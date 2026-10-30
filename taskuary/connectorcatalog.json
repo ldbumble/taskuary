@@ -534,7 +534,7 @@
       "title": "Amazon Seller Central (SP-API)",
       "group": "Corporate systems",
       "planned": false,
-      "desc": "Your Amazon seller reports - sales & traffic, orders, FBA inventory, settlements - as reports, dashboards and agent lookups; read-only.",
+      "desc": "Your Amazon seller reports - sales & traffic, orders, FBA inventory, settlements - and Amazon Business purchases for reconciliation, with their invoice numbers, as reports, dashboards and agent lookups; read-only.",
       "match": [
         "amazon seller central (sp-api)",
         "amazon seller central",
@@ -544,7 +544,9 @@
         "sp-api",
         "sp api",
         "amazon sp api",
-        "amazon seller"
+        "amazon seller",
+        "amazon business",
+        "business reconciliation"
       ]
     },
     {

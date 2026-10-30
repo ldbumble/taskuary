@@ -858,14 +858,17 @@ const DATA_META = {
       "Never post a bill or an expense yourself: propose it (TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"quickbooks_bill\", \"vendor\": ..., \"amount\": ..., \"account\": ..., \"doc_number\": ...}) and say in the session what it is for. Turn the card on, SETUP DONE."] },
   // Amazon SP-API (amazon_sp.py): a seller's own reports. READ-ONLY - the card asks Amazon to build a report and reads it,
   // and reaches no endpoint that changes a listing, a price or an order. A data card: it never puts work on the rail.
+  // The same LWA login also reaches Amazon Business reconciliation (purchases + invoice numbers) when the app holds that role.
   amazon_sp: { title: "Amazon Seller Central (SP-API)",
-    types: ["amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces"],
+    types: ["amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "amazon_business_transactions"],
+    // which Amazon APIs these credentials reach: Test fills the dots, the owner can tick them too (amazon_sp.APIS)
+    apis: [["sp", "Seller reports (SP-API)"], ["business", "Amazon Business reconciliation"]],
     fields: [["LWA client id (Develop Apps → your app → LWA credentials → View)", "client_id", "amzn1.application-oa2-client.…"],
       ["LWA client secret", "client_secret"],
       ["region — na (North America & Brazil), eu (Europe, UK, Middle East, India) or fe (Japan, Australia, Singapore)", "region", "na"],
       ["marketplace id(s), comma-separated — blank = every marketplace you sell in", "marketplace_ids", "ATVPDKIKX0DER"]],
     secretLabel: "refresh token (write-only) — the Atzr|… token Authorize shows you",
-    desc: "Your Amazon seller reports as rows: sales & traffic (the Business Report), every order by order date, FBA inventory and settlements — or any report type Amazon offers — for reports, dashboards and agent lookups. Read-only: it asks Amazon to build a report and reads it, nothing else.",
+    desc: "Your Amazon seller reports as rows: sales & traffic (the Business Report), every order by order date, FBA inventory and settlements — or any report type Amazon offers — and Amazon Business purchases for reconciliation, with their invoice numbers, for reports, dashboards and agent lookups. Read-only: it asks Amazon to build a report and reads it, nothing else.",
     howto: ["Seller Central → Apps and Services → Develop Apps (sellercentral.amazon.com/sellingpartner/developerconsole). The first time, Amazon asks you to register as a developer: choose a PRIVATE developer (an app for your own business only) and tick the data roles for the reports you want — Finance and Accounting for settlements, Inventory and Order Tracking for orders, Amazon Fulfillment for FBA inventory, Selling Partner Insights / Brand Analytics for sales & traffic. You must be the account's primary user.",
       "Once approved, Add new app client: any name, API type SP API, the same roles. Nothing to publish — a self-authorized app works while it is still a draft.",
       "In the app list, LWA credentials → View: copy the Client identifier and the Client secret into this card.",
@@ -873,10 +876,11 @@ const DATA_META = {
       "Pick the region your marketplaces live in (na, eu or fe) and, if you only want some of them, their marketplace ids (ATVPDKIKX0DER is amazon.com, A2EUQ1WTGCTBG2 amazon.ca, A1F83G8C2ARO7P amazon.co.uk). Save, then Test: it lists the marketplaces this account sells in.",
       "Build the reports on the REPORTS tab: 'Amazon — sales & traffic', 'orders', 'FBA inventory', 'settlement', or 'Amazon — any report' with a report type name from Amazon's list (developer-docs.amazon.com/sp-api/docs/report-type-values). Dashboards take the same sources.",
       "Vendor Central works the same way: Integration → API Integration to register and authorize; vendor reports (GET_VENDOR_SALES_REPORT and friends) go through 'any report'.",
+      "Buying on Amazon Business instead (or as well)? The same client id, secret and refresh token work when the app holds the Business Purchase Reconciliation role. Test tries both APIs and fills a dot for each one that answered — a 403 from one is fine while the other works. Then build 'Amazon — Business purchases': every charge and refund in a window, matched to its invoice or credit memo number.",
       "Amazon's quotas are small — about one new report a minute — and a report takes a minute to several to build. The card waits a throttle out instead of failing, and keeps a finished report for 15 minutes so a dashboard and a report on the same window ask once."],
     agent: ["The developer registration, the app and the Authorize press are the owner's to do in their own Seller Central (Apps and Services → Develop Apps); you cannot do them. Ask for the LWA client id, client secret and refresh token, the region (na/eu/fe) and any marketplace ids. Save client_id, client_secret, region and marketplace_ids in ConfigJson and the refresh token as Secret. Never print the secret or the token back.",
-      "POST {base}/api/connectors/{cid}/test{hdr}: it reads the marketplaces this account sells in. 'refused the credentials' is a wrong client id/secret or a revoked token (Authorize again); a 403 is a missing role on the app. Turn the card on, SETUP DONE.",
-      "Lookups are run_tool with type amazon_sales_traffic {days, granularity, by}, amazon_orders {days}, amazon_inventory, amazon_settlement {days, count}, amazon_marketplaces, or amazon_report {report_type, days | start/end, options}. All are reads. Settlement reports cannot be requested — amazon_settlement finds the ones Amazon already built.",
+      "POST {base}/api/connectors/{cid}/test{hdr}: it tries the Selling Partner API (the marketplaces this account sells in) and Amazon Business reconciliation, passes if either answered, and returns `apis` - the ones that did. 'refused the credentials' is a wrong client id/secret or a revoked token (Authorize again); a 403 on one API is a role the app does not hold. Turn the card on, SETUP DONE.",
+      "Lookups are run_tool with type amazon_sales_traffic {days, granularity, by}, amazon_orders {days}, amazon_inventory, amazon_settlement {days, count}, amazon_marketplaces, or amazon_report {report_type, days | start/end, options} on the seller side, and amazon_business_transactions {days | start/end, invoices} for Amazon Business purchases. All are reads. Settlement reports cannot be requested — amazon_settlement finds the ones Amazon already built.",
       "Each report call can take minutes and spends a quota of about one per minute: ask for the window you need once, not in a loop."] },
   // ~3,600 third-party endpoints behind one card. It is ONE card and not ninety because tool
   // definitions live in the model's context: treg's own MCP server exposes about ten fixed
@@ -3095,6 +3099,28 @@ function OAuthConnect({ conn, meta, reload }) {
   );
 }
 
+/* Which of a card's APIs its credentials reach (meta.apis): a row of small dots. One Amazon login can hold seller roles,
+   Amazon Business roles or both, and the other API answers 403 - so Test fills the dots that answered, and a tick here
+   is the owner's own say (the owner, 2026-10-30: "maybe make little fillable dots which api you have access to"). */
+function ApiDots({ apis, cfg, setCfg }) {
+  const on = Array.isArray(cfg.apis) ? cfg.apis : [];
+  const flip = (k) => setCfg({ ...cfg, apis: on.includes(k) ? on.filter((x) => x !== k) : apis.map(([a]) => a).filter((a) => a === k || on.includes(a)) });
+  return (
+    <Box data-tq-api-dots="" sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+      <Typography variant="caption" sx={{ color: DIM }}>Reaches</Typography>
+      {apis.map(([k, label]) => (
+        <Box key={k} component="button" type="button" role="checkbox" aria-checked={on.includes(k)} onClick={() => flip(k)}
+          title={on.includes(k) ? `${label}: answered the last Test (or ticked) — click to untick` : `${label}: not reached — Test fills this in, or click to tick`}
+          sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, border: 0, bgcolor: "transparent", p: 0, cursor: "pointer", font: "inherit" }}>
+          <Box component="span" sx={{ width: 9, height: 9, borderRadius: "50%", border: `1.5px solid ${on.includes(k) ? "#47654a" : FAINT}`,
+            bgcolor: on.includes(k) ? "#47654a" : "transparent", flexShrink: 0 }} />
+          <Typography component="span" variant="caption" sx={{ color: on.includes(k) ? INK : DIM }}>{label}</Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload, onBack: leave, onCreated, byType = {} }) {
   // the same one Save as a channel card: what each discovered object is used for is held until the bar saves it
   const draft = useCardDraft(savedConn, savedSources, reload);
@@ -3147,8 +3173,11 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   };
   const runTest = async () => {
     setBusy("test"); setFresh(false);
-    try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
-    catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
+    try {
+      const t = (await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data;
+      setTest(t);
+      if (Array.isArray(t?.apis)) setCfg((c) => ({ ...c, apis: t.apis }));   // the server saved the dots that answered; show them now
+    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
   // A SAVE IS NEWS, the last Test's failure is not: the old "need tenant_id" stayed under a good save (the UI audit, 2026-10-21)
@@ -3182,6 +3211,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
               back, so the box is empty and says it is saved - typed, it replaces the stored one */}
           {meta.fields.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg}
             {...(f[1] === "conn_str" && !(conn.WriteOnlyKeys || []).includes(f[1]) ? { multiline: true, minRows: 2 } : {})} />)}
+          {meta.apis && <ApiDots apis={meta.apis} cfg={cfg} setCfg={setCfg} />}
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
             helperText={meta.secretHelp || SECRET_HELP} />}

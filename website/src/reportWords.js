@@ -42,6 +42,7 @@ export const TYPE_LABELS = {
   amazon_sales_traffic: "Amazon \u2014 sales & traffic", amazon_orders: "Amazon \u2014 orders by order date",
   amazon_inventory: "Amazon \u2014 FBA inventory", amazon_settlement: "Amazon \u2014 settlement",
   amazon_report: "Amazon \u2014 any report", amazon_marketplaces: "Amazon \u2014 marketplaces",
+  amazon_business_transactions: "Amazon \u2014 Business purchases",
   teller_transactions: "Bank & card \u2014 transactions", teller_accounts: "Bank & card \u2014 accounts", teller_balances: "Bank & card \u2014 balances",
   teller_spend: "Bank & card — spend, per card and in total",
   simplefin_transactions: "Bank & card (SimpleFIN) \u2014 transactions", simplefin_accounts: "Bank & card (SimpleFIN) \u2014 accounts",

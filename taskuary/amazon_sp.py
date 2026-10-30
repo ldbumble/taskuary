@@ -1,4 +1,5 @@
-"""Amazon Selling Partner API (SP-API): a seller's own reports as rows - for Reports, Dashboards and agents.
+"""Amazon Selling Partner API (SP-API) and the Amazon Business reconciliation API: a seller's own reports, and a
+business buyer's purchases, as rows - for Reports, Dashboards and agents.
 
 A DATA card, not a channel: nothing here polls for work or lands on the rail. It READS, and only reads:
 
@@ -8,11 +9,17 @@ A DATA card, not a channel: nothing here polls for work or lands on the rail. It
   amazon_inventory      {}                                                         - FBA inventory, now
   amazon_settlement     {"days": 60, "count": 1}                                   - the newest settlement report(s)
   amazon_marketplaces   {}                                                         - where this account sells
+  amazon_business_transactions {"days": 7, "invoices": true}                       - Amazon Business purchases, with invoice numbers
 
-A report is not a GET: Amazon makes you ASK for it (createReport), wait while it is built (getReport until
+ONE LOGIN, SEVERAL APIS. The same Login-with-Amazon app can hold Selling Partner roles, Amazon Business roles or
+both, and an app with only one of them gets a 403 from the other. So the card carries `apis` - which of APIS the
+credentials reach - and Test fills it by probing each with one cheap read: a 403 from one is not a failed Test
+while another answered (the owner, 2026-10-30: "maybe make little fillable dots which api you have access to").
+
+A seller report is not a GET: Amazon makes you ASK for it (createReport), wait while it is built (getReport until
 DONE), then fetch a short-lived link to the file (getReportDocument), which is usually gzipped TSV or JSON.
-So the one POST this card makes besides the token exchange is createReport - asking Amazon to prepare
-something to read. Nothing it can call changes a listing, a price, an order or a shipment: WRITES is the
+So the POSTs this card makes besides the token exchange are createReport - asking Amazon to prepare
+something to read - and Amazon Business's invoice lookup, a read that takes its order lines as a body. Nothing it can call changes a listing, a price, an order or a shipment: WRITES is the
 whole list, and _call refuses anything else before it leaves the machine.
 
 AUTH is Login with Amazon (LWA): the owner's self-authorized app gives a client id + secret, and pressing
@@ -33,6 +40,11 @@ from loguru import logger
 TOKEN_URL = 'https://api.amazon.com/auth/o2/token'
 HOSTS = {'na': 'https://sellingpartnerapi-na.amazon.com', 'eu': 'https://sellingpartnerapi-eu.amazon.com',
          'fe': 'https://sellingpartnerapi-fe.amazon.com'}
+# Amazon Business has its own hosts (docs: "Amazon Business API endpoints") for the same three regions; the Far East one is
+# jp. and serves Japan and Australia
+BUSINESS = {'na': 'https://na.business-api.amazon.com', 'eu': 'https://eu.business-api.amazon.com', 'fe': 'https://jp.business-api.amazon.com'}
+# the APIs one set of LWA credentials may reach - the card's dots, in the order they are shown and probed
+APIS = {'sp': 'Seller reports (SP-API)', 'business': 'Amazon Business reconciliation'}
 REGION_WORDS = {'north america': 'na', 'america': 'na', 'us': 'na', 'europe': 'eu', 'eu': 'eu', 'far east': 'fe', 'asia': 'fe'}
 # docs/marketplace-ids: id -> (country, region). Which endpoint serves a marketplace is fixed by Amazon.
 MARKETPLACES = {'ATVPDKIKX0DER': ('US', 'na'), 'A2EUQ1WTGCTBG2': ('CA', 'na'), 'A1AM78C64UM0Y8': ('MX', 'na'), 'A2Q3Y263D00KWC': ('BR', 'na'),
@@ -42,17 +54,23 @@ MARKETPLACES = {'ATVPDKIKX0DER': ('US', 'na'), 'A2EUQ1WTGCTBG2': ('CA', 'na'), '
                 'A1VC38T7YXB528': ('JP', 'fe'), 'A39IBJ37TRP1C6': ('AU', 'fe'), 'A19VAU5U5O7RUS': ('SG', 'fe')}
 REPORTS = '/reports/2021-06-30'
 PARTICIPATIONS = '/sellers/v1/marketplaceParticipations'
+RECON = '/reconciliation/2021-01-08'
 # The documented usage plans, requests per second. A token returns to the bucket every 1/rate seconds, so that
 # is how long a 429 is waited out - a fixed timer is what the docs say not to do.
 RATE = {'createReport': 0.0167, 'getReport': 2.0, 'getReports': 0.0222, 'getReportDocument': 0.0167,
-        'getMarketplaceParticipations': 0.016}
-# Every call this card makes that is not a GET. createReport asks Amazon to BUILD a report to read; it moves nothing.
-WRITES = frozenset({('POST', f'{REPORTS}/reports')})
+        'getMarketplaceParticipations': 0.016, 'getTransactions': 2.0, 'getInvoiceDetailsByOrderLineItems': 2.0}
+# Every call this card makes that is not a GET. createReport asks Amazon to BUILD a report to read; the invoice lookup is a read
+# that takes its order lines as a body. Neither moves anything.
+WRITES = frozenset({('POST', f'{REPORTS}/reports'), ('POST', f'{RECON}/invoices')})
 # Amazon builds these on its own schedule and refuses a createReport for them: they are found with getReports instead.
 LISTED_ONLY = re.compile(r'^GET_V2_SETTLEMENT_REPORT_DATA')
 NAMED = {'sales_traffic': 'GET_SALES_AND_TRAFFIC_REPORT', 'orders': 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL',
          'inventory': 'GET_FBA_MYI_UNSUPPRESSED_INVENTORY_DATA', 'settlement': 'GET_V2_SETTLEMENT_REPORT_DATA_FLAT_FILE_V2'}
 TIMEOUT, TRIES, MAX_BACKOFF, DOC_TTL = 30, 4, 120, 900
+INVOICE_BATCH, MAX_PAGES = 25, 1000        # getInvoiceDetailsByOrderLineItems takes 25 order lines at most
+# a 403 means a missing role, and the role has a different name in each API's console
+ROLE_HINT = {'sp': "the app may lack the role this report needs (Develop Apps → Edit App → roles), or the marketplace is not this account's",
+             'business': 'the app may lack the Business Purchase Reconciliation role, or these credentials are not an Amazon Business account'}
 _TOK = {}        # hash of (client id, refresh token) -> (access token, expiry)
 _DOCS = {}       # (report type, window, marketplaces, options) -> (fetched at, rows)
 _sleep = time.sleep
@@ -125,10 +143,11 @@ def _why(r) -> str:
     except Exception: return r.text[:300]
 
 
-def _call(cfg, op, method, path, **kw) -> dict:
-    """One SP-API call, read-only by construction: any verb but GET that is not in WRITES never leaves here."""
+def _call(cfg, op, method, path, api='sp', **kw) -> dict:
+    """One SP-API call (or Amazon Business, api='business'), read-only by construction: any verb but GET that is not in
+    WRITES never leaves here."""
     if method != 'GET' and (method, path) not in WRITES: raise AmazonError(f'{method} {path} is not a call this card makes - it is read-only')
-    url, renewed = HOSTS[region(cfg)] + path, False
+    url, renewed = (BUSINESS if api == 'business' else HOSTS)[region(cfg)] + path, False
     for n in range(TRIES):
         r = requests.request(method, url, timeout=TIMEOUT, headers={'x-amz-access-token': token(cfg), 'user-agent': _ua(),
                                                                     'accept': 'application/json', 'content-type': 'application/json'}, **kw)
@@ -138,11 +157,12 @@ def _call(cfg, op, method, path, **kw) -> dict:
         if r.status_code in (401, 403) and not renewed and 'expired' in r.text.lower(): _TOK.pop(_key(cfg), None); renewed = True; continue
         break
     if r.status_code == 429: raise AmazonError(f'Amazon is still throttling {op} after {TRIES} tries - its quota is small; run it again in a few minutes')
-    if r.status_code == 403:
-        raise AmazonError(f'Amazon refused {op} (403): {_why(r)} - the app may lack the role this report needs '
-                          '(Develop Apps → Edit App → roles), or the marketplace is not this account\'s')
+    if r.status_code == 403: raise AmazonError(f'Amazon refused {op} (403): {_why(r)} - {ROLE_HINT[api]}')
     if r.status_code >= 300: raise AmazonError(f'Amazon {op} {r.status_code}: {_why(r)}')
-    return r.json() if r.text else {}
+    j = r.json() if r.text else {}
+    # Amazon Business can answer 200 and still carry an errors list: a refusal is not an empty page of rows
+    if api == 'business' and isinstance(j, dict) and j.get('errors'): raise AmazonError(f'Amazon {op}: {_why(r)}')
+    return j
 
 
 # ── reads ────────────────────────────────────────────────────────────────────────────────
@@ -278,7 +298,7 @@ def report(cfg, report_type, start=None, end=None, options=None, by='') -> tuple
 
 
 # ── the card's test, and the report/tool surface (reports.REGISTRY) ─────────────────────
-def probe(cfg) -> str:
+def _probe_sp(cfg) -> str:
     ms = participations(cfg)
     mine = [m for m in ms if m['participating']]
     if not mine: return f"connected ({region(cfg).upper()}) - but this account participates in no marketplace in that region"
@@ -289,6 +309,30 @@ def probe(cfg) -> str:
     if miss := [w for w in want if w not in have]: out += f" · not this account's in this region: {', '.join(miss)}"
     if not want: out += ' · no marketplace ids on the card, so reports cover all of these'
     return out
+
+
+def _probe_business(cfg) -> str:
+    start, end = feed_window({'days': 1})
+    _call(cfg, 'getTransactions', 'GET', f'{RECON}/transactions', api='business', params={'feedStartDate': start, 'feedEndDate': end, 'pageSize': 1})
+    return f'reconciliation answered ({region(cfg).upper()})'
+
+
+PROBES = {'sp': _probe_sp, 'business': _probe_business}
+
+
+def probe_apis(cfg) -> tuple:
+    """(detail, apis): one cheap read against each of APIS, and the keys of the ones that answered - what the card's dots show.
+    The Test passes while ANY answered; only when none did is it a failure, and then it says why for each."""
+    token(cfg)          # refused credentials are the same answer from every API - said once, not once per API
+    ok, no = {}, {}
+    for k, f in PROBES.items():
+        try: ok[k] = f(cfg)
+        except (AmazonError, requests.RequestException) as e: no[k] = str(e)
+    if not ok: raise AmazonError(' · '.join(f'{APIS[k]}: {v}' for k, v in no.items()))
+    return ' · '.join([f'{APIS[k]} ✓ {v}' for k, v in ok.items()] + [f'{APIS[k]} ✗ {v[:200]}' for k, v in no.items()]), list(ok)
+
+
+def probe(cfg) -> str: return probe_apis(cfg)[0]
 
 
 def _out(cfg, rows, note, label, span=''):
@@ -348,3 +392,109 @@ def run_amazon_marketplaces(cfg):
     """{} - the marketplaces this seller account is registered in, with currency and store name."""
     ms = participations(cfg)
     return _out(cfg, ms, '', f"{sum(m['participating'] for m in ms)} participating")
+
+
+# ── Amazon Business: purchases as reconciliation sees them ───────────────────────────────
+def feed_window(cfg, default_days=7, now=None) -> tuple:
+    """(feedStartDate, feedEndDate) for getTransactions: `start`/`end` dates, else the last `days` days. A missing side is 7 days
+    from the other, a start is that day's midnight, and an end of today is now less two minutes - any other end is that day's
+    last second. Those are the rules of the owner's working reconciliation code (2026-10-30): today's 23:59:59 is in the future."""
+    now = now or datetime.now(timezone.utc); today = now.date()
+    def day(v):
+        try: return datetime.fromisoformat(str(v).strip()[:10]).date()
+        except ValueError: raise AmazonError(f'{v!r} is not a date - write it as 2026-10-01')
+    s, e = (day(cfg[k]) if cfg.get(k) else None for k in ('start', 'end'))
+    if not (s or e):
+        try: n = max(1, int(cfg.get('days') or default_days))
+        except (TypeError, ValueError): n = default_days
+        s, e = today - timedelta(days=n), today
+    elif not s: s = e - timedelta(days=7)
+    elif not e: e = s + timedelta(days=7)
+    e = min(e, today)
+    if s > e: raise AmazonError(f'the window starts {s} but ends {e} - the start must come first')
+    return f'{s.isoformat()}T00:00:00Z', _iso(now - timedelta(minutes=2)) if e == today else f'{e.isoformat()}T23:59:59Z'
+
+
+def transactions(cfg, start, end, page_size=100) -> list:
+    """Every transaction whose feed date falls in the window, page by page. Amazon's reference says a next page is asked for
+    with nextPageToken as the ONLY parameter."""
+    out, params, seen = [], {'feedStartDate': start, 'feedEndDate': end, 'pageSize': max(1, min(int(page_size), 100))}, set()
+    for _ in range(MAX_PAGES):
+        j = _call(cfg, 'getTransactions', 'GET', f'{RECON}/transactions', api='business', params=params)
+        out += j.get('transactions') or []
+        tok = j.get('nextPageToken')
+        if not tok or tok in seen: break           # a token handed back twice would page forever
+        seen.add(tok); params = {'nextPageToken': tok}
+    return out
+
+
+def _line_key(li): return tuple(str(li.get(k) or '') for k in ('orderId', 'orderLineItemId', 'shipmentId'))
+
+
+def invoices(cfg, lines) -> dict:
+    """(orderId, orderLineItemId, shipmentId) -> its invoiceDetails, asked INVOICE_BATCH lines at a time. A line missing any of
+    the three cannot be asked about and is left out."""
+    keys, out = list(dict.fromkeys(k for k in map(_line_key, lines) if all(k))), {}
+    for i in range(0, len(keys), INVOICE_BATCH):
+        body = {'orderLineItems': [dict(zip(('orderId', 'orderLineItemId', 'shipmentId'), k)) for k in keys[i:i + INVOICE_BATCH]]}
+        j = _call(cfg, 'getInvoiceDetailsByOrderLineItems', 'POST', f'{RECON}/invoices', api='business', data=json.dumps(body))
+        for d in j.get('invoiceDetailsByOrderLineItems') or []: out[_line_key(d.get('orderLineItem') or {})] = d.get('invoiceDetails') or []
+    return out
+
+
+def _when(v):
+    try: d = datetime.fromisoformat(str(v).strip().replace('Z', '+00:00'))
+    except ValueError: return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def pick_invoice(kind, details, tx_date=None) -> dict:
+    """The invoice a transaction line answers to: a CHARGE its STANDARD invoice; a REFUND or OVERREFUND the CREDIT_MEMO nearest
+    its own date (a line refunded twice has two), with the STANDARD one kept as originalInvoiceNumber."""
+    std = next((d for d in details if str(d.get('invoiceType') or 'STANDARD').upper() == 'STANDARD'), None)
+    if str(kind or '').upper() not in ('REFUND', 'OVERREFUND'):
+        return {'invoiceNumber': std['invoiceNumber'], 'invoiceDate': std.get('invoiceDate')} if std else {}
+    memos, t = [d for d in details if str(d.get('invoiceType') or '').upper() == 'CREDIT_MEMO'], _when(tx_date)
+    if t: memos.sort(key=lambda d: abs((_when(d.get('invoiceDate')) or t) - t))
+    out = {'invoiceNumber': memos[0]['invoiceNumber'], 'invoiceDate': memos[0].get('invoiceDate')} if memos else {}
+    return {**out, 'originalInvoiceNumber': std['invoiceNumber']} if std else out
+
+
+def enrich(cfg, txs) -> list:
+    """Each transaction line given the invoice it answers to (pick_invoice), in place; a line Amazon has no invoice for keeps its own."""
+    got = invoices(cfg, [li for t in txs for li in t.get('transactionLineItems') or []])
+    for t in txs:
+        for li in t.get('transactionLineItems') or []: li.update(pick_invoice(t.get('transactionType'), got.get(_line_key(li)) or [], t.get('transactionDate')))
+    return txs
+
+
+def _amt(m): return m.get('amount') if isinstance(m, dict) else m
+
+
+def tx_rows(txs) -> list:
+    """One row per transaction line (a transaction without lines is one row), the transaction's own fields on each."""
+    out = []
+    for t in txs:
+        amt = t.get('amount') if isinstance(t.get('amount'), dict) else {}
+        head = {'transactionId': t.get('transactionId'), 'transactionDate': t.get('transactionDate'), 'transactionType': t.get('transactionType'),
+                'amount': _amt(t.get('amount')), 'currency': amt.get('currencyCode'), 'legalEntityName': t.get('legalEntityName')}
+        for li in t.get('transactionLineItems') or [{}]:
+            out.append({**head, 'asin': li.get('asin'), 'productTitle': li.get('productTitle'), 'itemQuantity': li.get('itemQuantity'),
+                        'unitPrice': _amt(li.get('unitPrice')), 'totalAmount': _amt(li.get('totalAmount')), 'tax': _amt(li.get('tax')),
+                        'orderId': li.get('orderId'), 'purchaseOrderNumber': li.get('purchaseOrderNumber'),
+                        'invoiceNumber': li.get('invoiceNumber') or t.get('invoiceNumber'), 'invoiceDate': li.get('invoiceDate'),
+                        'originalInvoiceNumber': li.get('originalInvoiceNumber')})
+    return out
+
+
+def _yes(v) -> bool: return v is None or v == '' or str(v).strip().lower() not in ('0', 'false', 'no', 'off', 'none')
+
+
+def run_amazon_business_transactions(cfg):
+    """{"days": 7 (or "start"/"end" dates), "invoices": true} - Amazon Business purchases as the reconciliation API sees them:
+    one row per transaction line (charges, refunds) with ASIN, quantity, amounts, tax, order and PO number. With invoices on,
+    each line is matched to its invoice number - a charge its invoice, a refund its credit memo. Read-only."""
+    start, end = feed_window(cfg)
+    txs = transactions(cfg, start, end)
+    if txs and _yes(cfg.get('invoices')): enrich(cfg, txs)
+    return _out(cfg, tx_rows(txs), f'{len(txs)} transaction(s)', 'Amazon Business transactions', _span(start, end))

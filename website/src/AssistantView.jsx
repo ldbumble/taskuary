@@ -1510,7 +1510,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // home, with nothing on the canvas
     const timer = setTimeout(async () => {
       deferredChat.current.delete(timer);
-      try { if (epoch === chatEpoch.current && !resettingRef.current) await fn(); } finally { setNextComing(false); }
+      // ...but not where it found the walk already at work (a close's own surface in flight): that walk ends the dots itself (surface), and
+      // clearing them here blinked them off and on between the put-down and the next item
+      try { if (epoch === chatEpoch.current && !resettingRef.current) await fn(); } finally { if (!turnFlight.current) setNextComing(false); }
     }, delay);
     deferredChat.current.add(timer);
     return timer;
@@ -2249,7 +2251,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (!done) setErr(errText(e));
     }
     turnFlight.current = false;
-    setBusy(false); setFlight(null);
+    setBusy(false); setFlight(null); setNextComing(false);
     if (done) readChatOnce(chatEpoch.current).catch(() => {});
   }, [busy, drawAhead, ensureNextSelection, landed, loadPile, noteLine, putOnTable, readChatOnce, resetting, turn, unshow]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
@@ -3531,7 +3533,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const winOn = !old && !walk && !firstRun;
   const winLines = useMemo(() => (winOn ? shown.map((m, i) => [m, i]).filter(([m]) => talkLine(m)).slice(-60) : []), [winOn, shown]);
   const inWin = useMemo(() => new Set(winLines.map(([m]) => m.id)), [winLines]);
-  const popPending = winOn && (busy || phoneBusy);
+  // ...a typed ask's dots, where its answer will land - never a walk move's (Next, a put-down, a row picked: `flight`), whose answer is the next
+  // item on the canvas (the owner, 2026-10-30: "it's still a little buggy hitting next and not a task, mark done"): moved into the window, shut or
+  // not, they left the canvas blank under the folded item for the length of the move
+  const popPending = winOn && (busy || phoneBusy) && !flight;
   const [boxOpen, setBoxOpen] = useState(false);
   const popRef = useRef(null), popBodyRef = useRef(null), boxRef = useRef(null), winOnRef = useRef(false);
   winOnRef.current = winOn;

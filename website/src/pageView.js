@@ -20,7 +20,8 @@ const SKIP = ".tq-chat-pop, .tq-dock, [data-tq-view-skip]";
 const MAX_FIELDS = 40, MAX_BUTTONS = 40;
 // the same words the server checks again (pageview.py): a send by its verb or its label, a secret by its key or the words on its box
 export const SEND_VERBS = new Set(["approve", "send", "accept_invite", "decline_invite", "propose_time", "share", "forward", "send-handoff", "email"]);
-const SEND_WORDS = /^\s*(send|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b/i;
+// ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done
+const SEND_WORDS = /^\s*(send(?! to (an? )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b/i;
 const SECRET_WORDS = /(password|passphrase|secret|token|api[ _-]?key|private key|access key|client key|xox[bp]-)/i;
 export const isSecret = (key = "", label = "") => {
   const k = String(key || "").toLowerCase();
@@ -117,7 +118,12 @@ export function readView(root = currentRoot()) {
   if (!root) return null;
   const area = areaOf(root), x = extrasOf(root, area);
   const fields = [...(x.fields || []).map((f) => ({ ...f, kind: f.kind || "text", extra: true })), ...domFields(root)];
-  const buttons = [...(x.buttons || []).map((b) => ({ ...b, enabled: b.enabled !== false, extra: true })), ...(area === "task" ? rowButtons() : []), ...domButtons(root)];
+  // ...one button per name: a row verb the page also draws (a draft's Send under it, Mark done in Close out) is the row's, pressed the row's
+  // road, and lit where the page draws it
+  const dom = domButtons(root), rows = area === "task" ? rowButtons() : [], seen = new Set();
+  const buttons = [...(x.buttons || []).map((b) => ({ ...b, enabled: b.enabled !== false, extra: true })),
+    ...rows.map((b) => ({ ...b, el: dom.find((d) => norm(d.label) === norm(b.label))?.el })), ...dom]
+    .filter((b) => { const k = norm(b.label); if (seen.has(k)) return false; seen.add(k); return true; });
   const title = x.title || root.getAttribute("data-tq-view-label") || root.querySelector("[data-tq-view-label]")?.getAttribute("data-tq-view-label") || "";
   return { root, area, title, item: x.item || null, fields, buttons, last: lastResult.get(area) || null };
 }
@@ -132,7 +138,8 @@ export function context(root = currentRoot()) {
     buttons: v.buttons.map(({ id, label, enabled, send }) => ({ id, label, enabled, ...(send || isSend({ id, label }) ? { send: true } : {}) })),
     ...(v.last ? { last: v.last } : {}), ...(text ? { text } : {}) };
 }
-export const subjectOf = (v) => (v ? `${v.area}|${v.item?.id ?? v.title ?? ""}` : "");
+// ...the same card whatever its line says about it now: "not set up" turning "connected" after a Save is still the conversation's subject
+export const subjectOf = (v) => (v ? `${v.area}|${v.item?.id ?? shortTitle(v)}` : "");
 
 // ── THE PAGE'S OWN ANSWERS: a Test, a Preview - what the Assistant hears next ──
 export function viewResult({ action = "test", ok = false, detail = "" } = {}) {
@@ -148,8 +155,13 @@ export function viewResult({ action = "test", ok = false, detail = "" } = {}) {
 let session = null;            // { subject, title, auto }
 const listeners = new Set();
 export const onReact = (f) => { listeners.add(f); return () => listeners.delete(f); };
-export const startSession = (v = context()) => { if (!v) return null; const subject = subjectOf(v);
-  if (session?.subject !== subject) session = { subject, title: v.title || v.area, auto: 0 }; else session.auto = 0; return session; };
+// ...named the way the chat says it: "the LinkedIn connector card", not the frame's whole line about it
+const shortTitle = (v) => { const t = String(v.item?.ref ? `${v.item.ref}` : v.title || v.area || "this page").split(/ \(| - nothing|, its | · /)[0].trim();
+  return /^(the |TQ-)/i.test(t) ? t : `the ${t}`; };
+// `door`: opened by a "with AI" button - a setup the owner asked to be walked through, whose x asks before it ends it
+export const startSession = (v = context(), door = false) => { if (!v) return null; const subject = subjectOf(v);
+  if (session?.subject !== subject) session = { subject, title: shortTitle(v), auto: 0, door }; else { session.auto = 0; session.door = session.door || door; }
+  return session; };
 export const endSession = () => { session = null; clearTimeout(settle.t); settle.key = null; };
 export const sessionNow = () => session;
 const live = () => !!session && subjectOf(context()) === session.subject;
@@ -193,10 +205,13 @@ export const setLighter = (f) => { lighter = f; };
 function unlight() { lit.forEach((el) => el.removeAttribute("data-tq-setup-lit")); lit = []; }
 function light(el) {
   const t = el?.closest?.(".MuiInputBase-root, .MuiSwitch-root, .MuiButton-root, [data-tq-knob], [role=combobox]") || el;
-  if (!t) return;
+  if (!t) return null;
   t.setAttribute("data-tq-setup-lit", "view"); lit.push(t);
   t.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  return t;
 }
+// ...a box it filled flashes once - only that one: a button it lit for the owner stays lit
+const flash = (el) => { const t = light(el); if (t) setTimeout(() => { t.removeAttribute("data-tq-setup-lit"); lit = lit.filter((x) => x !== t); }, 1400); };
 
 // ── RUNNING WHAT CAME BACK ──
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -244,25 +259,28 @@ const cut = (s, n = 60) => { s = String(s ?? ""); return s.length > n ? `${s.sli
 
 // one op, on the live page, checked again here: still there, still enabled, a send never pressed, a secret never set
 async function runOne(op, n) {
-  if (op.op === "refused") return step(n, `${op.target} ${op.why || "is yours to do"}`, "error");
+  // ...a refusal is not a failure: it is the line the owner drew, said as a step like any other
+  if (op.op === "refused") return step(n, `${op.target} ${op.why || "is yours to do"}`, "done", "read");
   if (op.op === "open") {
     if (!opener) return step(n, "Could not bring that page up here", "error");
     const { op: _o, area, ...state } = op;
     opener(area, state);
     const r = await waitRoot(area, state.knob);
-    return step(n, `Opened ${r?.getAttribute("data-tq-view-label") || area}`, "done", "read");
+    await wait(150);                              // ...its frame names what is open once the card has drawn
+    return step(n, `Opened ${(r && readView(r)?.title) || area}`, "done", "read");
   }
   const v = readView();
   if (!v) return step(n, "Nothing is open to work on", "error");
   if (op.op === "set") {
     const f = find(v.fields, op.field, "key", "label");
     if (!f) return step(n, `Could not find ${op.field} on the page`, "error");
-    if (f.secret || isSecret(f.key, f.label)) return step(n, `${f.label} is yours to paste into its field - I never see or type a secret`, "error");
+    if (f.secret || isSecret(f.key, f.label)) return step(n, `${f.label} is yours to paste into its field - I never see or type a secret`, "done", "read");
     if (f.disabled) return step(n, `${f.label} is greyed out`, "error");
     if (f.extra) await f.set(op.value);
     else if (f.kind === "choice" && f.el.matches("[role=combobox]")) { if (!(await pickCombo(f.el, op.value))) return step(n, `${f.label} has no ${cut(op.value)}`, "error"); }
     else setDom(f.el, op.value);
-    if (f.el) { light(f.el); setTimeout(unlight, 1400); }
+    if (f.el) flash(f.el);
+    if (f.said) return step(n, f.said(op.value));      // an extra that runs something says what it ran ("Asked the builder for ...")
     return step(n, f.kind === "switch" ? `Turned ${/^(on|true|1|yes|enabled?)$/i.test(String(op.value).trim()) ? "on" : "off"} ${f.label}` : `Set ${f.label} to ${cut(op.value)}`);
   }
   const name = op.button || op.target;

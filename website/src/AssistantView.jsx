@@ -2363,7 +2363,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // it something about what is on it"): its fields and buttons, a secret as its state only. Asking about it starts the conversation the
     // page's own edits are heard in
     const view = how.view !== undefined ? how.view : pageView.context();
-    if (view && !react) pageView.startSession(view);
+    if (view && !react) pageView.startSession(view, !!how.door);
     // ...a TYPED line opens the window (it was typed in its box); a line sent for a press elsewhere never does - the window opens only by
     // the owner's own hand or for an error (the owner, 2026-10-28: "when the walk-through ended, the chat reopened by itself")
     if (winOnRef.current && line == null) setPopOpen(true);
@@ -2404,6 +2404,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         const ops = Array.isArray(data.view_ops) ? data.view_ops : [];
         if (data.say || data.options?.length || data.chips?.length || ops.length)
           setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say || "", options: data.options || [], chips: data.chips || [], steps: data.steps || [] }]);
+        // ...but IN THE CHAT POP-UP a turn that only acted still ends on words (actReceipt): there is no card in it to wear the badge, and the
+        // owner's line stood alone over the task (2026-10-27). A drafted reply (`decision`) writes its own receipt
+        else if (winOnRef.current && !data.context_update && !data.decision) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...actReceipt(data, tableKey || current) }]);
         // WHAT IT DOES ON THE PAGE, run there through the page's own buttons (pageView.run): each act a step on this answer as it lands - a
         // send lit for the owner, never pressed; the owner's own hand on the page drops the rest. What the page answered (a Test) is heard next
         if (ops.length) {
@@ -2411,9 +2414,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           const s = pageView.sessionNow();
           if (result && s && s.auto < 3) setTimeout(() => reactRef.current?.({ kind: "result", text: `${result.action} ${result.ok ? "passed" : "failed"}${result.detail ? `: ${result.detail}` : ""}` }), 300);
         }
-        // ...but IN THE CHAT POP-UP a turn that only acted still ends on words (actReceipt): there is no card in it to wear the badge, and the
-        // owner's line stood alone over the task (2026-10-27). A drafted reply (`decision`) writes its own receipt
-        else if (winOnRef.current && !data.context_update && !data.decision) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...actReceipt(data, tableKey || current) }]);
         // A TYPED PUT-DOWN WAS PRESSED (concierge._put_down - the owner, 2026-10-23: "it should collapse the task and write on it marked done
         // with note"): its card wears the button's badge, and on the table it is put down as the row's own press puts it down - folded, the
         // next item up - never a line saying so
@@ -2475,7 +2475,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   };
   // ...and a line the bell hands over (askAssistant.js), sent as if typed - or left in the box while a turn is running, never dropped
   const askRef = useRef(null);
-  askRef.current = (t) => (busy || resetting || turnFlight.current ? setText(t) : send(t));
+  askRef.current = (t, how = {}) => (busy || resetting || turnFlight.current ? setText(t) : send(t, false, how));
   // THE PAGE'S OWN EDITS, HEARD WHILE HELPING (pageView.onReact - the owner, 2026-10-30: "inside a conversation the owner started about that
   // page, it notices the owner's own edits"): one turn per settled edit, Save or Test answer - never while a turn runs or the owner is typing
   // in the chat box, and at most 3 in a row before the owner says something again. Outside a conversation about the page: silence
@@ -2504,7 +2504,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const help = (e) => {
       const line = String(e.detail?.line || "").trim(); if (!line) return;
       setPopOpen(true);
-      setTimeout(() => askRef.current?.(line), Number(e.detail?.wait ?? 350));    // ...after the page it opened has drawn
+      setTimeout(() => askRef.current?.(line, { door: true }), Number(e.detail?.wait ?? 350));    // ...after the page it opened has drawn
     };
     // ...and a card's walk left open from before is said here once, folded, its steps under it (aisetup.move_walk)
     // ...and a door whose work went to an agent (a playbook's build) says where it is, the window opened by that press
@@ -3872,8 +3872,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   : <Tooltip title="Minimize - keeps this conversation"><IconButton size="small" aria-label="Minimize the chat" data-tq-box-mini="" onClick={minimize}><CloseFullscreenIcon sx={{ fontSize: 15, color: DIM }} /></IconButton></Tooltip>}
                 {/* ...its ×: the one way, with Esc, the window shuts to the pill - what is typed stays for the next time it opens */}
                 {/* ...and WHILE IT IS HELPING WITH A PAGE its × asks first (the owner, 2026-10-30: "the owner ends a session by closing the chat
-                    with its ×, which asks to confirm ending the chat") - yes ends the help and shuts the window; Esc only shuts it */}
-                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); if (pageView.sessionNow()) setEnding(true); else shutBox(); }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
+                    with its ×, which asks to confirm ending the chat") - yes ends the help and shuts the window; Esc only shuts it. A chat that only
+                    asked about the page, with no "with AI" door pressed, shuts as it always did - and stops hearing the page */}
+                <Tooltip title="Close (Esc)"><IconButton size="small" aria-label="Close the chat" data-tq-box-close="" onClick={(e) => { e.stopPropagation(); if (pageView.sessionNow()?.door) setEnding(true); else { pageView.endSession(); shutBox(); } }}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip></div>
               {ending && (
                 <div className="tq-chat-pop-end" data-tq-chat-end="" role="alertdialog" aria-label="End this chat?">
                   <span>End this chat? I stop helping with {pageView.sessionNow()?.title || "this page"}.</span>

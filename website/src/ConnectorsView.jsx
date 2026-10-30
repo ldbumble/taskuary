@@ -49,7 +49,6 @@ import { label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
-import ConnectAi from "./ConnectAi.jsx";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
@@ -65,42 +64,27 @@ import { openHelp, sayEarlier, viewResult } from "./pageView.js";
    left open from before is folded into the chat the next time the card opens (aisetup.move_walk). ── */
 // opens Connections > AI CLI agents from inside a card - the door the "no AI app here" line points at
 const AgentsDoor = createContext(null);
+// ...and it is never greyed: the chat answers with no AI too, in its own words and with Connect an AI under them (concierge.no_brain) - the
+// old "needs an AI first" was the walk's agent, which is gone
 function useAiWalk({ conn }) {
-  const [ready, setReady] = useState({ ok: true, why: "" });
   const cid = conn.ConnectorId, name = conn.Name || conn.Type || "this connection";
   useEffect(() => {
     if (!cid) return undefined;
     let live = true;
-    api.get(`/api/connectors/${cid}/ai-setup`).then(({ data }) => {
-      if (!live) return;
-      if (data?.ready !== undefined) setReady({ ok: data.ready !== false, why: data.why || "" });
-      if (data?.moved && data.earlier) sayEarlier(data.earlier);
-    }).catch(() => { /* the card still works without it */ });
+    api.get(`/api/connectors/${cid}/ai-setup`).then(({ data }) => { if (live && data?.moved && data.earlier) sayEarlier(data.earlier); })
+      .catch(() => { /* the card still works without it */ });
     return () => { live = false; };
   }, [cid]);
-  return { ready, start: () => openHelp(`Help me set up ${name}`) };
+  return { start: () => openHelp(`Help me set up ${name}`) };
 }
 
 // the button, in the card's own row beside Save and Test - outlined, never the card's one filled button
 function AiWalkButton({ ai }) {
   return (
-    <Button variant="outlined" disabled={!ai.ready.ok} onClick={ai.start} data-tq-ai-setup="start"
-      title={ai.ready.ok ? "Optional - opens the chat, and the Assistant sets this card up with you" : ai.ready.why}
+    <Button variant="outlined" onClick={ai.start} data-tq-ai-setup="start" title="Optional - opens the chat, and the Assistant sets this card up with you"
       startIcon={<BoltIcon sx={{ fontSize: 15 }} />}>
       Get AI to set it up
     </Button>
-  );
-}
-
-// no brain to hand it to: say where to get one, rather than a button that only answers "not found" (B10)
-function AiWalk({ ai }) {
-  if (ai.ready.ok) return null;
-  return (
-    <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", lineHeight: 1.5 }}>
-      Get AI to set it up needs an AI first. {ai.ready.why || `Set one up under ${placeName("ai_apps")}.`}
-      {/* the one button every "no AI" line carries, to the AI cards (owner-approved, 2026-10-21) */}
-      <ConnectAi variant="outlined" />
-    </Typography>
   );
 }
 
@@ -119,7 +103,6 @@ const AiSetup = (props) => {
   return (
     <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start", maxWidth: 720 }}>
       <AiWalkButton ai={ai} />
-      <Box sx={{ alignSelf: "stretch" }}><AiWalk ai={ai} /></Box>
     </Box>
   );
 };
@@ -3187,7 +3170,6 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       {tab === "Setup" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
-      <Box sx={{ maxWidth: 720, mt: 1.5 }}><AiWalk ai={ai} /></Box>
       <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={leave} />

@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { clickNav, startHarness } from "./harness.mjs";
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = (page, f, arg, timeout = 30000) => page.waitForFunction(f, { timeout, polling: 200 }, arg).catch(async (e) => {
   throw new Error(`${e.message} waiting for ${String(f).slice(0, 200)}\n${(await page.evaluate(() => document.body.innerText)).slice(-1500)}`);
 });
@@ -32,7 +33,7 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   page.on("pageerror", (e) => errors.push(e.message));
   const list = await (await fetch(`${harness.fixtureApi}/api/connectors`, { headers: { "X-Taskuary-Token": harness.token } })).json();
   const li = list.data.find((c) => c.Type === "linkedin");
-  let saved = null, tested = 0, walk = null, said = null;
+  let saved = null, tested = 0, asked = null, walked = 0;
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (r) => {
     const u = new URL(r.url()), p = u.pathname, json = (body) => r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -43,21 +44,13 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
         ConfigJson: JSON.stringify({ client_id: JSON.parse(saved.ConfigJson).client_id }) } : c) });
     if (p === `/api/connectors/${li.ConnectorId}/linkedin/status`)
       return json({ redirect_uri: "http://localhost:7999/api/linkedin/callback", connected: false, has_app: !!saved?.ConfigJson, member: "", days_left: null });
-    // the walk (aisetup.walk_view's shape): started, answered by a Save, closed
-    if (p === `/api/connectors/${li.ConnectorId}/ai-setup` && r.method() === "GET") return json(walk ? { ...walk, ready: true, why: "" } : { session: null, steps: [], busy: false, ask: null, done: false, ready: true, why: "" });
-    if (p === `/api/connectors/${li.ConnectorId}/ai-setup` && r.method() === "POST") {
-      walk = { session: { taskId: 11, ref: "TQ-0011", sid: "g1" }, busy: false, now: "", done: false,
-        steps: [{ kind: "agent", text: "This needs a LinkedIn app of yours, and its two keys.\nOpen developer.linkedin.com/apps, create an app, then paste its Client ID here." }],
-        ask: { field: "client_id", label: "Client ID", text: "Open developer.linkedin.com/apps, create an app, then paste its Client ID here." } };
-      return json({ ...walk, existing: false });
+    // the walk moved into the chat (2026-10-30): its old road starts nothing, and the chat's own turn is played here
+    if (p === `/api/connectors/${li.ConnectorId}/ai-setup` && r.method() === "GET") return json({ session: null, steps: [], busy: false, ask: null, done: false, ready: true, why: "" });
+    if (p.startsWith(`/api/connectors/${li.ConnectorId}/ai-setup`)) { walked++; return json({ moved: true }); }
+    if (p === "/api/concierge/stream" && r.method() === "POST" && JSON.parse(r.postData() || "{}").mode === "say") {
+      asked = JSON.parse(r.postData() || "{}");
+      return r.respond({ status: 200, contentType: "application/x-ndjson", body: JSON.stringify({ type: "done", say: "LinkedIn needs an app of yours.", options: [], chips: [], decision: null }) + "\n" });
     }
-    if (p === `/api/connectors/${li.ConnectorId}/ai-setup/say`) {
-      said = JSON.parse(r.postData() || "{}");
-      walk = { ...walk, ask: { field: "client_secret", label: "Client Secret", text: "Now the Primary Client Secret, from the same Auth tab." },
-        steps: [...walk.steps, { kind: "done", text: `You saved on the card: ${said.saved.join(", ")}` }, { kind: "agent", text: "Now the Primary Client Secret, from the same Auth tab." }] };
-      return json(walk);
-    }
-    if (p === `/api/connectors/${li.ConnectorId}/ai-setup/done`) { walk = null; return json({ wrap: "done", taskId: 11 }); }
     if (p === `/api/connectors/${li.ConnectorId}/test`) { tested++; return json({ ok: false, ms: 3, detail: "LinkedIn is not signed in yet - save the app's Client ID and Client Secret on the LinkedIn card, then press Sign in with LinkedIn" }); }
     page.fixtureRequestGuard(r);
   });
@@ -108,8 +101,8 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   await until(page, () => /press Sign in with LinkedIn/.test(document.querySelector("[data-tq-browse-one]").innerText));
   assert.equal(tested, 1);
 
-  // 5. Get AI to set it up: a button in the card's own row; the general agent's walk drawn on the card, the field it asks for lit -
-  //    no terminal. The walk's server answers (aisetup.walk_view) are stood in for: the demo refuses connector writes.
+  // 5. Get AI to set it up: a button in the card's own row that opens the chat window with the card as its subject - the walk moved into
+  //    the chat (the owner, 2026-10-30), so nothing of it is drawn on the card and no task is made. The chat's turn is played here
   const row = await page.evaluate(() => {
     const bs = [...document.querySelectorAll("[data-tq-browse-one] button")];
     const save = bs.find((b) => b.innerText.trim() === "Save"), ai = document.querySelector('[data-tq-browse-one] [data-tq-ai-setup="start"]');
@@ -117,17 +110,13 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   });
   assert.deepEqual(row, { same: true, outlined: true }, "Get AI to set it up sits beside Save and Test, outlined");
   await page.evaluate(() => document.querySelector('[data-tq-browse-one] [data-tq-ai-setup="start"]').click());
-  await page.waitForSelector("[data-tq-ai-walk]");
-  await until(page, () => /Your step:.*Client ID/.test(document.querySelector("[data-tq-ai-walk]")?.innerText || ""));
-  await until(page, () => [...document.querySelectorAll("[data-tq-browse-one] [data-tq-setup-lit]")].some((e) => /Client ID/.test(e.closest(".MuiFormControl-root")?.innerText || "")));
-  assert.equal(await page.$("[data-tq-browse-one] .xterm"), null, "no terminal on the card");
-  assert.match(await page.evaluate(() => document.querySelector("[data-tq-ai-walk]").innerText), /This needs a LinkedIn app of yours/);
-  assert.ok(await field(page, "Client ID", "test-client-id-0002"));
-  await page.evaluate(() => [...document.querySelectorAll("[data-tq-browse-one] button")].find((b) => b.innerText.trim() === "Save").click());
-  await until(page, () => /You saved on the card: Client ID/.test(document.querySelector("[data-tq-ai-walk]")?.innerText || ""));
-  assert.deepEqual(said.saved, ["Client ID"], "Save tells the walk what was put on the card - by name, never the value");
+  await until(page, () => { const p = document.querySelector(".tq-chat-pop"); return !!p && !p.hidden; });
+  for (let i = 0; i < 60 && !asked; i++) await sleep(250);
+  assert.match(asked.text, /^Help me set up LinkedIn/);
+  assert.equal(asked.view?.area, "connections", "the card goes with the ask");
+  assert.ok(!JSON.stringify(asked).includes("test-client-secret"), "a secret never goes with it");
+  assert.equal(await page.$("[data-tq-ai-walk]"), null, "no walk on the card");
+  assert.equal(walked, 0, "the old walk road is never asked to start one");
   if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: `${process.env.TASKUARY_SHOTS}/linkedin-card-after.png` });
-  await page.evaluate(() => document.querySelector('[data-tq-browse-one] [data-tq-ai-setup="done"]').click());
-  await until(page, () => !document.querySelector("[data-tq-ai-walk]"));
   assert.deepEqual(errors, []);
 });

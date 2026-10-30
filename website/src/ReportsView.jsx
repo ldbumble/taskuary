@@ -434,7 +434,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not draft that." });
   };
   useViewExtras("reports", { fields: [{ key: "describe", label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
-    value: "", set: compose }] });
+    value: "", set: compose, said: (v) => `Asked the builder for: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
   if (!sources) return err
@@ -616,11 +616,12 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
               startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
               {syncing ? "Running…" : "Run due now"}
             </Button>
+            {/* ...and beside it, the describe box's door to the chat (SetupWithAi) */}
+            {section === "reports" && <SetupWithAi kind="report" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-report" }); }} />}
+            {section === "dashboards" && <SetupWithAi kind="dashboard" onOpen={() => { setDashDraft(null); onBrowseState?.({ section, open: "new-dashboard" }); }} />}
+            {section === "workflows" && <SetupWithAi kind="workflow" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-agent" }); }} />}
             {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
-          {section === "reports" && <SetupWithAi kind="report" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-report" }); }} />}
-          {section === "dashboards" && <SetupWithAi kind="dashboard" onOpen={() => { setDashDraft(null); onBrowseState?.({ section, open: "new-dashboard" }); }} />}
-          {section === "workflows" && <SetupWithAi kind="workflow" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-agent" }); }} />}
         </Box>
       ) : null,
       cards: section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
@@ -1817,7 +1818,7 @@ function SourceComposer({ typeHint, one, hint, onSources }) {
       viewResult({ action: "compose", ok: !data.error, detail: data.error || data.explain || (one ? "Filled it in." : "Added them.") });
     } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not write that card." });
   };
-  useViewExtras("reports", { fields: [{ key: `sources${n}`, label: what, value: "", set: fill }] });
+  useViewExtras("reports", { fields: [{ key: `sources${n}`, label: what, value: "", set: fill, said: (v) => `Asked for the cards: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
   return (
     <Button size="small" data-tq-setup-ai="sources" onClick={() => openHelp(one ? `Fill in the ${typeHint || "source"} card with me` : `Help me with this: ${hint}`)}
       startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>

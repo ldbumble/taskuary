@@ -5292,7 +5292,9 @@ class SurfaceBody(BaseModel):
     expected_next_members: list[str] | None = None
     fyi: int | None = None              # how many plain FYI rows the page wants whole in the rail that rides along (funnel.page_fyi)
     blind: bool = False                 # pressed with nothing on the table (processing_navigation.reserve)
-class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
+class ConciergeSayBody(BaseModel):
+    text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
+    view: dict | None = None; react: str = ''
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
 def _encoded(content) -> Response:
@@ -5593,6 +5595,8 @@ class ConciergeStreamBody(BaseModel):
     mode: str = 'say'; text: str | None = None; key: str | None = None; only: str | None = None; context_mid: int | None = None
     open_card: str | None = None                  # the card browsed open in the canvas, said in words
     images: list[str] = []                        # pictures sent with the line (/api/prompt-image)
+    view: dict | None = None                      # the page on screen, read when the owner asked (pageview.py) - secrets as their state only
+    react: str = ''                               # what the owner just did on that page, inside a conversation they started about it
     include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
     blind: bool = False                 # pressed with nothing on the table (processing_navigation.reserve)
     selection_revision: str | None = None
@@ -5699,7 +5703,7 @@ async def concierge_stream(body: ConciergeStreamBody):
                                             include_surfaced=body.include_surfaced, exclude=body.exclude,
                                             leaving=body.leaving)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
-                                      open_card=body.open_card, images=prompt_images(body.images))
+                                      open_card=body.open_card, images=prompt_images(body.images), view=body.view, react=body.react)
             if notice: out['context_update'] = notice
             # THE CARD FIRST, THE RAIL AFTER IT (the owner, 2026-10-20): the rail that rides along (design B) is read after the
             # turn's writes, and that read was most of a press - the card waited on it. `done` goes now and says the rail
@@ -5812,7 +5816,8 @@ def concierge_say(body: ConciergeSayBody):
         #
         # Nothing is lost. The act boundary guards itself: operations.propose pins ContextRevision and
         # execute refuses a moved one (409), and verdicts.decide re-checks before a reply can leave.
-        return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card, images=prompt_images(body.images))
+        return concierge.say(store, body.text, body.key, actor=ACTOR, open_card=body.open_card, images=prompt_images(body.images),
+                             view=body.view, react=body.react)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.get('/api/concierge/chips')
@@ -6640,11 +6645,22 @@ def _failed_test(cid: int, name: str, out: dict):
     try: failures.record_on(store, 'connector', cid, kind='connection.test', error=out.get('detail') or 'the test failed', what=f'{name} failed its test', name=name)
     except Exception as e: logger.debug(f'the failed test of connector {cid} was not recorded: {e}')
 
+class ConnectorTestBody(BaseModel): ConfigJson: str | None = None; Secret: str | None = None
+
 @app.post('/api/connectors/{cid}/test')
-def connector_test(cid: int):
+def connector_test(cid: int, body: ConnectorTestBody | None = None):
     from .channels import test_connector
     c = store.get_connector(cid)
     if not c: raise HTTPException(404, 'connector not found')
+    # TEST WHAT IS ON SCREEN (the owner, 2026-10-30: "a connection's Test can try the values on screen, so the Assistant can test before
+    # the owner saves"): the card's unsaved values, over the saved ones, tried through a store that keeps nothing (channels.DraftStore) -
+    # the row, its last error and its config stay as they were until Save
+    if body and (body.ConfigJson is not None or body.Secret):
+        try: draft = {'config': json.loads(body.ConfigJson) if body.ConfigJson else None, 'secret': body.Secret or None}
+        except ValueError: raise HTTPException(422, 'ConfigJson is not JSON')
+        out = test_connector(store, cid, draft=draft)
+        store.audit('connector', cid, 'test_draft_ok' if out['ok'] else 'test_draft_failed', ACTOR, detail=out['detail'])
+        return {**out, 'draft': True}
     out = test_connector(store, cid)
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
     if not out['ok']: _failed_test(cid, c.get('Name') or c.get('Type'), out)
@@ -6866,9 +6882,9 @@ def connector_ai_setup(cid: int, body: AiSetupBody):
     c = store.get_connector(cid)
     # WhatsApp pairs itself (Node check, bridge auto-start, QR on the card); an agent here only sat on the bridge process
     if c and c['Type'] == 'whatsapp': raise HTTPException(422, 'WhatsApp needs no agent: the Pair with your phone box does the setup itself')
-    # the GENERAL agent walks the card (aisetup.start_walk, the owner 2026-10-21) - not a coding CLI in a terminal
-    try: return aisetup.start_walk(store, cid, _walk_ctx(body), ACTOR)
-    except (ValueError, RuntimeError, FileNotFoundError) as e: raise HTTPException(422, str(e))
+    # ...and no walk starts here any more: the card's door opens the Assistant's chat (2026-10-30). Kept one release for an old page
+    if not c: raise HTTPException(404, 'connector not found')
+    return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False, 'moved': True}
 
 def _walk_ctx(body): return {'guide': body.guide or [], 'fields': body.fields or [], 'secret_label': body.secret_label or '', 'agent_steps': body.agent_steps or []}
 
@@ -6878,15 +6894,19 @@ def connector_ai_setup_live(cid: int):
     whether any brain could take a new one, so the card can say where to get one instead of a button that only answers
     "not found" (B10)."""
     why = aisetup.ready_why(store)
+    # THE WALK MOVED INTO THE CHAT (2026-10-30): an open one is folded into the conversation as one record and its task closed - the
+    # card's door opens the Assistant now (aisetup.move_walk)
+    moved = aisetup.move_walk(store, cid, ACTOR)
+    if moved: return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False, 'moved': True, 'earlier': moved,
+                      'ready': not why, 'why': why}
     return {**aisetup.walk_view(store, cid), 'ready': not why, 'why': why}
 
 class AiSetupTurn(AiSetupBody): text: str = ''; saved: list[str] = []
 
 @app.post('/api/connectors/{cid}/ai-setup/say')
 def connector_ai_setup_say(cid: int, body: AiSetupTurn):
-    """The person answered the walk: words typed on the card, or the fields they just saved there."""
-    try: return aisetup.walk_said(store, cid, _walk_ctx(body), body.text, body.saved)
-    except ValueError as e: raise HTTPException(409, str(e))
+    """The person answered the walk: words typed on the card, or the fields they just saved there - the chat's now (2026-10-30)."""
+    return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False, 'moved': True}
 
 @app.post('/api/connectors/{cid}/ai-setup/done')
 def connector_ai_setup_done(cid: int):

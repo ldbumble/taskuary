@@ -74,13 +74,18 @@ class WalkTests(unittest.TestCase):
             p.start(); self.addCleanup(p.stop)
         self.addCleanup(terminal.SESSIONS.clear)
 
-    def view(self): return c.get(f'/api/connectors/{self.cid}/ai-setup').json()
+    # THE WALK IS THE CHAT'S NOW (2026-10-30): the card's door opens the Assistant, and a GET of the old road folds an open walk into the
+    # conversation (aisetup.move_walk). What is left of the walk is read and driven here through the module, as the agent's own road
+    def view(self): return {**aisetup.walk_view(server.store, self.cid), 'ready': not aisetup.ready_why(server.store)}
+    def ctx(self): return {'guide': self.BODY['guide'], 'fields': self.BODY['fields'], 'secret_label': self.BODY['secret_label'], 'agent_steps': []}
+    def start(self): return aisetup.start_walk(server.store, self.cid, self.ctx())
+    def said(self, text='', saved=None): return aisetup.walk_said(server.store, self.cid, self.ctx(), text, saved)
 
     def test_the_button_starts_the_general_agent_and_its_step_is_on_the_card(self):
         from taskuary import general
         self.replies = ['This needs a LinkedIn app of yours, and its two keys.\n'
                         '[[TASKUARY-CARD-ASK: client_id]] Open developer.linkedin.com/apps, create an app, then paste its Client ID here.']
-        r = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()
+        r = self.start()
         tk = server.store.get_task(r['session']['taskId'])
         self.assertEqual((tk['Kind'], tk['SourceRef'], tk['Tags']), ('general', aisetup.WALK_REF, f'connector:{self.cid}'))
         sess = general.session_for(tk['TaskId'])
@@ -98,14 +103,14 @@ class WalkTests(unittest.TestCase):
         said = [s['text'] for s in v['steps'] if s['kind'] == 'agent'][-1]
         self.assertIn('paste its Client ID here', said); self.assertNotIn('TASKUARY-CARD', said)
         # pressed again: the same walk, not a second
-        self.assertTrue(c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()['existing'])
+        self.assertTrue(self.start()['existing'])
 
     def test_the_agent_saves_a_field_and_runs_test_and_the_card_shows_each(self):
         from taskuary import channels
         self.replies = ['I will set the version.\n[[TASKUARY-CARD-SAVE: version = 202609]]\n[[TASKUARY-CARD-TEST]]',
                         'LinkedIn is connected.\n[[TASKUARY-CARD-DONE]]']
         with mock.patch.object(channels, 'test_connector', return_value={'ok': True, 'detail': 'signed in as Alex Doyle'}) as tested:
-            c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+            self.start()
         tested.assert_called_once_with(server.store, self.cid)
         self.assertEqual(json.loads(server.store.get_connector(self.cid)['ConfigJson'])['version'], '202609')
         self.assertIn("The card's Test passed: signed in as Alex Doyle", self.seen[1][1])        # the result went back to the agent
@@ -117,20 +122,20 @@ class WalkTests(unittest.TestCase):
 
     def test_the_agent_may_not_save_a_secret(self):
         self.replies = ['[[TASKUARY-CARD-SAVE: client_secret = abc]]\n[[TASKUARY-CARD-SAVE: Secret = tok]]']
-        c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+        self.start()
         row = server.store.get_connector(self.cid, with_secret=True)
         self.assertNotIn('client_secret', json.loads(row['ConfigJson'])); self.assertFalse(row.get('Secret'))
         self.assertTrue(any(s['kind'] == 'failed' and 'yours to paste' in s['text'] for s in self.view()['steps']))
 
     def test_what_the_person_saves_or_says_on_the_card_is_the_agents_next_turn(self):
         self.replies = ['[[TASKUARY-CARD-ASK: client_id]] Paste the Client ID.', 'Thanks - now the secret.', 'It is on the Auth tab.']
-        c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+        self.start()
         server.store.save_connector({'ConnectorId': self.cid, 'ConfigJson': json.dumps({'client_id': 'app-id'})}, 'test')
-        c.post(f'/api/connectors/{self.cid}/ai-setup/say', json={**self.BODY, 'saved': ['Client ID']})
+        self.said(saved=['Client ID'])
         self.assertIn('The person saved these on the card: Client ID', self.seen[1][1])
         self.assertIn('set: client_id; empty: client_secret, version', self.seen[1][0])          # the card's state, read fresh
         self.assertNotIn('app-id', self.seen[1][0])                                                # keys, never values
-        c.post(f'/api/connectors/{self.cid}/ai-setup/say', json={**self.BODY, 'text': 'where is the secret?'})
+        self.said('where is the secret?')
         kinds = [(s['kind'], s['text']) for s in self.view()['steps']]
         self.assertIn(('done', 'You saved on the card: Client ID'), kinds)
         self.assertIn(('you', 'where is the secret?'), kinds)
@@ -139,17 +144,35 @@ class WalkTests(unittest.TestCase):
     def test_no_brain_makes_no_task_and_says_where_to_get_one(self):
         from taskuary import general
         with mock.patch.object(general, 'provider_options', return_value=[]):
-            r = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
-            self.assertEqual(r.status_code, 422); self.assertIn('AI CLI agents', r.json()['detail'])
+            with self.assertRaises(ValueError) as e: self.start()
+            self.assertIn('AI CLI agents', str(e.exception))
             self.assertIsNone(aisetup.walk_task(server.store, self.cid))
             self.assertEqual(self.view()['ready'], False)
 
     def test_done_closes_the_walk_and_its_task_and_wrap_takes_the_same_road(self):
         from taskuary import general
-        r = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()
-        tid = r['session']['taskId']
+        tid = self.start()['session']['taskId']
         self.assertEqual(c.post(f'/api/connectors/{self.cid}/ai-setup/done').json(), {'wrap': 'done', 'taskId': tid})
         self.assertEqual(server.store.get_task(tid)['Status'], 'done')
         self.assertIsNone(general.session_for(tid)); self.assertIsNone(self.view()['session'])
-        r2 = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()
+        r2 = self.start()
         self.assertEqual(c.post(f"/api/tasks/{r2['session']['taskId']}/wrap", json={}).json()['wrap'], 'done')
+
+    def test_an_open_walk_moves_into_the_chat_as_one_record_and_its_task_closes(self):
+        """The owner, 2026-10-30: the walk goes on in the Assistant now, with no Board task. One left open from before is folded into
+        the conversation the next time the card is opened - "Earlier setup of X · N steps", its steps under it - and its task closes."""
+        from taskuary import concierge, general
+        self.replies = ['This needs a LinkedIn app.\n[[TASKUARY-CARD-ASK: client_id]] Paste its Client ID.']
+        tid = self.start()['session']['taskId']
+        v = c.get(f'/api/connectors/{self.cid}/ai-setup').json()
+        self.assertTrue(v['moved']); self.assertIsNone(v['session'])
+        self.assertRegex(v['earlier']['title'], r'^Earlier setup of .+ · \d+ steps?$')
+        self.assertTrue(any('LinkedIn app' in s['summary'] for s in v['earlier']['steps']))
+        self.assertEqual(server.store.get_task(tid)['Status'], 'done')
+        self.assertTrue(any(aisetup.MOVED in str(x.get('Body')) for x in server.store.list_comments(tid)))
+        rows = general.chat_rows(server.store, general.dock_task(server.store)[0]['TaskId'])
+        self.assertTrue(any(str(r.get('Body') or '').startswith('Earlier setup of') for r in rows))      # said in the chat, kept there
+        again = c.get(f'/api/connectors/{self.cid}/ai-setup').json()
+        self.assertFalse(again.get('moved'))                                                          # once
+        self.assertTrue(c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()['moved'])   # the old road starts nothing
+        self.assertIsNone(aisetup.walk_task(server.store, self.cid))

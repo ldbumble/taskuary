@@ -804,6 +804,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'amazon_marketplaces': _lazy('amazon_sp', 'run_amazon_marketplaces'),
             # Amazon Business (same card, same LWA login): purchases as reconciliation sees them, with their invoice numbers
             'amazon_business_transactions': _lazy('amazon_sp', 'run_amazon_business_transactions'),
+            # ...and one invoice or credit memo as its PDF, fetched to a local folder like sftp_get - for an agent's lookup
+            'amazon_invoice_pdf': _lazy('amazon_sp', 'run_amazon_invoice_pdf'),
             # A stateful report: the scheduler opens a batch, the page confirms amounts, and
             # Review sends. The special run path below owns the state transitions.
             'zoho_monthly_invoices': lambda cfg: ('monthly invoice workflow', 'A monthly batch will be opened; no invoice is created or sent by Preview.'),
@@ -912,7 +914,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'sftp_list': 'sftp', 'sftp_get': 'sftp', 'sftp_put': 'sftp', 'sftp_move': 'sftp',
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
-           **{t: 'amazon_sp' for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces', 'amazon_business_transactions')},
+           **{t: 'amazon_sp' for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces', 'amazon_business_transactions', 'amazon_invoice_pdf')},
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
            'simplefin_accounts': 'simplefin', 'simplefin_transactions': 'simplefin',
            'simplefin_balances': 'simplefin', 'simplefin_spend': 'simplefin',
@@ -1148,7 +1150,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
                  'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
-                 **{t: _amazon_connection for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces', 'amazon_business_transactions')},
+                 **{t: _amazon_connection for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces', 'amazon_business_transactions', 'amazon_invoice_pdf')},
                  **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
                  **{t: _simplefin_connection for t in ('simplefin_accounts', 'simplefin_transactions',
                                                        'simplefin_balances', 'simplefin_spend')},
@@ -1213,16 +1215,22 @@ def source_label(sub: dict, i: int) -> str:
     return (sub.get('label') or '').strip() or f"{sub.get('type', 'rest')} #{i}"
 
 
-def run_source_parts(store, subs: list) -> list:
+# the sources that put files on a run as they read (`_files`, render_report) - only these are handed the list, so no other
+# executor ever sees a key it might pass along upstream
+FETCHES_FILES = frozenset({'amazon_business_transactions'})
+
+
+def run_source_parts(store, subs: list, files: list = None) -> list:
     """[(key, label, head, body)] - one per source, each run on its own connection and query. One
     source failing is reported in place - it never takes the whole report down. `key` is the name
-    a prompt uses for it (source_key), so its rows can be placed where the prompt says."""
+    a prompt uses for it (source_key), so its rows can be placed where the prompt says. `files` is a
+    RUN's list a source may add fetched files to (render_report)."""
     out = []
     for i, sub in enumerate(subs, 1):
         t, label = sub.get('type', 'rest'), source_label(sub, i)
         try:
             gate(store, sub)
-            head, body = executor_for(t)(resolve_cfg(store, dict(sub)))
+            head, body = executor_for(t)(resolve_cfg(store, {**sub, '_files': files} if files is not None and t in FETCHES_FILES else dict(sub)))
         except Exception as e:
             head, body = 'FAILED', f'error: {str(e)[:400]}'
             logger.warning(f'report source "{label}" failed: {e}')
@@ -1410,18 +1418,21 @@ def headline_from(summary: str, fallback: str) -> str:
 
 
 
-def render_report(store, cfg: dict, llm=None, notes: list = None):
+def render_report(store, cfg: dict, llm=None, notes: list = None, files: list = None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
     AI connector turn raw rows into the summary that lands on the timeline. The report may
     name its own brain and model (report_llm); `llm` is the default it falls back to.
 
     `notes` is a RUN asking (run_report_source; a preview and the Advisor's look leave it None): a source that could
     not be read is added to it as (label, why) and the run goes on over the rest, and when NO source could be read the
-    run is Skipped with the reason instead of summarising nothing (the owner, 2026-10-21)."""
+    run is Skipped with the reason instead of summarising nothing (the owner, 2026-10-21).
+
+    `files` is a RUN's too: a source that fetches files while it reads (the Amazon Business report's invoice PDFs, as `_files`)
+    adds {path, name, type} to it, and the run puts them on the report's message beside the spreadsheet (the owner, 2026-10-30)."""
     llm = report_llm(store, cfg, llm)
     subs = [s for s in (cfg.get('sources') or []) if s.get('type')]
     if subs:
-        parts = run_source_parts(store, subs)
+        parts = run_source_parts(store, subs, files)
         bad = [(l, b[len('error: '):] if b.startswith('error: ') else b) for _, l, h, b in parts if h == 'FAILED']
         if notes is not None:
             if bad and len(bad) == len(parts): raise Skipped('Skipped: no source could be read - ' + '; '.join(f'{l}: {w}' for l, w in bad))
@@ -1432,7 +1443,8 @@ def render_report(store, cfg: dict, llm=None, notes: list = None):
         t, run = cfg.get('type', 'rest'), executor_for(cfg.get('type', 'rest'))
         try:
             gate(store, cfg)
-            cfg = resolve_cfg(store, {**cfg, '_unread': notes} if notes is not None else cfg)
+            mine = {**({'_unread': notes} if notes is not None else {}), **({'_files': files} if files is not None and t in FETCHES_FILES else {})}
+            cfg = resolve_cfg(store, {**cfg, **mine} if mine else cfg)
             head, summary = run(cfg)
         except Skipped: raise
         except Exception as e:
@@ -1842,9 +1854,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         err = _after(store, src, cfg, d, title, subject, lines, out.get('message_id'))
         return {'message_id': out.get('message_id'), 'subject': subject, 'files': 0, **out, **err}
     notes = []          # the sources this run had to go without, (label, why) - render_report fills it
+    fetched = []        # files a source fetched as it read (an invoice PDF), to go on the report's message
     try:
         if failed_model: raise RuntimeError(failed_model)
-        head, summary = render_report(store, cfg, llm, notes=notes)
+        head, summary = render_report(store, cfg, llm, notes=notes, files=fetched)
         subject, body = f'{title} — {head}', summary
     except NothingToReport as e:
         return {'message_id': None, 'subject': f'{title} — nothing to report on', 'files': 0, 'said': 0, 'failed': False, 'summary': str(e)}
@@ -1888,8 +1901,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
                                                       'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed'})
     # the rows are the report: hand back the spreadsheet to open and the chart to look at
     try:
-        from .artifacts import attach_report_output
-        made = attach_report_output(store, mid, title, body)
+        from .artifacts import attach_report_output, attach_files
+        made = attach_report_output(store, mid, title, body) + attach_files(store, mid, fetched)
     except Exception as e:
         made = []
         logger.warning(f'report artifacts for {title} failed: {e}')

@@ -468,7 +468,10 @@ number), each matched to its invoice number — a charge to its invoice, a refun
 It signs in the same way, with an app that holds the <strong>Business Purchase Reconciliation</strong> role. One
 set of credentials can reach either API or both, so the card shows a dot for each: <strong>Test</strong> tries a
 cheap read against both, fills in the ones that answered, and passes as long as one did. Build the
-report as <strong>Amazon — Business purchases</strong>. See Amazon&#39;s
+report as <strong>Amazon — Business purchases</strong>. Turn on <strong>attach invoice PDFs</strong> and each run also puts the
+invoice (or credit memo) PDFs on the report — at most 25 new ones a run, since Amazon builds each PDF
+on request at about one a minute; one already fetched is kept and not asked for again. An agent can
+fetch a single one by number with the <code>amazon_invoice_pdf</code> lookup. See Amazon&#39;s
 <a href="https://developer-docs.amazon.com/amazon-business/docs">Amazon Business API documentation</a>.</p>
 <p><strong>Markets</strong> — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
 strategy screen that filters another card&#39;s rows. With a key: <strong>Twelve Data</strong> (quotes and computed

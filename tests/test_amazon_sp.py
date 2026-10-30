@@ -2,7 +2,7 @@
 exchange and its hour-long cache, Test reading the marketplaces, the createReport -> getReport -> document ->
 gzip -> rows road, a 429 waited out at the operation's own rate, and the read-only guarantee - nothing but a
 GET leaves this card except the token exchange and createReport. The seller and their goods are invented."""
-import gzip, json, unittest
+import gzip, io, json, shutil, unittest, zipfile
 from unittest import mock
 
 from taskuary import amazon_sp as amz, reports, scopes
@@ -392,6 +392,160 @@ class ApiDots(Base):
         self.assertTrue(r['ok'], r); self.assertEqual(r['apis'], ['business'])
         saved = json.loads(s.get_connector(c['ConnectorId'], with_secret=True)['ConfigJson'])
         self.assertEqual((saved['apis'], saved['client_secret'], saved['region']), (['business'], 'cs-test', 'na'))
+
+
+def _pdf(tag): return b'%PDF-1.4\n% ' + tag.encode() + b'\n%%EOF\n'
+
+
+def _zip(files):
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, 'w') as z:
+        for n, d in files: z.writestr(n, d)
+    return b.getvalue()
+
+
+class FakeInvoicePdf(FakeBusiness):
+    """FakeBusiness that also builds invoice PDFs: createReport -> getReport (statuses) -> document -> a presigned download that is,
+    as Amazon's guide says, a zip of PDFs gzipped on top - or whatever `doc` says."""
+    def __init__(self, doc=None, gz=True, statuses=('IN_QUEUE', 'DONE'), **kw):
+        super().__init__(**kw); self.doc, self.gz, self.statuses, self.created, self.downloads = doc, gz, list(statuses), [], 0
+
+    def request(self, method, url, **kw):
+        path = url.split('.amazon.com', 1)[1]
+        if not path.startswith(amz.BREPORTS): return super().request(method, url, **kw)
+        self.calls.append((method, url))
+        if method == 'POST' and path == f'{amz.BREPORTS}/reports': self.created.append(json.loads(kw['data'])); return _resp(202, {'reportId': 'P1'})
+        if path == f'{amz.BREPORTS}/reports/P1':
+            st = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+            return _resp(200, {'reportId': 'P1', 'processingStatus': st, **({'reportDocumentId': 'PD1'} if st == 'DONE' else {})})
+        if path == f'{amz.BREPORTS}/documents/PD1':
+            return _resp(200, {'reportDocumentId': 'PD1', 'url': 'https://tortuga-prod.s3.example/pdf?sig=x', **({'compressionAlgorithm': 'GZIP'} if self.gz else {})})
+        raise AssertionError(f'unexpected call {method} {path}')
+
+    def get(self, url, **kw):
+        self.calls.append(('DOWNLOAD', url)); self.downloads += 1; assert 'headers' not in kw
+        n = self.created[-1]['reportOptions']['invoiceId']
+        doc = self.doc if self.doc is not None else _zip([('summary.pdf', _pdf('summary')), (f'Invoice_{n.replace("-", "")}.pdf', _pdf(n)),
+                                                          ('Invoice_OTHER-9.pdf', _pdf('other'))])
+        return _resp(200, content=gzip.compress(doc) if self.gz else doc)
+
+    def patch(self): return mock.patch.multiple(amz.requests, post=self.post, request=self.request, get=self.get)
+
+
+class PdfBase(Base):
+    """No PDF left on disk from another test, and a clock that moves only when the code sleeps - 120s of polling in no time."""
+    def setUp(self):
+        super().setUp(); shutil.rmtree(amz.pdf_dir(), ignore_errors=True)
+        self.t = [0.0]
+        p = mock.patch.multiple(amz, _sleep=lambda s: (self.slept.append(s), self.t.__setitem__(0, self.t[0] + s)), _clock=lambda: self.t[0])
+        p.start(); self.addCleanup(p.stop)
+
+
+class InvoicePdf(PdfBase):
+    def test_an_invoice_is_asked_for_polled_every_15s_and_picked_out_of_the_zip_by_its_number(self):
+        f = FakeInvoicePdf()
+        with f.patch(): name, data = amz.invoice_pdf(CFG, '1111-2222-3333')
+        self.assertEqual((name, data), ('Invoice_111122223333.pdf', _pdf('1111-2222-3333')))      # punctuation in the number is ignored
+        self.assertEqual(f.created, [{'reportType': 'GET_AB_INVOICE_PDF', 'reportOptions': {'invoiceId': '1111-2222-3333', 'documentType': 'Invoice'},
+                                      'marketplaceIds': ['ATVPDKIKX0DER']}])
+        self.assertEqual(self.slept, [15])
+        self.assertTrue(all(u.startswith('https://na.business-api.amazon.com/reports/2021-09-30/') for m, u in f.calls if m != 'DOWNLOAD'))
+
+    def test_a_credit_memo_is_asked_for_as_credits(self):
+        f = FakeInvoicePdf()
+        with f.patch(): amz.invoice_pdf({**CFG, 'region': 'eu', 'marketplace_ids': 'A1PA6795UKMFR9'}, 'CM-2', credit=True)
+        self.assertEqual(f.created[0]['reportOptions'], {'invoiceId': 'CM-2', 'documentType': 'Credits'})
+        self.assertEqual(f.created[0]['marketplaceIds'], ['A1PA6795UKMFR9'])
+        self.assertTrue(f.calls[0][1].startswith('https://eu.business-api.amazon.com/'))
+
+    def test_a_plain_uncompressed_pdf_comes_back_as_it_is(self):
+        with FakeInvoicePdf(doc=_pdf('only'), gz=False).patch(): self.assertEqual(amz.invoice_pdf(CFG, 'INV-1'), ('INV-1.pdf', _pdf('only')))
+
+    def test_a_cancelled_or_fatal_pdf_is_a_failure_in_words(self):
+        for st in ('CANCELLED', 'FATAL'):
+            with FakeInvoicePdf(statuses=('IN_PROGRESS', st)).patch(), self.assertRaises(amz.AmazonError) as e: amz.invoice_pdf(CFG, 'INV-1')
+            self.assertIn(f'invoice INV-1 ({st})', str(e.exception))
+
+    def test_a_pdf_still_building_after_120s_gives_up(self):
+        f = FakeInvoicePdf(statuses=('IN_PROGRESS',))
+        with f.patch(), self.assertRaises(amz.AmazonError) as e: amz.invoice_pdf(CFG, 'INV-1')
+        self.assertIn('still IN_PROGRESS after 120s', str(e.exception))
+        self.assertEqual(sum(self.slept), 120); self.assertEqual(f.downloads, 0)
+
+    def test_outside_north_america_a_marketplace_must_be_named(self):
+        with mock.patch.object(amz.requests, 'request') as r, self.assertRaises(amz.AmazonError): amz.invoice_pdf({**CFG, 'region': 'eu', 'marketplace_ids': ''}, 'X')
+        r.assert_not_called()
+
+    def test_the_pdf_is_the_only_new_post_and_it_stays_read_only(self):
+        f = FakeInvoicePdf()
+        with f.patch(): amz.invoice_pdf(CFG, 'INV-1')
+        self.assertEqual({(m, u.split('.amazon.com')[1]) for m, u in f.calls if m not in ('GET', 'DOWNLOAD')}, {('POST', '/reports/2021-09-30/reports')})
+        self.assertEqual((scopes.needs('amazon_invoice_pdf'), reports.card_of('amazon_invoice_pdf')), ('read', 'amazon_sp'))
+
+    def test_the_tool_stages_the_pdf_once_and_answers_with_its_path(self):
+        f = FakeInvoicePdf()
+        with f.patch():
+            head, path = amz.run_amazon_invoice_pdf({**CFG, 'invoice': 'CM-2', 'credit': 'true'})
+            head2, path2 = amz.run_amazon_invoice_pdf({**CFG, 'invoice': 'CM-2', 'credit': True})
+        self.assertEqual(path, path2); self.assertTrue(path.endswith('Amazon credit memo CM-2.pdf'))
+        self.assertEqual(open(path, 'rb').read(), _pdf('CM-2')); self.assertIn('already fetched', head2); self.assertEqual(len(f.created), 1)
+        with self.assertRaises(amz.AmazonError): amz.run_amazon_invoice_pdf(CFG)
+
+
+class PickPdf(unittest.TestCase):
+    def test_a_zip_without_the_number_in_a_filename_is_read_for_it_or_refused(self):
+        z = _zip([('a.pdf', _pdf('a')), ('b.pdf', _pdf('b'))])
+        with mock.patch.object(amz, '_pdf_text', side_effect=lambda d: 'Invoice # INV-77' if d == _pdf('b') else 'nothing'):
+            self.assertEqual(amz.pick_pdf(z, 'inv77'), ('b.pdf', _pdf('b')))
+            with self.assertRaises(amz.AmazonError): amz.pick_pdf(z, 'INV-78')
+
+    def test_a_zip_of_one_pdf_is_that_pdf_and_a_non_pdf_is_refused(self):
+        self.assertEqual(amz.pick_pdf(gzip.compress(_zip([('doc/x.pdf', _pdf('x'))])), 'INV-1'), ('x.pdf', _pdf('x')))
+        with self.assertRaises(amz.AmazonError): amz.pick_pdf(b'<html>', 'INV-1')
+        with self.assertRaises(amz.AmazonError): amz.pick_pdf(_zip([('readme.txt', b'hi')]), 'INV-1')
+
+
+class ReportPdfs(PdfBase):
+    def test_a_run_attaches_each_invoice_and_credit_memo_once(self):
+        f, sink = FakeInvoicePdf(), []
+        with f.patch(): head, body = amz.run_amazon_business_transactions({**CFG, 'pdfs': 'yes', '_files': sink})
+        rows = [json.loads(l) for l in body.splitlines()]
+        self.assertEqual([(c['reportOptions']['invoiceId'], c['reportOptions']['documentType']) for c in f.created], [('INV-1', 'Invoice'), ('CM-2', 'Credits')])
+        self.assertEqual([r['invoicePdf'] for r in rows], ['Amazon invoice INV-1.pdf', 'Amazon credit memo CM-2.pdf'])
+        self.assertEqual([x['name'] for x in sink], ['Amazon invoice INV-1.pdf', 'Amazon credit memo CM-2.pdf']); self.assertIn('2 invoice PDF(s) attached', head)
+        f2, sink2 = FakeInvoicePdf(), []
+        with f2.patch(): amz.run_amazon_business_transactions({**CFG, 'pdfs': 'yes', '_files': sink2})
+        self.assertEqual((f2.created, len(sink2)), ([], 2))         # already on disk: attached again, not asked for again
+
+    def test_the_cap_holds_the_rest_for_the_next_run(self):
+        f, sink = FakeInvoicePdf(), []
+        with f.patch(): head, _ = amz.run_amazon_business_transactions({**CFG, 'pdfs': 'yes', 'pdf_cap': 1, '_files': sink})
+        self.assertEqual((len(f.created), len(sink)), (1, 1)); self.assertIn('1 more next run', head)
+
+    def test_off_by_default_and_a_preview_fetches_none(self):
+        f = FakeInvoicePdf()
+        with f.patch():
+            head, _ = amz.run_amazon_business_transactions({**CFG, '_files': []})
+            head2, _ = amz.run_amazon_business_transactions({**CFG, 'pdfs': 'yes'})
+        self.assertEqual(f.created, []); self.assertNotIn('PDF', head); self.assertIn('not on a preview', head2)
+
+    def test_a_report_run_puts_the_pdfs_on_its_message(self):
+        s = MemoryStore(); c = s.get_connector_by_type('amazon_sp')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': CFG['refresh_token'],
+                          'ConfigJson': json.dumps({k: CFG[k] for k in ('client_id', 'client_secret', 'region')})}, 'owner')
+        files = []
+        with FakeInvoicePdf().patch(): reports.render_report(s, {'type': 'amazon_business_transactions', 'pdfs': 'yes'}, notes=[], files=files)
+        mid = s.add_message({'TaskId': None, 'ExternalId': 'report:t', 'ConversationId': 'report:t', 'Channel': 'report', 'Subject': 'r', 'Status': 'feed'})
+        from taskuary.artifacts import attach_files
+        attach_files(s, mid, files)
+        got = s.list_attachments(mid)
+        self.assertEqual([(a['Name'], a['ContentType']) for a in got], [('Amazon invoice INV-1.pdf', 'application/pdf'), ('Amazon credit memo CM-2.pdf', 'application/pdf')])
+        self.assertEqual(open(got[1]['Path'], 'rb').read(), _pdf('CM-2'))
+        # one source among several hands its files to the run the same way
+        more = []
+        with FakeInvoicePdf().patch():
+            reports.render_report(s, {'sources': [{'type': 'amazon_business_transactions', 'pdfs': 'yes'}]}, notes=[], files=more)
+        self.assertEqual([f['name'] for f in more], ['Amazon invoice INV-1.pdf', 'Amazon credit memo CM-2.pdf'])
 
 
 class Parse(unittest.TestCase):

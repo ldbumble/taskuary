@@ -133,7 +133,9 @@ export const FIELDS = {
   amazon_marketplaces: [AI_FIELD],
   // Amazon Business (the same card): purchases by feed date, each line matched to its invoice or credit memo unless told not to
   amazon_business_transactions: [["days back (by feed date)", "days", "text", "7"],
-    ["match each line to its invoice number — yes or no", "invoices", "text", "yes"], AI_FIELD],
+    ["match each line to its invoice number — yes or no", "invoices", "text", "yes"],
+    // the owner, 2026-10-30: the invoice PDFs themselves, attached to the run - off unless asked, 25 new ones a run at most
+    ["attach invoice PDFs (up to 25 new a run) — yes or no", "pdfs", "text", "no"], AI_FIELD],
   // the bank feed: which account (last four, a word of its name, or blank for all), how far back
   teller_transactions: [["account — last four digits, a word of its name, or blank for every account", "account", "text", "1234"],
     ["days back", "days", "text", "30"], AI_FIELD],

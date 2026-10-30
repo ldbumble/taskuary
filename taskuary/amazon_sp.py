@@ -9,7 +9,8 @@ A DATA card, not a channel: nothing here polls for work or lands on the rail. It
   amazon_inventory      {}                                                         - FBA inventory, now
   amazon_settlement     {"days": 60, "count": 1}                                   - the newest settlement report(s)
   amazon_marketplaces   {}                                                         - where this account sells
-  amazon_business_transactions {"days": 7, "invoices": true}                       - Amazon Business purchases, with invoice numbers
+  amazon_business_transactions {"days": 7, "invoices": true, "pdfs": false}       - Amazon Business purchases, with invoice numbers
+  amazon_invoice_pdf    {"invoice": "1111-2222-3333", "credit": false}             - one Amazon Business invoice (or credit memo) as a PDF
 
 ONE LOGIN, SEVERAL APIS. The same Login-with-Amazon app can hold Selling Partner roles, Amazon Business roles or
 both, and an app with only one of them gets a 403 from the other. So the card carries `apis` - which of APIS the
@@ -19,7 +20,7 @@ while another answered (the owner, 2026-10-30: "maybe make little fillable dots 
 A seller report is not a GET: Amazon makes you ASK for it (createReport), wait while it is built (getReport until
 DONE), then fetch a short-lived link to the file (getReportDocument), which is usually gzipped TSV or JSON.
 So the POSTs this card makes besides the token exchange are createReport - asking Amazon to prepare
-something to read - and Amazon Business's invoice lookup, a read that takes its order lines as a body. Nothing it can call changes a listing, a price, an order or a shipment: WRITES is the
+something to read, a seller report or an Amazon Business invoice PDF - and Amazon Business's invoice lookup, a read that takes its order lines as a body. Nothing it can call changes a listing, a price, an order or a shipment: WRITES is the
 whole list, and _call refuses anything else before it leaves the machine.
 
 AUTH is Login with Amazon (LWA): the owner's self-authorized app gives a client id + secret, and pressing
@@ -31,7 +32,7 @@ THROTTLING: the documented usage plans are tiny (createReport 1 a minute), so a 
 the operation's own restore rate rather than a guess, and a finished document is kept for a few minutes so
 a dashboard and a report reading the same window ask Amazon once.
 """
-import csv, gzip, hashlib, io, json, re, time
+import csv, gzip, hashlib, io, json, re, time, zipfile
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -55,13 +56,14 @@ MARKETPLACES = {'ATVPDKIKX0DER': ('US', 'na'), 'A2EUQ1WTGCTBG2': ('CA', 'na'), '
 REPORTS = '/reports/2021-06-30'
 PARTICIPATIONS = '/sellers/v1/marketplaceParticipations'
 RECON = '/reconciliation/2021-01-08'
+BREPORTS = '/reports/2021-09-30'        # Amazon Business's own reports API (the invoice PDF) - a later version than SP-API's
 # The documented usage plans, requests per second. A token returns to the bucket every 1/rate seconds, so that
 # is how long a 429 is waited out - a fixed timer is what the docs say not to do.
 RATE = {'createReport': 0.0167, 'getReport': 2.0, 'getReports': 0.0222, 'getReportDocument': 0.0167,
         'getMarketplaceParticipations': 0.016, 'getTransactions': 2.0, 'getInvoiceDetailsByOrderLineItems': 2.0}
 # Every call this card makes that is not a GET. createReport asks Amazon to BUILD a report to read; the invoice lookup is a read
 # that takes its order lines as a body. Neither moves anything.
-WRITES = frozenset({('POST', f'{REPORTS}/reports'), ('POST', f'{RECON}/invoices')})
+WRITES = frozenset({('POST', f'{REPORTS}/reports'), ('POST', f'{RECON}/invoices'), ('POST', f'{BREPORTS}/reports')})
 # Amazon builds these on its own schedule and refuses a createReport for them: they are found with getReports instead.
 LISTED_ONLY = re.compile(r'^GET_V2_SETTLEMENT_REPORT_DATA')
 NAMED = {'sales_traffic': 'GET_SALES_AND_TRAFFIC_REPORT', 'orders': 'GET_FLAT_FILE_ALL_ORDERS_DATA_BY_ORDER_DATE_GENERAL',
@@ -73,7 +75,7 @@ ROLE_HINT = {'sp': "the app may lack the role this report needs (Develop Apps �
              'business': 'the app may lack the Business Purchase Reconciliation role, or these credentials are not an Amazon Business account'}
 _TOK = {}        # hash of (client id, refresh token) -> (access token, expiry)
 _DOCS = {}       # (report type, window, marketplaces, options) -> (fetched at, rows)
-_sleep = time.sleep
+_sleep, _clock = time.sleep, time.monotonic
 
 
 class AmazonError(RuntimeError): pass
@@ -488,13 +490,140 @@ def tx_rows(txs) -> list:
 
 
 def _yes(v) -> bool: return v is None or v == '' or str(v).strip().lower() not in ('0', 'false', 'no', 'off', 'none')
+def _on(v) -> bool: return str(v or '').strip().lower() in ('1', 'true', 'yes', 'on', 'y')     # off unless said
+
+
+# ── Amazon Business: an invoice or credit memo as its PDF ───────────────────────────────
+# The owner's working flow (2026-10-30): createReport GET_AB_INVOICE_PDF, poll every 15s up to 120s, then the document - which
+# Amazon's "Downloading invoices" guide says is "compressed twice: first with zip, then with gzip", and a zip may hold several PDFs.
+INVOICE_PDF, PDF_POLL, PDF_WAIT, PDF_CAP = 'GET_AB_INVOICE_PDF', 15, 120, 25
+_FILE = re.compile(r'[^A-Za-z0-9._ -]+')
+
+
+def _bare(s) -> str: return re.sub(r'\W+', '', str(s or '')).lower()
+
+
+def _pdf_text(data, pages=2) -> str:
+    # pypdf is an optional extra (docs/bundle), never a requirement of this card: without it a zip of several PDFs is matched on
+    # filenames alone
+    try: from pypdf import PdfReader
+    except ImportError: return ''
+    try: return ' '.join(p.extract_text() or '' for p in PdfReader(io.BytesIO(data)).pages[:pages])
+    except Exception: return ''
+
+
+def pick_pdf(raw: bytes, number) -> tuple:
+    """(filename, pdf bytes) out of a downloaded invoice document: a plain PDF as it is; a zip's PDF whose filename carries the
+    invoice number (punctuation and case ignored), else the one whose first two pages say it, else its only PDF."""
+    if raw[:2] == b'\x1f\x8b': raw = gzip.decompress(raw)
+    if raw[:5] == b'%PDF-': return f'{number}.pdf', raw
+    if not zipfile.is_zipfile(io.BytesIO(raw)): raise AmazonError(f'the invoice document for {number} is neither a PDF nor a zip of them')
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        pdfs = [(i.filename.rsplit('/', 1)[-1], z.read(i)) for i in z.infolist() if not i.is_dir() and i.filename.lower().endswith('.pdf')]
+    if not pdfs: raise AmazonError(f'the invoice document for {number} held no PDF')
+    k = _bare(number)
+    hit = (next((p for p in pdfs if k and k in _bare(p[0])), None) or (pdfs[0] if len(pdfs) == 1 else None)
+           or next((p for p in pdfs if k and k in _bare(_pdf_text(p[1]))), None))
+    if not hit: raise AmazonError(f"none of the {len(pdfs)} PDFs Amazon sent for {number} names it ({', '.join(n for n, _ in pdfs[:5])})")
+    return hit
+
+
+def _marketplace(cfg, marketplace=None) -> str:
+    ids = ids_of(marketplace) or ids_of(cfg.get('marketplace_ids'))
+    if ids: return ids[0]
+    if region(cfg) == 'na': return 'ATVPDKIKX0DER'          # the owner's default: amazon.com
+    raise AmazonError('which marketplace is the invoice from? Put its id on the card or pass "marketplace_id" (e.g. A1PA6795UKMFR9 for Germany)')
+
+
+def invoice_pdf(cfg, number, credit=False, marketplace=None) -> tuple:
+    """(filename, pdf bytes) for ONE Amazon Business invoice - or, with `credit`, credit memo: createReport GET_AB_INVOICE_PDF on
+    the business host, getReport every PDF_POLL seconds until DONE (CANCELLED or FATAL, or PDF_WAIT seconds, is a failure), then
+    the document. `number` is the invoiceNumber the invoice lookup gave - for a refund, the credit memo's own number: Amazon's guide
+    says the invoiceId is that invoiceNumber and "the correct invoice or credit memo document will be vended" from it."""
+    n, kind = str(number or '').strip(), 'credit memo' if credit else 'invoice'
+    if not n: raise AmazonError('no invoice number - give the invoiceNumber an Amazon Business transaction carries')
+    body = {'reportType': INVOICE_PDF, 'reportOptions': {'invoiceId': n, 'documentType': 'Credits' if credit else 'Invoice'},
+            'marketplaceIds': [_marketplace(cfg, marketplace)]}
+    rid = _call(cfg, 'createReport', 'POST', f'{BREPORTS}/reports', api='business', data=json.dumps(body))['reportId']
+    deadline = _clock() + PDF_WAIT
+    while True:
+        rep = _call(cfg, 'getReport', 'GET', f'{BREPORTS}/reports/{rid}', api='business')
+        st = rep.get('processingStatus')
+        if st == 'DONE' and rep.get('reportDocumentId'): break
+        if st in ('CANCELLED', 'FATAL', 'DONE'):
+            raise AmazonError(f"Amazon would not build the PDF of {kind} {n} ({st}) - check the number{' and that it is a credit memo' if credit else ''}")
+        if _clock() >= deadline: raise AmazonError(f'the PDF of {kind} {n} was still {st} after {PDF_WAIT}s - report {rid}; ask again in a minute')
+        _sleep(PDF_POLL)
+    d = _call(cfg, 'getReportDocument', 'GET', f"{BREPORTS}/documents/{rep['reportDocumentId']}", api='business')
+    r = requests.get(d['url'], timeout=120)
+    if r.status_code != 200: raise AmazonError(f'the PDF of {kind} {n} would not download ({r.status_code}) - the link lives five minutes; ask again')
+    raw = gzip.decompress(r.content) if str(d.get('compressionAlgorithm') or '').upper() == 'GZIP' else r.content
+    return pick_pdf(raw, n)
+
+
+def pdf_dir():
+    from . import config
+    p = config.home() / 'amazon' / 'invoices'; p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def pdf_path(number, credit=False): return pdf_dir() / (_FILE.sub('', f"Amazon {'credit memo' if credit else 'invoice'} {number}").strip()[:120] + '.pdf')
+
+
+def staged_pdf(cfg, number, credit=False, marketplace=None):
+    """The invoice's PDF on disk (pdf_dir), fetched once: an issued invoice never changes, and every fetch spends a createReport
+    from a quota of about one a minute. Returns (path, fetched now)."""
+    p = pdf_path(number, credit)
+    if p.exists() and p.stat().st_size: return p, False
+    p.write_bytes(invoice_pdf(cfg, number, credit, marketplace)[1])
+    return p, True
+
+
+def run_amazon_invoice_pdf(cfg):
+    """{"invoice": "1111-2222-3333", "credit": false, "marketplace_id": "ATVPDKIKX0DER"} - ONE Amazon Business invoice, or with
+    credit the credit memo of that number, fetched as a PDF to a local folder; answers with its path. Like sftp_get it writes a file
+    here and is still a read: nothing upstream moves."""
+    n = str(cfg.get('invoice') or cfg.get('invoice_number') or '').strip()
+    if not n: raise AmazonError('which invoice? Pass "invoice": the invoiceNumber an Amazon Business transaction carries')
+    p, fresh = staged_pdf(cfg, n, _on(cfg.get('credit')), cfg.get('marketplace_id'))
+    return f"{p.stat().st_size} bytes · {'credit memo' if _on(cfg.get('credit')) else 'invoice'} {n}{'' if fresh else ' (already fetched)'}", str(p)
+
+
+def attach_pdfs(cfg, rows, sink) -> str:
+    """Each row's invoice PDF staged and added to `sink` (the run's files, which land on the report's message), at most `pdf_cap`
+    (PDF_CAP) NEW fetches a run - one already on disk costs Amazon nothing, so the next run picks up where this one stopped. A row
+    gets `invoicePdf`, the file's name. Returns the note for the headline."""
+    try: cap = max(0, min(int(cfg.get('pdf_cap') or PDF_CAP), PDF_CAP))
+    except (TypeError, ValueError): cap = PDF_CAP
+    want = list(dict.fromkeys((r['invoiceNumber'], str(r.get('transactionType') or '').upper() in ('REFUND', 'OVERREFUND'))
+                              for r in rows if r.get('invoiceNumber')))
+    got, bad, left, fetched = {}, [], 0, 0
+    for n, credit in want:
+        if not pdf_path(n, credit).exists() and fetched >= cap: left += 1; continue
+        try: p, fresh = staged_pdf(cfg, n, credit); fetched += fresh
+        except (AmazonError, requests.RequestException) as e:
+            fetched += 1; bad.append(f'{n}: {e}')
+            if '(403)' in str(e): break             # a role the app lacks refuses every one the same way - said once
+            continue
+        got[(n, credit)] = p.name; sink.append({'path': str(p), 'name': p.name, 'type': 'application/pdf'})
+    for r in rows:
+        if (k := (r.get('invoiceNumber'), str(r.get('transactionType') or '').upper() in ('REFUND', 'OVERREFUND'))) in got: r['invoicePdf'] = got[k]
+    return ' · '.join(x for x in (f'{len(got)} invoice PDF(s) attached' if want else '', f'{left} more next run (at most {cap} new a run)' if left else '',
+                                  f"{len(bad)} PDF(s) not fetched - {bad[0][:200]}" if bad else '') if x)
 
 
 def run_amazon_business_transactions(cfg):
-    """{"days": 7 (or "start"/"end" dates), "invoices": true} - Amazon Business purchases as the reconciliation API sees them:
-    one row per transaction line (charges, refunds) with ASIN, quantity, amounts, tax, order and PO number. With invoices on,
-    each line is matched to its invoice number - a charge its invoice, a refund its credit memo. Read-only."""
+    """{"days": 7 (or "start"/"end" dates), "invoices": true, "pdfs": false, "pdf_cap": 25} - Amazon Business purchases as the
+    reconciliation API sees them: one row per transaction line (charges, refunds) with ASIN, quantity, amounts, tax, order and PO
+    number. With invoices on, each line is matched to its invoice number - a charge its invoice, a refund its credit memo. With
+    pdfs on, a RUN also attaches each invoice's PDF to the report (attach_pdfs). Read-only."""
     start, end = feed_window(cfg)
     txs = transactions(cfg, start, end)
     if txs and _yes(cfg.get('invoices')): enrich(cfg, txs)
-    return _out(cfg, tx_rows(txs), f'{len(txs)} transaction(s)', 'Amazon Business transactions', _span(start, end))
+    rows, note = tx_rows(txs), f'{len(txs)} transaction(s)'
+    if rows and _on(cfg.get('pdfs')):
+        # only a run has somewhere to put a file (reports._run_report_source hands it `_files`); a preview or a dashboard does not,
+        # and fetching up to 25 PDFs at a minute's quota each would make a preview take a quarter of an hour
+        sink = cfg.get('_files')
+        note += ' · ' + (attach_pdfs(cfg, rows, sink) if isinstance(sink, list) else 'invoice PDFs are attached when the report runs, not on a preview')
+    return _out(cfg, rows, note, 'Amazon Business transactions', _span(start, end))

@@ -53,7 +53,7 @@ class FactsTests(unittest.TestCase):
     def test_the_state_block_is_counts_and_names_first_and_bounded(self):
         b = appfacts.state_block(store())
         self.assertIn('THE APP RIGHT NOW', b)
-        self.assertRegex(b, r'\d+ reports?: '); self.assertIn('1 workflow: ', b)
+        self.assertRegex(b, r'\d+ reports?: '); self.assertIn('1 routine: ', b)   # a workflow is a Routine on screen since 2026-10-29
         self.assertIn('Monthly AR Report', b); self.assertIn('ADP hours export - last run failed', b)
         self.assertRegex(b, r'\d+ connected: .*Alex mailbox'); self.assertNotIn('Teams', b)   # the catalogue's off cards are a count
         self.assertIn('catalogue cards off', b)

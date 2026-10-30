@@ -2008,7 +2008,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         else:
             out = closed(_cut(out, SEED_CEILING - 20, 'prompt'))
         logger.warning(f'seed for task {tid} trimmed to fit the command line ({len(out)} chars)')
-    return out
+    # ...and a coding routine with a skill opens ON that skill: its slash command leads the first prompt, so Claude Code resolves it in the
+    # repository it started in or the user's own skills, never a copy pasted from Taskuary's folder (workflows.slash_of)
+    from . import workflows as _wf
+    sk = _wf.slash_of(store, t)
+    return f'/{sk} {out}' if sk and (not cli or cli_named({'cmd': cli}) == 'claude') else out
 
 
 _REPO_LINE = re.compile(r'^-\s+\*\*([^*]+)\*\*:\s*(.*)$', re.M)

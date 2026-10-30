@@ -69,7 +69,9 @@ def definition(store, src) -> dict:
     lone = cfg['flow'][-1] if isinstance(cfg.get('flow'), list) and cfg['flow'] and isinstance(cfg['flow'][-1], dict) else {}
     if lone.get('kind') == 'agent': cfg = {**cfg, 'prompt': cfg.get('prompt') or lone.get('prompt'), 'skill': cfg.get('skill') or lone.get('skill')}
     skill, steps = str(cfg.get('skill') or '').strip().lstrip('/'), ''
-    if skill:
+    # A CODING ROUTINE'S SKILL IS THE CLI'S OWN (the owner, 2026-10-29): typed as its slash command in the repository (slash_of), so Claude
+    # Code finds it in that repo's .claude/skills or the user's ~/.claude/skills - Taskuary's own skills folder is a general routine's
+    if skill and runs_on(cfg) != 'coding':
         from . import config
         p = config.home() / 'skills' / skill / 'SKILL.md'
         try: steps = p.read_text(encoding='utf-8') if p.is_file() else ''
@@ -96,6 +98,21 @@ def catalog(store) -> dict:
     flows = [definition(store, s) for s in store.list_sources(active_only=False) if s.get('Channel') == 'report' and is_workflow(s)]
     procs = [{'slug': b['slug'], 'title': b['title'], 'when': b['when'], 'uses': b['uses'], 'about_code': b['about_code']} for b in playbooks.list_all()]
     return {'workflows': flows, 'procedures': procs}
+
+
+def with_runs(cfg: dict, runs) -> dict:
+    """A drafted agent routine with the form's own picks over it: `runs` {coding, cwd, skill} - a repository folder and a skill name."""
+    r = runs if isinstance(runs, dict) else {}
+    if cfg.get('type') != 'agent' or not r.get('coding'): return cfg
+    cwd, skill = str(r.get('cwd') or '').strip(), str(r.get('skill') or '').strip().lstrip('/')
+    return {**cfg, 'runs_on': 'coding', **({'cwd': cwd} if cwd else {}), **({'skill': skill} if skill else {})}
+
+
+def slash_of(store, task) -> str:
+    """The skill a coding routine's run opens on, its slash command's name - '' for anything else."""
+    src = source_of(store, task)
+    d = definition(store, src) if src else {}
+    return d['skill'] if d.get('skill') and d.get('runs_on') == 'coding' else ''
 
 
 def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:

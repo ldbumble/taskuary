@@ -433,3 +433,13 @@ Off rail:   C1 (closed task, arrived between T2 and T3)
 6. **Section heading click.** Proposed: open the section's first row, then Next walks down the whole rail past the section's end, with no "Reports done." stop. Keep that line at the section boundary, or drop it?
 7. **The Passed band and "back at" gutter on tasks disappear.** Nothing is "passed" any more. Confirm that removing them is fine, and that no replacement mark is wanted.
 
+
+## Decisions on the open questions (2026-10-30, decided by the seven rules; the owner pre-authorized the build)
+
+1. Opening a task clears its "+N" mark and nothing else - opening never reads.
+2. Back after Next read a report goes to the row now above it: a read report has left the rail.
+3. A meeting is walked like a task, in its place - never skipped, never hidden until it starts.
+4. For later is not on the walk's line: Next from the last task goes to Reports. A For later row clicked walks down the rail from its place.
+5. The desk and the phone share one walk.
+6. A section heading clicked carries on down the rail - no "Reports done." stop.
+7. The Passed band and the tasks' "back at" time are removed; with no skipping they say nothing.

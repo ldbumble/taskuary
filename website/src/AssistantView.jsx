@@ -1385,6 +1385,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const downRef = useRef(new Set());
   const isDown = (c) => !!c && leftOf(c).some((x) => downRef.current.has(x));
   const unleave = (c) => { for (const x of leftOf(c)) { leftRef.current.delete(x); downRef.current.delete(x); } };
+  // ...and A WALK THE SERVER BEGAN ANEW begins this list anew (the rail's walk_at, funnel.new_walk): only the walk button cleared it, so
+  // after a new chat, or a walk asked for in words, a task passed in the walk before stayed "left" here - offered again by the server, it
+  // was put down unseen and the walk went on to the FYI (the owner, 2026-10-30: "it skipped the next task in list straight to fyi")
+  const walkAtRef = useRef(null);
+  const noteWalk = (data) => {
+    const w = data?.walk_at;
+    if (w == null) return;
+    if (walkAtRef.current !== null && w !== walkAtRef.current) { leftRef.current.clear(); downRef.current.clear(); bounced.current = false; }
+    walkAtRef.current = w;
+  };
   const putOnTable = useCallback((card, how = "pile") => {
     if (card && how !== "card" && isLeft(card)) return;          // pressed past or closed: never back unless its row is clicked (leftRef)
     if (how !== "sync") tableMoves.current += 1;
@@ -1589,7 +1599,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const captured = captureNextSelection(data, requestedScope);
       if (hasNextSelection(data)) selectionContractSeen.current = true;
       selectionRef.current = captured; preparedRef.current = data.prepared_next || null;
-      seePile(data);
+      seePile(data); noteWalk(data);
       pileRef.current = refreshPilePresentation(pileRef.current, data); notePile(askedAt);
       setPile((p) => refreshPilePresentation(p, data)); setPileRead(true);
       if (!(await readChat(epoch))) return;
@@ -1970,7 +1980,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // gap between the old rows vanishing and the next four appearing (design B, 2026-09-17).
   const holdPile = useCallback((data, scope) => {
     forcedLoadStartedAt.current = heldSince(data);     // the live events this read already saw need no reload
-    seePile(data);                                      // ...counted by their write stamps, too (liveSeq.js)
+    seePile(data); noteWalk(data);                      // ...counted by their write stamps, too (liveSeq.js); a new walk clears what was left
     notePile(forcedLoadStartedAt.current);              // ...and a task read older than it no longer speaks over its rows
     if (hasNextSelection(data)) selectionContractSeen.current = true;
     selectionRef.current = captureNextSelection(data, scope);

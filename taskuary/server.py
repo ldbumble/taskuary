@@ -5348,6 +5348,10 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     from . import concierge
     try: p['prepared_next'] = concierge.prepare_next(store, capture, p.get('selection_revision'))
     except Exception as e: logger.debug(f'no prepared Next: {e}'); p['prepared_next'] = None
+    # ...and WHEN THIS WALK BEGAN (funnel.new_walk): the page keeps the rows it left this walk, and a walk the server started anew -
+    # a new chat, a walk that ran out, one asked for in words - must start the page's list anew too (AssistantView's leftRef)
+    from .processing_unread import WALK_KEY
+    p['walk_at'] = str(store.get_setting(WALK_KEY) or '')
     return p
 
 def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict | None:

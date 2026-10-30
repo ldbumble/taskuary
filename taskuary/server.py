@@ -276,7 +276,7 @@ ATTACH_QUIET = 10
 
 
 from loguru import logger
-import time as _time
+import sqlite3, time as _time
 QUIET_GETS = {'/api/ingest/status'}     # polled GETs that are not logged when they succeed (request_log)
 SLOW_REQUEST = 5.0                      # seconds: a request this slow is logged at INFO with its store.lock wait (request_log)
 
@@ -8962,7 +8962,11 @@ def _status_write(target_store, owners):
     # the same banner again is no news: each write is a transaction AND an ingest-status push to every
     # open page, and an idle phone doorway was sending the identical "idle" two or three times a second (P13)
     st = json.dumps(_visible_status(owners))
-    if target_store.get_setting('ingest_status') != st: target_store.set_setting('ingest_status', st, 'system')
+    # ...and a banner is never worth a sync: a writer holding the database past its timeout raised "database is locked" here and
+    # threw away the poll that only wanted to say it was running (2026-10-29) - the next write says it again
+    try:
+        if target_store.get_setting('ingest_status') != st: target_store.set_setting('ingest_status', st, 'system')
+    except sqlite3.OperationalError as e: logger.debug(f'ingest status not written: {e}')
 
 
 def _status_begin(target_store, lane, what):

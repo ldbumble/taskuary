@@ -9,9 +9,10 @@ export const kindOf = (t) => { const k = String(t || "").toLowerCase(); return M
 export const defaultLevel = (t) => DEFAULTS[kindOf(t)] ?? BASE;
 export const combines = (t) => MAILBOXES.has(String(t || "").toLowerCase()) || MESSAGING.has(String(t || "").toLowerCase());
 export const clampLevel = (v) => { const n = Math.round(Number(v)); return n >= LO && n <= HI ? n : null; };
-export const MARKS = [
-  { value: 1, label: "Keep separate" }, { value: 2, label: "" }, { value: 3, label: "" }, { value: 4, label: "" }, { value: 5, label: "Combine" },
-];
+// ...each stop numbered over the track, and the two ends named under it at its edges (the owner, 2026-10-29: "words keep separate are
+// weird and put numbers on top")
+export const MARKS = [1, 2, 3, 4, 5].map((value) => ({ value, label: String(value) }));
+export const ENDS = ["Separate", "Combine"];
 // what the level does, said under the slider in the card's own words
 export const SAYS = {
   1: "A message joins a task only when it is the same problem.",

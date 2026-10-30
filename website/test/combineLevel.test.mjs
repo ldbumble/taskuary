@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "../src/combineLevel.js";
+import { ENDS, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "../src/combineLevel.js";
 
 const src = fs.readFileSync(path.join(import.meta.dirname, "..", "src", "ConnectorsView.jsx"), "utf8");
 
@@ -18,8 +18,8 @@ test("the message connections carry it, a code host or a database does not", () 
   assert.deepEqual(["github", "sqlite", "jira", ""].map(combines), [false, false, false, false]);
 });
 
-test("the ends are labelled Keep separate and Combine, and every level says what it does", () => {
-  assert.equal(MARKS[0].label, "Keep separate"); assert.equal(MARKS.at(-1).label, "Combine");
+test("the stops are numbered and the ends are labelled Separate and Combine, and every level says what it does", () => {
+  assert.deepEqual(ENDS, ["Separate", "Combine"]); assert.deepEqual(MARKS.map((m) => m.label), ["1", "2", "3", "4", "5"]);
   assert.deepEqual(MARKS.map((m) => m.value), [1, 2, 3, 4, 5]);
   for (const m of MARKS) assert.ok(SAYS[m.value]);
   assert.deepEqual([0, 1, 5, 6, "x"].map(clampLevel), [null, 1, 5, null, null]);

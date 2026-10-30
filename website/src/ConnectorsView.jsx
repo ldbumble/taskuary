@@ -36,7 +36,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 import { matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
-import { ALWAYS, HI, LO, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "./combineLevel.js";
+import { ALWAYS, ENDS, HI, LO, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "./combineLevel.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { namesRestart, pairAgain, restartBridge } from "./waBridge.js";
@@ -4238,7 +4238,11 @@ const CombineStep = ({ conn, n }) => {
       </Typography>
       <Box sx={{ px: 1.5, mt: 0.5, maxWidth: 420 }}>
         <Slider size="small" min={LO} max={HI} step={1} marks={MARKS} value={level} aria-label="Combine level"
+          sx={{ mt: 2.5, mb: 0, "& .MuiSlider-markLabel": { top: -16, fontSize: 11, color: FAINT }, "& .MuiSlider-markLabelActive": { color: INK } }}
           onChange={(_, v) => setLevel(v)} onChangeCommitted={(_, v) => save(v)} />
+        <Box sx={{ display: "flex", justifyContent: "space-between", mt: -0.5, fontSize: 11.5, color: DIM }}>
+          <span>{ENDS[0]}</span><span>{ENDS[1]}</span>
+        </Box>
       </Box>
       <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>{SAYS[level]} {ALWAYS}</Typography>
       {err && <Typography variant="caption" sx={{ color: "#a33", display: "block" }}>{err}</Typography>}

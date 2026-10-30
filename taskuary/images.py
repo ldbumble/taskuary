@@ -18,23 +18,23 @@ from loguru import logger
 from . import words
 
 IMAGE_TYPES = ('openai_image', 'azure_openai_image', 'xai_image', 'image_server',
-               'gemini_image', 'stability_image', 'openrouter_image', 'replicate_image')
+               'gemini_image', 'stability_image', 'openrouter_image', 'replicate_image', 'runway_image')
 NEEDS_KEY = set(IMAGE_TYPES) - {'image_server'}
 LABELS = {'openai_image': 'OpenAI images (gpt-image-1)', 'azure_openai_image': 'Azure OpenAI images',
           'xai_image': 'xAI Grok images', 'image_server': 'Any OpenAI-compatible image server',
           'gemini_image': 'Google Gemini images', 'stability_image': 'Stability AI',
-          'openrouter_image': 'OpenRouter images', 'replicate_image': 'Replicate (FLUX, SDXL, and more)'}
+          'openrouter_image': 'OpenRouter images', 'replicate_image': 'Replicate (FLUX, SDXL, and more)', 'runway_image': 'Runway (Gen-4 images)'}
 # the OpenAI-compatible four: (base url, default model). azure builds its own URL from the card.
 COMPAT = {'openai_image': ('https://api.openai.com/v1', 'gpt-image-1'),
           'xai_image': ('https://api.x.ai/v1', 'grok-2-image'),
           'image_server': ('http://127.0.0.1:7860/v1', 'stable-diffusion-xl'),
           'azure_openai_image': ('', 'gpt-image-1')}
 SHAPES = {**{t: 'openai' for t in COMPAT}, 'gemini_image': 'gemini', 'stability_image': 'stability',
-          'openrouter_image': 'openrouter', 'replicate_image': 'replicate'}
+          'openrouter_image': 'openrouter', 'replicate_image': 'replicate', 'runway_image': 'runway'}
 DEFAULT_MODEL = {'gemini_image': 'gemini-3-flash-image', 'stability_image': 'core',
-                 'openrouter_image': 'google/gemini-3-flash-image', 'replicate_image': 'black-forest-labs/flux-schnell'}
+                 'openrouter_image': 'google/gemini-3-flash-image', 'replicate_image': 'black-forest-labs/flux-schnell', 'runway_image': 'gen4_image'}
 NO_CONNECTOR = (f"no image model is set up - add one under {words.name('images')} "
-                '(OpenAI, Azure, Gemini, Stability, OpenRouter, Replicate, xAI, or any '
+                '(OpenAI, Azure, Gemini, Stability, OpenRouter, Replicate, Runway, xAI, or any '
                 'OpenAI-compatible server running on this machine)')
 SIZES = ('1024x1024', '1024x1536', '1536x1024')
 POLL_S, POLL_EVERY = 180, 2          # replicate and friends: how long to wait, how often to ask
@@ -190,6 +190,33 @@ def _replicate(t, cfg, key, prompt, size):
     out = job.get('output')
     first = out[0] if isinstance(out, list) and out else out
     data, mime = _bytes_from(first if isinstance(first, str) else '')
+    return data, mime, model
+
+
+RUNWAY, RUNWAY_VERSION = 'https://api.dev.runwayml.com/v1', '2024-11-06'
+RUNWAY_RATIO = {'1024x1024': '1024:1024', '1024x1536': '1080:1440', '1536x1024': '1440:1080'}
+
+
+def _runway(t, cfg, key, prompt, size):
+    """Runway runs every generation as a task: start it, then ask until it has an output URL (docs.dev.runwayml.com)."""
+    model = cfg.get('model') or DEFAULT_MODEL[t]
+    headers = {'Authorization': f'Bearer {key}', 'X-Runway-Version': RUNWAY_VERSION, 'Content-Type': 'application/json'}
+    r = requests.post(f'{RUNWAY}/text_to_image', headers=headers,
+                      json={'model': model, 'promptText': prompt[:1000], 'ratio': RUNWAY_RATIO[size]}, timeout=120)
+    if r.status_code >= 300: _fail(r, LABELS[t])
+    tid, job, deadline = (r.json() or {}).get('id'), {}, time.time() + POLL_S
+    if not tid: raise RuntimeError(f'{LABELS[t]}: no task came back')
+    while job.get('status') not in ('SUCCEEDED', 'FAILED', 'CANCELLED') and time.time() < deadline:
+        time.sleep(POLL_EVERY)
+        g = requests.get(f'{RUNWAY}/tasks/{tid}', headers=headers, timeout=60)
+        if g.status_code >= 300: _fail(g, LABELS[t])
+        job = g.json() or {}
+    if job.get('status') in ('FAILED', 'CANCELLED'):
+        raise RuntimeError(f"{LABELS[t]}: {job.get('failure') or 'the model refused the prompt'}")
+    if job.get('status') != 'SUCCEEDED':
+        raise RuntimeError(f'{LABELS[t]}: the image was still not ready after {POLL_S}s')
+    out = job.get('output') or []
+    data, mime = _bytes_from(out[0] if out and isinstance(out[0], str) else '')
     return data, mime, model
 
 

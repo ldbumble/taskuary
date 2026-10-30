@@ -748,6 +748,14 @@ const META = {
       "core is the cheap default; ultra costs more per image.",
       "Test draws one small grey square. Enable to use it."],
     agent: ["Ask the owner for a Stability AI key, save it as Secret, leave model blank for core, Test, turn it on, SETUP DONE."] },
+  runway_image: { group: "AI — images", channel: "ai", srcLabel: null,
+    fields: [["model (default gen4_image)", "model"]],
+    secretLabel: "Runway API key",
+    desc: "Runway's Gen-4 image model, on its developer API — credits bought in the Runway developer portal, apart from a Runway app plan.",
+    howto: ["Create a key in the Runway developer portal (dev.runwayml.com) and paste it under Credentials.",
+      "The developer API bills its own credits - add some there before testing.",
+      "Test draws one small grey square. Enable to use it."],
+    agent: ["Ask the owner for a Runway API key from dev.runwayml.com, save it as Secret, leave model blank for gen4_image, Test, turn it on, SETUP DONE."] },
   openrouter_image: { group: "AI — images", channel: "ai", srcLabel: null,
     fields: [["model (default google/gemini-3-flash-image)", "model"]],
     secretLabel: "OpenRouter API key",
@@ -1900,7 +1908,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       note: "Without a card here, nothing can draw. With one, an agent asked for a picture generates it and files it on the task, where the timeline shows it inline. Replicate reaches the most models for one token; a local OpenAI-compatible server costs nothing and keeps the prompt on this machine.",
       cards: [
         ...channelCards(["openai_image", "azure_openai_image", "gemini_image", "stability_image",
-          "openrouter_image", "replicate_image", "xai_image", "image_server"]),
+          "openrouter_image", "replicate_image", "runway_image", "xai_image", "image_server"]),
         ...catalogCards("AI — images"),
       ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall

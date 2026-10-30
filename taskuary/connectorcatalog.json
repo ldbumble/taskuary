@@ -963,6 +963,18 @@
       ]
     },
     {
+      "type": "runway_image",
+      "title": "Runway",
+      "group": "AI — images",
+      "planned": false,
+      "desc": "Runway's Gen-4 image model on its developer API — the same account's credits, for campaign pictures drawn from a sentence.",
+      "match": [
+        "runway",
+        "runwayml",
+        "runway image"
+      ]
+    },
+    {
       "type": "xai_image",
       "title": "xAI Grok images",
       "group": "AI — images",

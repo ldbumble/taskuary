@@ -103,6 +103,22 @@ class StopWithWorkRunning(Files, Base):
         self.fire('Stop', last_assistant_message='Done.', background_tasks=[], transcript_path=self.file(SHELL))
         self.assertIsNone(ws.waiting_of(self.s, t))
 
+    def test_its_subagents_are_light_load_until_the_next_stop(self):
+        """The owner, 2026-10-30: subagents "count like sub agents, 5 of them are one". The Stop's list is kept on the session,
+        so the width (ingest.agent_load) sees them; a later Stop with fewer frees the room and drains the queue."""
+        from unittest import mock
+        from taskuary import blackboard as bb
+        t = self.session()
+        two = [{'id': f'a{i}', 'type': 'subagent', 'status': 'running', 'description': 'review'} for i in (1, 2)]
+        with mock.patch.object(bb, 'drain_later') as drain:
+            self.fire('Stop', last_assistant_message='Reviewing.', background_tasks=two + [{'id': 'b1', 'type': 'shell', 'status': 'running'}],
+                      transcript_path=self.file([]))
+            self.assertEqual((len(t.subagents), bb.subagent_count()), (2, 2))         # the shell is not a subagent
+            drain.assert_not_called()
+            self.fire('Stop', last_assistant_message='One back.', background_tasks=two[:1], transcript_path=self.file([]))
+            self.assertEqual(bb.subagent_count(), 1); drain.assert_called_once()
+        t.alive = False; self.assertEqual(bb.subagent_count(), 0)                   # a session that ended counts nothing
+
     def test_the_idle_notice_while_a_job_runs_is_not_a_question(self):
         """A minute after a turn that left a shell running, Claude sends its idle notice. It wakes itself when the job
         reports, so it is waiting on its own work: still working, not "on you" (TQ-1059, 2026-10-13). A real ask counts."""

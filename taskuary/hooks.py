@@ -493,6 +493,12 @@ def _events(t, p: dict) -> None:
             jobs = background.from_hook(p)
             if jobs is None: jobs = background.live(list(t.bg.values())) or (background.pending(p.get('transcript_path')) if 'claude' in _cli(t) else [])
             if jobs: ws.record(st, tid, sid, 'background', text=background.summary(jobs), choices=jobs, source='hook')
+            # its subagents are light load on the one width (ingest.agent_load, the owner 2026-10-30): kept until the next Stop says
+            # again, and fewer than before may let a queued agent start
+            was, t.subagents = len(getattr(t, 'subagents', None) or ()), background.agents(jobs)
+            if len(t.subagents) < was:
+                from . import blackboard as bb
+                bb.drain_later(st)
         elif ev == 'Interrupt': ws.record(st, tid, sid, 'turn_end', text='interrupted', source='hook')
         elif ev == 'SessionEnd':
             # the run's own ending, before the pty's EOF gets there - unless the process lives on

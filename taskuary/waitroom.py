@@ -138,7 +138,7 @@ def deliver(store, tid: int) -> dict:
     """Hand this task's waiting notes over IF the agent has stopped. {'delivered': n, 'state': ...}
     - 'held' states are the ones where nothing moved: working, asking, closed, full."""
     from . import terminal as term
-    from .ingest import auto_sessions
+    from .ingest import has_room
     pending = store.waiting_notes(tid)
     if not pending: return {'delivered': 0, 'state': state(store, tid)[0]}
     st, t = state(store, tid)
@@ -181,7 +181,7 @@ def deliver(store, tid: int) -> dict:
     if st == 'no_session':
         task = store.get_task(tid) or {}
         if task.get('Status') not in ('open', 'in_progress'): return {'delivered': 0, 'state': 'closed'}
-        if len([x for x in list(term.SESSIONS.values()) if x.alive]) >= auto_sessions(store): return {'delivered': 0, 'state': 'full'}
+        if not has_room(store): return {'delivered': 0, 'state': 'full'}
         # General work reopens in its connector-backed conversation. Coding work still reopens
         # the configured CLI. The waiting room therefore feeds the same underlying session no
         # matter which of its two renderers (assistant or terminal) the owner happens to prefer.

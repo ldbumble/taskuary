@@ -43,6 +43,7 @@
     "agent_context_file": "1",
     "agent_hooks": "1",
     "auto_sessions": "4",
+    "auto_sessions_light": "5",
     "hand_sound": "chime",
     "hand_desktop": "1",
     "phone_assistant": "0",

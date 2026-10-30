@@ -726,6 +726,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # workspace the owner controls. Prior incoming mail is never a rule here.
                     'trust_own_domain': '1', 'trust_sent_history': '1', 'trust_non_email': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
+                    'auto_sessions_light': '5',     # quick answers / subagents that count as one of those (ingest.agent_load)
                     'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>
                     'startup_sync_days': '3',       # backfill window when the app starts: catch what arrived while it was shut
                     # minutes between background polls while the app is OPEN. The Timeline said

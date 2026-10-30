@@ -146,8 +146,8 @@ def test_only_claudes_quick_flags_reach_the_web():
 
 REAL_START = general.start_session                       # conftest's guard; actor='owner' passes through
 
-def opened(s, tid, **k):
-    ses = REAL_START(s, tid, pick='cli:claude'); return ses
+def opened(s, tid, quick=False, **k):
+    ses = REAL_START(s, tid, pick='cli:claude', quick=quick); return ses
 
 def filed(s, tid, answer):
     "One quick run filed on a fresh quick session; the session."
@@ -257,7 +257,7 @@ def test_a_failed_quick_call_escalates_and_frees_its_slot():
     said, auto, _ = run(s, tid, boom)
     assert said == 'escalated' and auto.call_args.kwargs == {'deep': True}
     assert any('the quick answer could not be made (timed out after 180s)' in c['Body'] for c in s.list_comments(tid))
-    assert quickwork.POOL._value == quickwork.QUICK_POOL                    # the slot came back
+    assert quickwork.in_flight() == 0                                       # the slot came back
 
 # TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): the ask a quick start files is Taskuary's brief, never under YOU
 def test_a_quick_starts_ask_is_filed_as_taskuarys_brief():
@@ -310,13 +310,13 @@ def test_a_quick_session_that_cannot_start_says_so_and_never_raises():
     assert any("The assistant couldn't start" in c['Body'] and 'not signed in' in c['Body'] for c in s.list_comments(tid))
     assert s.get_dispatch(tid)                                                   # on the retry budget, as a failed deep start is
 
-def test_fifty_arrivals_run_eight_at_a_time_and_take_no_desk():
+def test_fifty_arrivals_run_as_many_as_the_agent_slots_hold_and_take_no_desk():
     from taskuary import blackboard as bb
     s = home(); tids = [arrived(s, mail_kw={'external_id': f'q{i}', 'conversation_id': f'conv-{i}'})[0] for i in range(50)]
     assert len(set(tids)) == 50
     gate, now, most, lock = threading.Event(), [0], [0], threading.Lock()
     def slow(system, user, **k):
-        with lock: now[0] += 1; most[0] = max(most[0], now[0])
+        with lock: now[0] += 1; most[0] = max(most[0], quickwork.in_flight())      # the slots held, not who reached the brain first
         gate.wait(5)
         with lock: now[0] -= 1
         return json.dumps(ANSWER)
@@ -326,8 +326,9 @@ def test_fifty_arrivals_run_eight_at_a_time_and_take_no_desk():
         for t in ts: t.start()
         time.sleep(.5); gate.set()
         for t in ts: t.join(10)
-        assert most[0] == quickwork.QUICK_POOL == 8
-        assert bb.live_count() == 0 and not s.queued_dispatches()             # no desk taken, nothing "Waiting its turn"
+        assert most[0] == ingest.AUTO_SESSIONS * ingest.LIGHT_PER_AGENT == 20   # four agents' worth, five quick answers to one
+        assert bb.live_count() == 0 and not s.queued_dispatches()             # no desk taken, no agent queued
+    assert quickwork.in_flight() == 0
 
 
 def test_a_quick_arrival_gets_one_call_and_no_agent_session():
@@ -434,8 +435,8 @@ def test_a_queued_escalation_starts_the_agent_with_its_notes():
     s = home(); tid, _ = arrived(s)
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
          mock.patch.object(llm, 'build_llm', return_value=Brain({**ANSWER, 'escalate': True, 'why': 'it means booking for three', 'report': 'Two dates fit.'})), \
-         mock.patch.object(bb, 'live_count', return_value=99):                   # every agent slot is taken
-        assert quickwork.start(s, tid) == 'escalated'
+         mock.patch.object(quickwork, '_fits', return_value=True), mock.patch.object(bb, 'live_count', return_value=99):
+        assert quickwork.start(s, tid) == 'escalated'                           # it had its quick slot; by the escalation every agent slot is taken
     brief = s.get_dispatch(tid)['Brief']
     assert 'it means booking for three' in brief and 'Two dates fit.' in brief
     with mock.patch.object(bb, 'live_count', return_value=0), mock.patch.object(ingest, '_start_general', return_value=True) as deep:

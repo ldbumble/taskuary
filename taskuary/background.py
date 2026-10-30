@@ -119,6 +119,8 @@ def live(jobs, now: float = None) -> list:
     return [j for j in jobs or [] if isinstance(j, dict) and (j.get('until') is None or j['until'] > now)]
 
 
+def agents(jobs) -> list: return [j for j in jobs or [] if isinstance(j, dict) and j.get('kind') == 'agent']
+
 def summary(jobs) -> str:
     "'1 shell, 1 monitor still running' - the words Claude's own footer uses"
     n = {}

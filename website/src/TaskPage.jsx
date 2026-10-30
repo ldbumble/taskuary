@@ -1847,6 +1847,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               sx={{ display: "block", fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.label || l.url}</Link>))}
                         </Box>}
   </>);
+  // "Repository: none - not started" said what was wrong and offered nothing to do about it (the owner, 2026-10-30): the line carries
+  // the picker's own button, and the pick resumes the held start as every other road to it does (pickRepo). The picker draws in the
+  // agent's step, so the press opens the Agent section it belongs to (the owner, 2026-10-27: "the correct section opens") and the picker
+  // is brought into view rather than opening unseen.
+  const pickOnAlert = (p, sx = {}) => p.key === "repo" && (
+    <Button size="small" variant="outlined" data-tq-fact-pick="repo" title={heldRepo ? heldWhy : btnHint("pick_repo")}
+      startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />} sx={{ ...chipBtn, verticalAlign: "middle", ...sx }}
+      onClick={() => { pickRepo(); if (threeUp) openSection("agent"); requestAnimationFrame(() => document.querySelector("[data-tq-repo-picker]")?.scrollIntoView({ block: "nearest", behavior: "smooth" })); }}>
+      {PICK_CODE}</Button>);
   const fromSorted = () => (
                       <Box data-tq-sorted="" title={`${detail.ref} · ${made}${triaged.at ? ` · sorted ${whenShort(triaged.at)}` : ""}`}
                         sx={{ display: "flex", gap: 1, alignItems: "flex-start", pt: 1, borderTop: `1px solid ${BORDER}` }}>
@@ -1857,7 +1866,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {workContext && <Box component="span" sx={{ display: "block" }}>Works from: {workContext}</Box>}
                           {/* ...and a warning it carries (a start held for a repository) in the alert ink the header pill wore */}
                           {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
-                            <Box key={p.key} component="span" data-tq-fact-alert={p.key} sx={{ display: "block", color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}</Box>))}
+                            <Box key={p.key} component="span" data-tq-fact-alert={p.key} sx={{ display: "block", color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}{pickOnAlert(p, { ml: 1 })}</Box>))}
                         </Typography>
                       </Box>
   );
@@ -1893,7 +1902,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {triaged.later > 0 && <Typography sx={{ fontSize: 12.5, color: FAINT }}>{plural(triaged.later, "later message")} joined this task</Typography>}
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
         {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
-          <Typography key={p.key} data-tq-fact-alert={p.key} sx={{ fontSize: 12.5, color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}</Typography>))}
+          <Typography key={p.key} data-tq-fact-alert={p.key} sx={{ fontSize: 12.5, color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}{pickOnAlert(p, { ml: 1 })}</Typography>))}
       </Box>
     </Box>
   );
@@ -2985,7 +2994,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>}
                 </Box>}
                 {repoPick && (
-                  <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
+                  <Box data-tq-repo-picker="" sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
                       <AccountTreeIcon sx={{ fontSize: 16, color: "#55697a" }} />
                       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1 }}>

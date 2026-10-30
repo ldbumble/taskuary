@@ -1349,6 +1349,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (!replyMessage?.MessageId || openingReply) return;
     const id = selected;
     setOpeningReply(generate ? "generate" : "write"); setErr("");
+    // THE BOX OPENS AT THE PRESS (the owner, 2026-10-30: "the top line says drafting then the box opens up. Box should open up right away and
+    // then you can spin in the box of drafting"): Close out comes up now, on its empty box with the spinner in it, and the draft fills it
+    setOpenStage("reply");
     try {
       // the box at once and the AI's draft behind it, "Drafting…" in the decision meanwhile (replyDraft.js, 2026-10-01)
       // ...and Reply on a task no agent has worked opens it EMPTY - only Draft with AI ("ai") asks for the AI's draft (2026-10-28)
@@ -3314,9 +3317,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               is the same openReply */}
                           {replyEmpty && (
                             <Box data-tq-reply-empty="" sx={{ mt: 1 }}>
-                              <Box onMouseDown={(e) => { if (!openingReply) { e.preventDefault(); openReply(false); } }}>
+                              <Box sx={{ position: "relative" }} onMouseDown={(e) => { if (!openingReply) { e.preventDefault(); openReply(false); } }}>
                                 <DraftField value="" onChange={() => {}} placeholder={openingReply === "generate" ? "Drafting…" : "No draft yet — hit Draft with AI"}
                                   inputProps={{ readOnly: true, style: { fontSize: 12.5, lineHeight: 1.45, cursor: "text" } }} />
+                                {openingReply === "generate" && <CircularProgress size={14} data-tq-drafting-spin=""
+                                  sx={{ position: "absolute", top: 12, right: 12, color: FAINT }} />}
                               </Box>
                               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, flexWrap: "wrap" }}>
                                 {/* ...not lit on an INVITE (B15): its answer is the row's Accept or Decline, not an email */}

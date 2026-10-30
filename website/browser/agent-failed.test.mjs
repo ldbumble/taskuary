@@ -78,7 +78,7 @@ test("a general agent that could not start says Failed, offers Try again and Con
   // ...and the task is still on the rail, with the dock row's moves under it: a failed run is never a page with nothing to press
   await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].some((r) => r.offsetParent && /Compare three payroll/.test(r.textContent)),
     { timeout: 15000 }).catch(() => { throw new Error("the failed task has no row on the rail"); });
-  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-row] button, [data-tq-head-moves] button")].some((b) => b.offsetParent && b.textContent.trim() === "Mark done"),
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-row] button, :is([data-tq-spine-moves], [data-tq-pane-moves]) button")].some((b) => b.offsetParent && b.textContent.trim() === "Mark done"),
     { timeout: 15000 }).catch(() => { throw new Error("the dock row has no Mark done"); });
   if (process.env.TQ_SHOT) await page.screenshot({ path: process.env.TQ_SHOT });
   // Try again with still no AI is greyed, the reason its hover - never pressable into the same failure (the owner, 2026-10-22). On the row,

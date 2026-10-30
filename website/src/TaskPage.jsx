@@ -476,12 +476,31 @@ const SEC_NAME = { from: "Came from", agent: "Agent", close: "Close out" };
 const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
 const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="button" className={`tq-ab ${v.tone} ${rankOf(v, head)}`} disabled={v.disabled} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
+// THE TASK'S OWN MOVES RIDE ON THE PANES TOO (the owner, 2026-10-30: "mark done and close with a note belong on the close out spine either when
+// open or closed ... same with share. Change should be on Came from"): the title bar keeps the status, Expand and the X. Close out carries Mark
+// done, Close with a note, Attach a file and Share after its own moves; Came from its Change ▾
+function useTaskMoves(sec) {
+  const head = useSpineVerbs("head"), share = useSpineVerbs("share"), change = useSpineVerbs("change");
+  return { task: sec === "close" ? [...head, ...share] : [], change: sec === "from" ? change : NO_MOVES };
+}
+const NO_MOVES = [];
+function ChangeMoves({ change }) {
+  const [at, setAt] = useState(null);
+  return <>
+    <button type="button" className="tq-ab s task" aria-haspopup="menu" aria-expanded={!!at} data-tq-more="change"
+      title="Split or merge, who does it, the priority, who it is assigned to" onClick={(e) => setAt(e.currentTarget)}>{"Change ▾"}</button>
+    <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
+      {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
+        onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></>;
+}
 function SpineMoves({ sec }) {
-  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p");
-  if (!vs.length) return null;
+  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p"), { task, change } = useTaskMoves(sec);
+  if (!vs.length && !task.length && !change.length) return null;
   return (
     <Box data-tq-spine-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
       {vs.map((v) => stageBtn(v, v.spine || v.label))}
+      {task.map((v) => stageBtn(v, v.label, true))}
+      {change.length > 0 && <ChangeMoves change={change} />}
     </Box>);
 }
 // ...and OPEN, its stage moves are on a WHITE STRIP across the pane's top (the owner, 2026-10-29, "try it": the spine's white look, kept
@@ -490,29 +509,17 @@ function SpineMoves({ sec }) {
 // pointing the way its spine's would. A live agent's is slim: Stop and save and the arrows, small, so the terminal keeps its height
 export const STRIP_H = 44, STRIP_LIVE_H = 32;
 const FOLD = { from: [["right", "‹", "agent"]], agent: [["left", "‹", "from"], ["right", "›", "close"]], close: [["left", "›", "agent"]] };
+// ...one line: what does not fit folds into its ▾ from the end - never Mark done nor what is lit
 export function PaneMoves({ sec, skip = () => false }) {
-  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), [at, setAt] = useState(null);
+  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { task, change } = useTaskMoves(sec);
   // ...a `tucked` move keeps its rule (a sent reply's Hand it to a person): behind the strip's ▾ unless it is lit
-  const vs = all.filter((v) => !v.tucked || v.tone === "p"), rest = all.filter((v) => !vs.includes(v));
-  if (!all.length) return null;
-  return <Box data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" }}>
-    {vs.map((v) => stageBtn(v))}
-    {rest.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
-    <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
-      {rest.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
-        onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></Box>;
-}
-// THE TASK'S OWN MOVES, ON ITS TITLE BAR (the owner, 2026-10-29: the bar is Back and Next alone): Mark done first, then what acts on the
-// whole task - Close with a note, Attach a file, a card's own words - Change (its moves behind one ▾) and Share, at the right before the
-// status pill. One line: what does not fit folds into a ▾ from the end, never Mark done
-function HeadMoves() {
-  const moves = useSpineVerbs("head"), change = useSpineVerbs("change"), share = useSpineVerbs("share");
-  const items = [...moves.map((v) => ({ key: v.id, v })), ...(change.length ? [{ key: "change", change }] : []), ...share.map((v) => ({ key: v.id, v }))];
-  const box = useRef(null), [n, setN] = useState(99), [at, setAt] = useState(null), [chAt, setChAt] = useState(null);
+  const up = all.filter((v) => !v.tucked || v.tone === "p"), tucked = all.filter((v) => !up.includes(v));
+  const items = [...up.map((v) => ({ key: v.id, v })), ...task.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true })),
+    ...(change.length ? [{ key: "change", change }] : [])];
+  const box = useRef(null), [n, setN] = useState(99), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setN(99); }, [sig]);
-  // ...never past Mark done and what is lit, which lead the list (splitRow): a lit move folded behind the ▾ is one the owner cannot see
-  const keep = Math.max(1, items.findIndex((x) => !x.v || (x.v.id !== "done" && !/:done$/.test(String(x.v.id)) && x.v.tone !== "p")));
+  const keep = 1 + items.reduce((k, x, i) => (x.v && (isDoneMove(x.v) || x.v.tone === "p") ? i : k), 0);
   useLayoutEffect(() => { const b = box.current; if (b && n > keep && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.max(keep, Math.min(k, items.length) - 1)); });
   useEffect(() => {
     const b = box.current?.parentElement;
@@ -522,25 +529,17 @@ function HeadMoves() {
     ro.observe(b);
     return () => ro.disconnect();
   }, []);
-  if (!items.length) return null;
-  const shown = items.slice(0, n), folded = items.slice(n);
-  const menuItems = folded.flatMap((x) => (x.change ? x.change : [x.v]));
-  return (
-    <Box ref={box} data-tq-head-moves="" role="group" aria-label="What to do with this task" onClick={(e) => e.stopPropagation()}
-      sx={{ ...MOVE_LOOK, display: "flex", alignItems: "center", gap: 0.6, flex: "0 1 auto", minWidth: 0, maxWidth: "62%", overflow: "hidden", "& .tq-ab": { minHeight: 26, fontSize: 12, px: 1.25, flexShrink: 0 } }}>
-      {shown.map((x) => (x.change
-        ? <button key="change" type="button" className="tq-ab s task" aria-haspopup="menu" aria-expanded={!!chAt} data-tq-more="change"
-            title="Split or merge, who does it, the priority, who it is assigned to" onClick={(e) => setChAt(e.currentTarget)}>{"Change ▾"}</button>
-        : stageBtn(x.v, x.v.label, true)))}
-      {folded.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more="head" onClick={(e) => setAt(e.currentTarget)}>▾</button>}
-      <Menu open={!!chAt} anchorEl={chAt} onClose={() => setChAt(null)}>
-        {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
-          onClick={(e) => { const a = chAt; setChAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu>
-      <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
-        {menuItems.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
-          onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu>
-    </Box>);
+  if (!items.length && !tucked.length) return null;
+  const shown = items.slice(0, n), rest = [...items.slice(n).flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
+  return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
+    "& .tq-ab": { flexShrink: 0 } }}>
+    {shown.map((x) => (x.change ? <ChangeMoves key="change" change={x.change} /> : stageBtn(x.v, x.v.label, !!x.head)))}
+    {rest.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
+    <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
+      {rest.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
+        onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></Box>;
 }
+const isDoneMove = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // ...an icon's own words, there for a reader and a test, never drawn
 const HIDDEN_WORDS = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
@@ -2573,7 +2572,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   )}
                   {/* THE STATUS, TOP RIGHT: the rail's own mark and word for this task (railStatus.taskStatus) - its logo ringed while an
                       agent works. A task Taskuary closed under a working agent says so on its hover (the list row's "agent stopped"). */}
-                  {inRow && threeUp && !sessionView && <HeadMoves />}
                   <StatusPill status={status} agent={agentName(t)} note={interruptedTask ? INTERRUPTED : ""}
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
                   {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.

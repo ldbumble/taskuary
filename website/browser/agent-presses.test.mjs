@@ -70,7 +70,7 @@ async function rowVerb(page, id) {
   // ...on the row once its write-up has settled (it is greyed while Stop and save writes up)
   // ...or, a stage move, in the open Agent pane's heading or on its spine (the owner, 2026-10-29: they left the bar)
   let at = await page.waitForSelector([`[data-tq-row] button[data-tq-verb$="${id}"]:not([disabled])`, `[data-tq-pane-moves] button[data-tq-verb$="${id}"]:not([disabled])`,
-    `[data-tq-spine-moves] button[data-tq-verb$="${id}"]:not([disabled])`, `[data-tq-head-moves] button[data-tq-verb$="${id}"]:not([disabled])`,
+    `[data-tq-spine-moves] button[data-tq-verb$="${id}"]:not([disabled])`, `:is([data-tq-spine-moves], [data-tq-pane-moves]) button[data-tq-verb$="${id}"]:not([disabled])`,
     `[data-tq-pane-strip] button[data-tq-verb$="${id}"]:not([disabled])`].join(", "), { timeout: id === "continue" ? 20000 : 3000 }).catch(() => null);
   for (const more of await page.$$("[data-tq-row] [data-tq-more]")) {
     if (at) break;

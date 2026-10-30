@@ -42,7 +42,7 @@ test("the Advisor's Chase them on a goal runs at once and the row keeps Next and
   assert.deepEqual(said.filter((l) => l.you), [], "a press was written as an owner line");
   assert.ok(await page.$("[data-tq-row] [data-tq-next]"), "the row lost Next");
   // ...and its verbs: on the row, or - on a desk, where the bar is Back and Next - on the title bar and the panes (the owner, 2026-10-29)
-  const verbs = async () => [...await rowVerbs(page), ...await page.$$eval("[data-tq-head-moves] button[data-tq-verb], [data-tq-spine-moves] button[data-tq-verb], [data-tq-pane-moves] button[data-tq-verb]",
+  const verbs = async () => [...await rowVerbs(page), ...await page.$$eval(":is([data-tq-spine-moves], [data-tq-pane-moves]) button[data-tq-verb], [data-tq-spine-moves] button[data-tq-verb], [data-tq-pane-moves] button[data-tq-verb]",
     (bs) => bs.filter((b) => b.offsetParent).map((b) => b.dataset.tqVerb))];
   assert.ok((await verbs()).length > 1, `the row shrank to one button: ${await verbs()}`);
 });

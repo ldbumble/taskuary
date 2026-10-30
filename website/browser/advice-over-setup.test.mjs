@@ -39,7 +39,7 @@ test("a task opened over setup has its lit button and its line in the task's Adv
     .catch(async (e) => { throw new Error(`${e.message}\n${(await page.evaluate(() => document.body.innerText)).slice(-1200)}`); });
   // ...and its button lit where it lives, drawn a beat after the section on a slow machine: on a desk the task's moves are its title bar's
   // and the stage moves their panes' (the owner, 2026-10-29), so Mark done is lit on the title bar, not the Back/Next bar
-  const MOVES = ["[data-tq-row]", "[data-tq-head-moves]", "[data-tq-spine-moves]", "[data-tq-pane-moves]"];
+  const MOVES = ["[data-tq-row]", ":is([data-tq-spine-moves], [data-tq-pane-moves])", "[data-tq-spine-moves]", "[data-tq-pane-moves]"];
   await page.waitForSelector(MOVES.map((m) => `${m} .tq-ab.p[data-tq-verb]`).join(", "), { timeout: 15000 }).catch(async () => assert.fail(`its button is not lit: ${
     await page.evaluate((M) => [...document.querySelectorAll(M.map((m) => `${m} button`).join(", "))].map((b) => `${b.getAttribute("data-tq-verb")}.${b.className}`).join(", "), MOVES)}`));
   assert.equal(await page.$(".tq-dock .tq-next, [data-tq-strip]"), null, "and nothing over the row");

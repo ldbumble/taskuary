@@ -83,6 +83,6 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   assert.match(tasks, /labelOfRow\("continue"\)/);
   assert.match(tasks, /<ContinueBox task=\{t\} anchor=\{continueAt\}/);
   // ...the press opens that box - except over a run that FAILED, which is tried again at once (owner-approved, 2026-10-21)
-  assert.match(tasks, /continuePress = \(e, a\) => \{ setResultOpen\(true\); return failedRun \? tryAgain\(\) : setContinueAt\(steady\(a \|\| e\?\.currentTarget\)\); \}/);
+  assert.match(tasks, /continuePress = \(e, a\) => \(failedRun \? \(setResultOpen\(true\), tryAgain\(\)\) : setContinueAt\(steady\(a \|\| e\?\.currentTarget\)\)\);/);
   assert.match(tasks, /onClick=\{continuePress\}/);
 });

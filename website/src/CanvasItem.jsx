@@ -117,7 +117,11 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
     const r = box.current?.getBoundingClientRect();
     if (r) setPin({ left: r.left, width: r.width });   // exact: a rounded width re-wrapped the strip and moved the pane by 2px
   }, [phone, expanded]);
-  const h = phone ? phoneH : height;
+  // HALF, ON A DESK (the owner, 2026-10-30: "it should be half size when full and make full size when half"): the item takes the canvas, and
+  // its arrow halves it - the top stays where it is, as the chat box's does - and makes it whole again. A phone's arrow still pins it full screen
+  const [half, setHalf] = useState(false);
+  useEffect(() => { setHalf(false); }, [card.key]);
+  const h = phone ? phoneH : half ? `max(300px, calc(${height} / 2))` : height;
   const held = useHeldHeight(box, card.key);
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
@@ -173,7 +177,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
       <TableVerbs value={card.key}>
       <TaskPage taskId={card.tid} title={card.title || ""} rail={card} canvas active autostart={auto} onAutostarted={() => setAuto(null)}
         openAct={act} onActOpened={() => setAct(null)}
-        expanded={expanded} onExpand={onExpand}
+        expanded={phone ? expanded : !half} onExpand={phone ? onExpand : () => setHalf((v) => !v)}
         onClose={onFold} onListChanged={onListChanged} onChanged={onChanged}
         // a goal's step opens as its own view on the table (TaskHubPage.openTask); onSelect never carried an id here
         onOpenTask={onOpenTask}

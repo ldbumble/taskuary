@@ -2577,8 +2577,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.
                       Next is NOT up here: it sits under the view, where the walk has always put it (CanvasItem) */}
                   {onExpand && (
-                    <Tooltip title={expanded ? "Back to the conversation" : "Give this the whole canvas"}>
-                      <IconButton size="small" data-tq-expand="" aria-label={expanded ? (backArrow ? "Back to the chat" : "Collapse to the conversation") : "Expand to the whole canvas"}
+                    <Tooltip title={expanded ? (backArrow ? "Back to the conversation" : "Half the height") : "Give this the whole canvas"}>
+                      <IconButton size="small" data-tq-expand="" aria-label={expanded ? (backArrow ? "Back to the chat" : "Half the height") : "Expand to the whole canvas"}
                         aria-pressed={expanded} onClick={onExpand} sx={{ color: "#41525f", flexShrink: 0 }}>
                         {/* a phone's full screen goes BACK to the chat - an arrow, the way every phone says it. The SAME size
                             as the icon it replaces: 2px more re-flowed the strip and shrank the pane, a grow on the way back */}

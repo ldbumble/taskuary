@@ -72,7 +72,7 @@
 <div class="entry on">
       <a class="page" href="./reports" aria-current="page">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Reports and the Advisor's sections"></button>
-      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#workflows" data-sec="workflows">Workflows</a><a class="sec" href="#playbooks" data-sec="playbooks">Playbooks</a><a class="sec" href="#stateful-workflows" data-sec="stateful-workflows">Stateful workflows</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
+      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#routines" data-sec="routines">Routines</a><a class="sec" href="#playbooks" data-sec="playbooks">Playbooks</a><a class="sec" href="#stateful-routines" data-sec="stateful-routines">Stateful routines</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -401,17 +401,17 @@ an <strong>idea</strong>: a system your mail keeps naming that nothing here read
 such system per run, and never one it has raised before. The app&#39;s own health (a report failing
 run after run, a connection erroring) is raised the same way, and counts toward the post&#39;s
 lines like everything else.</p>
-<h2 id="workflows">Workflows<a class="anchor" href="#workflows" aria-label="Link to this section">#</a></h2>
-<p>A workflow is a job that writes or keeps state - posting bills, bumping dependencies, driving a
-portal - rather than a check that reads. <strong>Every run of a workflow is a task</strong>, whatever started
+<h2 id="routines">Routines<a class="anchor" href="#routines" aria-label="Link to this section">#</a></h2>
+<p>A routine is a job that writes or keeps state - posting bills, bumping dependencies, driving a
+portal - rather than a check that reads. <strong>Every run of a routine is a task</strong>, whatever started
 it: its schedule, <strong>Run now</strong>, the assistant, or you from your phone. The run never becomes a row
 under Reports and never goes through triage; its agent works it like any other task.</p>
 <ul>
-<li>A workflow that names a profile (<code>ap</code>, say) runs as that profile, with its rules; one that names
+<li>A routine that names a profile (<code>ap</code>, say) runs as that profile, with its rules; one that names
 none runs on the assistant, or on the coding profile when it has a folder to work in.</li>
-<li>A workflow with a <strong>folder</strong> (<code>cwd</code>) runs in that folder. If the folder is gone, the task says so
+<li>A routine with a <strong>folder</strong> (<code>cwd</code>) runs in that folder. If the folder is gone, the task says so
 and nothing starts.</li>
-<li>A workflow runs on the <strong>same brain as your general agents</strong> (Settings → How mail is sorted →
+<li>A routine runs on the <strong>same brain as your general agents</strong> (Settings → How mail is sorted →
 General agent), on its main model. For a hard job, the editor&#39;s <strong>Model</strong> row picks a stronger
 model from that CLI&#39;s own list and an <strong>Effort</strong> level - only the levels that CLI and model take
 (Claude Code&#39;s <code>--effort</code>, Codex&#39;s <code>model_reasoning_effort</code>). A CLI with no effort setting shows
@@ -420,23 +420,23 @@ says what it <strong>Runs on</strong>.</li>
 <li>One run at a time: a scheduled run that comes round while the last one is still working is not
 started, and <strong>Run now</strong> takes you to the run that is. A run that is only waiting for your yes
 does not hold the next one back.</li>
-<li>The task shows where it came from: the workflow&#39;s mark, <strong>Workflow · its name</strong> and
+<li>The task shows where it came from: the routine&#39;s mark, <strong>Routine · its name</strong> and
 <strong>Started by</strong> - its schedule (with the clock, e.g. &quot;Mondays 08:00&quot;), you, the assistant, or your
-phone - in the header and under <strong>Came from</strong>, with a link back to the workflow.</li>
+phone - in the header and under <strong>Came from</strong>, with a link back to the routine.</li>
 <li><strong>A mail can start it.</strong> Describe, in words, the mail that should start it under <strong>Start when a
 mail like this arrives</strong> (&quot;a vendor sends an invoice for something we ordered&quot;). Triage is shown
-every such workflow beside your playbooks; when a mail is one, that workflow runs and its run is
+every such routine beside your playbooks; when a mail is one, that routine runs and its run is
 the mail&#39;s task, with the mail filed on it. Its steps read the mail as <code>{{mail.from}}</code>,
 <code>{{mail.subject}}</code> and <code>{{mail.body}}</code> - as data, never pasted into a query. Approvals work as on
-any run. A workflow that hands to an agent is not started by a sender who may not start one by
-themselves; that mail becomes a task of its own that says which workflow it matched.</li>
-<li>A new workflow&#39;s first scheduled run is its next slot - saving one on a Wednesday does not run a
+any run. A routine that hands to an agent is not started by a sender who may not start one by
+themselves; that mail becomes a task of its own that says which routine it matched.</li>
+<li>A new routine&#39;s first scheduled run is its next slot - saving one on a Wednesday does not run a
 Monday job straight away. <strong>Run now</strong> runs it now.</li>
 <li>A run of steps with nothing waiting on it is done when its last step runs; a draft it wrote
 waits on its own task, which the step names.</li>
 </ul>
 <h2 id="playbooks">Playbooks<a class="anchor" href="#playbooks" aria-label="Link to this section">#</a></h2>
-<p>The third shelf on the Reports page, beside Reports and Workflows. A <strong>playbook</strong> is how this
+<p>The third shelf on the Reports page, beside Reports and Routines. A <strong>playbook</strong> is how this
 company does one kind of job - when it starts, which connections it uses, the steps, what an agent
 may do alone, what to ask first and what counts as done. Triage matches arriving mail to a
 playbook&#39;s <code>when</code> line, and the agent working that task is handed the playbook.</p>
@@ -448,13 +448,13 @@ proposes one on the task; approve it and the next mail like it is matched.</li>
 <li>Each playbook has an <strong>on/off switch</strong>: off keeps it, and triage stops matching it. Settings →
 How mail is sorted → <strong>Use playbooks</strong> turns them all off at once.</li>
 </ul>
-<h2 id="stateful-workflows">Stateful workflows<a class="anchor" href="#stateful-workflows" aria-label="Link to this section">#</a></h2>
-<p><strong>Monthly Zoho invoices</strong> is the first workflow on the Reports page that is not a query returning
+<h2 id="stateful-routines">Stateful routines<a class="anchor" href="#stateful-routines" aria-label="Link to this section">#</a></h2>
+<p><strong>Monthly Zoho invoices</strong> is the first routine on the Reports page that is not a query returning
 one result. One scheduled run opens a batch, the batch holds one row per customer, and each row
 advances separately through amount, draft, Review and sent.</p>
 <ol>
 <li>Connect <strong>Zoho Invoice</strong>, then use <strong>Monthly invoices</strong> on Reports.</li>
-<li>Choose the customers and a monthly cron. Saving enables the workflow.</li>
+<li>Choose the customers and a monthly cron. Saving enables the routine.</li>
 <li>On schedule (or <strong>Open this month</strong>), Taskuary reads each customer&#39;s latest prior sent invoice
 and prefills its total. No new invoice exists yet.</li>
 <li>Confirm or change the amounts, then <strong>Prepare Zoho drafts</strong> — each prior invoice is duplicated
@@ -462,7 +462,7 @@ as a draft and gets one durable Review card.</li>
 <li>Edit and approve each email. Approval sends that invoice; leaving the page, restarting
 Taskuary or approving a different customer does not lose the others.</li>
 </ol>
-<p>The duplicate boundary is <code>(workflow, customer, YYYY-MM)</code>, stored locally and written into Zoho&#39;s
+<p>The duplicate boundary is <code>(routine, customer, YYYY-MM)</code>, stored locally and written into Zoho&#39;s
 <code>reference_number</code>. A retry after a timeout reuses an existing draft; an existing non-draft
 invoice blocks the retry rather than creating another. A changed total is applied automatically
 only when the previous invoice had one line — a multi-line invoice with a changed total stops for

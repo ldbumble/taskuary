@@ -13,7 +13,7 @@ test("Report and Workflow are tabs on New, each the Reports describe box", () =>
   assert.match(src, /key: "report", +mark: "📊", label: "Report"/);
   assert.match(src, /key: "workflow", mark: "🔁", label: "Routine"/);
   // ...and a workflow ask the composer judged to be a report opens on the report shelf (the owner, 2026-10-18)
-  assert.match(src, /<Composer kind=\{kind\} initial=\{kind === initialKind \? initialText : ""\} onDraft=\{\(config, meta\) => \{ const k = meta\?\.verdict === "report" \? "report" : kind; handDraft\(k, config, meta\); onClose\?\.\(\); openAppLink\(DRAFT_HASH\[k\]\); \}\} \/>/);
+  assert.match(src, /<Composer kind=\{kind\} initial=\{kind === initialKind \? initialText : ""\} initialRuns=\{kind === initialKind \? initialRoutine : null\} onDraft=\{\(config, meta\) => \{ const k = meta\?\.verdict === "report" \? "report" : kind; handDraft\(k, config, meta\); onClose\?\.\(\); openAppLink\(DRAFT_HASH\[k\]\); \}\} \/>/);
   assert.doesNotMatch(src, /"repeat"/);
 });
 
@@ -32,4 +32,19 @@ test("a draft waits for Reports, and an open Reports hears it at once - taken on
   takeDraft();
   const view = read("ReportsView.jsx");
   assert.match(view, /take\(\);\s*\n\s*return onDraftHanded\(take\);/);
+});
+
+// THE ASSISTANT'S PREFILL LANDS IN THE FORM (the owner, 2026-10-29: "Wrote it into New - Build it there starts it" over blank fields):
+// concierge._new's `new` - its words and its `routine` {coding, repo, skill} - rides the browse state into New → Routine's own box
+test("a routine the Assistant wrote up opens New → Routine with its words, repository and skill filled in", () => {
+  const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx"), box = read("Composer.jsx");
+  assert.match(canvas, /initialText=\{state\?\.text \|\| ""\}/);
+  assert.match(canvas, /initialRoutine=\{state\?\.routine \|\| null\}/);
+  assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
+  assert.match(sheet, /initialRoutine = null \}\) \{/);
+  assert.match(box, /const \[ask, setAsk\] = useState\(initial\)/);
+  assert.match(box, /coding: !!\(initialRuns\?\.coding \|\| initialRuns\?\.repo \|\| initialRuns\?\.skill\), repo: initialRuns\?\.repo \|\| "", skill: initialRuns\?\.skill \|\| ""/);
+  // ...and what was picked goes to the builder, laid over its draft (workflows.with_runs)
+  assert.match(box, /runs: \{ coding: true, cwd, skill: runs\.skill \}/);
+  assert.match(box, /data-tq-routine-repo/); assert.match(box, /"data-tq-routine-skill"/);
 });

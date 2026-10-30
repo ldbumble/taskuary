@@ -97,6 +97,8 @@ def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer |
 
 
 QUICK_TIMEOUT = 180
+QUICK_POOL = 8
+POOL = threading.BoundedSemaphore(QUICK_POOL)       # apart from ingest.auto_sessions: a quick call is not a desk
 ESCALATED = 'A quick look found this needs the agent: '
 ESCALATE_BRIEF = 'A QUICK LOOK CAME FIRST: one call, which could not act, found this needs the agent - {why}. Take it from here.'
 FOUND = 'What it found so far: '
@@ -113,10 +115,12 @@ def start(store, tid, brief: str = None, as_owner: bool = True) -> str:
     """One call for a quick task, filed as a general turn - 'filed'; or the deep path, when the call says it needs more or fails - 'escalated';
     or 'failed', when the answer could not be filed: written on the task and counted on the retry budget, as _start_general does. Never raises."""
     q, steps, cancel = ingest.first_ask(store, tid, brief), [], threading.Event()
-    timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
-    try: out, failed = ask(store, tid, q, steps, cancel), ''
+    try:
+        with POOL:                                       # held for the call only, so filing or a deep start never keeps a slot; the timeout counts the call, not the wait
+            timer = threading.Timer(QUICK_TIMEOUT, cancel.set); timer.daemon = True; timer.start()
+            try: out, failed = ask(store, tid, q, steps, cancel), ''
+            finally: timer.cancel()
     except Exception as e: out, failed = None, f'the quick answer could not be made ({e})'
-    finally: timer.cancel()
     if out is None or out.escalate:
         why = failed or ('the quick answer could not be read' if out is None else out.why or 'it needs more than one call')
         escalate(store, tid, q, why, out.report if out else '')

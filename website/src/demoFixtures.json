@@ -12361,6 +12361,11 @@
     "writes": false
    },
    {
+    "type": "amazon_business_transactions",
+    "status": "builtin",
+    "writes": false
+   },
+   {
     "type": "zoho_monthly_invoices",
     "status": "builtin",
     "writes": false

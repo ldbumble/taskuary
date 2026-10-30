@@ -216,7 +216,7 @@ def test_connector(store, cid: int) -> dict:
     """Live credential + access probe; the result (or failure) lands on the connector row."""
     c = store.get_connector(cid, with_secret=True)
     if not c: raise ValueError('connector not found')
-    cfg, t0 = _cfg(c), time.time()
+    cfg, t0, extra = _cfg(c), time.time(), {}
     try:
         if c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, borrowed = graph_creds(store, c)
@@ -353,8 +353,10 @@ def test_connector(store, cid: int) -> dict:
             from .quickbooks import probe, connection
             detail = probe(connection(store, cid))
         elif c['Type'] == 'amazon_sp':
-            from .amazon_sp import probe, connection
-            detail = probe(connection(store, cid))
+            # the Test fills the card's dots - which Amazon APIs these credentials reach - and the card shows them at once
+            from .amazon_sp import probe_apis, connection
+            detail, apis = probe_apis(connection(store, cid))
+            store.set_connector_config(cid, {**_cfg(c), 'apis': apis}); extra['apis'] = apis
         elif c['Type'] == 'zoho_invoice':
             from .zoho import probe, connection
             detail = probe(connection(store, cid))
@@ -479,7 +481,7 @@ def test_connector(store, cid: int) -> dict:
         else:
             raise RuntimeError(f"no test for connector type '{c['Type']}'")
         store.touch_connector(cid)
-        out = {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail}
+        out = {'ok': True, 'ms': int((time.time() - t0) * 1000), 'detail': detail, **extra}
         if c['Type'] == 'imessage':
             # the read succeeded, but the send card still needs to name the host macOS will list
             from .imessage import setup_info

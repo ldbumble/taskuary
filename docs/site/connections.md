@@ -231,6 +231,15 @@ Vendor Central accounts do the same under Integration → API Integration. Amazo
 about one new report a minute, so a throttled call waits rather than fails, and a finished report is
 kept for 15 minutes. See Amazon's [SP-API documentation](https://developer-docs.amazon.com/sp-api).
 
+**Buying on Amazon Business** — the same card reads Amazon Business purchases for reconciliation:
+every charge and refund in a window, one row per line (ASIN, quantity, price, tax, order and PO
+number), each matched to its invoice number — a charge to its invoice, a refund to its credit memo.
+It signs in the same way, with an app that holds the **Business Purchase Reconciliation** role. One
+set of credentials can reach either API or both, so the card shows a dot for each: **Test** tries a
+cheap read against both, fills in the ones that answered, and passes as long as one did. Build the
+report as **Amazon — Business purchases**. See Amazon's
+[Amazon Business API documentation](https://developer-docs.amazon.com/amazon-business/docs).
+
 **Markets** — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
 strategy screen that filters another card's rows. With a key: **Twelve Data** (quotes and computed
 indicators across stocks, FX and crypto), **Alpha Vantage** (slow limits, no card, no expiry),

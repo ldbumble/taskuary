@@ -131,6 +131,9 @@ export const FIELDS = {
     ["days back (blank = the report type's own default)", "days", "text", "30"],
     ["report options (JSON, optional)", "options", "text", '{"reportPeriod": "WEEK"}'], AI_FIELD],
   amazon_marketplaces: [AI_FIELD],
+  // Amazon Business (the same card): purchases by feed date, each line matched to its invoice or credit memo unless told not to
+  amazon_business_transactions: [["days back (by feed date)", "days", "text", "7"],
+    ["match each line to its invoice number — yes or no", "invoices", "text", "yes"], AI_FIELD],
   // the bank feed: which account (last four, a word of its name, or blank for all), how far back
   teller_transactions: [["account — last four digits, a word of its name, or blank for every account", "account", "text", "1234"],
     ["days back", "days", "text", "30"], AI_FIELD],
@@ -217,7 +220,7 @@ const TYPE_GROUPS = [
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
   ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts",
-    "amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "metric", "metric_check"]],
+    "amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "amazon_business_transactions", "metric", "metric_check"]],
   // the bank/card feed is money, not a corporate system: it belongs beside the market sources
   ["Markets & finance", ["simplefin_transactions", "simplefin_accounts", "simplefin_balances", "simplefin_spend",
     "teller_transactions", "teller_accounts", "teller_balances", "teller_spend",
@@ -238,7 +241,7 @@ export const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
   intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint",
   amazon_report: "amazon_sp", amazon_sales_traffic: "amazon_sp", amazon_orders: "amazon_sp", amazon_inventory: "amazon_sp",
-  amazon_settlement: "amazon_sp", amazon_marketplaces: "amazon_sp" };
+  amazon_settlement: "amazon_sp", amazon_marketplaces: "amazon_sp", amazon_business_transactions: "amazon_sp" };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
   sharepoint: "SharePoint", google_sheets: "Google Sheets",
   prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl",

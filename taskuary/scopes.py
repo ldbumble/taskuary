@@ -49,6 +49,7 @@ ACTIONS = {
     'simplefin_accounts': 'read', 'simplefin_transactions': 'read', 'simplefin_balances': 'read', 'simplefin_spend': 'read',
     # Amazon SP-API: reports only. createReport asks Amazon to BUILD a report; the card reaches no endpoint that changes anything
     'amazon_report': 'read', 'amazon_sales_traffic': 'read', 'amazon_orders': 'read', 'amazon_inventory': 'read', 'amazon_settlement': 'read', 'amazon_marketplaces': 'read',
+    'amazon_business_transactions': 'read',     # Amazon Business reconciliation: its invoice lookup is a POST that reads
     # market data: every one of these is a window on a public market. Nothing upstream moves.
     'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
     'alchemy_prices': 'read', 'alchemy_wallet': 'read',

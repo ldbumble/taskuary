@@ -41,6 +41,8 @@ class FakeAmazon:
         self.calls.append((method, url)); path = url.split('.amazon.com', 1)[1]
         assert kw['headers']['x-amz-access-token'].startswith('Atza|')
         if self.throttle: self.throttle -= 1; return _resp(429, {'errors': [{'code': 'QuotaExceeded', 'message': 'You exceeded your quota'}]})
+        # a seller app holds no Amazon Business role: the reconciliation API refuses it, as Amazon does
+        if 'business-api' in url: return _resp(403, {'errors': [{'code': 'Unauthorized', 'message': 'Access to requested resource is denied.'}]})
         if path == amz.PARTICIPATIONS:
             return _resp(200, {'payload': [
                 {'marketplace': {'id': 'ATVPDKIKX0DER', 'name': 'Amazon.com', 'countryCode': 'US', 'defaultCurrencyCode': 'USD'},
@@ -107,7 +109,7 @@ class TestConnection(Base):
         f = FakeAmazon()
         with f.patch(): out = amz.probe(CFG)
         self.assertIn('Northwind Goods', out); self.assertIn('Amazon.com (ATVPDKIKX0DER)', out); self.assertNotIn('Amazon.ca', out)
-        self.assertEqual(f.calls[-1], ('GET', 'https://sellingpartnerapi-na.amazon.com/sellers/v1/marketplaceParticipations'))
+        self.assertIn(('GET', 'https://sellingpartnerapi-na.amazon.com/sellers/v1/marketplaceParticipations'), f.calls)
 
     def test_a_marketplace_the_account_does_not_have_is_flagged(self):
         with FakeAmazon().patch(): out = amz.probe({**CFG, 'marketplace_ids': 'ATVPDKIKX0DER, A1PA6795UKMFR9'})
@@ -242,6 +244,154 @@ class ReadOnly(Base):
         self.assertEqual((cfg['refresh_token'], cfg['client_secret'], cfg['region'], cfg['days']), ('Atzr|abc', 'shh', 'eu', 3))
         shown = guard.masked_config(s.get_connector(c['ConnectorId']))
         self.assertNotIn('shh', shown['ConfigJson']); self.assertEqual(shown['ConfigSaved'], ['client_secret'])
+
+
+KEY = {'orderId': '113-0000001-0000001', 'orderLineItemId': 'L1', 'shipmentId': 'S1'}
+LINE = {**KEY, 'asin': 'B0TEST0001', 'productTitle': 'Northwind mug', 'itemQuantity': 2, 'unitPrice': {'amount': 12.99, 'currencyCode': 'USD'},
+        'totalAmount': {'amount': 25.98, 'currencyCode': 'USD'}, 'tax': {'amount': 2.08, 'currencyCode': 'USD'}, 'purchaseOrderNumber': 'PO-1001'}
+CHARGE = {'transactionId': 'T1', 'transactionDate': '2026-10-20T10:00:00Z', 'transactionType': 'CHARGE',
+          'amount': {'amount': 28.06, 'currencyCode': 'USD'}, 'legalEntityName': 'Northwind', 'transactionLineItems': [LINE]}
+REFUND = {'transactionId': 'T2', 'transactionDate': '2026-10-25T09:00:00Z', 'transactionType': 'REFUND',
+          'amount': {'amount': -14.03, 'currencyCode': 'USD'}, 'legalEntityName': 'Northwind', 'transactionLineItems': [{**LINE, 'itemQuantity': 1}]}
+# one order line, invoiced once and credited twice: a refund belongs to the credit memo nearest its own date
+DETAILS = [{'invoiceNumber': 'INV-1', 'invoiceDate': '2026-10-20T00:00:00Z', 'invoiceType': 'STANDARD'},
+           {'invoiceNumber': 'CM-1', 'invoiceDate': '2026-10-21T00:00:00Z', 'invoiceType': 'CREDIT_MEMO'},
+           {'invoiceNumber': 'CM-2', 'invoiceDate': '2026-10-25T00:00:00Z', 'invoiceType': 'CREDIT_MEMO'}]
+
+
+class FakeBusiness:
+    """An Amazon Business buyer's app: reconciliation answers in pages, and the Selling Partner API refuses it (sp=403) - or not."""
+    def __init__(self, pages=([CHARGE], [REFUND]), sp=403, business=200):
+        self.pages, self.sp, self.business, self.calls, self.params, self.bodies = [list(p) for p in pages], sp, business, [], [], []
+
+    def post(self, url, **kw): return _resp(200, {'access_token': 'Atza|tok', 'expires_in': 3600})
+
+    def request(self, method, url, **kw):
+        self.calls.append((method, url)); path = url.split('.amazon.com', 1)[1]
+        if 'business-api' not in url:
+            if self.sp == 403: return _resp(403, {'errors': [{'code': 'Unauthorized', 'message': 'Access to requested resource is denied.'}]})
+            return FakeAmazon().request(method, url, **kw)
+        if self.business != 200: return _resp(self.business, {'errors': [{'code': 'Unauthorized', 'message': 'denied'}]})
+        if method == 'GET' and path == f'{amz.RECON}/transactions':
+            self.params.append(dict(kw['params']))
+            i = int(kw['params'].get('nextPageToken', 'p0')[1:])
+            return _resp(200, {'transactions': self.pages[i] if i < len(self.pages) else [],
+                               **({'nextPageToken': f'p{i + 1}'} if i + 1 < len(self.pages) else {})})
+        if method == 'POST' and path == f'{amz.RECON}/invoices':
+            body = json.loads(kw['data']); self.bodies.append(body)
+            return _resp(200, {'invoiceDetailsByOrderLineItems': [{'orderLineItem': li, 'invoiceDetails': DETAILS if li == KEY else
+                                                                   [{'invoiceNumber': f"INV-{li['orderLineItemId']}", 'invoiceDate': '2026-10-20T00:00:00Z',
+                                                                     'invoiceType': 'STANDARD'}]} for li in body['orderLineItems']]})
+        raise AssertionError(f'unexpected call {method} {path}')
+
+    def patch(self): return mock.patch.multiple(amz.requests, post=self.post, request=self.request)
+
+
+class Business(Base):
+    NOW = amz.datetime(2026, 10, 30, 15, 0, tzinfo=amz.timezone.utc)
+
+    def test_the_feed_window_follows_the_date_rules(self):
+        w = lambda **c: amz.feed_window(c, now=self.NOW)
+        self.assertEqual(w(), ('2026-10-23T00:00:00Z', '2026-10-30T14:58:00Z'))              # 7 days, ending two minutes ago
+        self.assertEqual(w(days=1), ('2026-10-29T00:00:00Z', '2026-10-30T14:58:00Z'))
+        self.assertEqual(w(start='2026-10-01'), ('2026-10-01T00:00:00Z', '2026-10-08T23:59:59Z'))   # a past end is that day's last second
+        self.assertEqual(w(end='2026-10-10'), ('2026-10-03T00:00:00Z', '2026-10-10T23:59:59Z'))
+        self.assertEqual(w(start='2026-10-28'), ('2026-10-28T00:00:00Z', '2026-10-30T14:58:00Z'))   # never past now
+        self.assertEqual(w(start='2026-10-01', end='2026-10-30'), ('2026-10-01T00:00:00Z', '2026-10-30T14:58:00Z'))
+        with self.assertRaises(amz.AmazonError): w(start='2026-10-20', end='2026-10-10')
+        with self.assertRaises(amz.AmazonError): w(start='last tuesday')
+
+    def test_transactions_page_on_the_token_alone_to_the_last_page(self):
+        f = FakeBusiness(pages=([CHARGE], [REFUND], [{**CHARGE, 'transactionId': 'T3'}]))
+        with f.patch(): txs = amz.transactions(CFG, '2026-10-01T00:00:00Z', '2026-10-08T23:59:59Z')
+        self.assertEqual([t['transactionId'] for t in txs], ['T1', 'T2', 'T3'])
+        self.assertEqual(f.params, [{'feedStartDate': '2026-10-01T00:00:00Z', 'feedEndDate': '2026-10-08T23:59:59Z', 'pageSize': 100},
+                                    {'nextPageToken': 'p1'}, {'nextPageToken': 'p2'}])
+        self.assertTrue(all(u.startswith('https://na.business-api.amazon.com/') for _, u in f.calls))
+
+    def test_the_region_picks_the_business_host(self):
+        f = FakeBusiness(pages=([],))
+        with f.patch(): amz.transactions({**CFG, 'region': 'fe'}, 'a', 'b')
+        self.assertTrue(f.calls[0][1].startswith('https://jp.business-api.amazon.com/reconciliation/2021-01-08/transactions'))
+
+    def test_an_errors_list_in_a_200_is_a_refusal(self):
+        with mock.patch.multiple(amz.requests, post=FakeBusiness().post,
+                                 request=lambda *a, **k: _resp(200, {'errors': [{'code': 'InvalidInput', 'message': 'bad feedEndDate'}]})):
+            with self.assertRaises(amz.AmazonError) as e: amz.transactions(CFG, 'a', 'b')
+        self.assertIn('bad feedEndDate', str(e.exception))
+
+    def test_a_charge_takes_its_invoice_and_a_refund_the_nearest_credit_memo(self):
+        self.assertEqual(amz.pick_invoice('CHARGE', DETAILS, '2026-10-20T10:00:00Z'), {'invoiceNumber': 'INV-1', 'invoiceDate': '2026-10-20T00:00:00Z'})
+        self.assertEqual(amz.pick_invoice('REFUND', DETAILS, '2026-10-25T09:00:00Z'),
+                         {'invoiceNumber': 'CM-2', 'invoiceDate': '2026-10-25T00:00:00Z', 'originalInvoiceNumber': 'INV-1'})
+        self.assertEqual(amz.pick_invoice('OVERREFUND', DETAILS, '2026-10-21T12:00:00Z')['invoiceNumber'], 'CM-1')
+        self.assertEqual(amz.pick_invoice('REFUND', DETAILS[:1], '2026-10-25'), {'originalInvoiceNumber': 'INV-1'})    # no memo yet
+        self.assertEqual(amz.pick_invoice('CHARGE', []), {})
+
+    def test_invoices_are_asked_25_lines_at_a_time_and_only_for_whole_lines(self):
+        lines = [{**KEY, 'orderLineItemId': f'L{i}'} for i in range(30)] + [{**KEY, 'shipmentId': ''}, {**KEY, 'orderLineItemId': 'L0'}]
+        f = FakeBusiness()
+        with f.patch(): got = amz.invoices(CFG, lines)
+        self.assertEqual([len(b['orderLineItems']) for b in f.bodies], [25, 5])       # the duplicate and the line with no shipment are not asked
+        self.assertEqual(got[('113-0000001-0000001', 'L7', 'S1')][0]['invoiceNumber'], 'INV-L7')
+
+    def test_the_report_flattens_lines_and_names_their_invoices(self):
+        f = FakeBusiness()
+        with f.patch(): head, body = amz.run_amazon_business_transactions({**CFG, 'days': 14})
+        rows = [json.loads(l) for l in body.splitlines()]
+        self.assertTrue(head.startswith('2 rows') and '2 transaction(s)' in head and 'Amazon Business transactions' in head, head)
+        c, r = rows
+        self.assertEqual((c['transactionType'], c['amount'], c['currency'], c['legalEntityName'], c['asin'], c['itemQuantity'], c['unitPrice'],
+                          c['totalAmount'], c['tax'], c['orderId'], c['purchaseOrderNumber'], c['invoiceNumber']),
+                         ('CHARGE', 28.06, 'USD', 'Northwind', 'B0TEST0001', 2, 12.99, 25.98, 2.08, '113-0000001-0000001', 'PO-1001', 'INV-1'))
+        self.assertEqual((r['transactionType'], r['invoiceNumber'], r['originalInvoiceNumber']), ('REFUND', 'CM-2', 'INV-1'))
+        self.assertEqual(len(f.bodies), 1)
+
+    def test_invoices_off_asks_no_invoice_and_no_transactions_asks_nothing_more(self):
+        f = FakeBusiness()
+        with f.patch(): _, body = amz.run_amazon_business_transactions({**CFG, 'invoices': 'no'})
+        self.assertEqual(f.bodies, []); self.assertNotIn('INV-1', body)
+        f = FakeBusiness(pages=([],))
+        with f.patch(): head, body = amz.run_amazon_business_transactions(CFG)
+        self.assertEqual((f.bodies, body), ([], '')); self.assertIn('0 transaction(s)', head)
+
+    def test_the_kind_is_a_read_on_the_amazon_card(self):
+        self.assertIn('amazon_business_transactions', reports.REGISTRY)
+        self.assertEqual((scopes.needs('amazon_business_transactions'), reports.card_of('amazon_business_transactions')), ('read', 'amazon_sp'))
+        f = FakeBusiness()
+        with f.patch(): amz.run_amazon_business_transactions(CFG)
+        self.assertEqual({(m, u.split('.amazon.com')[1].split('?')[0]) for m, u in f.calls if m != 'GET'}, {('POST', f'{amz.RECON}/invoices')})
+
+
+class ApiDots(Base):
+    def test_a_business_only_app_passes_test_naming_the_api_that_answered(self):
+        with FakeBusiness(sp=403).patch(): detail, apis = amz.probe_apis(CFG)
+        self.assertEqual(apis, ['business'])
+        self.assertIn('Amazon Business reconciliation ✓', detail); self.assertIn('Seller reports (SP-API) ✗', detail)
+        self.assertIn('(403)', detail)
+
+    def test_a_seller_only_app_passes_naming_sp(self):
+        with FakeAmazon().patch(): detail, apis = amz.probe_apis(CFG)
+        self.assertEqual(apis, ['sp']); self.assertIn('Seller reports (SP-API) ✓', detail)
+        self.assertIn('Business Purchase Reconciliation role', detail)
+
+    def test_both_answering_fills_both_dots(self):
+        with FakeBusiness(sp=200).patch(): _, apis = amz.probe_apis(CFG)
+        self.assertEqual(apis, ['sp', 'business'])
+
+    def test_neither_answering_fails_and_says_why_for_each(self):
+        with FakeBusiness(sp=403, business=403).patch(), self.assertRaises(amz.AmazonError) as e: amz.probe_apis(CFG)
+        self.assertIn('Seller reports (SP-API):', str(e.exception)); self.assertIn('Amazon Business reconciliation:', str(e.exception))
+
+    def test_the_card_test_saves_the_dots_that_answered(self):
+        from taskuary import channels
+        s = MemoryStore(); c = s.get_connector_by_type('amazon_sp')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1, 'Secret': 'Atzr|test',
+                          'ConfigJson': json.dumps({k: v for k, v in CFG.items() if k != 'refresh_token'} | {'apis': ['sp']})}, 'owner')
+        with FakeBusiness(sp=403).patch(): r = channels.test_connector(s, c['ConnectorId'])
+        self.assertTrue(r['ok'], r); self.assertEqual(r['apis'], ['business'])
+        saved = json.loads(s.get_connector(c['ConnectorId'], with_secret=True)['ConfigJson'])
+        self.assertEqual((saved['apis'], saved['client_secret'], saved['region']), (['business'], 'cs-test', 'na'))
 
 
 class Parse(unittest.TestCase):

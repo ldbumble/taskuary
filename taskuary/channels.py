@@ -212,8 +212,34 @@ def plain_failure(e: Exception) -> str:
                                      "for the right server and port.")
     return raw[:500] or type(e).__name__
 
-def test_connector(store, cid: int) -> dict:
-    """Live credential + access probe; the result (or failure) lands on the connector row."""
+class DraftStore:
+    """The store as a card's Test sees it while the values on screen are not saved yet (2026-10-30, the owner: "a connection's Test can
+    try the values on screen"): this one connector reads as its saved row with the draft over it - each probe below reads the row again
+    by itself - and nothing about it is written back. Its last error, its config and its sources stay as they were until Save."""
+    def __init__(self, store, cid: int, draft: dict):
+        self._store, self._cid, self._draft = store, int(cid), draft or {}
+    def __getattr__(self, name): return getattr(self._store, name)
+    def get_connector(self, cid, *a, **k):
+        c = self._store.get_connector(cid, *a, **k)
+        if not c or int(cid) != self._cid: return c
+        c = dict(c)
+        over = self._draft.get('config')
+        if isinstance(over, dict):
+            # a write-only key left empty on screen keeps the saved one, as Save itself does (guard.keep_write_only)
+            cfg = {**_cfg(c), **{k: v for k, v in over.items() if v not in (None, '')}}
+            c['ConfigJson'] = json.dumps(cfg)
+        if self._draft.get('secret'): c['Secret'] = self._draft['secret']
+        return c
+    def touch_connector(self, cid, *a, **k):
+        if int(cid) != self._cid: return self._store.touch_connector(cid, *a, **k)
+    def set_connector_config(self, cid, *a, **k):
+        if int(cid) != self._cid: return self._store.set_connector_config(cid, *a, **k)
+
+
+def test_connector(store, cid: int, draft: dict | None = None) -> dict:
+    """Live credential + access probe; the result (or failure) lands on the connector row - except a `draft` Test of the values on
+    screen ({config, secret}), which lands nowhere (DraftStore)."""
+    if draft: store = DraftStore(store, cid, draft)
     c = store.get_connector(cid, with_secret=True)
     if not c: raise ValueError('connector not found')
     cfg, t0, extra = _cfg(c), time.time(), {}

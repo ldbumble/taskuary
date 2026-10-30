@@ -16,6 +16,7 @@ And "Done" is a plain close - no report, no proposals, no reply draft; the conne
 result is the report.
 """
 import json, re
+from loguru import logger
 from . import config, words
 
 
@@ -370,3 +371,27 @@ def finish_walk(store, tid: int, actor: str = 'owner') -> dict:
     note(store, tid, 'Setup closed.')
     if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
     return {'wrap': 'done', 'taskId': tid}
+
+
+MOVED = 'Moved to the Assistant chat'
+
+
+def move_walk(store, cid: int, actor: str = 'owner') -> dict | None:
+    """AN OPEN WALK MOVES INTO THE CHAT (the owner, 2026-10-30: "this sort of ai troubleshooting should go on in the assistant"): the
+    card's walk is a conversation now, with no Board task. One left open from before is said in the chat once, as one folded record -
+    "Earlier setup of Slack · N steps", its steps under it - and its task closes with that note. None when there was none."""
+    t = walk_task(store, cid)
+    if not t: return None
+    from . import concierge, general
+    v, c = walk_view(store, cid), store.get_connector(cid) or {}
+    name = c.get('Name') or c.get('Type') or 'the connection'
+    status = {'failed': 'error'}
+    steps = [{'id': f"walk-{t['TaskId']}-{i}", 'kind': 'read', 'summary': (f"You: {s['text']}" if s['kind'] == 'you' else s['text'])[:300],
+              'status': status.get(s['kind'], 'done')} for i, s in enumerate(v.get('steps') or [])]
+    said = f"Earlier setup of {name} · {len(steps)} step{'' if len(steps) == 1 else 's'}"
+    try: concierge.record(store, general.dock_task(store, actor)[0]['TaskId'], 'assistant', said, {'kind': 'words', 'key': None, 'steps': steps})
+    except Exception as e: logger.warning(f'the earlier walk on connector {cid} was not said in the chat: {e}')
+    note(store, t['TaskId'], MOVED)
+    finish_walk(store, t['TaskId'], actor)
+    store.audit('connector', cid, 'ai_setup', actor, detail={'moved': t['TaskId']})
+    return {'title': said, 'steps': steps, 'taskId': t['TaskId']}

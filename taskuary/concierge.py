@@ -5221,17 +5221,33 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
     return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more + whole       # what it is for is said once (TURN_GUIDE)
 
 
+def _view_lines(raw: str) -> str:
+    """The model's VIEW lines taken off its answer and kept on the turn (pageview.take): checked against the page it was shown, a send
+    turned into a point, a secret refused. Without a view on the turn they are dropped - nothing asked it about a page."""
+    from . import pageview
+    turn = _TURN.get()
+    text, ops = pageview.take(raw, turn.get('view'))
+    if ops: turn['view_ops'] = (turn.get('view_ops') or []) + ops[:pageview.MAX_OPS - len(turn.get('view_ops') or [])]
+    return text
+
+
 def handle_of(i: dict) -> str:
     """What the model names a row by: its task's TQ ref, else its message's m-number, else its pile key."""
     return i.get('ref') or (f"m{i['mid']}" if i.get('mid') else '') or str(i.get('key') or '')
 
 
 def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
-        open_card: str | None = None, images: list | None = None) -> dict:
-    from . import demo
-    token = _TURN.set({})
+        open_card: str | None = None, images: list | None = None, view: dict | None = None, react: str = '') -> dict:
+    from . import demo, pageview
+    # THE PAGE ON SCREEN, when the owner asked with one up (pageview.py, 2026-10-30): read again as the server's own - secrets dropped
+    # whatever the page sent - and `react`, what the owner just did on it inside a conversation they started about it
+    token = _TURN.set({'view': pageview.clean(view), 'react': str(react or '')[:300]})
     # ...the demo's script answers only its suggestions, and its "only those" line carries them as chips (demo.with_prompts)
-    try: return demo.with_prompts(_say(store, text, key, llm, actor, trace, cancel, item, open_card, images))
+    try:
+        out = demo.with_prompts(_say(store, text, key, llm, actor, trace, cancel, item, open_card, images))
+        # ...and what it does on the page rides the answer, for the page to run through its own buttons
+        if _TURN.get().get('view_ops'): out = {**out, 'view_ops': _TURN.get()['view_ops']}
+        return out
     finally:
         _TURN.reset(token)
         # ...and the turn may have changed the instructions the chat's CLI runs on: the next ask finds the new one already up (warm)
@@ -5272,14 +5288,15 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # mark, so the Advisor's decision and SELECT's values, read after it, each rebuilt the whole pipe this turn had just built - 150-260 ms
     # of every typed turn on a fresh home before the model was asked, more on a real mailbox. Read here they take the build above; the
     # conversation so far is read here too, so it holds what came before this line and never the line itself, said again below it.
-    from . import toolcatalog
+    from . import toolcatalog, pageview
     llm = _brain_for(store, tid, llm, trace, cancel)
     adv_d = _decision(store, item) if llm else {}
     picks = toolcatalog.select_values(store, p['items']) if llm else ''
     so_far = _turns(store, tid, TURNS - 1) if llm else ''
     # the dock has the owner's words now; the item has them with the answer, once the turn knows it was about the item
-    record(store, tid, 'user', typed)
     turn = _TURN.get()
+    # ...a REACTION has no words of theirs: what they did on the page is told to the model, never written as a line they said
+    if not turn.get('react'): record(store, tid, 'user', typed)
     if item: turn.update(item=item, said=typed)
     turn['trace'] = trace                           # the app's own trouble draws its steps as they happen (_trouble)
     rec = lambda role, body, card=None: record_related(store, tid, item, role, body, card)
@@ -5306,6 +5323,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = turn_system(store, llm)
+        on_page = f"{pageview.block(turn['view'])}\n" if turn.get('view') else ''
         # THE CANVAS FIRST (canvas_block): the table's stage, ask, lit button and row by id, then what this walk put down - the Advisor's
         # decision read once (adv_d, above), for the lit button there and the "why?" line under the facts
         # the pipe's own SELECT values ride the turn, not the index (toolcatalog.select_values): they move with every mail
@@ -5321,7 +5339,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
-                      + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
+                      # ...and WHAT IS ON IT, when the page sent it (pageview.block): fenced as page content, with how to act on it
+                      + (f"{pageview.block(turn['view'], turn.get('react') or '')}\n" if turn.get('view') else '')
+                      + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item and not turn.get('view') else '')
                       # ...and a page opened BESIDE the item keeps the item on the table: the Assistant's own "turn off background sync" opened
                       # Settings, and the next "mark this done" went out about nothing (verify, 2026-10-19). Both are said; their words say which
                       # ...under that page, out of sight: "show me TQ-0003" over Connections answered and left it covered (2026-10-19 UI walk, G5)
@@ -5333,7 +5353,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
-        raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
+        raw = _view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip())
         rail_read(llm, tid, rail, rail_sent)
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
@@ -5350,9 +5370,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             trace and trace('tool', call['kind'], {'params': call['params']})
             then = (LAST_READ if n == READ_ROUNDS - 1 else
                     'Answer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.')
-            raw = str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, read_chars(call['kind']))}\n\n"
-                                  f"The owner asked: {text}\n{then}{SUMMARY_GUIDE if call['kind'] in SUMMARY_READS else ''}",
-                          max_tokens=answer_tokens(call['kind'])) or '').strip()
+            # ...with the page still in front of it: "turn off the digest" reads settings.list, then sets the switch it found (pageview)
+            raw = _view_lines(str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, read_chars(call['kind']))}\n\n"
+                                  f"{on_page}The owner asked: {text}\n{then}{SUMMARY_GUIDE if call['kind'] in SUMMARY_READS else ''}",
+                          max_tokens=answer_tokens(call['kind'])) or '').strip())
             raw, call = parse_call(raw)
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
         # never handed on to call_turn, which only knows operations that CHANGE something.
@@ -5363,8 +5384,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # A BROKEN ANSWER IS ASKED AGAIN, ONCE (gate): what it acted on stands; only the words are asked for again, then a plain line
         reply, broken = gate(reply)
         if broken and not call and not decision:
-            again = str(llm(system, asked + "\n\nYOUR LAST ANSWER WAS CUT OFF in the middle. Answer again, briefly - and a CALL, if one "
-                                     "is needed, as one whole line at the end.", max_tokens=MAX_TOKENS) or '').strip()
+            again = _view_lines(str(llm(system, asked + "\n\nYOUR LAST ANSWER WAS CUT OFF in the middle. Answer again, briefly - and a CALL, if one "
+                                     "is needed, as one whole line at the end.", max_tokens=MAX_TOKENS) or '').strip())
             again, call = parse_call(again)
             if call and toolcatalog.runs_now(call['kind']): call = None              # no second round of look-ups on a retry
             again, decision = parse_decision(again)
@@ -5409,7 +5430,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                        f"answered: {miss}\n\nThe owner asked: {text}\nFix it yourself: CALL a look-up for the right name, then the "
                        'action again - or answer them in plain words. Never pass that answer on to them.')
             try:
-                raw = str(llm(system, ask, max_tokens=MAX_TOKENS) or '').strip()
+                raw = _view_lines(str(llm(system, ask, max_tokens=MAX_TOKENS) or '').strip())
             except Exception as e:
                 logger.warning(f'concierge: the retry pass failed - {e}'); raw = ''
             raw, call = parse_call(raw)
@@ -5616,6 +5637,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if unreal_refs(store, reply, text): reply = ''
         options = [o for o in options if not unreal_refs(store, o, text)]
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
+    # ...a REACTION with nothing worth saying is silent (pageview): the owner typed nothing, and a filler line would be noise
+    if not reply and turn.get('react') and failed is None: return {'say': '', 'options': [], 'chips': [], 'decision': None}
     if not reply: reply = fallback(item, False, p['items'], brain=True, store=store)
     said = reply + (f"\nOPTIONS: {' | '.join(options)}" if options else '')
     # THE APP'S OWN TROUBLE, ANSWERED IN THE CHAT (troubleshoot.py): the steps it took ride on the line, and what it found decides the

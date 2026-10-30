@@ -114,9 +114,38 @@ These have no button. Say them, in the app or on your phone.
 | "yes, go ahead" to a waiting agent | Your answer goes to the agent | at once |
 | "run it again" on a report | **Run it again** lit on the report | you press it |
 | "remember that…", "I don't care about X any more" | Kept at once as a line in your memory (LEARNED.md), where triage, reports, the Advisor and agents read it | at once |
-| "set up a report that…" | **New** opens on Report with your words in it | you press Build it |
-| "stop hiding auto-replies" | The setting opens beside the answer, its knob outlined | you change it |
+| "set up a report that…" | **New** opens on Report with your words in it | you press **Set up with AI** |
+| "turn off sign every email" (over Settings) | The setting's group opens and its switch is turned off - a step in the chat | at once |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |
 | "what's in For later?" | The rail read by its own sections - Tasks, For later (with when each comes back), Reports, FYI | at once |
 
 Later and Tomorrow are gone: **Next** is the "not now", and **Remind me** puts a task away until a day.
+
+## It works on the page you ask it about
+
+Ask the chat about what is on the canvas - a task, a connection's card, a report being set up, a settings
+group, the Hub - and the page goes with your words: what is open, its boxes and what they hold, and its
+buttons. Only then: a page nobody asked about is never read, and setting a card up by hand never brings the
+Assistant in.
+
+It works the page the way you would, through the page's own boxes and buttons, and each thing it does is a
+step under its answer in the chat:
+
+- **It fills boxes and presses buttons** - a task's title, a reply draft's words, a card's fields; Save,
+  Test, Sync, Mark done, Remind me, a setting's switch. "Turn off sign every email" over Settings opens the
+  setting's group and turns its switch off.
+- **It never sends.** A press that would send something out of the app - **Send**, **Approve**, an email, a
+  chat message - is lit for you to press instead, whatever asked for it, the words on the page included.
+- **It never sees a secret.** A password, a key or a token goes as "empty", "typed" or "saved", never its
+  value, and it never types one: it tells you to paste it into its box. The server checks this again.
+- **Your hand wins.** A click or a key on the page while it is working stops the rest.
+
+**Get AI to set it up** on a connection's card, **Set up with AI** on Reports, Dashboards and Routines (and
+on New's tabs), **let AI fill this in** on a report's source card and **Fix with AI** on a routine's failed
+run all open the chat window on that page and ask for you - there is no AI box on the page any more, and no
+task on the Board: the chat is the record. Its **Test** tries the values on screen before you save them.
+
+While you are talking to it about a page, it notices what you do there - "I see you pasted the secret -
+testing again" - once per change, and never while you are typing to it. With the window shut its answer
+waits behind the pill's count; the window does not open by itself. The chat's **×** asks before it ends
+the conversation about the page.

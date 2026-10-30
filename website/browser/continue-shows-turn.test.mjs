@@ -76,6 +76,10 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   // CONTINUE, filled out: the note is on the pane at once, the pane is working on it, and the answer lands
   await visible(page, "Continue"); await click(page, "Continue");
   await page.waitForSelector("[data-tq-continue-card] textarea", { visible: true, timeout: 15000 });
+  // ...and opening the box leaves the Result where it rests: the press unfolded it to the full record, which blanked the pane while it
+  // loaded and put a "Back to the result" over the result already on screen (the owner, 2026-10-30)
+  assert.ok(await page.$("[data-tq-result-summary]"), "the Result's summary stays under the Continue box");
+  assert.equal(await page.$("[data-tq-full-result][aria-expanded='true']"), null, "no Back to the result while the box is open");
   await page.type("[data-tq-continue-card] textarea", "look at the south office first");
   await click(page, "Continue", "[data-tq-continue-card]");
   const pressed = Date.now();

@@ -21,10 +21,11 @@ test("Back and Next are the Nav pill: Back is the row's own, never a type, and t
   assert.ok(walkMove(BACK) && walkMove("next") && walkMove("floor:next") && !walkMove("setup:back") && !walkMove("done"));
 });
 
-test("on the first item no Back; on the last no Next - the walk's Next only (setup's own Back and Next stay)", () => {
+test("on the first item no Back; on the last Next greyed - the walk's Next only (setup's own Back and Next stay)", () => {
   assert.equal(rowOf({ ref: "", list: [...task, next] }).back, null, "nothing above: no Back registered, none drawn");
   const last = rowOf({ ref: "", list: [...task, back, next], end: true });
-  assert.equal(last.next, null, "the last one: no Next"); assert.equal(last.back.id, BACK);
+  // ...greyed, never gone (the owner, 2026-10-30: "always keep the back and next button but grey them out if not applicable")
+  assert.equal(last.next.id, "next", "the last one: Next stands"); assert.equal(last.next.disabled, true, "...greyed"); assert.equal(last.back.id, BACK);
   const setup = rowOf({ ref: "", list: [v("setup:back", "next", { label: "Back" }), v("setup:next", "decide", { tone: "p" })], end: true });
   assert.equal(setup.next.id, "setup:back", "setup's step back is not the walk's Next");
 });

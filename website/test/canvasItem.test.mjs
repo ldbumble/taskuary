@@ -30,7 +30,7 @@ test("Expand never changes the view's height, so the pane is never grown", () =>
 // screen with a back arrow - still no resize
 test("a phone's full screen pins the same box, never a bigger one", () => {
   assert.match(item, /export const phoneItemHeight = \(innerHeight\) => Math\.max\(420, Math\.round\(\(innerHeight \|\| 0\) - 16\)\)/);
-  assert.match(item, /const h = phone \? phoneH : height;/);
+  assert.match(item, /const h = phone \? phoneH : half \? `max\(300px, calc\(\$\{height\} \/ 2\)\)` : height;/);
   assert.match(item, /if \(r\) setPin\(\{ left: r\.left, width: r\.width \}\);/);
   assert.match(item, /position: "fixed", top: 8, left: pin\.left, width: pin\.width/);
   // ...the arrow the SAME size as the icon it replaces: 2px more re-flowed the strip and the pane grew on the way back

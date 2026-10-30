@@ -285,9 +285,12 @@ export function rowOf({ list, ref, end: last = false, off = "" }, pick = null) {
   const seen = new Set();
   const once = (xs) => xs.filter((v) => v.slot || (seen.has(v.label) ? false : (seen.add(v.label), true)));   // an empty slot names nothing
   decide = once(decide); agent = once(agent); more = once(more);
-  // ...on the last item no Next (the walk's own; setup's Back and Next, and the floor's, are not the walk's), and Back beside it
+  // ...on the last item the walk's Next stands GREYED (the owner, 2026-10-30: "always keep the back and next button but grey them out if not
+  // applicable"), as Back does on the first; setup's Back and Next, and the floor's, are not the walk's
   const greyed = (v) => (v && off ? { ...v, disabled: true, steady: false, title: off, why: off } : v);
-  const next = greyed(by("next").find((v) => !(last && v.id === "next")) || null), back = greyed(by("back")[0] || null);
+  const nx = by("next").find((v) => !(last && v.id === "next")) || by("next").find((v) => v.id === "next");
+  const next = greyed(nx && last && nx.id === "next" ? { ...nx, disabled: true, steady: false, title: "Nothing below this one", why: "nothing below this one" } : nx || null),
+    back = greyed(by("back")[0] || null);
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
   return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && (!next.disabled || next.steady) ? "p" : "s" },

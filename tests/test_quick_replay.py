@@ -10,10 +10,10 @@ qr = importlib.util.module_from_spec(spec); spec.loader.exec_module(qr)
 def test_counts_only_by_depth_and_reason():
     s = MemoryStore()
     a, b, c = (s.create_task({'Title': f'Northwind job {i}', 'Kind': 'general', 'OriginBase': 'owner'}, 'triage') for i in range(3))
-    s.judge_task(a, {'difficulty': 'quick'}, 'triage'); s.judge_task(b, {'difficulty': 'hard'}, 'triage')
+    s.judge_task(a, {'difficulty': 'standard'}, 'triage'); s.judge_task(b, {'difficulty': 'hard'}, 'triage')
     s.judge_task(c, {'difficulty': 'quick'}, 'triage'); s.tag_task(c, browserview.WANTS, actor='triage')
     out = qr.replay(s, now=datetime.now())
-    assert {k: v for k, v in out.items() if v} == {'general': 3, 'quick': 1, 'deep:difficulty': 1, 'deep:browser': 1}
+    assert {k: v for k, v in out.items() if v} == {'general': 3, 'quick': 1, 'deep:hard': 1, 'deep:browser': 1}
     assert all(isinstance(v, int) for v in out.values())                    # counts, never text
 
 def test_asking_counts_escalations_and_files_nothing():
@@ -25,6 +25,16 @@ def test_asking_counts_escalations_and_files_nothing():
     before = len(s.list_comments(a))
     with mock.patch.object(llm, 'build_llm', return_value=brain): out = qr.replay(s, now=datetime.now(), ask=5)
     assert (out['asked'], out['escalated']) == (1, 1) and len(s.list_comments(a)) == before
+
+def test_asking_counts_answers_questions_and_closes():
+    s = MemoryStore()
+    ts = [s.create_task({'Title': f'Northwind job {i}', 'Kind': 'general', 'OriginBase': 'owner'}, 'triage') for i in range(3)]
+    said = iter([{'report': 'Go.', 'draft': 'Yes.', 'question': None, 'done': False}, {'report': 'Which day?', 'question': 'Friday or Saturday?', 'done': True},
+                 {'report': 'Nothing owed.', 'question': None, 'done': True}])
+    brain = lambda *x, **k: json.dumps({'draft': None, 'escalate': False, 'why': 'w', **next(said)})
+    brain.takes_web, brain.takes_want = False, True
+    with mock.patch.object(llm, 'build_llm', return_value=brain): out = qr.replay(s, now=datetime.now(), ask=5)
+    assert {k: out[k] for k in ('asked', 'answered', 'question', 'closed', 'escalated')} == {'asked': 3, 'answered': 1, 'question': 1, 'closed': 1, 'escalated': 0}
 
 def test_window_and_dock_are_left_out():
     s = MemoryStore()

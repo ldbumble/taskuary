@@ -448,6 +448,11 @@ def schedule_due(store):
 
 def _due(q, now: str) -> bool: return not q.get('NextAt') or str(q['NextAt']) <= now
 
+def _occupied(tid) -> bool:
+    "A live session working the task - not a quick answer's (quickwork), which takes no desk and is what an escalation queued behind."
+    from . import terminal as term
+    return any(t.task_id == tid and t.alive and getattr(t, 'quick', False) is not True for t in list(term.SESSIONS.values()))
+
 
 def drain(store):
     """A session ended, a slot freed up, or a retry came due: start what was queued, in order.
@@ -471,7 +476,7 @@ def drain(store):
             # startup; an old row parked behind another task is simply due (PW-171)
             b = q.get('BehindTaskId')
             t = store.get_task(q['TaskId']) or {}
-            if t.get('Status') not in ('open', 'in_progress') or term.for_task(q['TaskId']):
+            if t.get('Status') not in ('open', 'in_progress') or _occupied(q['TaskId']):
                 store.clear_dispatch(q['TaskId']); continue
             try:
                 from . import general
@@ -490,7 +495,7 @@ def drain(store):
             except Exception as e:
                 # a session that exists is a start that happened: what failed was the bookkeeping after it,
                 # and counting that as a failed launch would start the work twice (PW-088)
-                if term.for_task(q['TaskId']):
+                if _occupied(q['TaskId']):
                     store.clear_dispatch(q['TaskId'])
                     store.add_comment(q['TaskId'], 'router', 'agent', f'Started, but noting it afterwards failed: {str(e)[:200]}')
                     continue

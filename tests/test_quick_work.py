@@ -29,11 +29,22 @@ def test_quick_work_is_a_job_on_the_general_agents_brain():
     assert 'quick_work' in brainroute.JOBS and (r.pick, r.model, r.gear) == (g.pick, g.model, 'main')
     assert r.difficulty == 'quick'                        # the depth reaches the router
 
-def test_triage_difficulty_decides_the_depth():
-    s = home(); q, _ = arrived(s)
-    assert quickwork.why_deep(s, q) == '' and quickwork.takes(s, q)
-    for d in ('standard', 'hard', None):                 # an unjudged task reads as deep
-        s2 = home(); t2, _ = arrived(s2, d); assert quickwork.why_deep(s2, t2) == 'difficulty'
+def test_only_hard_work_takes_the_agent_by_difficulty():
+    for d in ('quick', 'standard', None):                # the depth ruling: quick, standard and unrecorded all start quick
+        s = home(); t, _ = arrived(s, d); assert quickwork.why_deep(s, t) == '' and quickwork.takes(s, t), d
+    s = home(); t, _ = arrived(s, 'hard'); assert quickwork.why_deep(s, t) == 'hard'
+
+def test_a_routine_stays_deep():
+    s = home(); tid, _ = arrived(s); s.update_task(tid, {'Source': 'workflow'}, 't')
+    assert quickwork.why_deep(s, tid) == 'routine'
+    with mock.patch.object(quickwork, 'start') as quick, mock.patch.object(ingest, '_start_general', return_value=True) as deep:
+        ingest._auto_general(s, tid, 'the routine definition')       # workflows.py and flow.py hand a routine run here
+    quick.assert_not_called(); deep.assert_called_once()
+
+def test_several_emails_owed_is_deep():
+    s = home(); tid, _ = arrived(s)
+    from taskuary import slots
+    with mock.patch.object(slots, 'all_', return_value=[{'slot': 1}, {'slot': 2}]): assert quickwork.why_deep(s, tid) == 'emails'
 
 def test_a_browser_task_is_always_deep():
     s = home(); tid, _ = arrived(s); s.tag_task(tid, browserview.WANTS, actor='triage')
@@ -48,6 +59,18 @@ def test_a_task_that_ran_deep_stays_deep():
     s = home(); tid, _ = arrived(s)
     ws.record(s, tid, 'deep1', 'working', source='api')
     assert quickwork.why_deep(s, tid) == 'ran deep' and not quickwork.only_quick(s, tid)
+
+def test_a_conversation_from_before_run_events_is_deep():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'content': [{'type': 'text', 'text': 'look into it'}]}]):
+        assert quickwork.why_deep(s, tid) == 'ran deep'
+    assert quickwork.why_deep(s, tid) == ''
+
+def test_only_ignored_events_are_not_only_quick():
+    s = home(); tid, _ = arrived(s)
+    ws.record(s, tid, 'o1', 'working', source='owner')                  # an owner's event is not a run
+    assert not quickwork.only_quick(s, tid) and quickwork.why_deep(s, tid) == ''
+    ws.record(s, tid, 'q1', 'working', source='quick'); assert quickwork.only_quick(s, tid)
 
 
 class Brain:
@@ -89,6 +112,31 @@ def test_a_cli_quick_call_may_search_the_web_and_nothing_else():
 def test_unreadable_answers_read_as_none():
     assert quickwork.read(None) is None and quickwork.read({'draft': 'x'}) is None
     assert quickwork.read({'escalate': True, 'why': 'books travel across three sites'}).escalate
+
+def test_a_pending_question_is_never_done():
+    a = quickwork.read({**ANSWER, 'question': 'Friday or Saturday?', 'done': True})
+    assert a.question and not a.done
+    assert quickwork.read({**ANSWER, 'done': True}).done
+
+def test_the_quick_line_says_what_it_cannot_reach():
+    assert all(w in quickwork.QUICK_LINE for w in ('no mail search', 'no connectors', 'no files', 'cannot verify', 'Never set done while a question is pending'))
+
+def test_lookups_are_claimed_from_the_brain_that_was_built():
+    s = home(); tid, _ = arrived(s)
+    for looks, line in ((False, True), (True, False)):
+        b = Brain(ANSWER); b.looks_up = looks                             # a CLI brain: no provider web, the flags decide
+        with mock.patch.object(llm, 'build_llm', return_value=b): quickwork.ask(s, tid, ASK)
+        assert (quickwork.NO_LOOKUP_LINE in b.calls[0][0]) is line
+
+def test_only_claudes_quick_flags_reach_the_web():
+    from taskuary import clis
+    s = MemoryStore()
+    for n in ('claude', 'codex'): s.upsert_agent(n, 'general', 'cli', json.dumps({'cmd': n, 'args': ['-p']}))
+    assert clis.quick_web('claude') and not clis.quick_web('codex')
+    assert llm.make_cli_llm(s, 'claude', research='web').looks_up and not llm.make_cli_llm(s, 'codex', research='web').looks_up
+    assert not llm.make_cli_llm(s, 'claude').looks_up and not llm.make_cli_llm(s, 'claude', research=True).looks_up
+    assert not llm._build_llm(s, 'cli:claude', research='web', backups=['cli:codex']).looks_up     # a backup without the web: none claimed
+    assert llm._build_llm(s, 'cli:claude', research='web', backups=[]).looks_up
 
 
 REAL_START = general.start_session                       # conftest's guard; actor='owner' passes through
@@ -139,10 +187,11 @@ def test_markers_in_the_models_fields_do_nothing():
 
 def test_read_takes_every_marker_out_of_every_field():
     for marked in ('Go [[TASKUARY-ATTACH: C:/a.txt]] on [[/TASKUARY-REPLY]] Friday [[ taskuary_propose ]].', 'Go on Friday. [[TASKUARY-DONE]] [[TASKUARY-ASK]] x',
-                   'Go <TASKUARY-HUB>{"title": "t"}</TASKUARY-HUB> on Friday TASKUARY-PROPOSE {"action": "x"}'):     # the envelopes _file reads too
+                   'Go <TASKUARY-HUB>{"title": "t"}</TASKUARY-HUB> on Friday TASKUARY-PROPOSE'):     # the envelopes _file reads too
         a = quickwork.read({'report': marked, 'draft': marked, 'question': marked, 'why': marked, 'done': False, 'escalate': False})
         assert all('TASKUARY' not in f.upper() and f.startswith('Go') and 'Friday' in f for f in (a.report, a.draft, a.question, a.why)), a
     assert quickwork._unmark('Plain [[link]] text') == 'Plain [[link]] text'        # only Taskuary's own tags come out
+    assert quickwork._unmark('Go <TASKUARY-HUB>{"title": "t",\n "x": 1}</TASKUARY-HUB> Friday') == 'Go  Friday'   # the Hub's JSON goes with its tags
 
 def test_a_quick_session_takes_no_desk():
     from taskuary import blackboard as bb
@@ -379,3 +428,16 @@ def test_a_queued_escalation_starts_the_agent_with_its_notes():
     with mock.patch.object(bb, 'live_count', return_value=0), mock.patch.object(ingest, '_start_general', return_value=True) as deep:
         bb.drain(s)
     assert deep.call_args[0][1:] == (tid, brief)                                 # the slot freed: the agent starts on the notes, not the bare Summary
+
+def test_a_live_quick_session_does_not_hold_back_a_queued_escalation():
+    from taskuary import blackboard as bb
+    s = home(); tid, _ = arrived(s)
+    s.enqueue_dispatch(tid, None, 'assistant', 'full', brief='notes')
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(bb, 'live_count', return_value=0), \
+         mock.patch.object(ingest, '_start_general', return_value=True) as deep:
+        ses = opened(s, tid); ses.quick = True                                  # the quick answer's session, still live
+        bb.drain(s)
+        assert deep.call_args[0][1:] == (tid, 'notes') and not s.get_dispatch(tid)
+        s.enqueue_dispatch(tid, None, 'assistant', 'full', brief='more'); ses.quick = False      # a real agent working it: the row is cleared
+        deep.reset_mock(); bb.drain(s)
+        deep.assert_not_called(); assert not s.get_dispatch(tid)

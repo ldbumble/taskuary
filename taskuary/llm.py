@@ -355,6 +355,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         from .agents import warm_cli
         return warm_cli(shaped(system, '')[0], resume=llm.session_id, extra_env=extra_env, swap=swap)
     llm.session_id, llm.warm = resume, warm
+    # ...and whether it can look a fact up: only a quick call's own flags give the web (clis.quick_web), and a stranger's look has no tools
+    from .clis import quick_web
+    llm.looks_up = no_hands and research == 'web' and stranger_mode != 'look' and quick_web(prof['cmd'])
     # said out loud, not merely absent: a brain that CANNOT carry a schema is the one whose answer
     # is worth rechecking in code (llm.ask_json). Silence means "do not second-guess me".
     llm.takes_want = False
@@ -581,6 +584,8 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
     failover.is_failover, failover.route = True, None     # build_llm hands it its route row, for a backup to be written on
     failover.takes_want = True          # it forwards one to each brain that can carry it, and drops it for the rest
     failover.takes_web = any(getattr(b, 'takes_web', False) for _, b in brains)
+    # a prompt that says lookups exist is written before the answering brain is known: every brain of the chain must have them
+    failover.looks_up = all(getattr(b, 'looks_up', getattr(b, 'takes_web', False)) for _, b in brains)
     return failover
 
 

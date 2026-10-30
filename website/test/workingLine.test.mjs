@@ -18,7 +18,8 @@ test("nothing in the first second, then whole seconds that never run ahead", () 
 });
 
 test("the count rides beside the dots only where Stop does: a typed ask's real answer", () => {
-  const at = src.indexOf('<span className="tq-typing"><i /><i /><i /></span>');
+  // the pending line's dots - not a held line's (Line), which draws the same dots without the clock (the owner, 2026-10-30)
+  const at = src.indexOf('<span className="tq-typing"><i /><i /><i /></span>', src.indexOf("const pendingLine"));
   assert.ok(at > 0);
   const bubble = src.slice(at, src.indexOf("</div>", at));
   assert.match(bubble, /\{busy && answering\.current && !DEMO && <WorkingFor \/>\}/);

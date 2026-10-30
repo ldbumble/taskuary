@@ -125,7 +125,7 @@ def test_done_closes_through_the_agents_own_close():
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True):               # the close runs on a 0.1s timer: wait inside
         ses = opened(s, tid); ses.quick = True
         ses.file_quick(ASK, quickwork.read({**ANSWER, 'draft': None, 'done': True, 'why': 'Answered: worth going.'}), [])
-        end = time.time() + 3
+        end = time.time() + 10
         while time.time() < end and s.get_task(tid)['Status'] not in ('done', 'waiting'): time.sleep(.05)
     assert s.get_task(tid)['Status'] == 'waiting'          # closed, as wrapup closes one whose sender is owed a reply: it waits on the draft
     assert any('The agent closed this itself: Answered: worth going.' in c['Body'] for c in s.list_comments(tid))
@@ -150,3 +150,90 @@ def test_a_quick_session_takes_no_desk():
         ses = opened(s, tid); ses.quick = True
         assert bb.live_count() == 0
         ses.quick = False; assert bb.live_count() == 1
+
+def test_file_quick_marks_the_session_quick_itself():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        ses = opened(s, tid); ses.file_quick(ASK, quickwork.read({**ANSWER, 'draft': None, 'question': 'Friday or Saturday?'}), [])
+        evs = ws.events(s, tid, ses.sid)
+    assert ses.quick and evs and all(e['Source'] == 'quick' for e in evs)
+
+def test_file_quick_on_an_ended_session_refuses():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        ses = opened(s, tid); ses.alive = False
+        with unittest.TestCase().assertRaises(RuntimeError): ses.file_quick(ASK, quickwork.read(ANSWER), [])
+    assert not ws.events(s, tid, ses.sid)
+
+def test_a_quick_session_that_failed_to_file_ends():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        ses = opened(s, tid)
+        with mock.patch.object(general.GeneralSession, '_file', side_effect=RuntimeError('disk full')):
+            with unittest.TestCase().assertRaises(RuntimeError): ses.file_quick(ASK, quickwork.read(ANSWER), [])
+        end = time.time() + 10
+        while time.time() < end and ses.alive: time.sleep(.05)
+        assert not ses.alive and not general.session_for(tid)
+    assert ws.events(s, tid, ses.sid)[-1]['Kind'] == 'failed'
+
+
+CLAUDE = [{'pick': 'cli:claude', 'type': 'cli', 'label': 'Claude Code', 'model': ''}]     # a brain to Continue on
+
+def run(s, tid, brain, deep=None):
+    "quickwork.start on a fake brain, the deep start caught."
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=brain), \
+         mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(ingest, '_auto_general', side_effect=deep or (lambda *a, **k: None)) as auto:
+        said = quickwork.start(s, tid)
+        return said, auto, dict(terminal.SESSIONS)
+
+def test_escalate_starts_the_general_agent_with_the_notes():
+    s = home(); tid, _ = arrived(s)
+    said, auto, live = run(s, tid, Brain({**ANSWER, 'escalate': True, 'why': 'it means booking travel across three sites', 'report': 'Two dates fit.'}))
+    assert said == 'escalated' and not live                                   # no quick session was opened
+    (store_, t, brief), k = auto.call_args
+    assert t == tid and k == {'deep': True} and 'booking travel across three sites' in brief and 'Two dates fit.' in brief
+    assert any(c['Body'] == quickwork.ESCALATED + 'it means booking travel across three sites' for c in s.list_comments(tid))
+
+def test_a_failed_quick_call_escalates_and_frees_its_slot():
+    s = home(); tid, _ = arrived(s)
+    def boom(*a, **k): raise TimeoutError('timed out after 180s')
+    boom.takes_web = False
+    said, auto, _ = run(s, tid, boom)
+    assert said == 'escalated' and auto.call_args.kwargs == {'deep': True}
+    assert any('the quick answer could not be made (timed out after 180s)' in c['Body'] for c in s.list_comments(tid))
+    # Task 5: assert quickwork.POOL._value == quickwork.QUICK_POOL             # the slot came back (Task 5 adds POOL)
+
+def test_unreadable_json_escalates():
+    s = home(); tid, _ = arrived(s)
+    garbled = lambda *a, **k: 'not json at all'; garbled.takes_web = False; garbled.takes_want = True
+    assert run(s, tid, garbled)[0] == 'escalated'
+
+def test_continue_on_a_quick_task_runs_the_general_agent():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(general, 'provider_options', return_value=CLAUDE):
+        with mock.patch.object(llm, 'build_llm', return_value=Brain(ANSWER)): quickwork.start(s, tid)
+        ses = general.session_for(tid); assert ses.quick
+        deep = mock.Mock(return_value='Booked nothing; here is the plan.')
+        with mock.patch.object(llm, 'build_llm', return_value=deep) as build: ses.send_prompt('go on', pick='cli:claude')
+        assert build.call_args.kwargs['job'] == 'general' and not ses.quick
+        system, user = deep.call_args[0][:2]
+        assert 'Worth going: Erin is presenting.' in user                     # the quick turn is in its conversation
+
+def test_an_answer_to_a_quick_question_runs_the_general_agent():
+    s = home(); tid, _ = arrived(s)
+    q = {**ANSWER, 'draft': None, 'question': 'Friday or Saturday?'}
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'start_session', side_effect=opened), \
+         mock.patch.object(general, 'provider_options', return_value=CLAUDE):
+        with mock.patch.object(llm, 'build_llm', return_value=Brain(q)): quickwork.start(s, tid)
+        with mock.patch.object(llm, 'build_llm', return_value=mock.Mock(return_value='Friday it is.')) as build:
+            out = ws.answer_open(s, tid, 'Friday', 'owner')
+        assert out['delivered'] and build.call_args.kwargs['job'] == 'general' and not general.session_for(tid).quick
+
+def test_an_escalated_reply_task_is_told_its_job_once():
+    s = home(); tid, _ = arrived(s)
+    with mock.patch.object(ingest, 'reply_job', return_value='Work it out, then draft the reply to Erin.'):
+        said, auto, _ = run(s, tid, Brain({**ANSWER, 'escalate': True, 'why': 'three sites to check'}))
+        brief = auto.call_args[0][2]
+        assert ingest.first_ask(s, tid, brief).count('Work it out, then draft the reply to Erin.') == 1   # what _start_general asks

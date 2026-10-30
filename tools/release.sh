@@ -88,6 +88,16 @@ fi
 say "verify"
 curl -s "https://pypi.org/pypi/taskuary/$V/json" | python -c "import sys,json; d=json.load(sys.stdin); print('PyPI', d['info']['version'], [u['filename'] for u in d['urls']])"
 curl -s https://api.github.com/repos/ldbumble/taskuary/releases/latest | python -c "import sys,json; d=json.load(sys.stdin); print('GitHub', d['tag_name'], [a['name'] for a in d['assets']])"
+# THE PILL, ONCE SHIELDS SEES IT (2026-10-29: the pill read .70 after .72 shipped): the bump's asof= went out before PyPI had the
+# version, camo fetched it from a cold shields and held the old number - so wait for shields, then move asof= once more and push
+say "refresh the README's PyPI pill"
+for i in $(seq 1 20); do curl -s "https://img.shields.io/pypi/v/taskuary.svg" | grep -q "v$V" && break; sleep 30; done
+python - "$V" <<'PY'
+import re, sys
+for p in ('README.md', 'README.zh-CN.md'):
+    t = open(p, encoding='utf8', newline='').read(); open(p, 'w', encoding='utf8', newline='').write(re.sub(r'asof=[0-9a-z.-]+', f'asof={sys.argv[1]}-live', t))
+PY
+git commit -qam "Refresh the README's PyPI pill for $V" && git push -q origin HEAD:master || say "pill push skipped (master moved) - bump asof= by hand"
 say "v$V is out. The owner's app runs from the main checkout: restart Taskuary to load it."
 
 # THE NUMBER THAT MATTERS (the owner, 2026-10-28: measure the agreement rate after each release): how often the lit button was the one

@@ -126,19 +126,30 @@ class QuestionGateTests(Base):
 
     def test_an_open_marker_question_refuses_done(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess
-        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Which account should the refund go to?', choices=['Card', 'Bank'], source='hook')
+        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Which account should the refund go to?', choices=['Card', 'Bank'], source='api')
         self.assertIn('Which account should the refund go to?', selfclose.blocked(self.s, self.tid, sess))
         self.assertFalse(selfclose.declare(self.s, self.tid, 'done', 'agent').get('closed'))
+
+    def test_a_hook_question_the_agent_is_past_does_not_refuse_done(self):
+        # a hook's question blocks the CLI that asked it: an agent running --done is past it (the owner, 2026-10-30)
+        sess = live(self.tid); term.SESSIONS['run1'] = sess
+        ws.record(self.s, self.tid, 'run1', 'input_needed', text='Which account should the refund go to?', choices=['Card', 'Bank'], source='hook')
+        self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
 
     def test_the_models_read_of_a_turn_does_not_refuse_done(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess
         ws.record(self.s, self.tid, 'run1', 'input_needed', text='Want me to tidy the logs too?', source='judge')
         self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
 
-    def test_a_held_ask_refuses_done(self):
+    def test_a_held_ask_left_behind_is_let_go_and_does_not_refuse_done(self):
+        # the leftover hold refused every --done after the agent had moved on (the owner, 2026-10-30: "it should be able to close task")
         sess = live(self.tid); term.SESSIONS['run1'] = sess
-        with mock.patch.object(ws, 'held_for', return_value=['g1']):
-            self.assertIn('held open', selfclose.blocked(self.s, self.tid, sess))
+        h = ws.hold(self.tid, 'run1', 'g1', ['q1'])
+        try:
+            self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
+            self.assertTrue(h['released'] and h['event'].is_set(), 'the hook holding it lets go')
+        finally:
+            with ws._HELD_LOCK: ws.HELD.pop('g1', None)
 
 
 if __name__ == '__main__':

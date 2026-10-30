@@ -53,11 +53,12 @@ def band_of(item: dict) -> int:
     lane, kind = item.get('lane'), item.get('kind')
     if kind == 'meeting': return attention_band(urgent=not not_yet(item), actionable=True)
     l, sec = LANE.get(lane) or {}, lane_section(lane)
-    # a task an agent FINISHED is still a task - On you until Next reads it, never a report (the owner, 2026-09-24); an unjudged
-    # row the retry gave up on is nobody's to judge now, so it is the owner's
+    # a task an agent FINISHED is a result to read, drawn under Reports in its report lane - Next reads it and it leaves (the walk has
+    # one owner, 2026-10-30, rule 4 and 3.5; it was On you, band 2, from 2026-09-24); an unjudged row the retry gave up on is
+    # nobody's to judge now, so it is the owner's
     return attention_band(urgent=bool(l.get('urgent') or (l.get('urgent_request') and item.get('urgent_request'))),
                           owner_wait=bool(l.get('waits')),
-                          actionable=sec == 'task' or kind == 'agentdone' or (lane == 'unjudged' and bool(item.get('held'))),
+                          actionable=sec == 'task' or (lane == 'unjudged' and bool(item.get('held'))),
                           result=sec == 'reports')
 
 
@@ -83,7 +84,7 @@ def level_of(item: dict) -> str:
     # FOR LATER IS WHAT YOU PUT THERE WITH A DATE - Remind me - never a card merely shown (the owner, 2026-10-08: "it moved 1003
     # automatically to later?"), and no longer Next either: Next moves the walk on and the task stays in Tasks, where it was
     # (the owner, 2026-10-21). The walk skips it by its mark (put_down), not by moving it.
-    if band == 2 and item.get('deferred'): return 'later'
+    if band in (1, 2) and item.get('deferred'): return 'later'      # ...an urgent row too: Remind me puts it away like any task
     if band == 4 and item.get('kind') == 'idea': return 'ideas'
     return LEVEL_OF_BAND.get(band, 'fyi')
 

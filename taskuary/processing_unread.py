@@ -12,13 +12,6 @@ from datetime import date, datetime, timedelta
 
 from . import lanes, processing_all, proposals, waiton
 
-# How long a row with NO open task behind it - a draft or an agent's question on its own - stays passed after Next, and how long a
-# phone's section walk is held. FIXED, not a setting (the owner, 2026-10-21): it was task_return_minutes, which timed open tasks
-# too; open tasks now pass for the rest of the walk (`this_walk`, below), and what the clock still covers is too small to be a knob.
-# A home that still stores the old setting is simply not read.
-RETURN_MINUTES = 180
-
-
 def query_for(store, only=None, *, history=True):
     try:
         days = int(store.get_setting('feed_days') or 14)
@@ -57,29 +50,14 @@ def _arrived_after_close(task, view) -> bool:
                if not is_ours(m) and not is_auto(m) and m.get('Status') not in ('filed', 'skipped', 'ignored'))
 
 
-# the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
-# ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
-# at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-# Read off lanes.json: every lane whose section is Tasks - a task an agent is working included (2026-10-21).
+# the lanes that are the OWNER's move - every lane whose section is Tasks (lanes.json), a task an agent is working included: an open
+# task in one of them stays on the rail, read or not, in its place - Next never takes it off (the walk has one owner, 2026-10-30, rule 4)
 OWNER_LANES = lanes.OWNER_LANES
 # A goal's CHILD is a task row of its own, whoever holds it (the owner, 2026-10-21): it was folded into the goal's row while
 # an agent, a person or a hand-off had it, and a step being worked was nowhere on the rail. The goal's row still names who
 # holds which step ("coding on step 5 · Ray owes step 4").
-# what a new walk raises again whatever the old one did with it: work that blocks on the owner (funnel.reset_walk)
+# work that blocks on the owner (lanes.json `waits`)
 RAISED_BY_NEW_WALK = lanes.WAITS
-WALK_KEY = 'walk_started_at'
-
-
-def walk_started_at(store):
-    return processing_all._stamp(store.get_setting(WALK_KEY))
-
-
-def this_walk(at, walk_at) -> bool:
-    """Was a read or a mark on an open task made in the walk now running? NEXT IS ONCE PER WALK (the owner, 2026-10-21: "next keeps
-    a task on unless it's closed. It does not have to come back... if it starts over you see same list of tasks again"): it passes an
-    open task until the walk ends or a new one starts (both stamp WALK_KEY, funnel.new_walk), never for a number of hours. The same
-    second as the stamp is the old walk's: the Next that ran the walk out is written just before it."""
-    return bool(at and (walk_at is None or at > walk_at))
 
 
 def _decided(view, allowed) -> bool:
@@ -231,7 +209,7 @@ def sweep_task(store, idea: dict, action: dict) -> dict | None:
     return store.get_task(int(action['task']))
 
 
-def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None, noise=None):
+def card_for(store, item, compact, live_state, now, states=None, noise=None):
     """`noise`: _noise_hidden, read once by a build for all its cards (a setting read per card was 10,000 queries)."""
     from . import funnel
     from .processing_reads import state
@@ -468,11 +446,6 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     them = waiton.waiting(task) if active and not review and not news else ''
     if them and (not worker or worker.get('waiting')) and card['lane'] in ('yours', 'queued', 'stopped', 'saved', 'asked', 'blocked'):
         card.update(lane='theirs', waiting_on=them, why=f'waiting on {waiton.name_of(them)}')
-    # ...and an open task nobody closed comes BACK once it has been quiet, so clearing it is a
-    # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
-    # made a task handed to an agent the one row Done could not shift - the same question answered two
-    # ways in one column (the owner, 2026-09-15: "why is that one showing up but not 575"). It clears
-    # like the rest now, and the next walk brings it back (it was the quiet hours, task_return_minutes, until 2026-10-21). A Remind me date outranks it.
     # A LOOSE END (sweep.py): the daily check found this open task in no state that moves it - waiting on nobody named, or with
     # no date - and said so on the task's own row. It is the owner's move until the state is fixed, read live here, so a date or
     # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow
@@ -482,28 +455,16 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                                mids=[m['MessageId'] for m in view.get('messages') or []])
         if loose: card.update(lane_was=card['lane'], lane='yours', why=loose['Text'], loose=True, loose_at=loose.get('LastSaid'))
     read_at = processing_all._stamp(read.get('read_at'))
-    # ...read in an EARLIER walk: the walk that passed it is over, so it is the owner's again (this_walk) - an open task, whatever
-    # its lane, a yes still owed and an agent waiting included: shown in the old chat is not answered
-    back = bool(tid and active and not read.get('deferred') and read_at and not this_walk(read_at, walk_at))
-    if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
     # A GOAL COMES BACK ON NEWS, never on the quiet hours (the review, 2026-10-12): a step closed or a day slipped since you
     # last read it is what brings it back as yours; a quiet goal stays read however long it has been quiet - under Tasks, where every
     # goal stays (the owner, 2026-10-22: lanes.level_of)
-    if str(card.get('kind') or '').startswith('goal'):
-        back = bool(card.get('news_at') and (not read_at or read_at <= processing_all._stamp(card['news_at'])))   # same second counts
-        card.pop('why_open', None)
-    # PASSED IS STILL YOURS (the owner, 2026-09-23: "i thought if you hit next it goes to passed section?"):
-    # Next reads the row, and a read row used to leave the rail altogether until the hour brought it back -
-    # an open task, a draft waiting for a yes, simply gone. Work that is still the owner's stays on the rail
-    # for that hour, marked shown, which is what the Passed band draws; the walk does not offer it again.
-    # NEXT only - the shown mark, below. Done is "off work for the hour" (2026-09-15) and stays gone.
-    # ...a pass counts only for the state it passed (the owner, 2026-09-28: "If agent stopped working after a next it
-    # should shoot up to your task category"). A Next pressed while the agent worked, or on its last question, read the
-    # row - and when the agent stopped or asked again minutes later, that old receipt and mark filed the NEW stop straight
-    # into Passed. An agent's row is back in Your task when its run spoke after the pass.
+    back = bool(str(card.get('kind') or '').startswith('goal') and card.get('news_at')
+                and (not read_at or read_at <= processing_all._stamp(card['news_at'])))   # same second counts
+    # AN OPEN TASK UNDER TASKS STAYS ON THE RAIL, read or not (the walk has one owner, 2026-10-30, rule 4): Next on it writes nothing,
+    # opening it reads only its "+N", and only closing it or Remind me takes it off. It used to be "passed" - read, marked, drawn in a
+    # band of its own and skipped for the rest of the walk (2026-09-23, 2026-10-21) - and the walk skipped the work it was walking.
     since = _agent_spoke_at(store, tid) if card['lane'] in AGENT_STOPS else None
-    passed = bool(tid and active and read_at and not read['unread'] and not read.get('deferred') and not back
-                  and card['lane'] in OWNER_LANES and not (since and read_at < since))
+    held = bool(tid and active and not read.get('deferred') and card['lane'] in OWNER_LANES)
     # AN AGENT FINISHED IT (same message: "same for finished agent task?"): a task its agent closed is a
     # result nobody has looked at yet. It is on the rail once, with Reports, until it is read; a task the
     # owner closed stays closed and gone.
@@ -551,7 +512,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     away = bool(reminded and remind.waiting(task, now)) and not asking_now
     # ...said since it was last read: on the rail until it is read, like news on the task (Next puts it down for the quiet hours)
     raised = bool(card.get('loose') and (read_at is None or read_at < (processing_all._stamp(card.get('loose_at')) or now)))
-    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or raised or (finished and finished['unread']) or
+    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or held or stopped or raised or (finished and finished['unread']) or
                                                  (active and not away and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] == 'idea' or row.get('Channel') == 'assistant'))
@@ -567,66 +528,17 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ...said off the morning's note: remind.due clears the date as it files the note, so the date alone never said it (R13)
     due = any(c.get('Body') == remind.DUE_NOTE and str(c.get('CreatedAt') or '')[:10] == f'{now:%Y-%m-%d}' for c in view.get('comments') or [])
     if active and not read.get('deferred') and due: card['why'] = 'you asked to be reminded about this today'
-    # shown-but-not-read exists for the lanes whose unread is NOT the receipt's to give: the mark keeps
-    # Next from bouncing straight back to what it just introduced (everything else shown is read - the
-    # receipt says so).
-    # 'queued' belongs with them. A task handed to an agent that has not started is forced unread by the
-    # clause above, so its receipts - all of them read - decide nothing, and with no shown-mark either
-    # there was nothing left to keep it out of the walk: Next introduced it, Next chose it again, for as
-    # long as the owner kept pressing (the owner, 2026-09-14: "i keep on clicking next on the assistant
-    # idea but it just comes right back behind the current one"). It stays unread, so the work tab still
-    # holds it; it is simply no longer the thing the walk offers next.
-    # ...for the same hour the receipt holds. A new chat clears the mark for agent: keys only
-    # (funnel.reset_walk), so on these rows it held for good: the quiet hour brought a task waiting to
-    # start back unread (`back`, above), the walk skipped it for the mark, and stranded it at the end
-    # as "1 unread thing still waits. Say next" for as long as Next was pressed (the owner, 2026-09-18:
-    # "it skipped it but then saw it at the end and hitting next just confuses it"). The mark ages out
-    # with the receipt, so the row comes round again when the quiet hours bring it back.
-    # ONE CLOCK FOR ALL OF THEM (the owner, 2026-09-23: "promote later after an hour or so unless it's
-    # silenced until tomorrow"): an agent waiting on you and a reply ready kept a 30-minute cooldown of their own
-    # and the mark for good, so the rail's Passed band and the walk disagreed about when they were back.
-    # The mark is the timer now - this walk for an open task (2026-10-21), RETURN_MINUTES otherwise - and Remind me is the silence.
-    card.pop('surfaced', None); card.pop('surfaced_at', None)
-    shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    # ...and 'working': a task an agent is working is forced unread like these, and the walk takes it now (2026-10-21) - without
-    # the mark Next would put the same working task straight back on the table
-    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped', 'saved', 'working'):
-        shown_at = processing_all._stamp(shown.get('At'))
-        if since and shown_at and shown_at < since: shown = None                  # passed before the agent stopped
-        # ...an open task's mark holds for this walk, a row with no task behind it for the quiet hours
-        elif shown_at is None or (this_walk(shown_at, walk_at) if tid and active else shown_at > now - timedelta(minutes=quiet)):
-            card.update(surfaced=True, surfaced_at=shown.get('At'))
-    # AN OPEN TASK IS ALWAYS ON THE RAIL (the owner, 2026-09-29: "everything should be one driver from work rail to tasks
-    # board"). Passed used to need the shown mark as well as the read, so any door that read a task without marking it - a
-    # new walk clearing the marks, Done on a task it did not close - took open work off the rail for the quiet hours. The
-    # task being open is what puts it here; the read only picks the band. Closing it or Remind me takes it off.
-    if passed:
-        unread = True
-        card.update(unread=True, surfaced=True, surfaced_at=(shown or {}).get('At') or read.get('read_at'))
-    # ...and WALKED PAST is not the same as shown: only a mark Next left (it carries when the row is back) or Remind me files it
-    # under For later. A card merely put up, then another row clicked, stays where it was (the owner, 2026-10-08: "i had this
-    # task open and then hit another task in work rail and it moved 1003 automatically to later?")
-    mark = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    card['put_down'] = bool(card.get('surfaced') and mark and mark.get('Until'))
     # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it - a row put away
-    # with Remind me, on its date. An open task walked past has no time to say: it is back when this walk ends (this_walk); a
-    # row with no task behind it, when its mark ages out.
+    # with Remind me, on its date. Nothing else has a time to say: nothing is "passed" any more (Q7, 2026-10-30)
+    card.pop('surfaced', None); card.pop('surfaced_at', None)
     if card.get('deferred'): card['back_at'] = card.get('defer_until')
-    elif card.get('put_down') and not (tid and active):
-        base = read_at if passed else processing_all._stamp(card.get('surfaced_at'))
-        if base: card['back_at'] = (base + timedelta(minutes=quiet)).strftime('%Y-%m-%d %H:%M:%S')
     if card['lane'] == 'fyi' and not card.get('sig'):
         summaries = [r for r in view.get('processing_summaries', [])
                      if r.get('ContextRevision') == item['context_revision'] and r.get('Summary')
                      and r.get('Key') in [card['key'], *card['aliases']]]
         if summaries:
             card['summary'] = next((r for r in summaries if r['Key'] == card['key']), summaries[-1])['Summary']
-    # ...and the walk takes what the rail puts on you: a READ open task without a Next mark sits under Tasks, so `passed` alone
-    # (any read - opening it from the rail is one) let the walk start on the second row (the owner, 2026-10-14: "it skipped the
-    # first task again in walk through"). Only Next, Done or Remind me puts it down - shown-is-not-acted-on.
-    done = any(st and st.get('Status') == 'done' for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)])
-    card['actionable'] = bool(unread and not (passed and (card['put_down'] or done)) and not card['deferred'] and not card.get('settling')
-                              and not funnel._not_yet(card))     # ...a task an agent is WORKING is walked like the rest (2026-10-21)
+    card['actionable'] = bool(unread and not card['deferred'] and not card.get('settling') and not funnel._not_yet(card))
     card['arrived_at'] = arrived_at(store, card, task, view, allowed)
     card.update(news_since_seen(view, read, allowed))
     return card
@@ -759,9 +671,8 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
-    quiet, walk_at = RETURN_MINUTES, walk_started_at(store)
     noise = _noise_hidden(store)
-    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at, noise) for row in rows]
+    cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, noise) for row in rows]
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.
     kept = on_rail

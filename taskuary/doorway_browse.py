@@ -2,7 +2,7 @@
 
 The desktop's sidebar walks the rail by SECTION and browses Connections and Settings as sections -> list -> one, all by
 clicks. A WhatsApp or Telegram chat has no sidebar, so the same steps arrive as numbered picks (remote_assistant.run_act):
-"Walk FYI" walks that section and Next stays inside it until it is empty, then says so; "Connections" lists the
+"Walk FYI" opens that section's first row and Next walks on down the rail (railwalk, 2026-10-30); "Connections" lists the
 catalogue's groups, a group lists its cards, a card opens as text with its state and the way back. Nothing here asks a
 model - a pick is a button (remote_assistant.run_act). What the rail calls a section is funnel.level_of's to say.
 """
@@ -12,7 +12,6 @@ from pathlib import Path
 
 from . import funnel
 
-SECTION_KEY = 'remote_section'          # {section, seen} while a section is being walked in one chat
 WALKED = ('task', 'later', 'reports', 'ideas', 'fyi')   # the sections a chat offers to walk - Tasks holds every open task (2026-10-21)
 
 
@@ -20,34 +19,6 @@ def section_rows(items: list) -> list:
     """'Walk <section>' picks for every section the rail holds right now, in the rail's order."""
     have = {funnel.level_of(i) for i in items or [] if not i.get('settling')}
     return [(f'Walk {funnel.SECTION_WORDS[s]}', {'t': 'section', 'section': s}) for s in WALKED if s in have]
-
-
-def _key(chat: dict) -> str: return f"{SECTION_KEY}:{chat.get('channel')}:{chat.get('chat')}"
-
-
-def _now() -> datetime: return datetime.now()
-
-
-def held(store, chat: dict | None) -> dict | None:
-    """The section this chat is walking - over once it is older than the quiet hours: a walk abandoned in the morning
-    must not capture a Next days later (the final review)."""
-    if not chat: return None
-    try: v = json.loads(store.get_setting(_key(chat)) or 'null')
-    except ValueError: return None
-    if not (isinstance(v, dict) and v.get('section')): return None
-    from .processing_unread import RETURN_MINUTES
-    try: at = datetime.fromisoformat(str(v.get('at') or ''))
-    except ValueError: return None
-    return v if _now() - at <= timedelta(minutes=RETURN_MINUTES) else None
-
-
-def hold(store, chat: dict | None, section: str | None, seen=()):
-    if chat: store.set_setting(_key(chat), json.dumps({'section': section, 'seen': list(seen), 'at': _now().isoformat(timespec='seconds')})
-                               if section else '', 'assistant')
-
-
-def next_in(store, section: str, seen) -> dict | None:
-    return funnel.section_next((funnel.pile(store) or {}).get('items') or [], section, seen=seen)
 
 
 # ── browsing Connections and Settings, as numbered picks ─────────────────────────────────────────────────────────

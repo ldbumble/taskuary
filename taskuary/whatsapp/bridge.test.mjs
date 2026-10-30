@@ -167,6 +167,9 @@ export default function makeWASocket(config) {
     setTimeout(() => ev.emit("messages.upsert", { type: "notify", messages: [
       { key: { remoteJid: "8000@lid", fromMe: false, id: "IN1" }, message: { conversation: "the export is late" }, pushName: "Ray", messageTimestamp: 1750000000 },
       { key: { remoteJid: "9100@lid", fromMe: true, id: "IN2" }, message: { conversation: "to someone never picked" }, messageTimestamp: 1750000001 }] }), 150);
+    // ...and what waited out a dropped connection: WhatsApp hands it over on the reconnect, offline, and Baileys says "append"
+    setTimeout(() => ev.emit("messages.upsert", { type: "append", messages: [
+      { key: { remoteJid: "8000@lid", fromMe: false, id: "IN3" }, message: { conversation: "sent while the link was down" }, pushName: "Ray", messageTimestamp: 1750000002 }] }), 200);
   }, 20);
   return sock;
 }`;
@@ -194,6 +197,7 @@ test("/status says how many chats are let in and turned away, when the last mess
   try {
     let st = null;
     for (let i = 0; i < 100 && exited === null && !((st = await status(port, token))?.lastInboundAt); i++) await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 300));
     assert.equal(st?.connected, true, out);
     assert.equal(st.admitted, 1);
     assert.equal(st.turnedAway, 3, "the group, a stranger's LID, and the unpicked chat the owner wrote to - never the owner's own LID");
@@ -202,8 +206,9 @@ test("/status says how many chats are let in and turned away, when the last mess
     assert.equal(st.loggedOut, false);
     assert.ok(st.lidMapped >= 2, "the owner's pair and the looked-up number");
     const { messages } = await get(port, "/messages?after=0", token);
-    assert.deepEqual(messages.map((m) => [m.jid, m.text]), [["15550100200@s.whatsapp.net", "the export is late"]],
-      "the LID arrives as the number it was picked by; what the owner wrote to an unpicked chat stays out");
+    assert.deepEqual(messages.map((m) => [m.jid, m.text]), [["15550100200@s.whatsapp.net", "the export is late"],
+      ["15550100200@s.whatsapp.net", "sent while the link was down"]],
+      "the LID arrives as the number it was picked by; what the owner wrote to an unpicked chat stays out; what waited out a drop comes in");
     const { chats } = await get(port, "/chats", token);
     assert.ok(chats.some((c) => c.jid === "9000@lid" && !c.group), "a turned-away LID can be picked");
   } finally {

@@ -47,10 +47,22 @@ const reviewCard = {
   preview: "Are we still moving AP over on Thursday? I need to tell the team.",
 };
 
+// THE DEMO OPENS ON ITS TOUR (taskuary/demo.py TOUR): the owner's own to-do, the rail's first row as it is the server demo's, and
+// what /api/demo's `opens` names, so the canvas opens on it here too
+export const DEMO_TOUR = "Start here - what Taskuary can do";
 const pileItems = [
   {
+    bind: { task: DEMO_TOUR, key: "task" }, kind: "todo", lane: "yours", title: DEMO_TOUR, who: "Taskuary", when: "2026-09-02 23:58:00",
+    why: "the tour of the demo: every step is something to try here", channel: "own",
+  },
+  // the two rows the tour sends a visitor to that the morning below does not already hold
+  {
+    bind: { task: "Month-end close is short by 4,180", key: "task" }, kind: "todo", lane: "yours", title: "Month-end close is short by 4,180",
+    who: "Marcus Reed", when: "2026-09-03 01:10:00", why: "a concrete ask, addressed to you, with a date on it", channel: "email",
+  },
+  {
     bind: { task: "northwind/importers#214 - census sync fails when a site has no manager", key: "agent" },
-    kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
+    kind: "agent", lane: "blocked", title: "northwind/importers#214 - census sync fails when a site has no manager",
     who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the agent needs one choice from you before it changes anything",
     agent: "claude", working: "claude", asking: true,
     // the answers it named, and the request they bind to: a raised hand is answered by picking one
@@ -61,6 +73,10 @@ const pileItems = [
   },
   { ...reviewCard, surfaced: true, surfaced_at: "2026-09-03 10:20:00" },
   {
+    bind: { review: "Invoice 88213 - past due" }, kind: "review", lane: "approve", title: "Invoice 88213 - past due", who: "Tom Alvarez",
+    when: "2026-09-03 02:30:00", why: "a reply is drafted for you to send", channel: "email",
+  },
+  {
     bind: { task: "Year-end audit - the first document requests", key: "msg" }, kind: "asked", lane: "asked",
     title: "Year-end audit - they want it by the 15th", who: "Priya Shah", when: "2026-09-03 08:21:19",
     why: "a date was added to the audit requests", channel: "email", preview: "And they would like all of it by the 15th.",
@@ -68,7 +84,7 @@ const pileItems = [
   {
     key: "idea:renewal", kind: "idea", lane: "forgotten", title: "The copier renewal thread has gone quiet",
     who: "Tom Alvarez", when: "2026-09-02 16:15:00", why: "no reply since Thursday; the quote expires next week",
-    idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 6 }, mid: 6,
+    idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 903 }, mid: 903,   // its own post (DEMO_ASSISTANT_TIMELINE) - 6 was a thank-you
   },
   {
     bind: { report: "Helpdesk tickets by day, last 14" }, kind: "report", lane: "report", title: "Helpdesk tickets by day, last 14",
@@ -113,7 +129,7 @@ const currentMessages = [
   },
   {
     id: "demo-current-5", role: "assistant", at: "2026-09-03 10:19:10",
-    text: "Yes. It confirms Thursday and says the export will be reconciled Wednesday night. Read the invented draft below; in this demo, Approve never sends anything.",
+    text: "Yes. It confirms Thursday and says the export will be reconciled Wednesday night. Read the invented draft below; in this demo, Send never sends anything.",
     card: reviewCard,
     // the words under it, as a live turn carries them - without them the demo opened on a card with no Next
     chips: [{ verb: "next", label: label("next"), hint: hint("next") }],
@@ -194,7 +210,7 @@ export function createDemoAssistantState(fx = {}) {
   const waits = items.filter((i) => onYou(i)).length;   // the rail's own on you, as the opener and header count it
   const counted = (m) => (m.text?.includes("{n}") ? { ...m, text: m.text.replace("{n}", waits === 1 ? "One thing" : `${waits} things`) } : m);
   const transcripts = Object.fromEntries(Object.entries(DEMO_ASSISTANT_TRANSCRIPTS).map(([k, v]) => [k, bound(v).map(counted)]));
-  const census = items.find((i) => i.title === "Census sync fails when a site has no manager");
+  const census = items.find((i) => i.lane === "blocked");
   return {
     activeTaskId: 8900,
     task: { TaskId: 8900, Title: "What needs me before the ops review?", Kind: "general", Status: "open", Source: "assistant", SourceRef: "assistant:dock", CreatedAt: "2026-09-03 10:14:00" },
@@ -209,7 +225,8 @@ export function createDemoAssistantState(fx = {}) {
       ],
       lanes: [
         { lane: "blocked", word: WORD.blocked, role: "you", n: 1 },
-        { lane: "approve", word: WORD.approve, role: "you", n: 1 },
+        { lane: "yours", word: WORD.yours, role: "you", n: 2 },
+        { lane: "approve", word: WORD.approve, role: "you", n: 2 },
         { lane: "asked", word: WORD.asked, role: "working", n: 1 },
         { lane: "forgotten", word: WORD.forgotten, role: "info", n: 1 },
         { lane: "report", word: WORD.report, role: "info", n: 2 },

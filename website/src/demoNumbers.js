@@ -40,6 +40,8 @@ export function installNumbersWorkflow(state, assistant, at = Date.now()) {
     Channel: 'email', SourceName: 'Outlook mail', Subject: 'Latest vendor spend numbers?', FromName: 'Ruth Bennett', FromEmail: 'rbennett@northwind.example',
     SentAt: created, CreatedAt: created, BodyText: NUMBERS_REQUEST, Brief: NUMBERS_REQUEST, Direction: 'in', Status: 'routed' };
   state['/api/tasks'].data = [task];
+  // the one request is the first view; the office's tour is not in it, so the canvas must not try to open it
+  if (state['/api/demo']) state['/api/demo'].opens = null;
   state['/api/tasks?active=1'].data = [structuredClone(task)];
   state['/api/tasks/detail'][NUMBERS_TASK] = { task, ref: task.ref, messages: [message], attachments: [], artifacts: [],
     routes: [{ MessageId: NUMBERS_MESSAGE, TaskId: NUMBERS_TASK, Decision: 'create', Reason: 'A request for current internal numbers: prepare the analysis and draft a reply for review.', RoutedBy: 'triage', CreatedAt: created }],

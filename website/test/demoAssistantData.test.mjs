@@ -31,7 +31,7 @@ test("the scripted pipe demonstrates several kinds of work without claiming a li
   const demo = createDemoAssistantState();
   assert.ok(demo.pile.items.length >= 6);
   assert.deepEqual(new Set(demo.pile.items.map((item) => item.kind)),
-    new Set(["agent", "review", "asked", "idea", "report", "fyi"]));
+    new Set(["todo", "agent", "review", "asked", "idea", "report", "fyi"]));
   assert.ok(demo.pile.items.some((item) => item.lane === "working"));
   assert.ok(demo.pile.items.some((item) => item.lane === "blocked"));
 });
@@ -68,4 +68,8 @@ test("every scripted card is bound to the row it names in the shipped recording"
   const census = demo.pile.items.find((i) => i.lane === "blocked");
   assert.match(tasks.get(census.tid), /census sync fails/);
   assert.equal(demo.pile.alerts[0].item, census.key);
+  // ...and the tour the server demo opens on leads the rail, on the task /api/demo names
+  assert.equal(demo.pile.items[0].title, "Start here - what Taskuary can do");
+  assert.equal(demo.pile.items[0].tid, fx["/api/demo"].opens.tid);
+  assert.equal(tasks.get(fx["/api/demo"].opens.tid), "Start here - what Taskuary can do");
 });

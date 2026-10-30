@@ -33,3 +33,21 @@ test("Back from a report leaves it unread in Reports; Next on it reads it", { ti
   assert.ok(await until(async () => !(await reports(page)).includes(rep)), "and its row left Reports");
   assert.deepEqual(errors, []);
 });
+
+// NEXT READS THE REPORT OPEN ON THE REPORTS PAGE (the owner, 2026-10-30: "i hit next on reports ... it did not mark it as read and disappear"):
+// opened on the page (its #report= link), not from its row - Next read the table's item under the page and left the report unread
+test("Next with a report open on the Reports page reads that report off the rail", { timeout: 240000 }, async (t) => {
+  const { h, page, errors } = await boot(t, { width: 1440, height: 900 });
+  const api = (path) => fetch(`${h.fixtureApi}${path}`, { headers: { "X-Taskuary-Token": h.token } }).then((r) => r.json());
+  const rep = (await api("/api/funnel/pile")).items.find((i) => i.lane === "report" && typeof i.source_id === "number");
+  assert.ok(rep, "the demo has a report with a source on the rail");
+  // ...over a task, as the owner had it: the table's item is what Next walked on from
+  const task = (await api("/api/funnel/pile")).items.find((i) => i.tid);
+  assert.ok(await clickRow(page, task.key)); await sleep(3500);
+  await page.evaluate((sid) => { location.hash = `report=${sid}`; }, rep.source_id);
+  await page.waitForSelector('[data-tq-browse="reports"]', { timeout: 20000 }); await sleep(2500);
+  assert.ok((await api("/api/funnel/pile")).items.some((i) => i.key === rep.key), "opening it on the page read it");
+  assert.ok(await pressNext(page), "no Next over the Reports page");
+  assert.ok(await until(async () => !(await api("/api/funnel/pile")).items.some((i) => i.key === rep.key)), `Next left ${rep.key} on the rail`);
+  assert.deepEqual(errors, []);
+});

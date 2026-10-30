@@ -2141,7 +2141,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // on from the table's item, as it does from the task page, and what it brings - the next item, the end of the walk, a failure - is
     // drawn on the canvas. With the page left up, an answer with no card (the walk's end, "still being read") landed in the shut chat
     // window and under the page, and nothing on screen moved
-    if (!key && browsingRef.current) browseDownRef.current?.();
+    // ...AND THE REPORT OPEN ON THAT PAGE IS READ (the owner, 2026-10-30: "i hit next on reports on github reports and it did not mark it
+    // as read and disappear"): Next read the table's item under the page and left the report the owner was reading unread on the rail.
+    // Its rail rows (one per run, by its source) are read and put down, as Next reads a report opened from its own row (move_on)
+    if (!key && browsingRef.current) {
+      const pg = msgsRef.current.find((x) => x.id === browsingRef.current), sid = pg?.area === "reports" ? pg.state?.open : null;
+      if (typeof sid === "number") for (const i of (pileRef.current?.items || []).filter((x) => x.source_id === sid))
+        api.post("/api/funnel/settle", { key: i.key, verb: "surfaced", read: true, put_down: true }).catch(() => {});
+      browseDownRef.current?.();
+    }
     // ...AND IT WEARS "Next" like any press (the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on
     // each task") - only a card nothing else was pressed on; a Next that fails takes the badge off with the fold
     // ...saying what Next did (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"): "Read" on a

@@ -1245,106 +1245,7 @@ class GeneralSession:
             native_id = getattr(brain, 'session_id', '')
             self.cli_sid = ((native_id if isinstance(native_id, str) else '') or self.cli_sid) if continuity.can_resume(self.store, self.pick) else ''
             self._remember_session()
-            if not reply: raise RuntimeError('the model returned an empty response')
-            from . import playbooks
-            reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
-            # a connector card's walk: the card's tools (save a field, run Test, ask for one step) out of the reply (aisetup.collect)
-            from . import aisetup
-            reply = aisetup.collect(self.store, self.task_id, reply)
-            # An API-backed assistant has no shell, so Hub publishing rides as a private response
-            # envelope. Consume it before the response enters history or reaches the browser.
-            from . import handbook as hub
-            if hub.enabled(self.store):
-                reply = hub.publish_assistant_entries(self.store, self.task_id, reply, 'assistant')
-            if not reply: reply = 'Saved to the Hub.'
-            # the assistant's own "and that's the job done" (selfclose.CHAT_LINE). The marker is a
-            # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
-            # what gets shown - the sentence after it becomes the closing comment.
-            from . import selfclose
-            reply, named = selfclose.attach_markers(reply)
-            reply, drafted = selfclose.reply_marker(reply)
-            reply, showing = selfclose.show_markers(reply)
-            _show_files(self.store, self.task_id, showing, paths)
-            files = _files_to_attach(self.store, self.task_id, named, paths)
-            if drafted or files:
-                out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files)
-                if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
-                for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
-            reply, drafts = selfclose.draft_markers(reply)
-            if drafts:
-                from . import slots
-                for attrs, body in drafts:
-                    out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
-                    if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
-            # TASKUARY-PROPOSE: a write it may not make by itself (a read-level connection) waits on the task for the owner,
-            # the way a coding session's proposals do (wrapup.finish)
-            from . import proposals
-            if proposals.MARK in reply and self.store.get_setting('proposals_enabled', '1') == '1':
-                try: proposals.collect(self.store, self.task_id, reply, 'assistant')
-                except Exception as e: logger.warning(f'proposal collection failed for task {self.task_id}: {e}')
-                reply = proposals.strip(reply).strip() or 'Proposed - it waits on the task for your yes.'
-            # the page the turn ended on is where a restarted session's browser reopens (browserview.keep_page)
-            if browser_tools:
-                try:
-                    st = browserview.state(self.sid, fresh=True)
-                    browserview.keep_page(self.task_id, st.get('url'))
-                    # an offered browser the agent opened is the task's from now on: the next turn is told it is open, not offered
-                    if browser_offer and st.get('open'):
-                        self.store.tag_task(self.task_id, browserview.WANTS, actor='assistant'); self.browser_wanted = True
-                except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
-            reply, closing = selfclose.chat_marker(reply)
-            reply, signing = selfclose.signin_marker(reply)      # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
-            reply, turn = selfclose.turn_marker(reply)           # a step only the owner can do on the page: handed over on the browser view
-            reply, asks = selfclose.ask_markers(reply)
-            # THE QUESTION STAYS IN THE ANSWER. The marker line IS the question - ASK_LINE asks for it there - and cutting the
-            # marker cut the question with it, so the chat showed "the laptop spend needs your yes first" and never what to say
-            # yes to. Since the question card left the chat (2026-10-19: "the agent's question is in its own answer above, and
-            # the reply goes in the composer") the answer above is the only place it can be read (walk 2026-10-21).
-            said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
-            reply = '\n\n'.join(x for x in (reply, said) if x) or (closing or '')
-            if signing is not None and not reply: reply = 'I need the site signed in to go on.'
-            if turn is not None and not reply: reply = turn or 'Your turn in the browser.'
-            # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
-            try:
-                from . import workerstate as ws
-                ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source='api')
-                # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group)
-                g = ws.group_key(f'{self.sid}:' + '|'.join(q for q, _ in asks)) if len(asks) > 1 else None
-                for i, (q, choices) in enumerate(asks, 1):
-                    ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
-                              text=q, choices=choices, source='api')
-            except Exception as e: logger.debug(f'api worker event skipped: {e}')
-            if signing is not None:
-                from . import signin
-                try: signin.needs(self.store, self.task_id, self.sid, signing)
-                except Exception as e: logger.warning(f'task {self.task_id}: the sign-in the agent asked for was not raised - {e}')
-            if turn is not None:
-                from . import browserview
-                try: browserview.your_turn(self.store, self.task_id, self.sid, turn)
-                except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
-            # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it is filed as the run
-            # failing with its reason, and the session ends with its conversation saved - never parked as "waiting on you"
-            if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
-                from . import hooks
-                hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
-            rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
-            # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
-            from . import sessionrecord
-            try: sessionrecord.keep_turn(self.task_id, rid, self.trace)
-            except Exception as e: logger.debug(f'general turn steps not kept for task {self.task_id}: {e}')
-            self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
-                             {'provider': self.provider, 'model': self.model, 'chars': len(reply), 'took': round(time.time() - t0)})
-            self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
-            # AFTER the turn is filed, and off this thread: closing runs wrapup.wrap, which closes
-            # this very session - doing it inline would kill the pty from inside its own answer.
-            # A close marker only has meaning for source-backed work: there is an inbound
-            # message/event waiting for a completed answer. A conversation the owner opened
-            # manually is still a conversation after one answer. Enforce that boundary here,
-            # even if a resumed model remembers an older close instruction and emits the marker.
-            has_source = bool((self.store.task_detail(self.task_id) or {}).get('messages'))
-            if closing is not None and has_source:
-                threading.Timer(0.1, self._close_out, args=(closing,)).start()
-            return reply
+            return self._file(reply, paths, t0, browser_tools, browser_offer)
         except Exception as e:
             self._remember_trace('error', 'assistant', {'result': str(e), 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {e}\r\n\r\n')
@@ -1378,6 +1279,111 @@ class GeneralSession:
             self._cancel = None
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
+
+    def _file(self, reply: str, paths: list, t0: float, browser_tools: bool = False, browser_offer: bool = False) -> str:
+        """File one turn's answer: its markers read, its draft, question or close raised, the reply kept as the task's comment.
+        A general turn and a quick answer (quickwork) both end here, so the two can never file differently."""
+        if not reply: raise RuntimeError('the model returned an empty response')
+        from . import playbooks
+        reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
+        # a connector card's walk: the card's tools (save a field, run Test, ask for one step) out of the reply (aisetup.collect)
+        from . import aisetup
+        reply = aisetup.collect(self.store, self.task_id, reply)
+        # An API-backed assistant has no shell, so Hub publishing rides as a private response
+        # envelope. Consume it before the response enters history or reaches the browser.
+        from . import handbook as hub
+        if hub.enabled(self.store):
+            reply = hub.publish_assistant_entries(self.store, self.task_id, reply, 'assistant')
+        if not reply: reply = 'Saved to the Hub.'
+        # the assistant's own "and that's the job done" (selfclose.CHAT_LINE). The marker is a
+        # signal to Taskuary, not prose for the owner, so it comes out of what gets filed and
+        # what gets shown - the sentence after it becomes the closing comment.
+        from . import selfclose
+        reply, named = selfclose.attach_markers(reply)
+        reply, drafted = selfclose.reply_marker(reply)
+        reply, showing = selfclose.show_markers(reply)
+        _show_files(self.store, self.task_id, showing, paths)
+        files = _files_to_attach(self.store, self.task_id, named, paths)
+        if drafted or files:
+            out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files)
+            if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
+            for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
+        reply, drafts = selfclose.draft_markers(reply)
+        if drafts:
+            from . import slots
+            for attrs, body in drafts:
+                out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
+                if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
+        # TASKUARY-PROPOSE: a write it may not make by itself (a read-level connection) waits on the task for the owner,
+        # the way a coding session's proposals do (wrapup.finish)
+        from . import proposals
+        if proposals.MARK in reply and self.store.get_setting('proposals_enabled', '1') == '1':
+            try: proposals.collect(self.store, self.task_id, reply, 'assistant')
+            except Exception as e: logger.warning(f'proposal collection failed for task {self.task_id}: {e}')
+            reply = proposals.strip(reply).strip() or 'Proposed - it waits on the task for your yes.'
+        # the page the turn ended on is where a restarted session's browser reopens (browserview.keep_page)
+        if browser_tools:
+            from . import browserview
+            try:
+                st = browserview.state(self.sid, fresh=True)
+                browserview.keep_page(self.task_id, st.get('url'))
+                # an offered browser the agent opened is the task's from now on: the next turn is told it is open, not offered
+                if browser_offer and st.get('open'):
+                    self.store.tag_task(self.task_id, browserview.WANTS, actor='assistant'); self.browser_wanted = True
+            except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
+        reply, closing = selfclose.chat_marker(reply)
+        reply, signing = selfclose.signin_marker(reply)      # a sign-in it needs: Taskuary's to do, never the agent's (signin.py)
+        reply, turn = selfclose.turn_marker(reply)           # a step only the owner can do on the page: handed over on the browser view
+        reply, asks = selfclose.ask_markers(reply)
+        # THE QUESTION STAYS IN THE ANSWER. The marker line IS the question - ASK_LINE asks for it there - and cutting the
+        # marker cut the question with it, so the chat showed "the laptop spend needs your yes first" and never what to say
+        # yes to. Since the question card left the chat (2026-10-19: "the agent's question is in its own answer above, and
+        # the reply goes in the composer") the answer above is the only place it can be read (walk 2026-10-21).
+        said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
+        reply = '\n\n'.join(x for x in (reply, said) if x) or (closing or '')
+        if signing is not None and not reply: reply = 'I need the site signed in to go on.'
+        if turn is not None and not reply: reply = turn or 'Your turn in the browser.'
+        # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
+        try:
+            from . import workerstate as ws
+            ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source='api')
+            # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group)
+            g = ws.group_key(f'{self.sid}:' + '|'.join(q for q, _ in asks)) if len(asks) > 1 else None
+            for i, (q, choices) in enumerate(asks, 1):
+                ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
+                          text=q, choices=choices, source='api')
+        except Exception as e: logger.debug(f'api worker event skipped: {e}')
+        if signing is not None:
+            from . import signin
+            try: signin.needs(self.store, self.task_id, self.sid, signing)
+            except Exception as e: logger.warning(f'task {self.task_id}: the sign-in the agent asked for was not raised - {e}')
+        if turn is not None:
+            from . import browserview
+            try: browserview.your_turn(self.store, self.task_id, self.sid, turn)
+            except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
+        # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it is filed as the run
+        # failing with its reason, and the session ends with its conversation saved - never parked as "waiting on you"
+        if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
+            from . import hooks
+            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
+        rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
+        # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
+        from . import sessionrecord
+        try: sessionrecord.keep_turn(self.task_id, rid, self.trace)
+        except Exception as e: logger.debug(f'general turn steps not kept for task {self.task_id}: {e}')
+        self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
+                         {'provider': self.provider, 'model': self.model, 'chars': len(reply), 'took': round(time.time() - t0)})
+        self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
+        # AFTER the turn is filed, and off this thread: closing runs wrapup.wrap, which closes
+        # this very session - doing it inline would kill the pty from inside its own answer.
+        # A close marker only has meaning for source-backed work: there is an inbound
+        # message/event waiting for a completed answer. A conversation the owner opened
+        # manually is still a conversation after one answer. Enforce that boundary here,
+        # even if a resumed model remembers an older close instruction and emits the marker.
+        has_source = bool((self.store.task_detail(self.task_id) or {}).get('messages'))
+        if closing is not None and has_source:
+            threading.Timer(0.1, self._close_out, args=(closing,)).start()
+        return reply
 
     def _close_out(self, summary: str):
         """The chat said the work was done. Same ending as a coding session's: the task closes,

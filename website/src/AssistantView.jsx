@@ -341,8 +341,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   const batchKeys = new Set(batch ? (batch.members || (batch.items || []).map((i) => i.key)) : []);
   // BETWEEN TWO BATCHES the band keeps room for the one on its way (the 2026-10-25 sweep): "All read, next" lands the settled rail before the
   // next batch is on the table, and for that moment the band fell to its floor - "6 more fyi" between 8 and 4, "2 more fyi" before none.
-  // The batch the server has chosen next (expected_next_members) holds its rows in view until it lands; it is not ringed before it is up.
-  const nextBatch = new Set(!current && coming && (pile?.expected_next_members || []).length > 1 ? pile.expected_next_members : []);
+  // The batch the walk brings next (walk.below) holds its rows in view until it lands; it is not ringed before it is up.
+  const nextBatch = new Set(!current && coming && (walkOf(pile)?.below?.item?.members || []).length > 1 ? walkOf(pile).below.item.members : []);
   const curKey = current && !batch ? current.key : null;
   // a task named in the chat is on the table without being in the pile: it joins its own band
   const known = curKey && visibleItems.some((i) => i.key === curKey);
@@ -1529,7 +1529,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // it then left nothing, and the task kept no badge. That item is the table's until the close lands and the walk asks after it.
     if (!turnFlight.current && !cardRef.current && !mid && !earlyRef.current && moves === tableMoves.current) {
       const said = st.current || null;
-      if (turns === turnsBegun.current && (said?.key || null) !== (currentRef.current?.key || null)) putOnTable(said, "sync");
+      // ...and the walk beside the rail with it: the phone moved the one walk (Q5), so Back and the prepared Next are read for the row it is on now
+      if (turns === turnsBegun.current && (said?.key || null) !== (currentRef.current?.key || null)) { putOnTable(said, "sync"); loadPileRef.current?.(true); }
     }
     return true;
   }, [putOnTable]);
@@ -2033,7 +2034,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const optimisticId = asUser ? `u${Date.now()}` : null;
     if (optimisticId) setMsgs((m) => pickLine(m, { id: optimisticId, role: "user", text: asUser, pick: key || undefined }));
     // the row the press moves FROM: the one on the table, or the one a close just took off it
-    const fromKey = key || how === "start" ? null : leaving || currentRef.current?.key || null;
+    // ...a row named carries one only when it takes another's place (Put it on my list: the new task, at the report's place)
+    const fromKey = how === "start" ? null : key ? leaving || null : leaving || currentRef.current?.key || null;
     // NEXT PUTS THE TABLE DOWN AT ONCE (the owner, 2026-09-30): the task folds to its title line now and the "…" shows while the next
     // one loads; a Next that fails opens it again. Back folds nothing - it never reads or passes anything (rule 3)
     const putDown = !key && how === "next" && currentRef.current?.key ? currentRef.current.key : null;
@@ -2067,7 +2069,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const drawsNow = (c) => !!c && showsTask(c, cardFor(c)) && !!heldTask(c.tid) && heldTerm(c.tid) !== undefined;
     // ...and the line a close drew at its press IS this line when the prepared answer names the same row
     const keeps = !!carried && carried.key === (prep ? prep.item?.key : aheadItem?.key);
-    if (keeps) aheadRef.current = { ...carried, hash: carried.hash ?? null, table: tableNow() };
+    // (no hash: the close emptied the table under it, so the answer puts its item on the table again, as it always did)
+    if (keeps) aheadRef.current = { ...carried, hash: null, table: tableNow() };
     else dropCarried();
     if (keeps) unconfirmedRef.current = carried.key;   // drawn already; its Advisor read still waits on this answer
     else if (prep) aheadRef.current = drawAhead({ ...line, text: prep.say, options: prep.options || [], chips: prep.chips || [],
@@ -2460,6 +2463,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // cleared the table settled it too, but does NOT walk on: the table is put down and Next is offered.
       if (step === "watch") { clearTable(); loadPile(); openTaskCard({ tid: out.tid }); }
       else if (step === "advance") advance();
+      // PUT IT ON MY LIST keeps the new task on the table, at the report's place: no move (the walk has one owner, 2026-10-30, W49)
+      else if (step === "keep") deferInChat(() => surfaceRef.current?.(`task:${out.tid}`, null, p.key), 120);
       else if (step === "settle") await done(null);
       else { if (step === "offer") clearTable(); loadPile(); }
     } finally { setBusy(false); }
@@ -2678,12 +2683,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // plus asking for the next thing; a sweep does only this and leaves Next to the owner's finger.
   const clearTable = () => putOnTable(null, "sync");
   // `settled`: the server has answered already (a Mark done or Remind me that closed the task before calling here)
+  const advancedAt = useRef(0);
   const advance = (pile = null, settled = false) => {
     // THE WALK WENT ON WITHOUT IT (2026-10-25): Next pressed on the item a close drew at its press, while the close was still on its way.
     // The close landing then put down the table - by then the item Next brought - and asked for the next one again: the walk came back
     // to that item, put it down as one already left, and stood on an empty table; the task Next walked past kept no badge. That Next is
     // the walk's move now, so the close only counts.
     if (movedOnRef.current) { movedOnRef.current = false; onChanged?.(); setNextComing(false); return; }
+    // ...and ONE CLOSE IS ONE MOVE: a close heard twice (a Send that closed the task answers its own road and the task page's) came back with
+    // no row put down behind it, after the first had already brought the row below - and put THAT row down (the walk table's W28)
+    if (settled && !pile && !leavingRef.current && !earlyRef.current && Date.now() - advancedAt.current < 3000) { onChanged?.(); return; }
+    advancedAt.current = Date.now();
     // a close that drew the next item at its press leaves that item up: the walk's surface fills it in place (carryRef)
     const early = earlyRef.current; earlyRef.current = null;
     // ...and the walk moves on FROM THE ROW THE CLOSE TOOK OFF (railwalk.next: it has left the rail, so the row below its place - rule 5)
@@ -2736,7 +2746,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and NO "Sent to Erin Blake." LINE (the owner, 2026-10-22: "yes"): the folded card wears the button's badge ("✓ Send") and
   // carries the two words itself (`sent` keeps them on the row once it has folded - Line), so they stand while it is the newest line
   const sent = (pressed, tid = null, ref = null) => {
-    setMsgs((m) => { const i = interactiveCardIndex(m);
+    // ...on THE SENT TASK's line: a Send that closed it has already drawn the row below at its press (rule 5, 7), and the newest card
+    // is that one - marked sent, the next task folded under a badge it never earned and never reached the table (the walk table's W28)
+    setMsgs((m) => { let i = -1;
+      if (tid) for (let j = m.length - 1; j >= 0; j -= 1) if (Number(m[j]?.card?.tid) === Number(tid)) { i = j; break; }
+      if (i < 0) i = interactiveCardIndex(m);
       return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, sent: true, ...(pressed ? { pressed } : {}), ...sentChips(tid, ref) } : x)); });
     onChanged?.(); loadPile();
   };

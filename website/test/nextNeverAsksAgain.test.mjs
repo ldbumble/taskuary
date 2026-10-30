@@ -9,7 +9,7 @@ const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), 
 const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current"));
 
 test("a press is one move with no capture to go stale: the row on screen goes with it, and no line asks for another press", () => {
-  assert.match(surface, /const fromKey = key \|\| how === "start" \? null : leaving \|\| currentRef\.current\?\.key \|\| null;/);
+  assert.match(surface, /const fromKey = how === "start" \? null : key \? leaving \|\| null : leaving \|\| currentRef\.current\?\.key \|\| null;/);
   assert.match(surface, /const press = `p\$\{Date\.now\(\)\}/, "a press id: a retry is the same answer, one line (railwalk)");
   assert.doesNotMatch(view, /selection_revision|expected_next_key|ensureNextSelection|selectionGuardDetail/);
   for (const said of ["The list moved while that was loading", "Next is still refreshing"]) assert.ok(!view.includes(said), `no "${said}" line`);

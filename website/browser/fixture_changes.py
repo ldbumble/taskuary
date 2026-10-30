@@ -496,11 +496,16 @@ def install_processing_changes(app, store):
         if verb == 'arrive': walkworld.arrive(store, world, sym)
         elif verb == 'close-elsewhere': walkworld.close_elsewhere(store, world, sym)
         elif verb == 'agent-closes': walkworld.agent_closes(store, world, sym)
-        elif verb == 'read': funnel.settle(store, walkworld.key_of(store, world, sym), 'surfaced', 'owner', read=True); walkworld.reconcile(store)
+        elif verb == 'read':                          # ...a row the demo's own passes took off already is read already
+            key = walkworld.key_of(store, world, sym)
+            if key: funnel.settle(store, key, 'surfaced', 'owner', read=True); walkworld.reconcile(store)
         elif verb == 'phone start': remote_assistant.walk(store, 'owner', opener=False)
         else:
             on = railwalk.on(store)
             with concierge.delivering(concierge.PHONE): remote_assistant.run_act(store, {'t': 'next'}, {'key': on} if on else None, 'owner')
+        if verb.startswith('phone'):                  # ...and the desk hears of it as it hears a phone turn end (remote_assistant.respond)
+            from taskuary import live
+            live.emit(live.CHAT, thinking=False, channel='telegram')
         return walk_keys()
 
     @app.post('/api/fixture/walk/keys')

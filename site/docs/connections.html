@@ -451,7 +451,7 @@ machine.</p>
 SimpleFIN or Teller. These are the cards where the read/write distinction bites: each ships at
 <code>read</code>, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 <code>write</code> is what lets a routing policy pass small, known items through without you.</p>
-<p><strong>Selling on Amazon</strong> — the <strong>Amazon Seller Central (SP-API)</strong> card reads your seller reports:
+<p><strong>Selling on Amazon</strong> — the <strong>Amazon (Seller Central &amp; Business)</strong> card reads your seller reports:
 sales &amp; traffic (the Business Report), every order by order date, FBA inventory, settlements, or any
 other report type Amazon offers by its name. It is a data card for reports, dashboards and agent
 lookups, never a source of work, and it is read-only: the one thing it asks of Amazon is to build a
@@ -462,6 +462,14 @@ the card, press <strong>Authorize app</strong> and paste the refresh token it sh
 Vendor Central accounts do the same under Integration → API Integration. Amazon&#39;s quotas are small,
 about one new report a minute, so a throttled call waits rather than fails, and a finished report is
 kept for 15 minutes. See Amazon&#39;s <a href="https://developer-docs.amazon.com/sp-api">SP-API documentation</a>.</p>
+<p><strong>Buying on Amazon Business</strong> — the same card reads Amazon Business purchases for reconciliation:
+every charge and refund in a window, one row per line (ASIN, quantity, price, tax, order and PO
+number), each matched to its invoice number — a charge to its invoice, a refund to its credit memo.
+It signs in the same way, with an app that holds the <strong>Business Purchase Reconciliation</strong> role. One
+set of credentials can reach either API or both, so the card shows a dot for each: <strong>Test</strong> tries a
+cheap read against both, fills in the ones that answered, and passes as long as one did. Build the
+report as <strong>Amazon — Business purchases</strong>. See Amazon&#39;s
+<a href="https://developer-docs.amazon.com/amazon-business/docs">Amazon Business API documentation</a>.</p>
 <p><strong>Markets</strong> — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
 strategy screen that filters another card&#39;s rows. With a key: <strong>Twelve Data</strong> (quotes and computed
 indicators across stocks, FX and crypto), <strong>Alpha Vantage</strong> (slow limits, no card, no expiry),

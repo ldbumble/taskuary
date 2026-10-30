@@ -531,12 +531,12 @@
     },
     {
       "type": "amazon_sp",
-      "title": "Amazon Seller Central (SP-API)",
+      "title": "Amazon (Seller Central & Business)",
       "group": "Corporate systems",
       "planned": false,
       "desc": "Your Amazon seller reports - sales & traffic, orders, FBA inventory, settlements - and Amazon Business purchases for reconciliation, with their invoice numbers, as reports, dashboards and agent lookups; read-only.",
       "match": [
-        "amazon seller central (sp-api)",
+        "amazon (seller central & business)",
         "amazon seller central",
         "seller central",
         "vendor central",

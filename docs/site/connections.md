@@ -219,7 +219,7 @@ SimpleFIN or Teller. These are the cards where the read/write distinction bites:
 `read`, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 `write` is what lets a routing policy pass small, known items through without you.
 
-**Selling on Amazon** — the **Amazon Seller Central (SP-API)** card reads your seller reports:
+**Selling on Amazon** — the **Amazon (Seller Central & Business)** card reads your seller reports:
 sales & traffic (the Business Report), every order by order date, FBA inventory, settlements, or any
 other report type Amazon offers by its name. It is a data card for reports, dashboards and agent
 lookups, never a source of work, and it is read-only: the one thing it asks of Amazon is to build a

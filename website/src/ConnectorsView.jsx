@@ -859,7 +859,7 @@ const DATA_META = {
   // Amazon SP-API (amazon_sp.py): a seller's own reports. READ-ONLY - the card asks Amazon to build a report and reads it,
   // and reaches no endpoint that changes a listing, a price or an order. A data card: it never puts work on the rail.
   // The same LWA login also reaches Amazon Business reconciliation (purchases + invoice numbers) when the app holds that role.
-  amazon_sp: { title: "Amazon Seller Central (SP-API)",
+  amazon_sp: { title: "Amazon (Seller Central & Business)",
     types: ["amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "amazon_business_transactions"],
     // which Amazon APIs these credentials reach: Test fills the dots, the owner can tick them too (amazon_sp.APIS)
     apis: [["sp", "Seller reports (SP-API)"], ["business", "Amazon Business reconciliation"]],

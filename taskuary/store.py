@@ -1396,7 +1396,7 @@ class SQLiteStore:
                          ('matrix', 'Matrix'), ('google_chat', 'Google Chat'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
-                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('amazon_sp', 'Amazon Seller Central (SP-API)'), ('teller', 'Bank & card feed (Teller)'),
+                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('amazon_sp', 'Amazon (Seller Central & Business)'), ('teller', 'Bank & card feed (Teller)'),
                          ('simplefin', 'Bank & card feed (SimpleFIN)'),
                          ('coingecko', 'Crypto prices (CoinGecko)'), ('alchemy', 'Alchemy'), ('frankfurter', 'FX rates'),
                          ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),

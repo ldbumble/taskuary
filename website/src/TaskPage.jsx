@@ -402,7 +402,10 @@ const MOVES_AT = 0.33;
 const fitTabLines = (tab) => {
   const ls = [...tab.querySelectorAll("[data-tq-tab-line]")];
   ls.forEach((l) => l.removeAttribute("data-tq-unfit"));
-  const r = tab.getBoundingClientRect(), top = r.top + r.height * MOVES_AT - 10;
+  // ...up to where the moves ACTUALLY stand when they are there (the owner, 2026-10-30: "i told you to not let the chat go past the line"):
+  // Came from's three moves are taller than a spine's one, and the words ran on past the rule and under them
+  const r = tab.getBoundingClientRect(), mv = tab.querySelector("[data-tq-spine-moves]")?.getBoundingClientRect();
+  const top = (mv && mv.height ? mv.top : r.top + r.height * MOVES_AT) - 10;
   const cut = ls.findIndex((l) => l.getBoundingClientRect().bottom > top + 0.5);
   if (cut >= 0) ls.slice(cut).forEach((l) => l.setAttribute("data-tq-unfit", ""));
 };
@@ -415,7 +418,10 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
     fitTabLines(tab);
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(() => fitTabLines(tab)); ro.observe(tab);
-    return () => ro.disconnect();
+    // ...and again when its moves come or go: they arrive after the words (useSpineVerbs), and a child added is no resize of the tab
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => fitTabLines(tab));
+    mo?.observe(tab, { childList: true, subtree: true });
+    return () => { ro.disconnect(); mo?.disconnect(); };
   }, [lines.join("\n"), foot, here]);   // eslint-disable-line react-hooks/exhaustive-deps -- the words, not the array's identity
   // ...SLIM beside a live agent: the arrow, the section's mark, and at its foot a dot for where it stands - the words are its hover
   if (mini) return (

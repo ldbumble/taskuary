@@ -128,5 +128,39 @@ class AJoin(unittest.TestCase):
         self.assertEqual(sum(1 for m in self.s.thread_messages(ROOM) if m['TaskId'] == self.tid), 1)
 
 
+class TheLevelIsTheMeasure(unittest.TestCase):
+    """A colleague's report that a chat bridge was down, then within minutes their screenshot of it and a request to test it - at level 4
+    triage opened two more tasks, because the guide's older lines ("two problems are two jobs", a different screen is new) outweighed the
+    level paragraph and `same_problem` read as its name. The guide now says those lines are level 1's, and the field's bar moves with it."""
+    def test_the_chat_paragraph_hands_the_measure_to_the_level(self):
+        g = triage.SHIPPED
+        chat = g[g.index('**A chat line.**'):g.index('\n', g.index('**A chat line.**'))]
+        self.assertIn('it is THE measure: at 1 a different error', chat)
+        self.assertIn('at 4 and 5 a line about the same product or feature', chat)
+        self.assertIn('Despite its name, `same_problem`', chat)
+        self.assertLess(chat.index('at 1 a different'), chat.index('two problems are two jobs'))
+
+    def test_the_level_paragraph_says_what_four_joins_and_that_unrelated_never_does(self):
+        para = triage.FIELDS['combine']
+        for n in range(1, 6): self.assertIn(f'- **{n}**', para)
+        self.assertIn('a screenshot of it, a request to test it', para)
+        self.assertIn('those lines describe level 1', para)
+        self.assertIn('what has nothing to do with the task never joins it', para)
+
+    def test_the_room_tasks_field_moves_same_problems_bar_with_the_level(self):
+        self.assertIn("same_problem's bar moves with combine.level", triage.FIELDS['room_tasks'])
+        self.assertIn('unrelated content never is', triage.FIELDS['room_tasks'])
+
+    def test_a_group_line_carries_the_level_and_the_rooms_task(self):
+        s, seen = store(), []
+        combine.set_level(s, 'whatsapp', 4)
+        tid = say(s, 'g1', 'The chat bridge is not bringing my messages in', '2026-10-28 09:00:00', brain({}, seen))[0]['task_id']
+        say(s, 'g2', '(no text - see the attachment)', '2026-10-28 09:02:00', brain({}, seen))
+        u = seen[-1][1]
+        self.assertEqual(u['combine'], {'connection': 'whatsapp', 'level': 4})
+        self.assertIn(tid, [t['tid'] for t in u['room_tasks']])
+        self.assertIn(tid, [c['task_id'] for c in u['same_day_lines']])
+
+
 if __name__ == '__main__':
     unittest.main()

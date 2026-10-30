@@ -46,6 +46,8 @@ FIELDS = {
     'room_tasks': "room_tasks are this chat's tasks - the ones its same-day lines already sit on, then its others open or closed in the last "
                   "week - each with its tid, title, ask and status. A line joins one only when it belongs to that task at the combine level "
                   "(same_problem true; existing_task_id names it); otherwise it is a new ask (same_problem false). "
+                  "same_problem's bar moves with combine.level: at 1 only the very same problem; at 4 and 5 a line about the same product "
+                  "or feature - another symptom, a screenshot, a request to test it, a follow-up - is true; unrelated content never is. "
                   "Answer same_problem whenever the relationship is continues or answers - in a group a join left unsaid is not made.",
     'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
                   "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "

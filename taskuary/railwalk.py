@@ -162,13 +162,17 @@ def state(store) -> dict:
         # ...the table the old walk left (concierge's assistant_current:<dock>), read through once: a restart onto this build keeps it
         try:
             from . import general
-            old = str(store.get_setting(f"assistant_current:{general.dock_task(store, 'owner')[0]['TaskId']}") or '')
-            if old: st['on'], st['members'] = old, members_of(old)
+            dock = general.dock_task(store, 'owner')[0]['TaskId']
+            old = str(store.get_setting(f'assistant_current:{dock}') or '')
+            if old: st['on'], st['members'], st['_legacy'] = old, members_of(old), dock
         except Exception as e: logger.debug(f'railwalk: no old table to read through - {e}')
     return st
 
 
 def _write(store, st: dict):
+    dock = st.pop('_legacy', None)
+    if dock is not None:                              # the old table, read through once: its settings go with this first write
+        for k in (f'assistant_current:{dock}', f'assistant_current_closed:{dock}'): store.set_setting(k, '', 'system')
     places = st.get('places') or {}
     if len(places) > PLACES: st['places'] = dict(list(places.items())[-PLACES:])
     store.set_setting(KEY, json.dumps(st, default=str), 'system')

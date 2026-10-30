@@ -1143,7 +1143,7 @@ def order_key(item) -> tuple:
     reports too (the owner, 2026-10-22: "reports should go oldest first like everything else"; they were newest first from
     2026-10-02) - then a stable key. Nothing about its agent, its read state, its urgency, the table or the walk enters it, so a row
     moves only by leaving its section. Today's brief leads Reports, whatever the clock says - it summarises the day, so it is read
-    first. ONE key for the rail, desktop Next and phone Next (funnel_selection.below)."""
+    first. ONE key for the rail, desktop Next and phone Next (railwalk.line)."""
     level, at = level_of(item), arrived(item)
     t = (at - datetime.min).total_seconds() if at else 0.0
     return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, *place_id(item))

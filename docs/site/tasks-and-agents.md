@@ -79,7 +79,7 @@ These never end a task:
 |---|---|
 | **Stop and save** | The agent stops and its report is written; the task stays open |
 | **Reject** a draft | The draft is rejected; the task is untouched |
-| **Next** | Read and moved on for this walk; the next walk starts with the open tasks again |
+| **Next** | The row below comes up; the task stays in its place under Tasks, and Back brings it again |
 | **Remind me** | Put away until the day you pick, then back on your rail that morning |
 | A stopped or quiet session | Nothing — only you, or the agent saying so, ends a task |
 
@@ -356,8 +356,8 @@ Neither moves a row. A priority you set by hand stays yours: triage never raises
 
 | You or it does | It goes | Back when |
 |---|---|---|
-| **Next** on your open work | stays under Tasks; this walk skips it | when the walk ends or a new one starts, or a new message |
-| **Next** on anything else | off | a new message, note or edit on it |
+| **Next** on your open work | stays under Tasks, in its place - Next and Back reach it again | - |
+| **Next** on a report, an idea, an FYI or an agent's result | read, and off | a new message, note or edit on it |
 | **Mark done** | off | THEY write after the close - your own reply does not count |
 | **Remind me** | For later, with its day | 07:00 on that day, saying "you asked to be reminded about this today" |
 | Its agent closes the task | "Agent finished" until you read it | a new message on it |

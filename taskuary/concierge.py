@@ -3914,7 +3914,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                 try: _remember_sid(store, tid, llm)
                 except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
             # shown IS read: the state is `surfaced`, and it carries the entry's own summary
-            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=True)
+            # ...SHOWN, NOT READ (the owner, 2026-10-30: "i hit back on fyi it also marked them read ... if you click back it's not read
+            # only next"): a batch put up - by Next, Back or a click - is read on the way out, by Next or All read (move_on's batch road),
+            # as a report is (opened_reads); read here, Back to it took the handful off the rail
+            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=False)
             card['chips'] = chips_for(store, card)
             set_current(store, tid, card['key'], actor)
             funnel.mark_place(store, {'kind': 'fyis', 'key': card['key'], 'items': batch})   # where the walk is: Next goes on below it

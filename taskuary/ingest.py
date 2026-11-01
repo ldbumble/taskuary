@@ -126,6 +126,20 @@ def _land(store, msg: dict, task_id, status: str) -> int:
     return mid
 
 
+def personal_fyi(store, msg: dict, intent: dict) -> bool:
+    """A PERSONAL ASK IS AN FYI (the owner, 2026-11-01): a message under a personal workstream - by its own signals (the thread, the chat,
+    the people) first, else by triage's word - is never a task and never a drafted reply. Returns whether it was turned into one."""
+    try:
+        if not workstreams.personal(store) or not intent or intent.get('intent') == 'fyi': return False
+        ws = workstreams.of_message(store, {**_fields(msg, None), 'Direction': msg.get('direction') or 'in'}) or msg.get('_workstream') or ''
+        if ws not in workstreams.personal(store): return False
+        intent['intent'], intent['why'] = 'fyi', ('Personal - an FYI, never a task. ' + str(intent.get('why') or ''))[:240]
+        msg['_workstream'] = ws
+        return True
+    except Exception as e:
+        logger.debug(f'personal check skipped: {e}'); return False
+
+
 def _place(store, mid: int, task_id, said: str = None):
     """The landed message's workstream, and its task's when the task has none: the message's own signals first (its thread, mailbox,
     people - what the owner confirmed), triage's word where they say nothing (workstreams.py). Never fatal to landing."""
@@ -718,6 +732,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
                              workstreams=workstreams.menu(store) or None)
     intent['notes'], intent['notes_left'] = notes, notes_left
     if intent.get('workstream'): msg['_workstream'] = intent['workstream']
+    personal_fyi(store, msg, intent)
     return intent, fail
 
 

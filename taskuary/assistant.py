@@ -1976,6 +1976,9 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         store.set_brief(mid, json.dumps({'ideas': [], 'reviewed': rv, 'flight': [], 'stats': []}))
         return {'ran': True, 'said': 0, 'message_id': mid, 'reviewed': rv, 'inputs': read}
     # every line names the block behind it, looked up rather than asked for (source_of)
+    # ...and NOTHING PERSONAL IS RAISED (the owner, 2026-11-01): a line about an item under a personal workstream is dropped here
+    from .workstreams import is_personal
+    say = [s for s in say if not is_personal(store, tid=(s.get('action') or {}).get('tid'), mid=(s.get('action') or {}).get('mid'))]
     rows = [store.upsert_idea(s | {'action': (s.get('action') or {}) | {'why': s['why']}
                                    | ({'source': src} if (src := source_of(s, mids, blocks)) else {})}, stamp) for s in say]
     # ...and an idea that rests on a memory line says so where the owner's "why did it raise this?" reads (learned_cut.used)

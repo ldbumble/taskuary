@@ -184,6 +184,11 @@ def teach(store, kind: str, src: str, facts: str, scope: str = 'global', key: st
     the line's evidence and what an Undo finds it by. `stands`: still the owner's word once the model has answered (an Undo can come
     first). No brain, no line: a bare verdict is never written in its place. Returns the raw line, ''. Never raises."""
     from . import memoryedit
+    # ...and a verdict on something PERSONAL teaches nothing at all (workstreams.is_personal; the owner, 2026-11-01)
+    try:
+        from . import workstreams
+        if workstreams.is_personal(store, src=src): return ''
+    except Exception: pass
     try:
         # ...a verdict counts toward the next reflection whether or not it teaches a line now (learn.learn_from's tick, which it replaces)
         try: store.set_setting('learn_pending', str(int(store.get_setting('learn_pending') or 0) + 1), 'learn')

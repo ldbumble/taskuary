@@ -135,6 +135,18 @@ export const FIELDS = {
     ["match each line to its invoice number — yes or no", "invoices", "text", "yes"],
     // the owner, 2026-10-30: the invoice PDFs themselves, attached to the run - off unless asked, 25 new ones a run at most
     ["attach invoice PDFs (up to 25 new a run) — yes or no", "pdfs", "text", "no"], AI_FIELD],
+  // Stripe (stripe.py): a window of days on each list, and the filter Stripe's own list takes; amounts come back in money
+  stripe_balance: [AI_FIELD],
+  stripe_balance_transactions: [["days back", "days", "text", "30"], ["kind (blank = every kind)", "kind", "text", "charge · refund · payout · stripe_fee"], AI_FIELD],
+  stripe_charges: [["days back", "days", "text", "30"], ["status (blank = all)", "status", "text", "succeeded · failed · pending"], AI_FIELD],
+  stripe_payments: [["days back", "days", "text", "30"], ["status (blank = all)", "status", "text", "succeeded · requires_payment_method · canceled"], AI_FIELD],
+  stripe_payouts: [["days back", "days", "text", "30"], ["status (blank = all)", "status", "text", "paid · pending · in_transit · failed"], AI_FIELD],
+  stripe_refunds: [["days back", "days", "text", "30"], AI_FIELD],
+  stripe_disputes: [["days back", "days", "text", "90"], ["status (blank = all)", "status", "text", "needs_response · under_review · won · lost"], AI_FIELD],
+  stripe_customers: [["email (blank = every customer)", "email", "text", "someone@example.com"],
+    ["days back — new customers only (blank = all of them)", "days", "text", ""], AI_FIELD],
+  stripe_subscriptions: [["status", "status", "text", "active · trialing · past_due · canceled · all"], AI_FIELD],
+  stripe_invoices: [["days back", "days", "text", "30"], ["status (blank = all)", "status", "text", "open · paid · uncollectible · void"], AI_FIELD],
   // the bank feed: which account (last four, a word of its name, or blank for all), how far back
   teller_transactions: [["account — last four digits, a word of its name, or blank for every account", "account", "text", "1234"],
     ["days back", "days", "text", "30"], AI_FIELD],
@@ -221,7 +233,9 @@ const TYPE_GROUPS = [
   ["Microsoft 365 — Entra ID", ["entra_users", "entra_groups", "entra_signins", "entra_licenses"]],
   ["Monitoring", ["prometheus", "datadog"]],
   ["Corporate systems", ["intacct", "intacct_fields", "quickbooks", "quickbooks_vendors", "quickbooks_accounts",
-    "amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "amazon_business_transactions", "metric", "metric_check"]],
+    "amazon_sales_traffic", "amazon_orders", "amazon_inventory", "amazon_settlement", "amazon_report", "amazon_marketplaces", "amazon_business_transactions", "metric", "metric_check",
+    "stripe_balance", "stripe_balance_transactions", "stripe_charges", "stripe_payments", "stripe_payouts", "stripe_refunds", "stripe_disputes",
+    "stripe_customers", "stripe_subscriptions", "stripe_invoices"]],
   // the bank/card feed is money, not a corporate system: it belongs beside the market sources
   ["Markets & finance", ["simplefin_transactions", "simplefin_accounts", "simplefin_balances", "simplefin_spend",
     "teller_transactions", "teller_accounts", "teller_balances", "teller_spend",
@@ -242,11 +256,13 @@ export const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
   intacct_fields: "intacct", sharepoint_list: "sharepoint", sharepoint_file: "sharepoint",
   amazon_report: "amazon_sp", amazon_sales_traffic: "amazon_sp", amazon_orders: "amazon_sp", amazon_inventory: "amazon_sp",
-  amazon_settlement: "amazon_sp", amazon_marketplaces: "amazon_sp", amazon_business_transactions: "amazon_sp" };
+  amazon_settlement: "amazon_sp", amazon_marketplaces: "amazon_sp", amazon_business_transactions: "amazon_sp",
+  ...Object.fromEntries(["balance", "balance_transactions", "charges", "payments", "payouts", "refunds", "disputes", "customers",
+    "subscriptions", "invoices"].map((t) => [`stripe_${t}`, "stripe"])) };
 const CARD_LABELS = { mssql: "SQL Server", winrm: "Remote Windows", database: "Any database", aws: "AWS", azure: "Azure",
   sharepoint: "SharePoint", google_sheets: "Google Sheets",
   prometheus: "Prometheus", datadog: "Datadog", exa: "Exa", tavily: "Tavily", firecrawl: "Firecrawl",
-  intacct: "Sage Intacct", amazon_sp: "Amazon Seller Central" };
+  intacct: "Sage Intacct", amazon_sp: "Amazon Seller Central", stripe: "Stripe" };
 const BLANK = { type: "mssql", title: "", every_minutes: "", daily_at: "" };
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const isWorkflowSource = (s) => isWorkflowConfig(parse(s?.ConfigJson));

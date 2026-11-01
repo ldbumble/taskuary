@@ -22,6 +22,9 @@ PLANNED = [
            'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']
+# the Stripe card's reads (stripe.py), named once: REGISTRY, CARD_OF and CONNECTION_OF all list the same ten
+STRIPE_TYPES = ('stripe_balance', 'stripe_balance_transactions', 'stripe_charges', 'stripe_payments', 'stripe_payouts', 'stripe_refunds',
+                'stripe_disputes', 'stripe_customers', 'stripe_subscriptions', 'stripe_invoices')
 # The Morning digest's data is the whole window (digest.gather: ~30K on an ordinary weekday), not a table of rows. Under
 # AI_CHARS the model read the asks and the threads and never saw the standing verdicts, open work, finished work or what
 # the assistant already raised - and briefed as if none of it existed (2026-10-13).
@@ -806,6 +809,8 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'amazon_business_transactions': _lazy('amazon_sp', 'run_amazon_business_transactions'),
             # ...and one invoice or credit memo as its PDF, fetched to a local folder like sftp_get - for an agent's lookup
             'amazon_invoice_pdf': _lazy('amazon_sp', 'run_amazon_invoice_pdf'),
+            # Stripe (stripe.py): payments, payouts, disputes, subscriptions. READ-ONLY - GETs to api.stripe.com and nothing else
+            **{t: _lazy('stripe', f'run_{t}') for t in STRIPE_TYPES},
             # A stateful report: the scheduler opens a batch, the page confirms amounts, and
             # Review sends. The special run path below owns the state transitions.
             'zoho_monthly_invoices': lambda cfg: ('monthly invoice workflow', 'A monthly batch will be opened; no invoice is created or sent by Preview.'),
@@ -915,6 +920,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'quickbooks_vendors': 'quickbooks', 'quickbooks_accounts': 'quickbooks', 'quickbooks_bill': 'quickbooks', 'quickbooks_expense': 'quickbooks',
            'zoho_monthly_invoices': 'zoho_invoice',
            **{t: 'amazon_sp' for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces', 'amazon_business_transactions', 'amazon_invoice_pdf')},
+           **{t: 'stripe' for t in STRIPE_TYPES},
            'teller_accounts': 'teller', 'teller_transactions': 'teller', 'teller_balances': 'teller', 'teller_spend': 'teller',
            'simplefin_accounts': 'simplefin', 'simplefin_transactions': 'simplefin',
            'simplefin_balances': 'simplefin', 'simplefin_spend': 'simplefin',
@@ -1016,6 +1022,11 @@ def _quickbooks_connection(store, connector_id=None) -> dict:
 
 def _amazon_connection(store, connector_id=None) -> dict:
     from .amazon_sp import connection
+    return connection(store, connector_id)
+
+
+def _stripe_connection(store, connector_id=None) -> dict:
+    from .stripe import connection
     return connection(store, connector_id)
 
 
@@ -1150,6 +1161,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'intacct': intacct_connection, 'intacct_fields': intacct_connection,
                  'intacct_create': intacct_connection, 'intacct_update': intacct_connection,
                  **{t: _quickbooks_connection for t in ('quickbooks', 'quickbooks_vendors', 'quickbooks_accounts', 'quickbooks_bill', 'quickbooks_expense')},
+                 **{t: _stripe_connection for t in STRIPE_TYPES},
                  **{t: _amazon_connection for t in ('amazon_report', 'amazon_sales_traffic', 'amazon_orders', 'amazon_inventory', 'amazon_settlement', 'amazon_marketplaces', 'amazon_business_transactions', 'amazon_invoice_pdf')},
                  **{t: _teller_connection for t in ('teller_accounts', 'teller_transactions', 'teller_balances', 'teller_spend')},
                  **{t: _simplefin_connection for t in ('simplefin_accounts', 'simplefin_transactions',

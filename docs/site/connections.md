@@ -243,6 +243,21 @@ on request at about one a minute; one already fetched is kept and not asked for 
 fetch a single one by number with the `amazon_invoice_pdf` lookup. See Amazon's
 [Amazon Business API documentation](https://developer-docs.amazon.com/amazon-business/docs).
 
+**Taking payments with Stripe** — the **Stripe** card reads your Stripe account: the balance,
+balance transactions with fees and net, charges, payments (PaymentIntents), payouts, refunds,
+disputes, customers, subscriptions with each one's monthly recurring revenue, and invoices. Like the
+Amazon card it is a data card for reports, dashboards and agent lookups, never a source of work, and
+it is read-only by construction: it only sends GET requests, so nothing on it can refund, pay out or
+cancel. To connect it, open the Stripe Dashboard → Developers → API keys → **Create restricted key**,
+give it Read on Balance, Balance transaction sources, Charges, Refunds, Customers, Disputes,
+PaymentIntents, Payouts, Invoices and Subscriptions and None on everything else, then paste the key
+(`rk_live_…` or `rk_test_…`) onto the card, where it is kept write-only. A full secret key (`sk_`)
+works too, but it can move money; the restricted one is the one to give. **Test** reads the balance
+and says whether the key is live or test. Amounts come back in money rather than cents — a
+zero-decimal currency such as JPY stays as it is — lists are read a page at a time within the window
+you ask for, and a rate-limited call waits and retries. See Stripe's
+[restricted keys documentation](https://docs.stripe.com/keys#create-restricted-api-secret-key).
+
 **Markets** — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
 strategy screen that filters another card's rows. With a key: **Twelve Data** (quotes and computed
 indicators across stocks, FX and crypto), **Alpha Vantage** (slow limits, no card, no expiry),

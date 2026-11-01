@@ -34,8 +34,10 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   // ...through the server's one gate, which keeps it open while anything on it still waits on the owner (a held `git push`, 2026-10-29):
   // the page walks on only when that gate says it closed
-  assert.match(sent, /if \(closes && walkLeave\) \{\n\s+if \(!liveWork\) onLeave\?\.\(\);\n\s+try \{ const d = await walkLeave\("sent"\); if \(d\?\.kept\) onStay\?\.\(\); \}/,
+  assert.match(sent, /if \(closes && walkLeave\) \{\n\s+if \(!liveWork\) onLeave\?\.\(\);\n(\s+\/\/[^\n]*\n)*\s+try \{ const d = await walkLeave\("sent", liveWork \? \{ stays: true \} : \{\}\); if \(d\?\.kept\) onStay\?\.\(\); \}/,
     "on the walk's table, the walk's close (railwalk.leave sent) - never put down over live work, and picked back up when kept open");
+  // ...and the walk told it stays draws no row below at the press: the next row stood on the table until the kept answer came back
+  assert.match(read("AssistantView.jsx"), /const putDown = !key && \(how === "next" \|\| \(how === "leave" && !left\?\.stays\)\) \? fromKey : null;/);
   assert.match(sent, /\n\s+if \(closes\) \{/);
   assert.match(sent, /out = await closeAfterSend\(api, selected\);[^\n]*\n\s+if \(out\?\.closed\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);
   assert.doesNotMatch(sent, /finish\("done"\)/, "never Mark done's close, which has no gate");

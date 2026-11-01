@@ -44,9 +44,10 @@ test("Send with a live agent waiting on you: the reply goes, the task stays on t
   const pageSel = `[data-tq-task-page="${inv.TaskId}"]`, rowSel = `[data-tq-rail] .tq-pile-row[data-tq-key="${key}"]`;
   await page.waitForSelector(`${pageSel} :is(.xterm, [data-tq-agent-room=live])`, { timeout: 20000 });
   await page.waitForSelector(rowSel, { timeout: 20000 });
-  // Close out, where its Send is: opened by its tab while the agent holds the page
+  // Close out, where its Send is: opened by its tab while the agent holds the page - unless its buttons are already in view. Folded, its
+  // draft is drawn there out of sight (lendsReply, so Redraft stays on the spine): a button there is not Close out open
   await page.waitForSelector(`${pageSel} [data-tq-section-tab=close]`, { timeout: 20000 });
-  if (!(await page.$(`${pageSel} [data-tq-closeout] button`))) await page.$eval(`${pageSel} [data-tq-section-tab=close]`, (b) => b.click());
+  if (!(await page.$$eval(`${pageSel} [data-tq-closeout] button`, (bs) => bs.some((b) => b.offsetParent)))) await page.$eval(`${pageSel} [data-tq-section-tab=close]`, (b) => b.click());
   await page.waitForFunction((sel) => [...document.querySelectorAll(`${sel} [data-tq-closeout] button, [data-tq-row] button`)]
     .some((b) => /^Send\b/.test(b.textContent.trim()) && !b.disabled && b.offsetParent), { timeout: 20000 }, pageSel)
     .catch(async () => assert.fail(`no Send: ${await page.evaluate(() => [...document.querySelectorAll("button")].filter((b) => b.offsetParent).map((b) => b.textContent.trim()).join(" | "))}`));

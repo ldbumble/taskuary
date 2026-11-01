@@ -31,3 +31,11 @@ export const rawError = (req) => [req?.error, req?.stack].filter(Boolean).join("
 
 // the desktop window has no browser of its own: there the server opens the page in the default browser
 export const howToOpen = (w) => (w?.pywebview ? "app" : "tab");
+
+// A SEARCH UNDER CONNECTIONS THAT FOUND NO CARD (the owner, 2026-11-01): the same wish concierge.no_card files when "connect X" has no card.
+// A name reads as one only when it looks like a product - short and plain; anything else is asked for as "this connection"
+export const connectName = (q) => { const s = String(q || "").trim().replace(/\s+/g, " ");
+  return s.length >= 2 && s.length <= 40 && /^[\p{L}\p{N}][\p{L}\p{N} .&+'-]*$/u.test(s) ? s : ""; };
+export const connectionWish = (q) => { const name = connectName(q);
+  return { kind: "feature", screen: "Connections", trying: `Find a card under Connections for ${name || String(q || "").trim().slice(0, 200)}`,
+           happened: `A card under Connections for ${name || "a system I searched for"}, so Taskuary can connect to it` }; };

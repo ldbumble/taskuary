@@ -25,6 +25,7 @@ import api from "./api";
 import { takeLists } from "./connectorLists.js";
 import { usedBy } from "./connectorUses.js";
 import { nothingMatches } from "./searchHits.js";
+import { connectName, connectionWish, openBugReport } from "./bugReportOpen.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
@@ -45,7 +46,7 @@ import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource }
 import { editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
-import { label as btnLabel } from "./buttons.js";
+import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
@@ -1699,6 +1700,13 @@ function AlchemyWalletGuide({ onBack, onData }) {
   </Box>;
 }
 
+// A SEARCH THAT MATCHES NO CARD, planned ones included (the owner, 2026-11-01): one button asks for one through the one report popup -
+// the wish concierge.no_card files, drafted through the scrub, filed only by the owner's Submit on GitHub
+const RequestConnection = ({ q }) => (
+  <Button size="small" variant="outlined" data-tq-request-connection="" title={btnHint("report_bug", "connect")} onClick={() => openBugReport(connectionWish(q))}>
+    {connectName(q) ? btnLabel("report_bug", "connect").replace("this connection", connectName(q)) : btnLabel("report_bug", "connect")}
+  </Button>);
+
 // `browse` (the assistant canvas, CanvasBrowse.jsx): draw the catalogue's groups, cards and one connector's detail through
 // the canvas's frame instead of this tab's rail - same data, same cards, same detail, same controls.
 export default function ConnectorsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
@@ -1956,7 +1964,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
-      query: q, empty: "Nothing in this section yet.",
+      query: q, empty: "Nothing in this section yet.", noneAction: <RequestConnection q={q} />,
     });
   }
 
@@ -1979,7 +1987,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
       {q ? (
         <Box>
-          {!hits.length ? <Empty>{nothingMatches(q, "Connections")}</Empty> : (
+          {!hits.length ? <><Empty>{nothingMatches(q, "Connections")}</Empty><Box sx={{ textAlign: "center", mt: 1 }}><RequestConnection q={q} /></Box></> : (
             <>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
                 {hits.length} {hits.length === 1 ? "result" : "results"}

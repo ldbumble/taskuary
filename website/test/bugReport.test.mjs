@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { issueBody, issueUrl, fullReport } from "../src/bugReport.js";
+import { issueBody, issueUrl, fullReport, joinBody, techOf } from "../src/bugReport.js";
 
 const d = { title: "Save fails on the board", explanation: "Pressing Save showed a red banner.", where: "Board screen", error: "ValueError: bad thing",
   env: "Taskuary 1.2.3 (pip) · Windows 11 · Python 3.12", log: "line one\nline two", fingerprint: "abc123" };
@@ -34,6 +34,14 @@ test("a long error goes next, with a note, and the whole report is still what ge
 test("a huge explanation loses its tail, never the title", () => {
   const b = issueBody({ ...d, explanation: "word ".repeat(3000) }), { url, cut } = issueUrl(d.title, b), p = new URL(url).searchParams;
   assert.ok(cut && url.length <= 7500); assert.equal(p.get("title"), d.title); assert.ok(p.get("body").includes("(cut - the full report"));
+});
+
+test("a feature request is labelled enhancement, its body the request and the version only", () => {
+  const tech = techOf({ ...d, kind: "feature" }), body = joinBody("What would help: a sort.", tech, false, "feature");
+  assert.equal(tech, `### Environment\n${d.env}\n`);
+  assert.ok(body.startsWith("### The request\nWhat would help: a sort.") && !body.includes("### Error") && !body.includes("Log lines"), body);
+  assert.equal(new URL(issueUrl("[feature] Sort", body, undefined, "feature").url).searchParams.get("labels"), "enhancement");
+  assert.equal(new URL(issueUrl("[bug] x", body).url).searchParams.get("labels"), "bug");
 });
 
 const CUT = "(cut - the full report was copied to your clipboard)";

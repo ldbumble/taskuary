@@ -33,7 +33,7 @@ class DraftTests(unittest.TestCase):
         for p in PRIVATE: self.assertNotIn(p.lower(), (system + user).lower(), p)
         self.assertIn('TypeError', user); self.assertIn('[removed]', user); self.assertEqual(300, kw.get('max_tokens'))
         self.assertEqual('Opening a task fails', d['title']); self.assertEqual('Pressed Code. It failed. It should open.', d['explanation'])
-        self.assertEqual({'title', 'explanation', 'where', 'error', 'env', 'log', 'actions', 'fingerprint'}, set(d))
+        self.assertEqual({'title', 'explanation', 'where', 'error', 'env', 'log', 'actions', 'fingerprint', 'trying', 'happened', 'kind'}, set(d))
 
     def test_every_string_in_the_draft_is_scrubbed(self):
         d = bugreport.draft(self.s, CLIENT, llm=FakeBrain({'title': 't', 'explanation': 'e'}))
@@ -70,6 +70,51 @@ class DraftTests(unittest.TestCase):
         with mock.patch.object(self.s, 'people', side_effect=RuntimeError('db locked')), self.assertRaises(bugreport.Unsafe):
             bugreport.draft(self.s, CLIENT, llm=b)
         self.assertEqual([], b.calls)                                 # nothing reached the model either
+
+
+# THE OWNER ASKED FOR IT (the Assistant's issue.draft, an Advisor "Report this?" - 2026-11-01): a bug or a wish, in their words, through
+# the same scrub. A wish carries no error, stack, actions or log; both say what they are in the title, since labels= needs a maintainer
+WISH = {'kind': 'feature', 'screen': 'Assistant', 'route': '/api/tasks/12/code', 'error': 'TypeError: x', 'stack': 'at f (a.js:1:1)',
+        'actions': ['pressed Code'], 'at': '2026-10-14T10:00:50',
+        'trying': 'Sort the Renew the Payworth contract replies for Erin Blake by date',
+        'happened': 'A way to sort the rail by date, so erin@northwind.example comes first'}
+
+
+class AskedForTests(unittest.TestCase):
+    def setUp(self):
+        self.s, home = seeded(), Path(tempfile.mkdtemp())
+        (home / 'taskuary.log').write_text('2026-10-14 10:00:50 ERROR   taskuary.server:9 failed for Erin Blake\n', encoding='utf-8')
+        p = mock.patch('taskuary.config.home', return_value=home); p.start(); self.addCleanup(p.stop)
+
+    def test_a_wish_is_what_they_tried_and_what_would_help_scrubbed(self):
+        b = FakeBrain({'title': 'Sort the rail by date', 'explanation': 'What I was trying to do: sort. What would help: a sort.'})
+        d = bugreport.draft(self.s, WISH, llm=b)
+        system, user, _ = b.calls[0]
+        self.assertIn('feature request', system); self.assertIn('What would help:', user)
+        for p in PRIVATE: self.assertNotIn(p.lower(), (user + json.dumps(d)).lower(), p)
+        self.assertEqual('[feature] Sort the rail by date', d['title']); self.assertEqual('feature', d['kind'])
+        # ...and nothing of the page's last failure rides along: no error, stack, route, actions or log
+        self.assertEqual(('', '', [], 'Assistant'), (d['error'], d['log'], d['actions'], d['where']))
+        self.assertNotIn('TypeError', user); self.assertNotIn('Log lines', user)
+
+    def test_with_no_model_their_words_are_the_draft(self):
+        with mock.patch('taskuary.llm.build_llm', return_value=None):
+            d = bugreport.draft(self.s, WISH)
+        self.assertTrue(d['title'].startswith('[feature] A way to sort the rail by date')); self.assertLessEqual(len(d['title']), 80)
+        self.assertRegex(d['explanation'], r'^What I was trying to do: .*\n\nWhat would help: A way to sort the rail by date')
+        for p in PRIVATE: self.assertNotIn(p.lower(), json.dumps(d).lower(), p)
+
+    def test_a_bug_they_name_keeps_the_error_and_says_what_happened(self):
+        b = FakeBrain({'title': '[bug] Code fails', 'explanation': 'It failed.'})
+        d = bugreport.draft(self.s, {**CLIENT, 'kind': 'bug', 'trying': 'open a task', 'happened': 'the Code button did nothing'}, llm=b)
+        _, user, _ = b.calls[0]
+        self.assertIn('What happened: the Code button did nothing', user); self.assertIn('TypeError', user)
+        self.assertEqual('[bug] Code fails', d['title'])                  # the prefix once, whether the model wrote it or not
+        self.assertIn('TypeError', d['error']); self.assertEqual('bug', d['kind'])
+
+    def test_an_unknown_kind_is_the_old_report(self):
+        d = bugreport.draft(self.s, {**CLIENT, 'kind': 'gossip', 'trying': 'x'}, llm=FakeBrain({'title': 'Opening fails', 'explanation': ''}))
+        self.assertEqual(('Opening fails', '', ''), (d['title'], d['kind'], d['explanation']))
 
 
 if __name__ == '__main__':

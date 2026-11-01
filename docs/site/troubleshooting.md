@@ -160,6 +160,40 @@ kinds of AI and connections are on, and the log lines around the error. You can 
 
 It goes to a public page: read it before you submit.
 
+### Ask the Assistant to write it
+
+Tell the Assistant, in your own words, that Taskuary got something wrong or that you wish it could
+do something. It writes a **bug report** or a **feature request** and puts **Report this bug** or
+**Request a feature** under its answer. That button opens the same popup, drafted the same way and
+scrubbed the same way.
+
+- **A bug** says what you were trying to do and what happened, beside the last error the page
+  recorded. Its title starts with `[bug]`.
+- **A feature request** says what you were trying to do and what would help. It carries the Taskuary
+  version and your OS, and nothing else: no error, no log, no mail. Its title starts with
+  `[feature]`, and the issue is labelled `enhancement`.
+- **Software with no card under Connections** is a feature request too. Ask to connect something
+  Taskuary has no card for, and the Assistant names the closest cards and offers **Request a
+  feature** for it, in your words.
+
+Nothing is filed for you. You read the draft, change what you want, and press Submit on GitHub. The
+Assistant drafts one only when you ask in your own words at your desk. It won't draft one from a
+phone chat, and it won't draft one while a task with words from someone you have not vouched for is
+open.
+
+### The Advisor can suggest one
+
+When Taskuary itself keeps failing the same way, the Advisor raises one line with a **Report this?**
+move that opens the same popup:
+
+- agent runs ending with the same error three times or more this week, on at least two tasks (twice
+  is enough when the failure started with the version you are on), or
+- the Assistant's fix-it check giving up on the same connection twice in two weeks.
+
+A failure you can fix yourself, such as a sign-in that was refused, is never counted. Neither is a
+task that carries words from someone you have not vouched for. Each problem is raised once. Put it
+down with **Not ours** and it stays down.
+
 ## Still wrong
 
 - The live API reference at `/api/docs` shows exactly what the app exposes, and is the fastest way

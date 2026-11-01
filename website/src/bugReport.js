@@ -26,17 +26,18 @@ fingerprint: ${d.fingerprint}
 
 export const fullReport = (title, body) => `${title}\n\n${body}`;
 
-const link = (title, body) => `${NEW}?${new URLSearchParams({ title, body, labels: "bug" })}`;
+// a wish is labelled as one; GitHub keeps `labels` only for a maintainer, so the title says it too (bugreport.PREFIX)
+const link = (title, body, kind) => `${NEW}?${new URLSearchParams({ title, body, labels: kind === "feature" ? "enhancement" : "bug" })}`;
 
 // a slice that never ends in half a surrogate pair (it would encode as U+FFFD)
 const head = (s, n) => { const t = s.slice(0, n); return /[\ud800-\udbff]$/.test(t) ? t.slice(0, -1) : t; };
 const LOG = "<details><summary>Log lines</summary>";
 
-export function issueUrl(title, body, max = 7500) {
-  const ok = (t, b) => link(t, b).length <= max, done = (t, b) => ({ url: link(t, b), cut: true });
+export function issueUrl(title, body, max = 7500, kind = "bug") {
+  const link_ = (t, b) => link(t, b, kind), ok = (t, b) => link_(t, b).length <= max, done = (t, b) => ({ url: link_(t, b), cut: true });
   // the longest n for which f(n) still holds (encoded length only grows with n)
   const fit = (n, f) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (f(m)) lo = m; else hi = m - 1; } return lo; };
-  if (ok(title, body)) return { url: link(title, body), cut: false };
+  if (ok(title, body)) return { url: link_(title, body), cut: false };
   let b = body;
   const i = b.lastIndexOf(LOG), j = i < 0 ? -1 : b.indexOf("</details>", i);     // the last one: an Error may quote the tag
   if (j >= 0) b = `${b.slice(0, i)}${LOG}\n\n${NOTE}\n${b.slice(j)}`;
@@ -57,8 +58,11 @@ export function issueUrl(title, body, max = 7500) {
 // The popup edits the explanation and the technical part apart; the technical part keeps its headings so issueUrl can still
 // cut by them. The screenshot line is its own section: inside "What happened" the explanation's cut could take it.
 export const SHOT = "Paste the screenshot here.";
+// ...a wish has no error, log or place it broke: only the version it was asked of
 export const techOf = (d) => {
+  if (d.kind === "feature") return `### Environment\n${d.env}\n`;
   const log = d.actions?.length ? `Recent actions: ${d.actions.join(" · ")}\n\n${d.log}` : d.log, b = issueBody({ ...d, log, explanation: "" });
   return b.slice(b.indexOf("### Where"));
 };
-export const joinBody = (explanation, tech, shot = false) => `### What happened\n${explanation}\n\n${shot ? `### Screenshot\n${SHOT}\n\n` : ""}${tech}`;
+export const joinBody = (explanation, tech, shot = false, kind = "bug") =>
+  `### ${kind === "feature" ? "The request" : "What happened"}\n${explanation}\n\n${shot ? `### Screenshot\n${SHOT}\n\n` : ""}${tech}`;

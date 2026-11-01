@@ -353,6 +353,19 @@ def already_serving(host='127.0.0.1', port=None):
     return url if serving(url, secs=3) else ''      # something else on that port is not ours to open
 
 
+VIEW_POLL, VIEW_GONE = 5.0, 6.0     # how often a view asks after its server, and how long a silence means it is gone
+
+
+def follow_server(url: str, window, poll: float = VIEW_POLL, gone: float = VIEW_GONE):
+    """A VIEW CLOSES WITH THE SERVER IT SHOWS. Taskuary started a second time opens a window onto the one already running - a second
+    Taskuary.exe process, which outlived that server's exit for an Update and held the exe: the old program exited, the swap could not
+    replace it in 30 tries, and the helper put the old version back (TQ-1251). Once the server stops answering, the view goes too."""
+    while serving(url, secs=gone): time.sleep(poll)
+    logger.info(f'desktop: {url} stopped answering - closing this view of it')
+    try: window.destroy()
+    except Exception as e: logger.debug(f'desktop: the view was already gone - {e}')
+
+
 def held_elsewhere() -> str:
     """The Taskuary serving THIS data folder from another port, or '': one per folder (instance.py), and the configured
     port is only where it usually is - a start that found its port taken moved to a free one."""
@@ -467,7 +480,7 @@ def main():
     except Exception: pass
     if running:
         print(f'Taskuary is already running at {running} - opening that one.')
-        webview.start()
+        webview.start(follow_server, (running, window))
         return 0
 
     # this window owns the server: closing it hides it in the tray, and the tray's Quit quits - saying goodbye first (a view of another

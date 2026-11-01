@@ -188,6 +188,9 @@ def swap_script(exe: Path, new: Path, pid: int, args: list, also=()) -> str:
         'exit /b 3',
         ':giveup',
         '>> "%update_log%" echo ERROR: could not replace the old program after 30 tries %date% %time%',
+        # ...and WHO still runs it: a second copy (a view of this one, TQ-1251) holds the exe as surely as the old process did
+        '>> "%update_log%" echo still running from this program:',
+        f'tasklist /FI "IMAGENAME eq {exe.name}" >> "%update_log%" 2>&1',
         f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
         'del "%~f0"',
         'exit /b 1',

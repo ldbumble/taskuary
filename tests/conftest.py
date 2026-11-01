@@ -520,7 +520,10 @@ def no_advisor_in_the_background():
     it inline (`notice(..., wait=True)`); nobody gets one by accident."""
     from taskuary import advisor
     from taskuary import goals
+    from taskuary import calibrate
+    calibrate.clear()
     advisor.BACKGROUND = goals.BACKGROUND = False; yield; advisor.BACKGROUND = goals.BACKGROUND = True
+    calibrate.clear()
 
 
 @pytest.fixture(autouse=True, scope='session')

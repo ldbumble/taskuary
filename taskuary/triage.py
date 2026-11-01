@@ -6,6 +6,7 @@ import json, re
 import re as _re
 
 from . import kinds as task_kinds
+from .workstreams import from_menu
 
 # What each verdict COSTS is part of the judgement, so it is in the prompt: a task starts a
 # real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
@@ -198,7 +199,7 @@ def note_id(line: str) -> str:
 
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
-                   earlier=False, thread_task=False, notes=False) -> dict:
+                   earlier=False, thread_task=False, notes=False, workstreams=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -250,6 +251,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
     if playbooks: p['playbook'] = {'type': ['string', 'null']}
     if workflows: p['workflow'] = {'type': ['string', 'null']}
+    # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them), null when unsure
+    if workstreams: p['workstream'] = {'type': ['string', 'null']}
     if profiles: p['profile'] = {'type': ['string', 'null']}
     if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
                        repo_reason={'type': 'string'})
@@ -688,7 +691,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
                     profiles: str = None, routing_history: list = None, seen: set = None, job: str = None,
-                    coding: bool = True, workflows: str = None, connected: list = None) -> dict:
+                    coding: bool = True, workflows: str = None, connected: list = None, workstreams: str = None) -> dict:
     """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
     protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
     the owner wrote or generated something real, so the shipped template never rides in as noise.
@@ -788,6 +791,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # the owner, "why are there items in code in triage? I thought we removed them").
             if watch: system += "\n\nTHE REPORT'S BRIEF - why the owner runs this report and what they watch for:\n" + str(watch)[:1200]
             if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
+            # THE OWNER'S WORKSTREAMS (the owner, 2026-11-01): which body of work this belongs to sorts it - a side product's tester is not
+            # a day-job colleague, and a personal chat is never the job's. Context for the sort; how each is weighed is the guide's to say
+            if workstreams: system += ("\n\nTHE OWNER'S WORKSTREAMS - the separate bodies of work they run (a personal one is their own life, "
+                                       'never work); name in "workstream" the one this message belongs to, by its id before the colon, or '
+                                       'null when you are not sure:\n' + str(workstreams)[:2000])
             if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
             if profiles: system += '\n\nTHE WORKERS - the specialists for non-coding work, each with what it is for:\n' + str(profiles)[:2000]
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
@@ -857,7 +865,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             from .llm import ask_json
             answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
-                                                                     notes=bool(note_ids)),
+                                                                     notes=bool(note_ids), workstreams=bool(workstreams)),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -871,6 +879,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # opened a coding session; the model has read the whole message and TRIAGE.md's
                 # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
+                # ...and its workstream, only one it was shown (workstreams.from_menu): a made-up one places nothing
+                if workstreams and (ws := from_menu(j.get('workstream'), workstreams)): out['workstream'] = ws
                 if j['intent'] == 'task' and j.get('kind') in task_kinds.TRIAGE: out['kind'] = j['kind']
                 # ...and a coding verdict on an install with no coding tool is the general agent's: it tried to start a CLI that
                 # was not there and said "couldn't start" until someone noticed (2026-10-16)

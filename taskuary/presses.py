@@ -116,6 +116,8 @@ def kept(store, key, pressed, surface='desk', lit=None, live=None, rev=None, adv
                           (key, tgt[0], int(tgt[1]), rev or '', adv or None, got, int(bool(shown) and shown == got), str(item.get('kind') or ''),
                            w['channel'], w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now(),
                            surface, shown or '', json.dumps(others), int(bool(others)), str(repo).lower(), st, by, json.dumps(grey)))
+        from . import calibrate
+        calibrate.clear()                                   # a new answer is new record: the next decision reads it
         with _LOCK:
             last[k] = (time.monotonic(), rid)
             for o in [o for o, (t, _i) in last.items() if time.monotonic() - t > SAME_PRESS_SECS]: last.pop(o, None)

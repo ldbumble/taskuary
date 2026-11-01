@@ -60,6 +60,7 @@ import ItemSections, { ItemLay, ItemPart } from "./ItemSections.jsx";
 import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS, reportSchedule } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's three sections, by name (ItemSections)
+import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -1022,7 +1023,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
   if (table != null) return (
     <ItemSections kind="idea" itemKey={card.key} label="Advisor" height={table} about="from" lays title={card.title}
-      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
+      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
       sections={[
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
           body: <><ItemPart data-tq-idea-from="">

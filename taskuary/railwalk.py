@@ -232,7 +232,9 @@ def _walk(store, st: dict, rows: list) -> dict:
     if st.get('ended') and st.get('last'):
         n = _above(ln, _tuple(st['last']), inclusive=True)
     else: n = _above(ln, first) if first else None
-    return {'on': st.get('on'), 'members': st.get('members') or [], 'ended': bool(st.get('ended')),
+    # `reads`: Next on the row on screen reads it and it leaves the rail (rule 4, its kind as it was put up) - so the page takes it off at
+    # the press, not when the answer lands: a slow answer held a read FYI batch in its heading's count, an idea passed on the rail (2026-11-01)
+    return {'on': st.get('on'), 'members': st.get('members') or [], 'ended': bool(st.get('ended')), 'reads': st.get('kind') == 'reads',
             'above': (as_key(store, ln, n, down=False) if n is not None else None)}
 
 

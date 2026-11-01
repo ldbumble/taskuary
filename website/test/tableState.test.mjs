@@ -75,7 +75,8 @@ test("the page wires the record: the strip, the box's subject, the folded line a
   assert.match(src, /const backToTable = [^\n]*\n\s+setRailOpen\(false\);\n\s+if \(table\.folded \|\| table\.place\) unfoldTable\(\);/, "...by unfolding the table");
   // folded by its X it is put away (UX walk, 2026-10-22): no "on the table" ring, no #task - and its plain row opens it again in place
   // ...folded by a walk press, the row keeps its mark until the answer lands (rule 7: the band's count does not jump between batches)
-  assert.match(src, /current=\{old \|\| \(table\.folded && !flight\?\.from\) \|\|/, "a folded task's row is not marked on the table");
+  // ...unless the press read them (rule 4): they left with it, and the fyi batch below takes the bracket at the press
+  assert.match(src, /current=\{old \? null : readGone\?\.keys\.includes\(currentItem\?\.key\) \? [^\n]*\n\s+: \(table\.folded && !flight\?\.from\) \|\|/, "a folded task's row is not marked on the table");
   assert.match(src, /litTable\.tid && !table\.folded \? `#task=/, "nor does the address name it");
   assert.match(src, /if \(isCur \|\| \(table\.folded && key === table\.key\)\) \{ backToTable\(key\); return; \}\n\s*pull\(key, null\);/, "its row unfolds it, not a second pull");
   assert.match(src, /firstRun && \(browsing \|\| setupCard\) && <div data-tq-setup-over=""/, "a sidebar place - or a task - opens during setup, with the way back");

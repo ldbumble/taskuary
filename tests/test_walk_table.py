@@ -186,3 +186,19 @@ def test_the_world_is_the_table():
         assert [sym for _, sym in walkworld.dump(s, src)] == list(walkworld.ORDER)
         assert [lv for lv, _ in walkworld.dump(s, src)] == ['task'] * 6 + ['later'] + ['reports'] * 3 + ['ideas'] + ['fyi'] * 7
         funnel.invalidate()
+
+
+def test_peek_says_what_next_reads(world):
+    """`walk.reads` is the page's word, at the press, that the row on screen leaves with Next (rule 4): it takes it off the rail then,
+    not when the answer lands (2026-11-01). So it is exactly the rows Next reads off the rail - a task, a meeting stay; a report, the
+    idea, an fyi go. An fyi batch put up by Next reads too."""
+    from taskuary import railwalk
+    s, src = world
+    w = Walk(s, src)
+    for sym in ('T1', 'M1', 'R1', 'I1', 'F7'):
+        w.do(f'open {sym}')
+        reads = railwalk.peek(s)['reads']
+        w.do('next')
+        assert reads == (not any(walkworld.matches(r, src[sym]) for r in walkworld.rows(s))), f'{sym}: peek said reads={reads}'
+    w.do('open R3'); w.do('next')
+    assert w.on.startswith('fyis:') and railwalk.peek(s)['reads'], 'the batch Next put up is read by the next Next'

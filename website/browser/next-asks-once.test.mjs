@@ -47,7 +47,8 @@ test("a double-click on All read, next settles the batch once and walks on one b
   const was = await fyi(), t0 = Date.now();
   await page.evaluate(() => { const b = document.querySelector("[data-tq-row] [data-tq-next]"); b.click(); b.click(); });
   await sleep(5000);
-  assert.equal(count(reqs, t0, /^\/api\/funnel\/settle$/, "POST"), 1, "the batch was settled twice");
+  // ...its settle is one walk move now (railwalk.leave "settle"), not the settle route
+  assert.equal(count(reqs, t0, /^\/api\/(funnel\/settle|walk\/leave)$/, "POST"), 1, "the batch was settled twice");
   const n = (s) => +(/(\d+)/.exec(s)?.[1] || 0);
   assert.equal(n(was) - n(await fyi()), size, `one batch read: ${was} -> ${await fyi()}`);
   assert.deepEqual(errors, []);

@@ -23,6 +23,9 @@ test("asPressed draws a continued task working, in Tasks, and drops one being pu
   assert.deepEqual(cont.slice(1), rows.slice(1));
   const left = asPressed(rows, { leaving: 4 });
   assert.deepEqual(left.map((i) => i.key), ["processing:a", "processing:c"], "a row with no task is never dropped with it");
+  // ...and the rows a walk press reads (rule 4) leave by key, the rest as they are
+  assert.deepEqual(asPressed(rows, { read: ["fyis:processing:a", "processing:a"] }).map((i) => i.key), rows.slice(1).map((i) => i.key));
+  assert.equal(asPressed(rows, { read: [] }), rows);
 });
 
 test("the walk's Continue moves the row at the press, holds it until the pile agrees, and puts it back on failure", () => {
@@ -33,7 +36,7 @@ test("the walk's Continue moves the row at the press, holds it until the pile ag
   const view = read("AssistantView.jsx");
   assert.match(view, /onPress=\{\(\) => setContinuingTid\(continueOn\.task\.TaskId\)\}/);
   assert.match(view, /onFail=\{\(\) => setContinuingTid\(null\)\}/);
-  assert.match(view, /asPressed\(pile\.items, \{ leaving: leavingTid, continuing: continuingTid \}\)/);
+  assert.match(view, /asPressed\(pile\.items, \{ leaving: leavingTid, continuing: continuingTid, read: readGone\?\.keys \}\)/);
   assert.match(view, /row\.lane === "working"\)\) setContinuingTid\(null\)/, "held until the server's pile has it working");
 });
 

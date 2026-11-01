@@ -284,6 +284,11 @@ export const SECTION = (open, w, live = false, keep = false) => ({ position: "ab
 // ...a closed tab's width: 156px, and beside a LIVE agent Came from and Close out fold to slim 44px ones (the owner, 2026-10-27: "keep Came
 // from and Close out as very MINIMAL tabs ... so the live agent keeps nearly all the space")
 export const TAB_W = 156, MINI_W = 44;
+// ...IN RATIO, not in pixels (the owner, 2026-11-01, TQ-1251: "on my machine the main view is 80% ... by him it takes up 40% with the spines"):
+// two 156px spines were a fifth of a wide screen and two fifths of a laptop's at 150%. A spine is a tenth of the work area, never wider than
+// it was, and never so narrow its moves cannot stand
+export const TAB_SHARE = 0.1, TAB_MIN = 128;
+export const tabW = (w) => (w > 0 ? Math.round(Math.min(TAB_W, Math.max(TAB_MIN, w * TAB_SHARE))) : TAB_W);
 // ...and TWO OPEN SIDE BY SIDE (the owner, 2026-11-01, "try it": "a button to open 2 side by side so you can see agent response and close out
 // generated email or came from and agent work"): the open pane and its partner, half the work area each - Agent beside Close out (the answer
 // and the email it drafted), Came from beside Agent (the ask and the work). Only where two halves stay readable - a work area of 960px leaves
@@ -308,7 +313,7 @@ const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "poin
 // its name, three short lines of where it stands, each clamped so the tab never scrolls ("maybe a little smaller and have more summary on
 // each one") - and like a book's SPINE (the owner, 2026-10-27), at its foot over a thin rule the one status line ("✓ Sorted: ...", "✓ Done
 // · Advisor: ...", "● Up to here" on the one the task is at - the arrow filled in the accent there) and the section's number, large and faint
-const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: TAB_W,
+const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: "100%",
   border: 0, bgcolor: "#fff", color: INK, textAlign: "left",
   display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, px: 1.5, py: 1.75, boxSizing: "border-box", overflow: "hidden",
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
@@ -488,7 +493,9 @@ export const MOVE_LOOK = {
   "& .tq-ab.down:not(.p):hover:not(:disabled)": { bgcolor: "#fff", borderColor: ACCENT, color: INK } };
 const SPINE_MOVES = { ...MOVE_LOOK, display: "flex", flexDirection: "column", gap: 0.6, position: "absolute", top: `${MOVES_AT * 100}%`, left: 12, right: 12,
   pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, cursor: "default",
-  "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, justifyContent: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } };
+  // ...a spine in ratio can be narrow (tabW): its move's words wrap to a second line rather than cut to "Hand it t..."
+  "& .tq-ab": { width: "100%", minWidth: 0, minHeight: 30, fontSize: 12.5, px: 1, py: 0.4, justifyContent: "center", textAlign: "center", whiteSpace: "normal",
+    lineHeight: 1.2, height: "auto" } };
 const SEC_NAME = { from: "Came from", agent: "Agent", close: "Close out" };
 const OPENS_FORM = new Set(["send-general", "start-agent", "run-another"]);   // the agent's moves that open its start box
 const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="button" className={`tq-ab ${v.tone} ${rankOf(v, head)}`} disabled={v.disabled} data-tq-verb={v.id}
@@ -1701,7 +1708,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pairFlip = (k) => () => { setSecPick({ key: pickKey, sec: k }); setPairPick({ key: pickKey, on: !paired }); };
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
-  const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : TAB_W);
+  const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : tabW(bodyW));
   // ...less its slot's own 1px rule on the left (Agent and Close out), so the body lies inside it
   // ...side by side, half of what the closed tab and the two slots' rules leave
   const openW = (k) => (paired ? Math.max(320, Math.floor((bodyW - SECTIONS.filter((s) => !isOpen(s.key)).reduce((n, s) => n + closedW(s.key), 0) - 2) / 2))
@@ -1728,6 +1735,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;
   // ...side by side, both open halves draw theirs - and beside Came from, Close out's spine keeps the draft's Redraft its hidden card lends it
   const shows = (p) => pane === p || (paired && isOpen(p === "reply" ? "close" : p));
+  // ...and with Agent open, the draft waiting in the folded Close out is drawn there out of sight too, so its Redraft stays on the spine: it went
+  // with the card the moment Agent opened, and the spine read Hand it to a person, Mark done... with no Redraft (TQ-1251)
+  const lendsReply = threeUp && !paired && section === "agent" && !!pendingReview;
   // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
   // ...and only where nothing else waits there: a close-out to approve, a proposal, emails owed or a write-up under way have their own box
   const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
@@ -3284,7 +3294,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
                   {shows("reply") && co.writeupAt === "closeout" && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
                     onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
-                  {shows("reply") && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
+                  {(shows("reply") || lendsReply) && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* WHAT THE DRAFT ANSWERS, IN ONE LINE (the task-view cleanup, owner-approved 2026-10-25 - it replaces the 2026-10-16 condensed
                           rows here): "Answering <who>: <their words>", and the line opens the whole conversation in From. Four rows of the

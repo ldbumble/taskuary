@@ -120,6 +120,16 @@ def test_a_landed_message_and_its_task_are_placed_signals_first_then_triages_wor
     assert s.get_task(t2)['Workstream'] == 'northwind-finance-systems'
 
 
+def test_a_rail_task_row_carries_its_tasks_workstream_and_an_idea_keeps_its_own(s):
+    from taskuary import funnel
+    f = Factory(s)
+    t = f.task(title='Export greyed'); W.set_task(s, t, 'ledger-app', 'owner')
+    u = f.task(title='Unplaced')
+    items = [{'key': f'task:{t}', 'tid': t}, {'key': f'task:{u}', 'tid': u}, {'key': 'idea:1', 'tid': t, 'workstream': 'northwind-finance-systems'}]
+    funnel._label_workstreams(s, items)
+    assert [i.get('workstream') for i in items] == ['ledger-app', None, 'northwind-finance-systems']
+
+
 def test_the_api_lists_workstreams_moves_a_task_and_the_task_carries_its_label(s):
     t = Factory(s).task(title='Export button greyed')
     with mock.patch.object(server, 'store', s):

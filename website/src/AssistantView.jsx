@@ -114,6 +114,7 @@ import { revealRing } from "./railReveal.js";
 import { pressable } from "./pressable.js";
 import { coalesce } from "./coalesce.js";
 import { takeAsk } from "./askAssistant.js";
+import { WorkstreamLabel } from "./Workstream.jsx";   // a task row's workstream, a small label (the owner, 2026-11-01)
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -798,6 +799,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                             and on the card (B3, 2026-10-29) - a warning in the row's own height, never a gate */}
                         {!!i.danger && <span className="tq-pile-danger" data-tq-danger="" style={{ color: ALERT }} aria-label={dangerLine(i.danger, i.danger_aim)}>⚠</span>}
                         <b className={goal ? "goal-t" : undefined}>{i.title}</b>
+                        {/* WHICH WORKSTREAM it is under, small after the title (the owner, 2026-11-01) - it gives way first on a narrow rail */}
+                        {!!i.workstream && <WorkstreamLabel slug={i.workstream} sx={{ ml: 0.5, flexShrink: 1, minWidth: 0, overflow: "hidden", fontSize: 10.5 }} />}
                         {/* ONE FYI ROW PER EMAIL THREAD (trust audit P2, 2026-10-28): the newest mail speaks, the rest are its "+N" */}
                         {i.thread_n > 0 && <span className="tq-pile-ref" data-tq-thread-n={i.thread_n} title={`${i.thread_n} more on this thread - it opens on all of them`}>+{i.thread_n}</span>}
                         {/* a goal's row is "🎯 title · 2 of 5 steps" - its count, never its TQ number (the owner, 2026-10-21) */}

@@ -328,7 +328,8 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
         if 'cid' in _HELD: return {'said': '', 'pending': True}
         _HELD['cid'] = concierge.record(store, tid, 'assistant', f"{greeting(now)}.", {'key': 'brief', 'kind': 'brief', 'lane': 'report',
                                                                                           'title': 'Today', 'reading': True})
-        return {'said': '', 'pending': True, 'drawn': True}
+        _clear_walk(store)
+        return {'said': '', 'pending': True, 'drawn': True, 'cleared': True}
     from . import funnel
     try: items = funnel.pile(store).get('items') or []
     except Exception as e:
@@ -345,9 +346,18 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
             'on_you': c['on_you'], 'to_read': c['to_read'], 'tasks': c['tasks'],
             'mail': sum(map(lanes.is_mail, items)), 'chips': chips, 'away': away}
-    if cid: concierge.rewrite(store, cid, say, card)
-    else: concierge.record(store, tid, 'assistant', say, card)
-    return {'said': say, 'chips': chips}
+    # ...filled where it was drawn, over whatever the owner walked to meanwhile: only a new opener clears the table (_clear_walk)
+    if cid: concierge.rewrite(store, cid, say, card); return {'said': say, 'chips': chips}
+    concierge.record(store, tid, 'assistant', say, card); _clear_walk(store)
+    return {'said': say, 'chips': chips, 'cleared': True}
+
+def _clear_walk(store):
+    """THE OPENER STARTS THE DAY WITH NOTHING ON THE TABLE (the owner, 2026-11-01: "when the morning digest opens let's clear the walk
+    through otherwise it's confusing"): yesterday's row kept its "on the table" mark on the rail while the screen showed the greeting.
+    The walk is put down as a new chat puts it down (railwalk.reset) - Walk me through my tasks starts at the top again."""
+    from . import railwalk
+    try: railwalk.reset(store)
+    except Exception as e: logger.warning(f'welcome: the walk was not put down - {e}')
 
 def phone_lead(store, now: datetime = None) -> str:
     """The same opening, for the phone - which never speaks first, so it rides on the answer to their first message of the

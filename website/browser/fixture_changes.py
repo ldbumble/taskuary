@@ -43,6 +43,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/long-chat',
         '/api/fixture/task/workstreams',
         '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
+        '/api/fixture/day/away',
     })
 
     def fixture_refuse(method, path):
@@ -576,6 +577,18 @@ def install_processing_changes(app, store):
             from taskuary import live
             live.emit(live.CHAT, thinking=False, channel='telegram')
         return walk_keys()
+
+    @app.post('/api/fixture/day/away')
+    def day_away(body: dict):
+        """The owner was last here seventeen hours ago, so the page's next arrive draws the day's opener (welcome.due's gap), and the
+        page is told to arrive now, past its minute's throttle - as the end of the startup catch-up tells it."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import live, welcome
+        welcome._HELD.clear(); welcome._CATCHUP.clear()
+        gone = (datetime.now() - timedelta(hours=17)).strftime('%Y-%m-%d %H:%M:%S')
+        for k in (welcome.SEEN_KEY, welcome.CLOSED_KEY): store.set_setting(k, gone, 'fixture')
+        live.emit(live.ARRIVE)
+        return {'away_since': gone}
 
     @app.post('/api/fixture/walk/keys')
     def walk_keys_now(body: dict): return walk_keys()

@@ -175,6 +175,13 @@ export const tableCardIndex = (messages, key) => {
   }
   return at;
 };
+// THE DAY'S OPENER LEADS THE CONVERSATION (the owner, 2026-11-01): welcome.arrive records it in the live chat, after whatever the last
+// walk said, and a folded task card stood over "Good morning". The lines before the newest opener are not drawn; the same array back
+// when there is nothing above it, so what memoizes on it does not run again
+export const sinceOpener = (messages) => {
+  const at = (messages || []).findLastIndex((m) => m?.card?.kind === "brief");
+  return at > 0 ? messages.slice(at) : messages;
+};
 // ...and a RELOADED conversation knows only the server's word. The page's `done` mark does not travel in the history, so
 // after "All read, next" on the last batch found nothing next, the reload drew the read batch live again while the server
 // said nothing was on the table (the owner, 2026-10-02: "it reopens the same 4 again before disappearing"). Every item

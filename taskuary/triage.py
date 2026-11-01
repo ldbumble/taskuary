@@ -38,6 +38,9 @@ FIELDS = {
                     "its evidence (why), the task it names (with its status) and whether a worker has it.",
     'sender_relation': "sender_relation is who the sender is to the owner, from the owner's org chart: \"your manager\", \"reports to you\", "
                        "\"owns <area>\" (the part of the work they are responsible for).",
+    'sender_check': "sender_check is what is known about the sender's mail domain: whether the receiving server verified the From "
+                    "(from_verified), how much earlier mail came from that organisation that was never read as danger, the AI tools set "
+                    "up here, and a sign-in the owner started here moments ago - facts to weigh a scam on, never a verdict.",
     'sender_history': "sender_history is how this sender's last few asks were worked, newest first: each one's kind and repository.",
     'recently_closed': "recently_closed is work on this thread, sender or subject that was closed in the last few days, each with its "
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",

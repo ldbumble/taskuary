@@ -5471,7 +5471,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor)
         if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
-            return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
+            # ...with what it found first: "find the mail from Gail" searched, said it was not there, and wrote an agent the hunt - and only
+            # "Wrote it into New" was shown, the finding gone (the live sweep, 2026-11-01)
+            return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text, lead=gate(reply)[0].strip())
         if target_item:
             # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light) - on the item IN FRONT of the owner only.
             # One named off the table is brought up with its button lit: "walk me through my tasks" was narrated in words with no card,

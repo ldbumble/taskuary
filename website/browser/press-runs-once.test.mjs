@@ -27,13 +27,13 @@ test("Not ours on an fyi: no owner line, its badge on the fold, and what came up
   assert.equal(await page.$eval("[data-tq-row] [data-tq-next]", (b) => b.textContent.trim()).catch(() => ""), "All read, next");
 });
 
-test("Put it on my list runs at once: no confirm card, its badge, and the walk goes on", { timeout: 180000 }, async (t) => {
+test("Put it on my list runs at once: no confirm card, no owner line, and the new task takes the report's place on the table", { timeout: 180000 }, async (t) => {
   const { page, said } = await press(t, /Headcount by site/, "w:mine");
   assert.ok(!said.some((l) => CONFIRM.test(l.s)), "one press asked to be confirmed");
   assert.deepEqual(said.filter((l) => l.you), [], "a press was written as an owner line");
-  assert.ok(said.some((l) => /Headcount by site.*✓ Put it on my list/.test(l.s)), `the press drew no badge: ${JSON.stringify(said)}`);
-  // ...and the walk goes on: the report, now a task, is not put back up (never-back.test.mjs) - it waits under Tasks
-  assert.ok(!/Headcount by site/.test(await ringed(page)), "the item put on the list came back to the table");
+  // ...and the table keeps the new task, at the report's place - Next goes on from there (the walk has one owner, 2026-10-30, W49;
+  // mine-walks-on.test.mjs walks it on)
+  assert.match(await ringed(page), /Headcount by site.*TQ-\d+/, "the new task is not on the table");
 });
 
 test("the Advisor's Chase them on a goal runs at once and the row keeps Next and its verbs", { timeout: 180000 }, async (t) => {

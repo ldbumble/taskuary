@@ -34,7 +34,7 @@ test("the chat takes the room on the task page, the way a live session does", ()
 
 // THE AGENT'S CHAT OPENS PUSHED UP on the canvas: the folded Task strip scrolls above, and back down when another step opens
 test("on the canvas the agent step scrolls the Task strip away, and another step scrolls it back", () => {
-  assert.match(tasks, /const agentUp = !!canvas && pane === "agent" && workspaceMode === "general" && !liveSession;/);
+  assert.match(tasks, /const agentUp = !!canvas && shows\("agent"\) && workspaceMode === "general" && !liveSession;/);
   assert.match(tasks, /if \(!agentUp\) \{ if \(canvas && stepsBox\.current\) stepsBox\.current\.scrollTop = 0; return undefined; \}/);
   // ...the stacked page's one scroller; on the desk each of the three sections scrolls on its own (2026-10-27)
   assert.match(tasks, /<Box ref=\{stepsBox\} sx=\{threeUp \? \{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "row"[^\n]*\n\s+: \{ px: liveSession/);
@@ -45,7 +45,7 @@ test("on the canvas the agent step scrolls the Task strip away, and another step
 // own focus (focusStage: a draft ready is Close out) decides.
 test("an ended general session's chat gives the page back to the stage that is focused", () => {
   const src = read("../src/TaskPage.jsx");
-  assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| pane === "agent"\) \? \(/);
+  assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| shows\("agent"\)\) \? \(/);
   // ...a finished one's chat is the rest of its Result, behind the Result heading while the Result rests on its summary - unless it asks (2026-10-27)
   // ...or that is at work again: a turn under way shows (its band or its thinking line)
   // ...and a failed run rests on its reason and fix the same way (2026-10-28)

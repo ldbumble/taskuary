@@ -106,7 +106,7 @@ test("with a live session, X steps back to the task first and the session keeps 
   // ...and in the three sections (2026-10-27) Close out is one of them beside a live agent too, a slim tab (slot)
   for (const gate of [/\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from=""/,
     /\{!sessionView && detail\.runs\.length > 0/, /\{\(!sessionView \|\| threeUp\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/,
-    /: \{ \.\.\.card, \.\.\.step, borderTop: 0, mt: 1, px: 0, py: pane === "reply"/]) {
+    /: \{ \.\.\.card, \.\.\.step, borderTop: 0, mt: 1, px: 0, py: shows\("reply"\)/]) {
     assert.match(source, gate);
   }
   assert.doesNotMatch(source, /<Fold title=\{`Context & history/, "the fold is gone, not hidden");

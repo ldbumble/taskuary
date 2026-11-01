@@ -28,5 +28,5 @@ test("once open, the main view and its section are held: only a new task, its de
   // reopen or the width fold it - not the detail, the Advisor's pick, the write-up's end or in_progress -> open catching up (2026-11-01)
   assert.match(src, /const pickKey = `\$\{selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{\["done", "dropped"\]\.includes\(t\?\.Status\)\}`;/);
   assert.match(src, /const section = threeUp \? \(secPick\.key === pickKey \? secPick\.sec : mainHeld\.current\.sec\) : null/);
-  assert.match(src, /const openSection = \(s\) => setSecPick\(\{ key: pickKey, sec: s \}\);/);
+  assert.match(src, /const openSection = \(s\) => \{ if \(!\(paired && isOpen\(s\)\)\) setSecPick\(\{ key: pickKey, sec: s \}\); \};/);
 });

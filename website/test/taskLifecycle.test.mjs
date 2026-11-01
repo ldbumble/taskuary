@@ -91,10 +91,10 @@ test("the task page opens exactly one stage and lets you open the others by hand
   assert.match(source, /const restStage = sessionView \|\| writingUp \? "agent" : \(pressedHere \|\| writeup \? "reply" : peek \? "task" : focusStage\(/);
   assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| restStage\);/);
   assert.match(source, /setOpenStage\(null\)/);
-  assert.match(source, /onToggle: pane === name \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
+  assert.match(source, /onToggle: shows\(name\) \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
   for (const name of ["agent", "reply"]) {
     assert.ok(source.includes(`{...stageProps("${name}")}`), `stage ${name} must fold and open by hand`);
-    assert.ok(source.includes(`pane === "${name}" &&`), `stage ${name} body must be gated`);
+    assert.ok(source.includes(`shows("${name}") &&`), `stage ${name} body must be gated`);
   }
   // ...and the task itself is no stage any more: From is its own column, always open (the redesign, 2026-10-21) - the work column
   // opens what the task is for where the focus names the task (taskLayout.workPane)

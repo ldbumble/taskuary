@@ -36,7 +36,7 @@ test("landed holds the rail the turn brought and only falls back to its own load
 
 test("All read, next: the settle and the walk on are one move, and its answer brings the rail back without a reload", () => {
   const done = between("const done = async (pressed)", "// Setting Taskuary up");
-  assert.match(done, /await leave\(current, "settle"\)/);
+  assert.match(done, /await leave\(current, "settle", pressed \? \{ pressed \} : \{\}\)/);
   assert.doesNotMatch(done, /funnel\/settle/, "never a settle of its own and a walk after it");
   assert.match(between("const landed = useCallback", "const noteLine"), /if \(data\.pile\) holdPile\(data\.pile\);/);
 });

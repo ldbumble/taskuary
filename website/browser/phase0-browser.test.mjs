@@ -42,7 +42,8 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   const demo = await page.evaluate(async () => (await fetch("/api/demo", {
     headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token") },
   })).json());
-  assert.deepEqual(demo, { demo: true, owner: "Dana Whitfield" });
+  // ...`opens` null: the harness turns the demo's opening on its tour task off (demo.OPENS_ENV), so every test starts from the greeting
+  assert.deepEqual(demo, { demo: true, owner: "Dana Whitfield", opens: null });
   assert.equal(await page.$(".tq-typing"), null, "initial history/pipeline loading must not initiate an assistant turn");
 
   // The demo's recorded agents change from working to waiting during fixture startup.

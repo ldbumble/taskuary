@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { boot, clickRow, findRow, pressNext, rowOffers, sleep } from "./walkdriver.mjs";
+const inRatio = (slots) => Math.round(Math.min(156, Math.max(128, slots.reduce((n, s) => n + s.w, 0) * 0.1)));   // TaskPage.tabW (TQ-1251)
 
 /* A REPORT AND AN FYI COME IN A TASK'S THREE SECTIONS (the owner, 2026-10-28: "even reports should come in with the 3 sections of came in-close
    out but they should be small on the side like active agent. Want this to be consistent across. even fyi ... opening on what came in all
@@ -57,7 +58,7 @@ test("a report opens on itself between slim Came from and Close out tabs, a task
   const f = await look(page);
   assert.equal(f.main, "from");
   assert.deepEqual(f.open, ["Came from"]);
-  assert.deepEqual(f.slots.map((s) => [s.key, s.mini, s.w]).filter(([, mini]) => !mini).map(([k, , w]) => [k, w]).find(([k]) => k === "report"), ["report", 156]);
+  assert.deepEqual(f.slots.map((s) => [s.key, s.mini, s.w]).filter(([, mini]) => !mini).map(([k, , w]) => [k, w]).find(([k]) => k === "report"), ["report", inRatio(f.slots)]);
   assert.deepEqual([f.card.top, f.card.h], [m.card.top, m.card.h], "one height through a switch");
   const from = await page.$eval("[data-tq-report-from]", (e) => e.innerText);
   assert.match(from, /Report\s+Headcount by site, nightly[\s\S]*Ran\s+\S[\s\S]*Runs\s+\S[\s\S]*Edit this report/, from);
@@ -82,7 +83,7 @@ test("an FYI opens on what came in: one message, or a batch's all together, Agen
   assert.equal(one.main, "from");
   // ...its Agent a full spine, Send to agent standing on it as on a task's (the owner, 2026-10-31); Close out, with no move of its own, slim
   assert.deepEqual(one.slots.map((s) => [s.key, s.open, s.mini]), [["from", true, false], ["agent", false, false], ["close", false, true]]);
-  assert.deepEqual(one.slots.filter((s) => !s.open).map((s) => s.w), [156, 44]);
+  assert.deepEqual(one.slots.filter((s) => !s.open).map((s) => s.w), [inRatio(one.slots), 44]);
   assert.equal(one.msgs.length, 1);
   assert.equal(one.msgs[0].who, "Priya Shah");
   assert.ok(one.msgs[0].at && /Sharing for visibility/.test(one.msgs[0].words), JSON.stringify(one.msgs));

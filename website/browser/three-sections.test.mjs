@@ -72,8 +72,10 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
     assert.equal(m.main, "close", JSON.stringify(m));
     assert.deepEqual(m.slots.map((s) => s.key), ["from", "agent", "close"], "the flow's order");
     assert.deepEqual(m.slots.map((s) => s.open), [false, false, true], "one open");
+    // ...a tenth of the work area each, 104-156px (TaskPage.tabW: "it should be in ratio", TQ-1251)
+    const want = Math.min(156, Math.max(128, m.slots.reduce((n, s) => n + s.w, 0) * 0.1));
     for (const tab of m.tabs) {
-      assert.ok(Math.abs(tab.w - 156) <= 2, `${tab.key} tab is ~156px: ${tab.w}`);
+      assert.ok(Math.abs(tab.w - want) <= 3, `${tab.key} tab is ~${Math.round(want)}px: ${tab.w}`);
       assert.equal(tab.writing, "horizontal-tb", `${tab.key}'s words read across`);
     }
     const from = m.tabs.find((x) => x.key === "from").text, agent = m.tabs.find((x) => x.key === "agent").text;

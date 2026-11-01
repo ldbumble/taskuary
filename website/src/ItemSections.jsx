@@ -11,7 +11,7 @@
 // folded; the bar is Back and Next. A phone's stacked sections keep the row as it was
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
-import { FOCUS, FOCUS_EDGE, MINI_W, PaneStrip, SECTION, SHADE, SLOT, STACK_BELOW, STRIP_H, SectionHead, SectionTab, TAB_W } from "./TaskPage.jsx";
+import { FOCUS, FOCUS_EDGE, MINI_W, PaneStrip, SECTION, SHADE, SLOT, STACK_BELOW, STRIP_H, SectionHead, SectionTab, tabW } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
 
@@ -38,7 +38,7 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
   // ...and a section with a STAGE MOVE on its spine (an FYI's Agent: Send to agent) folds to a full tab, as a task's does, so the move can stand
   // there (the owner, 2026-10-31); a press on it opens that section, as a task's spine does
   const spine = useSpineAll(), staged = (k) => k !== about && (spine[k] || []).length > 0;
-  const closedW = (k) => (k === about || staged(k) ? TAB_W : MINI_W);
+  const closedW = (k) => (k === about || staged(k) ? tabW(w) : MINI_W);
   const openW = (k) => Math.max(240, w - sections.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === sections[0].key ? 0 : 1));
   const at = (k) => sections.findIndex((s) => s.key === k);
   // ON A PHONE THEY STACK, as a task's sections do under STACK_BELOW (trust audit R1, 2026-10-28): slim side tabs left a report 240px wide

@@ -87,14 +87,22 @@ test("Came from: the boxes, the conversation, the ask, the to-do - each message 
     if (!t) return null;
     const foot = t.querySelector("[data-tq-tab-foot]").getBoundingClientRect();
     const mv = t.querySelector("[data-tq-spine-moves]")?.getBoundingClientRect();
-    return { foot: foot.top, footBottom: foot.bottom, bottom: t.getBoundingClientRect().bottom, moves: mv ? mv.top : null,
+    // ...where the first line left off would end, were it drawn: it is left off only when it would not fit
+    const un = t.querySelector("[data-tq-tab-line][data-tq-unfit]");
+    let next = null;
+    if (un) { un.removeAttribute("data-tq-unfit"); next = un.getBoundingClientRect().bottom; un.setAttribute("data-tq-unfit", ""); }
+    return { foot: foot.top, footBottom: foot.bottom, bottom: t.getBoundingClientRect().bottom, moves: mv ? mv.top : null, next,
+      line: mv && mv.height ? mv.top : t.getBoundingClientRect().top + t.getBoundingClientRect().height * 0.33,
       lines: [...t.querySelectorAll("[data-tq-tab-line]")].map((l) => ({ text: l.textContent, drawn: getComputedStyle(l).display !== "none", bottom: l.getBoundingClientRect().bottom })) };
   }, CUR);
   assert.ok(tab, "Came from folds to its tab");
   assert.match(tab.lines[0].text, /· 15 messages$/, "the count is every message");
   const msgs = tab.lines.slice(1), drawn = msgs.filter((l) => l.drawn), cut = msgs.findIndex((l) => !l.drawn);
   assert.equal(msgs.length, 15, "every message goes to the tab");
-  assert.ok(drawn.length >= 2, `as many as the room holds, not one: ${drawn.length}`);
+  // ...as many as the room holds, measured: a spine in ratio (tabW, the owner 2026-11-01) can be narrow enough that the newest is all that
+  // fits above its moves, so the count is never pinned - the newest is always there, and the one after the last drawn would not have fit
+  assert.ok(drawn.length >= 1, "the newest message is drawn");
+  assert.ok(tab.next == null || tab.next > tab.line - 10.5, `as many as the room holds: the next one would fit too ${JSON.stringify(tab)}`);
   assert.ok(cut < 0 || msgs.slice(cut).every((l) => !l.drawn), `a run from the newest, none skipped: ${JSON.stringify(msgs.map((l) => l.drawn))}`);
   drawn.forEach((l, i) => assert.match(l.text, new RegExp(`Move note ${15 - i}:`), `newest first: ${l.text}`));
   assert.ok(tab.lines.filter((l) => l.drawn).every((l) => l.bottom <= tab.foot + 0.5), `each drawn line ends above the foot ${JSON.stringify(tab)}`);

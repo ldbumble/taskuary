@@ -2101,6 +2101,10 @@ class SQLiteStore:
         # pull request's end - passes here, so the "did it stay closed?" row is written once, from the same place. A write that
         # leaves the task waiting (a self-close that drafted a reply) is not a close and gets no row; a delivered promise is
         # already its own row (promise.made) and the actor says so.
+        # ...and every road that opens a closed one again says so (Close out starts a new round there) - 'reopened', not new mail's own
+        # 'reopen' (ingest._reopen), which is the rail's arrival clock (processing_unread.came_back): a Reopen press is not an arrival
+        if 'Status' in fields and was in ('done', 'dropped') and fields['Status'] not in ('done', 'dropped'):
+            self.audit('task', task_id, 'reopened', actor, 'human' if actor in ('owner', 'web') else 'agent', {'from': was})
         if fields.get('Status') in ('done', 'dropped') and was not in (None, 'done', 'dropped') and actor != 'promise':
             from . import outcomes
             facts = {'from': was, 'to': fields['Status']}
@@ -4887,6 +4891,37 @@ class SQLiteStore:
         """When new mail or chat last reopened this task (ingest._reopen's audit row), or None."""
         r = self._one("SELECT MAX(CreatedAt) m FROM audit WHERE EntityType='task' AND EntityId IN (?,?) AND Action='reopen'", (task_id, str(task_id)))
         return (r or {}).get('m')
+    def closeouts(self, task_id) -> list:
+        """Every time this task was closed and opened again, oldest first: {what: 'closed'|'reopened', at, to, note}. Close out is drawn
+        in ROUNDS from it (the owner, 2026-11-01: "now that a new message can reopen close out can happen multiple times") - each close
+        ends one, its note with it ("Closed out: ..." is written just before the close it is the note of), and a reopen starts the next.
+        Closes are the ledger's task.closed rows (outcomes.py, the one close door); a done task whose close predates the ledger keeps
+        its ClosedAt. Reopens are the audit's - new mail's (ingest._reopen) and a Reopen press's (update_task), one per moment."""
+        tid, cs, rs = int(task_id), [], []
+        notes = [(str(c['CreatedAt'] or ''), str(c['Body'])[len('Closed out: '):]) for c in self.list_comments(tid) if str(c.get('Body') or '').startswith('Closed out: ')]
+        for r in self._rows("SELECT At, FactsJson FROM outcome WHERE Kind='task.closed' AND TargetKind='task' AND TargetId=? ORDER BY Id", (tid,)):
+            try: to = (json.loads(r['FactsJson'] or '{}') or {}).get('to') or 'done'
+            except ValueError: to = 'done'
+            cs.append({'what': 'closed', 'at': str(r['At'] or ''), 'to': to, 'note': ''})
+        t = self.get_task(tid) or {}
+        if t.get('Status') in ('done', 'dropped') and t.get('ClosedAt') and not any(e['at'][:16] >= str(t['ClosedAt'])[:16] for e in cs):
+            cs.append({'what': 'closed', 'at': str(t['ClosedAt']), 'to': t['Status'], 'note': ''})
+        # ...new mail's reopen is said twice, by the write ('reopened') and then by its door ('reopen', ingest._reopen): one reopen
+        said = self._rows("SELECT Action, CreatedAt FROM audit WHERE EntityType='task' AND EntityId IN (?,?) AND Action IN ('reopen','reopened') "
+                          "ORDER BY Id", (tid, str(tid)))
+        rs = [{'what': 'reopened', 'at': str(r['CreatedAt'] or '')} for i, r in enumerate(said)
+              if not (r['Action'] == 'reopen' and i and said[i - 1]['Action'] == 'reopened')]
+        # ...in turn: a task is closed, then opened, then closed - the clock is to the second, and a Reopen and the next close can share one
+        ev, want = [], 'closed'
+        while cs or rs:
+            c, r = (cs[0]['at'][:19] if cs else None), (rs[0]['at'][:19] if rs else None)
+            take = cs if r is None or (c is not None and (c < r or (c == r and want == 'closed'))) else rs
+            ev.append(take.pop(0)); want = 'reopened' if ev[-1]['what'] == 'closed' else 'closed'
+        for e in ev:                                  # ...each note the close it was written for: the first one at or after it
+            if e['what'] != 'closed': continue
+            mine = [b for at, b in notes if at <= e['at'][:19]]
+            if mine: e['note'], notes = mine[-1], notes[len(mine):]
+        return ev
     def list_audit(self, et=None, eid=None, limit=200):
         if et: return self._rows('SELECT * FROM audit WHERE EntityType=? AND EntityId=? ORDER BY Id DESC LIMIT ?', (et, eid, limit))
         return self._rows('SELECT * FROM audit ORDER BY Id DESC LIMIT ?', (limit,))
@@ -6185,7 +6220,9 @@ class SQLiteStore:
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),
                 # ...with who it answers, as list_reviews has: without it a draft's To line read "this conversation"
-                'reviews': reviews}
+                'reviews': reviews,
+                # ...and each close and reopen, so Close out stacks its rounds (closeoutRounds.js) - the replies are the reviews above
+                'closeouts': self.closeouts(task_id)}
 
     # ── knowledge base (knowledge.py): documents as passages behind an FTS5 index ──
     def kb_doc(self, cid, source, path):

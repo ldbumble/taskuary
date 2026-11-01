@@ -65,6 +65,11 @@ export const fmtDateTime = (s) => {
   const z = tzLabel();
   return z ? `${base} ${z}` : base;
 };
+// ...and its day alone, "Oct 31" - a close that has no hour worth saying (Close out's earlier rounds)
+export const fmtDay = (s) => {
+  const d = s ? asUtc(s) : null;
+  return d && Number.isFinite(d.getTime()) ? fmtStamp(d, "en-US", { month: "short", day: "numeric", ...tzOpt() }) : "";
+};
 export const localDay = (s) => {
   const d = s ? asUtc(s) : null;
   return d && Number.isFinite(d.getTime()) ? fmtDate(d, "sv-SE", tzOpt()) : "";

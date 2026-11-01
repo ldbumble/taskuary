@@ -25,6 +25,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/chat-burst',
         '/api/fixture/task/chat-saved',
         '/api/fixture/task/closed-asked',
+        '/api/fixture/task/closeout-rounds',
         '/api/fixture/task/playbook-failed',
         '/api/fixture/general/canvas',
         '/api/fixture/general/rest',
@@ -145,6 +146,54 @@ def install_processing_changes(app, store):
                                                 'body': 'Can you explain the difference between the 4100 accounts?', 'sent_at': then.isoformat(' ')},
                                          llm=lambda system, user, **k: json.dumps(said))
         if out.get('task_id') != tid: raise HTTPException(409, f'the question did not join its task: {out}')
+        return {'taskId': tid, 'status': store.get_task(tid)['Status']}
+
+    @app.post('/api/fixture/task/closeout-rounds')
+    def closeout_rounds(body: dict):
+        """A task closed out more than once (the owner, 2026-11-01): Erin asked, the owner replied and it closed; with `rounds` 3 she wrote
+        again and it was closed with a note, nothing sent; then a question from her on the same thread reopened it, through the real door
+        with triage scripted. Each round's reply, close and reopen happened, and is then dated back a day apart. `draft`: a reply waits for
+        Send on the question. Invented people."""
+        if set(body) - {'rounds', 'draft'} or body.get('rounds', 2) not in (2, 3) or not isinstance(body.get('draft', False), bool):
+            raise HTTPException(422, 'rounds is 2 or 3, draft a boolean')
+        import json
+        from unittest import mock
+        from taskuary import concierge, ingest
+        n, conv, now = body.get('rounds', 2), f'fixture-rounds-{datetime.now():%H%M%S%f}', datetime.now()
+        at = lambda days, h=9, m=0: (now - timedelta(days=days)).replace(hour=h, minute=m, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
+        tid = store.create_task({'Title': 'Missing ledger accounts', 'Kind': 'task', 'Status': 'open', 'Source': 'email'}, 'router')
+        def erin(i, words, sent):
+            return store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'{conv}-{i}', 'ConversationId': conv, 'FromName': 'Erin Blake',
+                                      'FromEmail': 'erin@northwind.example', 'Subject': 'RE: Missing ledger accounts' if i > 1 else 'Missing ledger accounts',
+                                      'BodyText': words, 'SentAt': sent, 'Status': 'routed'})
+        def closed(when):        # ...the close just made, dated back: the ledger's row and the audit's reopen before it
+            store._exec("UPDATE outcome SET At=? WHERE Id=(SELECT MAX(Id) FROM outcome WHERE Kind='task.closed' AND TargetId=?)", (when, tid))
+            store._exec("UPDATE comment SET CreatedAt=? WHERE TaskId=? AND Body LIKE 'Closed out: %' AND CreatedAt>?", (when, tid, when))
+        m1 = erin(1, 'Some accounts are missing from the ledger pull - can you check which ones?', at(n, 9))
+        rid = store.add_review({'TaskId': tid, 'MessageId': m1, 'Kind': 'reply', 'DraftText': 'They were folded into 4100 when the chart changed.', 'Status': 'pending'})
+        store.decide_review(rid, 'approved', 'They were folded into 4100 when the chart changed. I will send the mapping.', 'owner')
+        store._exec('UPDATE review SET CreatedAt=?, DecidedAt=? WHERE ReviewId=?', (at(n, 12, 30), at(n, 12, 36), rid))
+        concierge.close_task(store, tid, 'owner'); closed(at(n, 12, 37))
+        if n == 3:
+            erin(2, 'Thanks - could you send the mapping when you have it?', at(2, 8, 15))
+            store.update_task(tid, {'Status': 'open'}, 'router')
+            store._exec("UPDATE audit SET CreatedAt=? WHERE Id=(SELECT MAX(Id) FROM audit WHERE EntityType='task' AND EntityId=? AND Action='reopened')", (at(2, 8, 16), tid))
+            store.add_comment(tid, 'owner', 'human', 'Closed out: Walked Erin through the mapping on a call.')
+            concierge.close_task(store, tid, 'owner'); closed(at(2, 15, 5))
+        said = {'intent': 'reply_only', 'why': 'Erin asks Alex directly', 'title': 'Missing ledger accounts', 'asks_owner': True,
+                'summary': 'Erin Blake asks which of the 4100 accounts moved in the change.'}
+        with mock.patch.object(ingest, '_spawn'):
+            out = ingest.ingest_message(store, {'external_id': f'{conv}-q', 'channel': 'email', 'from_email': 'erin@northwind.example',
+                                                'from_name': 'Erin Blake', 'conversation_id': conv, 'subject': 'RE: Missing ledger accounts',
+                                                'body': 'One more - which of the 4100 accounts moved in the change?',
+                                                'sent_at': (now - timedelta(minutes=20)).strftime('%Y-%m-%d %H:%M:%S')},
+                                         llm=lambda system, user, **k: json.dumps(said))
+        if out.get('task_id') != tid: raise HTTPException(409, f'the question did not join its task: {out}')
+        # ...the draft the question opened (its drafter is the job _spawn would run), written; or one, where it opened none
+        if body.get('draft'):
+            words, rv = '4101 and 4102 moved; the rest stayed where they were.', store.pending_review(tid, live_only=False)
+            if rv: store._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (words, rv['ReviewId']))
+            else: store.add_review({'TaskId': tid, 'MessageId': out['message_id'], 'Kind': 'reply', 'Status': 'pending', 'DraftText': words})
         return {'taskId': tid, 'status': store.get_task(tid)['Status']}
 
     @app.post('/api/fixture/task/advisor-raised')

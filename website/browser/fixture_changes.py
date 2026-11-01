@@ -907,7 +907,7 @@ def install_processing_changes(app, store):
 
     # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
     MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news',
-              'fyi_thread', 'idea_mail')
+              'fyi_thread', 'idea_mail', 'habits')
 
     @app.post('/api/fixture/task/matrix')
     def matrix_state(body: dict):
@@ -916,7 +916,8 @@ def install_processing_changes(app, store):
         `stopped` a coding run cut off mid-work - its screen kept, no write-up; `finished` a general agent whose run said it finished;
         `done` / `note` closed by the owner, bare or with a note; `deferred` put away with Remind me; `todo` the owner's own to-do list;
         `idea` an Advisor find on the rail; `news` a saved agent result and then the sender writing again; `fyi_thread` three FYI mails on
-        one email thread with no task (one rail row, trust audit P2); `idea_mail` an Advisor find about an FYI mail with no task (P1)."""
+        one email thread with no task (one rail row, trust audit P2); `idea_mail` an Advisor find about an FYI mail with no task (P1); `habits`
+        the one habits row (habits.py) - a habit the Advisor was sure of and adopted, and one it asks about."""
         if set(body) != {'state'} or body['state'] not in MATRIX: raise HTTPException(422, f'state is one of {MATRIX}')
         from taskuary import concierge, general, remind, terminal, workerstate as ws
         s, now = body['state'], datetime.now()
@@ -1001,6 +1002,19 @@ def install_processing_changes(app, store):
                                    'text': 'The Payworth statement still shows invoice 88213 open - worth checking it was paid.', 'action': {'mid': mid}},
                                   at(minutes=1807))
             from taskuary import funnel
+            store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
+        elif s == 'habits':
+            tid = None
+            from taskuary import funnel, habits, learn, learnedgraph as lg
+            day = now.strftime('%Y-%m-%d')
+            def line(k, text, sc, ev): return lg.fmt({'key': k, 'text': text, 'ev': ev, 'score': sc, 'seen': day, 'status': 'proposed'})
+            add = '\n'.join([line('matrix sso', '{{owner_first}} closes sign-in help threads directly; they need no drafted reply', 12,
+                                   [f'rv{i}' for i in range(901, 909)]),
+                              line('matrix fyi', 'Forwarded FYI mail from the Payworth desk needs no reply', 5, ['rv920', 'rv921'])])
+            doc = store.get_doc(learn.DOC) or '# LEARNED\n\n## What you care about\n'
+            if learn.PROP_END not in doc: doc += f'\n## Proposed rules — your call\n{learn.PROP_START}\n{learn.PROP_END}\n'
+            store.save_doc(learn.DOC, doc.replace(learn.PROP_END, add + '\n' + learn.PROP_END, 1), 'reflect')
+            habits.tick(store)
             store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
         elif s == 'news':
             tid = task('Site ops: who has the gate code', 'general', 'in_progress', Assignee='agent:general', Tags=terminal.SAVED)

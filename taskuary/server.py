@@ -221,6 +221,7 @@ async def _lifespan(_app):
         if (n := dashboards.migrate_priorities(store)): logger.info(f'{n} dashboard(s) now cut on regular / important / urgent')
     except Exception as e: logger.warning(f'priority rename skipped: {e}')
     learn.note_verdicts(store)     # an older install's notes table, written into LEARNED.md once and dropped (memorylines.migrate)
+    _fold_habits()                 # one habit card each, folded into the one habits row (habits.py, 2026-11-01)
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
     except Exception as e: logger.warning(f'retry scheduling skipped: {e}')
     try:                           # historical triage failures stored as filed become retriable errors, once (PW-040)
@@ -4138,13 +4139,14 @@ def assistant_ideas(status: str = None, mid: int = None):
         return out
     return {'data': [row(i) for i in store.list_ideas(status or None, mid)]}
 
-class IdeaBody(BaseModel): days: int = 1; until: str = None
+class IdeaBody(BaseModel): days: int = 1; until: str = None; line: str = None; yes: bool = None     # line/yes: one habit's answer (habits.py)
 
 @app.post('/api/assistant/ideas/{iid}/{verb}')
 def assistant_act(iid: int, verb: str, body: IdeaBody = None):
     """One word on one line (assistant.VERBS): task (Make a task), agent (Send to agent), dismiss (Not ours),
-    snooze (Remind me - `until` a day, or `days`), done."""
-    try: return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1), until=(body.until if body else None))
+    snooze (Remind me - `until` a day, or `days`), done; on the habits row, habit (`line`, `yes`) and seen."""
+    try: return assistant.act(store, iid, verb, ACTOR, days=(body.days if body else 1), until=(body.until if body else None),
+                              line=(body.line if body else None), yes=(body.yes if body else None))
     except ValueError as e: raise HTTPException(422, str(e))
 
 # what GeneralWorkspace reads to open a chat with its question already asked (newTask.js)
@@ -9709,6 +9711,22 @@ def catch_up_on_startup():
     t = threading.Thread(target=_catch_up, daemon=True)
     t.start()
     return t                       # the caller may wait on it; startup itself never does
+
+
+def _fold_habits():
+    """The habit cards of before 2026-11-01 become the one habits row (at once - the rail draws it), and each habit is said plainly to the
+    owner by the memory's brain (habits.py) off the window's path: the phrasing is a model call."""
+    from . import habits
+    try:
+        habits.fold(store)
+        if not habits.unphrased(store): return
+    except Exception as e: logger.warning(f'habit cards not folded: {e}'); return
+    def say():
+        try:
+            from .llm import build_llm
+            habits.phrase(store, build_llm(store, job='memory'))
+        except Exception as e: logger.warning(f'habits not phrased: {e}')
+    threading.Thread(target=say, daemon=True).start()
 
 
 def _heal_owner_docs():

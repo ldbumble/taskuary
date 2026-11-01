@@ -88,6 +88,8 @@ ALLOWED_WRITES = (
     # ...and the Report popup's draft: the demo's invented world, scrubbed and shown - it writes nothing, and only the visitor's own Submit on
     # GitHub would file it. Opening the page for the desktop window (/api/open-url) stays refused: the demo opens nothing on the host
     r'^/api/bug-report/draft$',
+    # ...and the habits row's own answers (habits.py): Adopt, No and Not right move a line of the demo's own LEARNED.md, as memory.wrong does
+    r'^/api/assistant/ideas/\d+/(habit|seen)$',
 )
 
 # What a confirmed proposal may run here: each writes the demo's own database and nothing else. Start (dispatch.prepare,

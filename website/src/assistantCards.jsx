@@ -977,12 +977,48 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
   );
 }
 
+// THE HABITS ROW (habits.py; the owner, 2026-11-01: "how many advisor ideas do i have now? it's too many. what does keep it/remind me do
+// here?"): one row for every habit the Advisor learned, each a sentence to the owner - what was seen, what changes - with its own buttons:
+// Not right on one it adopted (taken back for good), Adopt / No on one it asks about (No: never asked again). Moving on from the row marks
+// the adopted ones seen; once nothing in it is open, it goes - folded with the last answer's word when that answer emptied it
+function HabitList({ card, onDone }) {
+  const [items, setItems] = useState(card.action?.habits || []), [busy, setBusy] = useState(""), [err, setErr] = useState("");
+  useEffect(() => { setItems(card.action?.habits || []); }, [card.action]);
+  const unseen = useRef(false);
+  useEffect(() => { unseen.current = items.some((h) => h.adopted); });
+  useEffect(() => () => { if (unseen.current) api.post(`/api/assistant/ideas/${card.idea}/seen`, {}).catch(() => {}); }, [card.idea]);
+  const answer = async (h, yes, word) => {
+    setBusy(h.line); setErr("");
+    try {
+      const { data } = await api.post(`/api/assistant/ideas/${card.idea}/habit`, { line: h.line, yes });
+      setItems((xs) => xs.filter((x) => x.line !== h.line));
+      if (!data.open) { unseen.current = false; onDone?.(word); }
+    } catch (e) { setErr(failOf(e)); }
+    setBusy("");
+  };
+  const b = { minHeight: 28, py: 0, px: 1.25, fontSize: 12.5, flexShrink: 0 };
+  return (
+    <div data-tq-habits="">
+      {items.map((h) => (
+        <div key={h.line} data-tq-habit={h.adopted ? "adopted" : "ask"} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "6px 0" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>{h.say}</div>
+          {h.adopted
+            ? <Button size="small" sx={{ ...b, ...faint }} disabled={!!busy} onClick={() => answer(h, false, "Not right")}>Not right</Button>
+            : <><Button size="small" variant="contained" disableElevation sx={{ ...b, ...primary }} disabled={!!busy} onClick={() => answer(h, true, "Adopt")}>Adopt</Button>
+              <Button size="small" sx={{ ...b, ...faint }} disabled={!!busy} onClick={() => answer(h, false, "No")}>No</Button></>}
+        </div>))}
+      <CardErr err={err} />
+    </div>
+  );
+}
+
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, table = null }) {
   const a = card.action || {};
   // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const rule = card.idea_kind === "rule" && a.policy && card.idea;
+  const habits = card.idea_kind === "habit" && Array.isArray(a.habits) && card.idea;
   const makeRule = async () => {
     setBusy(true); setErr("");
     try { await api.post(`/api/assistant/ideas/${card.idea}/rule`, {}); onDone?.("Make it a rule"); }
@@ -1020,10 +1056,6 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
         ) : card.idea_kind === "workstream" && a.slug ? (
           <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-workstream-add={a.slug}
             onClick={addWorkstream}>{busy ? "Adding…" : a.added ? "Keep it" : "Add it"}</Button>
-        ) : card.idea_kind === "habit" && a.line ? (
-          // A HABIT OF YOURS (the owner, 2026-11-01): one the Advisor adopted says Keep it, one it is unsure of Adopt it; No is Not ours
-          <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-habit-adopt=""
-            onClick={addWorkstream}>{busy ? "Adopting…" : a.adopted ? "Keep it" : "Adopt it"}</Button>
         ) : card.idea_kind === "report" && a.report ? (
           // TASKUARY ITSELF FAILING AGAIN (reportideas.py): the one Report popup, drafted from what the Advisor counted - scrubbed, the owner's Submit
           <Button size="small" variant="contained" disableElevation sx={primary}
@@ -1048,8 +1080,10 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
           body: <><ItemPart data-tq-idea-from="">
             <div className="tq-card-lead">{card.title}</div>
-            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason */}
-            <Facts rows={[["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>]]} />
+            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason; the
+                habits row lists its habits instead, with no Whose move or Suggestion */}
+            {habits ? <HabitList card={card} onDone={onDone} />
+              : <Facts rows={[["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>]]} />}
           </ItemPart><CardErr err={err} /></> },
         { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
           body: <ItemPart data-tq-idea-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
@@ -1058,7 +1092,8 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
           body: <ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart> }]} />);
   return (
     <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
-      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
+      {habits && <HabitList card={card} onDone={onDone} />}
+      {!habits && facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
       {foot}
       <CardErr err={err} />
     </CardShell>

@@ -1020,11 +1020,16 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
         ) : card.idea_kind === "workstream" && a.slug ? (
           <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-workstream-add={a.slug}
             onClick={addWorkstream}>{busy ? "Adding…" : a.added ? "Keep it" : "Add it"}</Button>
+        ) : card.idea_kind === "report" && a.report ? (
+          // TASKUARY ITSELF FAILING AGAIN (reportideas.py): the one Report popup, drafted from what the Advisor counted - scrubbed, the owner's Submit
+          <Button size="small" variant="contained" disableElevation sx={primary}
+            onClick={() => openBugReport(a.report)}>{btn("report_bug", "ask")}</Button>
         ) : rule ? (
           <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} onClick={makeRule}>{busy ? "Making it…" : "Make it a rule"}</Button>
         ) : null}
         then={card.idea_kind === "connect" && a.connector_type ? <><b>{a.planned ? "See" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</>
           : card.idea_kind === "health" && a.tab ? <><b>Open {a.tab}</b> takes you to the tab that fixes it.</>
+          : card.idea_kind === "report" && a.report ? <><b>{btn("report_bug", "ask")}</b> drafts it for Taskuary's tracker with names and mail taken out - you read it and submit it on GitHub.</>
           : rule ? <><b>Make it a rule</b> adds it under Settings, Rules - switch it off there to undo it.</>
           // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
           : null}

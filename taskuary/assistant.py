@@ -1953,6 +1953,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         on = lambda bid: blocks is None or bool((blocks.get(bid) or {}).get('on'))
         try:
             props = health_ideas(store, now) if on('health') else []
+            # ...and Taskuary itself failing the same way again and again: "Report this?", its move the Report popup (reportideas.py)
+            if on('health'):
+                from . import reportideas
+                props += reportideas.ideas(store, now)
             # ...and a rule the owner's own presses already draw, asked once (promote.py) - counted, never thought
             if on('rules'):
                 from . import promote

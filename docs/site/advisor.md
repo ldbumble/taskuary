@@ -56,6 +56,16 @@ is an escalate rule. Never an ignore or a skip for a colleague or for anyone you
 escalate rule may be - it is for exactly those people, the boss above all), never when a rule already
 covers them, and one such question at a time.
 
+**A report worth filing.** When Taskuary itself keeps failing the same way, the clock raises one
+line marked *worth reporting*, with a **Report this?** move. It opens the Report popup, which shows
+the scrubbed draft and opens GitHub's new-issue page for your Submit. The line goes up after three
+agent runs end with the same error this week on at least two tasks, or after two since an update
+that brought the failure. It also goes up when the Assistant's fix-it check gives up on the same
+connection twice in two weeks. These are counts, not the AI's reading: a refused sign-in is yours to
+fix, and a task with words from someone you have not vouched for is never read. Each problem is
+raised once, and **Not ours** keeps it down
+([Troubleshooting](troubleshooting#report-a-bug)).
+
 **On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
 off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
 due day is missed, a report lands - and every item the walk or the chat puts on the table, an email,

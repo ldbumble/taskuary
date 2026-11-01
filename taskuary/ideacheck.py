@@ -21,10 +21,12 @@ TOUCHED_H = 24
 SYSTEM = ("You check an assistant's notes to a busy owner before they are shown. For each note you get what it says, why, the "
           "workstream it is under and what the owner last did on the item. A note EARNS its place only when it JOINS things the owner "
           "could not see in one place: two threads or two people asking about the same thing, an answer in one thread that settles "
-          "another, the same failure across several runs or days, a promise or ask against a date or a meeting, a second ask buried "
+          "another, the same failure across several runs or days, a promise or ask against a date or a meeting, a date a message "
+          "named that has now passed or is about to, a second ask buried "
           "beside a reply, a draft that leaves part of an ask out, two commitments that collide. A note RESTATES when it tells one "
           "thing a single message, report row, auto-reply or failure notice already says - however it is worded, and whatever it "
-          "suggests doing about it. Answer which notes only restate. "
+          "suggests doing about it. A note about something the owner ASKED to be brought up (listed first, when there is any) never "
+          "only restates. Answer which notes only restate. "
           'Answer JSON: {"known": [<the numbers of the notes that only restate one thing>]}')
 WANT = {'name': 'known', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['known'],
                                     'properties': {'known': {'type': 'array', 'items': {'type': 'integer'}}}}}
@@ -77,6 +79,9 @@ def check(store, say: list, llm=None) -> tuple:
         a = s.get('action') or {}
         if (s.get('kind') or 'idea') in quiet: held.append((s['key'], f"its kind ({s.get('kind') or 'idea'}) is under 80% useful lately")); continue
         if (t := touched(store, a)): held.append((s['key'], f'the owner acted on it in the last day ({t})')); continue
+        # ...a line the OWNER'S OWN MEMORY asks for (a What to bring up or a Promises line it rests on) and an unkept promise are
+        # raised on that word, never second-guessed (the live rail A/B, 2026-11-01: the second look held "bring up the Q4 budget")
+        if a.get('memory') or s.get('kind') == 'promise': keep.append(s); continue
         ask.append(s)
     if ask and llm is None:
         try:
@@ -86,7 +91,9 @@ def check(store, say: list, llm=None) -> tuple:
     if ask and llm is not None:
         try:
             from .llm import ask_json
-            user = '\n\n'.join(f"NOTE {n}: {s['text']}\nwhy: {s.get('why') or '-'}\nworkstream: {_workstream(store, s.get('action') or {})}\n"
+            from . import learned_cut as lc
+            bring = [raw for raw, _k in lc.lines(store.doc('learned') or '', lc.BRING)]
+            user = ('WHAT THE OWNER ASKED TO BE BROUGHT UP:\n' + '\n'.join(bring) + '\n\n' if bring else '') + '\n\n'.join(f"NOTE {n}: {s['text']}\nwhy: {s.get('why') or '-'}\nworkstream: {_workstream(store, s.get('action') or {})}\n"
                                f"the owner last did on it: {_last_acts(store, s.get('action') or {})}" for n, s in enumerate(ask, 1))
             got = ask_json(llm, SYSTEM, user, want=WANT, need=('known',))
             known = {int(x) for x in ((got.data or {}).get('known') or []) if str(x).lstrip('-').isdigit()} if got.data is not None else set()

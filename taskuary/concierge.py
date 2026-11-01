@@ -2691,12 +2691,54 @@ def _trouble(store, kind: str, p: dict) -> str:
     return troubleshoot.words(h, desk=routes())
 
 
+def issue_chip(report: dict) -> dict:
+    """The Report popup's button for a report the owner asked for: the page drafts it through the scrub (bugreport.draft) when pressed."""
+    return {'verb': 'bug', 'label': buttons.label('report_bug', 'feature' if report.get('kind') == 'feature' else None), 'report': report}
+
+
+def no_card(store, tid: int, want: str, ask: str, lead: str) -> dict:
+    """A system with no card under Connections, asked for on the desk: said so, and Request a feature under the line carrying the owner's
+    own words - the popup drafts it through the scrub and nothing is filed until their Submit on GitHub."""
+    from . import bugreport
+    chips = [issue_chip({'kind': 'feature', 'trying': ' '.join(str(ask or '').split())[:bugreport.N_SAID],
+                         'happened': f'A card under Connections for {want}, so Taskuary can connect to it'[:bugreport.N_SAID],
+                         'screen': 'Assistant', 'withLast': False})]
+    said = f"{lead} {chips[0]['label']}, under this, drafts a request for one - you read it and submit it on GitHub."
+    record(store, tid, 'assistant', said, {'kind': 'words', 'key': None, 'chips': chips})
+    return {'say': said, 'options': [], 'chips': chips, 'decision': None}
+
+
+def _issue(store, p: dict) -> str:
+    """A BUG OR A WISH ABOUT TASKUARY ITSELF, in the owner's words (issue.draft - the owner, 2026-11-01): nothing is drafted or sent here.
+    The request rides the turn and comes up under the answer as the Report popup's button, which drafts it through the scrub for the owner
+    to read, edit and submit on GitHub. Only on a turn they typed, and never over a stranger's task: words they did not write are not theirs
+    to file, and a stranger's mail must not get to steer what goes on a public tracker."""
+    from . import bugreport, origin
+    turn = _TURN.get()
+    if turn is None: turn = {}
+    if turn.get('react'): return 'Nothing was drafted: a report is drafted only when the owner asks for one in their own words. Say nothing about it.'
+    tid = (turn.get('item') or {}).get('tid')
+    try: stranger = bool(tid) and origin.of_task(store, int(tid))[0] == 'stranger'
+    except Exception: stranger = True                                    # unreadable is not a vouch
+    if stranger: return ('Nothing was drafted: the item on the table carries words from someone the owner has not vouched for. Say so, and '
+                         'that Report a problem, under the ? at the top, drafts one from their own words.')
+    if not routes(): return ('Nothing was drafted: a report is drafted at the desk, where the owner reads every word before it goes. '
+                             'Say they can ask you for it there.')
+    kind = 'feature' if str(p.get('kind') or '').strip().lower() == 'feature' else 'bug'
+    said = lambda k: ' '.join(str(p.get(k) or '').split())[:bugreport.N_SAID]
+    # ...a bug reads beside the page's last failure (the popup's withLast), a wish stands alone
+    turn['issue'] = {'kind': kind, 'trying': said('trying'), 'happened': said('happened'), 'screen': 'Assistant', 'withLast': kind == 'bug'}
+    return (f"Drafted. {issue_chip(turn['issue'])['label']}, under your answer, opens it with names, mail and addresses taken out, for them to "
+            'read and edit; their Submit on GitHub files it, and nothing is sent from here. Say that in a sentence - never repeat the draft.')
+
+
 def read_op(store, kind: str, params: dict) -> str:
     """A LOOK-UP, run at once. Changes nothing, waits for no confirmation, and never moves what is on
     the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
     goes back to the model, which then speaks with it."""
     p = params or {}
     if kind in ('app.health', 'app.repair'): return _trouble(store, kind, p)
+    if kind == 'issue.draft': return _issue(store, p)
     if kind == 'task.read':
         ref = str(p.get('ref') or '').strip()
         m = re.search(r'(\d+)', ref)
@@ -4407,13 +4449,13 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
         if sort.get('provider'):
             return call_turn(store, tid, {'kind': 'connection.create', 'params': {'type': sort['provider']}}, item, text, actor)
-        # A SYSTEM THE CATALOGUE HAS NO CARD FOR is said so, with its closest cards, and is an agent's job to find the road to - its API, its
-        # site in the browser, its files: it opened #connector=None, Connections with nothing on it ("how do I add Runway?", TQ-1251)
+        # A SYSTEM THE CATALOGUE HAS NO CARD FOR is said so, with its closest cards: it opened #connector=None, Connections with nothing
+        # on it ("how do I add Runway?", TQ-1251). A card is Taskuary's to build, so it is a FEATURE REQUEST in the owner's words - the
+        # Report popup's Request a feature, scrubbed, their Submit on GitHub files it (the owner, 2026-11-01); it was an agent's job in New
         if sort['kind'] == 'connection' and not sort.get('provider'):
             want = sort.get('name') or 'That system'
             near = ', '.join(x['title'] for x in catalogue_near(want)) if sort.get('name') else ''
-            return _new(store, tid, item, 'general', ask, lead=f"{want} has no card under {places.name('connections')}"
-                        f"{' (the closest: ' + near + ')' if near else ''} - an agent can find how to reach it.")
+            return no_card(store, tid, want, ask, f"{want} has no card under {places.name('connections')}{' (the closest: ' + near + ')' if near else ''}.")
         if sort['kind'] == 'connection':
             prov = sort['provider']
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
@@ -5457,9 +5499,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     said = reply + (f"\nOPTIONS: {' | '.join(options)}" if options else '')
     # THE APP'S OWN TROUBLE, ANSWERED IN THE CHAT (troubleshoot.py): the steps it took ride on the line, and what it found decides the
     # buttons under it - none when it works again, the fix's own place, else Report this bug. A phone has no buttons: the words say it
-    if turn.get('trouble') is not None:
+    if turn.get('trouble') is not None or turn.get('issue'):
         from . import troubleshoot
-        chips, steps = troubleshoot.chips(turn['trouble']) if routes() else [], turn.get('steps') or []
+        chips, steps = troubleshoot.chips(turn['trouble']) if routes() and turn.get('trouble') is not None else [], turn.get('steps') or []
+        # ...and the report the owner asked for (issue.draft): its own button, in place of the troubleshooter's - one report, not two
+        if turn.get('issue'): chips = [c for c in chips if c.get('verb') != 'bug'] + [issue_chip(turn['issue'])]
         rec('assistant', said, {'kind': 'words', 'key': None, 'chips': chips, 'steps': steps})
         return {'say': reply, 'options': options, 'chips': chips, 'decision': None, 'steps': steps}
     chips = chips_for(store, item) or walk_chips(len(p['items']))

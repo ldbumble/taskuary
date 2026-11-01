@@ -92,7 +92,7 @@ class CollectTests(unittest.TestCase):
     def test_a_bare_client_still_collects(self):
         f = bugreport.collect(self.s, {})
         self.assertEqual([], f['actions']); self.assertEqual('', f['error']); self.assertRegex(f['fingerprint'], r'^[0-9a-f]{10}$')
-        self.assertEqual({'where', 'error', 'env', 'log', 'actions', 'fingerprint'}, set(f))
+        self.assertEqual({'where', 'error', 'env', 'log', 'actions', 'fingerprint', 'trying', 'happened', 'kind'}, set(f))
 
 
 if __name__ == '__main__':

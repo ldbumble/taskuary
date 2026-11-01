@@ -15,7 +15,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, scripts, memory, rules, the Hub, the Board and Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?) |
+| **app** | settings, connections, scripts, memory, rules, the Hub, the Board and Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?) |
 | **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -742,6 +742,16 @@ Run the simple repair app.health named for a part of Taskuary, then read it agai
 - `how` - restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said
 
 <p class="runs">Runs at once and says what it changed.</p>
+
+### `issue.draft`
+
+Draft a bug report or a feature request for Taskuary's own public tracker, when the owner says Taskuary ITSELF did something wrong or wishes it could do something it cannot - never about their work, their mail or a person. It is scrubbed and comes up under your answer for them to read, edit and submit on GitHub themselves - nothing is filed from here.
+
+- `kind` - bug or feature
+- `trying` - what they were trying to do in the app, in general words with no names, mail, companies or task titles
+- `happened` - what went wrong (a bug) or what would help (a feature), the same way
+
+<p class="runs">Drafts it for you to read, edit and submit on GitHub yourself - nothing is filed.</p>
 
 ### `script.start`
 

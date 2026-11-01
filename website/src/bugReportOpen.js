@@ -12,9 +12,16 @@ export const bellError = (p) => ({ message: [p.title, p.detail].filter(Boolean).
 export const connError = (card, said) => ({ message: [card.title, said].filter(Boolean).join("\n"), screen: "Connection card",
   route: card.channel ? `connector ${card.channel}` : "", at: card.when || "" });
 
+// A REPORT THE OWNER ASKED FOR (the Assistant's issue.draft, an Advisor "Report this?" - 2026-11-01) carries its kind and their words. A wish
+// stands alone - no error, stack, route or actions; a bug reads beside the page's last failure only when the Assistant was asked right after it
+const asked = (e) => ({ kind: e.kind, trying: String(e.trying || ""), happened: String(e.happened || "") });
+
 export function draftRequest(snap, e) {
   if (!e) return snap;
   const msg = String(e.message || "").trim();
+  if (e.kind === "feature") return { ...snap, screen: e.screen || snap.screen, error: "", stack: "", route: "", at: "", actions: [], ...asked(e) };
+  if (e.kind && !e.withLast) return { ...snap, screen: e.screen || snap.screen, error: msg, stack: e.stack || "", route: e.route || "", at: e.at || "", ...asked(e) };
+  if (e.kind) return { ...snap, screen: e.screen || snap.screen, error: [...new Set([msg, snap.error].filter(Boolean))].join("\n"), ...asked(e) };
   if (e.withLast) return { ...snap, error: [...new Set([msg, snap.error].filter(Boolean))].join("\n") };
   return { ...snap, screen: e.screen || snap.screen, error: msg, stack: e.stack || "", route: e.route || "", at: e.at || "" };
 }

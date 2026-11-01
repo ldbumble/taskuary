@@ -101,19 +101,30 @@ def fingerprint(err, route, stack) -> str:
     return hashlib.sha1(f'{_etype(err)}|{norm_route(route)}|{_frame(stack)}'.encode()).hexdigest()[:10]
 
 
+# WHAT THE OWNER ASKED FOR, when they asked (the Assistant's issue.draft, an Advisor "Report this?"): a bug, or a wish. A wish carries
+# no error, stack, actions or log - "what I was trying to do / what would help" is the whole of it, and a log beside it is only more to leak
+KINDS = ('bug', 'feature')
+PREFIX = {'bug': '[bug] ', 'feature': '[feature] '}       # in the title too: GitHub drops `labels=` for anyone but a maintainer
+N_SAID = 1000
+
+
 def collect(store, client: dict) -> dict:
-    """The report's facts, unscrubbed: `client` carries screen, route, error, stack, actions and at (ISO)."""
+    """The report's facts, unscrubbed: `client` carries screen, route, error, stack, actions and at (ISO) - and, when the owner asked
+    for it, kind (bug | feature), trying (what they were trying to do) and happened (what went wrong, or what would help)."""
     c = client or {}
     g = lambda k: str(c.get(k) or '').strip()
-    err, stack = g('error'), g('stack')
+    kind = g('kind').lower() if g('kind').lower() in KINDS else ''
+    wish = kind == 'feature'
+    err, stack = ('', '') if wish else (g('error'), g('stack'))
     # a browser stack repeats the message as its first line; Python's does not
     body = '\n'.join(stack.splitlines()[1:] if stack.startswith(err.split('\n')[0]) and err else stack.splitlines())
-    acts = c.get('actions') if isinstance(c.get('actions'), list) else []
-    return {'where': ' '.join(x for x in (g('screen'), f"({g('route')})" if g('route') else '') if x),
+    acts = c.get('actions') if isinstance(c.get('actions'), list) and not wish else []
+    return {'where': ' '.join(x for x in (g('screen'), f"({g('route')})" if g('route') and not wish else '') if x),
             'error': '\n'.join(x for x in (err, '\n'.join(body.splitlines()[:40])) if x),
-            'env': env(store), 'log': log_near(g('at')),
+            'env': env(store), 'log': '' if wish else log_near(g('at')),
             'actions': [str(a)[:80] for a in acts[-N_ACTIONS:]],
-            'fingerprint': fingerprint(err, g('route'), stack)}
+            'trying': g('trying')[:N_SAID], 'happened': g('happened')[:N_SAID], 'kind': kind,
+            'fingerprint': fingerprint(err or g('happened'), g('route'), stack)}
 
 
 # ── scrub ────────────────────────────────────────────────────────────────────────────────────
@@ -411,15 +422,29 @@ WANT = {'type': 'object', 'properties': {'title': {'type': 'string'}, 'explanati
         'required': ['title', 'explanation']}
 
 
+FEATURE = ('You write a feature request for a public GitHub tracker from the facts given and nothing else. Answer JSON: '
+           '"title" - the capability wanted, under 70 characters; "explanation" - two short plain paragraphs, the first starting '
+           '"What I was trying to do:", the second "What would help:". Write about the app, never about anyone\'s work, mail or '
+           'company: never guess or invent names, people, companies or details, and leave [removed] parts out rather than filling them in.')
+SAID = {'bug': ('What I was trying to do', 'What happened'), 'feature': ('What I was trying to do', 'What would help')}
+
+
+def _said(f) -> list:
+    a, b = SAID.get(f.get('kind'), ('', ''))
+    return [f'{h}: {v}' for h, v in ((a, f.get('trying')), (b, f.get('happened'))) if h and v]
+
+
 def _ask(store, brain, f) -> dict:
     """The model's title and explanation, or {} - a draft without them is still a report."""
     from . import llm as ai
     try:
         brain = brain or ai.build_llm(store, gear='light', job='summary')
         if not brain: return {}
-        user = '\n'.join([f"Where: {f['where'] or 'unknown'}", f"Recent actions: {', '.join(f['actions']) or 'none'}",
-                          f"Error:\n{f['error'] or 'none reported'}", f"Environment: {f['env']}", f"Log lines:\n{f['log'][-3000:]}"])
-        d = ai.ask_json(brain, SYSTEM, user, want=WANT, max_tokens=300).data
+        wish = f.get('kind') == 'feature'
+        user = '\n'.join(_said(f) + [f"Where: {f['where'] or 'unknown'}"] + ([f"Environment: {f['env']}"] if wish else [
+            f"Recent actions: {', '.join(f['actions']) or 'none'}", f"Error:\n{f['error'] or 'none reported'}", f"Environment: {f['env']}",
+            f"Log lines:\n{f['log'][-3000:]}"]))
+        d = ai.ask_json(brain, FEATURE if wish else SYSTEM, user, want=WANT, max_tokens=300).data
         return d if isinstance(d, dict) else {}
     except Exception: return {}
 
@@ -438,8 +463,11 @@ def draft(store, client: dict, llm=None) -> dict:
     try: known = private_strings(store)
     except Exception as e: raise Unsafe(SAFE_MSG) from e
     S = lambda t: scrub(t, store, known)
-    f = {**{k: S(v) for k, v in raw.items() if k != 'actions'}, 'actions': [S(a) for a in raw['actions']]}
+    kind = raw['kind']
+    f = {**{k: S(v) for k, v in raw.items() if k not in ('actions', 'kind')}, 'actions': [S(a) for a in raw['actions']], 'kind': kind}
     d = _ask(store, llm, f)
-    first = next((l.strip() for l in f['error'].splitlines() if l.strip()), '') or NO_ERROR
-    title = _cut(_norm(S(_norm(d.get('title'))))) or _cut(first)
-    return {'title': title, 'explanation': S(str(d.get('explanation') or '').strip()), **f}
+    first = next((l.strip() for l in f['error'].splitlines() if l.strip()), '') or _norm(f['happened'] or f['trying']) or NO_ERROR
+    pre = PREFIX.get(kind, '')
+    title = _cut(_norm(S(_norm(d.get('title')))).removeprefix(pre.strip()).strip(), 80 - len(pre)) or _cut(first, 80 - len(pre))
+    # ...with no model, what the owner said is the explanation, in the two parts the request is written in
+    return {**f, 'title': pre + title, 'explanation': S(str(d.get('explanation') or '').strip()) or '\n\n'.join(_said(f))}

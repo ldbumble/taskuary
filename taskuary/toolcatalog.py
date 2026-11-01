@@ -491,13 +491,13 @@ BUCKETS = (
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
     ('app', 'settings, connections, scripts, memory, rules, the Hub, the Board and Search', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
-                                                             'connection.resume', 'app.repair', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
+                                                             'connection.resume', 'app.repair', 'issue.draft', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
                                                              'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote', 'page.open')),
 )
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'pipe.remove': 'select, learn?', 'agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'pipe.remove': 'select, learn?', 'agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?'}
 
@@ -632,15 +632,24 @@ ATTACH_AGENT = frozenset({'dispatch.prepare', 'agent.continue'})
 def is_read(kind: str) -> bool: return kind in READS
 # ...and the one that is not a look-up but runs in the turn all the same: the app's own simple repair, the press its card would make,
 # read again after (troubleshoot.repair). It reaches no one and starts nothing, so it is the chat's to run - and its steps show
+# ...and the report the owner asks for about Taskuary ITSELF (bugreport.py, the owner 2026-11-01): drafted, scrubbed and shown in the
+# Report popup under the answer - the owner reads it, edits it and presses Submit on GitHub. Nothing is filed from here, so it is the chat's
 NOW = {'app.repair': ('run the simple repair app.health named for a part of Taskuary, then read it again - `name`: the connection; '
-                      '`how`: restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said')}
+                      '`how`: restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said'),
+       'issue.draft': ("draft a bug report or a feature request for Taskuary's own public tracker, when the owner says Taskuary ITSELF did "
+                       'something wrong or wishes it could do something it cannot - never about their work, their mail or a person; '
+                       '`kind`: bug or feature; `trying`: what they were trying to do in the app, in general words with no names, mail, '
+                       'companies or task titles; `happened`: what went wrong (a bug) or what would help (a feature), the same way. It is '
+                       'scrubbed and comes up under your answer for them to read, edit and submit on GitHub themselves - nothing is filed from here')}
+NOW_NEEDS = {'app.repair': (('name',), ('how',)), 'issue.draft': (('kind',), ('trying', 'happened'))}     # each tuple: one of these
 def runs_now(kind: str) -> bool: return kind in READS or kind in NOW
 
 
 def valid(kind: str, params: dict) -> str:
     """'' when this CALL is one the registry actually runs, otherwise why not."""
     if kind in NOW:
-        miss = [n for n in ('name', 'how') if not str((params or {}).get(n) or '').strip()]
+        miss = [' or '.join(ns) for ns in NOW_NEEDS[kind] if not any(str((params or {}).get(n) or '').strip() for n in ns)]
+        if kind == 'issue.draft' and not miss and str(params.get('kind')).strip().lower() not in ('bug', 'feature'): miss = ['kind: bug or feature']
         return f"{kind} needs {', '.join(miss)}" if miss else ''
     if kind in READS:
         need = {'app.find': ('query',), 'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
@@ -746,6 +755,7 @@ def _entry(k: str) -> list:
                            'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text')
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
+            else 'Drafts it for you to read, edit and submit on GitHub yourself - nothing is filed.' if k == 'issue.draft'
             else 'Runs at once and says what it changed.' if k in KEPT or k in NOW or k in SETS
             else 'Brings up its page, at the thing, for you to press.' if k in PAGED else 'Brings up its button for you to press.')
     stop = '' if prose.endswith(('.', ')', '"')) else '.'

@@ -44,7 +44,9 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
   }, [open, screen, error]);
 
   const copy = (s) => Promise.resolve().then(() => navigator.clipboard.writeText(s));     // no clipboard API: a rejection, not a throw
-  const body = () => joinBody(text, tech, !!shot);
+  // a wish (the Assistant's issue.draft, a system with no card) is a feature request: its own title, field and label
+  const kind = draft?.kind || error?.kind || "bug", wish = kind === "feature";
+  const body = () => joinBody(text, tech, !!shot, kind);
   const say = (p, ok, onClip) => p.then(() => { setNote(ok); setShotOnClip(onClip); }).catch(() => setNote(REFUSED));
   const copyText = (s, ok) => say(copy(s), ok, false);
   const takeShot = (on) => {
@@ -57,7 +59,7 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
   const send = async () => {
     setBusy(true);
     try {
-      const b = body(), { url, cut } = issueUrl(title, b);
+      const b = body(), { url, cut } = issueUrl(title, b, undefined, kind);
       // the cut note only when the copy took: otherwise it would send them to paste what is not there
       const copied = cut ? await copy(fullReport(title, b)).then(() => true, () => false) : false;
       if (copied) setShotOnClip(false);
@@ -70,14 +72,14 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
 
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="bug-report-title"
     PaperProps={{ sx: { maxHeight: "90vh" } }}>
-    <DialogTitle id="bug-report-title">{btnLabel("report_bug")}</DialogTitle>
+    <DialogTitle id="bug-report-title">{btnLabel("report_bug", wish ? "feature" : undefined)}</DialogTitle>
     <DialogContent>
       {refused ? <Typography sx={{ fontSize: 13.5 }}>{refused}</Typography>
-        : !draft ? <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, color: DIM, fontSize: 13 }}><CircularProgress size={16} />Preparing the report…</Box>
+        : !draft ? <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, color: DIM, fontSize: 13 }}><CircularProgress size={16} />{wish ? "Preparing the request…" : "Preparing the report…"}</Box>
         : <>
           <Typography sx={{ color: DIM, fontSize: 13, mb: 2 }}>This goes to a public GitHub page. Check it before you submit.</Typography>
           <TextField fullWidth size="small" label="Title" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} sx={{ mb: 2 }} />
-          <TextField fullWidth multiline minRows={3} label="What happened" value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
+          <TextField fullWidth multiline minRows={3} label={wish ? "What would help" : "What happened"} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
           <Button size="small" onClick={() => setShowTech(!showTech)} aria-expanded={showTech}
             sx={{ mt: 1.5, px: 0, color: DIM, textTransform: "none" }}>{showTech ? "Hide technical details" : "Technical details"}</Button>
           {showTech && <TextField fullWidth multiline minRows={6} maxRows={16} value={tech} disabled={busy} onChange={(e) => setTech(e.target.value)}

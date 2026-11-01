@@ -51,3 +51,16 @@ test("a connection Check again could not fix is reported as itself: its title, w
   const r = draftRequest(snap, connError({ key: "conn:109", channel: "chatgpt", title: "ChatGPT stopped answering", when: "2026-10-15T11:00:00Z" }, "ChatGPT plan call failed (400)"));
   assert.deepEqual(r, { ...snap, screen: "Connection card", error: "ChatGPT stopped answering\nChatGPT plan call failed (400)", stack: "", route: "connector chatgpt", at: "2026-10-15T11:00:00Z" });
 });
+
+// THE OWNER ASKED FOR IT (issue.draft, an Advisor "Report this?", a system with no card - 2026-11-01)
+test("a wish stands alone: their words and kind, none of the page's failure, route or writes", () => {
+  const r = draftRequest(snap, { kind: "feature", trying: "see the rail by date", happened: "a sort by date", screen: "Assistant", withLast: false });
+  assert.deepEqual(r, { ...snap, screen: "Assistant", error: "", stack: "", route: "", at: "", actions: [], kind: "feature", trying: "see the rail by date", happened: "a sort by date" });
+});
+
+test("a bug the Assistant was asked for reads beside the last failure; the Advisor's stands alone", () => {
+  const asked = draftRequest(snap, { kind: "bug", trying: "export", happened: "nothing happened", screen: "Assistant", withLast: true });
+  assert.equal(asked.error, snap.error); assert.equal(asked.route, snap.route); assert.equal(asked.happened, "nothing happened");
+  const counted = draftRequest(snap, { kind: "bug", trying: "run an agent", happened: "failed 3 times", message: "TypeError: x", screen: "Advisor", route: "agent claude" });
+  assert.deepEqual([counted.error, counted.stack, counted.route, counted.screen, counted.kind], ["TypeError: x", "", "agent claude", "Advisor", "bug"]);
+});

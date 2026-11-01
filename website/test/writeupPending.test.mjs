@@ -65,7 +65,7 @@ test("Stop and save puts the agent down and keeps the Agent pane open while it w
   assert.doesNotMatch(page, /setSeekCloseOut/);
   // ...a failure's Try again is Close out's (taskLayout.closeOut)
   assert.match(page, /\{shows\("reply"\) && co\.writeupAt === "closeout" && <WriteupBlock view=\{writeup\}/);
-  assert.match(page, /\{shows\("reply"\) && !writeup && \(\(pendingReview \|\|/);                 // ...and the draft in its place, same card
+  assert.match(page, /\{\(shows\("reply"\) \|\| lendsReply\) && !writeup && \(\(pendingReview \|\|/);                 // ...and the draft in its place, same card
   assert.match(page, /if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;/);       // the closing pty is not adopted back
   assert.match(page, /<Box ref=\{closeOutRef\} data-tq-closeout=""/);
   // Mark done on a live agent stays the background close: the page walks on, no pending Close out

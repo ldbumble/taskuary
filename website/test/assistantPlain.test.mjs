@@ -38,8 +38,10 @@ test("an Advisor press presses the row's REAL button when the row has it - only 
 
 test("every item put on the table goes through putOnTable, which pins its card to the top and keeps it there (B15, SEEN)", () => {
   // ONE road: the turn's landing, the Board's open, a browse card, an unfold - none sets Current on its own any more
-  assert.match(view, /const putOnTable = useCallback\(\(card, how = "pile"\) => \{/);
-  assert.match(view, /\n\s+putOnTable\(card\);\n[^\n]*\n\s+say\(data\.say\);/, "landed");
+  assert.match(view, /const putOnTable = useCallback\(\(card, how = "pile", ahead = false\) => \{/);
+  assert.match(view, /\n\s+putOnTable\(card, "pile", !!below && card\?\.key === below\.key\);\n[^\n]*\n\s+say\(data\.say\);/, "landed");
+  // ...the answer filling in the row its press drew keeps the press's stamp: its Advisor read, sent at the press, is not made again
+  assert.match(view, /if \(!ahead\) itemAt\.current = \+\+readClock\.current;/, "the row drawn ahead");
   assert.match(view, /pull\(`task:\$\{req\.tid\}`\); return;/, "the Board's open goes the rail's road - no bare card for a walk on the phone (2026-10-23)");
   assert.match(view, /putOnTable\(null, "view"\);\s+\/\/ its top in view/, "a browse card");
   assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \}/, "the folded item opened again");

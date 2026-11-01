@@ -1381,12 +1381,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // THE WALK HAS ONE OWNER (railwalk, 2026-10-30): which row comes next, which is above and what leaving one does are the server's - the
   // page sends the row it has on screen and draws the answer. `leftKey`: the row a press just left, so its own Advisor read is not made
   const leftKey = useRef(null), pickedRef = useRef(false);
-  const putOnTable = useCallback((card, how = "pile") => {
+  // `ahead`: the answer filling in the row its press drew (landed) - the stamp stays the press's own, see there
+  const putOnTable = useCallback((card, how = "pile", ahead = false) => {
     if (how !== "sync") tableMoves.current += 1;
     if (how !== "view") {
       const item = how === "card" ? null : card || null;
       currentRef.current = item; cardRef.current = how === "card" ? card?.key || null : null;
-      itemAt.current = ++readClock.current;          // the item as it now stands, read no later than this (readAdvice's revision check)
+      if (!ahead) itemAt.current = ++readClock.current;   // the item as it now stands, read no later than this (readAdvice's revision check)
       setCurrent(item?.key || null); setCurrentItem(item); setCardKey(cardRef.current);
       // ...and the page the chat was answering about is put away with it: the open page's label stood after a task landed by Next,
       // a chip or a receipt, and the chat went on answering about Settings (re-audit, 2026-10-18)
@@ -1969,7 +1970,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const below = belowRef.current; belowRef.current = null;
     const id = below && card?.key === below.key ? below.id : `a${Date.now()}`;
     setMsgs((m) => placeLine(below ? m.filter((x) => x.id !== below.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
-    putOnTable(card);
+    // ...and its Advisor read, sent at the press, holds for the answer: the row comes back a revision on - the press's own write (shown, so
+    // seen), which the Advisor does not judge by - and that move read it again, two GETs a Next (CI, 2026-11-01). Anything else that
+    // moves it says so on its own (the `advice` event, a wake)
+    putOnTable(card, "pile", !!below && card?.key === below.key);
     if (card) setFoldedKey((k) => (k === card.key ? null : k));   // the row a close kept (a Send kept open) is back on the table, open
     say(data.say);
     // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along

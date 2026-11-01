@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import funnel
+from taskuary import funnel, railwalk
 from taskuary.store import SQLiteStore
 
 NOW = datetime.now().replace(microsecond=0).isoformat(sep=' ')
@@ -61,7 +61,7 @@ def test_it_is_still_unread_work_on_the_rail(db):
     handed_over(db, 'Add skip policy for PCC provisioning mail', 'assistant@example.test')
     activate(db)
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-        shown = funnel.next_item(db)
+        shown = railwalk.top(db)
         db.set_funnel_state(shown['key'], 'surfaced')
         funnel.invalidate()
         item = next(i for i in funnel.build(db, keep_surfaced=True)['items'] if i['key'] == shown['key'])

@@ -113,7 +113,7 @@ class TheWalkOpensWithTheDayTests(unittest.TestCase):
         items = [{'lane': 'approve'}, {'lane': 'fyi'}]
         with mock.patch('taskuary.funnel.pile', return_value={'items': items}), \
              mock.patch.object(ra, 'meetings_line', return_value="TODAY'S MEETINGS · 1\n· 10:00-10:30 Budget review"), \
-             mock.patch('taskuary.concierge.resume', return_value={'say': 'Nothing is on the table.', 'item': None}):
+             mock.patch('taskuary.railwalk.start', return_value={'say': 'Nothing is on the table.', 'item': None}):   # the walk's top (railwalk)
             text = ra.walk(s)
         self.assertIn("TODAY'S MEETINGS · 1", text); self.assertIn('TASKS · 1', text)
         self.assertEqual(str(s.get_settings().get(ra.MORNING_AT) or ''), datetime.now().strftime('%Y-%m-%d'))   # not said twice today

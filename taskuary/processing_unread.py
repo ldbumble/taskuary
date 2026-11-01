@@ -505,12 +505,12 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
     receipt = bool(not tid and not review and row.get('Direction') == 'out')
     # Worker attention is not a read operation. An active worker remains visible.
     # ...and stopped work is on the rail until it is looked at. It used to stay however often it was looked at, with
-    # Later the only way to put it down - and Later is gone (R6, the owner, 2026-09-25: "next should move it to passed
-    # and done should close it"). Next puts it in Passed like the rest of your work; the quiet hours bring it back.
+    # Later the only way to put it down - and Later is gone (R6, the owner, 2026-09-25). Under Tasks it stays in its place like the
+    # rest of your work (rule 4, 2026-10-30); closing it or Remind me takes it off.
     stopped = active and card['lane'] in ('stopped', 'saved') and not read.get('deferred') and (read_at is None or bool(since and read_at < since))
     # ...and Remind me puts away a live agent or a paused conversation too, until its day (R7, 2026-09-25)
     away = bool(reminded and remind.waiting(task, now)) and not asking_now
-    # ...said since it was last read: on the rail until it is read, like news on the task (Next puts it down for the quiet hours)
+    # ...said since it was last read: on the rail until it is read, like news on the task
     raised = bool(card.get('loose') and (read_at is None or read_at < (processing_all._stamp(card.get('loose_at')) or now)))
     unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or held or stopped or raised or (finished and finished['unread']) or
                                                  (active and not away and (worker or row.get('Working') or persisted_working or card.get('paused'))))

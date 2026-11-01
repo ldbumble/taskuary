@@ -5,7 +5,7 @@ import json, threading, time, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import funnel, lanes
+from taskuary import funnel, lanes, railwalk
 from taskuary.store import MemoryStore
 
 
@@ -530,7 +530,7 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             items = funnel.build(s)['items']
             # a task an agent is working is a task under Tasks, walked in the rail's order - oldest first (the owner, 2026-10-21)
-            self.assertEqual(funnel.next_item(s)['tid'], t2)
+            self.assertEqual(railwalk.top(s)['tid'], t2)
         self.assertEqual([(i['lane'], i['kind'], i['tid']) for i in items], [('working', 'todo', t2), ('blocked', 'agent', t1)])
         self.assertEqual([funnel.level_of(i) for i in items], ['task', 'task'])
         self.assertFalse(funnel.on_you(items[0])); self.assertTrue(funnel.on_you(items[1]))   # ...but only the asking one is on you
@@ -548,11 +548,11 @@ class LanesTests(unittest.TestCase):
         mail(s, 'PTO', hours=3, tid=t)
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(hours=1), 'idle': 200, 'waiting': True, 'tail': ['import now? (y/n)']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')
+            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')
             funnel.settle(s, f'agent:{t}', 'surfaced')
             items = funnel.build(s)['items']
             self.assertEqual([i['key'] for i in items], [f'agent:{t}'])                         # still in the pipe
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')                           # ...and still the walk's top
+            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')                           # ...and still the walk's top
         # ...and when the agent picks the work back up, the shown item rides up to the shelf instead of vanishing
         busy = [dict(live[0], idle=2, waiting=False)]
         with mock.patch('taskuary.terminal.live_sessions', return_value=busy):
@@ -660,11 +660,11 @@ class LanesTests(unittest.TestCase):
             funnel.invalidate()
             self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['Budget review'])   # on the timeline
             funnel.invalidate()
-            far_row = funnel.next_item(s)                        # ...walked in its place like a task (Q3, 2026-10-30), never urgent yet
+            far_row = railwalk.top(s)                        # ...walked in its place like a task (Q3, 2026-10-30), never urgent yet
             self.assertEqual(far_row['title'], 'Budget review'); self.assertFalse(lanes.is_urgent(far_row))
         with mock.patch.object(funnel, '_agenda', return_value=near):
             funnel.invalidate()
-            nxt = funnel.next_item(s)
+            nxt = railwalk.top(s)
         self.assertEqual((nxt['kind'], nxt['title']), ('meeting', 'Standup'))    # inside fifteen it is shaded urgent
         self.assertTrue(lanes.is_urgent(nxt))
 
@@ -683,7 +683,7 @@ class LanesTests(unittest.TestCase):
         s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Fixed - the corrected file is attached.', 'Status': 'pending'})
         it = funnel.build(s)['items'][0]
         self.assertEqual(it['kind'], 'review'); self.assertIn('fixed the escaping', it['summary'])
-        self.assertEqual(funnel.next_item(s, only='mail')['key'], it['key'])
+        self.assertEqual(railwalk.top(s)['key'], it['key'])
 
     def test_something_important_waiting_is_an_alert_and_the_assistant_is_told(self):
         from taskuary import concierge
@@ -876,12 +876,12 @@ class FeedUnreadTests(unittest.TestCase):
             # the same level as any task, and the walk's item in its place (the owner, 2026-10-21)
             self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 2, 'Taskuary'))
             self.assertEqual(row['FunnelKey'], f'agent:{task}')
-            self.assertEqual(funnel.next_item(s)['tid'], task)
+            self.assertEqual(railwalk.top(s)['tid'], task)
         waving = [dict(live[0], idle=200, waiting=True, tail=['Which region should I use?'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=waving):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
             self.assertEqual((row['Unread'], row['UnreadRank']), (1, 2))
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{task}')
+            self.assertEqual(railwalk.top(s)['key'], f'agent:{task}')
 
 
 class MemoryTests(unittest.TestCase):
@@ -900,16 +900,16 @@ class MemoryTests(unittest.TestCase):
         items = funnel.build(s)['items']
         # a reply for your yes stays in its place, shown or not - nothing marks it passed, and the walk's top is still it (2026-10-30)
         self.assertEqual([(i['key'], bool(i.get('surfaced'))) for i in items], [(one, False), (two, False)])
-        self.assertEqual(funnel.next_item(s)['key'], one)
+        self.assertEqual(railwalk.top(s)['key'], one)
         self.assertEqual(funnel.next_item(s, one)['key'], one)          # the named one is always reachable
         out = funnel.settle(s, two, 'later', hours=2)
         self.assertTrue(out['until'] > ago(0))
         # put away, it waits in For later (the canvas redesign, 2026-09-29) - on the rail, never next
         self.assertEqual([(i['key'], bool(i.get('deferred'))) for i in funnel.build(s)['items']], [(one, False), (two, True)])
-        self.assertEqual(funnel.next_item(s)['key'], one, 'For later is off the walk; the reply is still its top')
+        self.assertEqual(railwalk.top(s)['key'], one, 'For later is off the walk; the reply is still its top')
         funnel.settle(s, one, 'done')
         self.assertEqual([i['key'] for i in funnel.build(s, keep_surfaced=True)['items']], [two], 'done removes; later still waits')
-        self.assertIsNone(funnel.next_item(s))
+        self.assertIsNone(railwalk.top(s))
 
     def test_a_reply_shown_once_stays_and_a_rewritten_draft_stays_too(self):
         """Shown is not acted on (2026-10-13): a reply for your yes put on the table stays in its place, and so does its rewrite -
@@ -919,10 +919,10 @@ class MemoryTests(unittest.TestCase):
         it = funnel.next_item(s, one)
         funnel.settle(s, one, 'surfaced', note=it['sig'])
         self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
-        self.assertEqual(funnel.next_item(s)['key'], one)
+        self.assertEqual(railwalk.top(s)['key'], one)
         s.save_review_draft(int(one.split(':')[1]), 'The agent rewrote this after finishing the job.')
         self.assertEqual([i['key'] for i in funnel.build(s)['items']], [one, two])
-        self.assertEqual(funnel.next_item(s)['key'], one)
+        self.assertEqual(railwalk.top(s)['key'], one)
 
     def test_a_new_chat_does_not_make_read_mail_new_again(self):
         s = self._two()
@@ -1296,7 +1296,7 @@ class MemoryTests(unittest.TestCase):
         mail(s, 'Just landed', hours=0, status='triaging')
         items = funnel.build(s)['items']
         self.assertEqual([(i['kind'], i['settling']) for i in items], [('triaging', True)])
-        self.assertIsNone(funnel.next_item(s))
+        self.assertIsNone(railwalk.top(s))
         self.assertIn('surfaced', funnel.VERBS)
 
     def test_a_low_priority_row_is_unread_and_can_be_pulled_into_the_chat_by_hand(self):

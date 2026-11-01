@@ -251,7 +251,7 @@ class AnOpenTaskIsAlwaysOnTheRailTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             on = lambda: {i.get('tid') for i in rail(s)} & set(tids)
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next
+            concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])      # Next
             k = next(i['key'] for i in rail(s) if i.get('tid') == tids[1])
             funnel.settle(s, k, 'done', 'owner'); funnel.invalidate()                             # read, never closed
             for k in list(s.funnel_states()): s.clear_funnel_state(k)                              # every mark gone

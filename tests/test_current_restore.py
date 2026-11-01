@@ -63,24 +63,22 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual((again['current']['key'], len(again['messages'])), (f'msg:{m}', 1))
         self.assertEqual(concierge.current_key(self.s, general.dock_task(self.s)[0]['TaskId']), f'msg:{m}')
 
-    def test_a_handled_item_stays_readable_history_but_is_not_revived(self):
+    def test_a_row_closed_under_the_table_stays_on_it_drawn_as_it_is_now(self):
+        """PW-162 cleared Current when its row was settled or closed, and the table emptied under the owner. The row on screen now
+        stays on screen as it is now; Next and Back measure from its place (spec 2.1, the closed-Current ruling; 3.5 closes elsewhere)."""
+        dock = general.dock_task(self.s)[0]['TaskId']
         t, m = asked(self.s)
         self.c.post('/api/concierge/next', json={})
         self.c.post('/api/funnel/settle', json={'key': f'msg:{m}', 'verb': 'done'})
         st = self.c.get('/api/concierge').json()
-        self.assertIsNone(st['current']); self.assertEqual(st['messages'][0]['card']['key'], f'msg:{m}')   # the card is still in the transcript
-        self.assertEqual(concierge.current_key(self.s, general.dock_task(self.s)[0]['TaskId']), '')
-        # deferring clears it the same way, and so does a task that closed underneath it
-        t2, m2 = asked(self.s, 'Invoice 4471', 'Sam', 1)
-        self.c.post('/api/concierge/next', json={})
-        self.c.post('/api/funnel/settle', json={'key': f'msg:{m2}', 'verb': 'later'})
-        self.assertIsNone(self.c.get('/api/concierge').json()['current'])
+        self.assertEqual(st['messages'][0]['card']['key'], f'msg:{m}')                                  # the card is still in the transcript
+        self.assertEqual(concierge.current_key(self.s, dock), f'msg:{m}')                               # ...and still on the table
         t3, m3 = asked(self.s, 'PTO import', 'Erin', 0)
-        self.assertEqual(self.c.post('/api/concierge/next', json={}).json()['item']['key'], f'msg:{m3}')
+        self.assertEqual(self.c.post('/api/concierge/next', json={'key': f'msg:{m3}'}).json()['item']['key'], f'msg:{m3}')
         self.s.update_task(t3, {'Status': 'done'}, 'owner'); funnel.invalidate()
         st = self.c.get('/api/concierge').json()
-        self.assertIsNone(st['current'])                                                                # gone, and nothing chosen instead
-        self.assertEqual(len([x for x in st['messages'] if x['card']]), 3)                              # no turn was added by the read
+        self.assertEqual((st['current']['key'], st['current'].get('closed')), (f'msg:{m3}', True))     # drawn closed, nothing chosen instead
+        self.assertEqual(len([x for x in st['messages'] if x['card']]), 2)                              # no turn was added by the read
 
     def test_a_named_item_and_the_fyi_handful_are_written_down_too(self):
         t, m = asked(self.s)
@@ -99,7 +97,7 @@ class RestoreTests(unittest.TestCase):
         cur = c2.get('/api/concierge').json()['current']
         self.assertEqual((cur['key'], cur['kind'], len(cur['items'])), (batch['key'], 'fyis', 2))
 
-    def test_a_task_that_closes_under_an_own_work_row_leaves_the_table(self):
+    def test_a_task_that_closes_under_an_own_work_row_stays_on_the_table_closed(self):
         """The mail case above already worked: _feed_skip drops a closed row from the pile, so
         validation finds nothing and clears the key. Own work reaches the pile through the processing
         inventory instead, which keeps a closed task as a READ fyi row - still there, so Current went
@@ -115,8 +113,8 @@ class RestoreTests(unittest.TestCase):
         concierge.set_current(self.s, dock, key)
         self.assertEqual(concierge.restore_current(self.s, dock)['key'], key)   # open: it is on the table
         self.s.update_task(t, {'Status': 'done'}, 'owner'); settle()
-        self.assertIsNone(concierge.restore_current(self.s, dock))
-        self.assertEqual(concierge.current_key(self.s, dock), '')              # ...and it is not chosen again
+        self.assertTrue(concierge.restore_current(self.s, dock)['closed'])     # closed elsewhere: it stays on the table, drawn closed
+        self.assertEqual(concierge.current_key(self.s, dock), key)
 
     def test_a_task_already_closed_when_it_was_pulled_stays_on_the_table(self):
         """The case above is a task that closed WHILE it was on the table. A task looked up from search after it closed

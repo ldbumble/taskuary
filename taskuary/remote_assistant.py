@@ -1291,8 +1291,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
             return '\n\n'.join(said + [turn_text(nxt, store=store)])
         said.append('I could not write that draft here - it is waiting on the task page.')
     if walk_on:
-        here = (item or {}).get('key') if verb == 'next' else None       # Next leaves the table as the desktop's does
-        return _on(store, actor, said, leaving=here, exclude=here, done_with=(item or {}).get('key'))
+        return _on(store, actor, said, done_with=(item or {}).get('key'))   # Next leaves the table as the desktop's does
     # AN ANSWER THAT NAMES A TASK BRINGS IT UP (the router rule): the desk opens a [TQ-…](#task=N) link the moment the answer lands;
     # the phone stripped it to its words, so "bring up TQ-0035" was answered and nothing came up (F18). Its card and its choices
     linked = _TASK_ID.search(str(out.get('say') or '')) if not out.get('item') and not prop and not verb else None
@@ -1494,11 +1493,11 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
     return turn_text({'say': turn['say'], 'item': None}, store=store, extra=list(recovery_rows(store, turn['chips'], actor)))
 
 
-def _move_on(store, actor: str, leaving: str = None, exclude: str = None, done_with: str = None) -> tuple[dict, str]:
+def _move_on(store, actor: str, done_with: str = None) -> tuple[dict, str]:
     """What comes after the table - (the next surface, a lead line): the row that was directly below the one an act settled
     (`done_with`) or Next left (railwalk.next, rule 5). A section walked is no hold of its own: Next goes on down the rail (Q6)."""
     from . import concierge
-    return concierge.surface(store, actor=actor, from_key=done_with or leaving or exclude), ''
+    return concierge.surface(store, actor=actor, from_key=done_with), ''
 
 
 NEWS_KEY = 'phone_urgent_told'             # :<channel>:<chat> -> {walk, keys}: the urgent arrivals this walk already named (A12)
@@ -1531,7 +1530,7 @@ def urgent_news(store, out: dict | None) -> tuple[str, list]:
 
 
 def _on(store, actor: str, said: list, extra=None, **kw) -> str:
-    """The receipt lines, then what comes next (_move_on) - with the section's own end said when it ran out."""
+    """The receipt lines, then what comes next (_move_on) - the row below, down the whole rail (Q6: no section end)."""
     nxt, lead = _move_on(store, actor, **kw)
     # THE RECEIPT IS ITS OWN BUBBLE, and the choices are the next card's alone (F14): a receipt's own picks (Open TQ-…, Mark done on
     # the task it just sent for) rode the same poll as the card under it - two Nexts, and a Mark done for a different task
@@ -1744,7 +1743,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             from .store import task_ref
             said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
             here = (item or {}).get('key')
-            return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
+            return _on(store, actor, [said], done_with=here)
         if t == 'redraft':
             here = asking() or {}
             if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')
@@ -2039,7 +2038,7 @@ def member_lines(item: dict | None) -> list:
 
 
 def fyi_total(store, item: dict | None) -> int:
-    """Every FYI the rail holds with this batch counted in - its members are read by being shown, so the pile alone has dropped them."""
+    """Every FYI the rail holds with this batch counted in - a member read since the batch went up has left the pile, not the count."""
     if store is None or (item or {}).get('kind') != 'fyis': return 0
     from . import funnel
     try: rows = funnel.pile(store).get('items') or []

@@ -306,10 +306,11 @@ def current_key(store, tid: int = None) -> str:
 
 def set_current(store, tid: int, key: str | None, actor: str = 'assistant', closed: bool = False):
     """Kept for its callers: the table is railwalk's to write. Putting nothing there is no move at all - the row on screen stays on
-    screen, drawn as it now is, and Next and Back measure from its place (2026-10-30, replacing PW-162's clearing)."""
+    screen, drawn as it now is, and Next and Back measure from its place (2026-10-30, replacing PW-162's clearing). It writes the
+    table only - no line in the chat: whoever put the row there words it."""
     if not key: return
     from . import railwalk
-    if railwalk.on(store) != key: railwalk.open(store, key, actor=actor)
+    if railwalk.on(store) != key: railwalk.open(store, key, actor=actor, record=False)
 
 
 def resume(store, actor: str = 'owner') -> dict:
@@ -332,6 +333,10 @@ def restore_current(store, tid: int = None) -> dict | None:
                                                                                or funnel.item_for_key(store, key))
     except Exception as e:
         logger.warning(f'concierge: could not read the current item {key} - {e}'); item = None
+    # ...a mail row whose task closed elsewhere is no row any build draws: it stays on the table as its task, under the key it was put up by
+    if not item and (m := re.fullmatch(r'msg:(\d+)', key)) and (tid := (store.get_message(int(m.group(1))) or {}).get('TaskId')):
+        item = funnel.item_for_key(store, f'task:{tid}')
+        if item: item = item | {'key': key, 'aliases': [*(item.get('aliases') or ()), f'task:{tid}']}
     # a new line on its thread is being triaged: not drawable THIS moment, still the row the owner is on - back when triage lands
     if not item or item.get('settling'): return None
     if item.get('tid') and (store.get_task(int(item['tid'])) or {}).get('Status') in ('done', 'dropped'): item = item | {'closed': True}
@@ -1258,7 +1263,6 @@ def _bulk(store, tid: int, item: dict | None, kind: str, p: dict, text: str, act
         return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
     table_keys = {i['key'] for i in _on_the_table(store, actor) if i.get('key')}
     out = bulk_mod.act(store, verb, rows, actor, learn)
-    _off_the_table(store, out['done'], actor)
     say_ = bulk_mod.receipt(verb, out, refused, learn) + gone_line
     record_related(store, tid, item, 'assistant', say_)
     off = bool(table_keys) and table_keys <= {i['key'] for i in out['done']}
@@ -2487,17 +2491,6 @@ def _clear_one(store, key: str, actor: str, note: str) -> bool:
         return False
 
 
-def _off_the_table(store, cleared: list, actor: str):
-    """What a sweep clears cannot stay in front of the owner. Settling ONE item drops Current with it
-    (the /api/funnel/settle road does), and the sweep did not - so "clear the reports" cleared seven
-    and left the report it was holding on the table (the owner, 2026-09-07: "did not clear current one
-    when i said clear the reports")."""
-    keys = {i['key'] for i in cleared}
-    if not keys: return
-    tid = general.dock_task(store, actor)[0]['TaskId']
-    if current_key(store, tid) in keys: set_current(store, tid, None, actor)
-
-
 def _set_words(sel: dict) -> str:
     """A set, said: "from Gail", "about the export" - what the receipt names so the owner reads which ones."""
     sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [], False)}
@@ -2534,7 +2527,6 @@ def defer_selected(store, sel: dict, until, actor: str = 'owner') -> dict:
             funnel.settle(store, i['key'], 'later', actor, hours=hours)
             done.append(i)
         except (ValueError, RuntimeError) as e: logger.warning(f"concierge: {i['key']} was not put away - {e}")
-    _off_the_table(store, done, actor)
     return {'done': len(done), 'stuck': len(hits) - len(done), 'when': remind.when(at), 'titles': [i['title'] for i in done][:8], 'links': [bulk_mod.link(i) for i in done]}
 
 
@@ -2549,7 +2541,6 @@ def close_selected(store, sel: dict, actor: str = 'owner') -> dict:
             if i.get('tid'): close_task(store, int(i['tid']), actor)
             if _clear_one(store, i['key'], actor, 'closed by the owner'): done.append(i)
         except (ValueError, RuntimeError) as e: logger.warning(f"concierge: {i['key']} was not closed - {e}")
-    _off_the_table(store, done, actor)
     return {'done': len(done), 'stuck': len(hits) - len(done), 'titles': [i['title'] for i in done][:8], 'links': [bulk_mod.link(i) for i in done],
             'refused': [[bulk_mod.link(i), w] for i, w in refused]}
 
@@ -2559,7 +2550,6 @@ def clear_selected(store, sel: dict, actor: str = 'owner', keys: list | None = N
     items = select_items(store, sel) if sel or not keys else [i for i in _pipe(store) if i['lane'] not in ('blocked', 'working')]
     if keys: items = [i for i in items if i['key'] in set(keys)]
     cleared = [i for i in items if _clear_one(store, i['key'], actor, 'cleared by the owner')]
-    _off_the_table(store, cleared, actor)
     return {'cleared': len(cleared), 'stuck': len(items) - len(cleared),
             'titles': [i['title'] for i in cleared][:8],
             'mid': next((i.get('mid') for i in cleared if i.get('mid')), None), 'remember': False,
@@ -3055,7 +3045,6 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                 record_related(store, tid, item, 'assistant', say_)
                 return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
             cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner')]
-            _off_the_table(store, cleared, actor)
             # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
             # is left; the line counts what went and says it is not gone
             n = len(cleared)
@@ -3701,14 +3690,13 @@ def brought_up(item: dict, picked: bool = False) -> str:
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
-            include_surfaced: bool = False, exclude: str = None, leaving: str = None, from_key: str = None, press: str = None,
-            read=()) -> dict:
+            from_key: str = None, press: str = None, read=()) -> dict:
     """The walk's door for the chat and the phone: the row named (railwalk.open), else the row directly below the one on screen
     (railwalk.next). WHICH row, and what leaving it does, is railwalk's alone (the owner, 2026-10-30: the walk has one owner); this
-    keeps the old signature for the callers that word a turn around it. `leaving` / `exclude`: the row the caller had on screen."""
+    keeps the old signature for the callers that word a turn around it. `from_key`: the row the caller had on screen."""
     from . import railwalk
     if key: return railwalk.open(store, key, actor=actor, press=press, llm=llm, at=from_key)
-    return railwalk.next(store, from_key or leaving or exclude, actor=actor, press=press, read=read, llm=llm)
+    return railwalk.next(store, from_key, actor=actor, press=press, read=read, llm=llm)
 
 
 def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, record: bool = True, llm=None, left: int = 0,

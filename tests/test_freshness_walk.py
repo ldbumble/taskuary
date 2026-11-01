@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 from fastapi.testclient import TestClient
 
-from taskuary import channels, funnel, ingest, responder, server
+from taskuary import channels, funnel, ingest, railwalk, responder, server
 from taskuary.store import MemoryStore
 
 
@@ -57,7 +57,7 @@ class TheChangeCheckFollowsTheFourTests(Base):
         def poll(*a, **k):
             polls.append(k.get('only'))
             later(self.s, tid); return 1                                          # the refresh brings a newer line
-        item = funnel.next_item(self.s, None)
+        item = railwalk.top(self.s)
         self.assertEqual(item['key'], f'review:{rid}')
         with mock.patch.object(server, '_poll_reports', side_effect=poll):
             t = server._refresh_after({'item': item}); t.join(5)
@@ -82,7 +82,7 @@ class TheChangeCheckFollowsTheFourTests(Base):
     def test_a_quiet_source_is_a_no_op(self):
         tid, first, rid = teams_task(self.s)
         with mock.patch.object(server, '_poll_reports', return_value=0):
-            f = server._refresh_items([funnel.next_item(self.s, None)])
+            f = server._refresh_items([railwalk.top(self.s)])
         self.assertFalse(f['newer'])
 
     def test_nothing_on_the_table_asks_nothing(self):

@@ -1753,11 +1753,9 @@ def fyi_batch_size(store) -> int:
 _not_yet = lanes.not_yet
 
 
-def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
-              exclude: str = None, items: list | None = None) -> dict | None:
-    """What comes out of the mouth: the named item (read or not - the chat may return to it), or
-    the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
-    not ready to be talked about."""
+def next_item(store, key: str = None, include_surfaced: bool = False, items: list | None = None) -> dict | None:
+    """The named item, read or not - the chat may return to it. With no key there is nothing to look up: WHICH row comes next is
+    railwalk's alone (the walk has one owner, 2026-10-30; railwalk.top is the row a walk starts on)."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
     if key:
         # A batch is not an item, so there is nothing to look for: the lookup below never found it and
@@ -1779,10 +1777,7 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
             item = next((i for i in build(store, keep_surfaced=True, full_history=True, keys=[key])['items']
                          if i['key'] == key or key in i.get('aliases', [])), None)
         return _present_one(store, item) or batch_item(store, key)
-    # ...and with no key, the top of the walk's line: WHICH row comes next is railwalk's alone (2026-10-30)
-    from .railwalk import line
-    top = line(pile(store)['items'])
-    return _present_one(store, top[0] if top else None)
+    return None
 
 
 def batch_item(store, key: str) -> dict | None:

@@ -74,14 +74,14 @@ class LifecycleTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             funnel.announce(s)                                                   # first look remembers
             p = funnel.pile(s, force=True)
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')
+            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')
         self.assertEqual([(i['key'], i['lane']) for i in p['items']], [(f'agent:{t}', 'working')])
         # 6. it stops to ask: front of the pipe, a line in the chat with the card
         parked = [dict(working[0], idle=120, waiting=True, state='asking', tail=['Remove Bulk Deny as well? (y/n)'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             ev = funnel.pile(s, force=True)['events']
             self.assertEqual([e['kind'] for e in ev], ['asking'])
-            self.assertEqual(funnel.next_item(s)['kind'], 'agent')
+            self.assertEqual(railwalk.top(s)['kind'], 'agent')
             out = railwalk.start(s)                                              # Walk: from the top (the walk has one owner, 2026-10-30)
         self.assertEqual(out['item']['kind'], 'agent'); self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
         self.assertIn('Remove Bulk Deny as well?', str(out['item']))          # the question is on its card, not restated beside it

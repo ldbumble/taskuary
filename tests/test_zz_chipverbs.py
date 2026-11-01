@@ -41,7 +41,7 @@ class ChipVerbsTests(unittest.TestCase):
             try:
                 if verb == 'next':
                     with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-                        concierge.surface(s, llm=None, leaving=item['key'])
+                        concierge.surface(s, llm=None, from_key=item['key'])
                     note = 'walked on'
                 elif verb == 'reply':
                     note = 'drafts (page road, no proposal)'

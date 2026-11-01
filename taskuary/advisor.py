@@ -1149,6 +1149,9 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if pending and r['ask'] and not m: notice(store, SHOWN, tgt[0], tgt[1], tier=2, key=key)
     # QUIET UNLESS SURE (the owner, 2026-11-01): a rule's button the owner picks under 80% of the time in this state goes dark (calibrate)
     if by == 'rule' and verb and not calibrate.trusted(store, r['state'], verb, _workstream(store, tgt)): verb, line, ev = None, '', []
+    # ...and A PERSONAL ASK IS AN FYI (the owner, 2026-11-01): an item under a personal workstream lights no move of the work's - the walk
+    # passes it, the owner answers it in their own time
+    if verb and verb != 'next' and tgt[0] == 'task' and _personal(store, tgt): verb, line, ev = None, '', []
     if preread: _preread(store, key)
     d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind},
                 {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])}) if verb else \
@@ -1163,6 +1166,13 @@ def _workstream(store, tgt) -> str:
         from . import workstreams
         return workstreams.of_task(store, int(tgt[1]))
     except Exception: return ''
+
+
+def _personal(store, tgt) -> bool:
+    try:
+        from . import workstreams
+        return workstreams.is_personal(store, tid=int(tgt[1]))
+    except Exception: return False
 
 
 def _can_read(store) -> bool:

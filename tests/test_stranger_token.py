@@ -187,7 +187,7 @@ def test_taskuary_reply_from_a_stranger_session_authenticates_with_its_token(mon
     from taskuary import config
     hdr = cli._session_headers(config.load()['server'])
     assert hdr == {'X-Taskuary-Token': guard.stranger_token(SRV(), t)}
-    monkeypatch.setattr(selfclose, 'declare', lambda s, tid, summary, agent, no_reply=False: {'closed': True, 'tid': tid})
+    monkeypatch.setattr(selfclose, 'declare', lambda s, tid, summary, agent, no_reply=False, sid=None: {'closed': True, 'tid': tid})
     assert c.post('/api/agent/done', json={'task_id': t, 'summary': 'done'}, headers=hdr).json() == {'closed': True, 'tid': t}
 
 

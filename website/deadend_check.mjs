@@ -131,6 +131,8 @@ const WALK_SKIP = {
   "new_task": "the idle chips' New task opens the New sheet - walked by the browser New tests",
   "new_task:fix": "offered by the Advisor on a failure nothing fixes - the walk has no AI to offer it",
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
+  "report_bug:feature": "the Assistant's feature-request draft, offered only after the owner asks for something it cannot do - the demo chat asks nothing; report-it.test.mjs presses it",
+  "report_bug:ask": "the Advisor's Report this?, raised only after Taskuary fails one way 3+ times - the demo world has no such run of failures; report-it.test.mjs presses it",
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
   "approve:check": "Check delivery on a send nobody can confirm - the faults pass checks it is offered",
   "trust_start": "a chip only under a start refused for a stranger on a tool with no reviewer - the demo world never refuses one (tests/test_*stranger* press it)",

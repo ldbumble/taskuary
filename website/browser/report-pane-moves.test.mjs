@@ -59,8 +59,14 @@ test("a dashboard and an FYI lay their moves on the pane each is about; Close ou
   assert.ok(await clickRow(page, await findRow(page, /Regional operations newsletter/)));
   await page.waitForSelector('[data-tq-item-sections="fyi"] [data-tq-pane-strip="from"] [data-tq-pane-moves] button', { timeout: 20000 }); await sleep(1200);
   const fyi = await seen(page, '[data-tq-pane-strip="from"] [data-tq-pane-moves] button');
-  assert.ok(fyi.includes("Should be a task") && fyi.includes("Send to agent"), `Came from's strip: ${fyi}`);
+  assert.ok(fyi.includes("Should be a task") && !fyi.includes("Send to agent"), `Came from's strip: ${fyi}`);
   assert.deepEqual(await bar(page), ["Back", "Next"]);
+  // ...and Send to agent, a stage move, on the folded Agent's spine as on a task's (the owner, 2026-10-31) - its press opens Agent
+  assert.deepEqual(await seen(page, '[data-tq-section-tab="agent"] [data-tq-spine-moves] button'), ["Send to agent"], "the Agent spine carries Send to agent");
+  assert.equal(await page.$eval('[data-tq-slot="agent"]', (e) => Math.round(e.getBoundingClientRect().width)), 156, "a full spine, as a task's");
+  await page.click('[data-tq-section-tab="agent"] [data-tq-spine-moves] button'); await sleep(1500);
+  assert.equal(await page.$eval("[data-tq-item-sections] [data-tq-sections]", (e) => e.dataset.tqMain), "agent", "the press opened Agent");
+  await page.keyboard.press("Escape"); await sleep(300);
   assert.deepEqual(errors, []);
 });
 

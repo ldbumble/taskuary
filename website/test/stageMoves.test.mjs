@@ -70,3 +70,17 @@ test("an item that lays all its moves on one pane leaves the bar Back and Next, 
   assert.deepEqual(Object.keys(by), ["report"]);
   assert.deepEqual(by.report.map((x) => [x.label, !!x.quiet]), [["Put it on my list", false], ["Send to agent", false], ["Pause this report", true], ["Share", true]]);
 });
+
+// ...SAVE A STAGE MOVE, ON THE SPINE OF ITS OWN SECTION (the owner, 2026-10-31: "why is there no buttons on the agent like send to agent?"):
+// an FYI's Send to agent stands on its Agent; Should be a task and Not ours stay on Came from; a report, with no Agent section, keeps all
+test("an item with an Agent section puts Send to agent on it; the rest stay on the pane it is about", () => {
+  const all = { all: "from", keys: ["from", "agent", "close"] };
+  const list = [v("w:mine", "decide", { label: "Should be a task", stage: "from", laid: all }), v("w:regular_agent", "decide", { label: "Send to agent", laid: all }),
+    v("w:not_ours", "more", { label: "Not ours", laid: all }), v("next", "next", { laid: all })];
+  const { row, by } = splitRow(rowOf({ ref: "", list }), all, list);
+  assert.deepEqual(ids(row), []);
+  assert.deepEqual(by.agent.map((x) => x.label), ["Send to agent"]);
+  assert.deepEqual(by.from.map((x) => x.label), ["Should be a task", "Not ours"]);
+  const rep = { all: "report", keys: ["from", "report", "close"] }, mine = [v("w:mine", "decide", { label: "Put it on my list" }), v("w:regular_agent", "decide", { label: "Send to agent" })];
+  assert.deepEqual(Object.keys(splitRow(rowOf({ ref: "", list: mine }), rep, mine).by), ["report"], "a report has no Agent: all stay on it");
+});

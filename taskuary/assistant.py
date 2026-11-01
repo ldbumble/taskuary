@@ -2072,7 +2072,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 # (snooze: back on its day), and done - handled some other way, which is what the rail's Done writes. Next is the
 # walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
 # ...and a rule question's yes (promote.py): the rule it proposed is made, through the one create path
-VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule', 'accept')   # accept: a workstream card's Add it (2026-11-01)
+VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule', 'accept',   # accept: a workstream card's Add it (2026-11-01)
+         'habit', 'seen')                       # ...and the habits row's own: one habit's Adopt / No / Not right, and the row read (habits.py)
 # WHAT THE OWNER DID WITH AN IDEA, kept where the Advisor reads it (the owner, 2026-10-02: "feedback on assistant ideas even on
 # desktop does it teach it anything? we should have that"). The idea row's status said dismissed or done - and done covered a
 # task made from it and a line merely handled alike - and a dismissed row ages out of ALREADY SAID with the rest. This log is
@@ -2162,7 +2163,7 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     return {'taskId': tid, 'ref': task_ref(tid)}
 
 
-def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, until: str = None) -> dict:
+def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, until: str = None, line: str = None, yes: bool = None) -> dict:
     """One word on one idea. Every word writes the IDEA's own status - the rail's used to write only the rail's,
     and the Advisor went on listing an idea the owner had put down as open (I4, 2026-09-27)."""
     i = store.get_idea(idea_id)
@@ -2171,6 +2172,18 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
     try: a = json.loads(i.get('ActionJson') or '{}')
     except ValueError: a = {}
     out = {'ideaId': idea_id, 'verb': verb}
+    # THE HABITS ROW (habits.py; the owner, 2026-11-01): one row for every habit, each answered on its own line - Adopt / No on one it asks
+    # about, Not right on one it adopted - and the row read when the owner moves on. No task, agent, reminder or rule from it: it is not work
+    if i.get('Kind') == 'habit':
+        from . import habits
+        if verb == 'habit':
+            if not line or yes is None: raise ValueError('say which habit, and yes or no')
+            return out | habits.answer(store, line, bool(yes), actor)
+        if verb == 'seen': return out | habits.seen(store, actor)
+        if verb not in ('done', 'dismiss', 'dismiss_kind'): raise ValueError('a habit is answered on its own line: Adopt, No or Not right')
+        # ...and put down whole (typed, or the phone): the adopted ones seen, the asked ones No on Not ours - never asked again
+        habits.seen(store, actor, 'seen' if verb == 'done' else 'no')
+    elif verb in ('habit', 'seen'): raise ValueError('only the habits row has that')
     if verb == 'snooze':
         # Remind me reads a day the way the task's own picker does ('2 weeks', a date, 'tomorrow')
         from . import remind
@@ -2183,11 +2196,7 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
     if i.get('Kind') == 'workstream':
         from . import wsboot
         if verb in ('accept', 'done', 'dismiss', 'dismiss_kind'): out |= wsboot.answer_card(store, i, verb in ('accept', 'done'), actor)
-    # ...and A HABIT CARD (habits.py): Adopt / Keep it, or No - asked once, never again after No
-    elif i.get('Kind') == 'habit':
-        from . import habits
-        if verb in ('accept', 'done', 'dismiss', 'dismiss_kind'): out |= habits.answer(store, i, verb in ('accept', 'done'), actor)
-    elif verb == 'accept': raise ValueError('only a workstream or habit card is added')
+    elif verb == 'accept': raise ValueError('only a workstream card is added')
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
     if verb == 'rule':
         from . import promote

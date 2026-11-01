@@ -959,6 +959,9 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
     # SLIPPED (spec 2026-10-12): the four answers, whatever row leads the item - Chase, Let it go, They answered elsewhere, Remind me
     if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
+    # THE HABITS ROW (habits.py; the owner, 2026-11-01: "what does keep it/remind me do here? doesn't make much sense"): each habit carries
+    # its own Adopt / No / Not right inside the row, so the row itself is only passed - no task, agent, reminder or Not ours of an idea
+    if item.get('kind') == 'idea' and item.get('idea_kind') == 'habit': verbs = ['next']
     # AN INVITE WAITING ON YOUR ANSWER is answered here - Accept, Decline, Propose a new time, each drafted for your Send - and a
     # thread asking to meet offers Find a time beside Reply (calwrite.py, the owner, 2026-10-20). An email reply is not how an
     # invite is answered, nor is it an agent's or a list's.

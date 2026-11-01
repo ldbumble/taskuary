@@ -632,7 +632,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # what a planted line would ask the assistant to repeat back (origin.py's stranger rules keep the same distance)
     from . import origin as _origin
     outsider = _origin.of_task(store, tid)[0] == 'stranger'
-    owner_bg = '' if outsider else _brief.background(store)
+    from .workstreams import of_task as _ws_of           # ...JOB.md as this task's workstream reads it (2026-11-01)
+    owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None)
     system = (
         (f'{owner_bg}\n\n' if owner_bg else '') +
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "

@@ -447,7 +447,9 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     from .brief import background
     from . import origin
     stranger = origin.of_task(store, tid)[0] == 'stranger'
-    bg = '' if general or stranger else background(store)
+    # ...JOB.md as THIS task's workstream reads it: its own section, never the other hats' (workstreams.job_view, 2026-11-01)
+    from .workstreams import of_task as _ws_of
+    bg = '' if general or stranger else background(store, workstream=_ws_of(store, tid) or None)
     if bg: parts.append('## About the owner (background - whom you work for)\n' + bg.split('\n\n', 1)[1].replace('## ', '### '))
     # ...and the owner's people (orgchart.py): whom to send what to - "whoever owns payroll" is a name here. Never on a stranger's task either
     from . import orgchart

@@ -115,7 +115,7 @@ FIELDS['combine'] = ("combine is the owner's setting for this message's connecti
                      + (_m.group(0) if _m else ''))
 
 
-JOB_CHARS = 2500             # triage's cut of JOB.md; the assistant and the chat read it whole (job_doc)
+JOB_CHARS = 2500             # triage's cut of JOB.md - with workstreams their index and sections lead it (job_doc); the assistant and the chat read it whole (job_doc)
 _JOB_TEMPLATE = re.compile(r'^.*(not generated yet|Write it here).*$', re.M)
 
 
@@ -125,7 +125,9 @@ def job_doc(store, limit: int = None) -> str:
     (the same rule responder.style_doc applies to STYLE.md). Triage, the Assistant report, the chat and the
     morning brief read it; workers do not - the task is a worker's job, and a worker that knows the mission
     starts helping with the mission instead of the ticket."""
-    t = _JOB_TEMPLATE.sub('', re.sub(r'<!--.*?-->', '', store.doc('job') or '', flags=re.S))
+    # ...with workstreams, their index and each one's section FIRST, so the cut never drops a second hat (workstreams.job_brief, 2026-11-01)
+    from .workstreams import job_brief, streams
+    t = _JOB_TEMPLATE.sub('', job_brief(store) if streams(store) else re.sub(r'<!--.*?-->', '', store.doc('job') or '', flags=re.S))
     meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
     t = t.strip() if len(meat) > 40 else ''
     return t[:limit] if limit else t

@@ -50,12 +50,14 @@ BACKGROUND_DOCS = (('soul', 'SOUL.md - who the owner is, their people, systems a
 TRIAGE_ONLY = ('what counts as a task',)
 
 
-def background(store, chars: int = 9_000) -> str:
-    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty."""
+def background(store, chars: int = 9_000, workstream: str = None) -> str:
+    """SOUL.md and JOB.md as one background block, comments stripped and triage's own section dropped. '' when both are empty.
+    `workstream`: the task's - JOB.md keeps that workstream's section and leaves out the others' (workstreams.job_view, 2026-11-01)."""
     import re
+    from .workstreams import job_view
     out = []
     for name, what in BACKGROUND_DOCS:
-        text = re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
+        text = job_view(store, workstream) if name == 'job' and workstream else re.sub(r'<!--.*?-->', '', str(store.doc(name) or ''), flags=re.S)
         keep, skip = [], False
         for line in text.splitlines():
             if re.match(r'^#{1,3} ', line): skip = line.strip('# ').strip().lower() in TRIAGE_ONLY

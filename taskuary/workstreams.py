@@ -250,6 +250,34 @@ def write_job(store, actor: str = 'workstreams'):
     if new != doc: store.save_doc('job', new, actor)
 
 
+# ── WHAT EACH READER GETS (the design's S4: readers get the item's workstream, not the first 600 characters of everything) ─────────────
+_SECTION = re.compile(r'<!-- ws:([a-z0-9-]+):start -->(.*?)<!-- ws:\1:end -->', re.S)
+
+
+def _clean(t: str) -> str: return re.sub(r'\n{3,}', '\n\n', re.sub(r'<!--.*?-->', '', t, flags=re.S)).strip()
+
+
+def job_view(store, keep: str = None) -> str:
+    """JOB.md as an item under workstream `keep` reads it: the index, the owner's own lines, and that workstream's section - the other
+    workstreams' sections left out, since a day-job colleague's norms are noise on a side product's task. `keep` None: all of it."""
+    doc = store.doc('job') or ''
+    if keep is not None: doc = _SECTION.sub(lambda m: m.group(0) if m.group(1) == keep else '', doc)
+    return _clean(doc)
+
+
+def job_brief(store, per: int = 600, limit: int = None) -> str:
+    """JOB.md for a reader that serves every workstream (triage, the memory's reflection): the index and each section, cut to `per`
+    characters, FIRST - so a cut at `limit` never drops a second workstream - and then the rest of the document."""
+    doc = store.doc('job') or ''
+    secs = [(m.group(1), _clean(m.group(2))) for m in _SECTION.finditer(doc)]
+    idx = _clean(doc.split(INDEX_START, 1)[1].split(INDEX_END, 1)[0]) if INDEX_START in doc and INDEX_END in doc else ''
+    rest = _SECTION.sub('', doc)
+    if INDEX_START in rest and INDEX_END in rest: rest = rest.split(INDEX_START, 1)[0] + rest.split(INDEX_END, 1)[1]
+    head = '\n\n'.join([idx] + [s[:per] for _, s in secs if s]) if (idx or secs) else ''
+    out = '\n\n'.join(x for x in (head, _clean(rest)) if x)
+    return out[:limit] if limit else out
+
+
 def menu(store) -> str:
     """The workstreams as triage is shown them: one line each, its slug first - the model names one, or null."""
     return '\n'.join(f"- {w['slug']}: {w['name']}" + (f" - {w['about']}" if w['about'] else '') + (' (personal)' if w['personal'] else '')

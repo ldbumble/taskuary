@@ -414,7 +414,7 @@ def _hold_said(doc: str) -> tuple:
 def _job(store) -> str:
     try:
         from .triage import job_doc
-        return job_doc(store, 600)
+        return job_doc(store, 2000)       # the index and every workstream's section lead it (workstreams.job_brief, 2026-11-01)
     except Exception: return ''
 
 

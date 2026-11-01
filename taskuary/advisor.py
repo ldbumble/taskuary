@@ -496,13 +496,26 @@ def notes_line(store, item, target_kind, target_id) -> str:
     return ('THE OWNER\'S STANDING NOTES AND PAST VERDICTS on this sender or topic:\n' + '\n'.join(got)) if got else ''
 
 
-def owner_line(store) -> str:
-    """The head of SOUL.md and JOB.md: who the owner is and what their job is - the line weighs an ask by whom it serves."""
-    def head(d):
-        t = re.sub(r'<!--.*?-->|_\([^)]*\)_', '', str(store.doc(d) or ''), flags=re.S)       # comments and the template's placeholders
+WS_CHARS = 2000         # the item's own workstream section, whole up to this (the design's S4, 2026-11-01)
+
+
+def owner_line(store, tgt=None) -> str:
+    """The head of SOUL.md and JOB.md: who the owner is and what their job is - the line weighs an ask by whom it serves. On an item under
+    a workstream with a section of its own, JOB.md is that section, whole, under the one-line index of every workstream - not the first
+    600 characters of everything, which never reached a second hat (the 2026-11-01 audit)."""
+    def head(t, n=600):
+        t = re.sub(r'<!--.*?-->|_\([^)]*\)_', '', str(t or ''), flags=re.S)       # comments and the template's placeholders
         t = re.sub(r'\n\s*\n+', '\n', t).strip()
-        return t[:600].rsplit('\n', 1)[0] if len(t) > 600 else t
-    bits = [f"{n} (its opening):\n{h}" for d, n in (('soul', 'SOUL.md'), ('job', 'JOB.md')) if (h := head(d))]
+        return t[:n].rsplit('\n', 1)[0] if len(t) > n else t
+    bits = [f"SOUL.md (its opening):\n{h}"] if (h := head(store.doc('soul'))) else []
+    from . import workstreams
+    ws = _workstream(store, tgt) if tgt else ''
+    sec = workstreams.section(store, ws) if ws else ''
+    if sec:
+        names = [w['name'] for w in workstreams.streams(store)]
+        bits.append(f"JOB.md - the owner's workstreams: {', '.join(names)}. This item is under {workstreams.get(store, ws)['name']}:\n"
+                    + head(sec, WS_CHARS))
+    elif (h := head(store.doc('job'))): bits.append(f"JOB.md (its opening):\n{h}")
     return ('WHO THE OWNER IS:\n' + '\n'.join(bits)) if bits else ''
 
 
@@ -620,7 +633,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
     led += [f"{v['label']}: {measured(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if measured(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
-    try: lines += [playbook_line(store, target_kind, target_id), owner_line(store)]
+    try: lines += [playbook_line(store, target_kind, target_id), owner_line(store, (target_kind, target_id))]
     except Exception as e: logger.debug(f'advisor: no playbook or owner docs for {item.get("key")} - {e}')
     if tier >= 2:                                         # the bigger read, only for the item on the table
         from .counsel import dossier

@@ -36,7 +36,7 @@ def reads_label(slug: str) -> str:
 
 
 TITLE = {'people': 'Your people', 'care': 'What you care about', 'work': 'How you work', 'promises': 'Promises', 'bring': 'What to bring up'}
-BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 2000, 'advisor': 4000}
+BUDGET = {'triage': 1500, 'drafter': 600, 'agents': 3500, 'assistant': 4000, 'advisor': 4000}
 # ...and the section a reader takes FIRST, after the lines about the people on the item: what the owner cares about, except the Advisor's,
 # which is how they work - its 2000 characters filled with what-becomes-a-task lines and How you work never arrived (the Advisor audit,
 # 2026-10-28); a line saying how the owner handles a thing is what a lit button rests on

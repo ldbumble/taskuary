@@ -35,7 +35,8 @@ test("every built page carries the whole rail, and marks itself", () => {
   for (const p of manifest.pages) {
     const html = built[p.slug];
     for (const other of manifest.pages) {
-      assert.ok(html.includes(`>${asHtml(other.title)}</a>`), `${p.slug} does not list ${other.title}`);
+      // ...the rail writes a title's quote as typed ("What's new"); the body escapes it - either is the page listing it
+      assert.ok([asHtml(other.title), asHtml(other.title).replace(/&#39;/g, "'")].some((t) => html.includes(`>${t}</a>`)), `${p.slug} does not list ${other.title}`);
     }
     assert.match(html, /aria-current="page"/, `${p.slug} does not mark itself in the rail`);
   }

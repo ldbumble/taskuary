@@ -263,7 +263,7 @@
       "hint": "still yours - put away with Remind me, or a goal waiting for its next news; each comes back when its time says" },
     { "key": "reports", "word": "Reports", "band": 3, "to_read": true,
       "hint": "a report you set up landed - information, never a task" },
-    { "key": "ideas", "word": "Advisor ideas", "band": null,
+    { "key": "ideas", "word": "Advisor", "band": null,
       "hint": "something the Advisor noticed - {button:mine}, {button:regular_agent}, or {button:not_ours}" },
     { "key": "fyi", "word": "FYI", "band": 4, "to_read": true,
       "hint": "people told you things - read them or don't" }

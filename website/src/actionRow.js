@@ -43,6 +43,11 @@ let table = null, leaving = null;
 export const rowTable = (key) => { if ((key || null) === table) return; table = key || null; draw(); };
 export const leaveRow = (key) => { if ((key || null) === leaving) return; leaving = key || null; draw(); };
 const shows = ({ at }) => !at || ((!table || at === table) && at !== leaving);
+// ...and WHERE THE TABLE'S ITEM LAYS ITS MOVES, said by the item itself (ItemSections, on a desk), not only by its card's verbs: a line said
+// under a report (the demo's "switched off") takes the card's verbs off the bar and carries the same words as its own, and those rode the
+// bar again while the report's strip went empty. Only for the item on the table
+let lay = null;
+export const layTable = (key, laid) => { const was = lay; if (laid) lay = { key, laid }; else if (lay?.key === key) lay = null; if (lay !== was) draw(); };
 function draw() {
   const shown = [...owners].filter(([, o]) => shows(o));
   // one button per id: two mounted copies of a card (each its own owner, see useVerbs) carry the same verbs
@@ -50,7 +55,8 @@ function draw() {
   const seen = new Set(), mine = new Set(shown.map(([o]) => o)), list = shown.flatMap(([o, { verbs: vs, at }]) => vs.map((v) => [o, v, at]))
     .filter(([, v]) => !seen.has(v.id) && seen.add(v.id))
     .map(([o, v, at]) => ({ ...view(v), of: mine.has(ofs.get(v.id)) ? ofs.get(v.id) : o, ...(at ? { at } : {}) }));
-  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}), ...(off ? { off } : {}) }, s = JSON.stringify(next);
+  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}), ...(off ? { off } : {}),
+    ...(lay && table && lay.key === table ? { lay: lay.laid } : {}) }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
@@ -436,12 +442,13 @@ const FROM_STAGE = new Set(["nat", "remind"]);
 // ...a verb may name its pane itself (`stage`): an FYI's Should be a task rides its Came from, where a task's Not a task does
 export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
   return v?.stage || (CLOSE_STAGE.has(k) ? "close" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""); };
-const NONE = [];
+const NONE = [], ITEM_OWN = new Set(["mine"]);
 let spineVerbs = {}, spineSig = "";
 const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => spineSubs.delete(f); }, spineDraw = () => spineSubs.forEach((f) => f());
 export const laidOf = (list) => (list || []).find((v) => v.laid)?.laid || null;
 export const putSpineVerbs = (by) => { const s = JSON.stringify(by); if (s === spineSig) return; spineSig = s; spineVerbs = by; spineDraw(); };
 export const useSpineVerbs = (sec) => useSyncExternalStore(spineSub, () => spineVerbs[sec] || NONE);
+export const useSpineAll = () => useSyncExternalStore(spineSub, () => spineVerbs);
 // ...the row: Back and Next alone; each pane's stage moves in the move pill's order (`spine`: the word a folded pane shows - Draft reply
 // where nothing is drafted yet); the title bar's the task's own, Mark done first; a live agent's only its Stop and save, on its strip
 export function splitRow(row, on, list = []) {
@@ -451,6 +458,16 @@ export function splitRow(row, on, list = []) {
   // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar and leaves it the rest
   if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
     return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }
+  // ...and one laid on the desk in a task's three sections (ItemSections: a report, a dashboard, an FYI) puts EVERY move on the pane it is about,
+  // as a task's ride its panes (the owner, 2026-10-31: "i thought we moved all buttons to the agent canvas?? report should be white with buttons
+  // on it"): the move pill's first, then what was the Change pill and Share, quiet as a task's own moves are (`quiet`: PaneMoves, SpineMoves)
+  // ...SAVE A MOVE THAT TAKES IT A STAGE ON, which stands on the spine of its own section where the item has one (the owner, 2026-10-31, an
+  // FYI with Agent folded: "why is there no buttons on the agent like send to agent?"): Send to agent on its Agent, as on a task's. Put it on
+  // my list reads as an agent's move by its id (TYPE_OF mine) but is the item's own: it stays
+  if (on.all) { const { move, change, share } = pillsOf(row), by = { [on.all]: [] };
+    for (const v of move) { const k = stageOf(v); (by[k && k !== on.all && (on.keys || []).includes(k) && !ITEM_OWN.has(String(v.id).split(":").pop()) ? k : on.all] ||= []).push(v); }
+    by[on.all].push(...[...change, ...share].map((v) => ({ ...v, quiet: true })));
+    return { row: nav, by }; }
   const by = {};
   const { move, change } = pillsOf(row);
   for (const v of [...move, ...change]) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }

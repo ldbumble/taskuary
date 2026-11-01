@@ -56,7 +56,7 @@ import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
-import ItemSections, { ItemPart } from "./ItemSections.jsx";
+import ItemSections, { ItemLay, ItemPart } from "./ItemSections.jsx";
 import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS, reportSchedule } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's three sections, by name (ItemSections)
@@ -388,13 +388,16 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   const rowed = !!nav.row;
   // The first three of the card's own words stand in the row (a report's Put it on my list, Send to agent); the rest - and Mark done and
   // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
-  const staged = words.find((a) => stages[a.verb]), laid = staged ? { only: stages[staged.verb] } : null;
+  // ...and in a task's three sections on a desk, EVERY one rides the pane the item is about (ItemLay: actionRow.splitRow `all`) - the bar keeps
+  // Back and Next, as under a task (the owner, 2026-10-31)
+  const lay = React.useContext(ItemLay), staged = words.find((a) => stages[a.verb]);
+  const laid = lay || (staged ? { only: stages[staged.verb] } : null);
   const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
     ...(stages[a.verb] ? { stage: stages[a.verb] } : {}), ...(laid ? { laid } : {}), ...(tuck.includes(a.verb) ? { tucked: true } : {}), run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
     // a move that IS the way on - a batch's "All read, next" (`moves`) - is the row's Next itself (the design, phase A: the batch verb in
     // the Next group), so the batch shows one way on, and the Advisor's lit Next is it
-    ...(nav.onNext && !moves ? [{ id: "next", group: "next", label: btn("next"), disabled: nav.busy, run: () => nav.onNext(), title: btnHint("next") }] : []),
+    ...(nav.onNext && !moves ? [{ id: "next", group: "next", label: btn("next"), disabled: nav.busy, run: () => nav.onNext(), title: btnHint("next"), ...(laid ? { laid } : {}) }] : []),
     // a Foot's move acts on the WHOLE item on the table - a batch's "All read, next", a report's, a message's - so it rides the row with
     // the task's verbs (the owner, 2026-10-06: "all read next should be on bottom no as it relates to the whole lot?"); what acts on a
     // PIECE of it (a draft under a task, YourMove's send) stays on the piece. Mark done is never behind More.
@@ -840,8 +843,10 @@ const secs = (ms) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10000
 const Facts = ({ rows }) => <div className="tq-card-facts">{rows.filter(([, v]) => v).map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>;
 // WHAT HAPPENS NEXT, said in a Close out with nothing to send: the moves the row under the chat already holds for this item, each with what
 // it does - words, never second buttons (the owner, 2026-10-28: no new buttons or moves - the same dock row)
-export function RowMoves({ close = null, lead = "What happens next is on the row below:", also = [], next = { label: btn("next"), title: btnHint("next") } }) {
-  const nav = React.useContext(CardNav);
+// ...`on`: where an item in a task's three sections lays them on a desk (ItemLay) - the row below keeps Next
+export function RowMoves({ close = null, lead = "What happens next is on the row below:", also = [], next = { label: btn("next"), title: btnHint("next") }, on = "" }) {
+  const nav = React.useContext(CardNav), lay = React.useContext(ItemLay);
+  if (lay && on) lead = `What happens next is ${on}, and ${next.label} on the row below:`;
   const moves = [...also, ...(nav.also || []), ...(close?.tid ? [{ verb: "close", label: btn("close"), title: btnHint("close") }] : []),
     { verb: "next", ...next }].filter((m, i, all) => m.label && all.findIndex((x) => x.label === m.label) === i);
   return (
@@ -874,7 +879,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
   const src = useReportSource(table != null ? card.source_id : null);
   if (table != null) {
     const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
-    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="report"
+    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="report" lays
       title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{rest}</span></>}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
       sections={[
@@ -891,9 +896,9 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
             {card.mid && <FullText mid={card.mid} revision={card.presentation_revision} report={{ name }} />}
             {share}
           </ItemPart> },
-        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the row"],
+        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the report"],
           body: <ItemPart data-tq-report-close="">
-            <RowMoves close={card} />
+            <RowMoves close={card} on="at the top of the report" />
             <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
               then={card.bad ? "Running it again runs the report in the background - its result goes where the report sends it, and if it fails the bell says why." : null}
               where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
@@ -944,7 +949,7 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
   if (table != null) {
     const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
     const edit = card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button></div>;
-    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="report"
+    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="report" lays
       title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</span></>}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
       sections={[
@@ -957,8 +962,8 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
           lines: [card.title], foot: "✓ Landed",
           // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
           body: <div data-tq-dash-body="">{drawn}{share}</div> },
-        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the row"],
-          body: <ItemPart data-tq-dash-close=""><RowMoves close={card} /><Foot close={card} onDone={onDone} /></ItemPart> }]} />;
+        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the dashboard"],
+          body: <ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart> }]} />;
   }
   return (
     <CardShell card={card} kicker="dashboard" title={card.title}
@@ -972,7 +977,7 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
 }
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
-export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
+export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, table = null }) {
   const a = card.action || {};
   // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
@@ -996,9 +1001,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
     : a.source?.label ? <span>{a.source.label}</span> : null;
   const facts = [["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", why && <>{from}{from && ": "}{why}</>]].filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";
-  return (
-    <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
-      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
+  const foot = (
       <Foot
         verb={card.idea_kind === "connect" && a.connector_type ? (
           <Button size="small" variant="contained" disableElevation sx={primary}
@@ -1013,7 +1016,29 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
           : rule ? <><b>Make it a rule</b> adds it under Settings, Rules - switch it off there to undo it.</>
           // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
           : null}
-        where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
+        where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />);
+  // ON THE TABLE, IN THE THREE SECTIONS EVERYTHING ELSE COMES IN (ItemSections; the owner, 2026-10-31: "it looks pretty dumb this idea ... it
+  // should go in the coming from tab like fyi's"): what the Advisor noticed opens in Came from - the idea, its suggestion and the mail it is
+  // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
+  if (table != null) return (
+    <ItemSections kind="idea" itemKey={card.key} label="Advisor" height={table} about="from" lays title={card.title}
+      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
+      sections={[
+        { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
+          body: <><ItemPart data-tq-idea-from="">
+            <div className="tq-card-lead">{card.title}</div>
+            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason */}
+            <Facts rows={[["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>]]} />
+          </ItemPart><CardErr err={err} /></> },
+        { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
+          body: <ItemPart data-tq-idea-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
+            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
+        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on its panes"],
+          body: <ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart> }]} />);
+  return (
+    <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
+      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
+      {foot}
       <CardErr err={err} />
     </CardShell>
   );
@@ -1437,7 +1462,7 @@ export function FyiMessage({ item, onHead = null, open: held = null, children })
 function FyiSections({ card, table, items, msgs, foot, err, next }) {
   const nav = React.useContext(CardNav), n = items.length, batch = card.kind === "fyis";
   const handOff = !batch && (nav.also || []).some((a) => /agent|coder/.test(a.verb || ""));
-  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from"
+  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch}
     title={batch ? `${plural(n, "message")} - nothing to decide` : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
     sections={[
@@ -1452,12 +1477,12 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
           <div className="tq-thr-h"><b>No agent yet</b></div>
           <div className="tq-thr-did muted">Nobody is working on {n === 1 ? "this" : "these"}.</div>
           {(batch || handOff) && <div className="tq-item-note">{batch ? `To hand one to an agent, press its line under Came from - ${btn("regular_agent")} is among its moves.`
-            : `${btn("regular_agent")} on the row hands it to one - it gets the message and its attachments.`}</div>}
+            : `${btn("regular_agent")} hands it to one - it gets the message and its attachments.`}</div>}
         </ItemPart> },
       { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
         body: <ItemPart data-tq-fyi-close="">
           <div className="tq-card-note">Nothing to decide - {n === 1 ? "it only wants" : "they only want"} you to know.</div>
-          <RowMoves next={next} />
+          <RowMoves next={next} on={batch ? "" : "on its panes"} />
           {foot}
         </ItemPart> }]} />;
 }

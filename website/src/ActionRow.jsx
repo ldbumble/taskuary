@@ -101,7 +101,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
   // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow)
-  const { row, by: spineBy } = splitRow(rowOf(verbs, pick), laidOf(verbs.list), verbs.list);
+  const { row, by: spineBy } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null, verbs.list);
   useEffect(() => { putSpineVerbs(spineBy); });
   const { ref, decide, agent, more, next, back, why } = row;
   const hosted = useHosted();

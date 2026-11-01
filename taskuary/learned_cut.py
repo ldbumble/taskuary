@@ -211,6 +211,12 @@ def for_reader(store, reader: str, about: dict = None, budget: int = None, doc: 
     # it reaches the readers of the mail it is about, by what it is about (ingest.applicable_notes) - hundreds of them, about everyone
     # else, would be the whole budget
     ls = [x for x in ls if rank(x[0], x[1], about) != 5]
+    # ...and a line learned under ANOTHER workstream is not this item's (the design's S4/S5, 2026-11-01): a habit with the side product's
+    # testers is noise on a day-job ask. Lines under no workstream, and the owner's own, are everyone's
+    if (ws := (about or {}).get('workstream')):
+        try: other = {r['Key'] for r in store._rows("SELECT Key FROM learned_line WHERE IFNULL(Workstream,'') NOT IN ('', ?)", (ws,))}
+        except Exception: other = set()
+        ls = [x for x in ls if x[1] not in other]
     keep, over = cut(ls, budget or BUDGET[reader], about, FIRST.get(reader, 'care'))
     at = {raw: i for i, raw in enumerate(keep)}
     try: _note_over(store, reader, over)

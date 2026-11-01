@@ -309,7 +309,9 @@ def _learned(store, item: dict = None) -> str:
         m = store.get_message(int(item['mid'])) if item.get('mid') else None
         name = ' '.join(str((m or {}).get('FromName') or '').split())
         about = {'sender': w.get('sender'), 'domain': w.get('domain'), 'scope': w.get('scope'), 'people': sorted(on),
-                 'sender_name': name if len(name.split()) >= 2 else '', 'topic': str(item.get('title') or '')}
+                 'sender_name': name if len(name.split()) >= 2 else '', 'topic': str(item.get('title') or ''),
+                 # ...and its workstream: lines learned under another hat stay out (learned_cut.for_reader, 2026-11-01)
+                 'workstream': _workstream(store, ('task', item['tid'])) if item.get('tid') else ''}
     return learned_cut.for_reader(store, 'advisor', about, target=(item or {}).get('key') or '', cite=True)
 
 

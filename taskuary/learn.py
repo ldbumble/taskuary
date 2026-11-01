@@ -29,7 +29,7 @@ a system prompt is a rule. Only promoted sections travel (injectable()) - and ru
 effect is to HIDE mail never promote themselves at all: they wait in 'Proposed' for the
 owner, because a wrong ignore-rule silences the very corrections that would revoke it.
 """
-import re
+import json, re
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
@@ -140,7 +140,7 @@ def settle(store, old_doc: str, doc: str, today: str = None) -> str:
     from . import learnedgraph as lg
     today, log = today or _today(), lg.reflect_log(store)
     was = {l['key']: l for l in lg.lines(old_doc)}
-    out, kept, doc = [], {}, _caps(doc, log)
+    out, kept, doc = [], {}, _caps(doc, log, store)
     for raw, l in lg.walk(doc):
         if not l: out.append(raw); continue
         prev = kept.get(l['key'])
@@ -229,16 +229,79 @@ def _gates(doc: str, verdicts=frozenset()) -> str:
                               and not any(e.startswith(SORTING) or e in verdicts for e in l['ev'])])
 
 
-def _caps(doc: str, log=None) -> str:
+def _caps(doc: str, log=None, store=None) -> str:
     """A section holds at most CAPS (else CAP) machine lines in use; the weakest past it wait in Watching - a profile that only grows
-    is cut by every reader's budget instead, and silently (the design, 3.3). The owner's own lines are never counted or moved."""
+    is cut by every reader's budget instead, and silently (the design, 3.3). The owner's own lines are never counted or moved.
+    PER WORKSTREAM (the design's S5, 2026-11-01): with a store, the cap holds for each hat's lines apart - one busy workstream cannot
+    push the others' lines out."""
     from . import learnedgraph as lg
+    of = (lambda l: '') if store is None else (lambda l: _ws_of_line(store, l))
     by = {}
     for raw, l in lg.walk(doc):
         if l and l['status'] == 'live' and (slug := next((k for k, v in SECTIONS.items() if v == f"## {l['section']}"), None)):
-            by.setdefault(slug, []).append((lg.effective(l, log), l['seen'], raw))
-    bad = [raw for slug, ls in by.items() for *_, raw in sorted(ls, reverse=True)[CAPS.get(slug, CAP):]]
+            by.setdefault((slug, of(l)), []).append((lg.effective(l, log), l['seen'], raw))
+    bad = [raw for (slug, _ws), ls in by.items() for *_, raw in sorted(ls, reverse=True)[CAPS.get(slug, CAP):]]
     return _to_watching(doc, bad)
+
+
+def _ws_of_line(store, l: dict) -> str:
+    try:
+        from .workstreams import of_evidence
+        return of_evidence(store, l['ev'])
+    except Exception: return ''
+
+
+PROMISE_DAYS, PROMISE_GRACE = 30, 14   # a promise from the owner's sent words this recent is kept as a line until kept, or this long past due
+
+
+def promise_lines(store, doc: str, today: str = None) -> str:
+    """THE PROMISES SECTION, FROM THE OWNER'S OWN SENT WORDS (the 2026-11-01 audit: it stayed empty while promise ideas fired): each open
+    promise the sent-words judge found (sent_verdict) is a line under Promises - "You told Ray Colton you'd send the accruals file by
+    Thursday" - until it is kept (DeliveredBy), or PROMISE_GRACE days past its due day, when it leaves: an unkept promise is then the
+    Advisor's to raise, not the memory's to hold. Nothing personal; a line the owner put down does not come back (_buried)."""
+    from . import learnedgraph as lg
+    from .workstreams import is_personal
+    today = today or _today()
+    since = (datetime.fromisoformat(today[:10]) - timedelta(days=PROMISE_DAYS)).strftime('%Y-%m-%d')
+    late = (datetime.fromisoformat(today[:10]) - timedelta(days=PROMISE_GRACE)).strftime('%Y-%m-%d')
+    rows = store._rows("SELECT v.*, m.SentAt, m.RecipientsJson FROM sent_verdict v JOIN message m ON m.MessageId=v.MessageId "
+                       "WHERE v.Promise=1 AND m.SentAt>=? ORDER BY m.SentAt", (since,))
+    for v in rows:
+        key, ev = f"promise sv{v['MessageId']}", [f"sv{v['MessageId']}"]
+        hit = next(((raw, l) for raw, l in lg.walk(doc) if l and l['key'] == key), None)
+        done = bool(v.get('DeliveredBy')) or (v.get('Due') and str(v['Due'])[:10] < late) or is_personal(store, mid=v['MessageId'])
+        if done:
+            if hit: doc = doc.replace(hit[0] + '\n', '', 1).replace(hit[0], '', 1)
+            continue
+        if hit or _buried(store, ev) or store._one("SELECT 1 x FROM learned_line WHERE Key=? AND Status IN ('wrong','forgotten','closed')", (key,)): continue
+        try: to = (json.loads(v.get('RecipientsJson') or '{}') or {})
+        except ValueError: to = {}
+        to = to.get('to') if isinstance(to, dict) else to
+        who = str((to or [''])[0] if to else '').strip()
+        who = (who.get('email') if isinstance(who, dict) else who) or 'them'
+        text = f"You told {who} you'd {' '.join(str(v.get('What') or 'do it').split())[:160]}" + (f" by {v['Due']}" if v.get('Due') else '')
+        doc = _under(doc, PROMISES, lg.fmt({'key': key, 'text': text, 'ev': ev, 'score': 4, 'seen': today, 'status': 'live'}))
+    return doc
+
+
+STALE_DAYS = 90         # a machine line in use whose habit was last seen this long ago is closed, not kept (the design's S5, 2026-11-01)
+
+
+def expire(store, doc: str, today: str = None) -> str:
+    """THE MEMORY STAYS CURRENT (the 2026-11-01 audit: a profile only ever grew): a machine line in use, not the owner's own, whose `seen`
+    is older than STALE_DAYS is CLOSED - its row keeps its words with a ValidTo date and a history entry, it leaves the document, and a
+    machine write cannot bring it back (learnedlines.guard). Its evidence growing again writes it anew."""
+    from . import learnedgraph as lg
+    today = today or _today()
+    cut = (datetime.fromisoformat(today[:10]) - timedelta(days=STALE_DAYS)).strftime('%Y-%m-%d')
+    for raw, l in list(lg.walk(doc)):
+        if not l or l['status'] != 'live' or not re.match(r'^\d{4}-\d{2}-\d{2}', l['seen'] or '') or l['seen'][:10] >= cut: continue
+        doc = doc.replace(raw + '\n', '', 1).replace(raw, '', 1)
+        r = store._one('SELECT * FROM learned_line WHERE Key=?', (l['key'],))
+        if r and r.get('Status') in ('wrong', 'forgotten', 'closed', 'retired'): continue
+        if r: store._exec("UPDATE learned_line SET Status='closed', ValidTo=?, InDoc=0, UpdatedAt=? WHERE Key=?", (today, today, l['key']))
+        store.add_learned_event(l['key'], l['text'], 'closed', int(l['score'] or 0), ', '.join(l['ev']), 'expired', 'reflect')
+    return doc
 
 
 def injectable(text: str) -> str:
@@ -466,7 +529,7 @@ def reflect(store, llm=None) -> bool:
                               f'{sum(new.count(m) == 1 for m in markers)}/4 markers')
     # ...and every section is still there: a rewrite that lost "What you care about" lost everything triage reads
     if lost := [h for h in SECTIONS.values() if h in doc and h not in new]: return _failed(store, f'the rewrite dropped {", ".join(lost)}')
-    new = answer_lines(store, put_off_lines(store, _restore(new, held)))
+    new = expire(store, promise_lines(store, answer_lines(store, put_off_lines(store, _restore(new, held)))))      # ...promises from sent words, and what went stale leaves (S5)
     from . import learnedgraph
     # this reflection is itself an opportunity: it read the window, so every line it did not
     # touch has just gone one tick quieter. Recorded BEFORE settle, which measures against it.
@@ -478,6 +541,10 @@ def reflect(store, llm=None) -> bool:
     learnedgraph.record(store, new, settled, 'decay')          # and what the clock did to the ones it left alone
     voice_out(store)                               # what it learned about how the owner writes goes where the drafter reads it
     auto_adopt(store)                              # what the owner already said does not wait for a click
+    try:                                           # ...and each line says which workstream it was learned under (workstreams.tag_lines)
+        from .workstreams import tag_lines
+        tag_lines(store)
+    except Exception as e: logger.warning(f'learned lines not placed in workstreams: {e}')
     store.set_setting('learn_pending', '0', 'reflect')
     store.set_setting('learn_reflect_failed', '', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')

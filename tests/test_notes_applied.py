@@ -11,7 +11,7 @@ from tests.memlines import note as put_note
 
 def _store():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
     put_note(s, {'Scope': 'subject', 'ScopeKey': 'payworth refund request', 'Note': 'Payworth refund requests are for the AP team.',
                  'Source': 'verdict', 'Active': 1, 'CreatedBy': 'test'})
     put_note(s, {'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'Gail asking about the offsite is never a task.',
@@ -40,7 +40,7 @@ def test_triage_names_the_notes_it_applied_by_their_ids_and_the_verdict_keeps_th
 
 def test_with_no_notes_shown_there_is_no_notes_applied():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
     seen = {}
     def llm(system, user, **kw):
         seen['want'] = kw.get('want')

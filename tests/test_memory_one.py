@@ -212,16 +212,16 @@ def test_the_lessons_are_the_reflections_evidence_and_the_digests_window():
 
 
 def test_learning_has_no_off_switch(tmp_path):
-    """The owner, 2026-10-27: "we should always learn" - no setting, no toggle, and an old learn_enabled=0 is dropped at start."""
+    """The owner, 2026-10-27: "we should always learn" - no setting and no toggle; and 2026-11-01: Pause learning is dropped, so the
+    startup pass that deleted an old learn_enabled is gone too - nothing reads one, and a verdict teaches whatever an old install said."""
     import json
     from pathlib import Path
     from taskuary.store import SQLiteStore
     root = Path(server.__file__).parent
     for f in ('settings_schema.json', 'settings_defaults.json'):
         assert 'learn_enabled' not in json.loads((root / f).read_text(encoding='utf-8')), f
-    db = str(tmp_path / 't.db')
-    s = SQLiteStore(db); s.set_setting('learn_enabled', '0', 'owner')
-    assert SQLiteStore(db).get_setting('learn_enabled') is None, 'an old off switch is dropped'
+    src = '\n'.join(p.read_text(encoding='utf-8') for p in root.glob('*.py'))
+    assert 'learn_enabled' not in src, 'no code reads, writes or deletes an off switch'
     # ...and a verdict teaches whatever an old install had said
     s = MemoryStore(); s.set_setting('learn_enabled', '0', 'owner')
     assert memorylines.teach(s, 'not_ours', 'msg1', 'Subject: Payroll run', llm=teacher('Payroll runs are not yours', only_this=False))

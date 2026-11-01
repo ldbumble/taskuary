@@ -477,7 +477,7 @@ def build(store, tid: int, msgs: list = None, repo: str = None, general: bool = 
     # PROGRESSIVE DISCLOSURE (the owner, 2026-10-27: "agents can look at the memory LEARNED.md if they need it, same as the hub or anything
     # else"): the brief carries only the few lines about the people on this very task, and says where the rest is - the owner_memory tool,
     # `taskuary --memory` - instead of dumping every section into every start prompt
-    lrn = '' if stranger else learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo},
+    lrn = '' if stranger else learned_cut.for_reader(store, 'agents', {'sender': who, 'domain': who.rsplit('@', 1)[-1] if '@' in who else '', 'repo': repo, 'workstream': _ws_of(store, tid)},
                                                      target=f'task:{tid}', people=task_people - {''}, sections=('people',), budget=AGENT_PEOPLE)
     # ...and only when there is something in it: a fresh LEARNED.md is placeholders, and a pointer at nothing is not context
     doc = '' if stranger else store.doc('learned') or ''

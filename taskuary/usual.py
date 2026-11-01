@@ -135,11 +135,17 @@ def late_reply(store, m: dict, now=None) -> dict | None:
 def answer_habits(store, now=None) -> list:
     """[{who, name, minutes, n, evidence}] - each sender whose last answers say how soon the owner answers them (reply_lag, ANSWERS of them
     at least): THE COUNT a How you work line is written or confirmed from (learn.answer_lines). It sets no usual by itself."""
-    rows = store._rows("SELECT lower(FromEmail) AS w, MAX(FromName) AS n FROM message WHERE IFNULL(Direction,'in')<>'out' AND IFNULL(FromEmail,'')<>'' "
+    # ...WHO IS A PERSON (the 2026-11-01 audit: a mail-system relay stood among "Your people"): a sender triage classed automated or bulk
+    # more often than a person is a system, never one of the owner's people - triage's own reading, no address pattern; and nobody personal
+    rows = store._rows("SELECT lower(FromEmail) AS w, MAX(FromName) AS n, SUM(IFNULL(SenderClass,'person')='person') AS p, "
+                       "SUM(SenderClass IN ('automated','bulk')) AS a FROM message WHERE IFNULL(Direction,'in')<>'out' AND IFNULL(FromEmail,'')<>'' "
                        "AND Status NOT IN ('context','skipped','history') AND SentAt>=? GROUP BY lower(FromEmail)", (_ago(LOOK_DAYS, now),))
     mine, out = _mine(store), []
+    from .workstreams import personal, streams, by_signals
+    ps, xs = personal(store), streams(store)
     for r in rows:
-        if r['w'] in mine or '@' not in r['w']: continue
+        if r['w'] in mine or '@' not in r['w'] or (r.get('a') or 0) > (r.get('p') or 0): continue
+        if ps and by_signals(xs, {'FromEmail': r['w']})[0] in ps: continue
         u = reply_lag(store, r['w'], now)
         if u['n'] >= ANSWERS: out.append({'who': r['w'], 'name': ' '.join(str(r.get('n') or '').split()), 'minutes': u['minutes'], 'n': u['n'], 'evidence': u['evidence']})
     return out

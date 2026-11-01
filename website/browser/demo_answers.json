@@ -4,5 +4,7 @@
   "done": "CALL: {\"kind\": \"close\", \"params\": {}}",
   "open TQ-0001": "Here: [TQ-0001](#task=1).",
   "open TQ-0004": "Here: [TQ-0004](#task=4).",
-  "open TQ-0011": "Here: [TQ-0011](#task=11)."
+  "open TQ-0011": "Here: [TQ-0011](#task=11).",
+  "I wish I could sort the rail by date": "CALL: {\"kind\": \"issue.draft\", \"params\": {\"kind\": \"feature\", \"trying\": \"see what waits on me in order\", \"happened\": \"a way to sort the rail by date\"}}",
+  "that's a bug - the export button did nothing": "CALL: {\"kind\": \"issue.draft\", \"params\": {\"kind\": \"bug\", \"trying\": \"export the board\", \"happened\": \"the export button did nothing\"}}"
 }

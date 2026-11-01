@@ -43,6 +43,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/advisor-raised',
         '/api/fixture/task/long-chat',
         '/api/fixture/task/workstreams',
+        '/api/fixture/advisor/report-idea',
         '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
         '/api/fixture/day/away',
     })
@@ -229,6 +230,23 @@ def install_processing_changes(app, store):
         tid = json.loads(store.get_idea(i['IdeaId'])['ActionJson'] or '{}').get('tid')
         if not tid: raise HTTPException(409, 'the idea opened no task')
         return {'taskId': tid, 'mails': [first, again]}
+
+    @app.post('/api/fixture/advisor/report-idea')
+    def advisor_report_idea(body: dict):
+        """Three of Alex's agent runs ending on one error, counted by the Advisor's own detector (reportideas.ideas) and raised as its
+        "Report this?" line - the owner, 2026-11-01: "yes the advisor can suggest fixes/features"."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import reportideas
+        now = datetime.now()
+        for i in range(3):
+            tid = store.create_task({'Title': f'Reconcile the vendor batch {i + 1}', 'Kind': 'general', 'Status': 'open'}, 'owner')
+            rid = store.start_run(tid, 'coding', 'reconcile it', 'owner')
+            store._exec("UPDATE run SET Status='error', LastError=?, FinishedAt=? WHERE RunId=?",
+                        (f"KeyError: 'session' in the run loop (attempt {i + 1})", (now - timedelta(hours=i + 1)).isoformat(' ', 'seconds'), rid))
+        lines = [x for x in reportideas.ideas(store, now) if x['kind'] == 'report']
+        if not lines: raise HTTPException(409, 'the detector raised nothing')
+        rows = [store.upsert_idea(x, now.isoformat(' ', 'seconds')) for x in lines]
+        return {'ideas': [r['IdeaId'] for r in rows], 'text': lines[0]['text']}
 
     @app.post('/api/fixture/task/workstreams')
     def workstreams_task(body: dict):

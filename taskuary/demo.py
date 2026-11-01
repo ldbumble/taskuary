@@ -85,6 +85,9 @@ ALLOWED_WRITES = (
     # ...and Remove - not a task's Undo (recentlydeleted.restore): only what a Remove here kept can come back, and the demo's only
     # Remove that is not refused is that one - a task, put back in the demo's own database
     r'^/api/deleted/\d+/restore$',
+    # ...and the Report popup's draft: the demo's invented world, scrubbed and shown - it writes nothing, and only the visitor's own Submit on
+    # GitHub would file it. Opening the page for the desktop window (/api/open-url) stays refused: the demo opens nothing on the host
+    r'^/api/bug-report/draft$',
 )
 
 # What a confirmed proposal may run here: each writes the demo's own database and nothing else. Start (dispatch.prepare,
@@ -383,6 +386,10 @@ def brain(seed: int = 0, store=None):
         text = str(user or '')
         if _field(text, VERBS_OFFERED): return _advice(text)
         if str(system or '').startswith('You ARE '): return _draft(text)       # responder.SYSTEM: the owner's own reply
+        # ...a report asked for (issue.draft): the tool's own words say where its button is - the canned lines are about the list
+        if 'You looked up issue.draft and it says:' in text:
+            return ('That is drafted - the button under this opens it, with names and mail taken out, for you to read and submit on GitHub.'
+                    if 'Drafted.' in text else "I can't draft that one here.")
         if 'JSON' in str(system or '') or 'intent' in str(system or '').lower():
             return json.dumps({'intent': 'fyi', 'why': 'the demo files everything it is not sure about'})
         # what the person actually typed, out of a prompt that also carries the task, the

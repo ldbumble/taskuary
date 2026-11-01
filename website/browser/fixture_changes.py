@@ -40,6 +40,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/matrix',
         '/api/fixture/task/advisor-raised',
         '/api/fixture/task/long-chat',
+        '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
     })
 
     def fixture_refuse(method, path):
@@ -459,6 +460,56 @@ def install_processing_changes(app, store):
             return real(st, *a, **k)
         concierge.chips_for = chips_while_a_row_arrives
         return {'armed': True}
+
+    # THE WALK TABLE'S WORLD (tests/walkworld.py): the rows the Python runner walks, laid out on this demo, and the moves the table makes
+    # somewhere other than the desk - an arrival, a close elsewhere, an agent closing its own task, a row read, the phone - so both runners
+    # walk one world
+    import sys
+    from pathlib import Path
+    tests_dir = str(Path(__file__).resolve().parents[2] / 'tests')
+    if tests_dir not in sys.path: sys.path.insert(0, tests_dir)
+    import walkworld
+    world = {}
+
+    def walk_keys():
+        from taskuary import funnel, railwalk
+        funnel.invalidate()
+        rows, peek = walkworld.rows(store), railwalk.peek(store)
+        return {'keys': {sym: walkworld.key_of(store, world, sym, rows) for sym in world},
+                'on': railwalk.on(store), 'walk': {k: v for k, v in peek.items() if k != 'below'}, 'below': peek.get('below')}
+
+    @app.post('/api/fixture/walk/world')
+    def walk_world(body: dict):
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import funnel, railwalk
+        world.clear(); world.update(walkworld.build(store))
+        railwalk.reset(store); funnel.invalidate()
+        return walk_keys()
+
+    @app.post('/api/fixture/walk/do')
+    def walk_do(body: dict):
+        verb, sym = body.get('verb'), body.get('sym')
+        if verb not in ('arrive', 'close-elsewhere', 'agent-closes', 'read', 'phone start', 'phone next') \
+                or (sym is not None and not re.fullmatch(r'[A-Z]\d', str(sym))):
+            raise HTTPException(422, 'a table verb and a symbol')
+        from taskuary import concierge, funnel, railwalk, remote_assistant
+        if verb == 'arrive': walkworld.arrive(store, world, sym)
+        elif verb == 'close-elsewhere': walkworld.close_elsewhere(store, world, sym)
+        elif verb == 'agent-closes': walkworld.agent_closes(store, world, sym)
+        elif verb == 'read':                          # ...a row the demo's own passes took off already is read already
+            key = walkworld.key_of(store, world, sym)
+            if key: funnel.settle(store, key, 'surfaced', 'owner', read=True); walkworld.reconcile(store)
+        elif verb == 'phone start': remote_assistant.walk(store, 'owner', opener=False)
+        else:
+            on = railwalk.on(store)
+            with concierge.delivering(concierge.PHONE): remote_assistant.run_act(store, {'t': 'next'}, {'key': on} if on else None, 'owner')
+        if verb.startswith('phone'):                  # ...and the desk hears of it as it hears a phone turn end (remote_assistant.respond)
+            from taskuary import live
+            live.emit(live.CHAT, thinking=False, channel='telegram')
+        return walk_keys()
+
+    @app.post('/api/fixture/walk/keys')
+    def walk_keys_now(body: dict): return walk_keys()
 
     @app.post('/api/fixture/task/closed-elsewhere')
     def closed_elsewhere(body: dict):

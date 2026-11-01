@@ -160,7 +160,6 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(page, /<StageMode/);
   const view = read("AssistantView.jsx");
   assert.match(view, /\/api\/funnel\/pile/);
-  assert.match(view, /\/api\/concierge\/next/);
   assert.match(view, /All done/);
   assert.match(view, /!pile \? \(/);                  // loading is not a false empty Timeline
   assert.match(view, /Loading timeline/);
@@ -210,8 +209,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // superseded response cannot reconcile a newer Current selected while the request was pending.
   assert.match(pileRequest, /requestedCurrentKey \? \{ current: requestedCurrentKey \}/);
   assert.doesNotMatch(pileRequest, /\b(cat|pick|channel|source)\b/);
-  assert.match(view, /key: body\.key, only: body\.only, include_surfaced: body\.include_surfaced, exclude: body\.exclude,/);
-  assert.match(view, /selection_revision: body\.selection_revision, expected_next_key: body\.expected_next_key, expected_next_members: body\.expected_next_members/);
+  assert.match(view, /key: body\.key \|\| null, from_key: body\.from_key \|\| null, press: body\.press \|\| null,/);
+  assert.doesNotMatch(view, /selection_revision|expected_next_key/);   // no captured pick: the press sends the row on screen (railwalk)
   assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next
   assert.doesNotMatch(view, /i\.surfaced && !i\.current \? "shown"/);                              // unread never looks processed
   assert.match(view, /stage=\{chat\}/);   // the stage is the conversation, whatever was clicked

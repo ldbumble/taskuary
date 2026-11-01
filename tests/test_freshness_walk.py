@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 from fastapi.testclient import TestClient
 
-from taskuary import channels, funnel, ingest, responder, server
+from taskuary import channels, funnel, ingest, railwalk, responder, server
 from taskuary.store import MemoryStore
 
 
@@ -57,7 +57,7 @@ class TheChangeCheckFollowsTheFourTests(Base):
         def poll(*a, **k):
             polls.append(k.get('only'))
             later(self.s, tid); return 1                                          # the refresh brings a newer line
-        item = funnel.next_item(self.s, None)
+        item = railwalk.top(self.s)
         self.assertEqual(item['key'], f'review:{rid}')
         with mock.patch.object(server, '_poll_reports', side_effect=poll):
             t = server._refresh_after({'item': item}); t.join(5)
@@ -72,8 +72,9 @@ class TheChangeCheckFollowsTheFourTests(Base):
                                 'FromName': 'Sam', 'SentAt': stamp(-10 - i), 'BodyText': 'fyi only', 'Status': 'filed'})
             self.s.add_route(i + 1, None, 'file', None, 'triage: fyi - nothing to do', [], 'triage')
         polls = []
-        first = funnel.next_item(self.s, None)
-        card = {'kind': 'fyis', 'key': 'fyis:x', 'items': funnel.fyi_batch(self.s, first)}
+        from taskuary import railwalk
+        card = railwalk.as_item(self.s, railwalk._batch(self.s, railwalk.line(funnel.pile(self.s)['items']), 0, True))   # the walk's own batch
+        self.assertEqual(card['kind'], 'fyis')
         with mock.patch.object(server, '_poll_reports', side_effect=lambda *a, **k: polls.append(k.get('only')) or 0):
             server._refresh_after({'item': card}).join(5)
         self.assertEqual(sorted(p[0] for p in polls), ['slack', 'teams'])
@@ -81,7 +82,7 @@ class TheChangeCheckFollowsTheFourTests(Base):
     def test_a_quiet_source_is_a_no_op(self):
         tid, first, rid = teams_task(self.s)
         with mock.patch.object(server, '_poll_reports', return_value=0):
-            f = server._refresh_items([funnel.next_item(self.s, None)])
+            f = server._refresh_items([railwalk.top(self.s)])
         self.assertFalse(f['newer'])
 
     def test_nothing_on_the_table_asks_nothing(self):

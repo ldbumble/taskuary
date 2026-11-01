@@ -29,7 +29,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import buttons, concierge, funnel, general, ingest, operations, server, terminal, wrapup
+from taskuary import buttons, concierge, funnel, general, ingest, operations, railwalk, server, terminal, wrapup
 from taskuary.store import MemoryStore
 from taskuary import memorylines
 from tests.memlines import teaching
@@ -441,13 +441,13 @@ class ResponseTests(unittest.TestCase):
         s.save_review_draft(rv['ReviewId'], 'Attached - sorry for the wait.')
         return s, out['task_id'], rv['ReviewId'], pile(s)[0]
 
-    def test_next_moves_on_and_marks_the_one_shown_read(self):
+    def test_next_is_a_decision_and_the_task_shown_stays_on_the_rail(self):
         s, tid, mid, item = self._asked()
         out = decide(s, 'next', 'next', key=item['key'])
         self.assertEqual(out['decision'], {'verb': 'next'}); self.assertIsNone(out.get('proposal'))
         self.assertEqual(out['say'], 'Next.')
-        surface(s, item['key'])                                        # showing it IS reading it
-        self.assertTrue(funnel.next_item(s, item['key'])['surfaced'])
+        surface(s, item['key'])                                        # opening never reads, and a task stays in its place (rule 4)
+        self.assertEqual([i['key'] for i in pile(s)], [item['key']])
 
     def test_done_is_confirmed_then_closes_the_task_behind_the_item(self):
         s, tid, mid, item = self._asked()
@@ -1096,16 +1096,15 @@ class WalkFromWordsTests(unittest.TestCase):
         # Handled is gone: "done" is Mark done, and a handful has no task to close - nothing is proposed in its name
         self.assertIsNone(decide(s, 'done', 'done', key=card['item']['key']).get('proposal'))
 
-    def test_a_new_chat_brings_a_waiting_agent_back(self):
+    def test_a_new_chat_walks_from_the_top_and_a_waiting_agent_shown_yesterday_is_on_it(self):
         s, tid, mid, item = ResponseTests()._asked()
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         live = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
         agent = next(i for i in pile(s, live) if i['kind'] == 'agent')
-        funnel.settle(s, agent['key'], 'surfaced', 'owner')                   # shown in yesterday's chat
+        funnel.settle(s, agent['key'], 'surfaced', 'owner')                   # shown in yesterday's chat - no hidden "passed" (rule 6)
         with mock.patch.object(terminal, 'live_sessions', return_value=live):
-            self.assertNotEqual((funnel.next_item(s) or {}).get('key'), agent['key'])
             funnel.reset_walk(s)                                              # ...a new chat
-            self.assertEqual(funnel.next_item(s)['key'], agent['key'])        # the thing that blocks work comes first
+            self.assertEqual(railwalk.start(s)['item']['key'], agent['key'])  # the walk starts at the top
 
     def test_the_voice_is_told_to_stay_in_the_part(self):
         """Staying in character is the prompt's rule, not a regex over the reply (the owner, 2026-10-11): the regex blanked
@@ -1814,26 +1813,25 @@ class InlineVerbTests(unittest.TestCase):
             self.assertEqual(concierge.open_day(empty, llm=None)['chips'], [])
             self.assertEqual(concierge.surface(empty, llm=None)['chips'], [])
 
-    def test_next_marks_a_waiting_draft_read_and_keeps_the_reply(self):
-        """Next passes it - still yours, in Passed - it never throws the draft away (the owner, 2026-09-23:
-        "i thought if you hit next it goes to passed section?"). Not replying is Close, said on purpose."""
+    def test_next_on_a_waiting_draft_keeps_it_and_the_reply(self):
+        """Next leaves a task in its place (rule 4) - it never throws the draft away. Not replying is Close, said on purpose."""
         s, tid, rid, item = ResponseTests()._drafted()
         self.assertEqual(item['lane'], 'approve')
         surface(s, item['key'])
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            concierge.surface(s, llm=None, leaving=item['key'])              # …and the owner hits Next
-        self.assertEqual(s.funnel_states()[item['key']]['Status'], 'surfaced')
+            concierge.surface(s, llm=None, from_key=item['key'])             # …and the owner hits Next
+        self.assertEqual([i['key'] for i in pile(s)], [item['key']])         # still on the rail
         self.assertEqual(s.get_review(rid)['Status'], 'pending')             # the draft still waits for a yes
         self.assertEqual(s.get_task(tid)['Status'] not in ('done', 'dropped'), True)
 
-    def test_next_on_a_parked_agent_reads_it_but_leaves_the_session_running(self):
+    def test_next_on_a_parked_agent_marks_nothing_and_leaves_the_session_running(self):
         s, tid, mid, item = ResponseTests()._asked()
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         live = session(tid, idle=200, waiting=True, tail=['Remove the old rows too? (y/n)'])
         agent = next(i for i in pile(s, live) if i['kind'] == 'agent')
         with mock.patch.object(terminal, 'live_sessions', return_value=live):
-            concierge.surface(s, llm=None, leaving=agent['key'])
-        self.assertEqual(s.funnel_states()[agent['key']]['Status'], 'surfaced')
+            concierge.surface(s, llm=None, from_key=agent['key'])
+        self.assertNotIn(agent['key'], s.funnel_states())                    # a Tasks row: Next writes nothing (rule 4)
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')           # the agent is still working
         self.assertEqual([i['lane'] for i in pile(s, live)], ['blocked'])     # ...and it is not cancelled
 

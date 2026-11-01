@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from taskuary import funnel, terminal, processing_all, processing_unread
-from taskuary.funnel_selection import capture_selection
+from taskuary import railwalk
 from taskuary.store import MemoryStore
 
 
@@ -39,6 +39,18 @@ def both(s):
     return all_rows, unread
 
 
+def line(s):
+    """The walk's line over the rail as it stands (railwalk, 2026-10-30)."""
+    funnel.invalidate()
+    return railwalk.line(funnel.pile(s, force=True)['items'])
+
+
+def first_up(s):
+    """What Walk would put up: the top row of the line, a handful when it is FYI."""
+    ln = line(s)
+    return railwalk.as_item(s, railwalk._batch(s, ln, 0, True)) if ln else None
+
+
 def test_uncapped_shared_inventory_keeps_categories_pending_and_old_provider_arrivals(store):
     store.set_setting('funnel_max', '3', 'test')
     store.set_setting('funnel_hours', '1', 'test')
@@ -54,9 +66,10 @@ def test_uncapped_shared_inventory_keeps_categories_pending_and_old_provider_arr
     assert next(r for r in unread['items'] if r['mid'] == old)['unread']
     pending = next(r for r in unread['items'] if r['title'] == 'Still triaging')
     assert pending['settling'] and not pending['actionable']
-    capture = capture_selection(store)
-    assert pending['key'] not in capture.member_keys
-    assert len(capture.member_keys) == 4
+    up = first_up(store)
+    members = up.get('members') or [up['key']]
+    assert pending['key'] not in members
+    assert len(members) == 4
 
 
 def test_shown_in_chat_is_read_and_leaves_unread_and_next(store):
@@ -69,7 +82,7 @@ def test_shown_in_chat_is_read_and_leaves_unread_and_next(store):
     funnel.settle(store, first['key'], 'surfaced', read=True)
     all_rows, displayed = both(store)
     assert [i['key'] for i in displayed['items']] == [second['key']]
-    assert capture_selection(store).member_keys[0] == second['key']
+    assert line(store)[0]['key'] == second['key']
     assert {r['item_id']: r['row']['Unread'] for r in all_rows} == {first['processing_id']: 0, second['processing_id']: 1}
     assert [r[0] for r in store.cx.execute("SELECT DISTINCT Origin FROM processing_read_receipt")] == ['surfaced']
     # the legacy write (no read flag) still only marks: historical fixtures and direct callers are unchanged
@@ -85,16 +98,17 @@ def test_words_said_about_a_task_do_not_make_it_unread_again_but_an_agents_do(st
     add(store, 'Please change the users', tid=tid, status='routed')
     _, unread = both(store)
     key = unread['items'][0]['key']
-    funnel.settle(store, key, 'surfaced', read=True, put_down=True)          # Next (concierge.move_on)
+    funnel.settle(store, key, 'surfaced', read=True)                         # opened: read
     with store.processing_own_words(tid, 'Taskuary'):
         store.add_comment(tid, 'Taskuary', 'concierge_assistant', 'Your User changes task is still open.')
-    _, after = both(store)
-    # passed with Next it waits in Passed - still yours, not news (2026-09-23: "if you hit next it goes to passed")
-    assert [(i['key'], bool(i.get('surfaced')), i['actionable']) for i in after['items']] == [(key, True, False)], \
-        'the assistant talking about it is not news'
+    rows, after = both(store)
+    # an open task stays on the rail in its place, read or not (2026-10-30); the receipt says whether anything is news
+    assert [(i['key'], i['actionable']) for i in after['items']] == [(key, True)]
+    assert [r['row']['Unread'] for r in rows] == [0], 'the assistant talking about it is not news'
     store.add_comment(tid, 'coding', 'agent', 'Finished: users changed, PR opened.')
-    _, news = both(store)
-    assert [(i['key'], bool(i.get('surfaced'))) for i in news['items']] == [(key, False)], 'an agent reporting back IS news'
+    rows, news = both(store)
+    assert [i['key'] for i in news['items']] == [key]
+    assert [r['row']['Unread'] for r in rows] == [1], 'an agent reporting back IS news'
 
 
 def test_later_keeps_it_unread_until_its_time_then_it_comes_back(store):
@@ -120,14 +134,12 @@ def test_shown_approval_stays_unread_but_marked_so_next_does_not_bounce_back(sto
     funnel.settle(store, approve['key'], 'surfaced', read=approve['lane'] not in ('approve', 'blocked'))
     _, shown = both(store)
     kept = next(i for i in shown['items'] if i.get('rid') == rid)
-    assert kept['unread'] and kept['surfaced'] and kept['surfaced_at']
-    # on the table, Next moves on to the FYI: the page excludes what it holds
-    assert capture_selection(store, exclude=approve['key']).selected['key'] != approve['key'], 'just shown: Next moves to the FYI'
+    assert kept['unread'] and not kept.get('surfaced'), 'shown is not acted on, and nothing marks it (2026-10-30)'
+    # Next from it, on the table, goes on to the FYI below - it cannot bounce: it measures from the row on screen
+    assert railwalk.next(store, approve['key'])['item']['key'] != approve['key'], 'just shown: Next moves to the FYI'
     assert not store.cx.execute('SELECT 1 FROM processing_read_receipt').fetchone()
-    # ...but shown is not acted on: off the table, a walk takes it again until Next or Remind me puts it down (2026-10-13)
-    assert capture_selection(store).selected['key'] == approve['key']
-    funnel.settle(store, approve['key'], 'surfaced', read=False, put_down=True)
-    assert capture_selection(store).selected['key'] != approve['key'], 'put down: the walk does not bounce back to it'
+    # ...and a walk from the top takes it again, in its place, until it is decided
+    assert line(store)[0]['key'] == approve['key']
 
 
 def test_assistant_digest_post_does_not_duplicate_its_own_idea(store):
@@ -243,12 +255,14 @@ def test_pre_cutover_fyi_current_resolves_its_exact_legacy_member_aliases(store)
     second = add(store, 'Second preserved FYI')
     both(store)
     legacy_key = f'fyis:msg:{first},msg:{second}'
+    items = line(store)
     before = list(store.cx.iterdump())
     restored = funnel.next_item(store, legacy_key)
     assert restored['key'] == legacy_key
     assert [i['mid'] for i in restored['items']] == [first, second]
     assert all(i['processing_id'] for i in restored['items'])
-    assert capture_selection(store, exclude=legacy_key).selected is None
+    place = railwalk.place_of(store, legacy_key, railwalk._blank(), items)
+    assert place and railwalk._below(items, place[1]) is None, 'nothing below the batch it names'
     assert list(store.cx.iterdump()) == before
 
 
@@ -370,19 +384,22 @@ def test_grouped_root_identity_survives_review_and_new_member_activity(store):
     assert pending['items'][0]['rid'] == rid and pending['items'][0]['order_band'] == 2
     assert funnel.next_item(store, f'review:{rid}')['key'] == key
     assert pending['items'][0]['mid'] == mid, 'review target remains its exact older message'
-    assert capture_selection(store, exclude=f'review:{rid}').selected is None
+    ln = line(store)
+    assert railwalk._below(ln, funnel.order_key(ln[0])) is None, 'one root, one row: nothing below it'
 
 
-def test_source_filter_is_shared_with_selection_and_common_history(store):
+def test_source_filter_is_shared_with_the_rail_and_common_history(store):
+    """A view: filter reads the same membership on the rail as in common history. (The walk itself is not scoped by it yet -
+    railwalk walks the whole rail; the scoped walk of spec 3.1 is a known gap, 2026-10-30.)"""
     add(store, 'Email')
     add(store, 'Chat', channel='teams')
     both(store)
     scope = 'view:{"channel":"teams"}'
-    selected = capture_selection(store, only=scope)
+    scoped = processing_unread.build(store, only=scope, live_state=[])['items']
     snapshot = store.processing_inventory_snapshot(fixed_now=datetime.now().isoformat(), live_state=[])
     rows, _, _ = processing_all.compact_inventory(snapshot, processing_unread.query_for(store, scope))
-    assert {r['item_id'] for r in rows} == {r['processing_id'] for r in selected.pile['items']}
-    assert selected.selected['items'][0]['title'] == 'Chat'
+    assert {r['item_id'] for r in rows} == {r['processing_id'] for r in scoped}
+    assert [i['title'] for i in scoped] == ['Chat']
 
 
 def test_temporary_skip_is_shared_and_expires_without_becoming_a_read(store):
@@ -451,33 +468,35 @@ def test_waiting_selection_ignores_idle_clock_but_retains_worker_facts(store, mo
     worker = dict(base)
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: [dict(worker)])
     monkeypatch.setattr(terminal, 'asking_lines', lambda sid, lines: [])
+    def row():
+        funnel.invalidate()
+        r = next(i for i in funnel.build(store, now=now, live_state=terminal.live_sessions())['items'] if i.get('tid') == tid)
+        return funnel._present_one(store, r)
     before = list(store.cx.iterdump())
-    initial = capture_selection(store, now=now)
-    assert initial.selected['tid'] == tid and initial.selected['lane'] == 'blocked'
+    initial = row()
+    assert initial['lane'] == 'blocked'
     worker['idle'] = 101
-    elapsed = capture_selection(store, now=now)
-    assert elapsed.revision == initial.revision
-    assert elapsed.selected['view_revision'] == initial.selected['view_revision']
-    assert elapsed.selected['presentation_revision'] == initial.selected['presentation_revision']
+    elapsed = row()
+    assert elapsed['view_revision'] == initial['view_revision']
+    assert elapsed['presentation_revision'] == initial['presentation_revision']
     for changed in ({'waiting': False}, {'phase': 'working'},
                     {'request': base['request'] | {'text': 'Approve the revised change?'}},
                     {'tail': ['Different substantive output']}, {'sid': 'replacement-session'}):
         worker.clear()
         worker.update(base | changed)
-        assert capture_selection(store, now=now).revision != initial.revision, changed
+        assert row()['presentation_revision'] != initial['presentation_revision'], changed
     worker.clear()
     worker.update(base)
     worker.pop('waiting')
-    assert capture_selection(store, now=now).revision == initial.revision
+    assert row()['presentation_revision'] == initial['presentation_revision']
     worker['idle'] = terminal.IDLE_WAITING - 1
-    working = capture_selection(store, now=now)
+    working = row()
     # ...and working, it is still the walk's item - the same row, now the agent's pane (2026-10-21)
-    assert working.selected['key'] == initial.selected['key'] and working.selected['lane'] == 'working'
-    assert working.pending['working'] == 1
+    assert working['key'] == initial['key'] and working['lane'] == 'working'
     worker['idle'] = terminal.IDLE_WAITING
-    waiting = capture_selection(store, now=now)
-    assert waiting.selected['key'] == initial.selected['key']
-    assert waiting.revision != working.revision
+    waiting = row()
+    assert waiting['key'] == initial['key']
+    assert waiting['presentation_revision'] != working['presentation_revision']
     assert list(store.cx.iterdump()) == before
 
 
@@ -604,7 +623,7 @@ def test_an_interrupted_agent_task_is_stopped_work_that_a_look_does_not_clear(st
     funnel.settle(store, card['key'], 'surfaced', read=True)
     _, after = both(store)
     kept = next(i for i in after['items'] if i.get('tid') == tid)
-    assert kept['unread'] and kept['surfaced'], 'shown, marked so Next moves on, and still on the rail'
+    assert kept['unread'] and kept['lane'] == 'stopped' and kept['actionable'], 'shown, and still on the rail in its place'
     # ...and a task nothing ever started is still the queue it always was
     fresh = store.create_task({'Title': 'Never started', 'Assignee': 'agent:coding', 'Kind': 'coding'}, 'fixture')
     _, more = both(store)

@@ -93,7 +93,7 @@ def test_next_from_the_clicked_bottom_task_goes_to_the_first_report(db):
     bottom = next(i for i in items if i.get('tid') == tids[-1])
     report = next(i for i in items if lanes.level_of(i) == 'reports')
     concierge.surface(store, bottom['key'])                    # clicked, never walked: the two tasks above are unseen
-    out = concierge.surface(store, leaving=bottom['key'])
+    out = concierge.surface(store, from_key=bottom['key'])
     assert out['item'] and out['item']['key'] == report['key'], f"Next went to {out['item'] and out['item'].get('title')}, not the report"
 
 
@@ -104,7 +104,7 @@ def test_next_never_moves_up(db):
     out = concierge.surface(store, middle)                     # start the walk from the middle task
     seen = [middle]
     while out['item']:
-        out = concierge.surface(store, leaving=out['item']['key'])
+        out = concierge.surface(store, from_key=out['item']['key'])
         if out['item']: seen.append(out['item']['key'])
     at = [order.index(next(k for k in order if k in (key, *key[5:].split(',')))) for key in seen]
     assert at == sorted(at) and len(set(at)) == len(at), f'Next went back up: {seen} over {order}'
@@ -140,39 +140,49 @@ def test_the_bottom_ends_the_walk_names_what_was_skipped_and_the_next_walk_start
     store, tids = db
     bottom = next(i for i in rail(store) if i.get('tid') == tids[-1])
     out = concierge.surface(store, bottom['key'])
-    while out['item']: out = concierge.surface(store, leaving=out['item']['key'])
+    while out['item']: out = concierge.surface(store, from_key=out['item']['key'])
     assert out.get('over'), 'the walk did not end at the bottom'
     # ...named by their Opens, with no sentence on the desk (the owner, 2026-10-23: "yes remove the sentence, just the button")
     assert out['say'] == '', f"the end of the walk said a sentence: {out['say']}"
     assert out['chips'][0]['verb'] == 'walk' and [c['key'] for c in out['chips'][1:]][:2] == [i['key'] for i in rail(store) if i.get('tid') in tids[:2]]
-    again = concierge.surface(store)
+    from taskuary import railwalk
+    again = railwalk.start(store)                              # the Walk again chip: the next walk starts at the top (2026-10-30)
     assert again['item'] and again['item'].get('tid') == tids[0], 'the next walk did not start at the top'
 
 
 def test_urgent_is_walked_in_its_place():
     """The owner, 2026-10-22: urgent sits in Tasks, never moves, and Next reaches it like every other row - "a meeting in 4 hours -
     once you hit Next on the item before it, it opens up, then you hit Next it goes to next, no jumping around"."""
-    from taskuary.funnel_selection import below
+    from taskuary import railwalk
     row = lambda key, band, h: {'key': key, 'lane': 'asked', 'kind': 'asked', 'order_band': band, 'arrived_at': ago(h * 60)}
     items = funnel._order([row('task:3', 2, 1), row('urgent:1', 1, 0), row('task:1', 2, 5), row('task:2', 2, 3)])
     assert keys(items) == ['task:1', 'task:2', 'task:3', 'urgent:1']
-    assert keys(below(items, items, 'task:2')) == ['task:3', 'urgent:1']
-    assert below(items, items, None) is None, 'a walk with nothing on the table and no place starts at the top'
+    line = railwalk.line(items)
+    assert keys(line) == keys(items), 'the walk line is the rail order'
+    at = funnel.order_key(items[1])
+    assert [r['key'] for r in line[railwalk._below(line, at):]] == ['task:3', 'urgent:1'], 'Next from task:2 is the row below, urgent in its place'
+
+
+def below_of(items, place):
+    """The rows the walk would reach going down from `place` (railwalk: the line, the row directly below, and on)."""
+    from taskuary import railwalk
+    line = railwalk.line(items)
+    n = railwalk._below(line, tuple(place))
+    return [] if n is None else line[n:]
 
 
 def test_a_step_put_down_never_walks_back_up_to_its_goal():
     """The 2026-10-25 sweep: from the bottom task - a goal's step, made in the same second as its goal - Next went down to Reports, but
     Remind me and Mark done walked UP to the goal: with the step gone from the rail the walk read on from its place's clock, and the
     goal's arrival matched it to the second. The task number decides a tie; a key with none is still the place's own row."""
-    from taskuary.funnel_selection import below
     at = ago(30)
     row = lambda key, tid, band=2: {'key': key, 'tid': tid, 'lane': 'yours', 'kind': 'todo', 'order_band': band, 'arrived_at': at}
     goal, step, report = row('task:7', 7), row('task:9', 9), {'key': 'report:1', 'lane': 'report', 'kind': 'report', 'order_band': 3, 'arrived_at': ago(300)}
     place = list(funnel.order_key(step))
     items = funnel._order([goal, report])                       # the step was put away: it is off the line
-    assert keys(below(items, items, None, place, at_key='task:9')) == ['report:1'], 'the walk went back up to the goal above the step'
+    assert keys(below_of(items, place)) == ['report:1'], 'the walk went back up to the goal above the step'
     again = {'key': 'msg:3', 'lane': 'yours', 'kind': 'todo', 'order_band': 2, 'arrived_at': at}
-    assert keys(below([again], [again], None, place, at_key='task:9')) == ['msg:3'], "the place's own row under a key with no number was lost"
+    assert keys(below_of([again], place)) == ['msg:3'], "the place's own row under a key with no number was lost"
 
 
 def test_a_closed_task_opened_by_name_walks_on_from_its_row_in_tasks(db):
@@ -184,7 +194,7 @@ def test_a_closed_task_opened_by_name_walks_on_from_its_row_in_tasks(db):
     concierge.surface(store, first['key'])
     store.update_task(tids[0], {'Status': 'done'}, 'owner'); funnel.settle(store, first['key'], 'done', 'owner'); funnel.invalidate()
     concierge.surface(store, f'task:{tids[0]}')                 # opened again by name, closed
-    out = concierge.surface(store, leaving=f'task:{tids[0]}')
+    out = concierge.surface(store, from_key=f'task:{tids[0]}')
     assert out['item'] and out['item'].get('tid') == tids[1], f"Next from the closed task went to {out['item'] and out['item'].get('title')}"
 
 
@@ -202,6 +212,6 @@ def test_put_it_on_my_list_on_a_report_walks_on_below_the_report_never_back_up_t
     settle(store)
     made = store._one('SELECT TaskId FROM message WHERE MessageId=?', (report['mid'],))['TaskId']
     assert made and made in task_rows(store), 'the report did not become a task in Tasks'
-    out = concierge.surface(store, leaving=report['key'])
+    out = concierge.surface(store, from_key=report['key'])
     assert out['item'] and below_it in out['item']['key'].removeprefix('fyis:').split(','), f"Next went to {out['item'] and out['item'].get('title')}, not the row below the report"
     assert out['item'].get('tid') != made and lanes.level_of(out['item']) != 'task', 'the walk went back up into Tasks'

@@ -2,9 +2,16 @@
 after the owner last opened it neither moves the row nor changes its age - the row says "+N" beside the age (N = the messages from
 others since the owner last opened it), its line under the title is the newest message, and opening it clears the mark. A burst of three
 is one row and one "+3". Invented people only."""
+import pytest
+
 from taskuary import concierge, lanes
 
 from tests.processing.test_rail_order_is_fixed import TASKS, ago, db, keys, mail, rail, settle, task_rows  # noqa: F401 (db is a fixture)
+
+
+OPEN_RECORDS_NO_READ = pytest.mark.xfail(strict=True, reason=(
+    'railwalk.open settles a read on a task only when its row already carries new_n, so a task opened for the first time records no '
+    'read and replies after that open are never counted as +N (Q1: opening a task clears its +N - it must also mark what was seen)'))
 
 
 def row_of(store, tid): return next(i for i in rail(store) if i.get('tid') == tid)

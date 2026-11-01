@@ -131,7 +131,9 @@ def test_next_walks_past_a_dashboard_as_it_walks_past_a_report_and_the_next_refr
     funnel._SOURCES['at'] = 0
     keys = lambda: {i['key'] for i in funnel.pile(s, force=True)['items']}
     assert {f'report:{mid}', f'report:{rmid}'} <= keys()
-    concierge.move_on(s, f'report:{mid}'); concierge.move_on(s, f'report:{rmid}')
+    from taskuary import railwalk
+    railwalk.open(s, f'report:{mid}'); railwalk.next(s, f'report:{mid}')      # Next reads a report and a dashboard alike (rule 4)
+    railwalk.open(s, f'report:{rmid}'); railwalk.next(s, f'report:{rmid}')
     after = keys()
     assert f'report:{mid}' not in after and f'report:{rmid}' not in after
     again = reports.run_one(s, s.get_source(src['SourceId']), None, 'manual')['message_id']

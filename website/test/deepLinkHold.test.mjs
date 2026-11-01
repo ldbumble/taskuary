@@ -27,7 +27,7 @@ test("while held, the spinner stands in for the conversation and the Advisor str
 test("a chat read sent before a turn began never puts its older table back over that turn's answer", () => {
   assert.match(src, /const turnOnce = useCallback\(async \(body\) => \{\n    turnsBegun\.current \+= 1;/);
   assert.match(src, /const turns = turnsBegun\.current, moves = tableMoves\.current, mid = turnFlight\.current;\n    const \{ data: st \} = await api\.get\("\/api\/concierge"\);/);
-  assert.match(src, /if \(turns === turnsBegun\.current && \(said\?\.key \|\| null\) !== \(currentRef\.current\?\.key \|\| null\)\) putOnTable\(said, "sync"\);/);
+  assert.match(src, /if \(turns === turnsBegun\.current && \(said\?\.key \|\| null\) !== \(currentRef\.current\?\.key \|\| null\)\) \{ putOnTable\(said, "sync"\); loadPileRef\.current\?\.\(true\); \}/);
 });
 
 // RING (the dead-end walk, 2026-10-20): a link to the task the page loaded with, pressed in the chat once Next had moved on, was taken for the

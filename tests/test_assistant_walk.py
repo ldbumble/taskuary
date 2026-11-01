@@ -37,15 +37,16 @@ def test_the_walks_lines_name_what_comes_up_and_repeat_nothing_its_card_shows():
     s, seen = W.world(), []
     with ExitStack() as st:
         W._guards(st, set())
+        on = None
         for _ in range(30):
-            out = concierge.surface(s)
+            out = concierge.surface(s, from_key=on)            # Next from the row on the table (railwalk)
             it = out.get('item')
             if not it or it['key'] in [k for k, _ in seen]: break
             seen.append((it['key'], out['say']))
             shown = [it.get('title'), it.get('who'), it.get('preview')] + [x for e in it.get('items') or [] for x in (e.get('title'), e.get('who'))]
             assert W.words(out['say']) <= W.BRIEF, (it['key'], out['say'])
             assert not [x for x in shown if x and len(str(x)) > 3 and str(x) in out['say']], (it['key'], out['say'])
-            concierge.move_on(s, it['key'], 'owner')
+            on = it['key']
     assert {k.split(':')[0] for k, _ in seen} >= {'msg', 'review', 'report', 'fyis'}, seen       # every kind of card the demo has
 
 
@@ -88,6 +89,7 @@ def test_a_typed_turn_builds_the_pipe_once_and_says_the_owners_line_once():
         concierge.say(s, 'bring up TQ-12', llm=llm)
         whole.clear(); asked.clear()
         concierge.say(s, "what's this one about", key='msg:17', llm=llm)
-    assert len(whole) == 1, f'the pipe was built {len(whole)} times in one typed turn'
+    # ...at most once: since 2026-10-31 the owner's line - a write to the Assistant's own conversation only - leaves the built pipe warm
+    assert len(whole) <= 1, f'the pipe was built {len(whole)} times in one typed turn'
     assert 'OWNER: bring up TQ-12' in asked[0] and "OWNER: what's this one about" not in asked[0]
     assert asked[0].count("what's this one about") == 1

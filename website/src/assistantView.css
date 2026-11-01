@@ -216,13 +216,20 @@
 .tq-linkish { border: 0; background: none; padding: 0; font: inherit; color: #55697a; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* THE DAY'S OPENER, mock-up A (the owner, 2026-10-08): a greeting with the date beside it, then ONE paper card - the day's
    meetings as plain lines on the left, a row per band on the right. No tinted box: the hairlines carry it. */
-.tq-welcome-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.tq-welcome-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 8px; }
 .tq-welcome-head > b { font-size: 20px; font-weight: 600; color: #262521; line-height: 1.3; }
 .tq-welcome .tq-welcome-head > span { font: 500 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; color: #6e685f; white-space: nowrap; }
-.tq-day-box { background: #fffdfb; border: 1px solid #e6e0d6; border-radius: 12px; overflow: hidden; text-align: left; }
-.tq-day { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px; padding: 18px 22px; text-align: left; }
+.tq-day-box { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+/* TWO CARDS IN ONE ROW, then the digest (the owner, 2026-10-31: "more compact please. not everything has that much screen ... make them
+   cards"): a grid row stands both at the taller one's height, and that height is their content's - the day's list asks for a few lines
+   (assistantCards EV_SHOWN) and scrolls the rest, so ten meetings or none the row is the same shape. A 13" laptop first. */
+.tq-day { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; text-align: left; }
+.tq-day-pane, .tq-since { min-width: 0; background: #fffdfb; border: 1px solid #e6e0d6; border-radius: 10px; padding: 9px 14px 10px; }
+.tq-day-pane { display: flex; flex-direction: column; }
 /* WHAT CHANGED WHILE YOU WERE AWAY, on top of the same card (mock-up "A +", 2026-10-08): counted, no model; the digest folded under it */
-.tq-since { display: flex; flex-direction: column; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #ece7de; }
+.tq-since { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.tq-since > * { align-self: stretch; }
+.tq-since > .tq-linkish { align-self: flex-start; font-size: 12.5px; }
 .tq-since-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .tq-welcome .tq-since-head > span:last-child { font-size: 12.5px; color: #6e685f; }
 .tq-since-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -248,27 +255,39 @@
 .tq-welcome .tq-since-digest > span:not(.tag):not(.sep) { color: #262521; }
 .tq-since-digest .sep { color: #d8d1c5; }
 .tq-since-digest .tq-linkish { text-decoration: none; font-weight: 600; }
-.tq-since-body { border-top: 1px dashed #e3dccf; padding-top: 12px; max-height: 520px; overflow: auto; }
+.tq-since-body { border-top: 1px dashed #e3dccf; padding-top: 8px; max-height: 520px; overflow: auto; }
+/* folded, the body is cut at the last whole line that fits above the fold (SinceBlock) - the fade says there is more under it */
+.tq-since-body.cut { overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 14px), transparent); }
+/* the digest's own sections, tightened here only: the Reports page keeps DigestText's roomier drawing */
+.tq-since-body div:has(> section) { gap: 6px; }
+.tq-since-body section h3 { padding: 4px 10px; font-size: 12.5px; }
+.tq-since-body section ol { padding-top: 5px; padding-bottom: 5px; }
+.tq-since-body section li { margin-bottom: 1px; line-height: 1.45; }
 .tq-day.solo { grid-template-columns: minmax(0, 1fr); }
-@container (max-width: 640px) { .tq-day { grid-template-columns: minmax(0, 1fr); gap: 16px; } }
-.tq-welcome .tq-day-h { display: block; margin: 0 0 8px; font: 600 10.5px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6e685f; }
-.tq-day-agenda { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
-.tq-day-agenda .ev { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: baseline; }
-.tq-welcome .tq-day-agenda .t { font: 500 11.5px 'IBM Plex Mono', Consolas, monospace; color: #262521; white-space: nowrap; }
-.tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 1.4; color: #6e685f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container (max-width: 640px) { .tq-day { grid-template-columns: minmax(0, 1fr); } }
+.tq-welcome .tq-day-h { display: block; margin: 0 0 3px; font: 600 10.5px/18px 'IBM Plex Mono', Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; color: #6e685f; }
+.tq-day-agenda { min-width: 0; }
+/* the list's pitch is assistantCards' EV_ROW / EV_NOW: it asks for that much room, and the rest scrolls inside */
+.tq-day-evs { position: relative; flex: 1 1 auto; }
+.tq-day-evs > .in { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: thin; }
+.tq-day-agenda .ev { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: baseline; height: 22px; }
+.tq-welcome .tq-day-agenda .t { font: 500 11.5px/22px 'IBM Plex Mono', Consolas, monospace; color: #262521; white-space: nowrap; }
+.tq-welcome .tq-day-agenda .s { font-size: 13px; line-height: 22px; color: #6e685f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tq-day-agenda .ev.cal-note { display: block; height: auto; }
+.tq-welcome .tq-day-agenda .cal-note .s { display: block; line-height: 1.4; white-space: normal; }
+.tq-day-agenda .cal-go { align-self: flex-start; margin-top: 4px; font-size: 12.5px; }
+.tq-welcome .tq-day-wait .note { font-size: 12.5px; line-height: 1.4; color: #6e685f; }
 .tq-day-agenda .s b { font-weight: 600; color: #262521; }
 /* an unreadable calendar says why on its own line, under the headline */
 .tq-day-agenda .cal-note .why { display: block; margin-top: 4px; }
 .tq-day-agenda .ev.past .t, .tq-day-agenda .ev.past .s, .tq-day-agenda .ev.past .s b { color: #a09b92; font-weight: 400; }
 .tq-day-agenda .ev.past .s { text-decoration: line-through; text-decoration-color: #d8d1c5; }
 .tq-welcome .tq-day-agenda .ev.live .t { color: #8a3646; font-weight: 600; }
-.tq-welcome .tq-day-agenda .ev.now .t { font-weight: 600; text-transform: uppercase; color: #8a3646; }
+.tq-day-agenda .ev.now { height: 10px; align-items: center; }
+.tq-welcome .tq-day-agenda .ev.now .t { font-weight: 600; font-size: 9.5px; line-height: 10px; text-transform: uppercase; color: #8a3646; }
 .tq-day-agenda .ev.now i { height: 1px; background: #8a3646; align-self: center; }
 .tq-welcome .tq-day-agenda .ev.allday .t { color: #6e685f; }
-.tq-day-wait { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid #ece7de; padding-left: 22px; }
-.tq-day.solo .tq-day-wait { border-left: 0; padding-left: 0; }
-@container (max-width: 640px) { .tq-day-wait { border-left: 0; padding-left: 0; } .tq-day-row { grid-template-columns: 8px 76px minmax(0, 1fr) auto; } }
-.tq-day-row { display: grid; grid-template-columns: 8px 104px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px;
+.tq-day-row { display: grid; grid-template-columns: 8px 104px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 30px; padding: 0 4px;
   border: 0; border-bottom: 1px solid #f0ebe3; border-radius: 0; background: none; text-align: left; font: inherit; color: #262521; cursor: pointer; transition: background .15s; }
 .tq-day-row:last-child { border-bottom: 0; }
 .tq-day-row:hover { background: #fbf9f6; }
@@ -276,7 +295,7 @@
 .tq-day-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #b8afa1; }
 .tq-day-row .lbl { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-welcome .tq-day-row .who { font-size: 12.5px; color: #4d4a43; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-day-row .n { font: 600 18px/1 'IBM Plex Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-align: right; min-width: 24px; }
+.tq-day-row .n { font: 600 16px/1 'IBM Plex Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-align: right; min-width: 24px; }
 .tq-day-row.lvl-task .dot { background: #5f7a5f; }
 .tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
 .tq-day-row.lvl-fyi .dot { background: #7b7366; }
@@ -294,7 +313,7 @@
 .tq-day-row.lvl-fyi .lbl { background: #7b7366; }
 .tq-day-row.lvl-later .lbl { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }
 .tq-day-row .dot { display: none; }
-.tq-day-row { grid-template-columns: 104px minmax(0, 1fr) auto; }
+.tq-day-row { grid-template-columns: 96px minmax(0, 1fr) auto; }
 @container (max-width: 640px) { .tq-day-row { grid-template-columns: 84px minmax(0, 1fr) auto; } }
 /* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
 /* ONE ROW, however many bands: auto-fit at 170px held four across 822px, so a fifth band (an agent still working at launch, when
@@ -316,7 +335,7 @@
 .tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #827356; }
 .tq-day-card.lvl-fyi .dot { background: #7b7366; }
 .tq-day-card.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
-.tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+.tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
 .tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #262521; border-radius: 99px; padding: 7px 14px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }
 .tq-chip:disabled { opacity: .5; cursor: default; }
@@ -977,6 +996,22 @@
 .tq-chat-unit > .tq-compose-box .tq-compose-tools svg { font-size: 17px !important; }
 .tq-chat-unit > .tq-compose-box .tq-send { grid-area: send; justify-self: end; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
 .tq-chat-unit > .tq-compose-box .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
+/* ...A TRIAL: GROWN UNDER THE MOUSE (AssistantView's `grow`, the owner 2026-10-31: "try it"): the card stands on its slot's foot and right
+   edge at rest too, so it can grow up over the canvas without moving the slot - the bar beside it and the canvas stay where they are.
+   Never wider (the owner, 2026-10-31: "size of the chat should never change"). Two lines of words the card's width, the whole hint;
+   attach, voice and send on the line under them, as open */
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) > .tq-compose-field { position: absolute; right: 0; bottom: 0; width: 100%;
+  transition: border-color .12s, box-shadow .12s; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { transition: height .15s ease-out; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) > .tq-compose-field { z-index: 6; border-radius: 18px;
+  grid-template-areas: "words words words" "tools . send"; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) textarea { height: 46px !important; line-height: 20px; padding: 4px 6px 2px; overflow-y: auto; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) textarea::placeholder { white-space: normal; }
+.tq-chat-unit > .tq-compose-box > .tq-chat-unseen { z-index: 7; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) > .tq-chat-unseen { top: -43px; }
+@media (prefers-reduced-motion: reduce) {
+  .tq-chat-unit > .tq-compose-box > .tq-compose-field, .tq-chat-unit > .tq-compose-box textarea { transition: none; }
+}
 .tq-model-pick { grid-area: model; justify-self: end; display: inline-flex; align-items: center; gap: 3px; max-width: 180px; height: 24px; padding: 0 6px; border: 0;
   border-radius: 8px; background: transparent; color: #6e685f; font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
 .tq-model-pick > span { overflow: hidden; text-overflow: ellipsis; }

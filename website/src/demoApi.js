@@ -467,6 +467,15 @@ const write = (method, url, body) => {
 
   if (method === "post" && p === "/api/concierge/next") return scriptedNext(body?.key || null, body?.only || null);
   if (method === "post" && p === "/api/concierge/open") return scriptedNext(null, null);
+  // THE WALK'S OWN ROUTES (railwalk, 2026-10-30): the page posts every move here; the static demo stands in for railwalk with its script -
+  // a close takes its row off, Back is the row above, the rest walk on as the scripted Next does
+  const walkRoute = method === "post" && p.match(/^\/api\/walk\/(start|next|back|open|leave)$/)?.[1];
+  if (walkRoute === "leave") scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i.key !== body?.key);
+  if (walkRoute === "back") {
+    const rows = scriptedAssistant.pile.items, at = rows.findIndex((i) => i.key === body?.from_key);
+    return at > 0 ? scriptedNext(rows[at - 1].key, null) : { item: null, top: true, say: "", options: [], scripted: true };
+  }
+  if (walkRoute) return scriptedNext(walkRoute === "open" ? body?.key || null : null, null);
   if (method === "post" && p === "/api/concierge/say") return scriptedSay(body?.text, body?.key);
 
   if (method === "post" && p === "/api/funnel/settle") {

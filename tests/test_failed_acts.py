@@ -158,18 +158,21 @@ class AYesAnswersTheTableTests(unittest.TestCase):
 class TheWalkResumesTheTableTests(unittest.TestCase):
     """The incident: Close out failed on one pull request, the owner picked "Walk me through my tasks", and the walk
     started afresh - skipping the item it had just shown, still waiting on them - and put up the next one."""
-    def test_walk_me_through_brings_back_the_item_whose_act_failed(self):
-        from taskuary import concierge, remote_assistant as ra, server, terminal
+    def test_walk_me_through_starts_at_the_top_and_never_skips_the_item_whose_act_failed(self):
+        """A walk starts at the TOP of the rail now (spec 2), so it no longer resumes the table - but nothing it showed is
+        skipped (rule 6): the item whose act failed is still in its place, and Next walks down to it."""
+        from taskuary import concierge, railwalk, remote_assistant as ra, server, terminal
         s = store(); tid, rid, item, p = drafted(s)
         arrive(s, subject='Is the payroll file in?', body='Payroll closes Thursday.', hours=3)
         for pt in (mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]),
                    mock.patch.object(concierge, 'brain', return_value=None)):
             pt.start(); self.addCleanup(pt.stop)
-        concierge.surface(s, key=item['key'])                                        # shown: the walk would skip it for hours
+        concierge.surface(s, key=item['key'])                                        # shown: the old walk skipped it for hours
         with mock.patch('taskuary.outbound.reply_to_message', side_effect=RuntimeError('SMTP 550 mailbox unavailable')):
             run(s, p)
         card = ra.walk(s).split('\n\n', 2)[-1]                                       # past the opener's who-wants-what
-        self.assertIn(f'TQ-{tid:04d}', card); self.assertIn('Can you send it?', card); self.assertNotIn('Payroll closes', card)
+        self.assertIn('Payroll closes', card)                                        # the oldest arrival is the top
+        self.assertEqual(railwalk.next(s)['item']['tid'], tid)                       # ...and the failed one is the row below it
 
     def test_with_nothing_left_on_the_table_the_walk_takes_the_next_thing(self):
         from taskuary import concierge, general, terminal

@@ -5280,18 +5280,17 @@ def funnel_waiting():
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
-class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None; put_down: bool = False; fyi: int | None = None; pressed: str | None = None
+class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None; fyi: int | None = None; pressed: str | None = None
 class SurfaceBody(BaseModel):
     key: str | None = None
     only: str | None = None
-    include_surfaced: bool = False
-    exclude: str | None = None
-    selection_revision: str | None = None
-    expected_next_key: str | None = None
-    leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
-    expected_next_members: list[str] | None = None
+    from_key: str | None = None         # the row the page had on screen: Next moves from IT (railwalk.next), never from a captured pick
+    press: str | None = None            # one press, one answer: a repeat gets the same one and no second line
+    read: list[str] = []                # rows read on a page open over the table (the Reports page, 2026-10-30)
     fyi: int | None = None              # how many plain FYI rows the page wants whole in the rail that rides along (funnel.page_fyi)
-    blind: bool = False                 # pressed with nothing on the table (processing_navigation.reserve)
+class RailWalkBody(BaseModel):
+    from_key: str | None = None; key: str | None = None; press: str | None = None; how: str | None = None
+    note: str | None = None; until: str | None = None; read: list[str] = []; level: str | None = None; fyi: int | None = None
 class ConciergeSayBody(BaseModel):
     text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
     view: dict | None = None; react: str = ''
@@ -5309,57 +5308,39 @@ def _encoded(content) -> Response:
 
 def _pile_payload(force: bool = False, current: str = None, only: str = None,
                   include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict:
-    """The pile as the page draws it, with the selection token Next echoes. One road for the GET,
-    for the turn that carries the rail in its answer, and for the settle that does the same."""
-    from . import funnel
-    from .funnel_selection import capture_selection
-    from .processing_navigation import fields
+    """The pile as the page draws it, with the walk beside it (railwalk.peek): where the walk stands and the rows Back and Next would
+    bring. One road for the GET, for the turn that carries the
+    rail in its answer, and for the settle that does the same."""
+    from . import funnel, railwalk
     started, seen = time.time(), live_bus.seq()
-    # funnel.pile owns invalidation and single-flight across open tabs. Capture navigation
-    # from that exact cached pile; capture_selection accepts it specifically so this endpoint
-    # does not rebuild canonical membership a second time.
-    cached = funnel.pile(store, force=force) if only is None else None
-    events = (cached.get('events') or []) if cached is not None else funnel.announce(store)
-    capture = capture_selection(store, only=only, include_surfaced=include_surfaced,
-                                exclude=exclude, pile=cached)
+    # funnel.pile owns invalidation and single-flight across open tabs; the walk reads that same cached build, never a second one
+    cached = funnel.pile(store, force=force)
+    events = cached.get('events') or []
     # generated_at: when this read BEGAN (server clock, ms) - the page compares it to its live events
     # to know which writes this read already saw (funnelPile.coveredByReload); transient, outside the revision
-    # display_revision: the slot is held where it always sat - the final present() below fills it over the rows sent
-    # live_seq: the newest write stamp the rows were built after (live.seq) - the cached build's own when the cache answered, so a
-    # wake-up this read already holds is not read again (AssistantView's reload check); never a later one than the build saw
-    p = {**capture.pile, 'display_revision': None, **fields(store, capture), 'generated_at': int(started * 1000),
-         'live_seq': cached.get('live_seq') if cached is not None else seen,
-         'alerts': funnel.desk_alerts(funnel.alerts(store, capture.pile['items'])), 'events': events}
+    # live_seq: the newest write stamp the rows were built after (live.seq) - the cached build's own when the cache answered
+    p = {**cached, 'display_revision': None, 'generated_at': int(started * 1000), 'live_seq': cached.get('live_seq', seen),
+         'alerts': funnel.desk_alerts(funnel.alerts(store, cached['items'])), 'events': events}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
-    # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it
-    # showing back up if the ai agent replied, i edited it and sent??"). Looked up in the build
-    # the pile came from, not a second one.
-    if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store) if cached is not None else None)}
-    # Current is query-specific and may be absent from the ordinary pile. Include
-    # its complete presentation in the revision after attaching it to the response.
-    # `fyi`: the page's own rail pages its plain FYI tail (funnel.page_fyi) - AFTER the selection was captured from the whole
-    # pile, so the token Next echoes is the one a full read gives. Whatever is on the table or picked next is sent whole.
+    # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03). Looked up in the build the pile came from.
+    if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store))}
+    try: walk = railwalk.peek(store, ACTOR)
+    except Exception as e: logger.debug(f'no walk beside the rail: {e}'); walk = None
+    p['walk'] = walk
+    # `fyi`: the page's own rail pages its plain FYI tail (funnel.page_fyi). Whatever is on the table or drawn next is sent whole.
     if fyi is not None:
-        p = funnel.page_fyi(p, max(0, int(fyi)), keep=(current, exclude, p.get('expected_next_key'), *(p.get('expected_next_members') or ())))
-    p = funnel.present(store, p)
-    # PREPARED NEXT (2026-10-20): the answer a press would give for THIS selection, so the page draws it at the press and the
-    # press's own answer only confirms it (concierge.prepare_next). Outside the display revision: it is made of rows it covers.
-    from . import concierge
-    try: p['prepared_next'] = concierge.prepare_next(store, capture, p.get('selection_revision'))
-    except Exception as e: logger.debug(f'no prepared Next: {e}'); p['prepared_next'] = None
-    # ...and WHEN THIS WALK BEGAN (funnel.new_walk): the page keeps the rows it left this walk, and a walk the server started anew -
-    # a new chat, a walk that ran out, one asked for in words - must start the page's list anew too (AssistantView's leftRef)
-    from .processing_unread import WALK_KEY
-    p['walk_at'] = str(store.get_setting(WALK_KEY) or '')
-    return p
+        below = (walk or {}).get('below') or ''
+        p = funnel.page_fyi(p, max(0, int(fyi)), keep=(current, exclude, (walk or {}).get('on'), below,
+                                                       *((walk or {}).get('members') or ()), *railwalk.members_of(below)))
+    return funnel.present(store, p)
 
-def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict | None:
+def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None, force: bool = True) -> dict | None:
     """The rail read once after a write and carried in that write's answer, so the page holds it
     instead of asking for the same rows again (design B, 2026-09-17: a press of Next was two of these
     reloads at 1.5-2 s each). Scoped the way the page will hold it. Never the answer's failure: the
     page falls back to its own load when nothing rides along."""
-    try: return _pile_payload(force=True, only=only, include_surfaced=include_surfaced, exclude=exclude, fyi=fyi)
+    try: return _pile_payload(force=force, only=only, include_surfaced=include_surfaced, exclude=exclude, fyi=fyi)
     except Exception as e:
         logger.debug(f'the pile did not ride along: {e}'); return None
 
@@ -5368,10 +5349,7 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
                 include_surfaced: bool = False, exclude: str = None, fyi: int = None):
     """The ranked pile the Assistant page draws: next-first, every item with the words it rests
     on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
-    from .funnel_selection import SelectionUnavailable
     try: return _encoded(_pile_payload(force, current, only, include_surfaced, exclude, fyi))
-    except SelectionUnavailable as error:
-        raise HTTPException(503, error.detail) from error
     except processing_all.AllError as error:
         raise HTTPException(error.status, error.detail) from error
 
@@ -5380,18 +5358,14 @@ def funnel_settle(body: SettleBody):
     from . import concierge, funnel, general
     # `read` rides only on 'surfaced': the Assistant Game's Next is the chat's Next - shown is read (2026-09-06)
     # `shown`: the card's {key: view_revision}, so what landed after it was drawn stays unread (funnel.settle)
-    # `put_down`: the Assistant Game's Next is the chat's Next - walked past, not merely shown (move_on)
-    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours, read=body.read and body.verb == 'surfaced', shown=body.shown,
-                             put_down=body.put_down and body.verb == 'surfaced')
+    try: out = funnel.settle(store, body.key, body.verb, ACTOR, body.hours, read=body.read and body.verb == 'surfaced', shown=body.shown)
     except ValueError as e: raise HTTPException(422, str(e))
-    if body.verb in ('done', 'later', 'skip'):                              # settled: off the table, and nothing chosen in its place
+    if body.verb in ('done', 'later', 'skip'):                              # settled: the row leaves the rail; the table is the walk's (railwalk)
         dock = general.dock_task(store, ACTOR)[0]['TaskId']
-        if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
         # ...and the card wears what its press did, from the server too, so a reload draws it: "All read, next" on an fyi batch folded with
         # its badge on the page and lost it on the next read - this road, not Next's, is the one its button takes (concierge._stamp_next)
         # ...a button's own word, never free text: anything else is not a press of this app's
         if body.pressed and body.pressed in buttons.labels(): concierge._stamp_next(store, dock, body.key, body.pressed)
-        # the table is empty now, so the page's next scope excludes nothing: the rail comes back captured that way
         out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi)}
     return _encoded(out)
 
@@ -5534,41 +5508,67 @@ def concierge_chat_continue(tid: int, background: BackgroundTasks):
 
 @app.post('/api/concierge/next')
 def concierge_next(body: SurfaceBody = None):
-    """Pull the next thing out of the pipe - or the one named, or the next piece of mail - and say it."""
+    """The walk's wrapper during the migration (railwalk): with a key, that row opened; without one, the row below `from_key`."""
     from . import concierge
     body = body or SurfaceBody()
-    reservation = _navigation_reservation(body)
-    if reservation:
-        from .processing_navigation import NavigationStale
-        from .funnel_selection import SelectionUnavailable
-        try:
-            def _surface(selected, guard, dock):
-                return concierge.surface(store, actor=ACTOR, only=body.only, include_surfaced=body.include_surfaced,
-                                         exclude=body.exclude, selection=selected, commit_guard=guard, bound_dock=dock,
-                                         leaving=body.leaving)
-            out = _with_pile(reservation.run(_surface, ACTOR), body)
-            _refresh_after(out)                      # the change-check follows the four (design C)
-            return _encoded(out)
-        except NavigationStale as error:
-            raise HTTPException(409, error.detail) from error
-        except SelectionUnavailable as error:
-            raise HTTPException(503, error.detail) from error
     if body.key: _refresh_chat_key(body.key)     # a named pull refreshes ITS item first: the item is the subject (PW-050)
-    out = _with_pile(concierge.surface(store, body.key, actor=ACTOR, only=body.only,
-                                       include_surfaced=body.include_surfaced, exclude=body.exclude, leaving=body.leaving), body)
+    out = _with_pile(concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key, press=body.press, read=body.read), body)
     if not body.key: _refresh_after(out)         # ...and the walk's Next answers first, then asks the provider (design C)
     return _encoded(out)
 
-def _pile_rides(out: dict, body) -> bool: return not body.key and bool((out.get('item') or {}).get('key'))
+
+def _pile_rides(out: dict, body) -> bool: return bool((out.get('item') or {}).get('key')) or bool(out.get('over'))
 
 
 def _with_pile(out: dict, body) -> dict:
-    """A Next answer with the rail as the turn left it. The item is on the table, so the page will hold
-    the rail with everything but it - that is the scope it is captured under. The walk running out
-    (no item) leaves the page to its own load; a named pull (`key`) is not a walk."""
+    """A walk answer with the rail as the move left it (design B, 2026-09-17) - the next prepared answer in it (railwalk.peek)."""
     if not _pile_rides(out, body): return out
-    return {**out, 'pile': _pile_along(only=body.only, include_surfaced=body.include_surfaced, exclude=out['item']['key'],
-                                       fyi=getattr(body, 'fyi', None))}
+    return {**out, 'pile': _pile_along(fyi=getattr(body, 'fyi', None))}
+
+
+# THE WALK'S OWN ROUTES (railwalk, 2026-10-30): the page sends an action and draws the Answer that comes back - the row, its words and
+# chips, where the walk now stands, and the rail as the move left it with the next answer prepared in it.
+def _walk_answer(out: dict, body: RailWalkBody) -> Response:
+    # ...the cached rail unless something moved since it was built (funnel.pile's own check: a write anywhere, a worker): forced, a walk
+    # move built the whole rail a second time after the one its own writes had already cost it (2026-10-31, 0.5 s a press on a real home)
+    out = {**out, 'pile': _pile_along(fyi=body.fyi, force=False)}
+    _refresh_after(out)
+    return _encoded(out)
+
+@app.post('/api/walk/start')
+def walk_start(body: RailWalkBody = None):
+    from . import railwalk
+    body = body or RailWalkBody()
+    return _walk_answer(railwalk.start(store, ACTOR, press=body.press), body)
+
+@app.post('/api/walk/next')
+def walk_next(body: RailWalkBody = None):
+    from . import railwalk
+    body = body or RailWalkBody()
+    return _walk_answer(railwalk.next(store, body.from_key, ACTOR, press=body.press, read=body.read), body)
+
+@app.post('/api/walk/back')
+def walk_back(body: RailWalkBody = None):
+    from . import railwalk
+    body = body or RailWalkBody()
+    return _walk_answer(railwalk.back(store, body.from_key, ACTOR, press=body.press), body)
+
+@app.post('/api/walk/open')
+def walk_open(body: RailWalkBody):
+    from . import railwalk
+    if body.level: return _walk_answer(railwalk.section(store, body.level, ACTOR, press=body.press), body)
+    if not body.key: raise HTTPException(422, 'a key or a section is required')
+    return _walk_answer(railwalk.open(store, body.key, ACTOR, press=body.press, at=body.from_key), body)
+
+@app.post('/api/walk/leave')
+def walk_leave(body: RailWalkBody):
+    from . import railwalk
+    if not body.key or not body.how: raise HTTPException(422, 'a key and how it is left are required')
+    try: out = railwalk.leave(store, body.key, body.how, ACTOR, press=body.press, note=body.note, until=body.until)
+    except LookupError as e: raise HTTPException(404, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+    except RuntimeError as e: raise HTTPException(409, str(e))
+    return _walk_answer(out, body)
 
 @app.post('/api/concierge/open')
 def concierge_open():
@@ -5601,61 +5601,18 @@ class ConciergeStreamBody(BaseModel):
     images: list[str] = []                        # pictures sent with the line (/api/prompt-image)
     view: dict | None = None                      # the page on screen, read when the owner asked (pageview.py) - secrets as their state only
     react: str = ''                               # what the owner just did on that page, inside a conversation they started about it
-    include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
-    blind: bool = False                 # pressed with nothing on the table (processing_navigation.reserve)
-    selection_revision: str | None = None
-    expected_next_key: str | None = None
-    expected_next_members: list[str] | None = None
+    from_key: str | None = None                   # the row the page had on screen: Next and Back move from it (railwalk)
+    press: str | None = None
+    read: list[str] = []
     fyi: int | None = None
 
-
-def _navigation_reservation(body):
-    """Validate modern selection fields before dock, model, refresh or stream work."""
-    from .processing_navigation import reserve, NavigationStale
-    from .funnel_selection import SelectionUnavailable
-    names = {'selection_revision', 'expected_next_key', 'expected_next_members'}
-    supplied = names.intersection(body.model_fields_set)
-    if not supplied:
-        return None  # Compatibility for older callers during the staged cutover.
-    if (supplied != names or body.key or getattr(body, 'mode', 'next') != 'next'
-            or not re.fullmatch(r'[0-9a-f]{64}', body.selection_revision or '')
-            or body.expected_next_members is None):
-        raise HTTPException(422, 'automatic navigation requires the complete selection binding')
-    try:
-        return reserve(store, selection_revision=body.selection_revision,
-                       expected_next_key=body.expected_next_key,
-                       expected_next_members=body.expected_next_members,
-                       only=body.only, include_surfaced=body.include_surfaced, exclude=body.exclude,
-                       # nothing on the table - the walk's start: no item the owner saw that a moved pick could skip past
-                       blind=bool(getattr(body, 'blind', False)))
-    except NavigationStale as error:
-        raise HTTPException(409, error.detail) from error
-    except SelectionUnavailable as error:
-        raise HTTPException(503, error.detail) from error
 
 @app.post('/api/concierge/stream')
 async def concierge_stream(body: ConciergeStreamBody):
     """One turn of the assistant, streamed: the CLI's tool calls and progress as they happen, then
     `done` with the same payload the plain endpoints return. Same shape as the task assistant's
     stream; the browser walking away detaches, and the page's Stop sets `cancel` (/api/concierge/stop)."""
-    from . import concierge
-    from .processing_navigation import NavigationStale
-    from .funnel_selection import SelectionUnavailable
-    def admit():
-        # the walk handed to a phone no longer locks this road (2026-10-23): both surfaces walk, the desk follows
-        return _navigation_reservation(body)
-    admission = asyncio.create_task(asyncio.to_thread(admit))
-    try:
-        reservation = await asyncio.shield(admission)
-    except asyncio.CancelledError:
-        def release_admission(done):
-            try:
-                held = done.result()
-                if held: held.close()
-            except Exception:
-                pass
-        admission.add_done_callback(release_admission)
-        raise
+    from . import concierge, railwalk
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
     rides = [False]                     # set before `done` is queued: the stream then ends on the `pile` that follows it
     def put(e):
@@ -5697,33 +5654,22 @@ async def concierge_stream(body: ConciergeStreamBody):
             if notice: put({'type': 'context_update', 'say': notice})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
             elif body.mode == 'next':
-                if reservation:
-                    out = reservation.run(lambda selected, guard, dock: concierge.surface(
-                        store, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
-                        include_surfaced=body.include_surfaced, exclude=body.exclude,
-                        selection=selected, commit_guard=guard, bound_dock=dock, leaving=body.leaving), ACTOR)
-                else:
-                    out = concierge.surface(store, body.key, actor=ACTOR, only=body.only, trace=trace, cancel=cancel,
-                                            include_surfaced=body.include_surfaced, exclude=body.exclude,
-                                            leaving=body.leaving)
+                out = concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key, press=body.press, read=body.read)
+            elif body.mode == 'back': out = railwalk.back(store, body.from_key, ACTOR, press=body.press)
+            elif body.mode == 'start': out = railwalk.start(store, ACTOR, press=body.press)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
                                       open_card=body.open_card, images=prompt_images(body.images), view=body.view, react=body.react)
             if notice: out['context_update'] = notice
             # THE CARD FIRST, THE RAIL AFTER IT (the owner, 2026-10-20): the rail that rides along (design B) is read after the
             # turn's writes, and that read was most of a press - the card waited on it. `done` goes now and says the rail
             # follows; the rail comes as its own `pile` event, and the page keeps the rail it has until that one lands.
-            # the page drew the prepared answer at the press: this says whether the committed one is the same (prepare_next)
-            if body.mode == 'next' and not body.key: out['answer_hash'] = concierge.answer_hash(out)
-            if body.mode == 'next' and _pile_rides(out, body):
+            walking = body.mode in ('next', 'back', 'start')
+            if walking and _pile_rides(out, body):
                 rides[0] = True
                 put({'type': 'done', **out, 'pile_follows': True})
                 put({'type': 'pile', 'pile': _with_pile(out, body).get('pile')})
             else: put({'type': 'done', **out})
-            if body.mode == 'next': _refresh_after(out)     # after the answer, never before it (design C) - a clicked row too
-        except NavigationStale as error:
-            put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
-        except SelectionUnavailable as error:
-            put({'type': 'error', 'code': 'selection_unavailable', 'detail': error.detail, 'error': str(error)})
+            if walking: _refresh_after(out)     # after the answer, never before it (design C) - a clicked row too
         except processing_all.AllError as error:      # the page retries on this code once membership settles
             put({'type': 'error', 'code': error.detail['code'], 'detail': error.detail, 'error': str(error)})
         except concierge.Stopped:                     # the page stopped waiting already; nothing of the turn was kept
@@ -5733,15 +5679,10 @@ async def concierge_stream(body: ConciergeStreamBody):
             put({'type': 'error', 'error': str(e)})
         finally:
             _ANSWERING.discard(cancel)
-            if reservation: reservation.close()
-    try:
-        # ...with the request's context: the turn's writes are the page's own press (live.TAB), as they would be on the request's thread
-        ctx, turn = contextvars.copy_context(), work
-        def work(): ctx.run(turn)               # (named as the turn it runs: a thread is told apart by its target's name)
-        threading.Thread(target=work, daemon=True).start()
-    except BaseException:
-        if reservation: reservation.close()
-        raise
+    # ...with the request's context: the turn's writes are the page's own press (live.TAB), as they would be on the request's thread
+    ctx, turn = contextvars.copy_context(), work
+    def work(): ctx.run(turn)               # (named as the turn it runs: a thread is told apart by its target's name)
+    threading.Thread(target=work, daemon=True).start()
     async def generate():
         while True:
             e = await events.get()

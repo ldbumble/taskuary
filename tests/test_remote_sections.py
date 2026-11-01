@@ -38,28 +38,32 @@ class ForLaterTests(unittest.TestCase):
 
 
 class SectionWalkTests(unittest.TestCase):
+    """A section pick opens that section's first row, and Next walks on down the whole rail from it - no section held, no
+    "FYI done." stop (railwalk.section; Q6, 2026-10-30)."""
     def setUp(self):
         self.s = MemoryStore()
-        self.shown = []
-        def surface(store, key=None, **kw):
-            self.shown.append(key)
-            return {'say': f'shown {key}', 'item': {'key': key} if key else None}
         self.patches = [mock.patch.object(funnel, 'pile', return_value={'items': pile()}),
-                        mock.patch.object(concierge, 'surface', side_effect=surface),
-                        mock.patch.object(ra, 'carry_out', side_effect=lambda store, out, item, actor='owner', lead='', picked=False, extra=None: (lead + ' ' + out['say']).strip()),
+                        mock.patch.object(ra, 'carry_out', side_effect=lambda store, out, item, actor='owner', lead='', picked=False, extra=None: (lead + ' ' + (out.get('say') or '')).strip()),
                         mock.patch.object(ra, 'asking', return_value={'channel': 'whatsapp', 'chat': 'c1'})]
-        for p in self.patches: p.start()
+        for p in self.patches:
+            p.start(); self.addCleanup(p.stop)
 
-    def tearDown(self):
-        for p in self.patches: p.stop()
+    def test_a_section_pick_opens_its_first_row(self):
+        from taskuary import railwalk
+        opened = []
+        def open_(store, key, actor='owner', press=None, **k):
+            opened.append(key); return {'say': f'shown {key}', 'item': {'key': key}}
+        with mock.patch.object(railwalk, 'open', side_effect=open_):
+            self.assertEqual(ra.run_act(self.s, {'t': 'section', 'section': 'fyi'}, None).splitlines()[0], 'shown msg:3')
+        self.assertEqual(opened, ['msg:3'])
 
-    def test_a_section_pick_walks_that_section_and_next_stays_in_it_until_it_is_empty(self):
-        # (the first line: a pick's answer with nothing to tap gets the way on under it - 2026-10-22)
-        self.assertEqual(ra.run_act(self.s, {'t': 'section', 'section': 'fyi'}, None).splitlines()[0], 'shown msg:3')
-        self.assertEqual(ra.run_act(self.s, {'t': 'next'}, {'key': 'msg:3'}).splitlines()[0], 'shown msg:4')
-        done = ra.run_act(self.s, {'t': 'next'}, {'key': 'msg:4'})
-        self.assertTrue(done.startswith('FYI done.'), done)
-        self.assertEqual(self.shown, ['msg:3', 'msg:4', None], 'then the normal walk takes over')
+    def test_next_after_a_section_pick_goes_on_from_the_row_on_the_table(self):
+        seen = []
+        def surface(store, key=None, **kw):
+            seen.append(kw.get('from_key')); return {'say': 'next', 'item': None}
+        with mock.patch.object(concierge, 'surface', side_effect=surface):
+            ra.run_act(self.s, {'t': 'next'}, {'key': 'msg:4'})
+        self.assertEqual(seen, ['msg:4'])
 
     def test_an_empty_section_says_so(self):
         said = ra.run_act(self.s, {'t': 'section', 'section': 'reports'}, None)
@@ -95,21 +99,6 @@ class BrowseTests(unittest.TestCase):
         labels = [label for label, _ in ra.SCRIPT_LINES]
         self.assertIn('Connections', labels)
         self.assertIn('Settings', labels)
-
-
-class SectionWalkEndsTests(unittest.TestCase):
-    """The final review: a phone section walk abandoned today captured Next days later. It ends with a new walk, a named
-    pick, or when it is older than the quiet hours."""
-    def test_a_held_section_expires_and_a_new_walk_drops_it(self):
-        s = MemoryStore()
-        chat = {'channel': 'whatsapp', 'chat': 'c1'}
-        db.hold(s, chat, 'fyi', ['msg:3'])
-        self.assertEqual(db.held(s, chat)['section'], 'fyi')
-        with mock.patch.object(db, '_now', return_value=datetime.now() + timedelta(hours=4)):
-            self.assertIsNone(db.held(s, chat), 'past the quiet hours it is over')
-        with mock.patch.object(ra, 'asking', return_value=chat), mock.patch.object(ra, 'walk', return_value='walked'):
-            ra.run_act(s, {'t': 'walk'}, None)
-        self.assertIsNone(db.held(s, chat), 'a new walk is not the old section')
 
 
 class SummaryWordsTests(unittest.TestCase):

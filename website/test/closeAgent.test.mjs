@@ -9,7 +9,7 @@ test("both closes run the shared write-up and the shared task.complete", () => {
   const page = read("TaskPage.jsx"), wall = read("WallView.jsx"), mod = read("closeAgent.jsx");
   assert.match(mod, /api\.post\(`\/api\/tasks\/\$\{tid\}\/wrap`, \{ close: false, no_reply: true, background: true, then_close: true \}\)/);   // one server job (writeup.py)
   assert.match(mod, /runOperation\(api, "task\.complete", tid/);
-  assert.match(page, /const close = \(\) => completeTask\(api, selected, note\);/);
+  assert.match(page, /const close = walkLeave \? [^\n]* : \(\) => completeTask\(api, selected, note\);/);
   assert.match(page, /await writeUpThenClose\(api, id\)/);
   assert.doesNotMatch(page, /\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, no_reply: true \}/);    // no second copy
   assert.match(wall, /const wrote = await closeAgentWork\(api, s\.taskId\);/);

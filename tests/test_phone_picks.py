@@ -131,7 +131,7 @@ class StaleListTests(unittest.TestCase):
         s, _ = armed()
         with mock.patch.object(funnel, 'pile', return_value={'items': [{'key': 'a'}]}), \
              mock.patch.object(ra, 'who_wants_what', return_value='TODAY: three people want you.'), \
-             mock.patch.object(concierge, 'surface', return_value={'say': 'All clear.', 'item': None}):
+             mock.patch('taskuary.railwalk.start', return_value={'say': 'All clear.', 'item': None}):
             self.assertIn('TODAY', ra.run_act(s, {'t': 'walk'}, None))
         said = []
         with mock.patch.object(messengers, 'wa_send', side_effect=lambda *a, **k: said.append(a[2])), \

@@ -1281,6 +1281,9 @@ export function DayCards({ groups, onSection }) {
 // what waits on the right as a row per band (its gist, its count). It replaces the grey meetings box over a row of tiles.
 // No meetings: the waiting side alone; nothing waiting: the meetings alone; neither: nothing.
 const atLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
+// a meeting line's pitch and the now line's (assistantView.css .tq-day-evs): the list asks for room for this many lines, no more -
+// a longer day scrolls in its card instead of growing the page
+const EV_ROW = 22, EV_NOW = 10, EV_SHOWN = 5;
 const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @]/)[0]).join(", ") + (who.length > 2 ? ` +${who.length - 2}` : "");
 // what is ON YOU across the opener's groups: a section's `you` (summarize), or all its rows where the section is on you (lanes.json) -
 // whether the opener's Walk has anything to walk (AssistantView welcome); the card's headline is the rail's Tasks count (DayOpener)
@@ -1294,12 +1297,19 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   const now = Date.now(), next = evs.findIndex((e) => atLocal(e.start) > now);
   // the now line sits between what is behind you and what is ahead - not above a day that has not started
   const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
+  // A LONG DAY SCROLLS INSIDE ITS CARD (the owner, 2026-10-31: "make sure it matches if left side has 10 meetings or none it still looks
+  // normal"): the list opens on now - one meeting behind it in view - and the card stays the height of the open work beside it
+  const evsRef = useRef(null);
+  React.useLayoutEffect(() => {
+    const el = evsRef.current, at = el?.querySelector(".ev.now") || el?.querySelector(".ev:not(.past)");
+    if (el && at) el.scrollTop = Math.max(0, at.offsetTop - EV_ROW);
+  }, [all.length, nowAt]);
   // ONE HEADLINE (U6): "Waiting · 30" counted reports and FYI the rows below called nothing to decide - the count is what is
-  // on you, and reports and FYI sit apart as reading. Which sections are which is lanes.json's; a section's `you` is its rows that
-  // are on you (summarize - waiting on THEM, or an agent working, is under Tasks but not on you, as the greeting has always said)
-  const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), isRead = (g) => !!SECTION[g.key]?.to_read;
-  const act = groups.filter((g) => !isRead(g)), read = groups.filter(isRead);
-  const toRead = cnt(read);
+  // on you. Which sections are reading is lanes.json's `to_read`; a section's `you` is its rows that are on you (summarize - waiting
+  // on THEM, or an agent working, is under Tasks but not on you, as the greeting has always said)
+  // ...and the reading is not here at all (the owner, 2026-10-31: "don't need to read vs tasks, just what's open"): reports and FYI
+  // are the rail's, and the second card is what is open
+  const isRead = (g) => !!SECTION[g.key]?.to_read, act = groups.filter((g) => !isRead(g));
   // ONE NUMBER, THE RAIL'S (the owner, 2026-10-27: "they should match count of tasks"): the opener said "12 on you" and its Tasks row 12
   // beside the rail's TASKS 13 - an agent at work or a wait on them is a task on the rail and was left out here. The headline and each
   // band count every row the rail draws under it (summarize's `n`, the rail's own count), so the opener and the rail say one number
@@ -1326,12 +1336,14 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
       </div>
     );
   };
-  // ...and what CHANGED while you were away rides on top of the same card (SinceBlock - the owner picked "A +", 2026-10-08)
+  // TWO CARDS, SIZED BY WHAT IS IN THEM (the owner, 2026-10-31: "more compact ... make them cards"): one grid row, so the two stand
+  // the same height - the open work's, or the day's up to EV_SHOWN lines, whichever is taller - and never a tall empty box
+  const nLines = allDay.length + evs.length, room = Math.min(nLines, EV_SHOWN) * EV_ROW + (nowAt >= 0 ? EV_NOW : 0);
   return (
     <div className="tq-day-box">
     {(agenda || waits) && <div className={`tq-day${agenda && waits ? "" : " solo"}`}>
       {!!cal && (
-        <div className="tq-day-agenda" data-tq-cal={cal}>
+        <div className="tq-day-pane tq-day-agenda" data-tq-cal={cal}>
           <div className="tq-day-h">Your day · {cal === "empty" ? "no meetings" : "calendar"}</div>
           <div className="ev cal-note"><span className="s">{cal === "none" ? "No calendar connected - a calendar-capable card such as Microsoft 365 or Gmail reads it once it is allowed to."
             : cal === "error" ? <>Your calendar could not be read.<span className="why">{String(today.errors[0])}</span></> : "Nothing on your calendar today."}</span></div>
@@ -1340,30 +1352,31 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
         </div>
       )}
       {!!all.length && (
-        <div className="tq-day-agenda">
+        <div className="tq-day-pane tq-day-agenda">
           <div className="tq-day-h">Your day · {plural(evs.length, "meeting")}</div>
-          {allDay.map((e) => <div key={e.subject} className="ev allday"><span className="t">all day</span><span className="s"><b>{e.subject}</b></span></div>)}
-          {evs.map((e, i) => (
-            <React.Fragment key={`${e.start}-${i}`}>
-              {i === nowAt && <div className="ev now"><span className="t">now</span><i /></div>}
-              {line(e, i)}
-            </React.Fragment>
-          ))}
-          {nowAt === evs.length && <div className="ev now"><span className="t">now</span><i /></div>}
+          {/* the list takes no height of its own past `room`: the card is as tall as its row, and the rest of the day scrolls */}
+          <div className="tq-day-evs" style={{ minHeight: room }}><div ref={evsRef} className="in" data-tq-day-evs="">
+            {allDay.map((e) => <div key={e.subject} className="ev allday"><span className="t">all day</span><span className="s"><b>{e.subject}</b></span></div>)}
+            {evs.map((e, i) => (
+              <React.Fragment key={`${e.start}-${i}`}>
+                {i === nowAt && <div className="ev now"><span className="t">now</span><i /></div>}
+                {line(e, i)}
+              </React.Fragment>
+            ))}
+            {nowAt === evs.length && <div className="ev now"><span className="t">now</span><i /></div>}
+          </div></div>
         </div>
       )}
       {waits && (
-        <div className="tq-day-wait">
+        <div className="tq-day-pane tq-day-wait">
           {/* ...said ONCE (the owner, 2026-10-28): "13 TASKS" stood over a Tasks row saying 13 - the heading names the band, the row counts it */}
           <div className="tq-day-h">{loading ? "Counting…" : tasks ? "Tasks" : "Nothing on you"}</div>
-          {!groups.length && <div style={{ fontSize: 13, color: "#6e685f" }}>Your mail is still being read - what needs you shows up here.</div>}
+          {!groups.length && <div className="note">Your mail is still being read - what needs you shows up here.</div>}
           {act.map(row)}
-          {!!read.length && <div className="tq-day-h" style={{ marginTop: 8 }}>To read · {loading ? "…" : toRead}</div>}
-          {read.map(row)}
         </div>
       )}
     </div>}
-    {/* ...and the morning digest under the two cards (SinceBlock; the owner, 2026-10-30) */}
+    {/* ...and the morning digest right under the two cards (SinceBlock; the owner, 2026-10-30) */}
     {top}
     </div>
   );

@@ -968,7 +968,9 @@ def walk(store, actor: str = 'owner', opener: bool = True) -> str:
         spend_morning(store)                                  # the summary IS the day's opener - it is not said twice
         from . import welcome
         welcome.mark_greeted(store)                           # ...on the desk too: one good morning a day, wherever it was said
-        out = concierge.resume(store, actor)                  # the item on the table first, when there still is one
+        # ...from the TOP of the rail, as the desk's Walk starts (the walk has one owner, 2026-10-30) - one walk, shared with the desk
+        from . import railwalk
+        out = railwalk.start(store, actor)
         return carry_out(store, out, None, actor=actor, lead=opener)
 
 
@@ -1167,12 +1169,8 @@ def _way_on(store, tid=None) -> list:
 def stop_walk(store, tid=None) -> str:
     """Stop, said in the chat: the walk ends here - nothing on the table, no section held, the next walk from the top - and nothing is
     changed on any task. The walk and everything else stay one tap away."""
-    from . import concierge, doorway_browse, funnel
-    if tid:
-        try: concierge.set_current(store, tid, None, 'owner')
-        except Exception as e: logger.debug(f'the phone stop left the table as it was: {e}')
-    doorway_browse.hold(store, asking(), None)
-    funnel.new_walk(store)
+    from . import railwalk
+    railwalk.reset(store)
     return turn_text({'say': 'Stopped - the walk is over, and nothing on any task changed. Message me any time to start again.', 'item': None},
                      store=store, extra=[(WALK, {'t': 'walk', 'opened': True}), (MENU, {'t': 'menu'})])
 
@@ -1293,8 +1291,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
             return '\n\n'.join(said + [turn_text(nxt, store=store)])
         said.append('I could not write that draft here - it is waiting on the task page.')
     if walk_on:
-        here = (item or {}).get('key') if verb == 'next' else None       # Next leaves the table as the desktop's does
-        return _on(store, actor, said, leaving=here, exclude=here, done_with=(item or {}).get('key'))
+        return _on(store, actor, said, done_with=(item or {}).get('key'))   # Next leaves the table as the desktop's does
     # AN ANSWER THAT NAMES A TASK BRINGS IT UP (the router rule): the desk opens a [TQ-…](#task=N) link the moment the answer lands;
     # the phone stripped it to its words, so "bring up TQ-0035" was answered and nothing came up (F18). Its card and its choices
     linked = _TASK_ID.search(str(out.get('say') or '')) if not out.get('item') and not prop and not verb else None
@@ -1496,21 +1493,11 @@ def receipt_text(store, done: dict, actor: str = 'owner') -> str:
     return turn_text({'say': turn['say'], 'item': None}, store=store, extra=list(recovery_rows(store, turn['chips'], actor)))
 
 
-def _move_on(store, actor: str, leaving: str = None, exclude: str = None, done_with: str = None) -> tuple[dict, str]:
-    """What comes after the table - (the next surface, a lead line). WHILE A SECTION IS BEING WALKED the next row of that
-    section, whatever put the last one down: Next did, but an act (Make a task, Send to agent, Remind me) fell back to the
-    whole walk and put TQ-0001 up in the middle of Walk Reports (2026-09-30 phone test). `done_with` is the key the act settled."""
-    from . import concierge, doorway_browse, funnel
-    walking = doorway_browse.held(store, asking())
-    if walking:
-        seen = [*walking.get('seen', []), *[k for k in (leaving, done_with) if k]]
-        nxt = doorway_browse.next_in(store, walking['section'], seen)
-        if nxt:
-            doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
-            return concierge.surface(store, nxt['key'], actor=actor, leaving=leaving), ''
-        doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
-        return concierge.surface(store, actor=actor, leaving=leaving, exclude=exclude), funnel.section_done(walking['section'])
-    return concierge.surface(store, actor=actor, leaving=leaving, exclude=exclude), ''
+def _move_on(store, actor: str, done_with: str = None) -> tuple[dict, str]:
+    """What comes after the table - (the next surface, a lead line): the row that was directly below the one an act settled
+    (`done_with`) or Next left (railwalk.next, rule 5). A section walked is no hold of its own: Next goes on down the rail (Q6)."""
+    from . import concierge
+    return concierge.surface(store, actor=actor, from_key=done_with), ''
 
 
 NEWS_KEY = 'phone_urgent_told'             # :<channel>:<chat> -> {walk, keys}: the urgent arrivals this walk already named (A12)
@@ -1522,18 +1509,16 @@ def urgent_news(store, out: dict | None) -> tuple[str, list]:
     go on past it without a word. Only what the rail shades urgent (lanes.is_urgent), not shown in this walk, not the card coming up,
     and not named before in this walk. ('', []) when there is none, no chat is speaking, or the walk ran out: it walked every row below
     its place, the urgent one too, and the run-out starts a new walk, so the line named it again over "That's everything"."""
-    from . import funnel
-    from .processing_unread import WALK_KEY
+    from . import funnel, railwalk
     here, nxt = asking(), (out or {}).get('item')
     if store is None or not (here or {}).get('chat') or (out or {}).get('over'): return '', []
     try: items = funnel.pile(store).get('items') or []
     except Exception as e:
         logger.debug(f'the phone could not look for urgent arrivals: {e}'); return '', []
     up = (nxt or {}).get('key')
-    news = [i for i in items if is_urgent(i) and not i.get('settling') and not i.get('surfaced') and i.get('key') != up
-            and up not in (i.get('aliases') or ())]
+    news = [i for i in items if is_urgent(i) and not i.get('settling') and i.get('key') != up and up not in (i.get('aliases') or ())]
     if not news: return '', []
-    key, walk_at = f"{NEWS_KEY}:{here['channel']}:{here['chat']}", str(store.get_setting(WALK_KEY) or '')
+    key, walk_at = f"{NEWS_KEY}:{here['channel']}:{here['chat']}", str(railwalk.state(store).get('started') or '')
     try: told = json.loads(store.get_setting(key) or '{}') or {}
     except ValueError: told = {}
     seen = set(told.get('keys') or []) if told.get('walk') == walk_at else set()
@@ -1545,7 +1530,7 @@ def urgent_news(store, out: dict | None) -> tuple[str, list]:
 
 
 def _on(store, actor: str, said: list, extra=None, **kw) -> str:
-    """The receipt lines, then what comes next (_move_on) - with the section's own end said when it ran out."""
+    """The receipt lines, then what comes next (_move_on) - the row below, down the whole rail (Q6: no section end)."""
     nxt, lead = _move_on(store, actor, **kw)
     # THE RECEIPT IS ITS OWN BUBBLE, and the choices are the next card's alone (F14): a receipt's own picks (Open TQ-…, Mark done on
     # the task it just sent for) rode the same poll as the card under it - two Nexts, and a Mark done for a different task
@@ -1724,36 +1709,21 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     from . import doorway_browse
     try:
         if t == 'section':
-            # a section, walked (the desktop's heading click): its first row, and Next stays in it until it is empty
+            # a section, walked (the desktop's heading click): its first row, and Next walks on down the rail from it (Q6, 2026-10-30)
+            from . import railwalk
             sec = act.get('section') or ''
-            first = doorway_browse.next_in(store, sec, ())
-            if not first: return f"Nothing in {funnel.SECTION_WORDS.get(sec, sec)} right now."
-            doorway_browse.hold(store, asking(), sec, [first['key']])
-            nxt = concierge.surface(store, first['key'], actor=actor)
+            nxt = railwalk.section(store, sec, actor)
+            if not nxt.get('item'): return f"Nothing in {funnel.SECTION_WORDS.get(sec, sec)} right now."
             return carry_out(store, nxt, nxt.get('item'), actor)
-        # a new walk, or one item by name, is not the section being walked
-        if t in ('walk', 'open'): doorway_browse.hold(store, asking(), None)
         if t == 'menu': return turn_text({'say': 'Everything else, from here:', 'item': None}, store=store, extra=menu_lines(store))
         if t == 'browse':
             text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'), act.get('page') or 0)
             return turn_text({'say': text, 'item': None}, store=store, extra=rows)
-        if t == 'next' and doorway_browse.held(store, asking()):
-            here, walking = (item or {}).get('key'), doorway_browse.held(store, asking())
-            seen = [*walking.get('seen', []), *([here] if here else [])]
-            nxt = doorway_browse.next_in(store, walking['section'], seen)
-            if nxt:
-                doorway_browse.hold(store, asking(), walking['section'], [*seen, nxt['key']])
-                out = concierge.surface(store, nxt['key'], actor=actor, leaving=here)
-                news, opens = urgent_news(store, out)
-                return carry_out(store, out, out.get('item'), actor, lead=_lead(passed_read(item), news), extra=opens)
-            doorway_browse.hold(store, asking(), None)          # the section ran out: say so, and the walk goes on as normal
-            return carry_out(store, concierge.surface(store, actor=actor, leaving=here, exclude=here), None, actor,
-                             lead=_lead(passed_read(item), funnel.section_done(walking['section'])))
         if t == 'next':
-            # the desktop's Next: what is on the table is put down on the way out (read - Passed when it is yours) and not
-            # the next pick; the phone surfaced afresh, so a failed item could be handed straight back or left unread
+            # the desktop's Next: the row directly below the one on this chat's table, after leaving it (railwalk.next) - one walk
+            # with the desk (Q5), so the desk follows
             here = (item or {}).get('key')
-            out = concierge.surface(store, actor=actor, leaving=here, exclude=here)
+            out = concierge.surface(store, actor=actor, from_key=here)
             news, opens = urgent_news(store, out)
             return carry_out(store, out, None, actor, lead=_lead(passed_read(item), news), extra=opens)
         if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
@@ -1773,7 +1743,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             from .store import task_ref
             said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
             here = (item or {}).get('key')
-            return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
+            return _on(store, actor, [said], done_with=here)
         if t == 'redraft':
             here = asking() or {}
             if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')
@@ -2068,7 +2038,7 @@ def member_lines(item: dict | None) -> list:
 
 
 def fyi_total(store, item: dict | None) -> int:
-    """Every FYI the rail holds with this batch counted in - its members are read by being shown, so the pile alone has dropped them."""
+    """Every FYI the rail holds with this batch counted in - a member read since the batch went up has left the pile, not the count."""
     if store is None or (item or {}).get('kind') != 'fyis': return 0
     from . import funnel
     try: rows = funnel.pile(store).get('items') or []

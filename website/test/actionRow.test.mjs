@@ -232,7 +232,7 @@ test("a typed question is about what is OPEN on the table, whatever put it there
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(view, /const table = msgs\[tableCardIndex\(msgs, current \|\| cardRef\.current\)\]\?\.card;/);   // the table's own card (tableCard.test)
   // ...a page open beside it included: it does not take the item off the table (verify, 2026-10-19)
-  assert.match(view, /const subject = tableKey \|\| current \|\| cardRef\.current;/);
+  assert.match(view, /const subject = how\.door \? null : tableKey \|\| current \|\| cardRef\.current;/);
   assert.match(view, /turn\(\{ mode: "say", text: t, key: subject,/);
 });
 

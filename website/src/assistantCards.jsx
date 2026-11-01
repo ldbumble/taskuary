@@ -1020,6 +1020,10 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
         ) : card.idea_kind === "workstream" && a.slug ? (
           <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-workstream-add={a.slug}
             onClick={addWorkstream}>{busy ? "Adding…" : a.added ? "Keep it" : "Add it"}</Button>
+        ) : card.idea_kind === "habit" && a.line ? (
+          // A HABIT OF YOURS (the owner, 2026-11-01): one the Advisor adopted says Keep it, one it is unsure of Adopt it; No is Not ours
+          <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-habit-adopt=""
+            onClick={addWorkstream}>{busy ? "Adopting…" : a.adopted ? "Keep it" : "Adopt it"}</Button>
         ) : card.idea_kind === "report" && a.report ? (
           // TASKUARY ITSELF FAILING AGAIN (reportideas.py): the one Report popup, drafted from what the Advisor counted - scrubbed, the owner's Submit
           <Button size="small" variant="contained" disableElevation sx={primary}

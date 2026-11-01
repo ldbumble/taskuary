@@ -18,9 +18,9 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-TAKEN, WRONG = ('task', 'agent', 'rule'), ('dismiss', 'dismiss_kind')
-OWNER = ('owner', 'you', 'human')
-GRADES = ('taken', 'handled', 'wrong', 'walked')
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from taskuary import ideagrade                     # one grading, read by the Advisor's 80% bar per kind and by this tool
+GRADES = ideagrade.GRADES
 
 
 def connect(home) -> sqlite3.Connection:
@@ -33,17 +33,8 @@ def _cols(cx, t): return {r[1] for r in cx.execute(f'PRAGMA table_info({t})')}
 
 
 def grade(cx, i: dict, now: str) -> str:
-    """One idea's grade by what the owner did with it."""
-    verbs = {r[0] for r in cx.execute("SELECT Action FROM audit WHERE EntityType='idea' AND EntityId=?", (str(i['IdeaId']),))}
-    if verbs & set(TAKEN): return 'taken'
-    if verbs & set(WRONG) or (i['Status'] == 'dismissed' and i.get('DecidedBy') in OWNER): return 'wrong'
-    try: a = json.loads(i.get('ActionJson') or '{}')
-    except ValueError: a = {}
-    if a.get('tid') and cx.execute("SELECT 1 FROM outcome WHERE Kind='reply.sent' AND TargetKind='task' AND TargetId=? AND At>=? AND At<=? "
-                                   f"AND Actor IN ({','.join('?' * len(OWNER))}) LIMIT 1",
-                                   (a['tid'], i['FirstSeen'], _later(i['FirstSeen'], 24), *OWNER)).fetchone(): return 'taken'
-    if i['Status'] == 'done' and i.get('DecidedBy') in OWNER: return 'handled'
-    return 'walked' if _later(i['FirstSeen'], 24) <= now else 'pending'
+    """One idea's grade by what the owner did with it (taskuary.ideagrade)."""
+    return ideagrade.grade(lambda q, a=(): [dict(r) for r in cx.execute(q, a)], i, now)
 
 
 def ideas(cx, since: str, until: str = '9999') -> list:

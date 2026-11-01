@@ -1,0 +1,60 @@
+"""HOW THE OWNER TOOK EACH ADVISOR IDEA, AND WHICH KINDS HAVE EARNED THEIR PLACE (the design's S0 and S7, 2026-11-01).
+
+An idea is graded by the owner's own acts - no new button:
+  taken    they made a task or an agent run of it, adopted its rule, or sent a reply on the task it names within a day
+  handled  they put it down with Done
+  wrong    they dismissed it (or its whole kind)
+  walked   a day went by and they did none of these
+  pending  raised less than a day ago with nothing done yet - not graded
+Useful is taken + handled. A KIND of model idea is QUIET while its useful share over the last DAYS is under BAR on MIN or more graded
+(the owner, 2026-11-01: quiet unless sure; precision over 80%) - its lines are not raised. The window rolls, so a quiet kind is tried
+again once its old record ages out. Read here and by tools/advisor_ideas.py, one grading."""
+import json
+from datetime import datetime, timedelta
+
+TAKEN, WRONG = ('task', 'agent', 'rule', 'accept'), ('dismiss', 'dismiss_kind')
+OWNER = ('owner', 'you', 'human')
+GRADES = ('taken', 'handled', 'wrong', 'walked')
+BAR, MIN, DAYS = 0.8, 10, 30
+# the kinds the model raises - the app's own (health, report, connect, rule, workstream, habit) are counted, never thought, and stay
+TYPES = ('second_ask', 'pattern', 'decides', 'clash', 'drift', 'promise', 'prep')      # what the model may say a line of its own is
+MODEL_KINDS = ('idea',) + TYPES
+
+
+def _later(at, h): return (datetime.fromisoformat(str(at)[:19]) + timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def grade(q, i: dict, now: str) -> str:
+    """One idea's grade. `q(sql, args)` returns rows as dicts - a store's _rows, or a read-only connection's."""
+    verbs = {r['Action'] for r in q("SELECT Action FROM audit WHERE EntityType='idea' AND EntityId=?", (str(i['IdeaId']),))}
+    if verbs & set(TAKEN): return 'taken'
+    if verbs & set(WRONG) or (i['Status'] == 'dismissed' and i.get('DecidedBy') in OWNER): return 'wrong'
+    try: a = json.loads(i.get('ActionJson') or '{}') or {}
+    except ValueError: a = {}
+    if a.get('tid') and q("SELECT 1 x FROM outcome WHERE Kind='reply.sent' AND TargetKind='task' AND TargetId=? AND At>=? AND At<=? "
+                          f"AND Actor IN ({','.join('?' * len(OWNER))}) LIMIT 1", (a['tid'], i['FirstSeen'], _later(i['FirstSeen'], 24), *OWNER)):
+        return 'taken'
+    if i['Status'] == 'done' and i.get('DecidedBy') in OWNER: return 'handled'
+    return 'walked' if _later(i['FirstSeen'], 24) <= now else 'pending'
+
+
+def tally(gs) -> dict:
+    from collections import Counter
+    c = Counter(gs)
+    useful, graded = c['taken'] + c['handled'], sum(c[g] for g in GRADES)
+    return {**{g: c[g] for g in GRADES}, 'pending': c['pending'], 'n': graded, 'pct': round(100 * useful / graded) if graded else None}
+
+
+def record(store, days: int = DAYS) -> dict:
+    """{kind: tally} over the ideas first raised in the last `days`."""
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    by = {}
+    for i in store._rows('SELECT * FROM idea WHERE FirstSeen>=?', (since,)):
+        by.setdefault(i.get('Kind') or 'idea', []).append(grade(store._rows, i, now))
+    return {k: tally(v) for k, v in by.items()}
+
+
+def quiet_kinds(store) -> set:
+    """The model's kinds of idea that are quiet now: under BAR on MIN or more graded in the window."""
+    return {k for k, t in record(store).items() if k in MODEL_KINDS and t['n'] >= MIN and t['pct'] is not None and t['pct'] < BAR * 100}

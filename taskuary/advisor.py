@@ -1133,12 +1133,21 @@ def decide(store, key: str, preread: bool = True) -> dict:
             verb, line, ev = None, '', []
     if pending and r['ask'] and not m: notice(store, SHOWN, tgt[0], tgt[1], tier=2, key=key)
     # QUIET UNLESS SURE (the owner, 2026-11-01): a rule's button the owner picks under 80% of the time in this state goes dark (calibrate)
-    if by == 'rule' and verb and not calibrate.trusted(store, r['state'], verb, item.get('workstream')): verb, line, ev = None, '', []
+    if by == 'rule' and verb and not calibrate.trusted(store, r['state'], verb, _workstream(store, tgt)): verb, line, ev = None, '', []
     if preread: _preread(store, key)
     d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind},
                 {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])}) if verb else \
         {'key': key, 'state': r['state'], 'verb': None, 'line': '', 'by': by, 'evidence': [], 'kind': kind}
     return _out(store, key, item, verbs, r, rev, d, fix_of(store, item, verbs, d))
+
+
+def _workstream(store, tgt) -> str:
+    """The workstream of the item's task ('' off a task or unplaced) - its own record of presses decides once it has enough."""
+    if tgt[0] != 'task': return ''
+    try:
+        from . import workstreams
+        return workstreams.of_task(store, int(tgt[1]))
+    except Exception: return ''
 
 
 def _can_read(store) -> bool:

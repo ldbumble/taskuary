@@ -14,7 +14,7 @@ from .routing import first_line, draft_task_fields
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
-from . import buttons, remind, senders, textsim, words
+from . import buttons, remind, senders, textsim, words, workstreams
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -120,8 +120,20 @@ def _land(store, msg: dict, task_id, status: str) -> int:
     here, and a verdict that named nothing - a policy ignore, a failed call - simply carries none."""
     if msg.get('_mid'):
         store.place_message(msg['_mid'], task_id, status, title=msg.get('_title'))
-        return msg['_mid']
-    return store.add_message({**_fields(msg, task_id), 'Status': status})
+        mid = msg['_mid']
+    else: mid = store.add_message({**_fields(msg, task_id), 'Status': status})
+    _place(store, mid, task_id, msg.get('_workstream'))
+    return mid
+
+
+def _place(store, mid: int, task_id, said: str = None):
+    """The landed message's workstream, and its task's when the task has none: the message's own signals first (its thread, mailbox,
+    people - what the owner confirmed), triage's word where they say nothing (workstreams.py). Never fatal to landing."""
+    try:
+        if not workstreams.streams(store): return
+        s = workstreams.stamp_message(store, mid) or (said and workstreams.stamp_message(store, mid, said)) or ''
+        if s and task_id: store._exec("UPDATE task SET Workstream=? WHERE TaskId=? AND IFNULL(Workstream,'')=''", (s, task_id))
+    except Exception as e: logger.debug(f'workstream of message {mid} not placed: {e}')
 
 
 def _gh_no_auto(store, r: dict) -> bool:
@@ -701,8 +713,11 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
                              # ...and whether coding exists here at all: no coding tool connected, no coding kind (2026-10-16)
                              coding=capabilities.can_code(store),
                              # ...and what it can reach: "I can pull the Q3 totals" was offered with no connection to pull them from (B25)
-                             connected=connected_systems(store))
+                             connected=connected_systems(store),
+                             # ...and the owner's workstreams, so the sort knows which hat this is under (workstreams.py, 2026-11-01)
+                             workstreams=workstreams.menu(store) or None)
     intent['notes'], intent['notes_left'] = notes, notes_left
+    if intent.get('workstream'): msg['_workstream'] = intent['workstream']
     return intent, fail
 
 

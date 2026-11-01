@@ -60,9 +60,14 @@ class Walk:
             note = 'Sorted with the floor team.' if how == 'note' else None
             return self.land(railwalk.leave(self.s, self.key(args[0]), how, press=press, note=note, until=until))
         if verb == 'send':
-            sym, closes = args[0], args[1] == 'closes'
+            sym, closes, live = args[0], args[1] in ('closes', 'live'), args[1] == 'live'
             if closes and 'rid' in self.src[sym]: self.s.decide_review(self.src[sym]['rid'], 'approved', 'Sent.', 'owner')
-            return self.land(railwalk.leave(self.s, self.key(sym), 'sent', press=press))
+            # ...`live`: the reply went with the task's agent still open at its prompt, waiting on the owner (2026-11-01)
+            from types import SimpleNamespace
+            from taskuary import terminal
+            agent = {'w-live': SimpleNamespace(sid='w-live', task_id=self.src[sym].get('tid'), alive=True)} if live else {}
+            with mock.patch.dict(terminal.SESSIONS, agent):
+                return self.land(railwalk.leave(self.s, self.key(sym), 'sent', press=press))
         if verb == 'arrive': return walkworld.arrive(self.s, self.src, args[0])
         if verb == 'close-elsewhere': return walkworld.close_elsewhere(self.s, self.src, args[0])
         if verb == 'agent-closes': return walkworld.agent_closes(self.s, self.src, args[0])

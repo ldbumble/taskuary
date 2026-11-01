@@ -32,6 +32,7 @@
     {"id": "W27", "rule": [5], "steps": ["start", "next"], "action": "leave T2 note", "expect": "T3", "rail": {"not": ["T2"]}, "back": true},
     {"id": "W28", "rule": [5], "steps": ["open T4"], "action": "send T4 closes", "expect": "T5", "rail": {"not": ["T4"]}, "back": true},
     {"id": "W29", "browser": {"skip": "the demo has no second step on a task to keep a sent one open - pinned in process"}, "rule": [5], "steps": ["open T4"], "action": "send T4 kept", "expect": "T4", "rail": {"has": ["T4"]}, "back": true},
+    {"id": "W56", "browser": {"skip": "the demo runs no agent - a live one under Send is send-live-agent-stays"}, "rule": [5], "bug": "a Send closed a task whose agent was still open, waiting on the owner", "steps": ["open T4"], "action": "send T4 live", "expect": "T4", "rail": {"has": ["T4"]}, "back": true},
     {"id": "W30", "rule": [5], "steps": ["start", "next"], "action": "leave T2 remind", "expect": "T3", "later": ["T2"], "back": true},
     {"id": "W31", "rule": [5], "steps": ["open T5"], "action": "leave T5 not_task", "expect": "M1", "rail": {"not": ["T5"]}, "back": true},
     {"id": "W32", "rule": [5, 7], "steps": ["read R1", "read R2", "read R3", "read I1", "close-elsewhere M1", "open T5"], "action": "leave T5 not_task", "expect": "F1-F4", "rail": {"not": ["T5"]}, "back": true},

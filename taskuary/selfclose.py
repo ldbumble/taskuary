@@ -157,7 +157,7 @@ OWNER_ENDS = ('the owner opened this session, so they complete the task - your s
               'If whoever asked is owed a reply, save it now with `taskuary --reply "<text>"` - one written only in the chat is not kept')
 
 
-def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: bool = False) -> dict:
+def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: bool = False, sid: str = None) -> dict:
     """The agent ran `taskuary --done`. It said so, so no judge is consulted - only the gates that stop
     a double close or a task already shut, and the task's own say. A `stay:open` task is the owner's
     to complete: the agent's sentence is filed as a comment and nothing closes (the owner, 2026-09-25 -
@@ -178,6 +178,16 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     if stays_open(store, tid):
         store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')
         return {'closed': False, 'why': OWNER_ENDS}
+    # ...NOR WHILE ANYTHING ELSE ON IT IS STILL WORKING (the owner, 2026-11-01: "If anything still working never close the task
+    # automatically"): another session open on it, a quick call, a routine, a write-up - the word is filed and the task stays open.
+    # `sid` is the asker's own session (TASKUARY_SID); an older CLI that sends none is taken to be the task's one live session
+    from . import workerstate as ws
+    me = sid or getattr(term.session_for(tid), 'sid', None) or ''
+    # ...and a quick session's own call is the asker too: its close can land before the call that filed it lets go (quickwork.start)
+    live = ws.live_work(store, tid, but=me, skip=('quick',) if getattr(term.SESSIONS.get(me), 'quick', False) else ())
+    if live:
+        store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')
+        return {'closed': False, 'why': f"{'; '.join(live)} - the task stays open and the owner completes it"}
     if not _mark(tid): return {'closed': False, 'why': 'a self-close already ran for this task'}
     result = _finished(store, tid, term.session_for(tid), line)
     out = _wrap(store, tid, agent, 'the agent said it was finished' + (f' - {line}' if line else '')

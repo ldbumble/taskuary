@@ -2047,6 +2047,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (how === "back" && !data.item && data.top) { if (data.pile) holdPile(data.pile); }
       else landed(data);
       if (how === "leave") onChanged?.();             // a draft may have gone out: the Review badge recounts
+      // ...and A CLOSE KEPT OPEN (a Send with work still live on it, 2026-11-01) is back on the rail as well as the table: the row put down
+      // at the press stayed hidden from the rail, its canvas drawn over nothing - the two say the same thing or the owner is lost
+      if (how === "leave" && data?.kept) { leftKey.current = null; setLeavingTid(null); }
     } catch (e) {
       failed = e;
       if (optimisticId) setMsgs((m) => m.filter((message) => message.id !== optimisticId));

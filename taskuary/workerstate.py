@@ -61,6 +61,29 @@ def _live(tid: int):
     return next((x for x in list(term.SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)
 
 
+LIVE_SESSION, OTHER_SESSION = 'the agent session on it is still open', 'another agent session on it is still open'
+
+def live_work(store, tid: int, but=None, skip: tuple = ()) -> list:
+    """Everything still working or live on this task, each in its words - [] when nothing is. THE ONE CHECK every AUTOMATIC close asks
+    (the owner, 2026-11-01: "If anything still working never close the task automatically" - a Send closed a task whose agent sat at
+    its prompt waiting on him). An agent waiting on the owner is live: its session is open. `but` is the session asking (an agent's own
+    --done), never counted against itself; `skip` names work the caller IS ('routine', 'quick'). The owner's own Mark done never asks this."""
+    from . import quickwork, terminal as term, workflows, writeup
+    tid, out = int(tid), []
+    if but is None: live = _live(tid)
+    else: live = next((x for x in list(term.SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False) and str(x.sid) != str(but)), None)
+    if live: out.append(OTHER_SESSION if but is not None else LIVE_SESSION)
+    # ...a run row is a session's too: with `but` its own row is the asker's, so only a live pty speaks for another
+    elif but is None and any(r.get('TaskId') == tid for r in store.running_runs()): out.append('an agent run on it is still going')
+    with quickwork._RUN_LOCK: quick = tid in quickwork.RUNNING
+    if quick and 'quick' not in skip: out.append('a quick answer is still being worked out on it')
+    if writeup.running(tid) and not writeup.in_job(): out.append('its write-up is still being written')
+    with workflows._LOCK: flowing = tid in workflows._STARTING
+    if flowing and 'routine' not in skip: out.append('its routine is still running')
+    if store.get_dispatch(tid): out.append('an agent is queued to start on it')
+    return out
+
+
 def current_sid(store, tid: int):
     """The run that owns the task now: its live session, else the newest run that ever reported."""
     s = _live(tid)

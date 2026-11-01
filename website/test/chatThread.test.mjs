@@ -112,8 +112,10 @@ test("a promise task's reply source is its own sent mail, named by whom it was m
   assert.match(page, /fromLineOf\(\{ sender: ownSource,/, "From still reads the task's own sender");
 });
 
-test("an email task's Close out is the answered thread's rows; what was sent in another conversation still shows, once", () => {
+test("an email task's Close out answers the thread's message; what this round sent outside Taskuary shows, in any conversation", () => {
   assert.match(page, /sources\.find\(\(g\) => g\.msgs\.some\(\(m\) => m\.MessageId === sourceMessage\?\.MessageId\)\)/);
-  assert.match(page, /const sentApart = newestFirst\(sentOutside\.filter\(\(m\) => !closeGroup\?\.msgs\.some/, "never the sent lines twice");
+  // ...its own conversation too: Close out draws one "Answering" line of it, no rows, so nothing is said twice (closeoutRounds.js, 2026-11-01)
+  assert.match(page, /const sentOutside = round\.sent\.filter\(\(s\) => s\.msg\)\.map\(\(s\) => s\.msg\);/);
+  assert.match(page, /const sentApart = newestFirst\(sentOutside\);/);
   assert.match(closeOut, /\{sentApart\.map\(\(m\) => \(/);
 });

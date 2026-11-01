@@ -273,25 +273,36 @@ const RunSummaries = ({ sessions, pages, full }) => {
     </Box>);
 };
 
-// AN EARLIER RUN, folded to its line - when it ended, which agent, what came of it - and opened in place to its whole record
-const Earlier = ({ r }) => {
+// ONE EARLIER THING, folded to its line - when, who, what came of it - and opened in place: an agent's earlier run, and Close out's earlier
+// round (CloseoutRounds.jsx), folded the same way so the two read as one design. `mark` the row's data attribute
+export const FoldLine = ({ mark, head: said, line, empty = "", children }) => {
   const [open, setOpen] = useState(false);
   return (
-    <Box data-tq-run-before={r.n} sx={{ py: 0.5, borderBottom: `1px dashed ${BORDER}`, "&:last-of-type": { borderBottom: 0 } }}>
+    <Box {...mark} sx={{ py: 0.5, borderBottom: `1px dashed ${BORDER}`, "&:last-of-type": { borderBottom: 0 } }}>
       <Box role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(!open)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setOpen(!open))}
         sx={{ display: "flex", gap: 1, cursor: "pointer", fontSize: 12.5, minWidth: 0 }}>
         <Box component="span" sx={{ color: FAINT, width: 12, flexShrink: 0 }}>{open ? "▾" : "▸"}</Box>
-        <Box component="span" sx={{ color: DIM, flexShrink: 0 }}>Run {r.n} · {r.at} · {r.who}</Box>
-        {!open && <Box component="span" title={r.line} sx={{ color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.line || "no written result"}</Box>}
+        {/* ...the head whole where there is room; at a phone's width it ends in … rather than running off the edge */}
+        <Box component="span" title={said} sx={{ color: DIM, flexShrink: 0, maxWidth: "calc(100% - 20px)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{said}</Box>
+        {!open && <Box component="span" title={line} sx={{ color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line || empty}</Box>}
       </Box>
-      {open && <Box sx={{ pl: 2.5, pt: 0.5 }}><SessionRecord s={r.s} /></Box>}
+      {open && <Box sx={{ pl: 2.5, pt: 0.5 }}>{children}</Box>}
     </Box>);
 };
+// ...and the list of them under what leads, its head saying how many. `first`: nothing above it, so no rule over it
+export const FoldList = ({ mark, title, count, first = false, children }) => (
+  <Box {...mark} sx={first ? { mt: 1 } : sec}>
+    <Typography sx={head}>{title} · {count}</Typography>
+    {children}
+  </Box>);
+
+// AN EARLIER RUN, folded to its line - when it ended, which agent, what came of it - and opened in place to its whole record
+const Earlier = ({ r }) => <FoldLine mark={{ "data-tq-run-before": r.n }} head={`Run ${r.n} · ${r.at} · ${r.who}`} line={r.line} empty="no written result">
+  <SessionRecord s={r.s} /></FoldLine>;
 
 // THE RUNS BEFORE THE LATEST (the owner, 2026-10-29: "nothing earlier is dropped or replaced"), under its report, newest first, each one line
 // that opens in place (agentRecord.runHeads). `first`: nothing above it - a live terminal leads, or the sender wrote again - so no rule over it
 export const EarlierRuns = ({ runs, title = "", first = false }) => !runs?.length ? null : (
-  <Box data-tq-runs-before="" sx={first ? { mt: 1 } : sec}>
-    <Typography sx={head}>{title || "Earlier runs"} · {runs.length}</Typography>
+  <FoldList mark={{ "data-tq-runs-before": "" }} title={title || "Earlier runs"} count={runs.length} first={first}>
     {runs.map((r) => <Earlier key={r.s.sid || r.n} r={r} />)}
-  </Box>);
+  </FoldList>);

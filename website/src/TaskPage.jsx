@@ -98,6 +98,8 @@ import { completionFact, completionLine, waitingEmails, wentOut,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
+import EarlierRounds from "./CloseoutRounds.jsx";
+import { closeoutRounds, roundReviews } from "./closeoutRounds.js";
 import { diffStat } from "./agentRecord.js";
 import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
@@ -142,6 +144,8 @@ const whenShort = (s) => {
   return d.toDateString() === new Date().toDateString() ? fmtTime(d, [], { hour: "2-digit", minute: "2-digit" })
     : fmtDate(d, [], { month: "short", day: "numeric" });
 };
+// the Advisor's states whose line is a reply that went (rulebook: answered, and agent_done's "Your reply went")
+const REPLY_WENT = new Set(["answered", "agent_done"]);
 // SHOW ALL IS FOR READING (the owner, 2026-10-20: seven messages in a 360px box): the opened thread is as tall as the window
 // leaves room for - the terminal's rule, every row the page can give - and never shorter than the box it was; past that it scrolls
 const THREAD_MAX = "max(360px, calc(100vh - 160px))";
@@ -1310,23 +1314,30 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // playbook proposal combined into the reply ready section as it's part of the approval/action").
   // ...and only the task on the table's own: the last task's record, read until the new one lands, put its Send and Redraft on the row
   // for a beat, then the row emptied and refilled (the owner, 2026-10-26: "when you load task the buttons load then go gray then reload")
-  const reviews = t ? detail?.reviews || [] : [];
+  const allReviews = t ? detail?.reviews || [] : [];
+  // CLOSE OUT IN ROUNDS (closeoutRounds.js; the owner, 2026-11-01: "close out can happen multiple times"): what was sent, closed
+  // without sending and closed with is the CURRENT round's - the reply that answered an earlier message, and its "Sent ... stays open",
+  // stood over the message that reopened the task. Earlier rounds fold under it (EarlierRounds), as an agent's earlier runs do.
+  const sentOutsideAll = sentElsewhere(detail?.messages || [], detail?.reviews || []);
+  const rounds = closeoutRounds({ messages: (detail?.messages || []).filter((m) => !isIdeaLine(m)), reviews: allReviews, outside: sentOutsideAll,
+    closeouts: detail?.closeouts || [], open: !["done", "dropped"].includes(t?.Status), ms: tsMs });
+  const round = rounds.at(-1), reviews = roundReviews(allReviews, rounds);
   const pendingReview = pendingReplyReview(reviews);
   const allProposals = pendingProposals(reviews);
   // the task's close-out beside its reply is ONE decision on the reply's card; alone, it is its own card below
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
   const proposals = allProposals.filter((p) => !(pendingReview && p === closeoutRv));
   const sentReview = sentReplyReview(reviews);
-  const unsentReview = sentReview ? null : unsentReplyReview(detail?.reviews || []);
-  // the agent's record, drawn once, on the Agent work step
+  const unsentReview = sentReview ? null : unsentReplyReview(reviews);
+  // the agent's record, drawn once, on the Agent work step - the draft its run wrote, whichever round it went in
   const recordProps = { taskId: selected, pages: isGeneral ? [] : (detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown"),
-    draft: (() => { const r = pendingReview || unsentReview || sentReview; return r ? r.FinalText || r.DraftText || "" : ""; })(),
+    draft: (() => { const s = sentReplyReview(allReviews), r = pendingReview || (s ? null : unsentReplyReview(allReviews)) || s; return r ? r.FinalText || r.DraftText || "" : ""; })(),
     stamp: `${(detail?.comments || []).length}-${detail?.transcript?.at || ""}-${(detail?.artifacts || []).length}` };
   // ...and what already went out, so Close out says it instead of offering an empty letter: the ending upstream (a merge, a
   // close) and what you - or an agent under your login - sent outside Taskuary (the owner, 2026-10-12: "if agent already
   // sent message show what it sent")
   const ended = detail?.ended || null;
-  const sentOutside = sentElsewhere(detail?.messages || [], detail?.reviews || []);
+  const sentOutside = round.sent.filter((s) => s.msg).map((s) => s.msg);
   // A successful Review send is the reply even before (or when) the external channel ingests an
   // outbound copy. Put that receipt into the task's conversation as a real-looking outgoing
   // message; otherwise completed tasks showed one inbound message and claimed that was the whole
@@ -1427,8 +1438,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // CLOSE OUT'S CONVERSATION is the one being answered - the reply source's - condensed, newest first; never a batch's four authors
   const closeGroup = detail?.batch || !(inbound.length || owed) ? null
     : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
-  // ...and what you sent outside Taskuary in some OTHER conversation still says so under it, newest first
-  const sentApart = newestFirst(sentOutside.filter((m) => !closeGroup?.msgs.some((x) => x.MessageId === m.MessageId)));
+  // ...and what you sent outside Taskuary in this round says so under it, newest first - in another conversation, and in its own too, now
+  // that Close out draws one "Answering" line of it and no rows (the owner, 2026-11-01: the reply typed in the mail client after the reopen
+  // was on the page nowhere, and the reply of the round before stood as "What was sent")
+  const sentApart = newestFirst(sentOutside);
   // ...and the one message in it the draft answers: the reply's source, else the conversation's newest from them
   const owedRow = owed && closeGroup?.msgs.find((m) => m.MessageId === owed.MessageId);
   const answering = !closeGroup ? null : owedRow ? { ...owedRow, who: owed.FromName }
@@ -1581,7 +1594,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...whose record line already names the AI it ran on ("Claude Code (on this computer) · 07:05 · 6s"): an "AI claude" pill under
   // it said it twice (the agents walk, 2026-10-26)
   const factBrain = isGeneral && settled ? "" : brainPill;
-  const replyState = replyPhase(detail?.reviews || []);
+  const replyState = replyPhase(reviews);   // the current round's (closeoutRounds.js)
   // ONE question per page. A running session is itself the agent stage, so it is never folded; the
   // hand-picked stage wins over the computed one until you leave the task (start an agent on a task
   // whose draft is waiting, or answer a sender the agent is still working for).
@@ -1601,7 +1614,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
-    emails: emailsWaiting, record: hasRecord, out: wentOut(detail?.reviews),
+    emails: emailsWaiting, record: hasRecord, out: wentOut(reviews),
   }));
   const stage = sessionView ? "agent" : (openStage || restStage);
   // ...which of the work column's two halves is open: the stage, or - where the stage is the task itself, now always open on the
@@ -1691,8 +1704,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const oneScroll = settled && pane !== "reply";
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
-  // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
-  const closedNote = String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
+  // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close: the current round's
+  // close (store.closeouts), never an earlier round's; a detail with no closeouts (the site's demo) reads the newest note
+  const closedNote = detail?.closeouts ? round.close?.note || "" : String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
   // ...and the write-up's line stands in ONE place of the Agent pane: in the open record, else under the Result's summary or the step's top
@@ -2265,7 +2279,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE ADVISOR'S SECTION (advice.taskNote; the owner, 2026-10-26: "remove the advisor", then "an advisor section on the task itself part
   // of the agent thing but separate"): no line over the row or the bar - the canvas hands its decision's line in (`note`), the Tasks tab
   // reads its own - its own section over Agent work, and only when there is a line
-  const warn = notDone ? (canvas ? note : taskNote(taskAdvice)) : null;
+  // ...and a line about a reply that went belongs to the round it went in (closeoutRounds.js): "Your reply went at 00:23; nothing since"
+  // stood over the message that had reopened the task, its round with no reply yet (the owner, 2026-11-01). Read before the next decision
+  // lands, it is an earlier round's, and not said
+  const saidOld = (n) => n?.advice?.section === "close" && REPLY_WENT.has(n.advice.state) && !round.sent.length && !sentReview;
+  const heard = canvas ? note : taskNote(taskAdvice);
+  const warn = notDone && !saidOld(heard) ? heard : null;
   // THE ADVISOR'S SECTION, one element the layout places: over the work on a phone, in the Agent section on the desk - its draft press opens
   // Close out where the draft will stand
   // ...and its fix (advisor.fix_of): the agent's Continue or the draft's Redraft, pressed with the Advisor's line as the note
@@ -3409,6 +3428,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   ))}
                   {/* ...and the Advisor's line here when its move is Close out's (advice `section`): beside the Mark done it is the reason for */}
                   {threeUp && advisorNote && adviceIn === "close" && <Box data-tq-advisor-in="close" sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
+                  {/* ...and under all of the current round, the rounds before it, a line each (CloseoutRounds.jsx) - as the Agent's earlier runs */}
+                  {pane === "reply" && <EarlierRounds rounds={rounds} />}
                 </Box>)}
                 </Box>
                 </Box>

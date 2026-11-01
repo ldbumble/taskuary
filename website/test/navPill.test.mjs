@@ -58,7 +58,7 @@ test("the view registers Back beside the floor and asks the walk for the row abo
   assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !backTo, why: "nothing above this one",\s+run: \(\) => backTo && goBack\(\) \}\], !!backTo \|\| \(deskChat && !firstRun\)\);/);
   assert.match(view, /if \(!walkOf\(pileRef\.current\)\?\.above\) return undefined;/, "nothing above: nothing happens");
   assert.match(view, /return surface\(null, null, null, false, "back"\);/, "the walk's own Back: the row above, from the server");
-  assert.match(view, /const backTo = table\.speaks && !firstRun && !old && !walk && onWalk \? walkNow\.above : null;/);
+  assert.match(view, /const backTo = table\.speaks && !firstRun && !old && !walk && \(onWalk \? walkNow\.above : flight\?\.drawn && walkNow\?\.on === flight\.from \? walkNow\.above : null\);/);
   assert.match(view, /if \(busy \|\| turnFlight\.current\) \{ backHeld\.current = true;/, "a Back over a move in flight waits for it, and runs once");
   assert.match(view, /const atEnd = !!current && table\.speaks && onWalk && !walkNow\.below;/, "no Next on the last one: the walk says nothing is below");
   const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");

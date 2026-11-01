@@ -14,7 +14,8 @@ export async function boot(t, { width = 0, height = 1000, slow = 0, ...opts } = 
     const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function (m, url, ...rest) { this.__url = String(url); return open.call(this, m, url, ...rest); };
     XMLHttpRequest.prototype.send = function (...a) {
-      if (/\/api\/operations\/[^/]+\/execute|\/api\/tasks\/\d+\/remind/.test(this.__url))
+      // ...a close on the walk's table is one walk move now (railwalk.leave): slowed with the rest
+      if (/\/api\/operations\/[^/]+\/execute|\/api\/tasks\/\d+\/remind|\/api\/walk\/leave/.test(this.__url))
         for (const k of ["onreadystatechange", "onloadend", "onload"]) { const f = this[k]; if (f) this[k] = (...e) => setTimeout(() => f.apply(this, e), ms); }
       return send.apply(this, a);
     };

@@ -57,3 +57,16 @@ test("a lit move on the title bar comes right after Mark done, so the bar's fold
   assert.ok(all.includes("repo"), JSON.stringify(by));
   if (by.head.some((x) => x.id === "repo")) assert.deepEqual(by.head.slice(0, 2).map((x) => x.id), ["done", "repo"]);
 });
+
+// A REPORT LAYS EVERY MOVE ON ITS OWN PANE (the owner, 2026-10-31: "report should be white with buttons on it"): in its three sections on a
+// desk the bar is Back and Next, and the report's pane carries its moves in the bar's order, the Change pill's and Share quiet after them
+test("an item that lays all its moves on one pane leaves the bar Back and Next, its moves in the bar's order on that pane", () => {
+  const all = { all: "report" };
+  const list = [v("w:mine", "decide", { label: "Put it on my list", laid: all }), v("w:regular_agent", "decide", { label: "Send to agent", laid: all }),
+    v("w:report_off", "more", { label: "Pause this report", laid: all }), v("share", "more", { label: "Share" }), v("next", "next", { laid: all })];
+  const { row, by } = splitRow(rowOf({ ref: "", list }), all, list);
+  assert.deepEqual(ids(row), [], "nothing but Back and Next on the bar");
+  assert.ok(row.next, "Next stays");
+  assert.deepEqual(Object.keys(by), ["report"]);
+  assert.deepEqual(by.report.map((x) => [x.label, !!x.quiet]), [["Put it on my list", false], ["Send to agent", false], ["Pause this report", true], ["Share", true]]);
+});

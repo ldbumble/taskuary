@@ -441,7 +441,7 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       <Box component="span" data-tq-tab-name="">{sec.name}</Box>
       {lines.map((l, i) => <Box component="span" key={i} data-tq-tab-line="">{l}</Box>)}
-      <SpineMoves sec={sec.key} />
+      <SpineMoves sec={sec.key} name={sec.name} />
       {/* ...its foot ONE HEIGHT in every tab (the owner, 2026-10-27: "the 1 line and 2 line are not on the same line"): the rule, a status
           block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
       <Box component="span" data-tq-tab-foot="">
@@ -500,12 +500,14 @@ function ChangeMoves({ change }) {
       {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
         onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></>;
 }
-function SpineMoves({ sec }) {
+// ...`quiet`: an item's own whole-item moves laid on its one pane (actionRow.splitRow `all`: a report's Pause this report and Share) wear the
+// task's own quiet look, as its Change pill set them apart on the bar
+function SpineMoves({ sec, name = SEC_NAME[sec] }) {
   const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p"), { task, change } = useTaskMoves(sec);
   if (!vs.length && !task.length && !change.length) return null;
   return (
-    <Box data-tq-spine-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
-      {vs.map((v) => stageBtn(v, v.spine || v.label))}
+    <Box data-tq-spine-moves={sec} role="group" aria-label={`${name} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
+      {vs.map((v) => stageBtn(v, v.spine || v.label, !!v.quiet))}
       {task.map((v) => stageBtn(v, v.label, true))}
       {change.length > 0 && <ChangeMoves change={change} />}
     </Box>);
@@ -515,13 +517,16 @@ function SpineMoves({ sec }) {
 // the start its open form already carries - so a pane off the bar is never a dead end, and the arrows that fold it back to its spine,
 // pointing the way its spine's would. A live agent's is slim: Stop and save and the arrows, small, so the terminal keeps its height
 export const STRIP_H = 44, STRIP_LIVE_H = 32;
-const FOLD = { from: [["right", "‹", "agent"]], agent: [["left", "‹", "from"], ["right", "›", "close"]], close: [["left", "›", "agent"]] };
+// ...in any three sections (`keys`, the flow's order): the first folds right, the last left, the middle either way - a report's too (ItemSections)
+const foldArrows = (keys, k) => { const i = keys.indexOf(k), last = keys.length - 1;
+  return [...(i > 0 ? [["left", i === last ? "›" : "‹", keys[i - 1]]] : []), ...(i >= 0 && i < last ? [["right", i ? "›" : "‹", keys[i + 1]]] : [])]; };
+const TASK_KEYS = ["from", "agent", "close"];
 // ...one line: what does not fit folds into its ▾ from the end - never Mark done nor what is lit
-export function PaneMoves({ sec, skip = () => false }) {
+export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
   const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { task, change } = useTaskMoves(sec);
   // ...a `tucked` move keeps its rule (a sent reply's Hand it to a person): behind the strip's ▾ unless it is lit
   const up = all.filter((v) => !v.tucked || v.tone === "p"), tucked = all.filter((v) => !up.includes(v));
-  const items = [...up.map((v) => ({ key: v.id, v })), ...task.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true })),
+  const items = [...up.map((v) => ({ key: v.id, v, head: !!v.quiet })), ...task.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true })),
     ...(change.length ? [{ key: "change", change }] : [])];
   const box = useRef(null), [n, setN] = useState(99), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
@@ -538,7 +543,7 @@ export function PaneMoves({ sec, skip = () => false }) {
   }, []);
   if (!items.length && !tucked.length) return null;
   const shown = items.slice(0, n), rest = [...items.slice(n).flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
-  return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${SEC_NAME[sec]} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
+  return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${name} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
     "& .tq-ab": { flexShrink: 0 } }}>
     {shown.map((x) => (x.change ? <ChangeMoves key="change" change={x.change} /> : stageBtn(x.v, x.v.label, !!x.head)))}
     {rest.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
@@ -554,22 +559,23 @@ const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", wi
   "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
 // ...A LIVE AGENT'S STRIP HAS NO X (the owner, 2026-10-29): its x was a second way to end the session, which Stop and save already is; the
 // way back to the task is the fold arrows either side of it, which open Came from or Close out with the session kept running in its slim tab
-export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop }) {
+// ...`name` and `keys` for an item's own three sections (ItemSections: Came from | Report | Close out)
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS }) {
   const liveMoves = useSpineVerbs("live");
-  const arrows = FOLD[sec].map(([side, mark, to]) => ({ side, mark, to: fold(to) }));
-  const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${SEC_NAME[sec]} back`}
-    title={`Fold ${SEC_NAME[sec]} back to its tab`} sx={live ? { ...STRIP_ARROW, width: 22, height: 22, fontSize: 13 } : STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
+  const arrows = foldArrows(keys, sec).map(([side, mark, to]) => ({ side, mark, to: fold(to) }));
+  const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${name} back`}
+    title={`Fold ${name} back to its tab`} sx={live ? { ...STRIP_ARROW, width: 22, height: 22, fontSize: 13 } : STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
   return (
     <Box data-tq-pane-strip={sec} data-tq-live={live ? "" : undefined} sx={{ position: "absolute", top: 0, left: 0, right: 0, height: live ? STRIP_LIVE_H : STRIP_H, zIndex: 2,
       boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: live ? 1 : 1.5, bgcolor: "#fff", borderBottom: `1px solid ${FOCUS_EDGE}` }}>
       {arrows.filter((a) => a.side === "left").map(arrow)}
-      {!live && <Typography sx={{ ...SECTION_NAME, flexShrink: 0 }}>{SEC_NAME[sec]}</Typography>}
+      {!live && <Typography sx={{ ...SECTION_NAME, flexShrink: 0 }}>{name}</Typography>}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
         {live ? <Box sx={{ display: "flex", gap: 0.5 }}>
             {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" data-tq-verb="save-end" aria-label={btn("stop_agent")} onClick={onStop}
               sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} />
               <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}</Box>
-          : <PaneMoves sec={sec} skip={skip} />}
+          : <PaneMoves sec={sec} skip={skip} name={name} />}
       </Box>
       {arrows.filter((a) => a.side === "right").map(arrow)}
     </Box>);

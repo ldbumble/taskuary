@@ -11,14 +11,15 @@ test("an FYI's Came from says Should be a task, a task's Not a task", { timeout:
   const { page, errors } = await boot(t, { width: 1440, height: 900 });
   assert.ok(await clickRow(page, await findRow(page, /Regional operations newsletter/)));
   await page.waitForSelector('[data-tq-item-sections="fyi"]', { timeout: 20000 }); await sleep(1500);
-  const head = await words(page, '[data-tq-item-sections] [data-tq-slot="from"] [data-tq-section-head] button');
-  assert.deepEqual(head, ["Should be a task"], `Came from open: ${head}`);
+  // ...on its strip with the FYI's other moves, which ride Came from too since a report's left the bar (the owner, 2026-10-31)
+  const head = await words(page, '[data-tq-item-sections] [data-tq-pane-strip="from"] [data-tq-pane-moves] button');
+  assert.equal(head[0], "Should be a task", `Came from open: ${head}`);
   const bar = await words(page, "[data-tq-row] button");
   assert.ok(!bar.includes("Should be a task") && !bar.includes("Not a task"), `the bar says neither: ${bar}`);
   // ...and folded, on its spine
   await page.evaluate(() => document.querySelector('[data-tq-item-sections] [data-tq-section-tab="agent"]')?.click()); await sleep(800);
   const spine = await words(page, '[data-tq-item-sections] [data-tq-section-tab="from"] [data-tq-spine-moves] button');
-  assert.deepEqual(spine, ["Should be a task"], `Came from folded: ${spine}`);
+  assert.equal(spine[0], "Should be a task", `Came from folded: ${spine}`);
   const all = await words(page, "[data-tq-item-sections] button, [data-tq-row] button");
   assert.ok(!all.includes("Not a task"), `no Not a task on an FYI: ${all}`);
 

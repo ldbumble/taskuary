@@ -24,7 +24,7 @@ test("no level name merges two things", () => {
   for (const level of LEVEL_ORDER) assert.ok(!/[&+]|and/.test(levelLabel(level)), `${levelLabel(level)} names two things`);
   assert.equal(levelLabel("task"), "tasks");
   assert.equal(levelLabel("later"), "for later");
-  assert.equal(levelLabel("ideas"), "advisor ideas");
+  assert.equal(levelLabel("ideas"), "advisor");
   assert.equal(levelLabel("goals"), "", "Goals is gone: a goal with news is under Tasks");
   assert.equal(levelLabel("agents"), "", "Agents working is gone: a working agent's task is under Tasks");
   assert.equal(levelLabel("reports"), "reports");

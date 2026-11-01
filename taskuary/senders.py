@@ -131,6 +131,50 @@ def auth(msg: dict) -> str:
     return (meta.get('auth') if isinstance(meta, dict) else None) or 'none'
 
 
+SIGNIN_MINUTES = 30
+_VERIFIED = {'pass': 'pass - the receiving mail server verified the From domain (DMARC/DKIM)',
+             'fail': 'FAILED - the receiving mail server could not verify the From domain: it may be forged'}
+
+
+def org_domain(dom: str) -> str:
+    "The organisation's own domain under a mail host: mail.aiprovider.example -> aiprovider.example; a country's co.uk kept whole."
+    p = (dom or '').lower().strip('.').split('.')
+    return '.'.join(p[-3:] if len(p) > 2 and len(p[-1]) == 2 and len(p[-2]) <= 3 else p[-2:])
+
+
+def sender_check(store, msg: dict, now=None) -> dict:
+    """The FACTS a scam is weighed on, for triage - never a verdict (the owner, 2026-11-01: "it's not a scam but real"). A sign-in link
+    they had just asked for, from the AI tool they were signing back in to, read "Looks like a scam aimed at you": the model saw an address,
+    a subject and a body that opened with the mail client's "you don't often get email from" and the company's outside-sender notice, and
+    nothing that said whether the From was genuine or a service the owner uses. So it is told: whether the receiving server verified the
+    From (mailauth), how much earlier mail came from that organisation's domain that was never read as danger (a look-alike has none), the
+    AI tools set up here, and a sign-in the owner started here in the last half hour. Mail only; {} for anything else."""
+    dom = _domain(msg.get('from_email'))
+    if (msg.get('channel') or 'email') != 'email' or not dom: return {}
+    org, out = org_domain(dom), {'from_domain': dom}
+    if (v := auth(msg)) in _VERIFIED: out['from_verified'] = _VERIFIED[v]
+    else: out['from_verified'] = 'not checked - the mail carried no verification result'
+    try:
+        r = store._one("SELECT COUNT(*) n FROM message WHERE (lower(FromEmail) LIKE ? OR lower(FromEmail) LIKE ?) AND IFNULL(Danger,'')='' "
+                       "AND IFNULL(ExternalId,'')<>?", (f'%@{org}', f'%.{org}', msg.get('external_id') or ''))
+        out['earlier_mail_from_this_organisation'] = int((r or {}).get('n') or 0)
+    except Exception as e: logger.debug(f'sender check: history unread - {e}')
+    try:
+        from . import config
+        if (tools := sorted(config.load().get('cli_connections') or {})): out['ai_tools_set_up_here'] = tools
+    except Exception as e: logger.debug(f'sender check: tools unread - {e}')
+    from datetime import datetime, timedelta
+    now = now or datetime.now()
+    try:
+        since = (now - timedelta(minutes=SIGNIN_MINUTES)).isoformat(sep=' ', timespec='seconds')
+        if (a := next((a for a in store.audit_since(since) if a.get('Action') == 'cli_setup'), None)):
+            d = json.loads(a.get('Detail') or '{}') or {}
+            ago = max(0, int((now - datetime.fromisoformat(str(a['CreatedAt']))).total_seconds() // 60))
+            out['owner_started_a_sign_in'] = f"{d.get('name') or 'an AI tool'}, {ago} minutes ago, in Taskuary"
+    except Exception as e: logger.debug(f'sender check: sign-ins unread - {e}')
+    return out
+
+
 # THE SENTENCE IS THE ANSWER. These were fragments pasted after a colon - "assistant did not start: a member of a
 # whatsapp chat you have not talked with one-to-one." - read on a task page by an owner who could not tell who, which
 # chat or what to do (2026-10-16). Each is now a whole sentence naming the person and the channel; the caller adds what

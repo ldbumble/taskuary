@@ -623,6 +623,10 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         from . import orgchart
         if (rel := orgchart.relation_of(store, msg.get('from_email'), msg.get('from_name'))): thread = {**thread, 'sender_relation': rel}
     except Exception as e: logger.debug(f'org chart skipped for triage: {e}')
+    # ...and whether the From is genuine and a service the owner uses: a real sign-in link they had just asked for read as a scam, on
+    # nothing but the address and a body led by the mail client's "you don't often get email from" (senders.sender_check, 2026-11-01)
+    from .senders import sender_check
+    if (sc := sender_check(store, msg)): thread = {**thread, 'sender_check': sc}
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
     # ...and the tasks those lines sit on, by their own ask: a line that follows a sender's earlier lines is not their task for that
     # (the owner, 2026-10-28) - it is measured against what the task asks (same_problem)

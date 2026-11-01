@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.13 - 2026-11-01
+
+- Take the mail words back off the mailbox card: which card a name means is the model's to read
+
 ## 0.3.10.12 - 2026-11-01
 
 - A What's new page the Assistant reads, written by each release

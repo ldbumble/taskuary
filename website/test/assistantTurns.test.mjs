@@ -203,4 +203,8 @@ test("a line is keyed by its item, so placeLine moving it under a new id keeps i
   // ...and two copies of one item (a line not yet folded in) never share a key: the newest wears the item
   const two = [{ id: "a1", role: "assistant", text: "", card: card("task:7") }, { id: "a2", role: "assistant", text: "", card: card("task:7") }];
   assert.deepEqual([...lineKeys(two).values()], ["item:task:7", "a1"]);
+  // ...and the line Next draws ahead keeps its key when its answer fills it in place (landed: same id, `ahead` gone)
+  const ahead = [...before, { id: "a5", role: "assistant", text: "", card: card("task:8"), ahead: true }];
+  const filled = placeLine(ahead.filter((m) => m.id !== "a5"), { id: "a5", role: "assistant", text: "Next up", card: card("task:8") });
+  assert.equal(lineKeys(ahead).get("a5"), lineKeys(filled).get("a5"), "the card drawn at once is not remounted");
 });

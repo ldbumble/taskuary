@@ -300,8 +300,10 @@ def style_doc(store) -> str:
     so the untouched template never rides into a prompt as noise. The doc is the owner's
     voice distilled from their own sent mail (Docs → STYLE.md → Generate from history)."""
     from .byrecipient import without
+    from .stylews import shared
     # ...minus "By recipient": those lines are each for one person, and voice_line hands a draft only its own recipients'
-    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', without(store.doc('style') or '')))
+    # ...and minus each workstream's own lines: a draft reads only its own workstream's (stylews.block, 2026-11-01)
+    t = _TEMPLATE_LINES.sub('', _COMMENT.sub('', without(shared(store.doc('style') or ''))))
     meat = '\n'.join(l for l in t.splitlines() if l.strip() and not l.strip().startswith('#'))
     return t.strip() if len(meat) > 40 else ''
 
@@ -473,6 +475,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # only explicit writing instructions ride into a reply (PW-060) - STYLE.md's Owner notes, in `sty`; the routing verdicts stay with triage
     chat = written_as_chat(last.get('Channel'))
     sty = style_doc(store)
+    # ...and HOW THE OWNER WRITES IN THIS TASK'S WORKSTREAM, where it differs (stylews; the owner, 2026-11-01: "try it") - none, the shared
+    from . import stylews, workstreams
+    if sty and (wsb := stylews.block(store, ws := workstreams.of_task(store, task_id))): sty += wsb; stylews.used(store, task_id, ws)
     box = mailbox_in(next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last))
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
@@ -652,6 +657,8 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
+    from . import stylews, workstreams
+    if sty and (wsb := stylews.block(store, workstreams.of_message(store, m))): sty += wsb
     system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET + FEEDBACK + FILES_RULE
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the

@@ -161,6 +161,7 @@ REFINES = _bullet('refines')
 TASK_TITLE = _bullet('task_title')   # ...and the wider title a line that joins at the combine level gives the task (2026-10-29)
 OFFER = _bullet('offer')         # what an agent could do for the owner about the main ask (2026-10-28)
 NEEDS_BROWSER = _bullet('needs_browser')   # the work is done on a web page: the agent gets Taskuary's browser, wherever it starts (2026-10-29)
+NEEDS_DESKTOP = _bullet('needs_desktop')   # ...in a desktop app: the task is marked "needs desktop" when Agent Desktop is on (agentdesktop, 2026-10-31)
 WRAPPER = _bullet('wrapper')     # the text its sender did not write, for a screen to leave out (2026-10-28)
 DATA_CLASSES = ('ordinary', 'sensitive')
 DIFFICULTIES = ('quick', 'standard', 'hard')
@@ -236,6 +237,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # the work is done ON A WEB PAGE - a sign-up, a registration, a form, a portal with no connection here: every road that starts an
          # agent on the task gives it Taskuary's browser (ingest.mark_browser), whose submit waits for the owner's Approve (2026-10-29)
          'needs_browser': {'type': ['boolean', 'null']},
+         # ...and in a desktop app: marks the task "needs desktop" at the door, only with Agent Desktop on (agentdesktop.mark_from_triage)
+         'needs_desktop': {'type': ['boolean', 'null']},
          # the text around the sender's words that they did not write - a mail system's banner, an app's stamp, an unsubscribe
          # strip, a legal footer - copied verbatim, so a screen can leave exactly it out (strip_wrapper; the owner, 2026-10-28)
          'wrapper': {'type': ['array', 'null'], 'items': {'type': 'string'}},
@@ -843,6 +846,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and 'task_title' not in base and (home or same_ids or candidates is not None): system += '\n\n' + TASK_TITLE
             if not shape and '**offer**' not in base: system += '\n\n' + OFFER        # ...and what an agent could do for them (2026-10-28)
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
+            if not shape and '**needs_desktop**' not in base: system += '\n\n' + NEEDS_DESKTOP   # ...or in a desktop app (2026-10-31)
             if not shape and '**wrapper**' not in base: system += '\n\n' + WRAPPER    # ...and what its sender did not write (2026-10-28)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
@@ -958,6 +962,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     out['offer'] = offer
                     if j.get('offer_is_reply') is True: out['offer_is_reply'] = True
                 if out['intent'] == 'task' and j.get('needs_browser') is True: out['needs_browser'] = True
+                if out['intent'] == 'task' and j.get('needs_desktop') is True: out['needs_desktop'] = True
                 # ...and what it tries to make an AI do (TRIAGE.md's danger): asked for since 2026-10-15 and dropped here, so only ranking's
                 # reading ever reached message.Danger - and it holds the unattended start now (ingest.danger, the owner 2026-10-28)
                 dg = ' '.join(str(j.get('danger') or '').split())[:200]

@@ -8680,6 +8680,18 @@
     "status": "available",
     "installed": true,
     "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\agent-browser.CMD"
+   },
+   {
+    "name": "agent-desktop",
+    "cmd": "agent-desktop",
+    "label": "agent-desktop (Vercel)",
+    "license": "Apache-2.0",
+    "install": "npm install -g agent-desktop",
+    "url": "https://github.com/vercel-labs/agent-desktop",
+    "why": "the owner's desktop apps, read and operated through the accessibility tree, once Agent Desktop is on under Connections (agentdesktop.py)",
+    "status": "available",
+    "installed": false,
+    "path": ""
    }
   ]
  },
@@ -10576,6 +10588,22 @@
     "ConnectorId": 29,
     "Type": "reason_network",
     "Name": "Reason Network",
+    "ConfigJson": null,
+    "Active": 0,
+    "Roles": "",
+    "Scope": null,
+    "LastSyncAt": null,
+    "LastError": null,
+    "LastErrorAt": null,
+    "HasSecret": 0,
+    "ScopeDefault": "admin",
+    "SignedOut": false,
+    "LastErrorPlain": ""
+   },
+   {
+    "ConnectorId": 114,
+    "Type": "agent_desktop",
+    "Name": "Agent Desktop",
     "ConfigJson": null,
     "Active": 0,
     "Roles": "",
@@ -22985,5 +23013,11 @@
    }
   ]
  },
- "/api/terminals/scrollback": {}
+ "/api/terminals/scrollback": {},
+ "/api/desktop": {
+  "on": false,
+  "active": false,
+  "installed": false,
+  "how": "To use it, turn the Agent Desktop card on and mark a task \"needs desktop\"."
+ }
 }

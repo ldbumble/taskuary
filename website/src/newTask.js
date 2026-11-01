@@ -24,6 +24,11 @@ export const BROWSER_TAG = "needs:browser";
 // taskLifecycle.ownerControlsCompletion).
 export const STAY_TAG = "stay:open";
 export const wantsAsk = (task) => new RegExp(`(^|[\\s,])${ASK_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
+// ...and the owner's desktop apps (agentdesktop.py, 2026-10-31): with Agent Desktop on, only a task marked "needs desktop" gets it
+export const DESKTOP_TAG = "needs:desktop";
+export const DESKTOP_HOW = 'To use it, turn the Agent Desktop card on and mark a task "needs desktop".';
+export const wantsDesktop = (task) => new RegExp(`(^|[\\s,])${DESKTOP_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
+export const withDesktop = (tags, on) => [...String(tags || "").split(/[\s,]+/).filter((t) => t && t !== DESKTOP_TAG), ...(on ? [DESKTOP_TAG] : [])].join(",") || null;
 export const wantsBrowser = (task) => new RegExp(`(^|[\\s,])${BROWSER_TAG}([\\s,]|$)`).test(String(task?.Tags || ""));
 export const withoutAsk = (tags) => String(tags || "").split(/[\s,]+/).filter((t) => t && t !== ASK_TAG).join(",");
 

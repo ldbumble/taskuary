@@ -1558,6 +1558,8 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # the assistant's hand-off (ingest.mark_browser, 2026-10-29). Before the brain is picked: a browser task is a CLI's (walk_pick)
     from . import ingest
     if not session_for(tid) and ingest.mark_browser(store, tid): task = store.get_task(tid) or task
+    from . import agentdesktop
+    if not session_for(tid) and agentdesktop.mark_from_triage(store, tid): task = store.get_task(tid) or task      # ...and the desktop's
     # A WORKFLOW RUN starts on its workflow's brain - the general agents' own unless it asked for a harder model or more effort
     # (workflows.brain). Only a first start nobody steered: a saved conversation or the owner's pick at the strip stands.
     if task.get('Source') == 'workflow' and connector_id is None and not model and not pick and not store.saved_session(tid) and not session_for(tid):

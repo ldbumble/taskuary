@@ -41,7 +41,9 @@ class ItIsATool(unittest.TestCase):
 
     def test_the_cards_test_says_the_version_and_the_grant(self):
         said = '{"version":"2.5","ok":true,"command":"status","data":{"permissions":{"accessibility":{"state":"granted"}},"platform":"windows","version":"1.0.2"}}'
-        with mock.patch.object(ad, '_run', return_value=(0, said)): self.assertEqual(ad.test(), 'agent-desktop 1.0.2 on windows - accessibility granted')
+        with mock.patch.object(ad, '_run', return_value=(0, said)):
+            self.assertEqual(ad.test(), 'agent-desktop 1.0.2 on windows - accessibility granted. To use it, turn the Agent Desktop card on and '
+                                        'mark a task "needs desktop".')
         with installed(''), self.assertRaises(RuntimeError) as e: ad.test()
         self.assertIn('npm install -g agent-desktop', str(e.exception))
 
@@ -90,7 +92,7 @@ class Judging(unittest.TestCase):
 
 class Holding(unittest.TestCase):
     def setUp(self):
-        self.s = MemoryStore(); self.tid = Factory(self.s).task('Reply to Erin about the Payworth invoice'); turn_on(self.s)
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Reply to Erin about the Payworth invoice', Tags=ad.WANTS); turn_on(self.s)
         self.told = []
         self.sess = SimpleNamespace(sid='run1', send_prompt=lambda text, as_owner=True: self.told.append(text))
 
@@ -112,6 +114,14 @@ class Holding(unittest.TestCase):
         self.assertIn('Agent Desktop is off', self.check()['hookSpecificOutput']['permissionDecisionReason'])
         self.assertEqual(self.check('agent-desktop snapshot --app Notepad -i'), {})
         self.assertEqual(self.pending(), [])
+
+    def test_an_unmarked_task_is_refused_even_with_the_card_on(self):
+        ad.mark(self.s, self.tid, False)
+        out = self.check(v={'irreversible': False, 'sure': True, 'what': 'types'})
+        self.assertTrue(self.denied(out)); self.assertIn('not marked "needs desktop"', out['hookSpecificOutput']['permissionDecisionReason'])
+        self.assertEqual(self.check('agent-desktop list-apps'), {})                          # a look is still only a look
+        ad.mark(self.s, self.tid, True)
+        self.assertEqual(self.check(v={'irreversible': False, 'sure': True, 'what': 'types'}), {})
 
     def test_a_strangers_task_never_drives_the_desktop(self):
         with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'a sender nobody vouched for')):
@@ -163,7 +173,7 @@ class Holding(unittest.TestCase):
 
 class Hook(unittest.TestCase):
     def test_the_shell_hook_routes_desktop_acts_of_our_panes(self):
-        s = MemoryStore(); tid = Factory(s).task('Reply to Erin'); turn_on(s)
+        s = MemoryStore(); tid = Factory(s).task('Reply to Erin', Tags=ad.WANTS); turn_on(s)
         pane = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=r'C:\work', argv=['claude'], ext_id='c-1', resumed_from='', store=s)
         send = {'tool_name': 'PowerShell', 'tool_input': {'command': SEND}, 'session_id': 'c-1', 'cwd': r'C:\work'}
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True), installed(), names(), \
@@ -179,13 +189,66 @@ class Brief(unittest.TestCase):
         self.assertIn('CANNOT HOLD', ad.brief(held=False)); self.assertNotIn('HELD for the owner', ad.brief(held=False))
         self.assertIn('never pass --headed', ad.brief().replace('NEVER', 'never'))
 
-    def test_offered_only_when_the_card_is_on(self):
+    def test_offered_only_with_the_card_on_and_the_task_marked(self):
         s = MemoryStore(); tid = Factory(s).task('Reply to Erin')
         with installed(), mock.patch('taskuary.general.browser_offered', return_value=True):
             self.assertFalse(ad.offered(s, tid, 'cli:claude'))
-            turn_on(s); self.assertTrue(ad.offered(s, tid, 'cli:claude'))
+            turn_on(s); self.assertFalse(ad.offered(s, tid, 'cli:claude'))                    # on, but this task is not marked
+            ad.mark(s, tid); self.assertTrue(ad.offered(s, tid, 'cli:claude'))
+            ad.mark(s, tid, False); self.assertFalse(ad.offered(s, tid, 'cli:claude'))
         with installed(), mock.patch('taskuary.general.browser_offered', return_value=False):      # the dock, a stranger, an API brain
             self.assertFalse(ad.offered(s, tid, 'connector:3'))
+
+
+class TheMark(unittest.TestCase):
+    """The mark is a tag, as "needs a browser" is: set by the owner (the New sheet, POST /api/tasks/{id}/desktop) or by triage reading
+    the work as done in a desktop app - and triage's only with the card on, never on a stranger's task."""
+    def setUp(self): self.s = MemoryStore(); self.tid = Factory(self.s).task('Post the month-end journal in the ledger app', Tags='repo:northwind/ledger')
+
+    def said(self, v):
+        self.s.cx.execute('INSERT INTO route (TaskId, VerdictJson) VALUES (?, ?)', (self.tid, json.dumps(v)))
+
+    def test_it_sits_beside_the_other_tags(self):
+        ad.mark(self.s, self.tid)
+        t = self.s.get_task(self.tid)
+        self.assertTrue(ad.wanted(t)); self.assertIn('repo:northwind/ledger', t['Tags'])
+        self.assertFalse(ad.wanted({'Tags': 'needs:desktopish'}))
+
+    def test_triage_marks_it_only_with_the_card_on(self):
+        self.said({'intent': 'task', 'needs_desktop': True})
+        with installed():
+            self.assertFalse(ad.mark_from_triage(self.s, self.tid)); self.assertFalse(ad.wanted(self.s.get_task(self.tid)))
+            turn_on(self.s)
+            self.assertTrue(ad.mark_from_triage(self.s, self.tid)); self.assertTrue(ad.wanted(self.s.get_task(self.tid)))
+            self.assertTrue(ad.mark_from_triage(self.s, self.tid))
+        self.assertEqual(sum('desktop app' in (c.get('Body') or '') for c in self.s.list_comments(self.tid)), 1)     # said once
+
+    def test_triage_saying_no_or_a_stranger_is_no_mark(self):
+        turn_on(self.s)
+        self.said({'intent': 'task', 'needs_desktop': False})
+        with installed(): self.assertFalse(ad.mark_from_triage(self.s, self.tid))
+        self.said({'intent': 'task', 'needs_desktop': True})
+        with installed(), mock.patch('taskuary.origin.of_task', return_value=('stranger', 'nobody vouched')):
+            self.assertFalse(ad.mark_from_triage(self.s, self.tid))
+
+    def test_triage_is_asked_and_keeps_it_on_a_task_only(self):
+        from taskuary import triage
+        self.assertIn('needs_desktop', triage.verdict_schema()['schema']['properties'])
+        self.assertIn('**needs_desktop**', triage.SHIPPED)
+
+    def test_a_task_sessions_brief_names_it_only_on_a_marked_task(self):
+        from taskuary import terminal
+        turn_on(self.s)
+        with installed():
+            self.assertNotIn('agent-desktop', terminal.seed_text(self.s, self.tid, cli='claude'))
+            ad.mark(self.s, self.tid)
+            self.assertIn('HELD for the owner', terminal.seed_text(self.s, self.tid, cli='claude').split('agent-desktop', 1)[1])
+            self.assertIn('CANNOT HOLD YOUR DESKTOP', terminal.seed_text(self.s, self.tid, cli='codex'))
+
+    def test_the_owner_marks_it_and_an_agent_cannot(self):
+        from taskuary import guard
+        self.assertNotEqual(guard.denied('POST', '/api/tasks/7/desktop'), '')
+        self.assertEqual(guard.denied('GET', '/api/desktop'), '')
 
 
 if __name__ == '__main__': unittest.main()

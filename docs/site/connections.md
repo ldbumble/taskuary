@@ -317,6 +317,10 @@ desktop app with no connection and no web page. A connection comes first, then t
 - **Off until you turn it on.** With the card off, no agent is told about it, and any agent-desktop
   command from one of Taskuary's sessions is refused. On macOS the program asks for Accessibility
   permission the first time; the card's **Test** says whether it has it.
+- **Only on a task marked "needs desktop".** Turning the card on is not enough: mark the task too.
+  With the card on, the New sheet's **Needs desktop** box marks a new task. Triage marks one whose work
+  it reads as done in a desktop app. On a task without the mark, the agent is not told about it and
+  every agent-desktop command is refused. An agent cannot mark its own task.
 - **Your own tasks only.** A task with a message from someone you have not vouched for never drives
   your desktop. The task does not get it, as it does not get the browser.
 - **What can't be undone waits for you.** A command that only looks (a snapshot, a list of apps or

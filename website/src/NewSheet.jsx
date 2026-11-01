@@ -20,7 +20,7 @@ import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLE
 import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
-import { NO_REPO, planTask } from "./newTask.js";
+import { NO_REPO, planTask, withDesktop } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
@@ -235,6 +235,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const filed = useRef(null);      // a task this sheet filed whose start was refused: {taskId, ref, about, how}
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
+  // "needs desktop": offered only while the Agent Desktop card is on (agentdesktop.py) - off, the box is not there at all
+  const [deskOn, setDeskOn] = useState(false);
+  const [desk, setDesk] = useState(false);
+  useEffect(() => { if (open) api.get("/api/desktop").then(({ data }) => setDeskOn(!!data?.active)).catch(() => setDeskOn(false)); }, [open]);
   useEffect(() => {
     if (!agents.includes(agent)) { setAgent(codingProfile(agents, kinds)); setModel(""); }
   }, [agents, kinds, agent]);
@@ -304,7 +308,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // for, so each retry of a refused start filed another copy nobody worked on. The same words pressed again start the one filed.
         const again = filed.current?.about === about && filed.current.how === how ? filed.current : null;
         const data = again || (await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
-          Kind: plan.kind, Tags: plan.tags })).data;
+          Kind: plan.kind, Tags: withDesktop(plan.tags, deskOn && desk) })).data;
         if (!again) {
           filed.current = { ...data, about, how };
           // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
@@ -478,6 +482,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 {/* A session you start is yours to end: the server marks the task the moment you open
                     one (selfclose.claim), whichever door you came through - no checkbox to forget. */}
               </Box>
+            )}
+            {deskOn && (
+              <FormControlLabel sx={{ ml: 0 }} control={<Checkbox size="small" checked={desk} onChange={(e) => setDesk(e.target.checked)} />}
+                label={<Typography variant="body2">Needs desktop - its agent may operate the desktop apps on this computer</Typography>} />
             )}
           </>
         )}

@@ -5,8 +5,9 @@ import { mkdir } from "node:fs/promises";
 
 import { startHarness } from "./harness.mjs";
 
-/* A TRIAL: THE PILL GROWS UNDER THE MOUSE (the owner, 2026-10-31: "try it"). Hovered, the chat pill in the corner grows wider and three
-   lines tall over its own corner - the bar beside it and the canvas do not move, and it never covers the bar's buttons. A moment after the
+/* A TRIAL: THE PILL GROWS UNDER THE MOUSE (the owner, 2026-10-31: "try it"). Hovered, the chat pill in the corner grows taller over its
+   own corner - never wider (the owner, 2026-10-31: "size of the chat should never change"), the open window's own width, so a press on it
+   changes no width; the bar beside it and the canvas do not move, and it never covers the bar's buttons. A moment after the
    mouse leaves it is the pill again; a mouse passing across does not flicker it. It never shrinks while it is open (focus), nor while words
    are typed in it. TASKUARY_HOVERBOX_SHOTS=<folder> keeps a frame of each state and a frame sequence of the grow and the shrink. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -53,8 +54,9 @@ test("the chat pill grows under the mouse, shrinks after it leaves, and never wi
   const big = await geo();
   const say = JSON.stringify({ rest, big });
   assert.ok(big.grow && !big.open, `hovered it grows, and does not open ${say}`);
-  assert.ok(big.field.w > rest.field.w + 40 && big.field.h >= rest.field.h + 24, `wider and taller ${say}`);
-  assert.ok(Math.abs(big.field.r - rest.field.r) <= 1 && Math.abs(big.field.b - rest.field.b) <= 1, `grown out of its own corner ${say}`);
+  assert.ok(big.field.h >= rest.field.h + 24, `taller ${say}`);
+  assert.ok(Math.abs(big.field.l - rest.field.l) <= 1 && Math.abs(big.field.r - rest.field.r) <= 1, `never wider: the same left and right edges ${say}`);
+  assert.ok(Math.abs(big.field.b - rest.field.b) <= 1, `grown up out of its own foot ${say}`);
   assert.deepEqual([big.box, big.dock, big.canvas], [rest.box, rest.dock, rest.canvas], `nothing else moved ${say}`);
   assert.ok(big.field.l >= big.btnR, `it never covers the bar's buttons ${say}`);
   await shot("2-hover");
@@ -71,9 +73,15 @@ test("the chat pill grows under the mouse, shrinks after it leaves, and never wi
   assert.ok((await geo()).grow, "back in before the delay: still grown");
   await away(); await sleep(800);
 
-  // ...opened by a click, then the mouse away: open (only its × or Esc shuts it)
+  // ...opened by a click on the grown pill: the window at the same width, then the mouse away: open (only its × or Esc shuts it)
+  await page.mouse.move(x, y); await sleep(400);
+  assert.ok((await geo()).grow, "grown before the press");
   await page.click(".tq-chat-unit > .tq-compose-box textarea");
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
+  await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 5000 }); await sleep(300);
+  const opened = await geo(), popW = await page.$eval("[data-tq-chat-pop]", (e) => Math.round(e.getBoundingClientRect().width));
+  assert.ok(Math.abs(opened.field.w - rest.field.w) <= 1 && Math.abs(opened.field.r - rest.field.r) <= 1 && Math.abs(popW - rest.field.w) <= 1,
+    `the press opens the window at the pill's width ${JSON.stringify({ rest: rest.field, opened: opened.field, popW })}`);
   await page.keyboard.type("draft a reply to Erin");
   await away(); await sleep(900);
   assert.ok((await geo()).open, "focused and typed in, a look away leaves it open");
@@ -105,7 +113,7 @@ test("the chat pill grows under the mouse, shrinks after it leaves, and never wi
     const r0 = await geo(), [px, py] = await at(".tq-chat-unit > .tq-compose-box textarea");
     await page.mouse.move(px, py); await sleep(400);
     const r1 = await geo(), s = `${w}x${h} ${JSON.stringify({ r0, r1 })}`;
-    assert.ok(r1.grow && r1.field.h >= r0.field.h + 24 && r1.field.w >= r0.field.w, `grown ${s}`);
+    assert.ok(r1.grow && r1.field.h >= r0.field.h + 24 && Math.abs(r1.field.l - r0.field.l) <= 1 && Math.abs(r1.field.r - r0.field.r) <= 1, `taller, never wider ${s}`);
     assert.deepEqual([r1.box, r1.dock, r1.canvas], [r0.box, r0.dock, r0.canvas], `nothing else moved ${s}`);
     assert.ok(r1.field.l >= r1.btnR && r1.field.l >= 0, `the buttons never covered ${s}`);
     await shot(`5-hover-${w}`);

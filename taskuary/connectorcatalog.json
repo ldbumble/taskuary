@@ -213,7 +213,10 @@
         "any mailbox (imap)",
         "any",
         "mailbox",
-        "imap"
+        "imap",
+        "zoho mail",
+        "zoho email",
+        "yahoo mail"
       ]
     },
     {

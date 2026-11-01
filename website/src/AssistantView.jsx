@@ -2190,7 +2190,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const tableKey = table?.key && table.key !== foldedKey && !browsing ? table.key : null;
       // ...and a page open beside it does not take it off the table: the Assistant's own "turn off background sync" opened Settings, and the
       // next "mark this done" went out about nothing while the rail still said ON THE TABLE (verify, 2026-10-19). Both go; the words say which
-      const subject = tableKey || current || cardRef.current;
+      // ...except a DOOR's ask ("Get AI to set it up"), which is about the page it was pressed on: sent with the task on the table, "Help me
+      // set up Any mailbox (IMAP)" was answered with that task's story (TQ-1251)
+      const subject = how.door ? null : tableKey || current || cardRef.current;
       const ask = () => turn({ mode: "say", text: t, key: subject, context_mid: currentItem?.mid && subject === current ? currentItem.mid : null,
                                open_card: openCardRef.current, images, ...(view ? { view } : {}), ...(react ? { react } : {}) });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });

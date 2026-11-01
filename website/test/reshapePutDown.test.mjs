@@ -23,7 +23,7 @@ test("the task view's fold closes its drawer at the press and moves on as after 
   assert.match(page, /<Reshape taskId=\{selected\}[^\n]*onLeave=\{\(tid\) => \{ if \(tid === selected\) \{ setReshape\("merging"\); onLeave\?\.\(\); \} \}\}/);
   assert.match(page, /onStay=\{\(tid, msg\) => \{ if \(tid === selected\) \{ setReshape\(true\); onStay\?\.\(msg\); \} \}\}/);
   const done = part(page, "const reshaped = (r) =>", "};");
-  assert.match(done, /canvas && onFinish \? onFinish\("dropped", async \(\) => \{\}\)/, "the walk moves on - the server already dropped it");
+  assert.match(done, /walkLeave \? walkLeave\("left"\)/, "the walk moves on - the server already dropped it");
 });
 
 // ANY TASK, OPEN OR CLOSED (the owner, 2026-10-26: "we can't merge this with other tasks only open tasks?"): what is typed asks the

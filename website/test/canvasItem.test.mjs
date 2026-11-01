@@ -114,8 +114,8 @@ test("the note card goes at the press, and comes back with its words if the clos
 });
 
 test("a close the server already answered brings the next item without the half-second grace", () => {
-  assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/);
-  assert.match(view, /advance: \(pile, settled\) => advance\(pile, settled\),/, "the walk's advance passes `settled` on - it dropped it, so every close waited 500 ms");
+  assert.match(view, /onWalkLeave=\{\(how, x\) => actions\.leave\(c\.key, how, x\)\}/);
+  assert.doesNotMatch(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(null, null, from\)/, "no grace: the close and its walk are one call");
 });
 
 // ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): with the item drawn as its task view, the row under

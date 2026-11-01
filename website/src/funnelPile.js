@@ -77,23 +77,11 @@ export const refreshPilePresentation = (current, fresh) => {
   return JSON.stringify(current.walk ?? null) === JSON.stringify(fresh.walk ?? null) ? current : fresh;
 };
 
-// THE WALK BESIDE THE RAIL (railwalk.peek, the walk has one owner, 2026-10-30): every rail carries `walk` - the row on screen (`on`),
-// the key Back brings (`above`) and the Answer Next would give (`below`) - so a press draws at once and asks nothing first. The page keeps
-// no rule of its own about which row comes next or above.
+// THE WALK BESIDE THE RAIL (railwalk.peek, the walk has one owner, 2026-10-30): every rail carries `walk` - the row on screen (`on`) and the
+// keys Back and Next would bring (`above`, `below`). The page keeps no rule of its own about which row comes next or above: it reads them to
+// grey its buttons and mark the rail, and draws only what a move answers.
 export const walkOf = (pile) => pile?.walk || null;
-// ...the prepared Answer is for the row the walk stands on: drawn at a press made FROM that row (or from no row: the walk's own place)
-export const preparedFor = (pile, fromKey) => {
-  const w = walkOf(pile);
-  if (!w?.below) return null;
-  return !fromKey || fromKey === w.on || (w.members || []).includes(fromKey) ? w.below : null;
-};
-export const nextMarkerKey = (pile, items, current) => {
-  const b = walkOf(pile)?.below?.item;
-  if (b) return (b.members || [])[0] || b.key || null;
-  if (walkOf(pile)) return null;
-  const eligible = (item) => !item.settling && item.key !== current?.key;
-  return (items || []).find(eligible)?.key || null;
-};
+export const nextMarkerKey = (pile) => { const b = walkOf(pile)?.below; return b ? (b.startsWith("fyis:") ? b.slice(5).split(",")[0] : b) : null; };
 // can Next go on from here: the walk says what is below; before any walk was read, anything on the rail
 export const canAdvance = (pile, ready) => walkOf(pile) ? !!walkOf(pile).below : (ready || []).length > 0;
 

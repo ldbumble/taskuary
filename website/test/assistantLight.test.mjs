@@ -78,7 +78,7 @@ test("a typed put-down folds its card with the press badge and the note", () => 
   const view = src("AssistantView.jsx");
   const at = view.indexOf("const send = async"), body = view.slice(at, view.indexOf("const sendEmoji", at));
   assert.match(body, /const pr = data\.pressed;\s+if \(pr\?\.label\) \{\s+setMsgs\(\(m\) => pressLine\(m, pr, pr\.label, pr\.note \|\| ""\)\);/);
-  assert.match(body, /canvasState\.putDown\(here\.key \|\| pr\.key, pr\.tid \?\? null\); advance\(null, true\);/);
+  assert.match(body, /canvasState\.putDown\(here\.key \|\| pr\.key, pr\.tid \?\? null\); leave\(here\.key \|\| pr\.key, "left"\);/);
   assert.match(view, /<Pressed label=\{pressedOf\(m\)\} note=\{pressedNoteOf\(m\)\} \/>/);
   assert.match(view, /\{note && <span className="tq-pressed-note" data-tq-pressed-note="" title=\{note\}>\{note\}<\/span>\}/);
   assert.match(src("assistantView.css"), /\.tq-pressed-note \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;/);

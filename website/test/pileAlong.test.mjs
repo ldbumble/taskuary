@@ -34,15 +34,11 @@ test("landed holds the rail the turn brought and only falls back to its own load
   assert.match(hold, /setPile\(\(p\) => refreshPilePresentation\(p, data\)\)/);
 });
 
-test("All read, next: the settle brings the rail back and the walk takes it without a reload", () => {
+test("All read, next: the settle and the walk on are one move, and its answer brings the rail back without a reload", () => {
   const done = between("const done = async (pressed)", "// Setting Taskuary up");
-  assert.match(done, /verb: "done", only: only\.current/);
-  assert.match(done, /\.data\?\.pile \|\| null/);
-  assert.match(done, /advance\(pile\)/);
-  const advance = between("const advance = (pile", "const done = async");
-  assert.match(advance, /if \(pile\) holdPile\(pile\);/);
-  assert.match(advance, /pile \|\| settled \? 120 : 500/, "a rail in hand - or a close the server already answered - needs no half-second of grace");
-  assert.match(advance, /surfaceRef\.current\?\.\(null, null, from\)/, "the walk moves on from the row the close took off (rule 5)");
+  assert.match(done, /await leave\(current, "settle"\)/);
+  assert.doesNotMatch(done, /funnel\/settle/, "never a settle of its own and a walk after it");
+  assert.match(between("const landed = useCallback", "const noteLine"), /if \(data\.pile\) holdPile\(data\.pile\);/);
 });
 
 test("a typed next keeps the capture: the table did not change, so the token still names the pick", () => {

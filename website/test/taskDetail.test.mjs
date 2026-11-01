@@ -45,8 +45,8 @@ test("the view draws from the held read, and the reads ahead are where the next 
   assert.match(search, /if \(aheadTid\) prefetchTask\(api, aheadTid\);/);                                             // a search hit highlighted
   // an act makes the held reads old - but Next is no act, it is what they are for
   assert.match(view, /onPressed\(\(id\) => \{ if \(!walkMove\(id\)\) forgetTasks\(actedTid\.current \?\? null\); \}\)/);
-  assert.match(view, /useEffect\(\(\) => \{ if \(currentItem\?\.tid && earlyRef\.current\?\.key !== currentItem\.key\) actedTid\.current = currentItem\.tid; \}, \[currentItem\]\);/,
-    "an act lets go of its own task's read only - not the next item's, just before the walk goes on to it");
+  assert.match(view, /useEffect\(\(\) => \{ if \(currentItem\?\.tid\) actedTid\.current = currentItem\.tid; \}, \[currentItem\]\);/,
+    "an act lets go of its own task's read only - not the next item's");
 });
 
 test("a task's session is held with it: unknown until read, null for a task no agent holds", async () => {
@@ -63,42 +63,11 @@ test("a task's session is held with it: unknown until read, null for a task no a
   assert.equal(heldTerm(3), undefined, "a write that names no task lets the whole list go");
 });
 
-// NEXT PUTS THE NEXT ONE UP AT THE PRESS (G8): the fold left the canvas with no view and the rail ringing the item put down until the
-// server answered - the item the capture names is drawn at once from its held read, and the answer fills that same line
-test("Next draws what its capture names in the same frame as the fold, and the answer fills that line in place", () => {
-  const view = src("AssistantView.jsx"), turns = src("assistantTurns.js");
-  assert.match(view, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;[^]*aheadItem && \(drawsNow\(aheadItem\) \|\|/, "a Next only from a read already held - never an empty view");
-  assert.match(view, /drawAhead\(\{ \.\.\.line, text: "", card: aheadItem \}, null, \{ ask: !!key \}\)/);
-  assert.match(view, /setMsgs\(\(m\) => \[\.\.\.m, \{ \.\.\.line, ahead: true \}\]\);\s+putOnTable\(line\.card\);/);
-  assert.match(view, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
-  assert.match(view, /setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== rec\.id\)\);\s+const t = rec\.table;/, "a failure puts the table back");
-  assert.match(turns, /!m\.ahead && !NOT_ITEM\.has/, "a line drawn ahead is no copy of the item for oneCopy to fold others into");
-  // ...an item an agent is working included: the walk takes it like any task, and its card is the agent's pane (2026-10-21)
-  assert.match(view, /i\.key === aheadKey && !i\.settling\)/, "an item an agent has is drawn ahead like the rest");
-});
-
 // A ROW CLICKED COLD IS DRAWN AT THE CLICK (owner-approved, 2026-10-20): the old view and its ring stayed up for the whole read
 test("a rail row clicked before its task is read puts its frame up at the click, titled, over the view's loading state", () => {
   const view = src("AssistantView.jsx"), page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
-  assert.match(view, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)/,
-    "a pick by name needs no held read; a Next still does");
   assert.match(item, /<TaskPage taskId=\{card\.tid\} title=\{card\.title \|\| ""\}/, "the frame knows which item it is");
   assert.match(page, /data-tq-task-loading=[\s\S]{0,800}canvas && !!title && <Typography data-tq-task-loading-title=""/, "...and says it while it reads");
-});
-
-// A CLOSE PUTS THE NEXT ONE UP AT ITS PRESS (owner-approved, 2026-10-20): the next was drawn only after the server recorded the close
-test("Mark done, Remove and Remind me draw the next item at the press; a failed close takes it down and puts the closed one back", () => {
-  const view = src("AssistantView.jsx");
-  assert.match(view, /putDown: \(key, tid = null\) => \{[^\n]*drawNextEarlyRef\.current\?\.\(key\); \}/, "the press that folds the item draws the next");
-  assert.match(view, /pickUp: \(key, why\) => \{ takeEarlyBackRef\.current\?\.\(\);/, "a close that fails takes the drawn one down first");
-  assert.match(view, /const takeEarlyBack = \(\) => \{ const e = earlyRef\.current; earlyRef\.current = null; movedOnRef\.current = false; if \(e\) unshow\(e\); \};/, "...and the closed item is back on the table");
-  assert.match(view, /const b = preparedFor\(pileRef\.current, leaving\);/, "the walk's own prepared answer for the row on screen: the row that was below it");
-  assert.match(view, /earlyRef\.current = drawAhead\(\{ id: `a\$\{Date\.now\(\)\}`, role: "assistant", text: b\.say \|\| "", options: b\.options \|\| \[\], chips: b\.chips \|\| \[\], card: b\.item,/, "on the one road ahead");
-  assert.match(view, /\.\.\.\(drawsNow \? \{\} : \{ held: true \}\) \}, b\.answer_hash\);/, "its card held until the answer when its task is not read yet, as a Next draws");
-  assert.match(view, /if \(early\) \{ currentRef\.current = null; carryRef\.current = early; \}\s+else clearTable\(\);/,
-    "advance keeps the drawn item up and hands it to the walk's surface");
-  assert.match(view, /if \(keeps\) aheadRef\.current = \{ \.\.\.carried, hash: null, table: tableNow\(\) \};\s+else dropCarried\(\);/,
-    "the answer fills the drawn line in place when it names the same item, and takes it down when not");
 });
 
 // WHICH READ IS NEWER (the owner, 2026-10-23: "this shows agent working but it's not working"): the rail was built under the server's lock

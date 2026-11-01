@@ -5285,11 +5285,10 @@ class SurfaceBody(BaseModel):
     key: str | None = None
     only: str | None = None
     from_key: str | None = None         # the row the page had on screen: Next moves from IT (railwalk.next), never from a captured pick
-    leaving: str | None = None          # its older name, still sent by a phone road
     press: str | None = None            # one press, one answer: a repeat gets the same one and no second line
     read: list[str] = []                # rows read on a page open over the table (the Reports page, 2026-10-30)
     fyi: int | None = None              # how many plain FYI rows the page wants whole in the rail that rides along (funnel.page_fyi)
-class WalkBody(BaseModel):
+class RailWalkBody(BaseModel):
     from_key: str | None = None; key: str | None = None; press: str | None = None; how: str | None = None
     note: str | None = None; until: str | None = None; read: list[str] = []; level: str | None = None; fyi: int | None = None
 class ConciergeSayBody(BaseModel):
@@ -5309,8 +5308,8 @@ def _encoded(content) -> Response:
 
 def _pile_payload(force: bool = False, current: str = None, only: str = None,
                   include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict:
-    """The pile as the page draws it, with the walk beside it (railwalk.peek): where the walk stands, the row Back brings and the
-    Answer Next would give - so a press draws the next item at once (rule 7). One road for the GET, for the turn that carries the
+    """The pile as the page draws it, with the walk beside it (railwalk.peek): where the walk stands and the rows Back and Next would
+    bring. One road for the GET, for the turn that carries the
     rail in its answer, and for the settle that does the same."""
     from . import funnel, railwalk
     started, seen = time.time(), live_bus.seq()
@@ -5331,9 +5330,9 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     p['walk'] = walk
     # `fyi`: the page's own rail pages its plain FYI tail (funnel.page_fyi). Whatever is on the table or drawn next is sent whole.
     if fyi is not None:
-        below = ((walk or {}).get('below') or {}).get('item') or {}
-        p = funnel.page_fyi(p, max(0, int(fyi)), keep=(current, exclude, (walk or {}).get('on'), below.get('key'),
-                                                       *((walk or {}).get('members') or ()), *(below.get('members') or ())))
+        below = (walk or {}).get('below') or ''
+        p = funnel.page_fyi(p, max(0, int(fyi)), keep=(current, exclude, (walk or {}).get('on'), below,
+                                                       *((walk or {}).get('members') or ()), *railwalk.members_of(below)))
     return funnel.present(store, p)
 
 def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict | None:
@@ -5513,7 +5512,7 @@ def concierge_next(body: SurfaceBody = None):
     from . import concierge
     body = body or SurfaceBody()
     if body.key: _refresh_chat_key(body.key)     # a named pull refreshes ITS item first: the item is the subject (PW-050)
-    out = _with_pile(concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key or body.leaving, press=body.press, read=body.read), body)
+    out = _with_pile(concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key, press=body.press, read=body.read), body)
     if not body.key: _refresh_after(out)         # ...and the walk's Next answers first, then asks the provider (design C)
     return _encoded(out)
 
@@ -5529,38 +5528,38 @@ def _with_pile(out: dict, body) -> dict:
 
 # THE WALK'S OWN ROUTES (railwalk, 2026-10-30): the page sends an action and draws the Answer that comes back - the row, its words and
 # chips, where the walk now stands, and the rail as the move left it with the next answer prepared in it.
-def _walk_answer(out: dict, body: WalkBody) -> Response:
+def _walk_answer(out: dict, body: RailWalkBody) -> Response:
     out = {**out, 'pile': _pile_along(fyi=body.fyi)}
     _refresh_after(out)
     return _encoded(out)
 
 @app.post('/api/walk/start')
-def walk_start(body: WalkBody = None):
+def walk_start(body: RailWalkBody = None):
     from . import railwalk
-    body = body or WalkBody()
+    body = body or RailWalkBody()
     return _walk_answer(railwalk.start(store, ACTOR, press=body.press), body)
 
 @app.post('/api/walk/next')
-def walk_next(body: WalkBody = None):
+def walk_next(body: RailWalkBody = None):
     from . import railwalk
-    body = body or WalkBody()
+    body = body or RailWalkBody()
     return _walk_answer(railwalk.next(store, body.from_key, ACTOR, press=body.press, read=body.read), body)
 
 @app.post('/api/walk/back')
-def walk_back(body: WalkBody = None):
+def walk_back(body: RailWalkBody = None):
     from . import railwalk
-    body = body or WalkBody()
+    body = body or RailWalkBody()
     return _walk_answer(railwalk.back(store, body.from_key, ACTOR, press=body.press), body)
 
 @app.post('/api/walk/open')
-def walk_open(body: WalkBody):
+def walk_open(body: RailWalkBody):
     from . import railwalk
     if body.level: return _walk_answer(railwalk.section(store, body.level, ACTOR, press=body.press), body)
     if not body.key: raise HTTPException(422, 'a key or a section is required')
     return _walk_answer(railwalk.open(store, body.key, ACTOR, press=body.press, at=body.from_key), body)
 
 @app.post('/api/walk/leave')
-def walk_leave(body: WalkBody):
+def walk_leave(body: RailWalkBody):
     from . import railwalk
     if not body.key or not body.how: raise HTTPException(422, 'a key and how it is left are required')
     try: out = railwalk.leave(store, body.key, body.how, ACTOR, press=body.press, note=body.note, until=body.until)
@@ -5600,7 +5599,7 @@ class ConciergeStreamBody(BaseModel):
     images: list[str] = []                        # pictures sent with the line (/api/prompt-image)
     view: dict | None = None                      # the page on screen, read when the owner asked (pageview.py) - secrets as their state only
     react: str = ''                               # what the owner just did on that page, inside a conversation they started about it
-    from_key: str | None = None; leaving: str | None = None    # the row the page had on screen: Next and Back move from it (railwalk)
+    from_key: str | None = None                   # the row the page had on screen: Next and Back move from it (railwalk)
     press: str | None = None
     read: list[str] = []
     fyi: int | None = None
@@ -5653,8 +5652,8 @@ async def concierge_stream(body: ConciergeStreamBody):
             if notice: put({'type': 'context_update', 'say': notice})
             if body.mode == 'open': out = concierge.open_day(store, actor=ACTOR, trace=trace, cancel=cancel)
             elif body.mode == 'next':
-                out = concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key or body.leaving, press=body.press, read=body.read)
-            elif body.mode == 'back': out = railwalk.back(store, body.from_key or body.leaving, ACTOR, press=body.press)
+                out = concierge.surface(store, body.key, actor=ACTOR, from_key=body.from_key, press=body.press, read=body.read)
+            elif body.mode == 'back': out = railwalk.back(store, body.from_key, ACTOR, press=body.press)
             elif body.mode == 'start': out = railwalk.start(store, ACTOR, press=body.press)
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
                                       open_card=body.open_card, images=prompt_images(body.images), view=body.view, react=body.react)

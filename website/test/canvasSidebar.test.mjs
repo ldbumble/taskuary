@@ -36,8 +36,8 @@ test("a section heading walks that section; its chevron alone opens a capped ban
 test("a section heading opens its first row, and Next walks on down the rail - no section hold, no \"done.\" stop (Q6, 2026-10-30)", () => {
   const view = src("AssistantView.jsx");
   const walk = view.slice(view.indexOf("const walkSection = (level) => {"), view.indexOf("// A SIDEBAR BUTTON POSTS ITS BROWSE CARD"));
-  assert.match(walk, /bandsOf\(pile\?\.items\)\.find\(\(b\) => b\.level === level\)\?\.items\?\.find\(\(i\) => !i\.settling\)/);
-  assert.match(walk, /if \(first\) pull\(first\.key, null\);/);
+  assert.match(walk, /surface\(null, null, null, false, "section", \{ level \}\);/, "the server says which row is first (railwalk.section)");
+  assert.doesNotMatch(walk, /bandsOf/, "never the page's own pick");
   assert.doesNotMatch(view, /sectionRef|sectionNext|sectionDone/);
 });
 

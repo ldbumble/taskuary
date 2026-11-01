@@ -353,11 +353,11 @@ def back(store, from_key: str = None, actor: str = 'owner', press: str = None) -
         return _remember(press, _answer(store, st, rows, _present(store, item, actor, picked=True, rows=rows)))
 
 
-def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at: str = None) -> dict:
+def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at: str = None, record: bool = True) -> dict:
     """A rail click, a name, a link, a section heading (its first row), the Board's open, a search hit: that row on screen at its place.
     Reads nothing (rule 4) - but a task opened clears its "+N" (Q1): what landed on it has now been seen; it stays where it is.
     `at`: the row whose place it takes - Put it on my list keeps the new task on the table, and Next and Back go on from the report's
-    place (3.5, W49)."""
+    place (3.5, W49). `record=False`: the row put on screen with no line in the chat - the caller words it (concierge.set_current)."""
     with _LOCK:
         if (hit := _again(press)): return hit
         st, rows = state(store), _rows(store)
@@ -373,7 +373,13 @@ def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at:
         _put(st, item, rows, place=place)
         if row is None and item.get('tid') and kind_of(item) != 'reads': st['kind'] = 'none'
         _write(store, st)
-        return _remember(press, _answer(store, st, rows, _present(store, item, actor, picked=True, llm=llm, rows=rows)))
+        return _remember(press, _answer(store, st, rows, _present(store, item, actor, picked=True, llm=llm, rows=rows, record=record)))
+
+
+def top(store) -> dict | None:
+    """The row a walk starts on, as an item - read only: what `start` would put up, with nothing written."""
+    ln = line(_rows(store))
+    return as_item(store, _batch(store, ln, 0, True)) if ln else None
 
 
 def section(store, level: str, actor: str = 'owner', press: str = None) -> dict:
@@ -402,6 +408,17 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
         out = concierge.close_after_send(store, int(item['tid']), actor)
         return {'closed': out.get('status') in ('done', 'dropped'), 'kept': out.get('kept_open')}
     if how in ('all_read', 'next'): return {'closed': True, 'read': True}
+    # ...the act ran on its own road already (the task page's write-up, a hand-off, a fold, a typed put-down, a proposal): only the move,
+    # and the row closed exactly when it has left the line - so a kept-open row is re-presented, never walked past
+    if how == 'left': return {'closed': not find(line(_rows(store)), item['key'])}
+    # ...a card's own Done (an FYI batch's All read, a reply sent from its card): the row settled, nothing behind it closed
+    if how == 'settle': funnel.settle(store, item['key'], 'done', actor); return {'closed': True}
+    # ...Remind me through the picker's own road (remind.set_reminder): its agent-open refusal and its receipt stay the same
+    if how == 'remind' and item.get('tid'):
+        from . import remind
+        out = remind.set_reminder(store, int(item['tid']), until, actor)
+        operations.record_direct(store, 'task.defer', int(item['tid']), {'until': until or 'none'}, actor, out)
+        return {'closed': True, 'outcome': out}
     if how == 'done' and item.get('kind') in ('agentdone', 'report', 'fyis') or (how == 'done' and not item.get('tid')):
         funnel.settle(store, item['key'], 'done', actor); return {'closed': True}
     kind = HOW.get(how)
@@ -416,7 +433,7 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
     done = concierge.run_proposal(store, operations.propose(store, kind, int(target), params, actor), actor)
     if done.get('status') != 'done': raise RuntimeError(done.get('error') or f'{kind} did not run')
     o = done.get('outcome') or done.get('result') or {}
-    return {'closed': how != 'put_on_list', 'made': o.get('taskId') or o.get('task_id') or o.get('tid')}
+    return {'closed': how != 'put_on_list', 'made': o.get('taskId') or o.get('task_id') or o.get('tid'), 'outcome': o}
 
 
 def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, note: str = None, until: str = None) -> dict:
@@ -445,30 +462,18 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
             return _remember(press, _answer(store, st, rows, {**_present(store, fresh, actor, picked=True, record=False, rows=rows), 'kept': done.get('kept') or []}))
         st.update(on=key, members=members_of(key), first=list(place[0]), last=list(place[1]))
         _write(store, st)
-        return _remember(press, next(store, key, actor, effect=False))
+        # ...with what the act said (a removed task's Undo line, a reminder's warning) riding along for the page to draw
+        return _remember(press, {**next(store, key, actor, effect=False), **({'left': done['outcome']} if done.get('outcome') else {})})
 
 
 def peek(store, actor: str = 'owner') -> dict:
-    """Pure: {on, ended, below, above} for the row on screen - `below` the Answer `next` would give (minus its effects), `above` the key
-    `back` would bring. Every rail payload carries it as `walk`, so the page draws the next item at the press (rule 7)."""
+    """Pure: {on, ended, below, above} for the row on screen - `below` the key `next` would bring, `above` the key `back` would. Keys,
+    never Answers: the page draws only what a move answers, and reads these to grey Back and Next (one pass over the line, spec 7.3)."""
     with _LOCK:
         st, rows = state(store), _rows(store)
-        walk = _walk(store, st, rows)
-        ln = line(rows)
-        below = None
-        try:
-            if st.get('on') or st.get('ended'):
-                last = _tuple(st.get('last'))
-                if last is None: n = 0 if ln else None
-                else:
-                    n = _below(ln, last, skip=st.get('members') or ())
-                if n is not None:
-                    item = as_item(store, _batch(store, ln, n, True))
-                    below = {**_present(store, item, actor, picked=False, record=False, rows=rows)}
-                    below['answer_hash'] = answer_hash(below)
-            elif ln:
-                item = as_item(store, _batch(store, ln, 0, True))
-                below = {**_present(store, item, actor, picked=False, record=False, rows=rows)}
-                below['answer_hash'] = answer_hash(below)
-        except Exception as e: logger.debug(f'railwalk: nothing prepared - {e}')
-        return {**walk, 'below': below}
+        walk, ln = _walk(store, st, rows), line(rows)
+        if st.get('on') or st.get('ended'):
+            last = _tuple(st.get('last'))
+            n = (0 if ln else None) if last is None else _below(ln, last, skip=st.get('members') or ())
+        else: n = 0 if ln else None
+        return {**walk, 'below': as_key(store, ln, n) if n is not None else None}

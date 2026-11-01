@@ -53,7 +53,7 @@ test("a row opened and each Next read the rail, the conversation and the Advisor
   assert.ok(open.n("/api/advice") <= 2 + open.lines, `...and the Advisor ${open.n("/api/advice")} times (${open.lines} lines landed)`);
   for (let i = 0; i < 2; i++) {
     const next = await window(() => pressNext(page));
-    assert.ok(next.posts.includes("/api/concierge/stream"), `Next ${i} was pressed: ${next.posts}`);
+    assert.ok(next.posts.includes("/api/walk/next"), `Next ${i} was pressed: ${next.posts}`);
     // the press's answer carries the rail: the 1.5 s reload behind it read the same rows again
     assert.ok(next.n("/api/funnel/pile") <= others(next), `Next ${i} read the rail again: ${next.got}\n${JSON.stringify(next.wakes)}`);
     assert.ok(next.n("/api/concierge") <= others(next), `Next ${i} read the conversation again: ${next.got}`);
@@ -70,7 +70,7 @@ test("All read, next on an FYI batch counts the badge at most twice and reads th
   await page.evaluate(() => [...document.querySelectorAll('[data-tq-run="reports"] .tq-pile-row[data-tq-key] .card')].at(-1)?.click()); await sleep(3500);
   await pressNext(page); await sleep(3500);
   const fyi = await window(() => pressNext(page));
-  assert.ok(fyi.posts.includes("/api/funnel/settle"), `the press settled an FYI batch: ${fyi.posts}`);
+  assert.ok(fyi.posts.includes("/api/walk/leave"), `the press settled an FYI batch (railwalk.leave): ${fyi.posts}`);
   assert.equal(fyi.n("/api/funnel/pile"), 0, `the settle's own rail was read again: ${fyi.got}`);
   assert.ok(fyi.n("/api/reviews") <= 2 + others(fyi), `the Review badge was counted ${fyi.n("/api/reviews")} times: ${fyi.got}
 ${JSON.stringify(fyi.wakes)}`);

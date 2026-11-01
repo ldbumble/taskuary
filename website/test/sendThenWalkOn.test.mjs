@@ -34,7 +34,8 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   // ...through the server's one gate, which keeps it open while anything on it still waits on the owner (a held `git push`, 2026-10-29):
   // the page walks on only when that gate says it closed
-  assert.match(sent, /const sent = async \(\{ closes = false \} = \{\}\) => \{\n\s+if \(closes\) \{/);
+  assert.match(sent, /if \(closes && walkLeave\) \{\n\s+onLeave\?\.\(\);\n\s+try \{ await walkLeave\("sent"\); \}/, "on the walk's table, the walk's close (railwalk.leave sent)");
+  assert.match(sent, /\n\s+if \(closes\) \{/);
   assert.match(sent, /out = await closeAfterSend\(api, selected\);[^\n]*\n\s+if \(out\?\.closed\) \{ onLeave\?\.\(\); return closedHere\(\); \}/);
   assert.doesNotMatch(sent, /finish\("done"\)/, "never Mark done's close, which has no gate");
   assert.match(read("closeAgent.jsx"), /export const closeAfterSend = \(api, tid\) => runOperation\(api, "task\.complete", tid, \{ after_send: true \}\);/);

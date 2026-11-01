@@ -28,7 +28,9 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   let turnRequests = 0;
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/concierge/stream") turnRequests += 1;
+    // a turn is the stream; a walk move is its own POST to /api/walk/* (railwalk, 2026-10-30) - each counts once
+    const p = new URL(request.url()).pathname;
+    if (request.method() === "POST" && (p === "/api/concierge/stream" || p.startsWith("/api/walk/"))) turnRequests += 1;
   });
 
   const started = performance.now();

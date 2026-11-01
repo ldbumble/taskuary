@@ -1,6 +1,6 @@
 """THE WALK'S ROUTES (railwalk, 2026-10-30) - what the selection token and its reservation used to guarantee, kept by `from_key` and the
 press id: a press acts on the row the page showed, a write landing mid-press never refuses it ("i hate the next list changed", the owner,
-2026-10-26), a repeated press is one answer and one line, and the answer drawn ahead (walk.below) is the answer the press gives (rule 7).
+2026-10-26), a repeated press is one answer and one line, and the row the rail says is below (walk.below) is the row the press brings.
 Replaces the PW-050/PW-118 reservation tests (processing_navigation.reserve, funnel_selection) with the machinery they guarded gone."""
 from datetime import datetime
 import json
@@ -59,21 +59,20 @@ def post(client, path, **body):
     return r.json()
 
 
-def test_the_rail_carries_the_walk_and_the_answer_drawn_ahead_is_the_answer_the_press_gives(api):
+def test_the_rail_carries_the_walk_and_the_row_below_is_the_row_the_press_brings(api):
     db, client = api
     first = post(client, '/api/walk/start')
     walk = client.get('/api/funnel/pile', params={'force': True}).json()['walk']
     assert walk['on'] == first['item']['key'] and walk['above'] is None
     done = post(client, '/api/walk/next', from_key=first['item']['key'])
-    assert done['item']['key'] == walk['below']['item']['key']
-    assert done['answer_hash'] == walk['below']['answer_hash'], 'drawn ahead, it is the answer'
+    assert done['item']['key'] == walk['below'], 'the key the rail carried is the row Next brought'
     assert done['pile']['walk']['above'] == first['item']['key'], 'the rail rides along with the walk as the move left it'
 
 
 def test_a_write_landing_mid_press_never_refuses_it(api):
     db, client = api
     first = post(client, '/api/walk/start')
-    below = client.get('/api/funnel/pile', params={'force': True}).json()['walk']['below']['item']['key']
+    below = client.get('/api/funnel/pile', params={'force': True}).json()['walk']['below']
     task(db, 4)                                                           # mail lands while the press is on its way
     db.save_review_draft(db.list_reviews('pending')[0]['ReviewId'], 'A draft rewritten under the press')
     done = post(client, '/api/walk/next', from_key=first['item']['key'])
@@ -117,7 +116,7 @@ def test_the_concierge_routes_are_wrappers_of_the_walk(api):
 def test_leave_closes_and_brings_the_row_that_was_below(api):
     db, client = api
     first = post(client, '/api/walk/start')
-    below = client.get('/api/funnel/pile', params={'force': True}).json()['walk']['below']['item']['key']
+    below = client.get('/api/funnel/pile', params={'force': True}).json()['walk']['below']
     out = post(client, '/api/walk/leave', key=first['item']['key'], how='done')
     assert out['item']['key'] == below
     assert db.get_task(first['item']['tid'])['Status'] == 'done'

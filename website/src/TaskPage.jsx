@@ -685,7 +685,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   );
 }
 
-export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
+export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, walkLeave = null, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null, litMove = "" }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
@@ -1072,7 +1072,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     loadTasks(); onChanged?.();
     if (r?.dropped !== selected) return loadDetail(selected);
     setReshape(false);
-    canvas && onFinish ? onFinish("dropped", async () => {}).catch(() => {}) : onSelect(r.merged);
+    walkLeave ? walkLeave("left").catch(() => {}) : onSelect(r.merged);
   };
   // a card asked for one of this page's dialogs (assistantCards Foot TASK_ACTS): open it once the task is the one shown. Remove
   // has no dialog any more (the owner, 2026-10-19: a hover, not a box) - its press removes, from the card as from the row.
@@ -1093,7 +1093,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const notATask = async () => {
     onLeave?.();
     let out;
-    try { out = await runOperation(api, "task.not_a_task", selected); }
+    try { out = walkLeave ? (await walkLeave("not_task"))?.left : await runOperation(api, "task.not_a_task", selected); }
     catch (e) { const msg = opError(e, "Could not remove the task - it is still here; try Remove again."); setErr(msg); onStay?.(msg); return; }
     announceRemoved(fromAnswer(out, "task", t?.Title || "the task"));
     onSelect(null); await loadTasks(); onChanged?.();
@@ -1205,7 +1205,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // PUT DOWN AT THE PRESS (the owner, 2026-10-01: "you hit mark done it closes ... why does it take an extra second or 2?"): the
     // walk folds the task now and the close runs behind the "…"; a close that fails hands it back with the reason
     onLeave?.();
-    const close = () => completeTask(api, selected, note);   // the shared road (PW-215), the Wall's Close agent too (closeAgent.jsx)
+    // the shared road (PW-215), the Wall's Close agent too (closeAgent.jsx) - on the walk's table, the walk's one close (railwalk.leave)
+    const close = walkLeave ? () => walkLeave(note ? "note" : "done", note ? { note } : {}) : () => completeTask(api, selected, note);
     try { await (onFinish ? onFinish(status, close) : close()); }
     catch (e) { const msg = e?.response?.data?.detail || e?.message || "Failed to finish task"; setErr(msg); onStay?.(msg); loadTasks(); return msg; }
     finally { setFinishing(false); }
@@ -1215,7 +1216,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // it is off you: the list moves on, the walk brings the next, and the task stays open for its own Mark done
   const handedOff = async () => { setHandoff(false); await closedHere("waiting"); };
   const closedHere = async (status = "done") => {
-    try { await (onFinish ? onFinish(status, async () => {}) : loadDetail(selected)); } catch { /* already moved on the server */ }
+    // ...on the walk's table the act has run: the walk goes on from it - a hand-off's task stays open, so that is Next (rule 5)
+    try { await (walkLeave ? walkLeave(status === "waiting" ? "next" : "left") : onFinish ? onFinish(status, async () => {}) : loadDetail(selected)); }
+    catch { /* already moved on the server */ }
     loadTasks(); onChanged?.();
   };
   // SENT (Send / Approve): the send already went through. THE REPLY THAT WENT CLOSES THE TASK (the owner, 2026-10-29: "wait until the
@@ -1224,6 +1227,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // you - a held agent step, a proposal, an email it owes, a session still open (a held `git push` was closed under, 2026-10-29).
   // Anything else (an Approve, one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
   const sent = async ({ closes = false } = {}) => {
+    // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
+    if (closes && walkLeave) {
+      onLeave?.();
+      try { await walkLeave("sent"); } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
+      loadDetail(selected); loadTasks(); onChanged?.(); return;
+    }
     if (closes) {
       let out = null;
       try { out = await closeAfterSend(api, selected); } catch { /* read it below */ }
@@ -1234,8 +1243,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (done) { onLeave?.(); return closedHere(); }
     loadDetail(selected); loadTasks(); onChanged?.();
   };
-  // Remind me: put away until a day - the page around this view decides where to go next
+  // Remind me: put away until a day - the page around this view decides where to go next; on the walk's table the day is the walk's close
   const reminded = (out) => { onReminded?.(out); loadTasks(); onChanged?.(); };
+  const remindAct = walkLeave ? (until) => walkLeave("remind", { until }).then((d) => d?.left || { remindAt: until }) : null;
   const dismiss = () => onClose?.();
   // The report is identified by its durable marker, not the actor label. Named coding agents
   // appear as coding/claude/codex in the record; requiring ActorType === "agent" hid valid results.
@@ -2590,7 +2600,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={notATask}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
-                      <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
+                      <RemindMe task={t} compact onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} />
                       <Tooltip title={`${labelOfRow("hand")} - ${hintOfRow("hand")}`}>
                         <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -3416,7 +3426,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       sx={barLit("remove") ? primaryBtn : { ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }} data-tq-bar-item="nat" style={bar.shown("nat") ? undefined : HIDE}
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
-                    <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
+                    <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} data-tq-bar-item="sep" style={bar.shown("sep") ? undefined : HIDE} />
                     <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
                       data-tq-bar-item="hand" style={bar.shown("hand") ? undefined : HIDE}
@@ -3567,7 +3577,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
       {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
-      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession}
+      {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession}
         said={remindSaid} />}
       {calAsk && slotAt && <SlotPicker mid={calAsk.mid} act={slotAt.act} anchor={slotAt.at} onClose={() => setSlotAt(null)}
         onRefused={(data) => { setErr(data?.say || ""); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); }}

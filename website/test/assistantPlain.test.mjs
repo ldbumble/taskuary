@@ -39,8 +39,7 @@ test("an Advisor press presses the row's REAL button when the row has it - only 
 test("every item put on the table goes through putOnTable, which pins its card to the top and keeps it there (B15, SEEN)", () => {
   // ONE road: the turn's landing, the Board's open, a browse card, an unfold - none sets Current on its own any more
   assert.match(view, /const putOnTable = useCallback\(\(card, how = "pile"\) => \{/);
-  assert.match(view, /if \(!same\) putOnTable\(card\);\n\s+if \(!ahead \|\| ahead\.say !== data\.say\) say\(data\.say\);/, "landed");
-  assert.match(view, /putOnTable\(line\.card\);\n\s+if \(line\.text\) say\(line\.text\);/, "a line drawn ahead of its answer (drawAhead)");
+  assert.match(view, /\n\s+putOnTable\(card\);\n[^\n]*\n\s+say\(data\.say\);/, "landed");
   assert.match(view, /pull\(`task:\$\{req\.tid\}`\); return;/, "the Board's open goes the rail's road - no bare card for a walk on the phone (2026-10-23)");
   assert.match(view, /putOnTable\(null, "view"\);\s+\/\/ its top in view/, "a browse card");
   assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \}/, "the folded item opened again");

@@ -29,7 +29,7 @@ test("a started hand-off advances; one that needs a repository asks and keeps th
 test("the page advances without settling on a started hand-off, and the card asks for the repository", () => {
   const view = read("AssistantView.jsx");
   assert.match(view, /const step = afterConfirm\(p, out, current\);/);
-  assert.match(view, /if \(step === "advance"\) advance\(\);/);
+  assert.match(view, /if \(step === "advance"\) walkOn\(\);/);
   assert.match(view, /else if \(step === "settle"\) await done\(null\);/);
   assert.match(view, /else \{ if \(step === "offer"\) clearTable\(\); loadPile\(\); \}/);
   assert.equal(afterConfirm(coding, { settle: true, handoff: true, status: "done" }, coding.key), "advance");

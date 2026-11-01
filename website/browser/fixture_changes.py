@@ -476,7 +476,7 @@ def install_processing_changes(app, store):
         funnel.invalidate()
         rows, peek = walkworld.rows(store), railwalk.peek(store)
         return {'keys': {sym: walkworld.key_of(store, world, sym, rows) for sym in world},
-                'on': railwalk.on(store), 'walk': {k: v for k, v in peek.items() if k != 'below'}, 'below': ((peek.get('below') or {}).get('item') or {}).get('key')}
+                'on': railwalk.on(store), 'walk': {k: v for k, v in peek.items() if k != 'below'}, 'below': peek.get('below')}
 
     @app.post('/api/fixture/walk/world')
     def walk_world(body: dict):

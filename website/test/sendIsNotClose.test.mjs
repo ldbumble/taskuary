@@ -44,8 +44,8 @@ test("the canvas keeps a sent item on the table: the card folds wearing its butt
   assert.match(view, /reply: <ReplyCard card=\{c\} onDone=\{actions\.done\} onSent=\{actions\.sent\}/);
   // the folded card keeps a send's two words on the row; any other folded card keeps only Next
   assert.match(view, /const moved = !!m\.card && \(!live \|\| foldedNow\) && !m\.sent;/);
-  // Mark done from the row closes the task it names - the item may be gone with its draft - then the walk goes on
-  assert.match(view, /if \(c\.verb === "close" && c\.tid\) \{[\s\S]{0,200}runOperation\(api, "task\.complete", c\.tid\)[\s\S]{0,200}advance\(null, true\)/);
+  // Mark done from the row closes the task it names: on the table, the walk's one close (railwalk.leave); off it, alone
+  assert.match(view, /if \(c\.verb === "close" && c\.tid\) \{[\s\S]{0,200}await leave\(on, "done"\)[\s\S]{0,300}runOperation\(api, "task\.complete", c\.tid\)/);
   // ...and an Approve run from a proposal takes the server's own chips for its receipt (concierge.sent_chips)
   assert.match(view, /\(out\.status !== "done" \|\| p\.kind === "review\.approve"\) && res\?\.chips\?\.length/);
 });

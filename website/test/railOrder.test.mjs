@@ -51,10 +51,10 @@ test("an urgent task sits in Tasks at its arrival place, and no Urgent band is d
   assert.deepEqual(bands.map((b) => b.level), ["task"]);
   assert.deepEqual(bands[0].items.map((r) => r.key), ["task:1", "task:2", "task:3"]);
   assert.deepEqual(rows.map((r) => isUrgent(r)), [false, true, false]);
-  // the marker for Next, with no server selection, walks the urgent row in its place (the owner, 2026-10-22: "you go through it
-  // like all other tasks"): from the row above it, it is next; with nothing on the table the walk starts at the top, not at it
-  assert.equal(nextMarkerKey(null, rows, rows[0]), "task:2");
-  assert.equal(nextMarkerKey(null, rows, null), "task:1");
+  // the marker for Next is the server's word (railwalk.peek's `below`), never the page's guess - an urgent row is walked in its place
+  assert.equal(nextMarkerKey({ walk: { below: "task:2" } }), "task:2");
+  assert.equal(nextMarkerKey({ walk: { below: "fyis:msg:1,msg:2" } }), "msg:1");
+  assert.equal(nextMarkerKey(null), null, "no walk read yet: no marker");
 });
 
 test("the rail marks an urgent row's dot in place and says urgent to a screen reader; the opener still counts it", () => {

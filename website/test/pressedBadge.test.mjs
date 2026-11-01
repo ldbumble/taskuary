@@ -103,8 +103,8 @@ test("Next leaves its own badge on the card it passed, and a failed Next takes i
   // the owner, 2026-10-23: "we should have next pill on this one to show what was clicked on each task"
   assert.match(view, /const word = i < 0 \? "" : nextBadge\(m\[i\]\.card\);/);
   assert.match(view, /on \? \{ \.\.\.x, pressed: word \}/);
-  assert.match(view, /if \(putDown\) wear\(true\);/);
-  assert.match(view, /if \(putDown\) \{ setFoldedKey\(\(k\) => \(k === putDown \? null : k\)\); wear\(false\); leftKey\.current = null; \}/);
+  assert.match(view, /if \(worn\) wear\(true\);/);
+  assert.match(view, /if \(worn\) wear\(false\);/);
 });
 
 // NEXT READS A REPORT, IT PASSES A TASK (the owner, 2026-10-23: "should show read on reports if you go pass them when you hit next"):

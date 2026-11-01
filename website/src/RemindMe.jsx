@@ -18,8 +18,9 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0
 // `onLeave` fires AT THE PRESS, before the server answers, so the walk can put the task down at once; `onStay(error)` if it failed
 // `live`: an agent session is still open on the task - the picker warns instead of offering days (the owner, 2026-10-01:
 // it has to be saved and ended first); the server refuses the day with the same words if one slips through
+// `act`: the walk's own road for the day (railwalk.leave "remind") - the day and the move in one call; else the task's reminder route
 // `said`: the day the owner's words named, {until, day} (assistantLight's light.day) - its button comes first
-export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onStay, live = false, said = null }) {
+export function RemindPicker({ task, anchor, onClose, onDone, path, act = null, onLeave, onStay, live = false, said = null }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const away = remindWaiting(task);
@@ -38,7 +39,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
     const leaving = until !== "none";
     if (leaving) onLeave?.();
     try {
-      const { data } = await api.post(path || `/api/tasks/${task.TaskId}/remind`, { until });
+      const data = act && leaving ? await act(until) : (await api.post(path || `/api/tasks/${task.TaskId}/remind`, { until })).data;
       onClose?.(); onDone?.(data);
     } catch (e) {
       const msg = e?.response?.data?.detail || e?.message || "could not set the reminder";
@@ -96,7 +97,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
   );
 }
 
-export default function RemindMe({ task, compact = false, sx, onDone, onLeave, onStay, live = false, lit = false, said = null }) {
+export default function RemindMe({ task, compact = false, sx, onDone, act = null, onLeave, onStay, live = false, lit = false, said = null }) {
   const [at, setAt] = useState(null);
   const [day, setDay] = useState(null);     // the said day as it was at the press: the light that carried it goes out then
   const away = remindWaiting(task);
@@ -109,7 +110,7 @@ export default function RemindMe({ task, compact = false, sx, onDone, onLeave, o
             <EventIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         : <Button size="small" variant={lit ? "contained" : "outlined"} disableElevation sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: lit ? "inherit" : "#55697a" }} />}
             onClick={(e) => { setDay(said); setAt(e.currentTarget); }}>{away ? `Back ${remindDay(task.RemindAt)}` : label("defer")}</Button>}
-      <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} live={live} said={day} />
+      <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} act={act} onLeave={onLeave} onStay={onStay} live={live} said={day} />
     </>
   );
 }

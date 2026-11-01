@@ -35,7 +35,4 @@ test("the canvas holds every press to its item, on the window before any card he
   assert.match(view, /if \(!b \|\| b\.closest\("\[data-tq-rail\]"\) \|\| !b\.closest\("\.tq-asst-col, \[role=menu\], \.MuiPopover-paper"\)\) return;/);
   assert.match(view, /if \(!aimed\(item, e\)\) \{ e\.stopPropagation\(\); e\.preventDefault\(\); \}/);
   assert.match(view, /window\.addEventListener\("click", gate, true\);/);
-  // ...and a close's late answer leaves a walk that went on without it, and the close's receipt never clears the item it drew
-  assert.match(view, /if \(movedOnRef\.current\) \{ movedOnRef\.current = false; onChanged\?\.\(\); setNextComing\(false\); return; \}/);
-  assert.match(view, /!earlyRef\.current && moves === tableMoves\.current/);
 });

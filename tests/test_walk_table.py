@@ -85,8 +85,8 @@ class Walk:
             return self.out
         if verb == 'reports-page': self.page.append(args[0]); return None
         if verb == 'peek':
-            below = (railwalk.peek(self.s).get('below') or {}).get('item') or {}
-            assert below.get('key') == self.key(args[0]), f'prepared {below.get("key")}, wanted {args[0]}'
+            below = railwalk.peek(self.s).get('below')
+            assert below == self.key(args[0]), f'below {below}, wanted {args[0]}'
             return None
         raise ValueError(f'unknown step: {step}')
 

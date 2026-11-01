@@ -228,7 +228,7 @@ CATALOGUE = (
           "a meeting, the person's mail sitting unanswered, a date someone wrote. The line's own words are not that evidence: a standing "
           "fact with nothing current behind it is no line, however soon it might come due. A line of yours that rests on one of these "
           "names its [memory:...] key in \"memory\"",
-          _learned, cap=2000),
+          _learned, cap=4000),                   # 2000 until the design's S4 (2026-11-01): the rail reads every workstream's lines
     Block('ledger', 'The outcome ledger', 'view', ('outcome', 'doc'),
           'THE OUTCOME LEDGER (the last {days} days of what came of actions, resolved, each with an id to cite)',
           _ledger, window=('days', 30, 'How far back to read what came of actions'), cap=15),

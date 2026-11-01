@@ -7,7 +7,7 @@ way, then explains the machinery underneath it.
 Every connection with a *trigger* or *feed* role lands on one rail beside the Assistant. An email
 from a vendor, a pull request, a Teams message, this morning's spend report and a failed nightly
 export are one list, sorted by what they need from you: **Tasks**, **For later**, **Reports**,
-**Advisor ideas** and **FYI**. The filter at the top narrows it to one source or kind.
+**Advisor** and **FYI**. The filter at the top narrows it to one source or kind.
 
 Tasks is every open task, an agent working on it or not - a ring spins round the icon of one an
 agent is working, and the row stays where it is when the agent asks or stops. An urgent row is

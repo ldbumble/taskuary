@@ -139,7 +139,7 @@ test("an important line lands in the task's Advisor section, and every other str
   // ...ONE section of its own ("one is more a guide and one is more doing work", the owner 2026-10-26), only with a line - IN THE MAIN VIEW,
   // never a drawer, so no tab needs to say it holds a note (the Advisor audit's judge, 2026-10-26) - on the canvas and the Tasks tab alike
   const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
-  assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
+  assert.match(page, /const heard = canvas \? note : taskNote\(taskAdvice\);\n  const warn = notDone && !saidOld\(heard\) \? heard : null;/);
   assert.equal((page.match(/<AdvisorNote /g) || []).length, 1, "one place for the Advisor's words");
   assert.match(page, /const advisorNote = warn && !liveSession \? <AdvisorNote note=\{warn\}/);
   // ...placed by the layout: on a phone in the body's own scroller, before the columns; on the desk in the Agent section, under its work

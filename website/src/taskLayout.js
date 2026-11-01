@@ -90,9 +90,12 @@ const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
 // ...Came from: who, on what, when; their latest words; how many - and at its foot what triage made of it ("✓ Sorted: a reply to send · normal priority")
 // ...AT A GLANCE (the owner, 2026-10-27: "show more"): on what and how many, then every message newest first - who, and a short line each;
 // the tab draws as many as fit, newest down with none skipped (TaskPage fitTabLines) - a fixed three under "4 messages" read as one lost
+// ...never more than a spine can hold, though (TAB_MOST): a 1,500-line chat drew 1,500 lines into the tab to measure and hide all but a dozen,
+// a second of the click that opened it (the owner, 2026-11-01: "this still happens")
+export const TAB_MOST = 40;
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made,
-    ...msgs.map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
+    ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
   foot: sorted ? `✓ ${sorted}` : "" });
 // ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move
 export const agentWord = ({ live = false, waiting = false, failed = false, stopped = false, result = false, record = false, codeRun = false } = {}) =>

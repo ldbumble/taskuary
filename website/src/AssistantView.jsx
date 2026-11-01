@@ -786,6 +786,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
+                      onPointerDown={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}   /* a touch has no hover: read at the press */
                       aria-label={urgentDot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
                       title={[i.who, st?.word || meta.word, i.ref, imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', dangerLine(i.danger, i.danger_aim), why].filter(Boolean).join(" · ")}>
                       <div className="t">
@@ -2029,7 +2030,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // RULE 7, THE NEXT ITEM DRAWS AT ONCE: the rail's own row for the one below (walk.below - railwalk.peek, the same line `next` walks) is
     // put up at the press, and the answer fills that line in place (landed) or takes it down for the row it brought. A batch has no rail
     // row of its own: the dots stand for it. Without it Next and Mark done waited a whole round trip (400-600 ms against ~100 before)
-    const walkNow = walkOf(pileRef.current), below = putDown && walkNow?.on === putDown && walkNow.below && !walkNow.below.startsWith("fyis:") ? walkNow.below : null;
+    const walkNow = walkOf(pileRef.current), below = putDown && walkNow?.on === putDown && walkNow.below && !walkNow.below.startsWith("fyis:") ? walkNow.below
+      // ...AND A RAIL ROW PRESSED IS DRAWN AT ITS PRESS the same way, its task read since the pointer came down (taskDetail.js): the move's
+      // answer waited on the server's whole rail build, and a big task's row put nothing on the table for seconds (the owner, 2026-11-01)
+      : key && how === "next" && key !== currentRef.current?.key && !key.startsWith("fyis:") ? key : null;
     const belowItem = below ? (pileRef.current?.items || []).find((i) => i.key === below && !i.settling) || null : null;
     const was = currentRef.current;
     belowRef.current = null;

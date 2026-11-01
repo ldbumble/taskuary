@@ -14,7 +14,6 @@ test("the chat box stays open while its mic listens, and the words land in it", 
   t.after(() => harness.close());
   const page = await harness.newPage();
   await page.evaluateOnNewDocument(() => {
-    try { localStorage.setItem("tq-voice-browser", "1"); } catch { /* the mic falls back to asking */ }
     // a recogniser that hears one sentence when stopped - the owner talking for as long as the test holds it
     window.SpeechRecognition = class {
       start() { window.__listening = this; }

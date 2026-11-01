@@ -25,9 +25,56 @@ def _voice_store(t='groq_stt', secret='k1'):
 class ProviderTests(unittest.TestCase):
     def test_no_connector_is_said_the_way_the_owner_can_fix_it(self):
         s = MemoryStore()
-        self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': []})
-        with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/ogg')
+        with mock.patch.dict(voice._HAS, {'v': None}):
+            self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': [], 'builtin': None})
+            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/ogg', mic=True)
         self.assertIn(VOICE, str(e.exception)); self.assertIn('Groq', str(e.exception))
+
+
+class BuiltinVoiceTests(unittest.TestCase):
+    """The owner, 2026-11-01: "local voice using microsoft edge is not working. it should be built in without having to turn it on if it
+    finds it". With no card, the computer's own recogniser (Windows' System.Speech) hears the mic - found, never configured."""
+    def test_found_with_no_card_it_is_reported_and_hears_the_mics_wav(self):
+        s = MemoryStore()
+        with mock.patch.dict(voice._HAS, {'v': voice.BUILTIN}), mock.patch.object(voice, '_windows', return_value=' call Erin back ') as w:
+            self.assertEqual(voice.ready(s)['builtin'], voice.BUILTIN); self.assertFalse(voice.ready(s)['ready'])
+            self.assertEqual(voice.transcribe(s, b'RIFF', 'audio/wav', 'clip.wav', mic=True),
+                             {'text': 'call Erin back', 'provider': 'windows_speech', 'model': 'System.Speech dictation'})
+            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'webm', 'audio/webm', mic=True)
+            self.assertIn('WAV', str(e.exception))
+            # a voice note is no mic clip: Ogg it cannot read, so it still says how to set up a card
+            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'OggS', 'audio/ogg')
+            self.assertIn(VOICE, str(e.exception))
+        self.assertEqual(w.call_count, 1)
+
+    def test_a_card_still_wins(self):
+        s = _voice_store('groq_stt')
+        with mock.patch.dict(voice._HAS, {'v': voice.BUILTIN}), mock.patch.object(voice, '_windows') as w, \
+             mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'from groq'})):
+            self.assertEqual(voice.ready(s)['builtin'], None)
+            self.assertEqual(voice.transcribe(s, b'RIFF', 'audio/wav', mic=True)['provider'], 'groq_stt')
+        w.assert_not_called()
+
+    def test_off_windows_nothing_is_found(self):
+        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'linux'):
+            self.assertIsNone(voice.builtin())
+
+    def test_the_clip_goes_to_a_powershell_child_by_file_and_is_removed(self):
+        """The real run is checked by hand on Windows (the suite allows no child process): this pins what the child is handed."""
+        from taskuary import spawn
+        seen = {}
+        def run(argv, **kw):
+            seen.update(argv=argv, path=kw['env']['TQ_WAV'], timeout=kw['timeout'])
+            with open(seen['path'], 'rb') as f: seen['data'] = f.read()
+            return types.SimpleNamespace(returncode=0, stdout='call Erin back'.encode(), stderr=b'')
+        with mock.patch.object(spawn, 'run', run): self.assertEqual(voice._windows(b'RIFF....WAVE'), 'call Erin back')
+        self.assertEqual(seen['argv'][:2], ['powershell', '-NoProfile']); self.assertEqual(seen['data'], b'RIFF....WAVE')
+        script = base64.b64decode(seen['argv'][-1]).decode('utf-16-le')
+        self.assertIn('DictationGrammar', script); self.assertIn('$env:TQ_WAV', script)
+        self.assertFalse(os.path.exists(seen['path']), 'the clip does not outlive the call')
+        bad = lambda argv, **kw: types.SimpleNamespace(returncode=2, stdout=b'', stderr=b'Wave file not valid.')
+        with mock.patch.object(spawn, 'run', bad), self.assertRaises(RuntimeError) as e: voice._windows(b'x')
+        self.assertIn('Wave file not valid', str(e.exception))
 
     def test_groq_and_openai_ride_the_openai_shape_with_their_own_defaults(self):
         for t, host, model in (('groq_stt', 'api.groq.com/openai/v1', 'whisper-large-v3-turbo'),
@@ -188,6 +235,7 @@ class FunnelTests(unittest.TestCase):
             r = c_api.post('/api/voice/transcribe', content=b'webm bytes', headers={'content-type': 'audio/webm;codecs=opus'})
         self.assertEqual((r.status_code, r.json()['text']), (200, 'queue the payroll fix'))
         self.assertEqual((t.call_args[0][2], t.call_args[0][3]), ('audio/webm', 'clip.webm'))
+        self.assertIs(t.call_args[1].get('mic'), True)        # the mic's clip may fall to the computer's own recogniser
         self.assertEqual(c_api.post('/api/voice/transcribe', content=b'').status_code, 422)
         with mock.patch.object(voice, 'transcribe', side_effect=RuntimeError(voice.NO_CONNECTOR)):
             r = c_api.post('/api/voice/transcribe', content=b'x', headers={'content-type': 'audio/webm'})

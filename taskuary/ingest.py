@@ -2584,7 +2584,7 @@ def busy_words(store) -> str:
     from . import blackboard as bb
     n, cap = bb.live_count(), auto_sessions(store)
     if n >= cap: return f'{cap} agents are already running'
-    return (f"{n} agent{'s' if n != 1 else ''} plus " if n else '') + f'quick answers and subagents already fill the {cap} agent slots'
+    return (f"{plural(n, 'agent')} plus " if n else '') + f'quick answers and subagents already fill the {cap} agent slots'
 
 def choose_repo(store, tid) -> tuple:
     """(repository or None, why) - the CODING AGENT's own pick of the checkout for a job triage could not place

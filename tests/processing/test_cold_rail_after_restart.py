@@ -19,8 +19,10 @@ CI = bool(os.environ.get('CI'))
 # Speed guards against per-root queries and a held lock (many seconds), not against a busy machine: a shared CI runner
 # is several times slower and noisier than a desk (tests/test_floor_wave_b.py's FAST).
 FAST = 1.5 if CI else 0.5
-RAIL = 6.0 if CI else 2.0         # the rail alone, on a desk: 2.6-7.7 s before the bulk build, 0.8-1.9 s after (2026-10-21)
-BUILD = 10.0 if CI else 4.0       # the whole first pile: 4.5 s before, 2.3 s after
+# ...and a desk running browser tests beside it took 2.6-3.4 s (2026-10-31): the per-root regression is caught exactly by the
+# statement count above, so the clock here only has to catch a held lock
+RAIL = 6.0 if CI else 4.0         # the rail alone, on a desk: 2.6-7.7 s before the bulk build, 0.8-1.9 s after (2026-10-21)
+BUILD = 10.0 if CI else 6.0       # the whole first pile: 4.5 s before, 2.3 s after
 TASKS, FYI = 600, 3000
 
 

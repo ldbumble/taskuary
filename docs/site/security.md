@@ -77,6 +77,12 @@ a hold too. With no AI connected, typing into a box passes, read from the comman
 every other act waits. Approving runs that exact command, only while the browser is on the page it
 was held on.
 
+**A desktop act that can't be undone waits for you too.** Agent Desktop (Connections) is off until
+you turn it on, and never runs on a stranger's task. With it on, an `agent-desktop` command that only
+looks passes. Any other goes to your AI with the control it names, and one that would send, pay,
+delete or submit is held for your **Approve** the same way. Approving runs that exact command, and
+does nothing if that control is gone.
+
 **The agent never holds a sign-in.** The agent asks; Taskuary types the user name, password and
 authenticator code into the browser itself, over Chrome's own DevTools connection, only into the
 page's top document, only on the site the sign-in was saved for, checked again with the box focused.
@@ -194,7 +200,8 @@ These are honest limits.
 - **Only Claude Code's browser acts are held.** Codex, Devin and Copilot hooks report but cannot
   refuse a call, so their browser acts are not held. Neither is a Claude session whose hook could
   not reach Taskuary (Taskuary closed), nor an agent that drives Chrome some way other than
-  `agent-browser`.
+  `agent-browser`. The same is true of desktop acts and `agent-desktop`; there, those agents are
+  told to ask you first.
 - **Connections start at full permission.** An agent can use a connection marked *tool* to do anything
   that connection can do, unless you narrow it.
 - **Anything your own agents write for later can carry what they read.** Hub entries and wall notes

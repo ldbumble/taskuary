@@ -92,6 +92,19 @@ test("a held browser act reads as what it does and where, never its JSON", () =>
   assert.equal((shown.context.match(/pays the \$412\.50/g) || []).length, 1);
 });
 
+// ...and the same for an app on the owner's desktop (agentdesktop.py, 2026-10-31): Approve runs that exact agent-desktop command
+test("a held desktop act reads as what it does, with the exact command under it", () => {
+  const review = { Kind: "action", Reason: 'held before it ran, on your desktop: sends the reply to Erin Blake in the mail app - it can\'t be undone',
+    DraftText: JSON.stringify({ action: "desktop_act", sid: "run1", args: ["click", "@s8f3k2p9:e8"], command: "agent-desktop click @s8f3k2p9:e8",
+      what: "sends the reply to Erin Blake in the mail app" }) };
+  const shown = proposalPresentation(review);
+  assert.equal(shown.title, "The agent's desktop step waits for your yes");
+  assert.equal(shown.destination, "an app on your desktop");
+  assert.equal(shown.approveLabel, "Approve");
+  assert.equal(shown.readOnly, true);
+  assert.equal(reviewText(review), "Approve runs: agent-desktop click @s8f3k2p9:e8");
+});
+
 // A TRACKER ITEM'S CLOSE-OUT (trackers.py, 2026-10-25): the card says where it goes and the done state the tracker names - or that it
 // is the comment alone, before the press
 test("a Jira close-out reads as the comment and the move to the tracker's own done state", () => {

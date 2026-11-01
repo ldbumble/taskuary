@@ -58,7 +58,7 @@ export const reviewText = (review) => {
   if (proposal?.action === "run_tool") return toolBody(proposal);
   // the WHAT is the context line already (proposals.queue's Reason); the box is the exact command Approve runs, once - with no AI the card
   // said "agent-browser click @e12" three times over (2026-10-25)
-  if (proposal?.action === "browser_act" || proposal?.action === "shell_act") return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
+  if (["browser_act", "shell_act", "desktop_act"].includes(proposal?.action)) return proposal.command ? `Approve runs: ${proposal.command}` : proposal.what || "";
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
@@ -156,6 +156,18 @@ export const proposalPresentation = (review) => {
     context: review.Reason || "Held before it ran · it leaves this computer",
     destinationLabel: "In",
     destination: proposal.cwd || "the agent's folder",
+    approveLabel: APPROVE,
+    busyLabel: "running…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
+  // ...AND A HELD DESKTOP ACT (agentdesktop.py, 2026-10-31): what an app on the owner's desktop would do - Approve runs that exact command
+  if (proposal?.action === "desktop_act") return {
+    kind: "action",
+    title: "The agent's desktop step waits for your yes",
+    context: review.Reason || "Held before it ran · it can't be undone",
+    destinationLabel: "On",
+    destination: "an app on your desktop",
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

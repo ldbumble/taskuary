@@ -1849,6 +1849,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # the hold is promised only to a CLI whose hook can refuse (llm.HOLDS_CLI): Codex was told "held" and paid (2026-10-25)
     from .llm import HOLDS_CLI
     if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
+    # ...and the owner's desktop apps, once Agent Desktop is on - never on a stranger's task (agentdesktop.py; its hook refuses there too)
+    from . import agentdesktop as _ad
+    if not stranger and _ad.on(store): parts.append(_ad.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
     from . import blackboard as bb
     # the overlap model would read a stranger's title and summary, and its sentence would land in this prompt
     aware = bb.briefing(store, cwd, exclude_tid=tid, assess_for=None if stranger else tid) if cwd else ''

@@ -48,6 +48,14 @@ class Reading(unittest.TestCase):
         self.assertEqual(bg.acts('agent-browser find role button "Pay now" click')[0]['verb'], 'find')
         self.assertEqual(bg.acts('agent-browser click "@e12')[0]['verb'], '?')        # cannot be read: judged, never waved through
 
+    def test_a_line_break_in_typed_text_is_never_plain_typing(self):
+        # _segments reads a newline as `;`, so a break inside quotes came back as " ; " and fill passed with no AI (2026-10-31)
+        self.assertTrue(bg.typing(bg.acts('agent-browser fill @e1 "Dear Erin"')[0]))
+        for cmd in ("agent-browser fill @e1 'line one\nline two'", 'agent-browser fill @e1 "line one`nline two"'):
+            a = bg.acts(cmd)
+            if a: self.assertFalse(bg.typing(a[0]), cmd)
+        self.assertEqual(bg.acts('npx agent-browser@0.41.0 click @e12')[0]['verb'], 'click')      # a pinned version is the same tool
+
     def test_the_agents_own_session_flag_is_not_what_runs(self):
         self.assertEqual(bg._own_args(['--session', 'other', 'click', '@e12', '--headed']), ['click', '@e12'])
 

@@ -47,6 +47,11 @@ HELD = 'Taskuary held this for the owner'
 AGAIN = 'Dismiss this, and ask the agent to open the page again - it will be held for you again.'
 
 
+# A LINE BREAK IN THE COMMAND may be inside the typed text: _segments reads every newline as `;`, so "a\nb" in quotes came back as
+# "a ; b" and passed as plain typing. Any newline, or PowerShell's `n / `r, makes no act of that line plain typing.
+_NL = re.compile(r'[\r\n]|`[nr]')
+
+
 # ── which part of a shell command is a browser act ────────────────────────────────────────────────────────────────────────
 def _segments(cmd: str):
     "The simple commands in a shell line, as argv lists - split on ; && || | and newlines. None when it cannot be read."
@@ -65,16 +70,17 @@ def _segments(cmd: str):
     return out
 
 
-def _is_exe(tok: str) -> bool:
-    return re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower()) == EXE
+def _is_exe(tok: str, exe: str = EXE) -> bool:
+    # `npx agent-browser@0.41.0 click ...` is the same tool: a pinned version must not walk an act past the gate
+    return re.sub(r'(?<=.)@[^/]*$', '', re.sub(r'\.(exe|cmd|ps1|bat)$', '', os.path.basename(str(tok).replace('\\', '/')).lower())) == exe
 
 
-def _head(argv: list) -> list | None:
-    "The agent-browser arguments of one simple command, through env prefixes, `&`, npx and the like - else None."
+def _head(argv: list, exe: str = EXE) -> list | None:
+    "The agent-browser (or `exe`: desktop.py) arguments of one simple command, through env prefixes, `&`, npx and the like - else None."
     i = 0
     while i < len(argv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', argv[i]): i += 1          # FOO=bar agent-browser ...
     while i < len(argv) and argv[i].lower() in ('&', 'npx', 'pnpm', 'dlx', 'bunx', 'yarn', '-y', '--yes', 'exec', 'call', 'cmd', '/c', 'command'): i += 1
-    return argv[i + 1:] if i < len(argv) and _is_exe(argv[i]) else None
+    return argv[i + 1:] if i < len(argv) and _is_exe(argv[i], exe) else None
 
 
 def acts(cmd: str) -> list:
@@ -95,7 +101,7 @@ def acts(cmd: str) -> list:
         i = 0
         while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
         verb = a[i].lower() if i < len(a) else ''
-        if verb and verb not in LOOKS: out.append({'args': a, 'verb': verb})
+        if verb and verb not in LOOKS: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
     return out
 
 
@@ -109,7 +115,7 @@ def typing(act: dict) -> bool:
     sub = lambda n: a[i + n].lower() if i + n < len(a) and not any(t.startswith('-') for t in a[i + 1:i + n + 1]) else ''
     v = act['verb']
     ok = v in TYPES or (v == 'keyboard' and sub(1) in KEY_TYPES) or (v == 'find' and sub(3) in TYPES)
-    return ok and not any('\n' in t or '\r' in t for t in a)
+    return ok and not act.get('nl') and not any('\n' in t or '\r' in t for t in a)
 
 
 # ── the page it would act on, and the model's verdict ─────────────────────────────────────────────────────────────────────

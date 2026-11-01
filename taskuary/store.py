@@ -1376,6 +1376,7 @@ class SQLiteStore:
                          ('linkedin', 'LinkedIn'),
                          ('treg', 'treg (agent tools)'),
                          ('reason_network', 'Reason Network'),
+                         ('agent_desktop', 'Agent Desktop'),          # seeded off, like every card: the owner's desktop is opt-in (agentdesktop.py)
                          ('postgresql', 'PostgreSQL'),
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),

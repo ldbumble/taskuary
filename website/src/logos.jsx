@@ -481,6 +481,8 @@ LOGOS.openrouter_image = LOGOS.openrouter;
 LOGOS.image_server = LOGOS.stt_server;
 // Reason Network: a monogram - its own mark is a wordmark
 LOGOS.reason_network = (p) => <T p={p} bg="#2b2d42" text="R" />;     // "a server you run yourself", same idea as the Whisper one
+// Agent Desktop: Vercel's black, with a monogram - a tool the owner installs, as Reason Network is
+LOGOS.agent_desktop = (p) => <T p={p} bg="#000" text="AD" size={9} />;
 // the organisation's own AI wears Taskuary's mark (ui.jsx TaskuaryMark's file): it is no vendor's product, and the shared AI
 // sparkle read as one more provider (the owner, 2026-10-20)
 LOGOS.hipaa_ai = ({ sx }) => (

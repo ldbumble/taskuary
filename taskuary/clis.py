@@ -84,6 +84,11 @@ TOOLS = [
      'install': 'npm install -g agent-browser', 'url': 'https://github.com/vercel-labs/agent-browser',
      'why': 'a local headless Chromium the coding agent drives from the terminal, shown live beside the session (browserview.py)',
      'status': 'available'},
+    # its sibling for the desktop (the owner, 2026-10-31): native apps through the OS accessibility tree, off until its card is on
+    {'name': 'agent-desktop', 'cmd': 'agent-desktop', 'label': 'agent-desktop (Vercel)', 'license': 'Apache-2.0',
+     'install': 'npm install -g agent-desktop', 'url': 'https://github.com/vercel-labs/agent-desktop',
+     'why': "the owner's desktop apps, read and operated through the accessibility tree, once Agent Desktop is on under Connections (agentdesktop.py)",
+     'status': 'available'},
 ]
 
 

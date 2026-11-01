@@ -1098,6 +1098,11 @@ class GeneralSession:
                     from . import origin
                     o, why = origin.of_task(self.store, self.task_id)
                     if o == 'stranger': system = f'{system}\n\n{browserview.STRANGER_LINE.format(why=why)}'
+            # ...and the owner's desktop apps, once the owner turned Agent Desktop on - on the browser's own terms (agentdesktop.offered):
+            # a CLI with hands, the owner's own task, the same hook holding what can't be undone
+            from . import agentdesktop
+            desk = agentdesktop.offered(self.store, self.task_id, self.pick)
+            if desk: system = f'{system}\n\n{agentdesktop.brief(held=self.holds_browser())}'
             # only a CLI-backed chat can post to the wall: an API provider has no shell to
             # run the command in, and telling it about a command it cannot run is a lie
             if self.pick.startswith('cli:'):
@@ -1179,9 +1184,9 @@ class GeneralSession:
             # shell and the browser brief ride only for a task that asked for a browser
             if browser_env: build_args.update(extra_env=browser_env)
             # the CLI's own hands, in Taskuary's scratch folder (llm._build_llm), with the session's token in its environment
-            if browser_tools or hands: build_args.update(cli_tools=True)
+            if browser_tools or hands or desk: build_args.update(cli_tools=True)
             # ...and the browser hold as this chat's own hook: the user-wide one never knew a headless chat, so Pay went through (2026-10-25)
-            if browser_tools and self.holds_browser(): build_args.update(hold_sid=self.sid)
+            if (browser_tools or desk) and self.holds_browser(): build_args.update(hold_sid=self.sid)
             # WHICH GEAR: session work takes the MAIN model - a general worker is doing a job, not
             # classifying one message. The dock is the Assistant's own chat and keeps the quick
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
@@ -1228,15 +1233,16 @@ class GeneralSession:
                 if browser_tools:
                     from . import browserview
                     system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=not browser_offer)}'
+                if desk: system = f'{system}\n\n{agentdesktop.brief(held=self.holds_browser())}'
                 system = f'{system}\n\n{_sc.ASK_LINE}'
                 if systems: system = f'{system}\n\n{systems}'
                 if said: system = f'{system}\n\n{said}'           # the fresh conversation hears of the mail as the first did
                 if prior: user = f'{prior}\n\n{user}'
                 build_args = dict(pick=self.pick, model=self.model or None,
                                   trace=visible, cancel=cancel, task_id=self.task_id)
-                if browser_tools or hands:
+                if browser_tools or hands or desk:
                     build_args.update(cli_tools=True, extra_env=browser_env)
-                if browser_tools and self.holds_browser(): build_args.update(hold_sid=self.sid)
+                if (browser_tools or desk) and self.holds_browser(): build_args.update(hold_sid=self.sid)
                 build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
                 brain = llm_mod.build_llm(self.store, **build_args, job='general')
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS

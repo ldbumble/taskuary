@@ -761,20 +761,23 @@ def reason(payload: dict, wait: float = None) -> dict:
 def browser(payload: dict, brain=None, sid: str = '') -> dict:
     """Before one of OUR sessions runs a shell command (browsergate.check): a browser act that can't be undone is refused and held
     for the owner. Not our pane, not a shell tool, nothing of agent-browser in it: {} at once - the command is Claude's."""
-    from . import browsergate, shellgate
+    from . import agentdesktop, browsergate, shellgate
     tool = str(payload.get('tool_name') or '')
     if tool not in ('Bash', 'PowerShell'): return {}
     cmd = str((payload.get('tool_input') or {}).get('command') or '')
     # the cheap tests first: this hook sees every shell command - ...and A STEP THAT LEAVES THE MACHINE (a push, a merge, a public post, a
-    # publish, a mail) waits for the owner too (shellgate.py, the Advisor's risky-step hold, the owner 2026-10-28)
-    browse, out = browsergate.EXE in cmd.lower(), shellgate.acts(cmd)
-    if not browse and not out: return {}
+    # publish, a mail) waits for the owner too (shellgate.py, the Advisor's risky-step hold, the owner 2026-10-28), and so does a desktop
+    # act that can't be undone (agentdesktop.py, 2026-10-31)
+    browse, out, desk = browsergate.EXE in cmd.lower(), shellgate.acts(cmd), agentdesktop.EXE in cmd.lower()
+    if not browse and not out and not desk: return {}
     t = _pane(payload, 'claude') or _general(payload, sid)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
     if out: return shellgate.check(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t))
-    return browsergate.check(st, t.task_id, t.sid, cmd, brain)
+    # a line that drives both is judged desktop first: either one held holds the whole line
+    if desk and (held := agentdesktop.check(st, t.task_id, t.sid, cmd, brain)): return held
+    return browsergate.check(st, t.task_id, t.sid, cmd, brain) if browse else {}
 
 
 def run_sid(payload: dict, tid: int) -> str:

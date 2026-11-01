@@ -28,6 +28,9 @@ PURPOSE = {
                                  'themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, '
                                  'to someone - `to`: their name or address; drafted in their voice for their Send, never sent from here) | '
                                  'goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date), `text`. '
+                                 # "generate an image for me" was drawn by the chat's own brain and said "created", with nothing shown (TQ-1251)
+                                 'MAKING something - a picture, a flyer, a document, a spreadsheet - is a job for a general agent: write it '
+                                 'here, never make it in this chat yourself. '
                                  'A job that REPEATS on a clock ("every Monday at noon run the review skill") is a routine, never a one-off: '
                                  'add `recurs`: {schedule (when, in their words), objective (the job without the clock), repo (one they named, '
                                  'else null), skill (a skill they named, else null)} - it brings up New → Routine filled in for their Save; '

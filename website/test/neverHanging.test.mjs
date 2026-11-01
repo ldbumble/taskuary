@@ -10,7 +10,7 @@ const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", impo
 test("with nothing on the table the row's floor is Next, and the chat says to press it", () => {
   // ...only over an EMPTY row: a task card registers its own Next, and the hint over it read as a bug (2026-10-08)
   assert.match(view, /const rowEmpty = !rowVerbs\.list\.some\(\(v\) => !String\(v\.id\)\.startsWith\("floor:"\)\)/);
-  assert.match(view, /const hanging = [^\n]*rowEmpty[^\n]*\(canAdvance \|\| !!err \|\| proposing\)/);
+  assert.match(view, /const hanging = [^\n]*rowEmpty[^\n]*\(canNext \|\| !!err \|\| proposing\)/);
   // ...a proposal waiting on its Confirm keeps Next on the row: the item folded away with its row (the walk's INLINE, 2026-10-17)
   assert.match(view, /proposing = !!asked && asked\.version != null && \(asked\.status \|\| "proposed"\) === "proposed"/);
   assert.match(view, /useVerbs\("floor", \[\{ id: "floor:next", group: "next", label: btn\("next"\)/);
@@ -23,10 +23,12 @@ test("with nothing on the table the row's floor is Next, and the chat says to pr
 test("the floor's Next waits while the next one is coming: All read, next shows no Next of its own between batches", () => {
   assert.match(view, /const hanging = [^\n]*!busy[^\n]*!nextComing[^\n]*rowEmpty/);
   // the press itself says the next one is coming, in the same render that folds the batch...
-  assert.match(view, /const done = async \(pressed\) => \{[\s\S]{0,600}?\.\.\.x, done: true[\s\S]{0,200}?setNextComing\(true\);/);
+  assert.match(view, /const done = async \(pressed\) => \{[\s\S]{0,600}?\.\.\.x, done: true[\s\S]{0,400}?await leave\(current, "settle"\)/);
+  assert.match(view, /const leave = \(key, how, x = \{\}\) => new Promise\(\(done\) => \{\s*const epoch = chatEpoch\.current;\s*setNextComing\(true\);/);
   // ...and the walk's own turn takes `busy` in the same tick it clears it, so there is no frame between the two
   // ...the dots stand until what it runs has answered (the owner, 2026-10-30)
   assert.match(view, /deferredChat\.current\.delete\(timer\);[\s\S]{0,400}?try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ if \(!turnFlight\.current\) setNextComing\(false\); \}/);
   // ...and a settle that fails lets go of it, its receipt offering Next
-  assert.match(view, /setNextComing\(false\);\s*\n\s*setMsgs\(\(m\) => \[[^\n]*\n[^\n]*Not done - [^\n]*chips: \[\{ verb: "next"/);
+  assert.match(view, /setBusy\(false\); setFlight\(null\); setNextComing\(false\);/);
+  assert.match(view, /if \(error\) setMsgs\(\(m\) => \[[^\n]*\n[^\n]*Not done - [^\n]*chips: \[\{ verb: "next"/);
 });

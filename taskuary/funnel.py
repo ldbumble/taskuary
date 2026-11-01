@@ -1108,14 +1108,6 @@ _band = lanes.band_of
 # walk and the rail must agree on which row is in which.
 
 
-def section_next(items: list, section: str, seen=()) -> dict | None:
-    """The next row of one section, in the rail's own order: what clicking its heading, then Next, walks. A row
-    still being triaged is not ready; a row already walked in this pass is not offered twice."""
-    seen = set(seen or ())
-    return next((i for i in items or [] if level_of(i) == section and not i.get('settling')
-                 and i.get('key') not in seen and not seen.intersection(i.get('aliases') or [])), None)
-
-
 def section_done(section: str) -> str:
     return f"{SECTION_WORDS.get(section, section)} done."
 
@@ -1151,7 +1143,7 @@ def order_key(item) -> tuple:
     reports too (the owner, 2026-10-22: "reports should go oldest first like everything else"; they were newest first from
     2026-10-02) - then a stable key. Nothing about its agent, its read state, its urgency, the table or the walk enters it, so a row
     moves only by leaving its section. Today's brief leads Reports, whatever the clock says - it summarises the day, so it is read
-    first. ONE key for the rail, desktop Next and phone Next (funnel_selection.below)."""
+    first. ONE key for the rail, desktop Next and phone Next (railwalk.line)."""
     level, at = level_of(item), arrived(item)
     t = (at - datetime.min).total_seconds() if at else 0.0
     return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, t, *place_id(item))
@@ -1189,28 +1181,6 @@ def _order(items: list) -> list:
     return sorted(items, key=order_key)
 
 
-# WHERE THE WALK IS: the place (order_key) of the last row put on the table, so Next after a close - the row gone from the rail, the
-# table emptied - still goes on from there, down the line, and never back up to rows above it (the owner, 2026-10-22). A new walk
-# (new_walk) starts again from the top.
-PLACE_KEY = 'walk_place'
-
-
-def mark_place(store, item: dict | None):
-    # an urgent row is walked in its place like any other (the owner, 2026-10-22), so it moves the walk's place too
-    if not item: return
-    rows = item.get('items') if item.get('kind') == 'fyis' else None
-    at = max((order_key(i) for i in rows), default=None) if rows else order_key(item)
-    if at is not None: store.set_setting(PLACE_KEY, json.dumps([item.get('key'), list(at)]), 'system')
-
-
-def walk_place(store) -> tuple | None:
-    """(key, order_key) of the last row on the table in this walk, or None at a walk's start."""
-    if not hasattr(store, 'get_setting'): return None
-    try: key, at = json.loads(store.get_setting(PLACE_KEY) or 'null') or (None, None)
-    except (ValueError, TypeError): return None
-    return (key, tuple(at)) if at else None
-
-
 _LATER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved')
 
 
@@ -1219,7 +1189,7 @@ def _ts_dt(value):
     except ValueError: return None
 
 
-def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False, quiet: int = 180, walk_at=None) -> list:
+def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False) -> list:
     """Apply the owner's decisions to the assistant's work queue.
 
     A surfaced row is read and the feed's Unread view removes it. Unresolved approvals and agent
@@ -1244,22 +1214,10 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                 # shown, but CHANGED since - the agent rewrote the draft, the question moved on: new again
                 if i.get('sig') and st.get('Note') and st['Note'] != i['sig']:
                     out.append(i); continue
-                # a broken connection walked past is dismissed, not Passed - until its error changes (above)
-                # ...by Next (its put-down Until), not by being shown: on the table it stays on the rail (2026-10-15)
-                if i.get('kind') == 'connection':
-                    if st.get('Until'): continue
-                    out.append(i); continue
-                # Read is gone from the ordinary queue. Only unresolved work that is still on the
-                # owner (a draft/approval or an agent question) remains addressable and marked.
-                # ...and an open task walked past stays on the rail for the rest of THIS walk - no clock brings it back
-                # (the owner, 2026-10-21; processing_unread.this_walk); a row with no task behind it, for the quiet hours
-                from .processing_unread import this_walk
-                at = _ts_dt(st.get('At')) if st.get('At') else None
-                back = None if i.get('tid') else (at + timedelta(minutes=quiet)) if at else None
-                later = bool(i.get('tid') and i['lane'] in _LATER_LANES and this_walk(at, walk_at))
-                if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working') and not later: continue
-                i = i | {'surfaced': True, 'surfaced_at': st.get('At'), 'put_down': bool(st.get('Until'))}
-                if back and i['put_down'] and i['lane'] != 'working': i = i | {'back_at': back.strftime('%Y-%m-%d %H:%M:%S')}
+                if i.get('kind') == 'connection': out.append(i); continue
+                # READ IS GONE from the queue - but an OPEN TASK is never read off the rail: Next leaves it in its place under Tasks
+                # (the walk has one owner, 2026-10-30, rule 4), and no clock and no band says it was passed
+                if not keep_surfaced and not (i.get('tid') and i['lane'] in _LATER_LANES) and i['lane'] not in ('blocked', 'approve', 'working'): continue
                 # an fyi's shown-state note is the summary the assistant wrote for it (PW-151); a sig'd item's note is its sig
                 if i.get('lane') == 'fyi' and not i.get('sig') and st.get('Note'): i = i | {'summary': st['Note']}
         out.append(i)
@@ -1410,14 +1368,12 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
     hours, cap = knobs(store)
     items = [i for i in items if not _aged_out(i, now, hours)]
-    from .processing_unread import RETURN_MINUTES, walk_started_at
-    quiet, walk_at = RETURN_MINUTES, walk_started_at(store)
-    items = [i for i in _apply_states(items, states, now, keep_surfaced, quiet, walk_at) if not i.get('ranked_wait')]
+    items = [i for i in _apply_states(items, states, now, keep_surfaced) if not i.get('ranked_wait')]
     # The wrap-up is merged HERE, once the pile is what the owner has left: a task whose message they
     # have already read (or that triage filed as fyi - "Thank you!") is a task nobody closed, and the
     # wrap-up is the one thing still on them. Merged before the read, the row they had just cleared
     # suppressed it and the task fell out of the pipe altogether (2026-09-03).
-    wrapped = _apply_states(from_wrapped(store, now, busy), states, now, keep_surfaced, quiet, walk_at)
+    wrapped = _apply_states(from_wrapped(store, now, busy), states, now, keep_surfaced)
     wrap_tids = {w['tid'] for w in wrapped}
     # ...and it outranks a row that is on the rail for its open task alone (from_feed open_only): an
     # open task whose reply already went out is better told as "the reply went out - the task is
@@ -1464,6 +1420,16 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
                        'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
 
 
+def _chat_only(store, low, high) -> bool:
+    """Every write since the cached build was the Assistant's own conversation - a line it said, a badge it stamped, on its dock task. The
+    rail draws nothing from that task, and each walk move writes there: counted as a change, every press rebuilt the whole rail for its
+    own words (0.5-0.7 s on a real home, 2026-10-31)."""
+    written = getattr(store, 'rail_written', None)
+    dock = str(store.get_setting('assistant_dock_task_id') or '') if callable(written) else ''
+    got = written(low, high) if dock else None
+    return bool(got) and got <= {('task', dock)}
+
+
 def _rail_top(store):
     top = getattr(store, 'rail_top', None)
     return top() if callable(top) else None
@@ -1506,8 +1472,10 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         same_store = _CACHE.get('store') is store
         def moved():                                   # written to, or a worker moved, since the cached build began
             top = _rail_top(store)
-            return (top is not None and _CACHE.get('mark') is not None and top != _CACHE['mark']) \
-                   or workers is None or workers != _CACHE.get('workers')
+            if workers is None or workers != _CACHE.get('workers'): return True
+            if top is None or _CACHE.get('mark') is None or top == _CACHE['mark']: return False
+            if not _chat_only(store, _CACHE['mark'], top): return True
+            _CACHE['mark'] = top; return False         # ...the Assistant's own words only: the build stands, at the new mark
         if same_store and _CACHE['pile'] and not force and moved(): _CACHE.update(at=0.0); force = True
         # One websocket event wakes every open browser. If they all arrive while the first forced
         # rebuild is running, that one result satisfies all of them; rebuilding once per tab is a
@@ -1584,7 +1552,7 @@ TAIL_FIELDS = ('key', 'kind', 'title', 'who', 'agent', 'shows_who', 'ref', 'tid'
 
 def _plain_fyi(i) -> bool:
     return (i.get('lane') == 'fyi' and i.get('order_band') == 4 and i.get('kind') != 'idea' and not str(i.get('kind') or '').startswith('goal')
-            and not any(i.get(k) for k in ('settling', 'put_down', 'deferred', 'surfaced', 'news')))
+            and not any(i.get(k) for k in ('settling', 'deferred', 'surfaced', 'news')))
 
 
 def page_fyi(payload: dict, n: int, keep=()) -> dict:
@@ -1645,14 +1613,6 @@ def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
 def present(store, payload: dict) -> dict:
     """Detach and fingerprint a selected funnel payload without changing its selection."""
     return _present(store, payload)
-
-
-def capture_selection(store, *, only: str = None, include_surfaced: bool = False,
-                      exclude: str = None, now: datetime = None):
-    """A side-effect-free automatic selection for HTTP optimistic concurrency."""
-    from .funnel_selection import capture_selection as capture
-    return capture(store, only=only, include_surfaced=include_surfaced,
-                   exclude=exclude, now=now)
 
 
 def _present_one(store, item: dict | None) -> dict | None:
@@ -1805,25 +1765,9 @@ def fyi_batch_size(store) -> int:
 _not_yet = lanes.not_yet
 
 
-# WAITING ON THE OWNER - an agent parked on a question, a reply wanting their yes (lanes.json `waits`) - outranks a merely-unread
-# row in the walk. "New arrivals still lead" was the rule for every lane, and with fifty unread fyi the one thing actually on
-# the owner was shown once and never came up again (the owner, 2026-09-10). Being shown is not a decision, so it cannot retire
-# the item; only settling it, or later/skip, takes it off the walk - and _eligible's 30-minute cooldown keeps it from coming
-# straight back. ON YOU (lanes.on_you) is the wider count the opener and the greeting say: everything under Tasks
-# that is the owner's move.
-def leads(item: dict) -> bool:
-    """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Tasks. A shown
-    row whose lane does not wait on the owner (a saved coding session the owner had just closed) sat FIRST under Tasks on the rail
-    while the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk
-    are one order, so what the rail puts on you is walked in its place."""
-    return waits_on_you(item) or not item.get('surfaced') or level_of(item) == 'task'
-
-
-def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,
-              exclude: str = None, items: list | None = None) -> dict | None:
-    """What comes out of the mouth: the named item (read or not - the chat may return to it), or
-    the first unread one - of the mail alone when `only` is 'mail'. Something still being triaged is
-    not ready to be talked about."""
+def next_item(store, key: str = None, include_surfaced: bool = False, items: list | None = None) -> dict | None:
+    """The named item, read or not - the chat may return to it. With no key there is nothing to look up: WHICH row comes next is
+    railwalk's alone (the walk has one owner, 2026-10-30; railwalk.top is the row a walk starts on)."""
     # by key, whatever its state: read already, or with an agent on it now - the concierge decides what to say
     if key:
         # A batch is not an item, so there is nothing to look for: the lookup below never found it and
@@ -1845,25 +1789,7 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
             item = next((i for i in build(store, keep_surfaced=True, full_history=True, keys=[key])['items']
                          if i['key'] == key or key in i.get('aliases', [])), None)
         return _present_one(store, item) or batch_item(store, key)
-    if getattr(store, 'processing_reads_active', lambda: False)():
-        return capture_selection(store, only=only, exclude=exclude).selected
-    from .processing_unread import RETURN_MINUTES        # the same hour the canonical pile's mark holds
-    again = (datetime.now() - timedelta(minutes=RETURN_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
-    rows = pile(store, force=True)['items']
-    ready = [i for i in rows if not i.get('settling') and not i.get('deferred')
-             and not _not_yet(i) and i.get('key') != exclude
-             and (include_surfaced or not i.get('surfaced')
-                  or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
-    # ...below the row on the table, or the walk's place: Next walks down the line (funnel_selection.below, 2026-10-22)
-    from .funnel_selection import below
-    wp = (walk_place(store) or (None, None)) if only is None and not include_surfaced else (None, None)
-    down = below(rows, ready, exclude, wp[1], at_key=wp[0])
-    if down is not None: return _present_one(store, down[0] if down else None)
-    # What is ON THE OWNER leads (an urgent row is walked in its place, 2026-10-22); after that, new arrivals; after those, a merely-shown row is walked
-    # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
-    # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
-    from .funnel_selection import first_at_start
-    return _present_one(store, first_at_start(ready))
+    return None
 
 
 def batch_item(store, key: str) -> dict | None:
@@ -1886,20 +1812,6 @@ def batch_item(store, key: str) -> dict | None:
 def batchable(item: dict) -> bool:
     """Does this row read in an FYI batch? An idea has things to do - make it a task, hand it on, let it go - so it is walked alone."""
     return item.get('lane') == 'fyi' and item.get('kind') != 'idea'
-
-
-def fyi_batch(store, first: dict, items: list | None = None) -> list:
-    """The next few fyi's, the first included - what comes out together when the mouth reaches the fyi lane.
-
-    It forced a REBUILD to find the other three. Every caller had just built the pile to choose
-    `first` out of it, so an fyi Next paid for two: about 450ms of pure Python each on the owner's
-    store (2026-09-14 profile - 84k snapshot copies and 274 cards per build), and CPU is what the
-    whole server is short of. The caller's own list is passed in where there is one; otherwise the
-    cached pile answers, which is the same picture `first` was chosen from and never a staler one.
-    """
-    pool = items if items is not None else pile(store)['items']
-    ready = [i for i in pool if not i.get('settling') and not i.get('surfaced') and batchable(i)]
-    return ([first] + [i for i in ready if i['key'] != first['key']])[:fyi_batch_size(store)]
 
 
 # a task's status in the owner's words - "in_progress general task you asked about" was the line under a task opened by name
@@ -1980,7 +1892,7 @@ SETTLE_TRIES = 3          # a settle the census lag refused, reconciled and trie
 
 
 def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False,
-           shown=None, put_down: bool = False) -> dict:
+           shown=None) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
     it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen.
@@ -1994,22 +1906,11 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         # every open Assistant answers with a forced rebuild, so four fyi settled together set four
         # rebuilds of a 60-item pile racing each other in front of the Next that follows.
         with store.one_poke():
-            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown, put_down=put_down) for k in key[5:].split(',') if k]
+            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown) for k in key[5:].split(',') if k]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
-    until = None
-    # NEXT ON A MEETING HOLDS IT UNTIL IT STARTS (the owner, 2026-09-28: "i should not have to dismiss invite a
-    # 100 times"). A shown mark reaches only mail and task rows, so the calendar card came straight back after
-    # every batch; walked past before its time it is back when it starts, walked past once started it is gone
-    if key.startswith('meeting:') and verb == 'surfaced':
-        start = _activity_time(key.split(':', 1)[1][:16])
-        if start and start > datetime.now(): verb, until = 'later', start.strftime('%Y-%m-%d %H:%M:%S')
-        else: verb = 'done'
-    says = ''
-    # WALKED PAST (Next), not merely shown: the mark's Until is what says so. An open task is passed for the rest of this walk
-    # whatever it says (processing_unread.this_walk); a row with no task behind it, until then.
-    if verb == 'surfaced' and put_down and until is None:
-        from .processing_unread import RETURN_MINUTES
-        until = (datetime.now() + timedelta(minutes=RETURN_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
+    # A MEETING IS WALKED LIKE A TASK (Q3, 2026-10-30): Next on it writes nothing and it leaves the rail by itself after its grace
+    # minutes - it was held `later` until its start (2026-09-28), a row the walk skipped
+    until, says = None, ''
     if verb == 'later' and until is None:
         back, says = later_until(store, hours=hours)
         until = back.strftime('%Y-%m-%d %H:%M:%S')
@@ -2036,7 +1937,7 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     if verb == 'done': _idea_done(store, key, by)
     # ...and an FYI row that speaks for its whole email thread settles the mails folded under it (processing_unread.fold_fyi_threads)
     for k in thread_of(store, key):
-        try: settle(store, k, verb, by, hours, note, read=read, put_down=put_down)
+        try: settle(store, k, verb, by, hours, note, read=read)
         except Exception as e: logger.debug(f'funnel: {k} under {key} not settled - {e}')
     invalidate()
     # BULK PROCESSING: an item leaving the head is what pays for the next one to be judged - triage
@@ -2071,43 +1972,14 @@ def later_until(store, now: datetime = None, hours: float = None) -> tuple:
 
 
 def reset_walk(store):
-    """A new chat. Read stays read - a mail you saw yesterday is not new again because the
-    conversation is - but an alert put down in the old chat may speak once more in this one.
-
-    An AGENT waiting on you is the exception to "read stays read": it is the one lane that blocks
-    work, and having been shown it once in yesterday's chat is not an answer. A new chat surfaced
-    two fyi about lunch while an agent sat parked on a question (the 2026-09-03 break test), because
-    a blocked row must come back with the new chat."""
+    """A new chat. Read stays read - a mail you saw yesterday is not new again because the conversation is - but an alert put down in
+    the old chat may speak once more in this one, and the walk starts again from the top (railwalk.reset; the Walk button's start)."""
     # ...but a notice the owner put down stays down: a new chat does not raise a finished agent again (PW-166)
     for k, st in store.funnel_states().items():
         if k.startswith('notice:') and st.get('Status') == 'ack': store.clear_funnel_state(k)
     store.clear_funnel_states(('ack',))
-    for k, st in store.funnel_states().items():
-        if k.startswith('agent:') and st.get('Status') == 'surfaced': store.clear_funnel_state(k)
-    # ...and on the rail an agent's row is keyed processing:<item>, not agent:, so the mark above never reached it and
-    # a new walk never raised a waving agent again (R11, 2026-09-25)
-    try:
-        states = store.funnel_states()
-        from . import processing_unread          # the rail itself, not pile(): the pile runs the notice watcher
-        for i in processing_unread.build(store).get('items') or []:
-            # ...and a yes still owed (ready to send): shown in the old chat is not answered - a restart opened a new chat
-            # that skipped the Close out GitHub had just refused, for the next pull request (2026-09-29)
-            if i.get('lane') not in processing_unread.RAISED_BY_NEW_WALK: continue
-            for k in [i.get('key'), *(i.get('aliases') or [])]:
-                if k and (states.get(k) or {}).get('Status') == 'surfaced': store.clear_funnel_state(k)
-    except Exception as e: logger.debug(f'a new walk could not raise the waiting agents again: {e}')
-    # ...and their READ is from the old walk too. The mark alone left a row read and unmarked, which is no band at all -
-    # processing_unread counts a read before this stamp as not yet seen on every open task (this_walk)
-    new_walk(store)
-
-
-def new_walk(store):
-    """The walk now running ends here and the next one begins: every open task passed with Next in it is the owner's again, from
-    the top, in the rail's order (the owner, 2026-10-21: "if you start over or finish walk it goes back to whatever tasks are
-    left"). A new chat (reset_walk) and a walk that ran out (concierge.surface) both come through here. What was read stays read."""
-    from .processing_unread import WALK_KEY
-    store.set_setting(WALK_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'system')
-    if store.get_setting(PLACE_KEY): store.set_setting(PLACE_KEY, '', 'system')
+    from . import railwalk
+    railwalk.reset(store)
     invalidate()
 
 

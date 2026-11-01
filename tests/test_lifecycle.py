@@ -10,7 +10,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import buttons, concierge, funnel, general, server, terminal, verdicts
+from taskuary import buttons, concierge, funnel, general, railwalk, server, terminal, verdicts
 from taskuary.store import MemoryStore
 
 
@@ -74,15 +74,15 @@ class LifecycleTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             funnel.announce(s)                                                   # first look remembers
             p = funnel.pile(s, force=True)
-            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')
+            self.assertEqual(railwalk.top(s)['key'], f'agent:{t}')
         self.assertEqual([(i['key'], i['lane']) for i in p['items']], [(f'agent:{t}', 'working')])
         # 6. it stops to ask: front of the pipe, a line in the chat with the card
         parked = [dict(working[0], idle=120, waiting=True, state='asking', tail=['Remove Bulk Deny as well? (y/n)'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             ev = funnel.pile(s, force=True)['events']
             self.assertEqual([e['kind'] for e in ev], ['asking'])
-            self.assertEqual(funnel.next_item(s)['kind'], 'agent')
-            out = concierge.surface(s)
+            self.assertEqual(railwalk.top(s)['kind'], 'agent')
+            out = railwalk.start(s)                                              # Walk: from the top (the walk has one owner, 2026-10-30)
         self.assertEqual(out['item']['kind'], 'agent'); self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
         self.assertIn('Remove Bulk Deny as well?', str(out['item']))          # the question is on its card, not restated beside it
         # 7. it finishes with a report and drafts the reply; the watcher offers the report, the pipe holds the draft
@@ -94,7 +94,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual([(i['kind'], i['lane']) for i in p['items']], [('review', 'approve')])
         self.assertIn('removed Bulk Approve and Deny', p['items'][0]['summary'])
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
-            out = concierge.surface(s)
+            out = railwalk.start(s)
         self.assertEqual(out['item']['rid'], r); self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
         self.assertIn('removed Bulk Approve and Deny', str(out['item'])); self.assertIn(buttons.label('approve'), [c['label'] for c in out['chips']])
         # 8. approving SENDS - and only sends (the owner, 2026-10-18: "sending and closing are two steps"); Mark done closes the
@@ -150,7 +150,8 @@ class LifecycleTests(unittest.TestCase):
             self.assertTrue(c.post('/api/concierge/open').json()['opened'])
             nxt = c.post('/api/concierge/next', json={'only': 'mail'}).json()
             self.assertEqual(nxt['item']['rid'], r)
-            self.assertEqual(c.get('/api/funnel/pile?force=1').json()['items'][0]['surfaced'], True)      # on the table, still in the pipe
+            pile = c.get('/api/funnel/pile?force=1').json()
+            self.assertEqual((pile['items'][0]['key'], pile['walk']['on']), (nxt['item']['key'], nxt['item']['key']))   # on the table, still in the pipe
             # the words are read by the model and light the draft's own Send; the press sends (the owner, 2026-10-19)
             with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Sending it.\nCALL: {"kind": "approve", "params": {}}'):
                 said = c.post('/api/concierge/say', json={'text': 'looks good, send it', 'key': f'review:{r}'}).json()

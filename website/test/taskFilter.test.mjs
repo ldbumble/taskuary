@@ -63,8 +63,8 @@ test("the Tasks completion path pins the rail to in progress before patching", a
   assert.match(finish, /catch \(e\) \{ seenState\.current = before; setLeavingId\(null\); onSelect\(was\); throw e; \}/);
   assert.match(source, /\.filter\(\(x\) => x\.TaskId !== leavingId\)/);
   const page = source.slice(source.indexOf("const finish = async (status"));
-  assert.match(page.slice(0, 600), /const close = \(\) => completeTask\(api, selected, note\)/);
-  assert.match(page.slice(0, 600), /onFinish \? onFinish\(status, close\) : close\(\)/);
+  assert.match(page.slice(0, 800), /: \(\) => completeTask\(api, selected, note\)/);
+  assert.match(page.slice(0, 800), /onFinish \? onFinish\(status, close\) : close\(\)/);
 });
 
 test("a closed task opened directly cannot remain under the in-progress pill", async () => {

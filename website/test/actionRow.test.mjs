@@ -174,11 +174,11 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
   const task = read("TaskPage.jsx"), remind = read("RemindMe.jsx"), view = read("AssistantView.jsx");
   const finish = task.slice(task.indexOf("const finish = async"), task.indexOf("const reminded ="));
-  assert.ok(finish.indexOf("onLeave?.()") < finish.indexOf("completeTask("), "the close is asked for after the task is put down");
+  assert.ok(finish.indexOf("onLeave?.()") < finish.indexOf("const close ="), "the close is asked for after the task is put down");
   assert.match(finish, /onStay\?\.\(msg\)/);
-  assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("api.post"), "the reminder too");
+  assert.ok(remind.indexOf("onLeave?.()") < remind.indexOf("await act(until)"), "the reminder too");
   assert.match(remind, /if \(leaving\) onStay\?\.\(msg\)/);
-  assert.match(view, /putDown: \(key, tid = null\) => \{ leave\(\{ key, tid \}\); for \(const x of leftOf\(\{ key, tid \}\)\) downRef\.current\.add\(x\); leavingRef\.current = \{ key, tid \}; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); drawNextEarlyRef\.current\?\.\(key\); \}/, "folded, and the next drawn under it");
+  assert.match(view, /putDown: \(key, tid = null\) => \{ leftKey\.current = key; setExpanded\(false\); setFoldedKey\(key\); setNextComing\(true\); setLeavingTid\(tid\); \}/, "folded, the dots under it");
   // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
   // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
   const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
@@ -187,7 +187,7 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   assert.match(view, /items: asPressed\(pile\.items, \{ leaving: leavingTid/, "the rail drops it (funnelPile.asPressed)");
   assert.match(view, /putDownLanded\(pile\.items, leavingTid\)\) setLeavingTid\(null\)/, "until the server's pile has let it go - or put it For later - a reopened task is never hidden");
   assert.match(view, /pickUp: \(key, why\) => \{[^\n]*setLeavingTid\(null\)/, "a failed close puts it back on the rail too");
-  assert.match(view, /onAfter=\{\(\) => actions\.advance\(null, true\)\}/, "the next one comes without the half-second of grace");
+  assert.match(view, /onWalkLeave=\{\(how, x\) => actions\.leave\(c\.key, how, x\)\}/, "the close and the next one are one walk move");
 });
 
 test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as one sidebar area replaces another (2026-10-01)", () => {

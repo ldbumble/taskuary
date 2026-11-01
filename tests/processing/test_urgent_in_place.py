@@ -94,9 +94,9 @@ def test_next_walks_the_urgent_task_in_its_place_like_any_other(db):
     row = {i.get('tid'): i['key'] for i in items if i.get('tid')}
     order = [i.get('tid') for i in items if i.get('tid') in tids]
     concierge.surface(store, row[order[0]])                     # the owner opens the top task
-    seen, out = [order[0]], concierge.surface(store, leaving=row[order[0]])
+    seen, out = [order[0]], concierge.surface(store, from_key=row[order[0]])
     while out.get('item') and out['item'].get('tid') in tids:
-        seen.append(out['item']['tid']); out = concierge.surface(store, leaving=out['item']['key'])
+        seen.append(out['item']['tid']); out = concierge.surface(store, from_key=out['item']['key'])
     assert seen == order, f"Next did not walk the tasks in rail order, urgent included: {seen} vs {order}"
     assert out['item'] and lanes.level_of(out['item']) == 'reports'
 
@@ -106,14 +106,20 @@ def test_a_walk_starts_at_the_top_not_at_the_urgent_row(db):
     out = concierge.surface(store)
     assert out['item'] and out['item'].get('tid') == order[0], f"the walk did not start at the top: {out['item'] and out['item'].get('title')}"
 
+def below_of(items, place):
+    """The rows the walk would reach going down from `place` (railwalk: the line, the row directly below, and on)."""
+    from taskuary import railwalk
+    line = railwalk.line(items)
+    n = railwalk._below(line, tuple(place))
+    return [] if n is None else line[n:]
+
+
 def test_below_takes_the_urgent_row_in_its_place():
-    from taskuary.funnel_selection import below
     row = lambda key, band, h: {'key': key, 'lane': 'asked', 'kind': 'asked', 'order_band': band, 'arrived_at': ago(h * 60)}
     items = funnel._order([row('task:3', 2, 1), row('urgent:1', 1, 2), row('task:1', 2, 5), row('task:2', 2, 3)])
     assert keys(items) == ['task:1', 'task:2', 'urgent:1', 'task:3'], 'an urgent row is not at its arrival place'
-    assert keys(below(items, items, 'task:1')) == ['task:2', 'urgent:1', 'task:3'], 'Next jumped to the urgent row'
-    ready = [i for i in items if i['key'] not in ('task:1', 'task:2', 'urgent:1')]
-    assert keys(below(items, ready, 'urgent:1')) == ['task:3'], 'after the urgent row Next did not go on below it'
+    assert keys(below_of(items, funnel.order_key(items[0]))) == ['task:2', 'urgent:1', 'task:3'], 'Next jumped to the urgent row'
+    assert keys(below_of(items, funnel.order_key(items[2]))) == ['task:3'], 'after the urgent row Next did not go on below it'
 
 def test_the_phone_summary_still_counts_urgent(db):
     store, tids = db

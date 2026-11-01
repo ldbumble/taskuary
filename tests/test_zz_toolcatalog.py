@@ -115,9 +115,9 @@ class SelectorTests(unittest.TestCase):
         self.assertEqual(left, [], 'every report must be gone from Unread, not just the word-matches')
         print(f"  confirmed -> cleared {(r.json().get('outcome') or {}).get('cleared')}; reports left unread: {len(left)}")
 
-    def test_the_sweep_takes_what_it_cleared_off_the_table(self):
-        """Settling one item drops Current with it; the sweep left it there, so clearing the reports
-        cleared seven and kept the report the owner was holding (the owner, 2026-09-07)."""
+    def test_the_sweep_clears_the_row_on_the_table_and_leaves_it_on_screen(self):
+        """Clearing the reports cleared seven and kept the report the owner was holding (the owner, 2026-09-07): the sweep clears
+        it too. A bulk clear is a close made elsewhere, so the table keeps it, drawn as it is now (spec 3.5)."""
         s = self._pile()
         dock, _ = concierge.general.dock_task(s, 'owner')
         cat, members = self._class_of(s)
@@ -125,7 +125,8 @@ class SelectorTests(unittest.TestCase):
         concierge.set_current(s, dock['TaskId'], held['key'], 'owner')
         out = concierge.clear_selected(s, {'category': cat}, 'owner')
         self.assertEqual(out['cleared'], len(members))
-        self.assertEqual(concierge.current_key(s, dock['TaskId']), '', 'the cleared item stayed on the table')
+        self.assertNotIn(held['key'], [i['key'] for i in funnel.build(s)['items']])
+        self.assertEqual(concierge.current_key(s, dock['TaskId']), held['key'], 'a close elsewhere never moves the table')
 
     def test_a_selector_that_matches_nothing_says_so_instead_of_claiming(self):
         s = self._pile()
@@ -222,7 +223,8 @@ class FreshnessBelongsAtLoadTimeTests(unittest.TestCase):
         # a typed turn polls nothing up front; an item loaded into the chat is checked - since 2026-10-01 right AFTER it
         # opens rather than before ("open now, check after": the wait was 9 of the 12 seconds a click took)
         self.assertIn("body.key and body.mode not in ('say', 'next')", src)
-        self.assertIn("if body.mode == 'next': _refresh_after(out)", src)
+        self.assertIn("walking = body.mode in ('next', 'back', 'start')", src)      # every walk move, Next and a clicked row alike
+        self.assertIn("if walking: _refresh_after(out)", src)
 
 
 class ReadsTests(unittest.TestCase):
@@ -427,7 +429,7 @@ class SweepReachesTheTableTests(unittest.TestCase):
         items = funnel.build(s, keep_surfaced=True)['items']
         return Counter(i.get('category') for i in items).most_common(1)[0][0]
 
-    def test_the_report_on_the_table_is_swept_with_the_rest(self):
+    def test_the_report_on_the_table_is_swept_with_the_rest_and_stays_on_screen(self):
         s = self._pile()
         dock, _ = concierge.general.dock_task(s, 'owner')
         cat = self._cat(s)
@@ -439,7 +441,7 @@ class SweepReachesTheTableTests(unittest.TestCase):
                          'the item on the table is invisible to the selector')
         out = concierge.clear_selected(s, {'category': cat}, 'owner')
         self.assertEqual(out['cleared'], len(all_six))
-        self.assertEqual(concierge.current_key(s, dock['TaskId']), '', 'the cleared item stayed on the table')
+        self.assertEqual(concierge.current_key(s, dock['TaskId']), held['key'], 'a close elsewhere never moves the table (spec 3.5)')
 
     def test_the_card_says_when_it_sweeps_the_table_as_well(self):
         """The sweep settles Current itself, so the card carries its key: that is how the page knows the

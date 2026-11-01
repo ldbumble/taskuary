@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import funnel, funnel_selection, terminal, wrapup
+from taskuary import funnel, terminal, wrapup
 from taskuary.store import MemoryStore
 
 
@@ -151,10 +151,12 @@ class FyiBatchSettingTests(unittest.TestCase):
 
     def test_the_setting_reaches_the_selection_batch_too(self):
         """Two call sites read it; a setting that reached only one would half-work in silence."""
-        first = {'key': 'msg:1', 'lane': 'fyi'}
-        ready = [first] + [{'key': f'msg:{n}', 'lane': 'fyi'} for n in range(2, 9)]
+        from unittest import mock
+        from taskuary import railwalk
+        ready = [{'key': f'msg:{n}', 'lane': 'fyi', 'kind': 'fyi', 'order_band': 4} for n in range(1, 9)]
         for size in (1, 3, 8):
-            card, keys = funnel_selection._batch(first, ready, size)
+            with mock.patch.object(funnel, 'fyi_batch_size', return_value=size):
+                keys = [r['key'] for r in railwalk._batch(None, ready, 0, True)]      # the walk's batch (railwalk, 2026-10-30)
             self.assertEqual(len(keys), size, size)
             self.assertEqual(keys[0], 'msg:1', 'the one it led with stays first')
 

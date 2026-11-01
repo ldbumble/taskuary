@@ -53,11 +53,12 @@ def band_of(item: dict) -> int:
     lane, kind = item.get('lane'), item.get('kind')
     if kind == 'meeting': return attention_band(urgent=not not_yet(item), actionable=True)
     l, sec = LANE.get(lane) or {}, lane_section(lane)
-    # a task an agent FINISHED is still a task - On you until Next reads it, never a report (the owner, 2026-09-24); an unjudged
-    # row the retry gave up on is nobody's to judge now, so it is the owner's
+    # a task an agent FINISHED is a result to read, drawn under Reports in its report lane - Next reads it and it leaves (the walk has
+    # one owner, 2026-10-30, rule 4 and 3.5; it was On you, band 2, from 2026-09-24); an unjudged row the retry gave up on is
+    # nobody's to judge now, so it is the owner's
     return attention_band(urgent=bool(l.get('urgent') or (l.get('urgent_request') and item.get('urgent_request'))),
                           owner_wait=bool(l.get('waits')),
-                          actionable=sec == 'task' or kind == 'agentdone' or (lane == 'unjudged' and bool(item.get('held'))),
+                          actionable=sec == 'task' or (lane == 'unjudged' and bool(item.get('held'))),
                           result=sec == 'reports')
 
 
@@ -69,7 +70,7 @@ def stamped_band(item: dict) -> int:
 
 def is_urgent(item: dict) -> bool:
     """URGENT - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: no section of its own (the owner,
-    2026-10-22), it sits in Tasks at its arrival place, shaded, and Next walks it in its place (funnel_selection.below). lanes.js isUrgent."""
+    2026-10-22), it sits in Tasks at its arrival place, shaded, and Next walks it in its place (railwalk.line). lanes.js isUrgent."""
     return stamped_band(item) == URGENT['band']
 
 
@@ -82,8 +83,8 @@ def level_of(item: dict) -> str:
     # whether the walk brings it back as yours (processing_unread `back`), never its section; Remind me puts it For later like any task.
     # FOR LATER IS WHAT YOU PUT THERE WITH A DATE - Remind me - never a card merely shown (the owner, 2026-10-08: "it moved 1003
     # automatically to later?"), and no longer Next either: Next moves the walk on and the task stays in Tasks, where it was
-    # (the owner, 2026-10-21). The walk skips it by its mark (put_down), not by moving it.
-    if band == 2 and item.get('deferred'): return 'later'
+    # (the owner, 2026-10-21). The walk never skips it: Next is the row below, whatever was shown (2026-10-30).
+    if band in (1, 2) and item.get('deferred'): return 'later'      # ...an urgent row too: Remind me puts it away like any task
     if band == 4 and item.get('kind') == 'idea': return 'ideas'
     return LEVEL_OF_BAND.get(band, 'fyi')
 

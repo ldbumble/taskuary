@@ -177,11 +177,15 @@ def test_a_slipped_why_is_live_not_the_ideas_frozen_text(s):
     card = next(c for c in rail(s) if c.get('tid') == t)
     assert 'late for them after 5' in card['why'] and '6 days' in card['why']
 
-def test_next_keeps_a_slipped_row_on_the_rail_as_passed(s):
+def test_next_keeps_a_slipped_row_on_the_rail_in_its_place(s):
+    """Next on a task writes nothing (the walk has one owner, 2026-10-30): a slipped step stays on the rail, walkable, never gone."""
+    from taskuary import railwalk
     t = person_step(s, 7); card = next(c for c in rail(s) if c.get('tid') == t)
-    funnel.settle(s, card['key'], 'surfaced', 'owner', read=True, put_down=True); funnel.invalidate()       # the Next press
+    with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+        railwalk.open(s, card['key']); railwalk.next(s, card['key'])                                    # the Next press
+    funnel.invalidate()
     still = next((c for c in processing_unread.build(s, live_state=[])['items'] if c.get('tid') == t), None)
-    assert still is not None and (still.get('put_down') or still.get('surfaced'))                        # Passed, never gone
+    assert still is not None and still['actionable'] and still['lane'] == 'forgotten'
 
 def test_the_three_answers_need_a_slipped_card(s):
     t = s.create_task({'Title': 'Plain work', 'Status': 'open'}, 'owner')

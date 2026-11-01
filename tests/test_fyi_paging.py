@@ -11,9 +11,8 @@ def _row(n, lane='fyi', band=4, **kw):
 def _pile():
     work = [_row(i, lane='yours', band=2) for i in range(3)]
     fyi = [_row(i) for i in range(3, 103)]
-    odd = [_row(200, settling=True), _row(201, put_down=True), _row(202, kind='idea')]
-    return {'items': work + fyi[:40] + odd + fyi[40:], 'lanes': [{'lane': 'fyi', 'n': 103}], 'counts': {'unread': 106},
-            'expected_next_key': 'fyis:msg:3,msg:4', 'expected_next_members': ['msg:3', 'msg:4']}
+    odd = [_row(200, settling=True), _row(202, kind='idea')]
+    return {'items': work + fyi[:40] + odd + fyi[40:], 'lanes': [{'lane': 'fyi', 'n': 102}], 'counts': {'unread': 105}}
 
 
 def test_paged_rows_are_the_whole_rows_in_order():
@@ -33,7 +32,7 @@ def test_paged_rows_are_the_whole_rows_in_order():
 
 def test_what_is_not_plain_fyi_and_what_is_held_stays_whole():
     keys = {i['key'] for i in funnel.page_fyi(_pile(), 5, keep=('msg:90', 'processing:pi_95', 'fyis:msg:60,msg:61'))['items']}
-    assert {'msg:0', 'msg:1', 'msg:2', 'msg:200', 'msg:201', 'msg:202'} <= keys      # work, settling, put down, an idea
+    assert {'msg:0', 'msg:1', 'msg:2', 'msg:200', 'msg:202'} <= keys                 # work, settling, an idea (no put-down row: rule 6)
     assert {'msg:90', 'msg:95', 'msg:60', 'msg:61'} <= keys                            # the table (by key, alias or batch)
     assert len([k for k in keys if int(k[4:]) in range(3, 103)]) == 5 + 4
 

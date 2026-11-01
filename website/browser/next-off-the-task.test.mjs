@@ -60,7 +60,7 @@ test("a Next over Reports that brings no item is still seen: the page goes and t
   const { page, errors, row } = await taskUnder(t);
   assert.ok(await nav(page, "reports")); await sleep(2500);
   const guard = page.fixtureRequestGuard;
-  page.off("request", guard); page.on("request", (r) => (/\/api\/concierge\/(next|stream)/.test(r.url()) ? r.abort() : guard(r)));
+  page.off("request", guard); page.on("request", (r) => (/\/api\/walk\/next/.test(r.url()) ? r.abort() : guard(r)));
   assert.ok(await next(page)); await sleep(4000);
   const now = await state(page);
   assert.deepEqual(now.browse, [], "Reports is still drawn over a Next that failed");

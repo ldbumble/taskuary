@@ -133,7 +133,7 @@ test("the rail says a task's state once, and puts its title first", () => {
 });
 
 test("complete, reopen, coding start and stop run the shared operations road, never a second path", () => {
-  assert.match(tasks, /const close = \(\) => completeTask\(api, selected, note\);/);   // a close with a note rides the same road
+  assert.match(tasks, /: \(\) => completeTask\(api, selected, note\);/);   // a close with a note rides the same road
   assert.match(fs.readFileSync(new URL("../src/closeAgent.jsx", import.meta.url), "utf8"), /runOperation\(api, "task\.complete", tid/);
   assert.match(tasks, /runOperation\(api, "task\.reopen", id\)/);
   assert.match(tasks, /runOperation\(api, "dispatch\.prepare", id, \{ kind: "coding"/);

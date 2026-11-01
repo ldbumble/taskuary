@@ -22,15 +22,14 @@ test("Assistant consumes full display and presentation revisions without patch-m
 
 test("selection freshness preserves explicit action advancement while background events never advance", () => {
   const view = read("AssistantView.jsx");
-  assert.match(view, /try \{ data = await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\); break; \}/);
-  assert.match(view, /\n\s*landed\(data\);/);
+  // one press, one answer: the row the page had on screen goes with it (railwalk.next), and the answer is drawn as it lands
+  assert.match(view, /data = await turn\(\{ mode: key \? "next" : how, key: key \|\| \(how === "leave" \? fromKey : null\), from_key: fromKey, press,/);
+  assert.match(view, /\n\s*else landed\(data\);/);
   const events = view.slice(view.indexOf("if (data.events?.length)"), view.indexOf("// the item on the table is live"));
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|putOnTable|surfaceRef|deferInChat/);
-  // the grace is 500 ms unless the settle brought the rail back with it (pileAlong.test.mjs)
-  assert.match(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(\), pile \|\| settled \? 120 : 500\)/);
   // explicit advancement after a confirmed proposal: only a success that settles the item on the table moves the walk (PW-125)
   assert.match(view, /const step = afterConfirm\(p, out, current\);/);
-  assert.match(view, /if \(step === "advance"\) advance\(\);/);
+  assert.match(view, /if \(step === "advance"\) walkOn\(\);/);
   assert.match(view, /else if \(step === "settle"\) await done\(null\);/);
   assert.match(view, /else \{ if \(step === "offer"\) clearTable\(\); loadPile\(\); \}/);
 });

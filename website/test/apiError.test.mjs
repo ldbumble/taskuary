@@ -55,10 +55,9 @@ test("a string detail, and an error with no body at all, are left exactly as the
   assert.equal(processingErrorMessage(new Error("Network Error"), "fallback"), "Network Error");
 });
 
-test("the selection guard's shape - written for error.detail all along - now gets one", async () => {
-  const { selectionGuardDetail } = await import("../src/funnelPile.js");
-  const e = keepDetail({ response: { status: 503, data: { detail: { code: "selection_unavailable", selection_pending: null } } } });
-  assert.equal(selectionGuardDetail(e)?.code, "selection_unavailable");
+test("a structured refusal's shape - read off error.detail - is kept on the error", async () => {
+  const e = keepDetail({ response: { status: 409, data: { detail: { code: "processing_coverage_pending", retryable: true } } } });
+  assert.equal(e.detail?.code, "processing_coverage_pending");
 });
 
 test("a failed save reads as a sentence: the server's, or that nothing answered - never axios's", async () => {

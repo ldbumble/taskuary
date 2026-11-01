@@ -5,6 +5,9 @@ again."
 So Next on an open task marks it seen in THIS walk: it stays under Tasks and the walk goes on - the rest of Tasks, then reports and
 FYIs. There is no clock bringing it back (it came back after task_return_minutes). When the walk runs out, or a new one starts (a
 new chat), every task still open comes up again, from the top, in the rail's order. A closed one does not.
+
+Since 2026-10-30 (the walk has one owner) Next on a task writes nothing at all: there is no "seen in this walk". Next goes on to the
+row directly below, so a walk still never offers a task twice - and Walk starts at the top of the rail, with every task still open.
 """
 from datetime import datetime, timedelta
 from unittest import mock
@@ -50,9 +53,10 @@ def tasks(store, now=None): return {i['tid']: i for i in rail(store, now) if i.g
 
 def walk(store, n):
     """Walk me through my tasks, then Next n-1 times: the keys put on the table, in order. The last stays on the table."""
-    out = concierge.surface(store); keys = [out['item'] and out['item']['key']]
+    from taskuary import railwalk
+    out = railwalk.start(store); keys = [out['item'] and out['item']['key']]
     while len(keys) < n and out['item']:
-        out = concierge.surface(store, leaving=out['item']['key']); keys.append(out['item'] and out['item']['key'])
+        out = railwalk.next(store, out['item']['key']); keys.append(out['item'] and out['item']['key'])
     return keys, out
 
 
@@ -63,18 +67,18 @@ def test_next_on_two_tasks_goes_on_to_the_fyi_and_both_stay_in_tasks(db):
     store, tids = db
     keys, _ = walk(store, 3)
     assert [tid_of(store, k) for k in keys[:2]] == tids, 'the walk did not start on the tasks, in the rail order'
-    assert keys[2].startswith('fyis:'), f'after both tasks the walk did not go on to the FYI: {keys}'
+    assert any(i['key'] == keys[2] and lanes.level_of(i) == 'fyi' for i in rail(store)), f'after both tasks the walk did not go on to the FYI: {keys}'
     held = tasks(store)
     assert set(held) == set(tids), 'Next took an open task off the rail'
     assert all(lanes.level_of(held[t]) == 'task' for t in tids), 'a task walked past left Tasks'
-    assert not any(held[t]['actionable'] for t in tids), 'the walk would offer a task it already passed in this walk'
+    assert all(held[t]['actionable'] for t in tids), 'Next marked a task: nothing is passed (rule 6)'
 
 
 def test_no_clock_brings_a_passed_task_back_inside_the_walk(db):
     store, tids = db
     walk(store, 3)
     later = tasks(store, now=datetime.now() + timedelta(hours=5))
-    assert not any(later[t]['actionable'] for t in tids), 'the quiet hours brought a task back in the middle of the walk'
+    assert all(later[t]['actionable'] for t in tids), 'a task walked past is in its place, walkable'
     assert not any(later[t].get('back_at') for t in tids), 'a task walked past still promises a time it comes back'
 
 

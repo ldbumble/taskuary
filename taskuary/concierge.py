@@ -298,58 +298,54 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
 def _sid(store, tid: int) -> str: return str(store.get_setting(f'{SID_KEY}:{tid}') or '')
 
 
-def current_key(store, tid: int) -> str: return str(store.get_setting(f'{CURRENT_KEY}:{tid}') or '')
+def current_key(store, tid: int = None) -> str:
+    """The row on the table - railwalk's `on`, the one walk the desk and the phone share (Q5). `tid` (the dock) is no longer part of it."""
+    from . import railwalk
+    return railwalk.on(store)
 
 
 def set_current(store, tid: int, key: str | None, actor: str = 'assistant', closed: bool = False):
-    """The thing on the table, written down as it is put there (or taken away) - not inferred later. `closed`: its task
-    was finished before it went up - looked up, not walked to - so restore_current does not take that as it being over."""
-    if current_key(store, tid) != (key or ''): store.set_setting(f'{CURRENT_KEY}:{tid}', key or '', actor)
-    if str(store.get_setting(f'{CURRENT_CLOSED}:{tid}') or '') != ('1' if key and closed else ''):
-        store.set_setting(f'{CURRENT_CLOSED}:{tid}', '1' if key and closed else '', actor)
+    """Kept for its callers: the table is railwalk's to write. Putting nothing there is no move at all - the row on screen stays on
+    screen, drawn as it now is, and Next and Back measure from its place (2026-10-30, replacing PW-162's clearing). It writes the
+    table only - no line in the chat: whoever put the row there words it."""
+    if not key: return
+    from . import railwalk
+    if railwalk.on(store) != key: railwalk.open(store, key, actor=actor, record=False)
 
 
 def resume(store, actor: str = 'owner') -> dict:
-    """"Walk me through my tasks" and a hand-off's hello: the item ON THE TABLE when there still is one - an act on it
-    failed, its question is unanswered - and only then the next thing. Both used to surface afresh, and the walk skips a
-    row it has shown for a few hours: a Close out refused by GitHub was passed over for the next pull request, and the
-    one still waiting on the owner went quiet (2026-09-29). restore_current is the test of "still there"."""
+    """A hand-off's hello: the item ON THE TABLE when there is one, else the walk from the top (railwalk.start)."""
+    from . import railwalk
     held = restore_current(store, general.dock_task(store, actor)[0]['TaskId'])
-    return surface(store, held['key'], actor=actor) if held and held.get('key') else surface(store, actor=actor)
+    return railwalk.open(store, held['key'], actor=actor) if held and held.get('key') else railwalk.start(store, actor=actor)
 
 
-def restore_current(store, tid: int) -> dict | None:
-    """The persisted Current, validated against the pile as it stands (PW-162): the item as it is now when it
-    is still unread and still there; otherwise the key is cleared and nothing is chosen in its place."""
-    key = current_key(store, tid)
+def restore_current(store, tid: int = None) -> dict | None:
+    """The row on the table, as it is now - read or not, on the rail or not, closed or open. A row closed under the table stays on it,
+    drawn closed (2026-10-30: PW-162's clearing emptied the table under the owner); only a row nothing can find any more is None."""
+    key = current_key(store)
     if not key: return None
-    # the first rail after a restart is still being built: the item is shown from its own rows and judged once there is a
-    # rail - an item_for_key row is no verdict, and a done task's result would have been cleared off the table on it
+    # the first rail after a restart is still being built: the item is shown from its own rows
     if not key.startswith('fyis:') and getattr(store, 'rail_cold_building', lambda: False)():
         quick = funnel.item_for_key(store, key)
         if quick: return card_for(quick) | {'presentation_revision': quick.get('presentation_revision')}
-    try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else funnel.next_item(store, key, include_surfaced=True)
+    try: item = funnel.batch_item(store, key) if key.startswith('fyis:') else (funnel.next_item(store, key, include_surfaced=True)
+                                                                               or funnel.item_for_key(store, key))
     except Exception as e:
-        logger.warning(f'concierge: could not validate the current item {key} - {e}'); item = None
-    # ...and "still there" is not enough. A mail row on a closed task leaves the pile (funnel._feed_skip),
-    # but own work reaches it through the processing inventory, which keeps a finished task as a READ
-    # fyi row - so Current went on holding a task done twenty minutes ago and the assistant kept
-    # offering to hand it to an agent (TQ-0420). The test is OVER, never "read": an item the assistant
-    # puts in the chat is read, and clearing on that would empty the table as soon as it was set.
-    # ...except an agent's finished result, whose task is done by definition: the closed task IS what is being
-    # shown, and wiping it emptied the table and the rail the moment it went up (the owner, 2026-09-24)
-    # ...and a task that was ALREADY done when it went up - pulled from search to look at - is what is being shown, not
-    # work that finished under it: clearing it emptied the table and the rail with its card still open (the owner, 2026-10-15)
-    over = item and item.get('tid') and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')         and not store.get_setting(f'{CURRENT_CLOSED}:{tid}')
-    # a new line on its thread is being triaged: not on the table THIS moment, but still the one the owner is on - clearing
-    # the key emptied the table for good the instant a reply arrived (2026-09-29 audit); it is back when triage lands
-    if item and item.get('settling'): return None
-    if not item or (over and item.get('lane') != 'approve' and item.get('kind') != 'agentdone'):
-        set_current(store, tid, None)
-        return None
+        logger.warning(f'concierge: could not read the current item {key} - {e}'); item = None
+    # ...a mail row whose task closed elsewhere is no row any build draws: it stays on the table as its task, under the key it was put up by
+    if not item and (m := re.fullmatch(r'msg:(\d+)', key)) and (tid := (store.get_message(int(m.group(1))) or {}).get('TaskId')):
+        item = funnel.item_for_key(store, f'task:{tid}')
+        if item: item = item | {'key': key, 'aliases': [*(item.get('aliases') or ()), f'task:{tid}']}
+    # a new line on its thread is being triaged: not drawable THIS moment, still the row the owner is on - back when triage lands
+    if not item or item.get('settling'): return None
+    if item.get('tid') and (store.get_task(int(item['tid'])) or {}).get('Status') in ('done', 'dropped'): item = item | {'closed': True}
     card = card_for(item) | {'presentation_revision': item.get('presentation_revision')}
     if item.get('kind') == 'fyis': card['items'] = [card_for(i) for i in item.get('items') or []]   # the handful, entry by entry
     return card
+
+
+
 def _remember_sid(store, tid: int, llm):
     sid = getattr(llm, 'session_id', '') or ''
     if sid and sid != _sid(store, tid): store.set_setting(f'{SID_KEY}:{tid}', sid, 'assistant')
@@ -1267,7 +1263,6 @@ def _bulk(store, tid: int, item: dict | None, kind: str, p: dict, text: str, act
         return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
     table_keys = {i['key'] for i in _on_the_table(store, actor) if i.get('key')}
     out = bulk_mod.act(store, verb, rows, actor, learn)
-    _off_the_table(store, out['done'], actor)
     say_ = bulk_mod.receipt(verb, out, refused, learn) + gone_line
     record_related(store, tid, item, 'assistant', say_)
     off = bool(table_keys) and table_keys <= {i['key'] for i in out['done']}
@@ -2496,17 +2491,6 @@ def _clear_one(store, key: str, actor: str, note: str) -> bool:
         return False
 
 
-def _off_the_table(store, cleared: list, actor: str):
-    """What a sweep clears cannot stay in front of the owner. Settling ONE item drops Current with it
-    (the /api/funnel/settle road does), and the sweep did not - so "clear the reports" cleared seven
-    and left the report it was holding on the table (the owner, 2026-09-07: "did not clear current one
-    when i said clear the reports")."""
-    keys = {i['key'] for i in cleared}
-    if not keys: return
-    tid = general.dock_task(store, actor)[0]['TaskId']
-    if current_key(store, tid) in keys: set_current(store, tid, None, actor)
-
-
 def _set_words(sel: dict) -> str:
     """A set, said: "from Gail", "about the export" - what the receipt names so the owner reads which ones."""
     sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [], False)}
@@ -2543,7 +2527,6 @@ def defer_selected(store, sel: dict, until, actor: str = 'owner') -> dict:
             funnel.settle(store, i['key'], 'later', actor, hours=hours)
             done.append(i)
         except (ValueError, RuntimeError) as e: logger.warning(f"concierge: {i['key']} was not put away - {e}")
-    _off_the_table(store, done, actor)
     return {'done': len(done), 'stuck': len(hits) - len(done), 'when': remind.when(at), 'titles': [i['title'] for i in done][:8], 'links': [bulk_mod.link(i) for i in done]}
 
 
@@ -2558,7 +2541,6 @@ def close_selected(store, sel: dict, actor: str = 'owner') -> dict:
             if i.get('tid'): close_task(store, int(i['tid']), actor)
             if _clear_one(store, i['key'], actor, 'closed by the owner'): done.append(i)
         except (ValueError, RuntimeError) as e: logger.warning(f"concierge: {i['key']} was not closed - {e}")
-    _off_the_table(store, done, actor)
     return {'done': len(done), 'stuck': len(hits) - len(done), 'titles': [i['title'] for i in done][:8], 'links': [bulk_mod.link(i) for i in done],
             'refused': [[bulk_mod.link(i), w] for i, w in refused]}
 
@@ -2568,7 +2550,6 @@ def clear_selected(store, sel: dict, actor: str = 'owner', keys: list | None = N
     items = select_items(store, sel) if sel or not keys else [i for i in _pipe(store) if i['lane'] not in ('blocked', 'working')]
     if keys: items = [i for i in items if i['key'] in set(keys)]
     cleared = [i for i in items if _clear_one(store, i['key'], actor, 'cleared by the owner')]
-    _off_the_table(store, cleared, actor)
     return {'cleared': len(cleared), 'stuck': len(items) - len(cleared),
             'titles': [i['title'] for i in cleared][:8],
             'mid': next((i.get('mid') for i in cleared if i.get('mid')), None), 'remember': False,
@@ -3064,7 +3045,6 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                 record_related(store, tid, item, 'assistant', say_)
                 return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
             cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner')]
-            _off_the_table(store, cleared, actor)
             # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
             # is left; the line counts what went and says it is not gone
             n = len(cleared)
@@ -3663,43 +3643,9 @@ def card_for(item: dict) -> dict:
                                        'brief_today', 'thread', 'thread_n', 'thread_items')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
 
 
-def opened_reads(item: dict) -> bool:
-    """Whether putting `item` on the table reads it. A task does - it stays on the rail either way. A row read leaves the rail (a report,
-    a dashboard, a single fyi, an idea): only Next reads it, on the way out (move_on) - opening it, looking or Back never do."""
-    return lanes.level_of(item) in ('task', 'later')
-
-
-def move_on(store, key: str, actor: str = 'owner') -> dict:
-    """Put down the thing the owner is walking away from. It is READ, and that is all: Next settles
-    nothing. An open task stays under Tasks, passed for the rest of this walk; the next walk starts with it again.
-
-    Next used to END a draft waiting for a yes as `no_reply` and close its task (2026-09-07: "if you hit
-    next then no more reply needed"). The Passed band replaced that - "still yours, you pressed Next" -
-    and the two disagreed: a reply walked past was thrown away while the rail promised it back (the
-    owner, 2026-09-23: "i thought if you hit next it goes to passed section?"). Not sending one is
-    Close, said on purpose.
-
-    The TASK is left alone. Nothing is cancelled and no session is stopped."""
-    if not key: return {}
-    # The row being left is found in the build the rail already holds, while nothing has been written since it began
-    # (on Next the commit guard has just re-read the rail - recheck_selection -> funnel.pile, rebuilt if anything moved).
-    # A keyed build only to read back the same row's sig was 0.2-1 s of every Next on a big home (2026-10-20). Not
-    # there (older than the rail, a batch key) or written since - the lookup it always was.
-    held = funnel.rail_item(store, key)
-    if held is not None:
-        funnel.settle(store, key, 'surfaced', actor, note=held.get('sig'), read=True, put_down=True)
-        return {'key': key, 'read': True, 'reviews_ended': []}
-    try: item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
-    except Exception as e:
-        logger.debug(f'concierge: nothing to put down for {key} - {e}'); return {}
-    if not item: return {}
-    funnel.settle(store, key, 'surfaced', actor, note=item.get('sig'), read=True, put_down=True)
-    return {'key': key, 'read': True, 'reviews_ended': []}
-
-
 def _fyi_card(item: dict, batch: list, gists: dict) -> tuple:
-    """(the batch with each entry's gist, the line, the card) for an FYI batch - one road for the walk (surface) and for the
-    answer prepared ahead of it (prepare_next)."""
+    """(the batch with each entry's gist, the line, the card) for an FYI batch - the one road for every batch the walk puts up
+    (railwalk decides which rows; this words them)."""
     say = (f"{plural(len(batch), 'thing')} people told you, nothing to do: "
            + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
     batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
@@ -3715,38 +3661,6 @@ def _fyi_card(item: dict, batch: list, gists: dict) -> tuple:
             'members': [i['key'] for i in batch],
             'presentation_revision': item.get('presentation_revision')}
     return batch, say, card
-
-
-ANSWER_FIELDS = ('item', 'say', 'options', 'chips', 'left', 'exhausted', 'over')
-
-
-def answer_hash(out: dict) -> str:
-    """What a Next answer puts on the screen, hashed: the prepared answer and the committed one are compared by it."""
-    import hashlib
-    shown = {k: out[k] for k in ANSWER_FIELDS if k in out}
-    return hashlib.sha256(json.dumps(shown, ensure_ascii=False, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
-
-
-def prepare_next(store, selection, token: str) -> dict | None:
-    """PREPARED NEXT (the owner, 2026-10-20): the answer a press of Next would give for this captured selection, worked out
-    ahead of the press with no write, so the page can draw it the moment Next is pressed. The press still commits and
-    answers as it always did; the page compares the two by answer_hash and the committed answer replaces the card when
-    they differ. None where the answer cannot be known ahead: nothing selected, a model introducing the item (INTRO_AI),
-    an agent holding the row (its card is the live pane), a batch assembled from the cached pile."""
-    item, p = selection.selected, selection.pile
-    if item is None or INTRO_AI: return None
-    if item['lane'] == 'working' or (item.get('working') and item['kind'] not in ('agent', 'review', 'action')): return None
-    if funnel.batchable(item):
-        if item.get('kind') != 'fyis': return None
-        batch, say, card = _fyi_card(item, item.get('items'), {})
-        if routes(): say = brought_up(card)
-        card['chips'] = chips_for(store, card)
-        out = {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
-    else:
-        chips = chips_for(store, item, '')
-        say = brought_up(item) if routes() else fallback(item, True, store=store)
-        out = {'item': item | {'chips': chips}, 'say': say, 'options': [], 'chips': chips, 'left': len(p['items']) - 1}
-    return {'selection_revision': token, 'answer': out, 'answer_hash': answer_hash(out)}     # the token the page echoes (navigation.fields)
 
 
 KIND_WORDS = {'report': 'a report', 'idea': 'an Advisor idea', 'meeting': 'a meeting', 'fyi': 'an FYI', 'agentdone': "an agent's result"}
@@ -3776,155 +3690,30 @@ def brought_up(item: dict, picked: bool = False) -> str:
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
-            include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None,
-            bound_dock: dict = None, leaving: str = None) -> dict:
-    """The next thing out of the pipe (or the one named; or the next piece of MAIL), said in one
-    breath and marked as shown. Nothing left: says so.
+            from_key: str = None, press: str = None, read=()) -> dict:
+    """The walk's door for the chat and the phone: the row named (railwalk.open), else the row directly below the one on screen
+    (railwalk.next). WHICH row, and what leaving it does, is railwalk's alone (the owner, 2026-10-30: the walk has one owner); this
+    keeps the old signature for the callers that word a turn around it. `from_key`: the row the caller had on screen."""
+    from . import railwalk
+    if key: return railwalk.open(store, key, actor=actor, press=press, llm=llm, at=from_key)
+    return railwalk.next(store, from_key, actor=actor, press=press, read=read, llm=llm)
 
-    `leaving` is the item the owner is walking away from - Next, and only Next. It is put down on the
-    way out (move_on): read, and nothing more - a reply it was waiting on still waits, in Passed."""
-    if selection is not None and key is not None:
-        raise ValueError('a captured automatic selection cannot name a different item')
-    # ...and the card it left wears the press, as every press's does (_stamp_next): "Read" or "Next", surviving a reload
-    # ...and a card the page drew AHEAD of any answer - the next task a close put up at its press (drawNextEarly), Next pressed on it
-    # before the close's own walk-on was asked for - has no line here to wear it, so it is written now, wearing it: the card was shown
-    # and walked past, and it was gone on reload (the owner's walk, 2026-10-25: the task after a Mark done kept no Next)
-    put_down = (lambda: (move_on(store, leaving, actor), _stamp_next(store, tid, leaving, row=_row_of(p, leaving)))) if leaving else (lambda: None)
-    # ...and the row being left is not the next one: the pile is read BEFORE Next puts it down, and a task merely opened stays
-    # walkable (processing_unread: actionable), so only this keeps Next from offering it straight back (the page sends it too)
-    if leaving and selection is None: exclude = exclude or leaving
-    if bound_dock is not None and selection is None:
-        raise ValueError('a bound dock is only valid with a captured selection')
-    task = bound_dock if bound_dock is not None else general.dock_task(store, actor)[0]
-    tid = task['TaskId']
-    p = selection.pile if selection is not None else funnel.pile(store, force=True)
-    item = selection.selected if selection is not None else (
-        funnel.next_item(store, key, only, include_surfaced, exclude)
-        or (funnel.item_for_key(store, key) if key else None)
-    )
-    guarded = (lambda: commit_guard()) if commit_guard is not None else (lambda: nullcontext())
-    if not item:
-        opens = []
-        left = [i for i in p['items'] if not i.get('settling')]
-        # everything the rail holds For later: shown and put down for a while, AND put away to a day (Remind me) - the line
-        # counted only the first, and said "1 thing" over a rail of two (the owner, 2026-10-01: "why does it say one thing
-        # when there are 2?")
-        # ...and "still wait on you" counts what IS on you - the census's rule (lanes.census): a row waiting on them was counted, and the
-        # line said 13 under an opener's "12 on you" (the 2026-10-22 UX walk; the design, phase A)
-        waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at')) and (i.get('deferred') or lanes.on_you(i))]
-        # ...and what the walk never reached: Next walks DOWN the line (2026-10-22), so a row above where the owner started - a row
-        # clicked further down, say - is still walkable when the bottom is reached. It is named here, and the next walk starts with it.
-        skipped = [i for i in left if i.get('actionable', True) and not i.get('put_down') and not i.get('surfaced') and not i.get('deferred')
-                   and not funnel._not_yet(i) and not any(k and k in (i['key'], *i.get('aliases', ())) for k in (leaving, exclude))]
-        # ...A TASK REMOVED is said as removed (trust audit S4, 2026-10-28): its link said "I can't find that one", as if it never was
-        gone = bool(key) and removed_task(store, key)
-        if gone: say = "That task was removed - it's in Recently deleted."
-        elif key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
-        elif not only and skipped:
-            n = len(skipped)
-            # BUTTONS DO THE TALKING (the owner, 2026-10-23: "yes remove the sentence, just the button"): on the desk the row by the prompt
-            # says it - Walk me through my tasks and an Open for each - and no paragraph names them first. The phone has no row: one short status.
-            say = f"That's the bottom of the list - {plural(n, 'thing')} above where you started still wait{'s' if n == 1 else ''}." if DELIVERY.get() == PHONE else ''
-            opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
-                         f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
-                     for i in skipped[:3 if DELIVERY.get() != PHONE else 10]]
-        elif not only and waiting:
-            # Shown in this walk and still on the rail: a task waiting to start, one an agent left, or a
-            # draft/question, put down less than RETURN_MINUTES ago (180). Next will not repeat
-            # them yet, so the line must not promise it does - it did ("Say next and I'll take them"), and
-            # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
-            # ...in ONE order for the line and its buttons - what waits on the owner first, then the soonest back: the line named
-            # TQ-0001 and TQ-0002 over buttons that opened TQ-0003..5 (the UX review, 2026-10-07)
-            # the pile was read before Next put `leaving` down: that row is passed now
-            if leaving: waiting = [i | {'put_down': True} if leaving in (i['key'], *i.get('aliases', ())) else i for i in waiting]
-            # ...in the RAIL'S order, which already leads with what is on the owner: a sort of its own here named TQ-0001, TQ-0003,
-            # TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is not on_you() - and the owner could not match them
-            # (the walk click-through, 2026-10-17)
-            n = len(waiting)
-            # "Nothing new right now" opened a line about nine things still waiting: say the walk is through, then where they are
-            # ...and only what Remind me put there is "under For later": one Next walked past, or you looked at and left, is still
-            # under Tasks (the owner, 2026-10-21: Next moves on, the task stays)
-            aside = all(i.get('deferred') for i in waiting)
-            # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
-            # ...and what this walk passed is where the next one starts (the owner, 2026-10-21) - no hour it comes back in
-            # ...and on the desk no sentence at all (the owner, 2026-10-23): the Opens below and the Walk button are the end of the walk
-            say = ((f"That's everything for now - {plural(n, 'thing')} "
-                    + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}." if aside else f"you already saw still wait{'s' if n == 1 else ''} on you."))
-                   if DELIVERY.get() == PHONE else '')
-            # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
-            # What waits on the owner first - a close-out, an agent's question - then the rest.
-            # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")
-            opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
-                         f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
-                     for i in waiting[:3 if DELIVERY.get() != PHONE else 10]]     # the phone's poll holds an Open for each named (F26)
-        elif only and left:
-            # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over
-            say = f"That's all of those. {plural(len(left), 'other thing')} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
-        elif selection is not None and any(selection.pending.values()):
-            pending = selection.pending
-            parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
-            parts += ([f"{pending['settling']} still being read"] if pending['settling'] else [])
-            parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
-            say = PENDING + ', '.join(parts) + '.'
-        else: say = all_done(store)
-        over, desk = not key and not (only and left), DELIVERY.get() != PHONE
-        # ...and THE WAY TO WALK AGAIN, on the row by the prompt box, before the Opens: the day card's own button, not a card and not a
-        # sentence (the owner, 2026-10-22: "just have ... button on bottom on top of the prompt box"). The phone has its own Walk.
-        # ...whenever an open task is still under Tasks, whoever it waits on (2026-10-21: a finished walk shows them all again): one waiting
-        # on someone else, or an agent's, is no Open of the owner's, so the row had no Walk - only "Nothing's waiting." over a task on the
-        # rail and a bare Next (the owner, 2026-10-25: "I hit next when a task is the last thing and the walk through again did not show up")
-        again = over and desk and any(i.get('tid') and not i.get('deferred') for i in left)
-        if over and desk and (opens or again):
-            if not opens and say.startswith(ALL_DONE): say = ''            # buttons do the talking (2026-10-23), and it is not true
-            # ...nor "Nothing else needs you right now; 1 in progress." when all that is left is an agent's work: the Walk button says it (the
-            # owner, 2026-10-25, on the walk-again fix's question). The phone has no button there and keeps its words
-            if not opens and say.startswith(PENDING): say = ''
-            opens = [buttons.chip('walk'), *opens]
-        with guarded():
-            put_down()
-            # the walk ran out, or the link named a removed task - its card is no place to stand: nothing is on the table
-            if not key or gone: set_current(store, tid, None, actor)
-            # ...and the next walk is a new one: every open task this walk passed comes up again, from the top (2026-10-21)
-            if over: funnel.new_walk(store)
-            record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': opens} if opens else None)
-        # `over`: the walk itself ran out (not a name that was not found, not one filter done) - a phone offers the hand-back
-        return {'item': None, 'say': say, 'options': [], 'chips': opens or walk_chips(len(left)), 'left': len(p['items']),
-                'exhausted': only if (only and left) else None, 'over': over, **({'gone': True} if gone else {})}
-    # A TASK AN AGENT IS WORKING is walked like any other task, in the rail's order, and goes on the table with its agent's pane
-    # (the owner, 2026-10-21): Next used to say "is with the agent right now" and skip it, so a task jumped out of the walk - and
-    # out of On you, to Agents working - every time its agent started, and back when it stopped.
-    # FYIs have no action to take, so the normal walk brings four together. A row explicitly
-    # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
-    if not key and funnel.batchable(item):
-        # a batch already assembled (funnel_selection._batch, which next_item returns on a processing store)
-        # IS the batch: passed to fyi_batch as `first` it became its own member, "someone - 4 fyi" (2026-09-18)
-        batch = item.get('items') if item.get('kind') == 'fyis' else funnel.fyi_batch(store, item)
-        # NO MODEL CALL HERE. An fyi batch is the one card with nothing to decide - the entries are
-        # already written, and a pass that only restates them in the assistant's voice bought a
-        # paraphrase at the cost of the wait before the next four appear (the owner, 2026-09-16:
-        # "all read, next on fyi still takes a while ... no need to run through ai model, just
-        # present next ones"). The sentence below was already the fallback for a failed call; it is
-        # the whole of it now, and each entry keeps its own gist (fyiRow.gistFor).
-        gists, remember_llm = {}, False
-        batch, say, card = _fyi_card(item, batch, gists)
+
+def present_turn(store, item: dict, actor: str = 'owner', picked: bool = False, record: bool = True, llm=None, left: int = 0,
+                 trace=None, cancel=None) -> dict:
+    """The words, chips and card for a row railwalk put on screen - and, with `record`, its line in the chat. ONE function for the
+    committed answer and the prepared one (railwalk.peek), so the page draws at the press what the press will answer (rule 7).
+    Nothing here reads, marks or moves anything: the walk's effects are railwalk's."""
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    # FYIs have no action to take: a handful is worded from its entries - NO MODEL CALL (the owner, 2026-09-16: "all read, next on fyi
+    # still takes a while ... no need to run through ai model, just present next ones")
+    if item.get('kind') == 'fyis':
+        batch, say, card = _fyi_card(item, item.get('items') or [], {})
         if routes(): say = brought_up(card)             # the card lists the four; the line only names them
-        with guarded():
-            put_down()
-            if remember_llm:
-                try: _remember_sid(store, tid, llm)
-                except Exception as e: logger.warning(f'concierge: the fyi conversation did not save - {e}')
-            # shown IS read: the state is `surfaced`, and it carries the entry's own summary
-            # ...SHOWN, NOT READ (the owner, 2026-10-30: "i hit back on fyi it also marked them read ... if you click back it's not read
-            # only next"): a batch put up - by Next, Back or a click - is read on the way out, by Next or All read (move_on's batch road),
-            # as a report is (opened_reads); read here, Back to it took the handful off the rail
-            for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=False)
-            card['chips'] = chips_for(store, card)
-            set_current(store, tid, card['key'], actor)
-            funnel.mark_place(store, {'kind': 'fyis', 'key': card['key'], 'items': batch})   # where the walk is: Next goes on below it
-            record_related(store, tid, card, 'assistant', say, card)
-        return {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
-
-    llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if (llm is not None or INTRO_AI) else None   # the facts speak unless asked otherwise
+        card['chips'] = chips_for(store, card)
+        if record: record_related(store, tid, card, 'assistant', say, card)
+        return {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': left}
+    llm = _brain_for(store, tid, llm, trace, cancel, fast=True) if record and (llm is not None or INTRO_AI) else None
     say, options, wanted, remember_llm = '', [], '', False
     if llm:
         try:
@@ -3934,34 +3723,44 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                       if item['kind'] == 'report' and not item.get('bad') else '')
                    + ('The card below holds the draft that waits for their yes. ' if item['kind'] in ('review', 'action') else '')
                    + ('The agent is parked on the question in the card. ' if item['kind'] == 'agent' else ''))
-            say, options, wanted = _ask(store, llm, tid, item, ask, p['items'])
+            say, options, wanted = _ask(store, llm, tid, item, ask, funnel.pile(store).get('items') or [])
             remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
-    if not say: say = brought_up(item, picked=bool(key)) if routes() else fallback(item, True, store=store)
+    if not say: say = brought_up(item, picked=picked) if routes() else fallback(item, True, store=store)
     chips = chips_for(store, item, wanted)
-    with guarded():
-        put_down()
+    if record:
         if remember_llm:
             try: _remember_sid(store, tid, llm)
             except Exception as e: logger.warning(f'concierge: the model conversation did not save - {e}')
-        # in the chat = read, without exception (the owner, 2026-09-07: "hitting next or done should mark it
-        # read and then move on"). A draft waiting on a yes used to be held back unread; walking past one now
-        # marks it read and leaves it waiting in Passed - move_on(), which the Next road calls on the way out,
-        # settles nothing.
-        # ...but a row with no task behind it - a report, a dashboard, a single fyi - is only SHOWN here: read, it leaves the rail, and the
-        # owner opened a report, pressed Back, and it was gone (2026-10-29: Next marks it read, Back never does, nor opening or looking).
-        # Next reads it on the way out (move_on); a task stays on the rail read or not, so opening one still clears what it showed.
-        funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=opened_reads(item))
-        closed = bool(item.get('tid')) and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
-        set_current(store, tid, item['key'], actor, closed=closed)           # on the table, written down (PW-162)
-        # ...and where the walk is: Next goes on below it - from where the RAIL draws it. A closed task opened by name is no row of the
-        # pile, and the page draws it under Tasks, where it was (funnelPile.pulledRow); keyed by its lane, fyi, the place sat past every
-        # task and report still below it and Next jumped to the fyi batch (the 2026-10-25 sweep)
-        pulled = closed and not any(i.get('key') == item.get('key') for i in (p.get('items') or []))
-        funnel.mark_place(store, {**item, 'order_band': 2, 'deferred': False} if pulled else item)
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
                        card_for(item) | {'chips': chips})
-    return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}
+    return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': left}
+
+
+def end_turn(store, line: list, actor: str = 'owner', write: bool = True) -> dict:
+    """THE BOTTOM OF THE RAIL (5): the desk's end row as it was - the Walk again chip by the prompt and up to three Opens of rows still
+    under Tasks - and no sentence (the owner, 2026-10-23: "yes remove the sentence, just the button"). The phone has no row: one short
+    status and its Walk again. Nothing on the rail at all: the day is done."""
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    desk = DELIVERY.get() != PHONE
+    tasks = [i for i in line if lanes.level_of(i) == 'task']
+    opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
+                 f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
+             for i in tasks[:3 if desk else 10]]
+    if line or tasks: say, chips = ('' if desk else "That's the bottom of the list."), [buttons.chip('walk'), *opens]
+    else: say, chips = all_done(store), []
+    if write: record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': chips} if chips else None)
+    return {'item': None, 'say': say, 'options': [], 'chips': chips, 'left': len(line), 'exhausted': None, 'over': True}
+
+
+def missing_turn(store, key: str, actor: str = 'owner') -> dict:
+    """A name or a link that names nothing on the rail or off it - a REMOVED task said as removed (trust audit S4, 2026-10-28)."""
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    gone = removed_task(store, key)
+    say = ("That task was removed - it's in Recently deleted." if gone
+           else "I can't find that one - it may be older than what I keep, or it went out under another subject.")
+    record(store, tid, 'assistant', say)
+    return {'item': None, 'say': say, 'options': [], 'chips': [], 'left': 0, 'over': False, **({'gone': True} if gone else {})}
 
 
 # THE CARD'S OWN QUESTION (the owner, 2026-09-25): one button, and the card asks the one thing that differs. Not
@@ -5549,10 +5348,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and verb == 'next' and item:
         # ...in the model's own words when it wrote any: a bare "Next." over a request that asked for something else read as the request
         # ignored (2026-10-20, "Clear all the FYI, please."). An "Ok." says less than Next does, and is not kept
-        move_on(store, item['key'], actor)
-        # ...and the card it left wears Next's badge from the server, as the button's does (_stamp_next): a typed "next" drew it on the page
-        # and a reload took it off (the 2026-10-25 sweep; 0fd0a151 closed the same gap for All read, next)
-        _stamp_next(store, tid, item['key'])
+        # ...and the walk's Next itself is the page's to press with the row it had on screen (railwalk.next): its read and its badge
+        # are made there, once - written here as well, a report was read before the press that moved off it (2026-10-30)
         # ...and on the desk the receipt names what was put down: a bare "Next." is a word, not what it did (the owner, 2026-10-20: "it
         # should show what it chose to do")
         said = (reply if len(reply.split()) > 2 else

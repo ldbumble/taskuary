@@ -1976,6 +1976,9 @@ def showing(revisions):
     finally: _SHOWING.reset(tok)
 
 
+SETTLE_TRIES = 3          # a settle the census lag refused, reconciled and tried again - mail can land between each
+
+
 def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False,
            shown=None, put_down: bool = False) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
@@ -2014,20 +2017,22 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         tomorrow = (datetime.now() + timedelta(days=1)).replace(hour=7, minute=0, second=0)
         until = tomorrow.strftime('%Y-%m-%d %H:%M:%S')
     kw = {'read': read, 'shown': shown} if expected_context is None else {'read': read, 'shown': shown, 'expected_context': expected_context}
-    try:
-        store.set_funnel_state(key, verb, by, until, note, **kw)
-    except ValueError as e:
-        # Mail landing mid-settle moves the membership census, and the owner was handed that sentence
-        # verbatim while nothing moved - 27 items stayed in the pipe (the owner, 2026-09-07: "what does
-        # this mean as well when I got it to clear the rest of what was left?"). It is the worker's lag,
-        # not a refusal: do the very thing the message asks for, once, and settle again. A row that only just
-        # landed is the same lag - its item is not built yet ("processing target is unavailable"): a report the
-        # AI judge turned down stayed on the rail and its run was logged as failed (2026-10-01).
-        if 'reconciled before settlement' not in str(e) and 'processing target is unavailable' not in str(e): raise
-        from . import processing_all
-        processing_all.wait_settled(store)
-        store.reconcile_processing_membership()
-        store.set_funnel_state(key, verb, by, until, note, **kw)
+    for tries in range(SETTLE_TRIES):
+        try:
+            store.set_funnel_state(key, verb, by, until, note, **kw); break
+        except ValueError as e:
+            # Mail landing mid-settle moves the membership census, and the owner was handed that sentence
+            # verbatim while nothing moved - 27 items stayed in the pipe (the owner, 2026-09-07: "what does
+            # this mean as well when I got it to clear the rest of what was left?"). It is the worker's lag,
+            # not a refusal: do the very thing the message asks for, and settle again. A row that only just
+            # landed is the same lag - its item is not built yet ("processing target is unavailable"): a report the
+            # AI judge turned down stayed on the rail and its run was logged as failed (2026-10-01).
+            # ...and AGAIN while it keeps landing: on a busy mailbox more mail arrived between the reconcile and the one retry, and the
+            # morning digest - written and saved four minutes earlier - was logged as failed for its own row's settle (TQ-1251)
+            if ('reconciled before settlement' not in str(e) and 'processing target is unavailable' not in str(e)) or tries == SETTLE_TRIES - 1: raise
+            from . import processing_all
+            processing_all.wait_settled(store)
+            store.reconcile_processing_membership()
     if verb == 'done': _idea_done(store, key, by)
     # ...and an FYI row that speaks for its whole email thread settles the mails folded under it (processing_unread.fold_fyi_threads)
     for k in thread_of(store, key):

@@ -1912,7 +1912,10 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # "morning digest is usually stale when you get to it since it comes after the tasks"): its row is read as it lands
     if (not d['timeline'] or is_digest) and not (store.get_message(mid) or {}).get('TaskId'):
         from . import funnel
-        funnel.settle(store, f'report:{mid}', 'done', 'report')
+        # ...and a row that will not settle is not a failed run: the report is written and saved by now (TQ-1251: a digest four
+        # minutes in the making was logged as failed because mail kept landing while its own row settled)
+        try: funnel.settle(store, f'report:{mid}', 'done', 'report')
+        except Exception as e: logger.warning(f'reports: {title} ran, but its row was not put down - {e}')
     expire_previous_runs(store, src, cfg, mid)
     store.audit('message', mid, 'report', 'report', 'agent', title)
     from . import advisor                            # the Advisor on the event (advisor.py): a report is on the rail

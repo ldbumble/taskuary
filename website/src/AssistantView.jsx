@@ -79,7 +79,7 @@ import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
-import { actReceipt, mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
+import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine, pressChip, pressLine, pressedNoteOf, pressedOf } from "./assistantTurns.js";
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
@@ -3278,6 +3278,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // whatever is on the table and at any width (a bottom sheet on a phone); the canvas keeps the cards. The same Line, mounted while it is
   // shut (a last line's chips stay on the row); only the place changes
   const winOn = !old && !walk && !firstRun;
+  // a line keyed by its item (lineKeys): an item opened again keeps the view it has on the table
+  const keyOf = useMemo(() => lineKeys(shown), [shown]);
   const winLines = useMemo(() => (winOn ? shown.map((m, i) => [m, i]).filter(([m]) => talkLine(m)).slice(-60) : []), [winOn, shown]);
   const inWin = useMemo(() => new Set(winLines.map(([m]) => m.id)), [winLines]);
   // ...a typed ask's dots, where its answer will land - never a walk move's (Next, a put-down, a row picked: `flight`), whose answer is the next
@@ -3559,7 +3561,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </div>}
           {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
             : state && !shown.some((m) => !inWin.has(m.id)) && (!busy || popOpen) && !starting && welcome()}
-          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
+          {!firstRun && shown.map((m, i) => inWin.has(m.id) ? null : <Line key={keyOf.get(m.id)} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (

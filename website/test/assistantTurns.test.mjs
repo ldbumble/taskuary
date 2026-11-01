@@ -188,3 +188,19 @@ test("an act-only turn gets one receipt read off the act", () => {
   assert.equal(actReceipt({}).status, "warn");
   assert.ok(actReceipt({}).text, "even nothing back is said");
 });
+
+// AN ITEM OPENED AGAIN KEEPS ITS VIEW (agent-presses, 2026-11-01): a #task= link's pull landed after the task had come up on its own line,
+// placeLine moved the line to the end under the answer's id, and keyed by id the task view was torn down and built again - the Send to
+// agent pressed in between was lost. On screen a line is keyed by its item, so the moved line is the same line
+test("a line is keyed by its item, so placeLine moving it under a new id keeps it mounted", async () => {
+  const { lineKeys, placeLine } = await import("../src/assistantTurns.js");
+  const card = (key) => ({ key, kind: "todo", title: "Fix the vendor export" });
+  const before = [{ id: "u1", role: "user", text: "hi" }, { id: "2", role: "assistant", text: "", card: card("processing:a") }];
+  const after = placeLine(before, { id: "a9", role: "assistant", text: "", card: card("processing:a") });
+  assert.equal(lineKeys(before).get("2"), "item:processing:a");
+  assert.equal(lineKeys(after).get("a9"), "item:processing:a", "the same key as the line it replaced");
+  assert.equal(lineKeys(after).get("u1"), "u1", "a line with no item keeps its id");
+  // ...and two copies of one item (a line not yet folded in) never share a key: the newest wears the item
+  const two = [{ id: "a1", role: "assistant", text: "", card: card("task:7") }, { id: "a2", role: "assistant", text: "", card: card("task:7") }];
+  assert.deepEqual([...lineKeys(two).values()], ["item:task:7", "a1"]);
+});

@@ -153,6 +153,10 @@ async function connect() {
     // Baileys upgrade cannot silently change its defaults and download chat history.
     syncFullHistory: false,
     shouldSyncHistoryMessage: () => false,
+    // NO INIT QUERIES (TQ-1251). On every connect Baileys asks for WhatsApp's feature props, the blocklist and the privacy settings - "parity
+    // with WA Web" - and the props query timed out (408) on every connection on every machine, a minute after it opened. Nothing here reads any
+    // of the three; the bridge needs messages, names and the pairing.
+    fireInitQueries: false,
     // Ignored JIDs are acknowledged before decryption. Taskuary supplies the active source list.
     shouldIgnoreJid: chatGate.shouldIgnore
   });

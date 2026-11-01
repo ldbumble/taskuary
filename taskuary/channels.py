@@ -1501,6 +1501,10 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
     rv = proposals.closeout_pending(store, tid)
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, actor, 'the item ended upstream')
+    # ...but NOT UNDER WORK STILL LIVE ON IT (the owner, 2026-11-01: "If anything still working never close the task automatically"): an
+    # agent at its prompt, a quick call, a routine - the task stays open, and a later poll meets this ending again once nothing is
+    from . import workerstate as ws
+    if ws.live_work(store, tid): return False
     # ...and a merged or closed item is FINISHED, a thank-you drafted beside it included: it closes, and closing retires
     # the unsent draft (the owner, 2026-09-28: "if they were merged in, they should just close")
     # A SESSION ALREADY SAVED IS NOT WRAPPED AGAIN: its write-up is on the task, and a second one read the same transcript
@@ -1547,7 +1551,7 @@ def heal_upstream_ended(store) -> list:
         if t.get('Status') in ('done', 'dropped'): continue
         said = (ended_line(store, t['TaskId']) or {}).get('text')
         if not said: continue
-        close_upstream_ended(store, t['TaskId'], said, 'owner' if said.startswith('You ') else 'router')
+        if close_upstream_ended(store, t['TaskId'], said, 'owner' if said.startswith('You ') else 'router') is False: continue
         closed.append(t['TaskId'])
     if closed: logger.info(f"github: closed {len(closed)} task(s) whose item had already ended: {closed}")
     return closed

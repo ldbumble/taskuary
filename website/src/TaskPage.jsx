@@ -1253,11 +1253,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // goes through the server's one gate (concierge.close_after_send): kept open, said on the task, while anything on it still waits on
   // you - a held agent step, a proposal, an email it owes, a session still open (a held `git push` was closed under, 2026-10-29).
   // Anything else (an Approve, one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
+  // ...and NOTHING STILL WORKING IS PUT DOWN (the owner, 2026-11-01: "if agent screen is still open and you hit send message it should
+  // not close the tasks"): with work live the press puts nothing down, and a close the server kept open picks the row back up - put
+  // down at the press, it stayed off the rail with its agent still drawn on the canvas
   const sent = async ({ closes = false } = {}) => {
     // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
     if (closes && walkLeave) {
-      onLeave?.();
-      try { await walkLeave("sent"); } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
+      if (!liveWork) onLeave?.();
+      try { const d = await walkLeave("sent"); if (d?.kept) onStay?.(); } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
       loadDetail(selected); loadTasks(); onChanged?.(); return;
     }
     if (closes) {
@@ -1290,6 +1293,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
+  // ...and what a Send leaves open: an agent on it, working or waiting on you, keeps the task open (concierge.close_after_send)
+  const liveWork = liveSession || liveRun ? "the agent is working" : "";
   // No "are you sure" box on a live session (the owner, 2026-10-19: "this should be a hover over the buttons"): the press
   // is the decision, and what it does to the agent is said on the button's hover (markDoneHint).
   const askFinish = () => (liveSession ? stopAndFinish() : finish("done"));
@@ -3329,7 +3334,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
-                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
+                        <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
                           onEmailInstead={() => setEmailOpen(true)} why={threeUp ? warn?.line || "" : ""}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (

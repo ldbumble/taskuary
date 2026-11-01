@@ -155,6 +155,10 @@ class OneRoadTests(Harness):
 
 
 class CardTests(unittest.TestCase):
+    # a run whose start never runs (_spawn stubbed) stays "starting" - in this test's own set, not the process's: a leaked tid read as a
+    # routine still running on the next test's task 1 (workerstate.live_work)
+    def setUp(self): p = mock.patch.object(workflows, '_STARTING', set()); p.start(); self.addCleanup(p.stop)
+
     def test_the_card_reads_the_workflow_and_its_trigger_off_the_task(self):
         s = store(); sid = workflow(s)
         with mock.patch.object(workflows, '_spawn', lambda fn: None):

@@ -4864,7 +4864,7 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     ses = start_session(store, task_id, body.agent, body.model)
     return {'released': True, 'session': ses}
 
-class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'; no_reply: bool = False
+class AgentDoneBody(BaseModel): task_id: int; summary: str = ''; agent: str = 'agent'; no_reply: bool = False; sid: str = ''
 
 def _own_task_only(request: Request, tid: int):
     """One agent token is shared by every session, so the allow list alone let any of them draft or
@@ -4885,7 +4885,7 @@ def agent_done(body: AgentDoneBody, request: Request):
     from . import selfclose
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return selfclose.declare(store, body.task_id, body.summary, body.agent, no_reply=body.no_reply)
+    return selfclose.declare(store, body.task_id, body.summary, body.agent, no_reply=body.no_reply, sid=body.sid or None)
 
 def _owner_history(request: Request, tid: int):
     """A session reads the owner's history on its OWN task, and never on a stranger's: the middleware refuses a stranger's token

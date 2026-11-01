@@ -441,7 +441,7 @@ def main():
             print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to finish')
             return
         got = _post('/api/agent/done', {'task_id': int(tid), 'summary': args.done, 'no_reply': bool(args.no_reply),
-                                        'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger, timeout=120)
+                                        'agent': os.environ.get('TASKUARY_AGENT') or 'agent', 'sid': os.environ.get('TASKUARY_SID') or ''}, stranger, timeout=120)
         if not got: return
         r, out = got
         if out.get('closed'):

@@ -98,9 +98,10 @@ export const CalendarLine = ({ meta }) => (
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `closeOnSend`: the task page's Close out (the owner, 2026-10-29: "wait until the send actually succeeds, then close the task"): a reply
 // that went is the close too - onSent({ closes }) says so, only after the server's receipt; a send that failed leaves it open, its error here.
+// `liveWork`: what is still working on the task ("the agent is working") - the server keeps it open after the send, and the line says so.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -151,7 +152,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // (with the draft copied) where it cannot - and Redraft beside them. ONE NAME for the send, wherever (buttons.json), and it only
   // sends: SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18) - the task's own Mark done is the close
   const closesIt = closeOnSend && onTask && !!onSent;
-  const sendWord = btn("approve"), stays = closesIt ? "then the task closes" : `the task stays open until you ${btn("close")}`;
+  // ...but never while work on it is live (the owner, 2026-11-01): the reply goes and the task stays open - the server keeps it so too
+  const sendWord = btn("approve"), stays = closesIt && liveWork ? `the task stays open while ${liveWork}` : closesIt ? "then the task closes" : `the task stays open until you ${btn("close")}`;
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt

@@ -35,7 +35,7 @@ def install_processing_changes(app, store):
         '/api/fixture/browser/last-frame',
         '/api/fixture/browser/view',
         '/api/fixture/processing/arrive-during-next',
-        '/api/fixture/task/closed-elsewhere',
+        '/api/fixture/task/closed-elsewhere', '/api/fixture/task/live-agent',
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
         '/api/fixture/intake/arrive',
@@ -621,6 +621,21 @@ def install_processing_changes(app, store):
         if not concierge.close_task(store, body['task_id'], 'owner'): raise HTTPException(409, 'that task was not open')
         store.reconcile_processing_membership(); funnel.invalidate()
         return {'closed': body['task_id']}
+
+    @app.post('/api/fixture/task/live-agent')
+    def live_agent(body: dict):
+        """An agent live on the task, at its prompt and waiting on the owner (send-live-agent-stays): a recorded pane in the sessions, its
+        run's own ask recorded, as a CLI's Stop hook leaves it - the shape a Send closed under (the owner, 2026-11-01)."""
+        if set(body) != {'task_id'} or type(body['task_id']) is not int: raise HTTPException(422, 'exact task_id is required')
+        from taskuary import funnel, terminal, workerstate as ws
+        from taskuary import demo as _d
+        tid = body['task_id']
+        if not store.get_task(tid): raise HTTPException(404, 'no such task')
+        pane = _d.Replay(store, tid, 'Claude Code', lines=[('Checked the invoice against the purchase order: the totals match.', 0)])
+        terminal.SESSIONS[pane.sid] = pane
+        ws.record(store, tid, str(pane.sid), 'input_needed', text='Should I also file the receipt with the purchase order?', source='hook')
+        funnel.invalidate()
+        return {'taskId': tid, 'sid': pane.sid}
 
     @app.post('/api/fixture/processing/ordering')
     def ordering_arrivals(body: dict):

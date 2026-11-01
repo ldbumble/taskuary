@@ -1435,7 +1435,7 @@ class GeneralSession:
         the conversation stays on the task as its record, and the reply to whoever asked is
         drafted for the owner to approve."""
         from . import selfclose
-        try: out = selfclose.declare(self.store, self.task_id, summary, 'assistant')
+        try: out = selfclose.declare(self.store, self.task_id, summary, 'assistant', sid=self.sid)
         except Exception as e:
             logger.warning(f'assistant self-close failed on task {self.task_id}: {e}'); return
         # A REFUSED CLOSE IS SAID ON THE TASK, as selfclose.blocked promises ("a self-close that silently declines is

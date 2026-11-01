@@ -3562,7 +3562,7 @@ def waiting_on_owner(store, tid: int) -> list:
     reply or email for a Send, an agent session still open, a run or workflow still going, an agent queued to start. [] when nothing does.
     A SEND THAT CLOSES (close_after_send) asks this first: a Close out Send closed a task whose agent's `git push` was held for the
     owner's Approve - never approved, never pushed, and the task read done (2026-10-29)."""
-    from . import buttons, proposals, workerstate as ws, workflows
+    from . import buttons, proposals, workerstate as ws
     A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
         if r.get('Kind') != 'action':
@@ -3574,12 +3574,7 @@ def waiting_on_owner(store, tid: int) -> list:
         if p.get('action') in proposals.HELD_ACTS:
             out.append(f"the agent's held step still waits for your {A} - {p.get('what') or str(p.get('command') or 'a step')[:120]}")
         else: out.append(f"{str(r.get('Reason') or 'a proposal').strip()[:200]} - still waiting for your {A}")
-    if ws._live(tid): out.append('the agent session on it is still open')
-    elif any(r.get('TaskId') == tid for r in store.running_runs()): out.append('an agent run on it is still going')
-    with workflows._LOCK: flowing = tid in workflows._STARTING
-    if flowing: out.append('its routine is still running')
-    if store.get_dispatch(tid): out.append('an agent is queued to start on it')
-    return out
+    return out + ws.live_work(store, tid)        # ...and anything still working or live on it (the one check, workerstate.live_work)
 
 
 def close_after_send(store, tid: int, actor: str = 'owner') -> dict:

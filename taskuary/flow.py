@@ -27,7 +27,7 @@ from datetime import datetime
 from loguru import logger
 
 from .timewords import plural
-from . import redact
+from . import redact, workerstate
 from .store import task_ref
 from . import processing_order as po
 
@@ -595,7 +595,9 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
         else: ingest._auto_general(store, tid, brief)
     # ...done when nothing waits HERE. A draft step's review sits on a task of its own (outbox.compose) and is answered there: counting
     # it kept every run that drafts a mail open as "not started yet", offering Send to agent after every step had run (walk 2026-10-21)
-    elif stop is None and not any(r.get('review_id') and r.get('task_id') in (None, tid) for r in recs):
+    # ...and nothing else on it still working: the run is not the only hand on its task (workerstate.live_work, 2026-11-01)
+    elif stop is None and not any(r.get('review_id') and r.get('task_id') in (None, tid) for r in recs) \
+            and not workerstate.live_work(store, tid, skip=('routine',)):
         store.update_task(tid, {'Status': 'done'}, 'workflow')
     return {'run_id': rid, 'steps': recs, 'failed': failed, 'error': error, 'waiting': stop is not None and not failed, 'summary': words,
             'repairs': repairs, **({'cause': 'taskuary' if app else 'step'} if failed else {})}

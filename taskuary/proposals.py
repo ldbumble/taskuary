@@ -290,7 +290,9 @@ def playbook_answered(store, tid: int, actor: str) -> None:
     t = store.get_task(tid) or {}
     tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
     if HELD not in tags or playbook_pending(store, tid): return
-    store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD), **({} if owed(store, tid) else {'Status': 'done'})}, actor)
+    from . import workerstate as ws          # ...never back to done under work still live on it (a Continue since, 2026-11-01)
+    shut = not owed(store, tid) and not ws.live_work(store, tid)
+    store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD), **({'Status': 'done'} if shut else {})}, actor)
 
 
 def owed(store, tid: int) -> bool:

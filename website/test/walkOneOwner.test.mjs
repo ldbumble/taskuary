@@ -25,9 +25,12 @@ test("every walk move is one POST to /api/walk/*, never the stream or a settle o
     const s = read(n);
     assert.doesNotMatch(s, /\/api\/funnel\/settle|\/api\/concierge\/next/, `${n} moves the walk off /api/walk/*`);
   }
-  // ...and the one function that draws an Answer is landed: the press itself only folds the row it leaves and shows the dots
+  // ...and the one function that draws an Answer is landed: the press itself folds the row it leaves and puts up only the rail's own row
+  // for the one the server's walk.below names (rule 7: the next item draws at once - Next and Mark done waited a round trip without it)
   const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
-  assert.doesNotMatch(surface, /setMsgs\(\(m\) => \[\.\.\.m, \{[^}]*role: "assistant"/, "nothing drawn ahead of the answer");
+  assert.equal((surface.match(/setMsgs\(\(m\) => \[\.\.\.m, \{[^}]*role: "assistant"/g) || []).length, 1, "one line drawn ahead of the answer, no more");
+  assert.match(surface, /walkNow = walkOf\(pileRef\.current\), below = putDown && walkNow\?\.on === putDown && walkNow\.below/);
+  assert.match(surface, /card: belowItem, ahead: true/);
   assert.match(surface, /else landed\(data\);/);
 });
 

@@ -1095,16 +1095,10 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner', cancel=cancel)
             if cancel is not None and cancel.is_set(): return          # a pick came in behind it and answers instead
             if out.get('no_brain') and not picked:
-                # NO AI TO READ THE WORDS (F10): "next" typed over a list holding Next is that choice's own label - the poll vote said
-                # in words - and a number past the list is a slip of the thumb; with nobody to read either, the line answered "use
-                # the buttons" and the walk stopped there
-                said = ' '.join(str(question or '').split()).strip(' .!?').lower()
-                hit = next((w for w in offered if str(w).strip().lower() == said and w in acts), None)
-                if hit:
-                    forget_offered(store, channel, chat)
-                    note_pick(store, acts[hit], item, offered, acts)
-                    send(store, channel, chat, run_act(store, acts[hit], item), connector_id)
-                    return
+                # NO AI TO READ THE WORDS (F10): a number past the list is a slip of the thumb. Typed words are never matched to a
+                # choice's label here - what words mean is the model's to read, and with none the no-AI line answers (the owner,
+                # 2026-11-01: "never ever use hardcoded things")
+                said = ' '.join(str(question or '').split()).strip(' .!?')
                 if said.lstrip('#').isdigit() and offered:
                     send(store, channel, chat, f'Pick 1 to {len(offered)} - the choices are below.', connector_id, choices=offered)
                     return

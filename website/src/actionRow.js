@@ -43,6 +43,11 @@ let table = null, leaving = null;
 export const rowTable = (key) => { if ((key || null) === table) return; table = key || null; draw(); };
 export const leaveRow = (key) => { if ((key || null) === leaving) return; leaving = key || null; draw(); };
 const shows = ({ at }) => !at || ((!table || at === table) && at !== leaving);
+// ...and WHERE THE TABLE'S ITEM LAYS ITS MOVES, said by the item itself (ItemSections, on a desk), not only by its card's verbs: a line said
+// under a report (the demo's "switched off") takes the card's verbs off the bar and carries the same words as its own, and those rode the
+// bar again while the report's strip went empty. Only for the item on the table
+let lay = null;
+export const layTable = (key, laid) => { const was = lay; if (laid) lay = { key, laid }; else if (lay?.key === key) lay = null; if (lay !== was) draw(); };
 function draw() {
   const shown = [...owners].filter(([, o]) => shows(o));
   // one button per id: two mounted copies of a card (each its own owner, see useVerbs) carry the same verbs
@@ -50,7 +55,8 @@ function draw() {
   const seen = new Set(), mine = new Set(shown.map(([o]) => o)), list = shown.flatMap(([o, { verbs: vs, at }]) => vs.map((v) => [o, v, at]))
     .filter(([, v]) => !seen.has(v.id) && seen.add(v.id))
     .map(([o, v, at]) => ({ ...view(v), of: mine.has(ofs.get(v.id)) ? ofs.get(v.id) : o, ...(at ? { at } : {}) }));
-  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}), ...(off ? { off } : {}) }, s = JSON.stringify(next);
+  const next = { list, ref: shown.map(([, o]) => o.ref).find(Boolean) || "", ...(end ? { end } : {}), ...(off ? { off } : {}),
+    ...(lay && table && lay.key === table ? { lay: lay.laid } : {}) }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
@@ -451,6 +457,11 @@ export function splitRow(row, on, list = []) {
   // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar and leaves it the rest
   if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
     return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }
+  // ...and one laid on the desk in a task's three sections (ItemSections: a report, a dashboard, an FYI) puts EVERY move on the pane it is about,
+  // as a task's ride its panes (the owner, 2026-10-31: "i thought we moved all buttons to the agent canvas?? report should be white with buttons
+  // on it"): the move pill's first, then what was the Change pill and Share, quiet as a task's own moves are (`quiet`: PaneMoves, SpineMoves)
+  if (on.all) { const { move, change, share } = pillsOf(row);
+    return { row: nav, by: { [on.all]: [...move, ...[...change, ...share].map((v) => ({ ...v, quiet: true }))] } }; }
   const by = {};
   const { move, change } = pillsOf(row);
   for (const v of [...move, ...change]) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }

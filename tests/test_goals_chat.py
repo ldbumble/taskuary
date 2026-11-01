@@ -29,4 +29,4 @@ class GoalOpenerTests(unittest.TestCase):
 class GoalChipsTests(unittest.TestCase):
     def test_a_goal_gets_a_tasks_chips_not_next_alone(self):
         verbs = [c['verb'] if isinstance(c, dict) else c for c in concierge.chips_for(MemoryStore(), goal_item())]
-        self.assertEqual(verbs, ['close', 'defer', 'next'])
+        self.assertEqual(verbs, ['close', 'defer', 'watch', 'next'])

@@ -422,11 +422,11 @@ class LaunchGraceIsSpentByThePollTests(unittest.TestCase):
         """The old flag was spent BEFORE the wait: the chat clock found it spent while the catch-up was still waiting,
         polled a bridge still coming up, and filed the false "bridge not running" the grace was for."""
         wabridge._GRACE_OWED = True
-        release, seen = threading.Event(), []
-        def slow_wait(secs): release.wait(5); return True
+        release, inside, seen = threading.Event(), threading.Event(), []
+        def slow_wait(secs): inside.set(); release.wait(5); return True
         with mock.patch.object(wabridge, 'wait_listening', slow_wait):
             first = threading.Thread(target=wabridge.ready); first.start()
-            time.sleep(.1)
+            assert inside.wait(5)                     # the first poller is IN its grace (a slow runner took longer than a sleep)
             second = threading.Thread(target=lambda: seen.append(wabridge.ready())); second.start()
             time.sleep(.2)
             self.assertEqual(seen, [], 'the second poller went ahead while the bridge was still starting')

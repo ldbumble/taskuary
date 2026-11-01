@@ -3387,7 +3387,8 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
     if tk == 'source' and not on and target:
         return _page(store, tid, table, f'#report={target}', f"Opened {named or 'the report'} under Reports - {REPORT_SAYS.get(kind, 'change it')} there.")
-    b = (next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '') if kind == 'task.update'
+    # ...an assignee of the owner is "mine" (Put it on my list), an agent's is Send to agent - "assign it to me" never lit Send to agent
+    b = (('mine' if str(params.get('assignee') or '') == 'owner' else next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '')) if kind == 'task.update'
          else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
          else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
     if on and b:
@@ -4109,6 +4110,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
     elif verb == 'close': target = it.get('tid')        # an agent parked on it is stopped by the same close (close_task)
+    elif verb == 'watch': target = it.get('tid')        # Watch it: the task stays open, off the walk, under Watching (watch.py)
     elif verb in CAL_ACT:
         if not it.get('mid'): raise ValueError('nothing is on the table')
         target, params = it['mid'], {'act': CAL_ACT[verb]}

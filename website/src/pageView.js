@@ -298,7 +298,9 @@ async function runOne(op, n) {
   if (!b.enabled) return step(n, `${b.label} is greyed out`, "error");
   const before = lastResult.get(v.area)?.at;
   if (b.extra) await b.press();
-  else if (b.row) await rowPress(b.row, null, null, b.of);
+  // ...waited for only a beat: a close on the walk's table is a walk move (railwalk.leave), and it waits for the turn that pressed it to
+  // end - awaited whole, "rename it and mark it done" waited on itself and the task stayed open (2026-10-31)
+  else if (b.row) await Promise.race([rowPress(b.row, null, null, b.of), wait(1500)]);
   else {
     b.el.click();
     await wait(250);

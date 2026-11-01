@@ -139,6 +139,21 @@ test("a line that replaced an item's older line keeps that line's id through eve
   assert.equal(m.filter((x) => x.card?.key === "processing:a").length, 1);
 });
 
+// AN ITEM OPENED TWICE BEFORE ONE READ (railwalk.open records each opening): the server has two lines for it, the page one - and the page
+// opened since (a connection's card) stays the last line; the newer line was pushed after it and took the canvas (the search walk)
+test("an item opened twice before one read is one line, and the page opened after it stays last", async () => {
+  const { placeLine } = await import("../src/assistantTurns.js");
+  const card = { key: "processing:x", kind: "fyi" };
+  let m = [{ id: "a1", role: "assistant", text: "Opened TQ-0023.", card }, { id: "a2", role: "assistant", text: "Opened TQ-0022.", card: { key: "processing:y", kind: "fyi" } }];
+  m = [...placeLine(m, { id: "a3", role: "assistant", text: "Opened TQ-0023.", card }), { id: "b1", role: "browse", area: "connections" }];
+  const durable = [{ id: 12, role: "assistant", text: "Opened TQ-0023.", card }, { id: 14, role: "assistant", text: "Opened TQ-0022.", card: { key: "processing:y", kind: "fyi" } },
+    { id: 16, role: "assistant", text: "Opened TQ-0023.", card }];
+  const { messages, added } = mergeDurableTurns(m, durable);
+  assert.deepEqual(messages.map((x) => x.id), ["a2", "a3", "b1"]);
+  assert.deepEqual(added, []);
+  assert.deepEqual(mergeDurableTurns(messages, durable).messages.map((x) => x.id), ["a2", "a3", "b1"], "and on every read after");
+});
+
 // On the desk an item comes up under a few words naming only its kind: three reports in a row each say "Next up: a report.", and the
 // second's durable turn matched the first's bubble - its card replaced the first's, and the report the walk left had no line (RECEIPT)
 test("two lines with the same words but different items are two turns", () => {

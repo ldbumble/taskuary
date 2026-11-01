@@ -83,7 +83,7 @@ def level_of(item: dict) -> str:
     # whether the walk brings it back as yours (processing_unread `back`), never its section; Remind me puts it For later like any task.
     # FOR LATER IS WHAT YOU PUT THERE WITH A DATE - Remind me - never a card merely shown (the owner, 2026-10-08: "it moved 1003
     # automatically to later?"), and no longer Next either: Next moves the walk on and the task stays in Tasks, where it was
-    # (the owner, 2026-10-21). The walk skips it by its mark (put_down), not by moving it.
+    # (the owner, 2026-10-21). The walk never skips it: Next is the row below, whatever was shown (2026-10-30).
     if band in (1, 2) and item.get('deferred'): return 'later'      # ...an urgent row too: Remind me puts it away like any task
     if band == 4 and item.get('kind') == 'idea': return 'ideas'
     return LEVEL_OF_BAND.get(band, 'fyi')

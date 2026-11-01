@@ -17,7 +17,7 @@ import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import funnel
+from taskuary import funnel, railwalk
 from taskuary.store import MemoryStore
 
 
@@ -89,12 +89,12 @@ class OnYouIsNeverBuriedTests(unittest.TestCase):
     def test_a_shown_reply_still_leads_a_pipe_full_of_unread_fyi(self):
         _t, _m, r = drafted(s := store(), hours=6)
         for n in range(6): fyi(s, f'newsletter {n}')
-        first = funnel.next_item(s)
+        first = railwalk.top(s)
         self.assertEqual(first['key'], f'review:{r}')             # it leads: it is the thing on them
         # ...and after being shown it STILL leads. Before this change the walk preferred any unread
         # fyi from here on, so the one item on the owner never came back.
         shown_a_while_ago(s, f'review:{r}')
-        again = funnel.next_item(s)
+        again = railwalk.top(s)
         self.assertIsNotNone(again, 'the walk went silent with a reply still waiting')
         self.assertEqual(again['key'], f'review:{r}', 'the pending reply was buried under the unread fyi')
 

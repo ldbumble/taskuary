@@ -71,7 +71,7 @@ def test_next_walks_the_tie_down_and_never_back_up(db):
     rows = reports(store)
     out, seen = concierge.surface(store, rows[0]['key']), [rows[0]['key']]
     while out['item'] and lanes.level_of(out['item']) == 'reports':
-        out = concierge.surface(store, leaving=out['item']['key'])
+        out = concierge.surface(store, from_key=out['item']['key'])
         if out['item'] and lanes.level_of(out['item']) == 'reports': seen.append(out['item']['key'])
     assert seen == [i['key'] for i in rows], f'Next did not walk the tie in order: {seen}'
 
@@ -80,7 +80,7 @@ def test_next_from_the_lower_of_a_tie_goes_on_down_not_up_to_its_twin(db):
     store, _, _ = db
     rows = reports(store)
     concierge.surface(store, rows[-1]['key'])                  # the last of the four clicked; the three above it unseen
-    out = concierge.surface(store, leaving=rows[-1]['key'])     # Next reads it, so it leaves the rail: the walk goes on from its place
+    out = concierge.surface(store, from_key=rows[-1]['key'])     # Next reads it, so it leaves the rail: the walk goes on from its place
     assert out['item'] is None or out['item']['key'] not in [i['key'] for i in rows[:-1]], \
         f"Next went back up the tie to {out['item'] and out['item'].get('title')}"
 

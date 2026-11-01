@@ -7,7 +7,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import buttons, concierge, funnel, general, server, terminal
+from taskuary import buttons, concierge, funnel, general, railwalk, server, terminal
 from taskuary.store import MemoryStore
 from taskuary import memorylines
 
@@ -254,7 +254,7 @@ class TurnTests(unittest.TestCase):
                          [concierge.ALL_DONE])                         # legacy duplicate rows render once too
         drafted(s)
         first = concierge.surface(s, llm=lambda *a, **k: 'first')
-        again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next, as the page presses it
+        again = concierge.surface(s, llm=lambda *a, **k: 'never', from_key=first['item']['key'])      # Next, as the page presses it
         # ...walked past, it is still under Tasks - Next moves on, the task stays, and the next walk starts with it (the owner, 2026-10-21)
         # ...and the desk says no sentence about it: the buttons do the talking (the owner, 2026-10-23: "yes remove the sentence, just the button")
         self.assertIsNone(again['item']); self.assertEqual(again['say'], '')
@@ -565,7 +565,7 @@ class FyiWalkTests(unittest.TestCase):
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 120, 'waiting': True, 'tail': ['ok?']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            self.assertEqual(funnel.next_item(s)['kind'], 'agent')
+            self.assertEqual(railwalk.top(s)['kind'], 'agent')
 
     def test_left_counts_what_is_left_besides_the_item_on_the_table(self):
         """KNOWN GAP (railwalk, 2026-10-30): `left` was "how many besides this one" (len(pile) - 1, or - the batch) and the phone reads

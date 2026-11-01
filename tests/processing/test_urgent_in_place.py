@@ -94,9 +94,9 @@ def test_next_walks_the_urgent_task_in_its_place_like_any_other(db):
     row = {i.get('tid'): i['key'] for i in items if i.get('tid')}
     order = [i.get('tid') for i in items if i.get('tid') in tids]
     concierge.surface(store, row[order[0]])                     # the owner opens the top task
-    seen, out = [order[0]], concierge.surface(store, leaving=row[order[0]])
+    seen, out = [order[0]], concierge.surface(store, from_key=row[order[0]])
     while out.get('item') and out['item'].get('tid') in tids:
-        seen.append(out['item']['tid']); out = concierge.surface(store, leaving=out['item']['key'])
+        seen.append(out['item']['tid']); out = concierge.surface(store, from_key=out['item']['key'])
     assert seen == order, f"Next did not walk the tasks in rail order, urgent included: {seen} vs {order}"
     assert out['item'] and lanes.level_of(out['item']) == 'reports'
 

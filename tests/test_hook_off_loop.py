@@ -120,8 +120,7 @@ class HandsOffTests(unittest.TestCase):
         # should probably get rid of that" - the stream's admission no longer reads the hand-off at all
         where = []
         def handoff(st): where.append(on_loop()); return {'channel': 'whatsapp', 'chat': 'x'}
-        with mock.patch.object(remote_assistant, 'handoff', handoff), mock.patch.object(server, '_navigation_reservation', return_value=None), \
-             mock.patch('taskuary.concierge.brain', return_value=None):
+        with mock.patch.object(remote_assistant, 'handoff', handoff), mock.patch('taskuary.concierge.brain', return_value=None):
             r = TestClient(server.app).post('/api/concierge/stream', json={'mode': 'next'})
         self.assertNotEqual(r.status_code, 409)
 

@@ -95,7 +95,7 @@ class FyiHandfulTests(unittest.TestCase):
         self.assertTrue(s.get_message(first['mid'])['TaskId'])                                   # that one is a task now
         self.assertEqual(s.get_message(second['mid'])['Status'], 'filed')                          # its sibling is untouched...
         states = s.funnel_states()
-        self.assertEqual({states[i['key']]['Status'] for i in card['items'][1:]}, {'surfaced'})    # ...shown, not read
+        self.assertEqual({states.get(i['key'], {}).get('Status') for i in card['items'][1:]}, {None})   # ...shown, no mark at all (rule 4)
         self.assertTrue(all(any(x.get('mid') == i['mid'] for x in funnel.build(s, keep_surfaced=True)['items']) for i in card['items'][1:]))
         # the agent roads on an entry are the same proposals, with the kind in them
         with mock.patch.object(server, 'store', s), quiet():
@@ -139,7 +139,7 @@ class FyiHandfulTests(unittest.TestCase):
             r = client(s).post(f"/api/messages/{first['mid']}/reply", json={'draft': True}).json()
         self.assertTrue(r['reviewId']); self.assertEqual(s.get_review(r['reviewId'])['Status'], 'pending')
         send.assert_not_called()
-        self.assertEqual({s.funnel_states()[i['key']]['Status'] for i in card['items']}, {'surfaced'})
+        self.assertEqual({s.funnel_states().get(i['key'], {}).get('Status') for i in card['items']}, {None})
 
 
 class SingleItemTests(unittest.TestCase):
@@ -209,7 +209,7 @@ class PresentingMarksNothingTests(unittest.TestCase):
         out = arrive(s, 'Can you fix the export?', 'Rows drop.', who='Craig', email='craig@vendor.com', llm=brain('task', 'coding'))
         tid = out['task_id']
         with quiet(): card = concierge.surface(s, llm=lambda *a, **k: 'Craig wants the export fixed.')['item']
-        self.assertEqual(s.funnel_states()[card['key']]['Status'], 'surfaced')
+        self.assertNotIn(card['key'], s.funnel_states())                                            # put up writes no mark (rule 4)
         with quiet(): self.assertEqual(funnel.next_item(s, card['key'], include_surfaced=True)['key'], card['key'])   # still on the table
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertEqual(s.get_message(out['message_id'])['Status'], 'routed')
@@ -221,7 +221,7 @@ class PresentingMarksNothingTests(unittest.TestCase):
     def test_a_handful_shown_is_not_read_either(self):
         s = store(); got = five_fyi(s)
         with quiet(), mock.patch.object(concierge, 'brain', return_value=None): card = concierge.surface(s)['item']
-        self.assertEqual({s.funnel_states()[i['key']]['Status'] for i in card['items']}, {'surfaced'})
+        self.assertEqual({s.funnel_states().get(i['key'], {}).get('Status') for i in card['items']}, {None})
         self.assertEqual({s.get_message(i['mid'])['Status'] for i in card['items']}, {'filed'})
         self.assertEqual(len(funnel.build(s, keep_surfaced=True)['items']), 5)                       # all five still unread
         self.assertEqual(operations.history(s, message_id=card['items'][0]['mid']), [])

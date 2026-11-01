@@ -93,7 +93,7 @@ def test_next_from_the_clicked_bottom_task_goes_to_the_first_report(db):
     bottom = next(i for i in items if i.get('tid') == tids[-1])
     report = next(i for i in items if lanes.level_of(i) == 'reports')
     concierge.surface(store, bottom['key'])                    # clicked, never walked: the two tasks above are unseen
-    out = concierge.surface(store, leaving=bottom['key'])
+    out = concierge.surface(store, from_key=bottom['key'])
     assert out['item'] and out['item']['key'] == report['key'], f"Next went to {out['item'] and out['item'].get('title')}, not the report"
 
 
@@ -104,7 +104,7 @@ def test_next_never_moves_up(db):
     out = concierge.surface(store, middle)                     # start the walk from the middle task
     seen = [middle]
     while out['item']:
-        out = concierge.surface(store, leaving=out['item']['key'])
+        out = concierge.surface(store, from_key=out['item']['key'])
         if out['item']: seen.append(out['item']['key'])
     at = [order.index(next(k for k in order if k in (key, *key[5:].split(',')))) for key in seen]
     assert at == sorted(at) and len(set(at)) == len(at), f'Next went back up: {seen} over {order}'
@@ -140,7 +140,7 @@ def test_the_bottom_ends_the_walk_names_what_was_skipped_and_the_next_walk_start
     store, tids = db
     bottom = next(i for i in rail(store) if i.get('tid') == tids[-1])
     out = concierge.surface(store, bottom['key'])
-    while out['item']: out = concierge.surface(store, leaving=out['item']['key'])
+    while out['item']: out = concierge.surface(store, from_key=out['item']['key'])
     assert out.get('over'), 'the walk did not end at the bottom'
     # ...named by their Opens, with no sentence on the desk (the owner, 2026-10-23: "yes remove the sentence, just the button")
     assert out['say'] == '', f"the end of the walk said a sentence: {out['say']}"
@@ -194,7 +194,7 @@ def test_a_closed_task_opened_by_name_walks_on_from_its_row_in_tasks(db):
     concierge.surface(store, first['key'])
     store.update_task(tids[0], {'Status': 'done'}, 'owner'); funnel.settle(store, first['key'], 'done', 'owner'); funnel.invalidate()
     concierge.surface(store, f'task:{tids[0]}')                 # opened again by name, closed
-    out = concierge.surface(store, leaving=f'task:{tids[0]}')
+    out = concierge.surface(store, from_key=f'task:{tids[0]}')
     assert out['item'] and out['item'].get('tid') == tids[1], f"Next from the closed task went to {out['item'] and out['item'].get('title')}"
 
 
@@ -212,6 +212,6 @@ def test_put_it_on_my_list_on_a_report_walks_on_below_the_report_never_back_up_t
     settle(store)
     made = store._one('SELECT TaskId FROM message WHERE MessageId=?', (report['mid'],))['TaskId']
     assert made and made in task_rows(store), 'the report did not become a task in Tasks'
-    out = concierge.surface(store, leaving=report['key'])
+    out = concierge.surface(store, from_key=report['key'])
     assert out['item'] and below_it in out['item']['key'].removeprefix('fyis:').split(','), f"Next went to {out['item'] and out['item'].get('title')}, not the row below the report"
     assert out['item'].get('tid') != made and lanes.level_of(out['item']) != 'task', 'the walk went back up into Tasks'

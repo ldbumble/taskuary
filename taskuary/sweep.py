@@ -203,7 +203,10 @@ def _say_once(store, cands: list, stamp: str) -> list:
     """Upsert each candidate whose facts are new: never said, or said with another Sig. The same facts are not said again - not
     tomorrow, and not after the owner put the line down."""
     old, said = {i['Key']: i for i in store.list_ideas()}, []
+    from .workstreams import is_personal
     for c in cands:
+        a = c.get('action') or {}
+        if is_personal(store, tid=a.get('tid') or a.get('task'), mid=a.get('mid')): continue      # nothing personal is raised (2026-11-01)
         i = old.get(c['key'])
         if i and (i.get('Sig') or '') == c['sig']: continue
         said.append(store.upsert_idea(c, stamp))

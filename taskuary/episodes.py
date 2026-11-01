@@ -122,11 +122,14 @@ def build(store, since: str) -> list:
                    'not_mine_delete': 'said Not ours', 'not_a_task_delete': 'said Not a task', 'create_from_message': 'made it a task by hand'}[a['Action']]
             out.append((f"task{a['EntityId']}" if a['EntityType'] == 'task' else f"msg{a['EntityId']}", a['CreatedAt'], str((m or {}).get('FromEmail') or '').lower(),
                         f"{_head(m, store) if m else a['EntityType']} · you: {did}"))
+        from .workstreams import is_personal          # ...nothing under a personal workstream, an idea or a promise either (2026-11-01)
         for i in store._rows("SELECT * FROM idea WHERE DecidedBy='owner' AND Status IN ('dismissed','done','taken','accepted') AND DecidedAt>=?", (since,)):
+            if is_personal(store, src=f"idea{i['IdeaId']}"): continue
             out.append((f"idea{i['IdeaId']}", i['DecidedAt'], '', f"Advisor idea \"{' '.join(str(i.get('Text') or '').split())[:90]}\" · you: "
                         + ('dismissed it' if i['Status'] == 'dismissed' else 'took it up') + (f" (raised {i['SaidCount']} times)" if int(i.get('SaidCount') or 0) > 1 else '')))
         for v in store._rows("SELECT v.*, m.SentAt, m.RecipientsJson FROM sent_verdict v JOIN message m ON m.MessageId=v.MessageId "
                              "WHERE v.Promise=1 AND m.SentAt>=? ORDER BY m.SentAt", (since,)):
+            if is_personal(store, mid=v['MessageId']): continue
             try: to = (json.loads(v.get('RecipientsJson') or '{}') or {}).get('to') or []
             except ValueError: to = []
             who = str(to[0] if to else '').lower()

@@ -28,6 +28,11 @@ def personal(store, item: dict | None, m: dict | None = None) -> bool:
     """Mail from a mailbox the owner marked personal ({"personal": true} on its source) teaches nothing (the owner, 2026-10-23:
     "nothing learned from personal mail"). The app has no other mark of personal mail: a mailbox is work unless marked."""
     m = m or {}
+    # ...nor anything under a PERSONAL WORKSTREAM, whichever mailbox or chat it came by (workstreams.py, the owner 2026-11-01)
+    try:
+        from . import workstreams
+        if workstreams.is_personal(store, tid=(item or {}).get('tid'), m=m or None): return True
+    except Exception: pass
     name, ch = str(m.get('SourceName') or '').lower(), str(m.get('Channel') or (item or {}).get('channel') or '').lower()
     if not name: return False
     try: srcs = store.list_sources(active_only=False)

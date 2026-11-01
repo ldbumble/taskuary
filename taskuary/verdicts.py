@@ -582,8 +582,11 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if result is None and verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
         _settle_task_after_sent_reply(store, rv, actor, False)
     store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
-    if verb in ('edit', 'reject', 'no_reply') and not cal:          # a calendar note's one line teaches no voice
-        m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
+    from .presses import personal as _personal
+    m0 = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
+    # ...a draft to someone in a PERSONAL workstream teaches neither voice nor memory (the owner, 2026-11-01)
+    if verb in ('edit', 'reject', 'no_reply') and not cal and not _personal(store, {'tid': rv.get('TaskId')}, m0):   # a calendar note's one line teaches no voice
+        m = m0
         # an EDIT's note is about the wording - it goes to STYLE.md as a writing instruction (PW-061); a rejection's
         # or no-reply's note is about whether a reply was owed at all, which is triage's to learn
         if verb == 'edit' and note:

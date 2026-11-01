@@ -167,6 +167,40 @@ def _owner_addresses(store) -> set:
     return set(_low(own_addresses(store) | owner_addresses(store)))
 
 
+# ── PERSONAL IS NEVER LEARNED FROM (the owner, 2026-10-23 and 2026-11-01: personal asks are FYI, never learned from) ─────────────────────
+def is_personal(store, tid=None, mid=None, src: str = None, m: dict = None) -> bool:
+    """Whether a task, a message, or an evidence id (msg12, task7, idea3, rv4, sv9, out5, fs7) is under a personal workstream."""
+    ps = personal(store)
+    if not ps: return False
+    if src:
+        hit = re.match(r'^([a-z]+)(\d+)$', str(src))
+        k, n = (hit.group(1), int(hit.group(2))) if hit else ('', None)
+        if k in ('msg', 'sv') and n: mid = n
+        elif k in ('task', 'fs') and n: tid = n
+        elif k == 'idea' and n:
+            i = store._one('SELECT Workstream, ActionJson FROM idea WHERE IdeaId=?', (n,)) or {}
+            if i.get('Workstream') in ps: return True
+            try: a = json.loads(i.get('ActionJson') or '{}') or {}
+            except ValueError: a = {}
+            tid, mid = a.get('tid'), a.get('mid')
+        elif k == 'rv' and n:
+            r = store._one('SELECT TaskId, MessageId FROM review WHERE ReviewId=?', (n,)) or {}
+            tid, mid = r.get('TaskId'), r.get('MessageId')
+        elif k == 'out' and n:
+            r = store._one('SELECT TargetKind, TargetId FROM outcome WHERE Id=?', (n,)) or {}
+            if r.get('TargetKind') == 'task': tid = r.get('TargetId')
+    if m is None and mid:
+        try: m = store.get_message(int(mid))
+        except (TypeError, ValueError): m = None
+    if m:
+        if of_message(store, m) in ps: return True
+        if not tid and m.get('TaskId'): tid = m['TaskId']
+    if tid:
+        try: return of_task(store, int(tid)) in ps
+        except (TypeError, ValueError): return False
+    return False
+
+
 def label(store, slug: str) -> dict | None:
     """What a screen shows beside an item: {slug, name, personal} - None when it has no workstream."""
     w = get(store, slug) if slug else None

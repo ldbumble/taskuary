@@ -98,6 +98,9 @@ test("About your work: the job, how you write and who you are are drafts to acce
   const world = { boxes: [{ address: "alex@northwind.example", type: "outlook", title: "Email" }, { address: "alex@riverside.example", type: "imap", title: "Email" }],
     drafts: { job: DRAFT("## At Northwind (alex@northwind.example)\n\n### What my job is\n- I run the month-end close.\n\n"
       + "## At riverside.example (alex@riverside.example)\n\n### What my job is\n- I keep the volunteer rota."),
+    // WHAT YOU WORK ON (the owner, 2026-11-01): the one screen after the job - each workstream to rename, mark personal or leave out
+    workstreams: DRAFT(JSON.stringify([{ slug: "northwind-close", name: "Northwind month-end", about: "the close at Northwind", personal: false,
+      section: "- I run the month-end close", kept: false }, { slug: "home", name: "Home", about: "family", personal: true, section: "", kept: false }])),
     style: { state: "failed", why: "no sent mail to learn from - connect a mailbox", text: "" },
     soul: { state: "running", why: "", text: "" } } };
   const { page, errors, sent } = await open(harness, world);
@@ -106,15 +109,22 @@ test("About your work: the job, how you write and who you are are drafts to acce
   assert.match(await line(page), /2 sources are connected\./);
   assert.ok(await press(page, "That's all my sources"));
   await onStep(page, "job");
-  assert.deepEqual(world.asked, [["job", "style", "soul"]], "all three drafts are written once every mailbox is in");
+  assert.deepEqual(world.asked, [["job", "workstreams", "style", "soul"]], "every draft is written once every mailbox is in");
   // the job: read as a document, a section per organisation, and accepted as it is
   await until(page, () => document.querySelectorAll("[data-tq-job-read] h2").length === 2);
-  assert.match(await page.evaluate(() => document.body.innerText), /About your work · 7 of 9/);
+  assert.match(await page.evaluate(() => document.body.innerText), /About your work · 7 of 10/);
   assert.match(await line(page), /This is your job as your email describes it/);
   await shot(page, "about-job");
   assert.ok(await press(page, "Looks right"));
+  await onStep(page, "workstreams");
+  // what you work on: one row each, the personal one ticked and said so; leaving one out is the answer that goes back
+  await until(page, () => document.querySelectorAll("[data-tq-workstream-row]").length === 2);
+  assert.match(await line(page), /Here's what I think you work on/);
+  assert.match(await page.evaluate(() => document.querySelector('[data-tq-workstream-row="home"]').innerText), /nothing here is learned from/);
+  await shot(page, "about-workstreams");
+  assert.ok(await press(page, "Looks right"));
   await onStep(page, "style");
-  assert.deepEqual(world.accepted, ["job"]);
+  assert.deepEqual(world.accepted, ["job", "workstreams"]);
   // how you write failed: said plainly on the canvas and on the line, with Write it again lit - Next never pretends it worked
   assert.match(await page.evaluate(() => document.querySelector("[data-tq-draft-failed]")?.innerText || ""), /I couldn't write it: no sent mail to learn from/);
   assert.match(await line(page), /I couldn't write it from your sent mail \(no sent mail to learn from - connect a mailbox\)\. Press Write it again/);
@@ -137,6 +147,6 @@ test("About your work: the job, how you write and who you are are drafts to acce
   assert.ok(await press(page, "Looks right"));
   for (let i = 0; i < 100 && !sent["/api/setup/first-run/about"]; i++) await new Promise((r) => setTimeout(r, 100));
   assert.equal(sent["/api/setup/first-run/about"], 1, "the last Looks right saves the answers");
-  assert.deepEqual(world.accepted, ["job", "style", "soul"]);
+  assert.deepEqual(world.accepted, ["job", "workstreams", "style", "soul"]);
   assert.deepEqual(errors, []);
 });

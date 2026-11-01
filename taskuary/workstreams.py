@@ -97,7 +97,8 @@ def by_signals(xs: list, m: dict) -> tuple:
     def only(k, v):
         ws = [w['slug'] for w in xs if v and v in w[k]]
         return ws[0] if len(ws) == 1 else ''
-    for k, v, why in (('channels', f'{ch}:{src}', 'chat group'), ('mailboxes', src, 'mailbox'), ('repos', src, 'repository')):
+    conv = str(m.get('ConversationId') or '').strip().lower()
+    for k, v, why in (('channels', conv, 'chat'), ('channels', f'{ch}:{src}', 'chat group'), ('mailboxes', src, 'mailbox'), ('repos', src, 'repository')):
         if (s := only(k, v)): return s, why
     people = _addresses(m)
     if (s := _one([w['slug'] for a in people for w in xs if a in w['people']])): return s, 'people'

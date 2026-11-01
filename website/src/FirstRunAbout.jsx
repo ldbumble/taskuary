@@ -19,15 +19,15 @@ import { useVerbs } from "./actionRow.js";
 import { Md } from "./md.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That didn't work.";
-export const STEPS = ["name", "org", "role", "signature", "systems", "mailboxes", "job", "style", "soul"];
+export const STEPS = ["name", "org", "role", "signature", "systems", "mailboxes", "job", "workstreams", "style", "soul"];
 export const MAIL_AT = STEPS.indexOf("mailboxes");
 // Skip before the mailbox step lands on it; on it there is no Skip; past it, Skip leaves the rest (null)
 export const skipTo = (at) => (at < MAIL_AT ? MAIL_AT : null);
 export const canSkip = (step) => step !== "mailboxes";
-export const DRAFTS = ["job", "style", "soul"];
+export const DRAFTS = ["job", "workstreams", "style", "soul"];
 const KIND = { outlook: "Microsoft 365 / Outlook", gmail: "Gmail", imap: "Email (IMAP)" };
 const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", signature: "Your email signature",
-  systems: "Systems you work in", mailboxes: "Connect your sources", job: "Your job", style: "How you write", soul: "Who you are" };
+  systems: "Systems you work in", mailboxes: "Connect your sources", job: "Your job", workstreams: "What you work on", style: "How you write", soul: "Who you are" };
 const ASK = {
   name: "What's your name?", org: "What organisation do you work for?",
   role: "What's your job title? Next, I write your job description from your email.",
@@ -44,6 +44,12 @@ const SAYS = {
     failed: (why) => `I couldn't write it from your email (${why}). Press Write it again, or say it in your own words.`,
     ready: "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Looks right.",
     none: "Press Write it - I read your email and describe your job.", busy: "Writing your job description from your email…" },
+  // HERE'S WHAT I THINK YOU WORK ON (the owner, 2026-11-01): six months of mail grouped into workstreams - rename one, mark it personal,
+  // or leave it out; a personal one is never learned from
+  workstreams: { running: "Reading six months of your mail to see what you work on - about a minute.",
+    failed: (why) => `I couldn't tell what you work on from your mail (${why}). Press Write it again, or skip this step.`,
+    ready: "Here's what I think you work on. Rename any, mark the personal one, untick any that's wrong, then press Looks right.",
+    none: "Press Write it - I read six months of your mail and list what you work on.", busy: "Grouping your mail into what you work on…" },
   style: { running: "Reading your sent mail to describe how you write - about a minute.",
     failed: (why) => `I couldn't write it from your sent mail (${why}). Press Write it again, or describe it in your own words.`,
     ready: "This is how you write, as your sent mail shows it. Edit anything that's off, then press Looks right.",
@@ -62,7 +68,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   const [at, setAt] = useState(0), [reading, setReading] = useState(false), [note, setNote] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [other, setOther] = useState("");
   // the three drafts: {state, why, text} as the server has them, the text as the owner left it, which they changed, which is open
-  const [drafts, setDrafts] = useState({ job: NONE, style: NONE, soul: NONE }), [texts, setTexts] = useState({ job: "", style: "", soul: "" });
+  const [drafts, setDrafts] = useState({ job: NONE, workstreams: NONE, style: NONE, soul: NONE }), [texts, setTexts] = useState({ job: "", workstreams: "", style: "", soul: "" });
   const [edited, setEdited] = useState({}), [editing, setEditing] = useState("");      // read as a document; Edit opens its text
   const touched = useRef(new Set()), learnedFor = useRef(""), editedRef = useRef({});
   editedRef.current = edited;
@@ -242,7 +248,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
         {draft.state === "failed" && <Typography data-tq-draft-failed="" sx={{ color: "#9b2c2c", fontSize: 13.5 }}>
           {soon ? draft.why : `I couldn't write it: ${draft.why}`}</Typography>}
         {/* READ AS A DOCUMENT, not its markdown (the owner, 2026-10-16: the box showed "### What my job is"): Edit opens the text */}
-        {editing === step || !text.trim()
+        {step === "workstreams" ? <WorkstreamsConfirm text={text} onChange={(v) => { setEdited((x) => ({ ...x, workstreams: true })); setTexts((x) => ({ ...x, workstreams: v })); }} />
+          : editing === step || !text.trim()
           ? <TextField key={step} multiline fullWidth minRows={10} maxRows={22} value={text} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
             onChange={(e) => { const v = e.target.value; setEdited((x) => ({ ...x, [step]: true })); setTexts((x) => ({ ...x, [step]: v })); }}
             inputProps={{ "aria-label": LABEL[step] }} autoFocus={editing === step} />
@@ -251,7 +258,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
               "& h3": { fontSize: 14.5, fontWeight: 700, mt: 1.5, mb: 0.5 }, "& h3:first-of-type": { mt: 0.5 }, "& ul": { pl: 2.5, my: 0.5 },
               "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={text} /></Box>}
         <Box sx={{ display: "flex", gap: 1 }}>
-          {text.trim() && <Button size="small" onClick={() => setEditing((v) => (v === step ? "" : step))}>{editing === step ? "Done editing" : "Edit"}</Button>}
+          {text.trim() && step !== "workstreams" && <Button size="small" onClick={() => setEditing((v) => (v === step ? "" : step))}>{editing === step ? "Done editing" : "Edit"}</Button>}
           <Button size="small" onClick={() => { setEditing(""); learn([step]); }} disabled={!!busy}
             data-tq-setup-lit={writeLit ? "about" : undefined}>{draft.state === "none" ? "Write it" : "Write it again"}</Button>
         </Box>
@@ -259,6 +266,32 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
       {note && !draft && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
       {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}
       {!again && canSkip(step) && <Box><Button size="small" disabled={!!busy} onClick={skip} sx={{ color: DIM, fontSize: 12.5 }}>Skip these questions</Button></Box>}
+    </Box>
+  );
+}
+
+// THE ONE SCREEN: each workstream the mail showed - its name to change, Personal to tick (never learned from), Keep to untick - and
+// what JOB.md will say about it. The answer is the list as left: [{slug, name, personal, keep}] (firstrun.accept -> wsboot.confirm).
+export const parseWorkstreams = (text) => { try { const x = JSON.parse(text || "[]"); return Array.isArray(x) ? x : []; } catch { return []; } };
+export function WorkstreamsConfirm({ text, onChange }) {
+  const rows = parseWorkstreams(text);
+  const put = (i, patch) => onChange(JSON.stringify(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))));
+  if (!rows.length) return <Typography sx={{ color: DIM, fontSize: 13.5 }}>Your mail did not show separate workstreams yet.</Typography>;
+  return (
+    <Box data-tq-workstreams-confirm="" sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {rows.map((r, i) => (
+        <Box key={r.slug} data-tq-workstream-row={r.slug} sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1,
+          opacity: r.keep === false ? 0.55 : 1 }}>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <TextField size="small" value={r.name} onChange={(e) => put(i, { name: e.target.value })} sx={{ minWidth: 240, "& .MuiInputBase-root": { fontSize: 14.5 } }}
+              inputProps={{ "aria-label": "Workstream name" }} />
+            <label style={{ fontSize: 13, color: DIM }}><input type="checkbox" checked={!!r.personal} onChange={(e) => put(i, { personal: e.target.checked })} /> Personal</label>
+            <label style={{ fontSize: 13, color: DIM }}><input type="checkbox" checked={r.keep !== false} onChange={(e) => put(i, { keep: e.target.checked })} /> Keep</label>
+          </Box>
+          {r.about && <Typography sx={{ fontSize: 13, color: DIM, mt: 0.5 }}>{r.about}</Typography>}
+          {r.section && !r.personal && <Box sx={{ mt: 0.5, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 13.5, lineHeight: 1.5 } }}><Md text={r.section} /></Box>}
+          {r.personal && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5 }}>Personal: an ask here is an FYI, and nothing here is learned from.</Typography>}
+        </Box>))}
     </Box>
   );
 }

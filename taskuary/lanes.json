@@ -298,6 +298,7 @@
     "promise": { "word": "you promised", "counted": "promise", "section": "loose" },
     "cold": { "word": "gone quiet", "counted": "gone quiet", "section": "loose" },
     "prep": { "word": "prep", "counted": "prep", "section": "people" },
+    "workstream": { "word": "workstream", "counted": "workstream", "section": "ideas" },
     "asked": { "word": "slipped", "counted": "slipped", "section": "ideas" },
     "ahead": { "word": "coming up", "counted": "coming up", "section": "ideas" },
     "idea": { "word": "advisor idea", "counted": "idea", "section": "ideas" },

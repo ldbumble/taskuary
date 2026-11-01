@@ -1803,6 +1803,11 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     # own lists, including empty lists, so one Assistant report can never borrow another's sources.
     if report_id is None and watch_source_ids is None and watch_sources is None:
         watch_source_ids, watch_sources = _watch(store)
+    # ...THE ADVISOR NOTICES A NEW HAT (the owner, 2026-11-01): a connector or GitHub project whose traffic no workstream places is judged
+    # here, added when sure, else an Advisor card - and each section kept current once a week (wsboot.tick; cheap when nothing is new)
+    if report_id is None:
+        from . import wsboot
+        wsboot.tick(store)
     # its reads - minutes of them over the whole mail history - go to a reader connection, never the writer's lock every request
     # queues on (store.reads_off_writer, 2026-10-23); what it writes still goes through the writer
     with _LOCK, (store.reads_off_writer() if hasattr(store, 'reads_off_writer') else contextlib.nullcontext()):
@@ -2040,7 +2045,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 # (snooze: back on its day), and done - handled some other way, which is what the rail's Done writes. Next is the
 # walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
 # ...and a rule question's yes (promote.py): the rule it proposed is made, through the one create path
-VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule')
+VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule', 'accept')   # accept: a workstream card's Add it (2026-11-01)
 # WHAT THE OWNER DID WITH AN IDEA, kept where the Advisor reads it (the owner, 2026-10-02: "feedback on assistant ideas even on
 # desktop does it teach it anything? we should have that"). The idea row's status said dismissed or done - and done covered a
 # task made from it and a line merely handled alike - and a dismissed row ages out of ALREADY SAID with the rest. This log is
@@ -2147,6 +2152,11 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
         store.set_idea_status(idea_id, 'snoozed', actor, at)
         store.audit('idea', idea_id, verb, actor, detail={'until': at})
         return out | {'until': at, 'remindAt': at, 'when': remind.when(at)}
+    # A WORKSTREAM CARD (wsboot.card; the owner, 2026-11-01): Add it keeps it - its section into JOB.md - and No takes it out, once and for good
+    if i.get('Kind') == 'workstream':
+        from . import wsboot
+        if verb in ('accept', 'done', 'dismiss', 'dismiss_kind'): out |= wsboot.answer_card(store, i, verb in ('accept', 'done'), actor)
+    elif verb == 'accept': raise ValueError('only a workstream card is added')
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
     if verb == 'rule':
         from . import promote

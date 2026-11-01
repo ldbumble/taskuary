@@ -91,17 +91,18 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // the pick lands (AssistantView) - never the item being left's own
   // ...and a held button of the item STILL ON THE TABLE acts too (2026-10-27, Run another agent on a general agent did nothing): while its
   // write-up ran the row kept re-drawing and stayed held, and every press of the item's own verbs fell through to nothing
-  const act = verbs === now ? press : (id, e, a) => {
-    const at = verbs.list.find((x) => x.id === id)?.at, v = now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at)));
-    return v ? press(id, e, a, v.of) : undefined;
-  };
+  const liveOf = (id) => { const at = verbs.list.find((x) => x.id === id)?.at; return now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at))); };
+  const act = verbs === now ? press : (id, e, a) => { const v = liveOf(id); return v ? press(id, e, a, v.of) : undefined; };
   // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
   // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
   const move = advised?.none ? adviceNone(advised.none).move : "";
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
   // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow)
-  const { row, by: spineBy } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null, verbs.list);
+  const { row, by: held } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null, verbs.list);
+  // ...and the pane's spine presses as the bar does (CI, 0.3.10.5: Send to agent on a folded Agent spine pressed while the row held did
+  // nothing - its button still named the card that drew it before the task page's card was registered again, and press found no verb there)
+  const spineBy = verbs === now ? held : Object.fromEntries(Object.entries(held).map(([k, vs]) => [k, vs.map((v) => ({ ...v, of: liveOf(v.id)?.of ?? v.of }))]));
   useEffect(() => { putSpineVerbs(spineBy); });
   const { ref, decide, agent, more, next, back, why } = row;
   const hosted = useHosted();

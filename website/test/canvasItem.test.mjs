@@ -70,7 +70,7 @@ test("a new line always shows; only a browse card's own steps hold the bottom", 
 // ...and both go: a page open beside the item no longer takes the item off the table - the Assistant's own Settings page, opened for
 // "turn off background sync", sent the next "mark this done" out about nothing (verify, 2026-10-19). The model reads which "this" is
 test("a card open in the canvas goes with the turn, beside the item still on the table", () => {
-  assert.match(view, /const subject = tableKey \|\| current \|\| cardRef\.current;/);
+  assert.match(view, /const subject = how\.door \? null : tableKey \|\| current \|\| cardRef\.current;/);
   assert.match(view, /key: subject, context_mid: currentItem\?\.mid && subject === current \? currentItem\.mid : null,\n\s+open_card: openCardRef\.current/);
 });
 

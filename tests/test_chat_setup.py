@@ -271,3 +271,17 @@ class AppPagesTests(unittest.TestCase):
         # setup is the Setup button at the top, never a link the chat opens (the owner, 2026-10-19)
         self.assertNotIn('#setup', desk); self.assertIn('the Setup button at the top', desk)
         with concierge.delivering(concierge.PHONE): self.assertNotIn('APP PAGES', concierge._system(s))   # no canvas to open it on
+
+
+def test_the_set_up_sort_sees_each_card_by_its_title_and_a_mailbox_as_one():
+    """"connect my zoho email" opened Zoho Invoice (TQ-1251): the sort was handed bare types, and only one of them said Zoho."""
+    seen = []
+    concierge.sort_setup(store(), 'connect my zoho email', composer(sort={'kind': 'connection', 'provider': 'imap'}, seen=seen))
+    (system, user), = seen
+    types = json.loads(user)['connector_types']
+    assert types['imap'] == 'Any mailbox (IMAP)' and types['zoho_invoice'] == 'Zoho Invoice'
+    assert 'EMAIL ACCOUNT IS A MAILBOX' in concierge.SETUP_SORT_SYSTEM
+
+
+def test_a_zoho_mailbox_named_to_the_catalogue_is_the_mailbox_card():
+    assert concierge.catalogue_card('zoho mail')['type'] == 'imap'

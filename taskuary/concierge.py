@@ -4265,7 +4265,11 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      'prepare it for the owner\'s review; triage matches new mail to it. A request to build, make or set up a playbook, '
                      'or to have a recurring kind of ask handled the same way every time, is playbook. '
                      'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
-                     'name its type from connector_types when you can. INVESTIGATE is a set-up that needs real digging first - a portal to '
+                     'name its type from connector_types when you can. '
+                     # "connect my zoho email" opened Zoho Invoice: the sort saw bare types, and a mail account shares its maker's name (TQ-1251)
+                     'AN EMAIL ACCOUNT IS A MAILBOX: the card of its own provider when connector_types has one (gmail, outlook), else imap - '
+                     'Zoho Mail, Yahoo, a domain address - never a card for another product of the same company (Zoho Invoice is billing). '
+                     'INVESTIGATE is a set-up that needs real digging first - a portal to '
                      'read, systems to choose between, several moving parts - where a walk-through with an agent is the honest next step. '
                      'A simple configuration is never investigate. '
                      # The assistant HAS a browser, and nothing here said so: asked for a daily report off a page behind a
@@ -4326,9 +4330,11 @@ def sort_setup(store, text: str, llm) -> dict:
     from . import compose
     from . import connectorcatalog
     types = sorted(set(store_mod.DEFAULT_ROLES) | {c['type'] for c in connectorcatalog.cards() if not c.get('planned')})
+    # each type with its card's title: "imap" alone never said it is any mailbox, so a Zoho mailbox went to the one type that said Zoho
+    titled = {t: (connectorcatalog.by_type(t) or {}).get('title') or t for t in types}
     from . import roles
     have = {k: r['title'] for k, r in roles.ROLES.items()}
-    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': types, 'roles': have}), max_tokens=300)) or {}
+    try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': titled, 'roles': have}), max_tokens=300)) or {}
     except Exception as e:
         logger.warning(f'concierge: the set-up sort failed - {e}'); out = {}
     kind = str(out.get('kind') or 'report').lower(); prov = str(out.get('provider') or '').lower().strip()

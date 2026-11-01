@@ -693,7 +693,7 @@ Change one setting; the schema says what it takes.
 
 ### `connection.create`
 
-Bring up a connector card to connect it; a second one of a kind opens with its Add another. Never carrying a secret: the owner gives it on the card.
+Bring up a connector card to connect it; a second one of a kind opens with its Add another. An email account is a mailbox: gmail, outlook, else imap (Zoho Mail, Yahoo, a domain address) - never another product of the same company. Never carrying a secret: the owner gives it on the card.
 
 - `type` - the catalogue type or title (linkedin, slack, "QuickBooks Online")
 - `name` (optional)

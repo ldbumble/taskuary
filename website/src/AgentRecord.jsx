@@ -167,7 +167,7 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   }
   if (!rec) return history ? null : <CircularProgress size={12} />;
   const runs = runHeads(rec.sessions, live), earlier = <EarlierRuns runs={runs.slice(1)} />;
-  if (history) return <EarlierRuns runs={runs} title={title} first />;
+  if (history) return <EarlierRuns runs={runs} title={title} first folded={!!live} />;
   if (!now && !pages.length) return story ? <AgentStory story={story} /> : null;
   const { state, since } = recordHead(story, rec.ended);
   // the run's last words stand in for a session whose own log kept none; a conversation's answers are the chat under the card,
@@ -289,20 +289,32 @@ export const FoldLine = ({ mark, head: said, line, empty = "", children }) => {
       {open && <Box sx={{ pl: 2.5, pt: 0.5 }}>{children}</Box>}
     </Box>);
 };
-// ...and the list of them under what leads, its head saying how many. `first`: nothing above it, so no rule over it
-export const FoldList = ({ mark, title, count, first = false, children }) => (
-  <Box {...mark} sx={first ? { mt: 1 } : sec}>
-    <Typography sx={head}>{title} · {count}</Typography>
-    {children}
-  </Box>);
+// ...and the list of them under what leads, its head saying how many. `first`: nothing above it, so no rule over it.
+// `folded`: under a LIVE agent's terminal the list is its head alone, one line that opens it and shuts it again (the owner, 2026-11-01:
+// "it's taking up from the coding cli view which we never want to do") - open, it scrolls in a capped box, so the terminal keeps its room
+export const FoldList = ({ mark, title, count, first = false, folded = false, children }) => {
+  const [open, setOpen] = useState(false), flip = () => setOpen(!open);
+  if (!folded) return (
+    <Box {...mark} sx={first ? { mt: 1 } : sec}>
+      <Typography sx={head}>{title} · {count}</Typography>
+      {children}
+    </Box>);
+  return (
+    <Box {...mark} data-tq-folded-list={open ? "open" : "shut"} sx={first ? { mt: 0.75 } : sec}>
+      <Typography role="button" tabIndex={0} aria-expanded={open} onClick={flip} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), flip())}
+        sx={{ ...head, mb: 0, cursor: "pointer", "&:hover": { color: INK } }}>{title} · {count} {open ? "▾" : "▸"}</Typography>
+      {open && <Box sx={{ mt: 0.35, maxHeight: "30vh", overflowY: "auto" }}>{children}</Box>}
+    </Box>);
+};
 
 // AN EARLIER RUN, folded to its line - when it ended, which agent, what came of it - and opened in place to its whole record
 const Earlier = ({ r }) => <FoldLine mark={{ "data-tq-run-before": r.n }} head={`Run ${r.n} · ${r.at} · ${r.who}`} line={r.line} empty="no written result">
   <SessionRecord s={r.s} /></FoldLine>;
 
 // THE RUNS BEFORE THE LATEST (the owner, 2026-10-29: "nothing earlier is dropped or replaced"), under its report, newest first, each one line
-// that opens in place (agentRecord.runHeads). `first`: nothing above it - a live terminal leads, or the sender wrote again - so no rule over it
-export const EarlierRuns = ({ runs, title = "", first = false }) => !runs?.length ? null : (
-  <FoldList mark={{ "data-tq-runs-before": "" }} title={title || "Earlier runs"} count={runs.length} first={first}>
+// that opens in place (agentRecord.runHeads). `first`: nothing above it - a live terminal leads, or the sender wrote again - so no rule over it.
+// `folded`: a live terminal leads, and the list is one line under it that opens it (FoldList)
+export const EarlierRuns = ({ runs, title = "", first = false, folded = false }) => !runs?.length ? null : (
+  <FoldList mark={{ "data-tq-runs-before": "" }} title={title || "Earlier runs"} count={runs.length} first={first} folded={folded}>
     {runs.map((r) => <Earlier key={r.s.sid || r.n} r={r} />)}
   </FoldList>);

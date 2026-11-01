@@ -281,6 +281,36 @@ GitHub account is connected to Taskuary for this. If the report is too long for 
 text is on your clipboard to paste.</li>
 </ul>
 <p>It goes to a public page: read it before you submit.</p>
+<h3 id="ask-the-assistant-to-write-it">Ask the Assistant to write it<a class="anchor" href="#ask-the-assistant-to-write-it" aria-label="Link to this section">#</a></h3>
+<p>Tell the Assistant, in your own words, that Taskuary got something wrong or that you wish it could
+do something. It writes a <strong>bug report</strong> or a <strong>feature request</strong> and puts <strong>Report this bug</strong> or
+<strong>Request a feature</strong> under its answer. That button opens the same popup, drafted the same way and
+scrubbed the same way.</p>
+<ul>
+<li><strong>A bug</strong> says what you were trying to do and what happened, beside the last error the page
+recorded. Its title starts with <code>[bug]</code>.</li>
+<li><strong>A feature request</strong> says what you were trying to do and what would help. It carries the Taskuary
+version and your OS, and nothing else: no error, no log, no mail. Its title starts with
+<code>[feature]</code>, and the issue is labelled <code>enhancement</code>.</li>
+<li><strong>Software with no card under Connections</strong> is a feature request too. Ask to connect something
+Taskuary has no card for, and the Assistant names the closest cards and offers <strong>Request a
+feature</strong> for it, in your words.</li>
+</ul>
+<p>Nothing is filed for you. You read the draft, change what you want, and press Submit on GitHub. The
+Assistant drafts one only when you ask in your own words at your desk. It won&#39;t draft one from a
+phone chat, and it won&#39;t draft one while a task with words from someone you have not vouched for is
+open.</p>
+<h3 id="the-advisor-can-suggest-one">The Advisor can suggest one<a class="anchor" href="#the-advisor-can-suggest-one" aria-label="Link to this section">#</a></h3>
+<p>When Taskuary itself keeps failing the same way, the Advisor raises one line with a <strong>Report this?</strong>
+move that opens the same popup:</p>
+<ul>
+<li>agent runs ending with the same error three times or more this week, on at least two tasks (twice
+is enough when the failure started with the version you are on), or</li>
+<li>the Assistant&#39;s fix-it check giving up on the same connection twice in two weeks.</li>
+</ul>
+<p>A failure you can fix yourself, such as a sign-in that was refused, is never counted. Neither is a
+task that carries words from someone you have not vouched for. Each problem is raised once. Put it
+down with <strong>Not ours</strong> and it stays down.</p>
 <h2 id="still-wrong">Still wrong<a class="anchor" href="#still-wrong" aria-label="Link to this section">#</a></h2>
 <ul>
 <li>The live API reference at <code>/api/docs</code> shows exactly what the app exposes, and is the fastest way

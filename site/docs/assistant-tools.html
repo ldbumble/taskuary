@@ -151,7 +151,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>app</strong></td>
 <td>settings, connections, scripts, memory, rules, the Hub, the Board and Search</td>
-<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?)</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
@@ -585,7 +585,14 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>name</code> - the connection</li>
 <li><code>how</code> - restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said</li>
 </ul>
-<p class="runs">Runs at once and says what it changed.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="issue-draft"><code>issue.draft</code><a class="anchor" href="#issue-draft" aria-label="Link to this section">#</a></h3>
+<p>Draft a bug report or a feature request for Taskuary&#39;s own public tracker, when the owner says Taskuary ITSELF did something wrong or wishes it could do something it cannot - never about their work, their mail or a person. It is scrubbed and comes up under your answer for them to read, edit and submit on GitHub themselves - nothing is filed from here.</p>
+<ul>
+<li><code>kind</code> - bug or feature</li>
+<li><code>trying</code> - what they were trying to do in the app, in general words with no names, mail, companies or task titles</li>
+<li><code>happened</code> - what went wrong (a bug) or what would help (a feature), the same way</li>
+</ul>
+<p class="runs">Drafts it for you to read, edit and submit on GitHub yourself - nothing is filed.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
 <p>Start a script by its name: walk me through my tasks | set up a report.</p>
 <ul>
 <li><code>name</code></li>

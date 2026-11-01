@@ -247,11 +247,29 @@ function SinceBlock({ onOpen, onReading }) {
   // THE OPENER IS THE DAY, THEN THE DIGEST (the owner, 2026-10-30: "it should just show the 2 cards your day then the tasks count. Under it
   // the morning digest first few rows of it, then with more button"): the away counts, the away cards and the memory line are gone from
   // here - this block is the digest alone, under DayOpener's two cards: its first lines, More for the rest
+  // AS MANY LINES AS THE SCREEN HAS ROOM FOR (the owner, 2026-10-31: "move up the morning digest beginning of report until more depending
+  // on screen size"): folded, the body stops at the last whole line above the chat's fold - what stands under it (More, the way-in buttons)
+  // kept in view - and never fewer than PREVIEW_MIN; measured again whenever the window or the cards above it change size
+  const PREVIEW_MIN = 3, MORE_H = 22, bodyEl = useRef(null), moreEl = useRef(null), [fit, setFit] = useState(null);
+  useLayoutEffect(() => {
+    const el = bodyEl.current, box = el?.closest(".tq-chat-body"), msg = el?.closest(".tq-welcome-msg");
+    if (open || !el) { setFit(null); return undefined; }
+    const measure = () => {
+      const r = el.getBoundingClientRect(), ends = [...el.querySelectorAll("li")].map((li) => li.getBoundingClientRect().bottom - r.top);
+      if (!box || !msg || !ends.length) { setFit(null); return; }
+      const b = box.getBoundingClientRect(), fold = b.top + box.clientHeight - parseFloat(getComputedStyle(box).paddingBottom || 0);
+      const under = msg.getBoundingClientRect().bottom + parseFloat(getComputedStyle(msg).marginBottom || 0) - r.bottom
+        - (moreEl.current?.offsetHeight || 0) + MORE_H;
+      const n = Math.max(PREVIEW_MIN, ends.filter((e) => e <= fold - r.top - under).length);
+      setFit(n >= ends.length ? null : Math.ceil(ends[n - 1]) + 6);
+    };
+    measure();
+    const ro = new ResizeObserver(measure); [box, msg?.querySelector(".tq-day")].forEach((x) => x && ro.observe(x));
+    return () => ro.disconnect();
+  }, [open, dg.text]);
   if (!pending && !dg.source_id) return null;
   const spin = (words) => <span role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CircularProgress size={12} thickness={5} sx={{ color: "#827356" }} />{words}</span>;
-  const lines = String(dg.text || "").split("\n"), PREVIEW = 6;
-  let seen = 0; const cut = lines.findIndex((l) => l.trim() && ++seen > PREVIEW);
-  const preview = cut < 0 ? dg.text : lines.slice(0, cut).join("\n"), more = cut >= 0;
+  const more = fit != null;
   return (
     <div className="tq-since" data-tq-since="">
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
@@ -270,8 +288,9 @@ function SinceBlock({ onOpen, onReading }) {
             : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
           {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
         </div>
-        {dg.text && <div className="tq-since-body" data-tq-digest-text=""><DigestText text={open ? dg.text : preview} sourceId={dg.source_id} /></div>}
-        {dg.text && more && <button type="button" className="tq-linkish" data-tq-digest-more="" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        {dg.text && <div ref={bodyEl} className={`tq-since-body${more ? " cut" : ""}`} style={more ? { maxHeight: fit } : undefined} data-tq-digest-text="">
+          <DigestText text={dg.text} sourceId={dg.source_id} /></div>}
+        {dg.text && (more || open) && <button ref={moreEl} type="button" className="tq-linkish" data-tq-digest-more="" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           {open ? "Less ▴" : "More ▾"}</button>}
       </>}
     </div>

@@ -501,8 +501,10 @@ def _events(t, p: dict) -> None:
                 bb.drain_later(st)
         elif ev == 'Interrupt': ws.record(st, tid, sid, 'turn_end', text='interrupted', source='hook')
         elif ev == 'SessionEnd':
-            # the run's own ending, before the pty's EOF gets there - unless the process lives on
-            if str(p.get('reason') or 'other') not in SESSION_GOES_ON:
+            # the run's own ending, before the pty's EOF gets there - unless the process lives on, or it was signed out: the pane
+            # opens it again for the sign-in (terminal.signed_out), so its worker never reads as gone
+            if str(p.get('reason') or '') == 'logout': t.signed_out = True
+            elif str(p.get('reason') or 'other') not in SESSION_GOES_ON:
                 ws.record(st, tid, sid, 'disconnected', text=f"session ended ({p.get('reason') or 'other'})", source='hook')
     except Exception as e: logger.debug(f'worker event from hook skipped: {e}')
 

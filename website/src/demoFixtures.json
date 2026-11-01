@@ -11295,6 +11295,22 @@
     "ConfigSaved": []
    },
    {
+    "ConnectorId": 115,
+    "Type": "stripe",
+    "Name": "Stripe",
+    "ConfigJson": "{}",
+    "Active": 0,
+    "Roles": "report,tool",
+    "Scope": null,
+    "LastSyncAt": null,
+    "LastError": null,
+    "LastErrorAt": null,
+    "HasSecret": 0,
+    "ScopeDefault": "admin",
+    "SignedOut": false,
+    "LastErrorPlain": ""
+   },
+   {
     "ConnectorId": 71,
     "Type": "teller",
     "Name": "Bank & card feed (Teller)",
@@ -12390,6 +12406,56 @@
    },
    {
     "type": "amazon_business_transactions",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_balance",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_balance_transactions",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_charges",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_payments",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_payouts",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_refunds",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_disputes",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_customers",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_subscriptions",
+    "status": "builtin",
+    "writes": false
+   },
+   {
+    "type": "stripe_invoices",
     "status": "builtin",
     "writes": false
    },

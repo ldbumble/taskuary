@@ -870,6 +870,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'quickbooks': 'report,tool',
                  'zoho_invoice': 'report,tool',
                  'amazon_sp': 'report,tool',     # a seller's Amazon reports: data only, never work on the rail
+                 'stripe': 'report,tool',        # payments and payouts: data only, never work on the rail (owner, 2026-11-01)
                  'teller': 'report,tool',          # the bank feed: transactions as a report (and "can become work"), balances as a tool
                  'simplefin': 'report,tool',       # the same feed, from the bridge anyone can sign up to
                  # market data (markets.py): four keyless cards, each a report source and an agent tool
@@ -1403,7 +1404,7 @@ class SQLiteStore:
                          ('matrix', 'Matrix'), ('google_chat', 'Google Chat'),
                          ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
-                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('amazon_sp', 'Amazon (Seller Central & Business)'), ('teller', 'Bank & card feed (Teller)'),
+                         ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('amazon_sp', 'Amazon (Seller Central & Business)'), ('stripe', 'Stripe'), ('teller', 'Bank & card feed (Teller)'),
                          ('simplefin', 'Bank & card feed (SimpleFIN)'),
                          ('coingecko', 'Crypto prices (CoinGecko)'), ('alchemy', 'Alchemy'), ('frankfurter', 'FX rates'),
                          ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),

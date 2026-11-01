@@ -51,6 +51,9 @@ ACTIONS = {
     'amazon_report': 'read', 'amazon_sales_traffic': 'read', 'amazon_orders': 'read', 'amazon_inventory': 'read', 'amazon_settlement': 'read', 'amazon_marketplaces': 'read',
     'amazon_business_transactions': 'read',     # Amazon Business reconciliation: its invoice lookup is a POST that reads
     'amazon_invoice_pdf': 'read',               # an invoice PDF fetched to a local folder - like sftp_get, nothing upstream moves
+    # Stripe: reads only - stripe._call refuses every verb but GET, so no refund, payout or cancel can leave the card
+    **{t: 'read' for t in ('stripe_balance', 'stripe_balance_transactions', 'stripe_charges', 'stripe_payments', 'stripe_payouts',
+                           'stripe_refunds', 'stripe_disputes', 'stripe_customers', 'stripe_subscriptions', 'stripe_invoices')},
     # market data: every one of these is a window on a public market. Nothing upstream moves.
     'coingecko_prices': 'read', 'fx_rates': 'read', 'yahoo_quotes': 'read', 'yahoo_history': 'read',
     'alchemy_prices': 'read', 'alchemy_wallet': 'read',

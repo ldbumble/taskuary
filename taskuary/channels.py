@@ -385,6 +385,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             from .amazon_sp import probe_apis, connection
             detail, apis = probe_apis(connection(store, cid))
             store.set_connector_config(cid, {**_cfg(c), 'apis': apis}); extra['apis'] = apis
+        elif c['Type'] == 'stripe':
+            from .stripe import probe, connection
+            detail = probe(connection(store, cid))
         elif c['Type'] == 'zoho_invoice':
             from .zoho import probe, connection
             detail = probe(connection(store, cid))

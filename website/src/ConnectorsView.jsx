@@ -808,6 +808,21 @@ const DATA_META = {
       "POST {base}/api/connectors/{cid}/test{hdr}: it tries the Selling Partner API (the marketplaces this account sells in) and Amazon Business reconciliation, passes if either answered, and returns `apis` - the ones that did. 'refused the credentials' is a wrong client id/secret or a revoked token (Authorize again); a 403 on one API is a role the app does not hold. Turn the card on, SETUP DONE.",
       "Lookups are run_tool with type amazon_sales_traffic {days, granularity, by}, amazon_orders {days}, amazon_inventory, amazon_settlement {days, count}, amazon_marketplaces, or amazon_report {report_type, days | start/end, options} on the seller side, and amazon_business_transactions {days | start/end, invoices} for Amazon Business purchases; amazon_invoice_pdf {invoice, credit} fetches one invoice (credit: true for a credit memo, by its own number) as a PDF and returns its local path. All are reads. Settlement reports cannot be requested — amazon_settlement finds the ones Amazon already built.",
       "Each report call can take minutes and spends a quota of about one per minute: ask for the window you need once, not in a loop."] },
+  // Stripe (stripe.py): payments, payouts, disputes and subscriptions. READ-ONLY - the card sends GETs to api.stripe.com and
+  // nothing else, so it cannot refund, pay out or cancel. A data card: it never puts work on the rail (the owner, 2026-11-01).
+  stripe: { title: "Stripe",
+    types: ["stripe_balance", "stripe_balance_transactions", "stripe_charges", "stripe_payments", "stripe_payouts", "stripe_refunds",
+      "stripe_disputes", "stripe_customers", "stripe_subscriptions", "stripe_invoices"],
+    fields: [], secretLabel: "restricted API key (write-only) — rk_live_… or rk_test_…; a full sk_ key works, a read-only restricted one is safer",
+    desc: "Your Stripe account as rows: the balance, balance transactions with fees and net, charges, payments, payouts, refunds, disputes, customers, subscriptions with their MRR, and invoices — for reports, dashboards and agent lookups. Read-only: it only ever reads.",
+    howto: ["Stripe Dashboard → Developers → API keys → Create restricted key (stripe.com/docs/keys#create-restricted-api-secret-key). Name it Taskuary. Use a test-mode key first if you want to see it work on test data.",
+      "Give it Read on: Balance, Balance transaction sources, Charges (and Refunds where Stripe lists it on its own), Customers, Disputes, PaymentIntents and Payouts under Core, and Invoices and Subscriptions under Billing — and None on everything else. If a report later says 403, the message names the resource the key still needs Read on.",
+      "Create key, copy it (it starts rk_live_ or rk_test_) and paste it here. It is stored write-only: it never comes back to this page. A full secret key (sk_) is accepted too, but it can move money, so a restricted read-only key is the one to give.",
+      "Test reads the balance and says whether the key is LIVE or TEST, and the account's name when the key may read it — without that permission it still passes on the balance.",
+      "Build the reports on the REPORTS tab: 'Stripe — payouts', 'disputes', 'subscriptions (MRR)', 'balance transactions' and the rest, each over a window of days. Dashboards take the same sources. Amounts arrive in money, not cents — 500 JPY stays 500."],
+    agent: ["Making the key is the owner's to do in their own Stripe Dashboard (Developers → API keys → Create restricted key, Read on the resources the card lists, None elsewhere); you cannot do it. Ask for the key and save it as Secret. Never print it back.",
+      "POST {base}/api/connectors/{cid}/test{hdr}: it reads the balance and names the account and LIVE or TEST mode. 'refused the key (401)' is a mistyped or rolled key; a 403 names the resource the restricted key lacks Read on. Turn the card on, SETUP DONE.",
+      "Lookups are run_tool with type stripe_balance, stripe_balance_transactions {days, kind}, stripe_charges / stripe_payments {days, status, customer}, stripe_payouts {days, status}, stripe_refunds {days}, stripe_disputes {days, status}, stripe_customers {email, days}, stripe_subscriptions {status} (each row carries its MRR) or stripe_invoices {days, status, customer}. All are reads; nothing on this card can refund, pay out or cancel."] },
   // ~3,600 third-party endpoints behind one card. It is ONE card and not ninety because tool
   // definitions live in the model's context: treg's own MCP server exposes about ten fixed
   // tools and keeps the catalogue as DATA behind them, so an agent searches it rather than
@@ -1883,7 +1898,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
-      ...dataCards(["intacct", "quickbooks", "zoho_invoice", "amazon_sp"]),
+      ...dataCards(["intacct", "quickbooks", "zoho_invoice", "amazon_sp", "stripe"]),
       ...catalogCards("Corporate systems"),
     ]},
     { title: "Markets & finance", cards: [

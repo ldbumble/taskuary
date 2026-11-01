@@ -550,6 +550,21 @@
       ]
     },
     {
+      "type": "stripe",
+      "title": "Stripe",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Your Stripe payments - balance, charges, payouts, refunds, disputes, customers, subscriptions with their MRR, and invoices - as reports, dashboards and agent lookups; read-only, with a restricted key.",
+      "match": [
+        "stripe",
+        "stripe payments",
+        "stripe payouts",
+        "stripe dashboard",
+        "stripe billing",
+        "stripe subscriptions"
+      ]
+    },
+    {
       "type": "teller",
       "title": "Bank & card feed (Teller)",
       "group": "Markets & finance",
@@ -2098,16 +2113,6 @@
         "365",
         "files",
         "office365 files"
-      ]
-    },
-    {
-      "type": "stripe",
-      "title": "Stripe",
-      "group": "Everything else",
-      "planned": true,
-      "desc": "Payments, subscriptions and disputes",
-      "match": [
-        "stripe"
       ]
     },
     {

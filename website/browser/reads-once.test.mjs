@@ -51,7 +51,9 @@ test("a row opened and each Next read the rail, the conversation and the Advisor
   assert.ok(open.n("/api/funnel/pile") <= 1 + others(open), `a row opened read the rail ${open.n("/api/funnel/pile")} times: ${open.got}\n${JSON.stringify(open.wakes)}`);
   assert.ok(open.n("/api/concierge") <= 1 + others(open), `...and the conversation ${open.n("/api/concierge")} times`);
   assert.ok(open.n("/api/advice") <= 2 + open.lines, `...and the Advisor ${open.n("/api/advice")} times (${open.lines} lines landed)`);
-  for (let i = 0; i < 2; i++) {
+  // ...three: the demo's first two Nexts each meet an Advisor line landing for a row further down, which the budget allows, and the
+  // read the answer's own revision made (the row drawn at the press came back a revision on) hid under it - the third meets none
+  for (let i = 0; i < 3; i++) {
     const next = await window(() => pressNext(page));
     assert.ok(next.posts.includes("/api/walk/next"), `Next ${i} was pressed: ${next.posts}`);
     // the press's answer carries the rail: the 1.5 s reload behind it read the same rows again

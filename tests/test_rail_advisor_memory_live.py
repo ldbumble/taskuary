@@ -80,13 +80,45 @@ def _stale_world(s):
                        'Status': 'filed', 'SenderClass': 'person', 'BodyText': body})
 
 
+# MORE THAN ONE WORKSTREAM (the design's S8, 2026-11-01): what only the workstreams can decide
+def _mom(s):
+    """Mom asked on the family chat three days ago and nobody answered: personal - never the Advisor's to raise."""
+    s.add_message({'ConversationId': 'whatsapp:home', 'Channel': 'whatsapp', 'SourceName': 'My phone', 'Subject': 'Saturday', 'FromName': 'Mom',
+                   'FromEmail': 'mom@family.example', 'SentAt': C.at(d=3), 'Status': 'filed', 'SenderClass': 'person',
+                   'BodyText': 'Can you pick up the car at 5 on Saturday? Let me know.'})
+def _clash(s):
+    """The owner promised the Ledger app's tester a demo Thursday at 2pm; the day job's manager has just moved the board prep to the same hour."""
+    s.add_message({'ConversationId': 'whatsapp:ledger', 'Channel': 'whatsapp', 'SourceName': 'My phone', 'Subject': 'Demo', 'FromName': 'Omar Keller',
+                   'FromEmail': 'omar@ledger.example', 'SentAt': C.at(d=2), 'Status': 'filed', 'SenderClass': 'person', 'BodyText': 'Can you show me the new export?'})
+    mid = s.add_message({'ConversationId': 'whatsapp:ledger', 'Channel': 'whatsapp', 'SourceName': 'My phone', 'Subject': 'Re: Demo', 'FromName': 'Alex Doyle',
+                         'FromEmail': C.OWNER, 'SentAt': C.at(d=2, m=-5), 'Status': 'context', 'Direction': 'out',
+                         'BodyText': "I'll demo it for you Thursday at 2pm, promise."})
+    s.put_sent_verdict(mid, 'whatsapp:ledger', False, True, 'demo the new export', 'Thursday 2pm', 'eval')
+    s.add_message({'ConversationId': 'email:board-prep', 'Channel': 'email', 'Subject': 'Board prep moved', 'FromName': 'Erin Blake',
+                   'FromEmail': 'erin@northwind.example', 'SentAt': C.at(h=2), 'Status': 'filed', 'SenderClass': 'person',
+                   'BodyText': 'Board prep is moving to Thursday at 2pm - I need you in the room for the finance section.'})
+
+
+def plant_workstreams(s):
+    """The filled arm's workstreams: the day job, the side product and personal, as the bootstrap and the owner left them."""
+    from taskuary import workstreams as W
+    W.save(s, [{'name': 'Northwind finance systems', 'about': 'my day job', 'domains': ['northwind.example']},
+               {'name': 'Ledger app', 'about': 'a product I build with Omar and Marcus', 'people': ['omar@ledger.example'], 'channels': ['whatsapp:ledger']},
+               {'name': 'Personal', 'personal': True, 'people': ['mom@family.example'], 'channels': ['whatsapp:home']}])
+    W.write_section(s, 'northwind-finance-systems', '- I run finance systems at Northwind; Erin Blake is my manager and board prep is hers')
+    W.write_section(s, 'ledger-app', '- Omar Keller tests it; I demo new features to him myself')
+
+
 # (world name, build, between, [(case, kind or None, should, pattern a line must match to be about it)])
 # kind None: any line whose text or why matches - a memory line can surface as a candidate's line or as the model's own idea
 MEMORY = [('q4', _q4, None, [('bring: Q4 budget numbers arrive, nobody asks anything', None, True, r'Q4|budget')]),
           ('newsletter', C._newsletter, None, [('bring: a newsletter arrives', None, False, r'newsletter|Payworth|unsubscribe')]),
           ('silences', _two_silences, None, [('people: the CFO has not answered in three days', None, True, r'Paula|forecast'),
                                              ("people: a stranger's cold pitch, one question asked", None, False, r'Dana|pitch|one-pager|AP process')]),
-          ('ray', _ray, None, [('promises: "Will do." to Ray about the accruals', None, True, r'Ray|accrual'),])]
+          ('ray', _ray, None, [('promises: "Will do." to Ray about the accruals', None, True, r'Ray|accrual'),]),
+          ('mom', _mom, None, [("workstreams: Mom's ask on the family chat is never raised", None, False, r'Mom|car|Saturday')]),
+          ('clash', _clash, None, [('workstreams: a Ledger demo and the Northwind board prep, both Thursday 2pm', None, True,
+                                    r'(demo|Omar).*(board|Erin)|(board|Erin).*(demo|Omar)|clash|overlap|same (time|hour)')])]
 # the rail cases where the model's taste decides (health and rule rows post with no model; connect lines are the model's own, untested here)
 PICK = ('asked a vendor 3 days ago, no answer', 'they answered', 'the last word was to an automated address', 'promised a budget by Friday, not sent',
         'the budget went', 'open task untouched for six days', 'touched yesterday', 'an agent has been on it for six days',
@@ -108,7 +140,8 @@ class Router:
     def __init__(self, real):
         self.real, self.script, self.calls, self.seen = real, C.brain(), 0, []
     def __call__(self, system, user, max_tokens=None, **kw):
-        if not str(system or '').startswith('YOUR INSTRUCTION'): return self.script(system, user, max_tokens, **kw)
+        # ...the Advisor's pass, and its second look before a line posts (ideacheck, S7), go to the real model; the rest is scripted
+        if not str(system or '').startswith(('YOUR INSTRUCTION', "You check an assistant's notes")): return self.script(system, user, max_tokens, **kw)
         self.calls += 1
         t = time.time()
         out = self.real(system, user, max_tokens=max_tokens)
@@ -155,7 +188,7 @@ def grade(lines, kind, should, pat, why) -> tuple:
 def one(world, router, arm) -> dict:
     name, build, between, cases = world
     s = C.store(); build(s)
-    if arm != 'empty': fill(s)
+    if arm != 'empty': fill(s); plant_workstreams(s)
     if arm == 'stale': stale(s)
     n0 = len(router.seen)
     lines = check(s, router)

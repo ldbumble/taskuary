@@ -77,3 +77,17 @@ def test_the_advisor_raises_no_idea_about_a_personal_item(s):
                                {'key': 'loose:q4', 'kind': 'loose', 'text': 'Q4 variance has no next step', 'sig': 'b', 'action': {'task': work}}],
                            '2026-11-01 09:00:00')
     assert [i['Key'] for i in said] == ['loose:q4']
+
+
+def test_the_advisor_lights_no_work_move_on_a_personal_ask(s, monkeypatch):
+    from taskuary import advisor, funnel, terminal
+    monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: []); monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
+    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
+    from tests.test_advisor_consistent import ask
+    s.set_setting('calendar_enabled', '0', 'test')
+    # the same ask twice is a duplicate the rule folds with Remove - lit on work, nothing on a personal ask
+    ask(s, 'Q4 variance', ('Erin Blake', ERIN), 7, cid='email:q4'); w, _ = ask(s, 'RE: Q4 variance', ('Erin Blake', ERIN), 2, cid='email:q4')
+    ask(s, 'The car', ('Mom', MOM), 7, cid='email:car'); t, _ = ask(s, 'RE: The car', ('Mom', MOM), 2, cid='email:car')
+    work, home = (advisor.decide(s, f'task:{x}', preread=False) for x in (w, t))
+    assert (work['state'], bool(work['verb'])) == ('duplicate', True)
+    assert (home['state'], home['verb']) == ('duplicate', None)

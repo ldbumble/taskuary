@@ -41,7 +41,9 @@ DEAD = {'gail w9': 'is in finance and answers', 'marcus waits': 'friday review',
 
 # the cases the memory should decide, and the move that is right once it is known (empty: the advisor_cases grading stands)
 NEW = {'Q3 variance file': ({'approve', 'redraft', 'reply'}, {'not_ours'}), 'Board deck numbers': ({'reply'}, {'not_ours', 'defer', 'close'}),
-       'W-9 for Brightline Supplies': ({'reply', 'forward'}, {'not_ours'})}
+       'W-9 for Brightline Supplies': ({'reply', 'forward'}, {'not_ours'}),
+       # MORE THAN ONE WORKSTREAM (the design's S8, 2026-11-01): Mom's ask on the family chat is personal - an FYI, never the work's Reply
+       'Pick up the car at 5': ({'close', 'next'}, {'reply', 'approve', 'redraft'})}
 # ...the draft breaks the promise: Redraft, or Reply to write it again (the SYSTEM prompt's own words for a draft that promises wrong)
 FILLED_OK = {'Badge access for the new AP clerk': {'forward'}, 'Night shift overtime rate': {'forward'}, 'Q3 variance file': {'redraft', 'reply'},
              'Payworth seat count renewal': {'defer'}}
@@ -59,12 +61,23 @@ def _strip(doc: str) -> str:
     return doc
 
 
+def workstreams_plant(s):
+    """The owner's three workstreams as the filled arm knows them - the day job, the side product, personal - with their sections."""
+    from taskuary import workstreams as W
+    W.save(s, [{'name': 'Northwind finance systems', 'about': 'my day job', 'domains': ['northwind.example']},
+               {'name': 'Ledger app', 'about': 'a product I build with Omar and Marcus', 'people': ['omar@ledger.example', 'marcus@ledger.example']},
+               {'name': 'Personal', 'personal': True, 'people': ['mom@family.example'], 'channels': ['whatsapp:home']}])
+    W.write_section(s, 'northwind-finance-systems', '- I run finance systems at Northwind; Erin Blake is my manager')
+    W.write_section(s, 'ledger-app', "- Omar Keller tests it; his bug reports are fixed in code, never answered by mail")
+
+
 def plant(s, filled: bool):
     """The memory as the condition has it. Filled: the live lines, the Gail line closed by its correction (memoryedit.remember
     replaces=), the Marcus line marked Wrong, the Trainly line Forgotten - each through the owner's own road."""
     from taskuary import learn, learned_cut as lc, memoryedit
     doc = s.get_doc('learned') or ''
     if not filled: s.save_doc('learned', _strip(doc), 'owner'); return
+    workstreams_plant(s)
     for slug, raw, _k in LIVE_LINES + [('people', GAIL_OLD, 'gail w9'), ('people', WRONG, 'marcus waits'), ('work', FORGOT, 'trainly monday')]:
         doc = learn._under(doc, lc.SECTIONS[slug], raw)
     s.save_doc('learned', doc, 'reflect')
@@ -88,6 +101,8 @@ def world(filled: bool):
     # a vendor asking who takes its W-9: the closed line says Gail, the line that replaced it says Paula
     f._work('W-9 for Brightline Supplies', kind='task', subject='W-9 for Brightline Supplies', from_name='Brightline Accounts', from_email='accounts@brightline.example',
             body='Our W-9 on file has expired. Who on your side should we send the new one to?', conversation_id='email:brightline-w9', sent_at=f.ago(hours=3))
+    f._work('Pick up the car at 5', kind='task', subject='Pick up the car at 5', body='Can you pick up the car at 5 on Saturday?', channel='whatsapp',
+            from_name='Mom', from_email='mom@family.example', conversation_id='whatsapp:home', sent_at=f.ago(hours=3))
     plant(s, filled)
     funnel.invalidate()
     for t in NEW:

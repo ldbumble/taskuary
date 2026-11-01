@@ -232,11 +232,21 @@ def run_image_generate(store, args: dict, message_id: int = None, task_id: int =
     puts it in front of the owner - the timeline already shows images inline (artifacts.py).
     Returning bytes to an agent instead would leave the owner with nothing to look at."""
     from . import artifacts
+    mid, tid = message_id or (args or {}).get('message_id'), task_id or (args or {}).get('task_id')
+    # NOWHERE TO LAND IS REFUSED BEFORE ANYTHING IS DRAWN: with no message it drew, said how many bytes, and kept nothing - "image created",
+    # and the owner never saw it (TQ-1251)
+    if not (mid or tid): raise RuntimeError('a picture needs a task to land on - pass task_id; nothing was drawn')
     out = generate(store, (args or {}).get('prompt'), size=(args or {}).get('size') or '1024x1024')
-    mid = message_id or (args or {}).get('message_id')
-    if not mid: return {'provider': out['provider'], 'model': out['model'], 'bytes': len(out['data'])}
     ext = {'image/jpeg': 'jpg', 'image/webp': 'webp'}.get(out['mime'], 'png')
     name = f"image-{int(time.time())}.{ext}"
+    if tid and not mid:
+        # ...an agent's picture lands in its task's outputs, the folder the task page offers to open and download (outputs.folder)
+        from . import outputs
+        d = outputs.folder(int(tid)); d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_bytes(out['data'])
+        logger.info(f"images: {out['provider']} drew {len(out['data']):,} bytes into task {tid}'s outputs")
+        return {'file': str(d / name), 'name': name, 'provider': out['provider'], 'model': out['model'],
+                'bytes': len(out['data']), 'prompt': out['prompt']}
     path = artifacts.attachment_dir(int(mid)) / name
     path.write_bytes(out['data'])
     aid = store.add_attachment({'MessageId': int(mid), 'Name': name, 'ContentType': out['mime'],
@@ -244,3 +254,12 @@ def run_image_generate(store, args: dict, message_id: int = None, task_id: int =
     logger.info(f"images: {out['provider']} drew {len(out['data']):,} bytes for message {mid}")
     return {'attachment_id': aid, 'name': name, 'provider': out['provider'], 'model': out['model'],
             'bytes': len(out['data']), 'prompt': out['prompt']}
+
+
+def run_image_tool(cfg: dict) -> tuple:
+    """{"prompt": "...", "size": "1024x1024", "task_id": N} - draws a picture with the owner's image card and files it where they see it: in the
+    task's outputs (task_id), or on a message (message_id). As the tools endpoint calls it (reports.REGISTRY): it was handed run_image_generate,
+    which takes the store first, so every agent's call failed on a missing argument and no picture was ever drawn (TQ-1251)."""
+    out = run_image_generate(cfg['store'], cfg, message_id=cfg.get('message_id'), task_id=cfg.get('task_id'))
+    where = f"TQ-{int(cfg['task_id']):04d}'s outputs" if out.get('file') else f"message {cfg.get('message_id')}"
+    return f"drew {out['name']} with {LABELS.get(out['provider'], out['provider'])} into {where}", json.dumps(out)

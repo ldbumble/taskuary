@@ -57,9 +57,11 @@ test("a reply with no draft yet says reply owed, with no flag, on the rail row a
   page.off("request", guard);
   page.on("request", async (r) => {
     const u = new URL(r.url());
-    if (!owedOn || r.method() !== "GET" || !/^\/api\/(funnel\/pile|tasks\/\d+)$/.test(u.pathname)) { guard(r); return; }
+    // ...and every walk move's answer, which carries the rail as the move left it (railwalk: one POST to /api/walk/*, its pile along)
+    const walk = r.method() === "POST" && /^\/api\/walk\//.test(u.pathname);
+    if (!owedOn || !(walk || (r.method() === "GET" && /^\/api\/(funnel\/pile|tasks\/\d+)$/.test(u.pathname)))) { guard(r); return; }
     try {
-      const res = await fetch(r.url(), { headers: r.headers() });
+      const res = await fetch(r.url(), { method: r.method(), headers: r.headers(), ...(walk ? { body: r.postData() } : {}) });
       r.respond({ status: res.status, contentType: "application/json", body: JSON.stringify(unDraft(await res.json())) });
     } catch { guard(r); }
   });
@@ -93,8 +95,11 @@ test("a typed 'remind me Monday' lights Remind me, and its picker's first button
   // ...on the row, or - Remind me is Came from's move now (the owner, 2026-10-29) - on its spine or in its open heading
   const lit = '.tq-arow-verbs button.tq-ab.p[data-tq-verb$="remind"], [data-tq-spine-moves] button.tq-ab.p[data-tq-verb$="remind"], [data-tq-pane-moves] button.tq-ab.p[data-tq-verb$="remind"]';
   await page.waitForSelector(lit, { visible: true, timeout: 20000 });
+  // ...on the walk's table the day is the walk's close (railwalk.leave "remind"), the task's own route anywhere else
   const posted = new Promise((resolve) => page.on("request", (r) => {
-    if (r.method() === "POST" && r.url().endsWith(`/api/tasks/${inv.TaskId}/remind`)) resolve(r.postData());
+    if (r.method() !== "POST") return;
+    if (r.url().endsWith(`/api/tasks/${inv.TaskId}/remind`)) resolve(r.postData());
+    else if (r.url().endsWith("/api/walk/leave") && JSON.parse(r.postData() || "{}").how === "remind") resolve(r.postData());
   }));
   // the press itself, on the button (the chat's pop-up may lie over the row - remind-lit-anchor is about where it opens)
   await page.$eval(lit, (b) => b.click());
@@ -107,6 +112,10 @@ test("a typed 'remind me Monday' lights Remind me, and its picker's first button
   await page.click("[data-tq-remind-said]");
   const until = JSON.parse(await Promise.race([posted, sleep(10000).then(() => "{}")])).until || "";
   assert.equal(new Date(`${until.slice(0, 10)}T12:00:00`).getDay(), 1, `its press puts the task away until that Monday: ${until}`);
+  // ...and the server put it away to that day
+  await page.waitForFunction(() => !document.querySelector(".tq-typing"), { timeout: 20000 });
+  const away = (await api(`/api/tasks/${inv.TaskId}`)).task?.RemindAt || "";
+  assert.equal(away.slice(0, 10), until.slice(0, 10), `the task is away until ${until}: ${away}`);
   assert.deepEqual(errors, []);
 });
 

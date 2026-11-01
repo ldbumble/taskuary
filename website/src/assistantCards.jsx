@@ -989,6 +989,14 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
     catch (e) { setErr(failOf(e)); }
     setBusy(false);
   };
+  // A WORKSTREAM THE ADVISOR FOUND (the owner, 2026-11-01: after setup, new or changed workstreams are confirmed through an Advisor card):
+  // Add it keeps it; No is the chips' Not ours, as on every idea - and it never asks again
+  const addWorkstream = async () => {
+    setBusy(true); setErr("");
+    try { await api.post(`/api/assistant/ideas/${card.idea}/accept`, {}); onDone?.(a.added ? "Keep it" : "Add it"); }
+    catch (e) { setErr(failOf(e)); }
+    setBusy(false);
+  };
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
   // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
   // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
@@ -1009,6 +1017,9 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
             onClick={() => go("Connections", `connector=${a.connector_type}`)}>{a.planned ? `See ${a.title || a.connector_type}` : `Connect ${a.title || a.connector_type}`}</Button>
         ) : card.idea_kind === "health" && a.tab ? (
           <Button size="small" variant="contained" disableElevation sx={primary} onClick={() => go(a.tab, a.hash || "")}>Open {a.tab}</Button>
+        ) : card.idea_kind === "workstream" && a.slug ? (
+          <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} data-tq-workstream-add={a.slug}
+            onClick={addWorkstream}>{busy ? "Adding…" : a.added ? "Keep it" : "Add it"}</Button>
         ) : rule ? (
           <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} onClick={makeRule}>{busy ? "Making it…" : "Make it a rule"}</Button>
         ) : null}

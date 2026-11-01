@@ -9702,6 +9702,10 @@ def catch_up_on_startup():
         # on the same once-a-day rhythm.
         try: learn.reflect_if_due(store)
         except Exception as e: logger.warning(f'reflection failed: {e}')
+        # ...and the workstreams kept current, once a week: each section from its last two weeks, a quiet one put by, and the hat a new
+        # connector or GitHub project brought noticed - added when sure, else an Advisor card (wsboot.tick, the owner 2026-11-01)
+        from . import wsboot
+        wsboot.tick(store)
     t = threading.Thread(target=_catch_up, daemon=True)
     t.start()
     return t                       # the caller may wait on it; startup itself never does

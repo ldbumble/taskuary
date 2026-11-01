@@ -687,7 +687,9 @@ def _who(store, ans: dict):
 # THE DRAFTS BEING WRITTEN, per store (a test's store is not the app's): JOB.md, STYLE.md and SOUL.md, each its own setup screen that
 # waits on it and shows what came back. STYLE.md was written silently behind the job and its failure only logged (the owner,
 # 2026-10-20: "make it visible here"). One queue, one at a time, in this order - who you are reads the job written before it.
-DRAFTS = ('job', 'style', 'soul')
+DRAFTS = ('job', 'workstreams', 'style', 'soul')
+# ...and WHAT YOU WORK ON (the owner, 2026-11-01: a one-screen "Here's what I think you work on" at first setup): six months of the mail
+# grouped into workstreams (wsboot.propose), its text the proposals as JSON - the screen renames, marks personal, or leaves one out
 _JOB, _LOCK = {}, threading.Lock()
 
 
@@ -717,7 +719,10 @@ def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
                 if not ds['_q']: ds['_on'] = False; return
                 d = ds['_q'].pop(0)
             st = ds[d]
-            try: histgen.generate(store, d); st.update(state='ready', why='')
+            try:
+                if d == 'workstreams': _propose(store)
+                else: histgen.generate(store, d)
+                st.update(state='ready', why='')
             except Exception as e:
                 logger.info(f'setup: {d} not learned from the mail - {e}'); st.update(state='failed', why=_unread(store, e))
             with _LOCK:
@@ -738,11 +743,31 @@ def _unread(store, e) -> str:
     except Exception: return why
 
 
+def _propose(store):
+    from . import wsboot
+    from .llm import build_llm
+    llm = build_llm(store, job='summary')
+    if not llm:
+        from . import words
+        raise RuntimeError(f"no active AI connector - set one up under {words.name('ai')}")
+    if not wsboot.propose(store, llm) and not wsboot.proposals(store):
+        raise RuntimeError('your mail did not show separate workstreams yet')
+
+
+def _ws_text(store) -> str:
+    """The workstreams screen's draft: the proposals and the ones already kept, as JSON [{slug, name, about, personal, section, kept}]."""
+    from . import workstreams as W, wsboot
+    rows = [{**{k: p[k] for k in ('slug', 'name', 'about', 'personal', 'section')}, 'kept': False} for p in wsboot.proposals(store)]
+    rows += [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': W.section(store, w['slug']), 'kept': True}
+             for w in W.streams(store)]
+    return json.dumps(rows) if rows else ''
+
+
 def job_state(store, name: str = 'job') -> dict:
     """{state: none|running|ready|failed, why, text} - one draft as its setup screen shows it."""
     st = (_JOB.get(id(store)) or {}).get(name) or {}
     if st.get('state') in ('running', 'failed'): return {'state': st['state'], 'why': st.get('why') or '', 'text': ''}
-    text = learned_job(store, name)
+    text = _ws_text(store) if name == 'workstreams' else learned_job(store, name)
     return {'state': 'ready' if text else 'none', 'why': '', 'text': text}
 
 
@@ -756,6 +781,12 @@ def accept(store, name: str, text: str) -> dict:
     from . import histgen
     from datetime import datetime
     if name not in DRAFTS: raise ValueError(f'no setup draft called {name}')
+    if name == 'workstreams':           # the screen's answer: [{slug, name, personal, keep}] - kept ones go live, their sections into JOB.md
+        from . import wsboot
+        try: items = json.loads(text or '[]') or []
+        except ValueError: raise ValueError('the workstreams answer is not a list')
+        wsboot.confirm(store, [i for i in items if isinstance(i, dict)], 'owner')
+        return job_state(store, name)
     said = str(text or '').strip()
     if said and said != learned_job(store, name):
         histgen.put_learned(store, name, f"_from your mail history, corrected by you at setup {datetime.now().strftime('%Y-%m-%d %H:%M')}_\n\n{said}", 'owner')

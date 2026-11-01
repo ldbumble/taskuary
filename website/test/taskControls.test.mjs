@@ -65,7 +65,7 @@ test("the agent heading is one short line, live or not", () => {
   // 2026-09-17: keep the stopped header as short as the one a running agent
   // gets). The bar rides IN the heading, so both extra lines go.
   const head = tasks.slice(tasks.indexOf('<WorkflowHeading number="2"'), tasks.indexOf('<WorkflowHeading number="3"'));
-  assert.ok(head.includes(": pane === \"agent\" && agentBar ? agentBarRow :"), "the expanded card's bar is the heading's action, not a row of its own");
+  assert.ok(head.includes(": shows(\"agent\") && agentBar ? agentBarRow :"), "the expanded card's bar is the heading's action, not a row of its own");
   // ...and on the canvas the open pane's white strip carries its stage moves, which left the bar (the owner, 2026-10-29) - not its heading
   assert.ok(head.includes("action={inRow ? null"), "the canvas's agent heading carries no bar");
   assert.match(tasks, /\{stripOn\(k\) && <PaneStrip sec=\{k\}/, "the open pane's strip draws its moves");

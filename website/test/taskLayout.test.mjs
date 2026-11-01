@@ -175,8 +175,8 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   assert.match(src, /\|\| \(co\.advice \? "Nobody sent this one[^"]*" : CLOSE_BY_HAND\)/);
   // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
   assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
-  assert.match(src, /pane === "reply" && co\.writeupAt === "closeout" && <WriteupBlock/);
-  assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : pane === "agent" && !sessionView && hasRecord && !resultRest \? "record" : "top";/);
+  assert.match(src, /shows\("reply"\) && co\.writeupAt === "closeout" && <WriteupBlock/);
+  assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest \? "record" : "top";/);
   assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
   assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
   assert.match(src, /\{lineAt === "record" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);

@@ -283,6 +283,11 @@ export const SECTION = (open, w, live = false, keep = false) => ({ position: "ab
 // ...a closed tab's width: 156px, and beside a LIVE agent Came from and Close out fold to slim 44px ones (the owner, 2026-10-27: "keep Came
 // from and Close out as very MINIMAL tabs ... so the live agent keeps nearly all the space")
 export const TAB_W = 156, MINI_W = 44;
+// ...and TWO OPEN SIDE BY SIDE (the owner, 2026-11-01, "try it": "a button to open 2 side by side so you can see agent response and close out
+// generated email or came from and agent work"): the open pane and its partner, half the work area each - Agent beside Close out (the answer
+// and the email it drafted), Came from beside Agent (the ask and the work). Only where two halves stay readable - a work area of 960px leaves
+// each about 400 beside the closed spine; a 1440 screen's is ~1014 - and never over a live agent: it keeps the most room
+export const PAIR_OF = { from: "agent", agent: "close", close: "agent" }, PAIR_MIN = 960;
 // ...which section a press belongs to, by its verb id (a draft's own are "<review>:<verb>", all Close out's)
 const VERB_SECTION = { close: new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time"]),
   agent: new Set(["continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]) };
@@ -561,14 +566,21 @@ const HIDDEN_WORDS = { position: "absolute", width: 1, height: 1, overflow: "hid
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
   fontSize: 15, lineHeight: 1, border: `1px solid ${BORDER}`, bgcolor: "#fff", color: ACCENT, p: 0,
   "&:hover": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
+// ...the toggle's glyph: two columns where it opens two, one where it goes back to one
+const PairGlyph = ({ two }) => <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4">
+  <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.6" />{two && <line x1="7" y1="1" x2="7" y2="11" />}</svg>;
 // ...A LIVE AGENT'S STRIP HAS NO X (the owner, 2026-10-29): its x was a second way to end the session, which Stop and save already is; the
 // way back to the task is the fold arrows either side of it, which open Came from or Close out with the session kept running in its slim tab
 // ...`name` and `keys` for an item's own three sections (ItemSections: Came from | Report | Close out)
-export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS }) {
+// ...`pair`: the side-by-side toggle ({ on, with, flip }; none where two halves would not be readable or an agent is live). Paired, the arrow
+// toward the other open half is gone and the outer one slides the pair along, keeping this pane
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS, pair = null }) {
   const liveMoves = useSpineVerbs("live");
-  const arrows = foldArrows(keys, sec).map(([side, mark, to]) => ({ side, mark, to: fold(to) }));
+  const arrows = foldArrows(keys, sec).map(([side, mark, to]) => ({ side, mark, to: fold(to) })).filter((a) => !pair?.on || a.to !== pair.with);
   const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${name} back`}
-    title={`Fold ${name} back to its tab`} sx={live ? { ...STRIP_ARROW, width: 22, height: 22, fontSize: 13 } : STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
+    title={pair?.on ? `Show ${SEC_NAME[a.to] || a.to} beside ${name}` : `Fold ${name} back to its tab`}
+    sx={live ? { ...STRIP_ARROW, width: 22, height: 22, fontSize: 13 } : STRIP_ARROW} onClick={() => onFold(a.to)}>{a.mark}</Box>;
+  const pairWord = pair?.on ? "One pane" : "Side by side";
   return (
     <Box data-tq-pane-strip={sec} data-tq-live={live ? "" : undefined} sx={{ position: "absolute", top: 0, left: 0, right: 0, height: live ? STRIP_LIVE_H : STRIP_H, zIndex: 2,
       boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: live ? 1 : 1.5, bgcolor: "#fff", borderBottom: `1px solid ${FOCUS_EDGE}` }}>
@@ -581,6 +593,8 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
               <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}</Box>
           : <PaneMoves sec={sec} skip={skip} name={name} />}
       </Box>
+      {pair && <Tooltip title={pairWord}><Box component="button" type="button" data-tq-strip-pair={pair.on ? "on" : "off"} aria-label={pairWord} aria-pressed={pair.on}
+        sx={{ ...STRIP_ARROW, borderRadius: "7px" }} onClick={pair.flip}><PairGlyph two={!pair.on} /></Box></Tooltip>}
       {arrows.filter((a) => a.side === "right").map(arrow)}
     </Box>);
 }
@@ -1023,6 +1037,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [fromSide]);
   // THE SECTION OPENED BY HAND (a closed section's tab), held for the view it was pressed in - `key` is the held view's (mainKey below)
   const [secPick, setSecPick] = useState({ key: null, sec: null });
+  // ...and SIDE BY SIDE, held the same way: the pick folds back to one pane with it (another task, an agent starting or ending, the close)
+  const [pairPick, setPairPick] = useState({ key: null, on: false });
   // THE ADVISOR ON THE TASKS TAB (U12): read further down (readTaskAdvice); declared here, as the section the task opens on is its pick too
   const [taskAdvice, setTaskAdvice] = useState(null);
   // ...and Came from's whole thread, behind "Full message history (N)"
@@ -1670,31 +1686,42 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
   const outsideSays = outside && outsideLine({ who: replyMessage?.FromName || "", where: outside.SourceName || channelName(outside.Channel),
     when: (() => { const w = whenShort(outside.SentAt); return !w ? "" : asUtc(String(outside.SentAt)).toDateString() === new Date().toDateString() ? `at ${w}` : `on ${w}`; })() });
-  const openSection = (s) => setSecPick({ key: pickKey, sec: s });
+  // ...SIDE BY SIDE (PAIR_OF): on the canvas, a work area wide enough for two readable halves, and no live agent - narrower, or once an
+  // agent starts, it is one pane again
+  const canPair = !!canvas && threeUp && !liveSession && bodyW >= PAIR_MIN, paired = canPair && !!section && pairPick.key === pickKey && pairPick.on;
+  const isOpen = (k) => section === k || (paired && PAIR_OF[section] === k);
+  // ...a press that opens a section already open beside the other keeps the pair as it stands
+  const openSection = (s) => { if (!(paired && isOpen(s))) setSecPick({ key: pickKey, sec: s }); };
+  const pairFlip = (k) => () => { setSecPick({ key: pickKey, sec: k }); setPairPick({ key: pickKey, on: !paired }); };
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : TAB_W);
   // ...less its slot's own 1px rule on the left (Agent and Close out), so the body lies inside it
-  const openW = (k) => Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1));
+  // ...side by side, half of what the closed tab and the two slots' rules leave
+  const openW = (k) => (paired ? Math.max(320, Math.floor((bodyW - SECTIONS.filter((s) => !isOpen(s.key)).reduce((n, s) => n + closedW(s.key), 0) - 2) / 2))
+    : Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1)));
   // ...and on the canvas the open one wears its white strip (PaneStrip): the body under it, its own name head given to the strip
-  const stripOn = (k) => inRow && section === k;
+  const stripOn = (k) => inRow && isOpen(k);
   const stripH = (k) => (sessionView && k === "agent" ? STRIP_LIVE_H : STRIP_H);
   const stripSkip = { from: () => false, agent: (v) => (runFormOpen && OPENS_FORM.has(v.id)) || (v.id === "continue" && failedFix),
     close: (v) => v.id === "reply" && (replyEmpty || !!pendingReview) };
   const foldTo = (k) => (to) => (hereSec && hereSec !== k && k !== "agent" ? hereSec : to);
   const slot = (k, body) => (!threeUp ? body
-    : <Box data-tq-slot={k} data-tq-open={section === k ? "" : undefined} sx={{ ...SLOT(section === k, closedW(k)),
+    : <Box data-tq-slot={k} data-tq-open={isOpen(k) ? "" : undefined} sx={{ ...SLOT(isOpen(k), closedW(k)),
         ...(k !== "from" ? { borderLeft: `1px solid ${FOCUS_EDGE}` } : {}),
         ...(stripOn(k) ? { "& > [role=region]": { top: `${stripH(k)}px` }, "& > [role=region] [data-tq-section-head]": { display: "none" } } : {}),
         // ...a live agent's body keeps its place under the strip while it is folded too: it stays laid out (SECTION's keep), and a body
         // that grew by the strip's height while away refit the terminal and sent the pty a resize
         ...(inRow && sessionView && k === "agent" && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
-        {section !== k && tabFor(k)}
-        {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={foldTo(k)} onFold={openSection}
-          onStop={sessionView && k === "agent" ? () => press("save-end") : null} />}
+        {!isOpen(k) && tabFor(k)}
+        {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
+          onStop={sessionView && k === "agent" ? () => press("save-end") : null}
+          pair={canPair ? { on: paired, with: paired ? SECTIONS.find((s) => s.key !== k && isOpen(s.key))?.key : null, flip: pairFlip(k) } : null} />}
         {body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;
+  // ...side by side, both open halves draw theirs - and beside Came from, Close out's spine keeps the draft's Redraft its hidden card lends it
+  const shows = (p) => pane === p || (paired && isOpen(p === "reply" ? "close" : p));
   // ...and a reply owed with nothing drafted shows its empty box in Close out, Draft with AI under it (the three sections, 2026-10-27)
   // ...and only where nothing else waits there: a close-out to approve, a proposal, emails owed or a write-up under way have their own box
   const replyEmpty = threeUp && !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
@@ -1705,18 +1732,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the column alone scrolls, the agent's part and its chat at their own height, and a folded Close out keeps its place on screen by
   // standing at the column's foot (sticky) - where the inner scroller used to keep it. With Close out open (a draft to send) the Result
   // still gives way to it (2026-10-25: "never past a report or a diff")
-  const oneScroll = settled && pane !== "reply";
+  const oneScroll = settled && !shows("reply");
   // the one line From folds to while an agent works (sessionView)
   const fromLine = fromLineOf({ sender: ownSource, count: sourceCount, workflow: fromWorkflow, made: t ? `${detail.ref} · ${made}` : "" });
   // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close: the current round's
   // close (store.closeouts), never an earlier round's; a detail with no closeouts (the site's demo) reads the newest note
   const closedNote = detail?.closeouts ? round.close?.note || "" : String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
-  const storyAt = storyPlace(news ? null : story, { open: pane === "agent" && !sessionView, hasRecord });
+  const storyAt = storyPlace(news ? null : story, { open: shows("agent") && !sessionView, hasRecord });
   // ...and the write-up's line stands in ONE place of the Agent pane: in the open record, else under the Result's summary or the step's top
-  const lineAt = co.writeupAt !== "result" ? null : pane === "agent" && !sessionView && hasRecord && !resultRest ? "record" : "top";
+  const lineAt = co.writeupAt !== "result" ? null : shows("agent") && !sessionView && hasRecord && !resultRest ? "record" : "top";
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
-  const agentEmpty = !term?.alive && !wide && pane !== "agent" && !hasRecord && !["line", "story", "summary"].includes(storyAt);
+  const agentEmpty = !term?.alive && !wide && !shows("agent") && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // A HELD STEP CARRIES ITS TRUST PRESSES (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
   // domain and then we won't have issue again"): the box that says why nothing started holds them, and Came from then shows none.
   // A press lifts the hold - the box says so and the normal Start is offered; nothing starts by itself
@@ -1734,7 +1761,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // the one white section on the shaded body (taskLayout.focusOf); a live session has no shade and no focus - it is the page
   const focus = focusOf({ live: !!term?.alive, result: resultShown, failed: failedRun, pane, waiting: !!waitFor, list, owed: sendWaits });
-  const chatBelow = focus === "agent" && workspaceMode === "general" && pane === "agent" && !liveSession && !resultRest;   // its chat joins the focus under it
+  const chatBelow = focus === "agent" && workspaceMode === "general" && shows("agent") && !liveSession && !resultRest;   // its chat joins the focus under it
   // ...Came from as a left drawer only over a live session now (stages.json `drawer`); the right drawer went with the three sections
   const fromDrawer = main === "work" && !threeUp;
   useEffect(() => { setFromSide(false); }, [main]);
@@ -1973,8 +2000,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // only a folded heading is a control: exactly one stage is open, so clicking the open one has
   // nothing to do and must not offer a chevron that does nothing.
   const stageProps = (name) => name === "agent" && resultShown
-    ? { folded: pane !== name || resultRest, onToggle: () => { if (pane !== name) { setOpenStage(name); setResultOpen(true); } else setResultOpen((v) => !v); } }
-    : { folded: pane !== name, onToggle: pane === name ? null : () => setOpenStage(name) };
+    ? { folded: !shows(name) || resultRest, onToggle: () => { if (!shows(name)) { setOpenStage(name); setResultOpen(true); } else setResultOpen((v) => !v); } }
+    : { folded: !shows(name), onToggle: shows(name) ? null : () => setOpenStage(name) };
   const startCodingAgent = async () => {
     const id = selected;
     if (!beginStart(id, "coding")) return;
@@ -2221,7 +2248,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ON THE CANVAS THE CHAT'S OWN STRIP RIDES IN THIS STEP'S HEADING: a row for "Agent work" and a second for the agent's name, its
   // brain and Full screen took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
   const [chatTools, setChatTools] = useState(null);
-  const agentUp = !!canvas && pane === "agent" && workspaceMode === "general" && !liveSession;
+  const agentUp = !!canvas && shows("agent") && workspaceMode === "general" && !liveSession;
   useEffect(() => {
     // ...and back down when another step opens: Task opened from there kept the scroll, its own heading out of sight
     if (!agentUp) { if (canvas && stepsBox.current) stepsBox.current.scrollTop = 0; return undefined; }
@@ -2683,7 +2710,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* ...UNTIL THREE SECTIONS IN A ROW (2026-10-27): with no live session the body is Came from | Agent | Close out, one open
                   (data-tq-main names it: from, agent, close), the other two its tabs; a live session's is the work ("work"), a phone's one
                   stacked page ("stacked") */}
-              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={section || main || "stacked"} data-tq-stage={taskStage} data-tq-drawer-out={fromDrawer && fromSide ? "" : undefined}
+              <Box ref={bodyBox} data-tq-task-body="" data-tq-main={section || main || "stacked"} data-tq-pair={paired ? `${section}+${PAIR_OF[section]}` : undefined} data-tq-stage={taskStage} data-tq-drawer-out={fromDrawer && fromSide ? "" : undefined}
                 data-tq-sections={threeUp ? "" : undefined} sx={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* ...and the tab reads as a press at a glance (the owner, 2026-10-26: "make it with arrow and more visible to pull out where it
                   came from"): the whole edge, an arrow in a disc that turns while it is out, a hover title saying what it opens */}
@@ -2707,8 +2734,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {(!fromDrawer || fromSide) && slot("from",
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
                     id={fromDrawer ? "tq-from-side" : undefined} role={fromDrawer ? "complementary" : threeUp ? "region" : undefined}
-                    aria-label={fromDrawer || threeUp ? "Came from" : undefined} aria-hidden={threeUp && section !== "from" ? true : undefined}
-                    onClickCapture={stacked ? phoneFromTap : undefined} sx={threeUp ? { ...SECTION(section === "from", openW("from")), gap: 1.75 }
+                    aria-label={fromDrawer || threeUp ? "Came from" : undefined} aria-hidden={threeUp && !isOpen("from") ? true : undefined}
+                    onClickCapture={stacked ? phoneFromTap : undefined} sx={threeUp ? { ...SECTION(isOpen("from"), openW("from")), gap: 1.75 }
                       : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen)) }}>
                     {threeUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"}
  />}
@@ -2815,7 +2842,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   sx={sessionView || threeUp ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",
                     ...(main === "work" ? MAIN : settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {slot("agent", <Box data-tq-work={threeUp ? "" : undefined} data-tq-agent-section="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Agent" : undefined}
-                  sx={threeUp ? SECTION(section === "agent", openW("agent"), sessionView, liveSession) : { display: "contents" }}>
+                  sx={threeUp ? SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession) : { display: "contents" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -2866,7 +2893,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 {!codeRun && <Box ref={agentHead} data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
-                  px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
+                  px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : shows("agent") ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
                   flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
@@ -2899,8 +2926,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
                     action={inRow ? null
-                      : pane === "agent" && agentBar ? agentBarRow :
-                      pane !== "agent" && !term?.alive && !["done", "dropped"].includes(t.Status)
+                      : shows("agent") && agentBar ? agentBarRow :
+                      !shows("agent") && !term?.alive && !["done", "dropped"].includes(t.Status)
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           {/* a regular agent's conversation is continued too - "Start an agent" read as starting over (T15) */}
                           {detail?.resumable || (isGeneral && generalStarted) ? (
@@ -2929,7 +2956,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {storyAt === "summary" && !resultShown && <AgentRecord {...recordProps} story={story} folded />}
                   {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
-                    onRecord={threeUp ? () => { if (pane !== "agent") setOpenStage("agent"); setResultOpen(true); } : null} />}
+                    onRecord={threeUp ? () => { if (!shows("agent")) setOpenStage("agent"); setResultOpen(true); } : null} />}
                   {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown
                       (BrowserPane.LastView, the owner 2026-10-28) */}
                   {workspaceMode === "general" && !sessionView && !term?.alive && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
@@ -2939,7 +2966,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
                     ‹ Back to the result</Button></Box>}
                   {lineAt === "top" && <WriteupLine view={writeup} hasReply={!!replyMessage} />}
-                  {pane === "agent" && <>
+                  {shows("agent") && <>
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
                   {/* AN AGENT CLOSED IT: nothing waits on you (the redesign, owner-approved 2026-10-21) - said first, over who closed it and why */}
@@ -3024,7 +3051,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>)}
                   {failedRun && isGeneral && hasGeneralHistory && !sessionView && (
                     <Box sx={{ mt: 0.75 }}><Button size="small" data-tq-full-result="" aria-expanded={resultOpen ? "true" : "false"}
-                      onClick={() => { if (!resultOpen && pane !== "agent") setOpenStage("agent"); setResultOpen(!resultOpen); }}
+                      onClick={() => { if (!resultOpen && !shows("agent")) setOpenStage("agent"); setResultOpen(!resultOpen); }}
                       sx={{ fontSize: 11, minHeight: 0, p: 0, minWidth: 0, textAlign: "left" }}>
                       {resultOpen ? "‹ Hide the conversation" : "The whole conversation ›"}</Button></Box>)}
                   {!threeUp && newStep()}
@@ -3081,7 +3108,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* ...while its session is live, or when you open Agent work yourself: drawn whenever the task had a chat, it
                     stayed on screen after End session with Close out folded under it, where a coding session's terminal goes
                     (the owner, 2026-10-13: "it should just move to the close out section when you close out agent run") */}
-                {workspaceMode === "general" && (liveSession || pane === "agent") ? (
+                {workspaceMode === "general" && (liveSession || shows("agent")) ? (
                   /* the chat is this task's session: it gets the room a terminal gets, not the
                      height of its own content squeezed between the cards above and below it. On the canvas that room is the
                      VIEW'S: the chat body is a size container (assistantView.css .tq-chat-body) and the view is 100cqh + 14px tall,
@@ -3188,8 +3215,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
                 {/* ...and in the three sections it is the third, its own section - beside a live agent too, a slim tab */}
                 {(!sessionView || threeUp) && slot("close", <Box ref={closeOutRef} data-tq-closeout="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Close out" : undefined}
-                  sx={threeUp ? { ...SECTION(section === "close", openW("close")), "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }
-                  : { ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.25 : 1, flexShrink: 0,
+                  sx={threeUp ? { ...SECTION(isOpen("close"), openW("close")), "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }
+                  : { ...card, ...step, borderTop: 0, mt: 1, px: 0, py: shows("reply") ? 1.25 : 1, flexShrink: 0,
                   // ...side by side only: a phone's stacked view scrolls whole under its own docked row
                   ...(oneScroll ? { "@container (min-width: 760px)": { position: "sticky", bottom: 0, zIndex: 1, bgcolor: SHADE, mt: 0.5, boxShadow: `0 -1px 0 ${BORDER}` } } : {}),
                   ...(focus === "reply" ? { ...FOCUS, mt: 1.25 } : {}),
@@ -3215,7 +3242,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact /> : null}
                     tone={PALETTE.oat} {...stageProps("reply")}
                     action={inRow ? null
-                      : pane !== "reply" && replyMessage
+                      : !shows("reply") && replyMessage
                       ? <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35 }}>
                           <Button size="small" variant={outside ? "outlined" : "contained"} disableElevation disabled={!!openingReply}
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
@@ -3238,16 +3265,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Box>}
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
                       again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
-                  {pane === "reply" && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
+                  {shows("reply") && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
                     <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
                       ✓ {btn(closedNote ? "close_note" : "close")}{t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}</Typography>
                     {closedNote && <Typography variant="body2" sx={{ color: DIM, mt: 0.25, whiteSpace: "pre-wrap" }}>{closedNote}</Typography>}
                   </Box>}
                   {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft
                       replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
-                  {pane === "reply" && co.writeupAt === "closeout" && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
+                  {shows("reply") && co.writeupAt === "closeout" && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
                     onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
-                  {pane === "reply" && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
+                  {shows("reply") && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* WHAT THE DRAFT ANSWERS, IN ONE LINE (the task-view cleanup, owner-approved 2026-10-25 - it replaces the 2026-10-16 condensed
                           rows here): "Answering <who>: <their words>", and the line opens the whole conversation in From. Four rows of the
@@ -3433,7 +3460,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...and the Advisor's line here when its move is Close out's (advice `section`): beside the Mark done it is the reason for */}
                   {threeUp && advisorNote && adviceIn === "close" && <Box data-tq-advisor-in="close" sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
                   {/* ...and under all of the current round, the rounds before it, a line each (CloseoutRounds.jsx) - as the Agent's earlier runs */}
-                  {pane === "reply" && <EarlierRounds rounds={rounds} />}
+                  {shows("reply") && <EarlierRounds rounds={rounds} />}
                 </Box>)}
                 </Box>
                 </Box>

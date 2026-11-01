@@ -1515,6 +1515,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
                  'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
         else: p = build(store)
         for i in p['items']: _attach(i)                  # how each row reads, once, for the rail and the phone alike
+        _label_workstreams(store, p['items'])            # ...and which workstream each task row is under, for its small label
         p['alerts'] = alerts(store, p['items'])
         # BULK PROCESSING: which row wears the "250 more" pill. None on an install that ranks
         # nothing, which is what keeps this whole feature invisible to an owner who takes one
@@ -1592,6 +1593,18 @@ def thread_of(store, key: str) -> list:
     if not str(key or '').startswith('processing:') or _CACHE.get('store') is not store: return []
     rows = [*(_CACHE.get('full') or ()), *((_CACHE.get('pile') or {}).get('items') or ())]
     return list(next((i.get('thread') or [] for i in rows if i.get('key') == key and i.get('thread')), []))
+
+
+def _label_workstreams(store, items: list):
+    """THE RAIL ROW'S WORKSTREAM LABEL (the owner, 2026-11-01): a task row carries its task's workstream, read in one query - only what is
+    placed already (workstreams.of_task places on read; the rail never writes). An idea row keeps its own."""
+    tids = sorted({int(i['tid']) for i in items if i.get('tid') and not i.get('workstream')})
+    if not tids: return
+    try: ws = {r['TaskId']: r['Workstream'] for r in store._rows(f"SELECT TaskId, Workstream FROM task WHERE TaskId IN ({','.join('?' * len(tids))}) "
+                                                                  "AND IFNULL(Workstream,'')<>''", tuple(tids))}
+    except Exception: return
+    for i in items:
+        if i.get('tid') and not i.get('workstream') and (w := ws.get(int(i['tid']))): i['workstream'] = w
 
 
 def rail_item(store, key: str) -> dict | None:

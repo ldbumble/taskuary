@@ -26,6 +26,9 @@ test("the task shows its workstream in a picker, and choosing another moves it",
   await page.waitForSelector(`${CUR} [data-tq-task-body][data-tq-sections]`, { timeout: 20000 });
   await sleep(1500);
   if (await page.$(`${CUR} [data-tq-section-tab=from]`)) { await page.click(`${CUR} [data-tq-section-tab=from] [data-tq-tab-arrow]`); await sleep(800); }
+  // ...and its rail row wears the workstream as a small label after the title (the owner, 2026-11-01)
+  await page.waitForFunction((t) => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].some((r) => r.innerText.includes(t)
+    && r.querySelector("[data-tq-workstream]")?.innerText.includes("Ledger app")), { timeout: 15000 }, "Export button greyed");
   const sel = `${CUR} [data-tq-workstream-picker] select`;
   await page.waitForSelector(sel, { visible: true, timeout: 10000 });
   const before = await page.$eval(sel, (s) => ({ value: s.value, options: [...s.options].map((o) => o.textContent) }));

@@ -4312,13 +4312,13 @@ def _compose_llm(store, trace=None, cancel=None):
 
 
 def catalogue_card(name: str) -> dict | None:
-    """The connector catalogue's card a name means - its type, its title or one of its match words, as the catalogue spells them."""
+    """The connector catalogue's card the model named - by its type or its title, exactly. Never by the catalogue's `match` words: which
+    card a name MEANS is the model's to read ("zoho" picked Zoho Invoice for a Zoho mailbox, TQ-1251); a miss is said with the closest."""
     from . import connectorcatalog
     n = ' '.join(str(name or '').lower().replace('_', ' ').split())
     if not n: return None
     cs = connectorcatalog.cards()
-    return (next((c for c in cs if c['type'] == n.replace(' ', '_')), None) or next((c for c in cs if c['title'].lower() == n), None)
-            or next((c for c in cs if n in [m.lower() for m in c.get('match') or []]), None))
+    return next((c for c in cs if c['type'] == n.replace(' ', '_')), None) or next((c for c in cs if c['title'].lower() == n), None)
 
 
 def catalogue_near(name: str, n: int = 3) -> list:

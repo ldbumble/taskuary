@@ -1205,6 +1205,10 @@ class SQLiteStore:
             llcols = {r[1] for r in self.cx.execute('PRAGMA table_info(learned_line)')}
             for col in ('Subject', 'ValidTo'):
                 if col not in llcols: self.cx.execute(f'ALTER TABLE learned_line ADD COLUMN {col} TEXT')
+            # WHICH WORKSTREAM each item is under (the design 2026-11-01, workstreams.py): a day job, a side product, personal - '' unplaced
+            for t in ('task', 'message', 'idea', 'learned_line'):
+                if 'Workstream' not in {r[1] for r in self.cx.execute(f'PRAGMA table_info({t})')}:
+                    self.cx.execute(f'ALTER TABLE {t} ADD COLUMN Workstream TEXT')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')
@@ -2906,6 +2910,13 @@ class SQLiteStore:
         else:
             self._exec('INSERT INTO idea (Key, Kind, Text, ActionJson, Sig, Status, FirstSeen, LastSaid, SaidCount) VALUES (?,?,?,?,?,?,?,?,1)',
                        (s['key'], s.get('kind'), s['text'], act, s.get('sig'), 'open', stamp, stamp))
+        # ...under the workstream of what it is about: its task's, else its message's (workstreams.py, 2026-11-01) - the idea's label
+        try:
+            from . import workstreams
+            ws = (workstreams.of_task(self, int(action['tid'])) if action.get('tid') else '') or \
+                 (workstreams.of_message(self, self.get_message(int(action['mid'])) or {}) if action.get('mid') else '')
+            if ws: self._exec('UPDATE idea SET Workstream=? WHERE Key=?', (ws, s['key']))
+        except Exception as e: logger.debug(f"idea {s['key']}: workstream not placed - {e}")
         return self._one('SELECT * FROM idea WHERE Key=?', (s['key'],))
     def set_idea_status(self, idea_id, status, by, until=None):
         self._exec('UPDATE idea SET Status=?, SnoozeUntil=?, DecidedBy=?, DecidedAt=? WHERE IdeaId=?', (status, until, by, _now(), idea_id))

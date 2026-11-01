@@ -3642,6 +3642,7 @@ def card_for(item: dict) -> dict:
     and reloads the live facts (draft text, agent tail) from the item's ids."""
     return {k: item.get(k) for k in ('key', 'kind', 'lane', 'title', 'who', 'when', 'why', 'mid', 'tid', 'ref', 'rid', 'idea', 'coding', 'source_id', 'preview', 'sent', 'stale', 'sig', 'more',
                                        'idea_kind', 'agent', 'asking', 'tail', 'event', 'summary', 'bad', 'draft', 'channel', 'category', 'action', 'sid', 'mode',
+                                       'workstream',     # the idea's workstream, for its small label (workstreams.py, 2026-11-01)
                                        # the agent's own question and the answers it offered: what a chat numbers, and
                                        # the request an answer is bound to (funnel.from_agents, workerstate PW-228)
                                        'choices', 'request_id', 'request_kind', 'closeout', 'rides',

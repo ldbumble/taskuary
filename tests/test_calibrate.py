@@ -38,6 +38,18 @@ def test_old_presses_are_out_of_the_record():
     assert calibrate.trusted(s, 'stopped', 'continue')
 
 
+def test_a_workstreams_own_record_decides_once_it_has_enough():
+    s = MemoryStore()
+    for n in range(1, 7):
+        s._exec("INSERT INTO task (TaskId, Title, Status, Workstream, CreatedAt, UpdatedAt) VALUES (?,?,?,?,datetime('now'),datetime('now'))",
+                (n, f'Ledger app bug {n}', 'open', 'ledger-app'))
+        _press(s, n, 'asked', 'close')                       # in the Ledger app, an ask is fixed and closed, never answered
+    for n in range(10, 40): _press(s, n, 'asked', 'reply')    # ...everywhere else, Reply (30 of 36 at home)
+    assert calibrate.trusted(s, 'asked', 'reply')
+    assert not calibrate.trusted(s, 'asked', 'reply', 'ledger-app')
+    assert calibrate.trusted(s, 'asked', 'reply', 'board-seat')   # a stream with no record of its own reads the home's
+
+
 def test_the_advisor_lights_nothing_where_the_rules_button_is_not_trusted(monkeypatch):
     from tests.test_advisor_consistent import MARCUS, ask
     from taskuary import funnel, terminal

@@ -1059,7 +1059,7 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         # _followed_up, and a line naming two tasks went to whichever matched first (the owner, 2026-10-11: no regex decides meaning)
         out.append(_item(f"idea:{i['IdeaId']}", 'idea', lane, i['Text'], when=i.get('LastSaid') or i.get('FirstSeen'), mid=a.get('mid'), tid=a.get('tid'),
                          who=m.get('FromName') or m.get('FromEmail') or '', channel=m.get('Channel') or '',
-                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'),
+                         idea=i['IdeaId'], idea_kind=i.get('Kind'), action=a, why=why, priority=tri.get('priority'), workstream=i.get('Workstream') or '',
                          who_email=a.get('who_email') or '', late_days=late,
                          urgent_request=tri.get('intent') in ('task', 'reply_only') and (bool(tri.get('urgent')) or priority_rank(tri.get('priority')) == 0)))
     return out

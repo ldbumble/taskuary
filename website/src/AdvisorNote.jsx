@@ -13,6 +13,7 @@ import api from "./api.js";
 import { TaskuaryMark } from "./ui.jsx";
 import { ALERT_INK, DIM, INK, label } from "./theme.jsx";
 import { MARKS, MARK_HINT } from "./learnedGroups.js";
+import { WorkstreamSelect } from "./Workstream.jsx";
 
 // the moves a memory line takes from the task: the owner's own line Forget only, a learned one all three (learnedGroups.marksFor)
 export const memoryMarks = (r) => (r?.kind !== "memory" || !r.key ? [] : r.own ? ["forget"] : ["keep", "wrong", "forget"]);
@@ -22,7 +23,9 @@ export const MARKED = { keep: "Kept - it is yours now.", wrong: "Marked wrong - 
 // something out comes with the press that puts it right (advisor.fix_of) - Continue with this / Redraft with this, the line as its note
 export const fixOf = (note) => (note?.advice?.fix?.verb && note.advice.fix.note ? note.advice.fix : null);
 
-export default function AdvisorNote({ note, onDraft = null, onFix = null, sx }) {
+// ...and WRONG WORKSTREAM is said here too (the owner, 2026-11-01): `workstream` is the task's {taskId, value, onDone}, its picker drawn
+// under what the line rests on - moving the task re-reads it under the right hat
+export default function AdvisorNote({ note, onDraft = null, onFix = null, workstream = null, sx }) {
   const [at, setAt] = useState(null), [done, setDone] = useState({}), [err, setErr] = useState(""), [fixing, setFixing] = useState(false);
   const fix = onFix ? fixOf(note) : null;
   const runFix = async () => {
@@ -72,6 +75,8 @@ export default function AdvisorNote({ note, onDraft = null, onFix = null, sx }) 
                     </Box>)}
                 </li>))}</ul></div>)
             : <Box className="fact" sx={{ color: DIM }}>{a.by === "check" ? "Read from the agent's work by the AI, after it stopped." : a.by === "model" ? "Read from this item by the AI." : "A fact Taskuary keeps about this item."}</Box>}
+          {workstream?.taskId && <Box data-tq-advisor-workstream="" sx={{ mt: 0.75, color: DIM, fontSize: 12 }}>Wrong workstream? Move it:
+            <WorkstreamSelect taskId={workstream.taskId} value={workstream.value} onDone={(s) => { setAt(null); workstream.onDone?.(s); }} /></Box>}
           {err && <Box role="alert" sx={{ color: ALERT_INK, fontSize: 12 }}>{err}</Box>}
         </div>
       </Popover>

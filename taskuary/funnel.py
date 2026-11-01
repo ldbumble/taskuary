@@ -1875,6 +1875,13 @@ def _idea_done(store, key: str, by: str):
     except Exception as e: logger.debug(f'the idea behind {key} was not read: {e}'); ids = []
     for i in ids:
         if (store.get_idea(i) or {}).get('Status') in ('open', 'snoozed'): store.set_idea_status(i, 'done', by)
+    # ...and the owner's own Done ON THE IDEA ITSELF says what is worth bringing up (the 2026-11-01 audit: "What to bring up" stayed empty
+    # while hundreds of ideas were put down this way - only Make a task and Dismiss taught it). Never one line per press: the model weighs
+    # it against the lines already there (memorylines.teach); a personal one teaches nothing
+    if m and by == 'owner' and (i := store.get_idea(int(m.group(1)))):
+        from . import memorylines
+        facts = f"The idea: {' '.join(str(i.get('Text') or '').split())[:400]}\nIts kind: {i.get('Kind') or 'idea'}\nThe owner: handled it (Done)"
+        memorylines.teach_soon(store, 'idea_done', f"idea{i['IdeaId']}", facts, section='bring')
 
 _SHOWING = contextvars.ContextVar('funnel_showing', default=None)
 

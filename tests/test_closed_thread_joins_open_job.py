@@ -35,7 +35,7 @@ class ClosedThreadJoinsOpenJob(unittest.TestCase):
     def setUp(self):
         cm = fake_embed.meaning(JOBS); cm.__enter__(); self.addCleanup(cm.__exit__, None, None, None)
         s = self.s = MemoryStore()
-        for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+        for k in ('calendar_enabled', 'coding_auto_enabled'): s.set_setting(k, '0', 't')
         s.set_setting('owner_email', 'alex@northwind.example', 't')
         self.a = mail(s, 'a', 'Alex, can you explain the co-insurance figures in the collections sheet?',
                       brain(title='Explain the co-insurance figures', summary='Paula asks what the co-insurance figures in the collections sheet mean.'),

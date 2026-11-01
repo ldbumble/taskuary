@@ -201,6 +201,40 @@ def is_personal(store, tid=None, mid=None, src: str = None, m: dict = None) -> b
     return False
 
 
+def of_evidence(store, ids) -> str:
+    """The workstream a learned line was learned under: the one most of its evidence (msg12, task7, rv4, ...) is placed in, when one
+    leads; '' when the evidence is spread across hats or unplaced - such a line is everyone's."""
+    if not streams(store): return ''
+    hits = []
+    for e in ids or ():
+        m = re.match(r'^([a-z]+)(\d+)$', str(e).strip())
+        if not m: continue
+        k, n = m.group(1), int(m.group(2))
+        try:
+            if k in ('msg', 'sv'): hits.append(of_message(store, store.get_message(n) or {}))
+            elif k in ('task', 'fs'): hits.append(of_task(store, n))
+            elif k == 'rv': hits.append(of_task(store, (store._one('SELECT TaskId FROM review WHERE ReviewId=?', (n,)) or {}).get('TaskId') or 0))
+            elif k == 'idea': hits.append((store._one('SELECT Workstream FROM idea WHERE IdeaId=?', (n,)) or {}).get('Workstream') or '')
+            elif k == 'out':
+                r = store._one('SELECT TargetKind, TargetId FROM outcome WHERE Id=?', (n,)) or {}
+                if r.get('TargetKind') == 'task': hits.append(of_task(store, r['TargetId']))
+        except Exception: continue
+    return _one(hits)
+
+
+def tag_lines(store) -> int:
+    """Write each machine line's workstream (learned_line.Workstream) from its evidence; a people line's own subject decides first.
+    Returns how many changed. Readers leave out the lines of another hat (learned_cut.for_reader)."""
+    if not streams(store): return 0
+    xs, n = streams(store), 0
+    for r in store._rows("SELECT Key, Ev, Subject, Workstream FROM learned_line WHERE Status IN ('in_use','watching')"):
+        ws = (by_signals(xs, {'FromEmail': r['Subject']})[0] if r.get('Subject') else '') or \
+             of_evidence(store, [e.strip() for e in str(r.get('Ev') or '').split(',') if e.strip()])
+        if ws != (r.get('Workstream') or ''):
+            store._exec('UPDATE learned_line SET Workstream=? WHERE Key=?', (ws, r['Key'])); n += 1
+    return n
+
+
 def label(store, slug: str) -> dict | None:
     """What a screen shows beside an item: {slug, name, personal} - None when it has no workstream."""
     w = get(store, slug) if slug else None

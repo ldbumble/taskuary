@@ -167,6 +167,7 @@ OWNER_ONLY = (
     (r'PATCH', r'^/api/tasks/\d+/checklist/[^/]+/note$', "a note on one of a task's to-dos is the owner's (the agent writes through its own task tools)"),
     (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (presses.py)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
+    (r'PUT', r'^/api/tasks/\d+/workstream$', "which of the owner's workstreams a task belongs to is the owner's word - it teaches where its people belong"),
     (r'POST', r'^/api/tasks/\d+/desktop$', "marking a task 'needs desktop' hands its agent the owner's desktop - never its own agent's press"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
     (r'POST', r'^/api/reason/(trusted|gate|folder|held/[0-9A-Za-z]+)$', "who may reach the owner's agents over Reason Network is the owner's"),

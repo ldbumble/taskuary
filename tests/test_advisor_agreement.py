@@ -243,3 +243,34 @@ def test_replay_the_reasonless_lights_go_dark(home):
     assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('', 'quiet'), 2: ('', 'quiet'), 3: ('', 'quiet'), 4: ('chase', '')}
     t = A.tally(list(ds.values()), 'today')
     assert (t['right'], t['wrong'], t['silent'], t['pct']) == (1, 0, 3, 100)
+
+
+# ── MEASURE HONESTLY (the 2026-11-01 design, S0) ─────────────────────────────────────────────────────────────────────────────────────────
+def test_remove_is_a_put_down_like_mark_done(home):
+    home.press(1, 'remove', 'close', '09:00:00', live=['remove', 'close'])
+    assert A.score(home.ds()[0]) == 'right'
+
+
+def test_a_continue_on_work_the_owner_is_already_driving_is_steering_not_a_dropped_ball(home):
+    home.press(1, '', 'continue', '09:00:00', live=['continue'])             # the first pick-up: a real dropped ball
+    home.press(1, '', 'continue', '11:00:00', live=['continue'], rev='r2')   # ...then the owner keeps steering it
+    home.press(2, '', 'continue', '09:00:00', live=['continue'])
+    home.outcome(2, 'agent.continued', '08:00:00')                            # typed to it in the pane an hour before
+    home.press(3, '', 'stop_agent', '09:00:00', live=['stop_agent'])        # a Stop is never steering
+    cx = A.connect(home.dir)
+    every = A.decisions(cx, DAY, silent=True)
+    assert sorted((d['target'][1], d['at'][-8:]) for d in A.dropped_balls(cx, every)) == [(1, '09:00:00'), (3, '09:00:00')]
+    assert sorted((d['target'][1], d['at'][-8:]) for d in A.dropped_balls(cx, every, steer=True)) == [(1, '11:00:00'), (2, '09:00:00')]
+    assert '2 dropped-ball misses (+2 steering)' in A.three(cx, every)
+
+
+def test_the_report_says_who_decided_each_light_and_whether_memory_was_behind_it(home):
+    home.press(1, 'close', 'close', '09:00:00', live=['continue'], by='rule')
+    home.model(2, 'reply', line='Erin waits on this; you answer her the same day', kind='memory')
+    home.press(2, 'reply', 'reply', '09:01:00', live=['reply', 'close'])
+    home.model(3, 'defer', line='Nothing is late yet')
+    home.press(3, 'defer', 'close', '09:02:00', live=['defer', 'close'])
+    cx = A.connect(home.dir)
+    assert {d['target'][1]: A.cause(cx, d) for d in home.ds()} == {1: 'rule', 2: 'model+memory', 3: 'model'}
+    out = A.report(home.ds(), DAY, cx=cx)
+    assert 'by cause' in out and 'model+memory' in out

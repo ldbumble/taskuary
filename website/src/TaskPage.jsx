@@ -60,6 +60,7 @@ import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeInte
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
+import { WorkstreamSelect } from "./Workstream.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import ChatThread from "./ChatThread.jsx";
 import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, DraftField, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
@@ -1975,6 +1976,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {workContext && <Typography sx={{ fontSize: 12.5, color: FAINT }}>Works from: {workContext}</Typography>}
         {facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => (
           <Typography key={p.key} data-tq-fact-alert={p.key} sx={{ fontSize: 12.5, color: ALERT_INK, fontWeight: 600 }}>{p.label}: {p.value}{pickOnAlert(p, { ml: 1 })}</Typography>))}
+        {/* which workstream it is under, and the picker that moves it - as the repo picker moves it to a checkout (the owner, 2026-11-01) */}
+        <WorkstreamSelect taskId={selected} value={detail?.workstream} onDone={() => { loadDetail(selected); loadTasks(); }} />
       </Box>
     </Box>
   );
@@ -2324,7 +2327,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (fix.verb === "continue") { await api.post(`/api/tasks/${id}/continue-work`, { note: fix.note }); continued(); return; }
     if (fix.verb === "redraft" && pendingReview?.ReviewId) { setOpenStage("reply"); await draftBehind(api, pendingReview.ReviewId, fix.note); if (!stale(id)) loadDetail(id); }
   };
-  const advisorNote = warn && !liveSession ? <AdvisorNote note={warn} onFix={advisorFix} onDraft={() => { setOpenStage("reply"); if (threeUp) openSection("close");
+  const advisorNote = warn && !liveSession ? <AdvisorNote note={warn} onFix={advisorFix}
+    workstream={{ taskId: selected, value: detail?.workstream, onDone: () => { loadDetail(selected); loadTasks(); } }} onDraft={() => { setOpenStage("reply"); if (threeUp) openSection("close");
     requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /> : null;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
   // Mark done and Remind me never fold, nor the button the Advisor lit

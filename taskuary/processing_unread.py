@@ -284,7 +284,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
             slip, late, quiet, day = funnel.slipped_followup(store, action, now)   # a quiet thread past the person's day: the owner's move
             if slip == 'answered': store.set_idea_status(idea['IdeaId'], 'done', 'funnel'); late = 0
             elif slip: lane = slip
-            base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action,
+            base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action, workstream=idea.get('Workstream') or '',
                         priority=triage.get('priority'), tid=action.get('tid') or tid,
                         mid=action.get('mid'), settling=bool(triage.get('pending')), who_email=action.get('who_email') or '', late_days=late,
                         urgent_request=lane == 'asked' and (bool(triage.get('urgent')) or funnel.priority_rank(triage.get('priority')) == 0))

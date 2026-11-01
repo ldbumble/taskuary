@@ -18,6 +18,7 @@ from .store import SQLiteStore, by_sentence, is_goal, render_doc, retoken_doc, t
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
+from . import workstreams as hub_ws
 from . import cli_connections, pathcache
 from . import blackboard
 from . import taskstate, stages
@@ -1954,6 +1955,8 @@ def task_detail(task_id: int):
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
             # a WORKFLOW RUN has no message and no triage behind it: which workflow, and what started it (workflows.of_task)
             'workflow': workflows.of_task(store, d['task']),
+            # which of the owner's workstreams it is under, for its small label and the picker (workstreams.py, the owner 2026-11-01)
+            'workstream': hub_ws.label(store, hub_ws.of_task(store, task_id)),
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
             'calendar': _calendar_of(task_id),
             # ...and what triage said an agent could do for the owner about the main ask - one press starts it (/api/tasks/{id}/offer)
@@ -2746,6 +2749,26 @@ def accept_offer(task_id: int, background: BackgroundTasks):
         store.tag_task(task_id, ingest.OFFER_TAG, actor=ACTOR)
         store.add_comment(task_id, ACTOR, 'agent', f'You accepted the offer: {offer}')
     return out
+
+class WorkstreamBody(BaseModel):
+    workstream: str = ''
+
+
+@app.get('/api/workstreams')
+def list_workstreams():
+    """The owner's workstreams, for the task's picker and the labels (workstreams.py). Proposed ones are the Advisor's cards, not here."""
+    return {'data': [{k: w[k] for k in ('slug', 'name', 'about', 'personal', 'status')} for w in hub_ws.streams(store)]}
+
+
+@app.put('/api/tasks/{task_id}/workstream')
+def set_task_workstream(task_id: int, body: WorkstreamBody):
+    """Move a task to a workstream - the picker on the task, as the repo picker moves it to a checkout (the owner, 2026-11-01). Its
+    messages and ideas follow, and the people on it are placed in that workstream from now on."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    try: out = hub_ws.set_task(store, task_id, body.workstream, 'owner')
+    except ValueError as e: raise HTTPException(422, str(e))
+    return {**out, 'label': hub_ws.label(store, out['workstream'])}
+
 
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again

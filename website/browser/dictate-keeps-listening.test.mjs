@@ -13,7 +13,6 @@ test("browser dictation survives Chrome's own end, shows interim words, stops on
   t.after(() => harness.close());
   const page = await harness.newPage();
   await page.evaluateOnNewDocument(() => {
-    try { localStorage.setItem("tq-voice-browser", "1"); } catch { /* the mic falls back to asking */ }
     window.__recs = [];
     window.SpeechRecognition = class {
       constructor() { window.__recs.push(this); this.live = false; }

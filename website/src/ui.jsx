@@ -15,6 +15,7 @@ import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { browserRecogniser, dictate, dictationError } from "./dictation.js";
+import { toWav } from "./wav.js";
 import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -477,9 +478,6 @@ export const useVoiceReady = () => {
   }, [n]);
   return v && { ...v, recheck: () => setN((x) => x + 1) };
 };
-// the owner picked the browser's own recogniser over a voice AI, once - remembered on this browser
-const BROWSER_VOICE = "tq-voice-browser";
-const browserVoice = () => { try { return localStorage.getItem(BROWSER_VOICE) === "1"; } catch { return false; } };
 
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
@@ -493,19 +491,23 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   // mic with it, mid-sentence. The box holds itself open while this is true
   React.useEffect(() => { onActive?.(!!rec || busy); }, [!!rec, busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = React.useState("");
-  const [ask, setAsk] = React.useState(null), [byBrowser, setByBrowser] = React.useState(browserVoice);
+  const [ask, setAsk] = React.useState(null), [srDown, setSrDown] = React.useState(false);
   // ...and a mic that stops SAYS WHY, beside it, not in a tooltip nobody hovers (the owner, 2026-10-28: "it just turns right off")
   const errAt = React.useRef(0), recRef = React.useRef(null); recRef.current = rec;
   const flash = (s) => { setErr(s); clearTimeout(errAt.current); errAt.current = setTimeout(() => setErr(""), 8000); };
   React.useEffect(() => () => { clearTimeout(errAt.current); recRef.current?.cancel?.(); }, []);
   const [hover, setHover] = React.useState(false);
   // NO VOICE AI, NO LIVE MIC (the owner, 2026-10-15: "if there is no voice provider the mic icon ... should be crossed out with popup
-  // to configure voice ai before it will activate"): the mic shows crossed out and its press asks - set up a voice AI, or (Edge and
-  // Chrome ship their own recogniser, the Web Speech API, free) use the browser's. That one cannot transcribe a voice-note FILE, so
-  // the connectors still matter for the funnel.
-  const SR = browserRecogniser();
-  const viaBrowser = !!(voice && !voice.ready && SR && byBrowser);
-  const off = !!(voice && !voice.ready && !viaBrowser);
+  // to configure voice ai before it will activate") - ...UNLESS A VOICE IS FOUND, AND THEN NO PRESS TO TURN IT ON (the owner, 2026-11-01:
+  // "local voice using microsoft edge is not working. it should be built in without having to turn it on if it finds it"). The mic stayed
+  // crossed out until "use this browser's own" was pressed, and in the desktop window there was nothing to press. Now, with no card: a
+  // tab's own recogniser (Edge and Chrome ship the Web Speech API) is used at once; else the computer's own (voice.py builtin - Windows'
+  // dictation, behind the desktop window too); only with neither is the mic crossed out and its press asks. A card still wins, and is
+  // still what transcribes a voice-note FILE. A tab whose speech service will not answer hands over to the computer's own.
+  const SR = browserRecogniser(), builtin = voice && !voice.ready ? voice.builtin : null;
+  const viaBrowser = !!(voice && !voice.ready && SR && !(srDown && builtin));
+  const viaBuiltin = !!(builtin && !viaBrowser);
+  const off = !!(voice && !voice.ready && !viaBrowser && !viaBuiltin);
   const press = (e) => { if (!off) return start(); setAsk(e.currentTarget); voice.recheck(); };
   // set up in the meantime (the popup's own button, or another tab): the mic is live the moment the status says so
   React.useEffect(() => { if (ask && voice?.ready) setAsk(null); }, [ask, voice?.ready]);
@@ -521,7 +523,13 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         const d = dictate({ SR, lang: navigator.language || "en-US", phrases: vocab,
           onFinal: (t) => { if (live.current.onInterim) live.current.onText?.(t); else all = all ? `${all} ${t}` : t; },
           onInterim: (t) => live.current.onInterim?.(t),
-          onEnd: (line) => { setRec(null); if (ctl) ctl.current = null; if (all) live.current.onText?.(all); if (line) flash(line); } });
+          onEnd: (line) => {
+            setRec(null); if (ctl) ctl.current = null; if (all) live.current.onText?.(all);
+            if (builtin && [dictationError("network"), dictationError("service-not-allowed")].includes(line)) {
+              setSrDown(true); line = `The browser's speech service did not answer - press the mic again to use ${builtin.label}`;
+            }
+            if (line) flash(line);
+          } });
         setRec(d); if (ctl) ctl.current = { cancel: () => d.cancel() };
       } catch { flash("This browser cannot dictate here - set up a voice AI instead"); }
       return;
@@ -534,9 +542,10 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        const clip = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setBusy(true);
         try {
+          const blob = viaBuiltin ? await toWav(clip) : clip;     // the computer's own recogniser reads WAV only
           const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm" } });
           if (data.text) onText?.(data.text); else flash("nothing audible");
         } catch (e) { flash(e?.response?.data?.detail || "transcription failed"); }
@@ -550,11 +559,8 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     : rec ? "Stop and transcribe"
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
+    : viaBuiltin ? `Dictate — ${builtin.label}. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
     : "Voice is off — no voice AI is set up yet");
-  const useBrowser = () => {
-    try { localStorage.setItem(BROWSER_VOICE, "1"); } catch { /* private window: this visit only */ }
-    setByBrowser(true); setAsk(null);
-  };
   return (<>
     <MuiTooltip title={ask ? "" : err ? <span data-tq-mic-err="">{err}</span> : title} open={!ask && (!!err || (hover && !!title))}
       onOpen={() => setHover(true)} onClose={() => setHover(false)}><span>
@@ -574,7 +580,6 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
         <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
           onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>Set up voice AI</Button>
-        {SR && <Button size="small" sx={{ textTransform: "none" }} onClick={useBrowser}>Use this browser's own (free)</Button>}
       </Box>
     </Popover>
   </>);

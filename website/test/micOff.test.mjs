@@ -5,15 +5,27 @@ import { canvasRequestFromHash } from "../src/canvasLinks.js";
 import { place } from "../src/words.js";
 
 // No voice AI, no live mic (the owner, 2026-10-15: "if there is no voice provider the mic icon in the bar on bottom should be crossed
-// out with popup to configure voice ai before it will activate").
+// out with popup to configure voice ai before it will activate") - unless a voice is found, and then no press to turn it on (the owner,
+// 2026-11-01: "it should be built in without having to turn it on if it finds it").
 const ui = readFileSync(new URL("../src/ui.jsx", import.meta.url), "utf8");
 const mic = ui.slice(ui.indexOf("export const MicButton"), ui.indexOf("export const ChoiceRow"));
 
-test("with no voice AI the mic is crossed out, and its press asks instead of recording", () => {
-  assert.match(mic, /const off = !!\(voice && !voice\.ready && !viaBrowser\)/);
+test("with no voice AI and no voice found the mic is crossed out, and its press asks instead of recording", () => {
+  assert.match(mic, /const off = !!\(voice && !voice\.ready && !viaBrowser && !viaBuiltin\)/);
   assert.match(mic, /off \? <MicOffIcon/);
   assert.match(mic, /const press = \(e\) => \{ if \(!off\) return start\(\); setAsk\(e\.currentTarget\)/);
-  assert.match(mic, /viaBrowser = !!\(voice && !voice\.ready && SR && byBrowser\)/, "the browser's recogniser only once it was chosen");
+});
+
+test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {
+  assert.match(mic, /viaBrowser = !!\(voice && !voice\.ready && SR && !\(srDown && builtin\)\)/, "the browser's recogniser whenever there is one");
+  assert.match(mic, /viaBuiltin = !!\(builtin && !viaBrowser\)/, "else the computer's own, as the server reports it");
+  assert.doesNotMatch(ui, /tq-voice-browser|useBrowser|this browser's own \(free\)/, "the opt-in step is gone");
+  assert.match(mic, /viaBuiltin \? await toWav\(clip\) : clip/, "the computer's own hears WAV");
+});
+
+test("a tab whose speech service will not answer hands over to the computer's own", () => {
+  assert.match(mic, /builtin && \[dictationError\("network"\), dictationError\("service-not-allowed"\)\]\.includes\(line\)/);
+  assert.match(mic, /setSrDown\(true\)/);
 });
 
 test("the popup opens the voice section of Connections, and that link lands there", () => {

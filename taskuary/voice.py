@@ -15,7 +15,7 @@ in-process: no key, no server, audio never leaves the box (pip install taskuary[
 The same function transcribes a clip from the browser's microphone: "put voice into prompts" is
 the prompt box plus a mic, and the text goes wherever the box goes.
 """
-import io, json, os, re, tempfile, time, wave
+import base64, io, json, os, re, subprocess, sys, tempfile, time, wave
 import requests
 from loguru import logger
 from . import words
@@ -83,12 +83,16 @@ def pick(store):
 def ready(store) -> dict:
     c = pick(store)
     return {'ready': bool(c), 'provider': c['Type'] if c else None, 'label': LABELS.get(c['Type']) if c else None,
-            'vocabulary': vocabulary(store)}
+            'vocabulary': vocabulary(store), 'builtin': None if c else builtin()}
 
 
-def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.ogg', c: dict = None) -> dict:
-    """Bytes in, {text, provider, model} out. Raises RuntimeError with something the owner can act on."""
+def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.ogg', c: dict = None, mic: bool = False) -> dict:
+    """Bytes in, {text, provider, model} out. Raises RuntimeError with something the owner can act on.
+    `mic`: a clip from the prompt box's mic, which may fall to the computer's own recogniser when no card is set up."""
     c = c or pick(store)
+    if not c and mic and builtin():
+        if (mime or '').split(';')[0].strip() not in ('audio/wav', 'audio/x-wav'): raise RuntimeError(f"{BUILTIN['label']} reads WAV only - press the mic again")
+        return {'text': _windows(data).strip(), 'provider': BUILTIN['engine'], 'model': 'System.Speech dictation'}
     if not c: raise RuntimeError(NO_CONNECTOR)
     t, cfg, key, terms = c['Type'], _cfg(c), c.get('Secret') or '', vocabulary(store)
     mime = (mime or 'audio/ogg').split(';')[0].strip()
@@ -163,6 +167,58 @@ def _local(cfg, data, name, terms=()):
         if terms: opts['initial_prompt'] = ', '.join(terms)
         segs, _info = m.transcribe(path, vad_filter=True, **opts)
         return ' '.join(s.text.strip() for s in segs), f'faster-whisper {size}'
+    finally:
+        try: os.unlink(path)
+        except OSError: pass
+
+
+"""THE COMPUTER'S OWN VOICE, ON WITHOUT A PRESS (the owner, 2026-11-01: "local voice using microsoft edge is not working. it should be
+built in without having to turn it on if it finds it"). The desktop window is Edge's WebView2, whose SpeechRecognition has no speech
+service behind it ("network" at once), and Edge's on-device recognition reports itself unavailable. What every Windows desktop does ship
+is the SAPI dictation recogniser behind .NET's System.Speech: offline, no key, no install, about a second for a sentence. It reads a WAV
+file, so the mic sends one (wav.js) and a PowerShell child hears it - no Python package, nothing on macOS or Linux, where this is None
+and the mic stays as it was. It takes no vocabulary (SAPI dictation has no phrase biasing), and it serves the mic only: a voice note
+arrives as Ogg/Opus, which it cannot read, so voice notes still want a card. A configured card always wins (ready, transcribe)."""
+BUILTIN = {'engine': 'windows_speech', 'label': 'Windows speech recognition (on this computer)'}
+_RECOGNISERS = r'SOFTWARE\Microsoft\Speech\Recognizers\Tokens'
+_HAS = {}
+
+def builtin():
+    """BUILTIN when this computer has a desktop recogniser System.Speech can open, else None. Read once: the registry, no child."""
+    if 'v' not in _HAS:
+        v = None
+        if sys.platform == 'win32':
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _RECOGNISERS) as k: v = BUILTIN if winreg.QueryInfoKey(k)[0] else None
+            except OSError: v = None
+        _HAS['v'] = v
+    return _HAS['v']
+
+# Recognize() answers null for a stretch it could not match, so a null is no end: the end is the engine letting go of the file, which throws
+_SAPI = r'''$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
+try {
+Add-Type -AssemblyName System.Speech
+$all = [System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()
+$ri = @($all | Where-Object { $_.Culture.Name -eq (Get-UICulture).Name }) + @($all) | Select-Object -First 1
+if (-not $ri) { throw 'no speech recogniser is installed' }
+$e = New-Object System.Speech.Recognition.SpeechRecognitionEngine $ri
+$e.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar)); $e.SetInputToWaveFile($env:TQ_WAV)
+$out = @(); for ($i = 0; $i -lt 500; $i++) { try { $r = $e.Recognize() } catch [InvalidOperationException] { break }; if ($r) { $out += $r.Text } }
+$e.Dispose(); [Console]::Out.Write(($out -join ' '))
+} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }'''
+
+def _windows(data: bytes) -> str:
+    from . import spawn
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f: f.write(data); path = f.name
+    try:
+        enc = base64.b64encode(_SAPI.encode('utf-16-le')).decode()
+        r = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc],
+                      capture_output=True, timeout=120, env={**os.environ, 'TQ_WAV': path})
+        if r.returncode: raise RuntimeError(f"{BUILTIN['label']} could not hear the clip: {r.stderr.decode('utf-8', 'replace').strip()[:200] or r.returncode}")
+        return r.stdout.decode('utf-8', 'replace')
+    except FileNotFoundError: raise RuntimeError(f"{BUILTIN['label']} needs PowerShell, which was not found")
+    except subprocess.TimeoutExpired: raise RuntimeError(f"{BUILTIN['label']} took over two minutes - try a shorter clip")
     finally:
         try: os.unlink(path)
         except OSError: pass

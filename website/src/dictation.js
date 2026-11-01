@@ -7,7 +7,8 @@
 
 /* NOT IN THE TASKUARY WINDOW (a user, 2026-10-29: "voice noting not working" - the mic said it could not reach the speech service).
    The desktop window is Edge's WebView2: it carries Chromium's SpeechRecognition class but no speech service behind it, so every
-   session ends at once with "network", online or not. There the browser's own voice is no choice at all - the mic asks for a voice AI. */
+   session ends at once with "network", online or not. There the browser's own voice is no choice at all - the computer's own takes it
+   (voice.py builtin: Windows' dictation), and only with none does the mic ask for a voice AI. */
 export const browserRecogniser = (w = typeof window === "undefined" ? null : window) =>
   w && !w.pywebview ? (w.SpeechRecognition || w.webkitSpeechRecognition || null) : null;
 

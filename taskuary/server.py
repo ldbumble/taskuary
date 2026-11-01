@@ -6779,7 +6779,7 @@ async def voice_transcribe(request: Request):
     if not data: raise HTTPException(422, 'no audio in the request')
     mime = (request.headers.get('content-type') or 'audio/webm').split(';')[0].strip()
     # a call to the transcription service, seconds long: on the loop it froze every pane and request until it answered
-    try: return await run_in_threadpool(voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}')
+    try: return await run_in_threadpool(voice.transcribe, store, data, mime, f'clip.{voice.ext_for(mime)}', mic=True)
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach the transcription service: {str(e)[:160]}')
 

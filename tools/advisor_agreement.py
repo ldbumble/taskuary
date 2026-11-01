@@ -32,7 +32,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
-TWIN = {'let_go': 'close', 'done': 'close', 'try_again': 'continue'}
+TWIN = {'let_go': 'close', 'done': 'close', 'try_again': 'continue', 'remove': 'close'}   # Remove puts the item down, as Mark done does
 NOT_ANSWERS = {'back', 'reopen'}                    # moving about, never a move on the item's decision
 OWNER = ('owner', 'you')
 ACT = {'task.closed': 'close', 'reply.sent': 'approve', 'agent.continued': 'continue'}   # outcome kinds that are the owner's own acts
@@ -40,6 +40,7 @@ HORIZON_H, LOOKBACK_H = 48, 1 / 6
 CHECK = 'agent.check'                               # the finish check's advice rows (advisor.CHECK)
 DROPPED = {'redraft', 'stop_agent', 'continue'}     # a press that picks up a ball something dropped
 FIRED_H = 1                                         # ...unflagged: no Advisor row lit anything on the item this long before it
+STEER_H = 12                                        # a Continue within this long of the owner's own Continue on the item is steering
 def _v(v): return TWIN.get(v or '', v or '')
 def _in(xs): return ','.join('?' * len(xs))
 
@@ -283,9 +284,20 @@ def fired(cx, d) -> bool:
                            (*d['target'], a, d['end'] if d.get('end') else d['at'])).fetchone())
 
 
-def dropped_balls(cx, ds) -> list:
-    """The silent decisions the owner answered with Redraft, Stop or Continue, where nothing of the Advisor's had fired on the item."""
-    return [d for d in ds if not d['lit'] and _v(d['action']) in DROPPED and not fired(cx, d)]
+def steering(cx, d, ds) -> bool:
+    """A Continue the owner presses on work they are already driving - their own Continue (a press or typed in the pane) on the same item in
+    the STEER_H hours before - is steering a long task, not a ball the Advisor dropped (the 2026-11-01 audit: 8 of 14 'dropped' were this)."""
+    if _v(d['action']) != 'continue': return False
+    a = _later(d['at'], -STEER_H)
+    if any(o is not d and o['target'] == d['target'] and _v(o['action']) == 'continue' and a <= o['at'] < d['at'] for o in ds): return True
+    return bool(cx.execute(f"SELECT 1 FROM outcome WHERE TargetKind=? AND TargetId=? AND Kind='agent.continued' AND Actor IN ({_in(OWNER)}) AND At>=? AND At<? LIMIT 1",
+                           (*d['target'], *OWNER, a, d['at'])).fetchone())
+
+
+def dropped_balls(cx, ds, steer=False) -> list:
+    """The silent decisions the owner answered with Redraft, Stop or Continue, where nothing of the Advisor's had fired on the item - the real
+    ones; `steer` instead gives the Continues that were the owner steering work they were already driving."""
+    return [d for d in ds if not d['lit'] and _v(d['action']) in DROPPED and not fired(cx, d) and steering(cx, d, ds) == steer]
 
 
 def three(cx, ds) -> str:
@@ -294,12 +306,29 @@ def three(cx, ds) -> str:
     pct = lambda t: f"{t['pct']}%" if t['pct'] is not None else 'n/a'
     on = lambda t: t['right'] + t['wrong']
     return (f"precision {pct(p['all'])} on {on(p['all'])} lit (finish check {pct(p['check'])} on {on(p['check'])}, the rest {pct(p['rest'])} on "
-            f"{on(p['rest'])}); silent {pct(c)} of {c['decisions']} decisions; {len(db)} dropped-ball miss{'' if len(db) == 1 else 'es'}")
+            f"{on(p['rest'])}); silent {pct(c)} of {c['decisions']} decisions; {len(db)} dropped-ball miss{'' if len(db) == 1 else 'es'}"
+            + (f" (+{n} steering)" if (n := len(dropped_balls(cx, ds, steer=True))) else ''))
 
 
 def lit_greyed(ds) -> list:
     """The decisions whose lit button was greyed at one of their presses: the owner was pointed at a button they could not press."""
     return [d for d in ds if d['lit'] and (d['lit'] in d.get('greyed', ()) or _v(d['lit']) in map(_v, d.get('greyed', ())))]
+
+
+def cause(cx, d) -> str:
+    """Who decided a lit button and whether the owner's memory was in it: 'rule' (a state alone, nothing about the owner read), 'model+memory'
+    (its line rests on a LEARNED line), 'model' (the model, with no memory line behind it), 'check' (the finish check)."""
+    if d['by'] in ('rule', 'check'): return d['by']
+    m = model_row(cx, *d['target'], d['rev'], d['lit'])
+    return 'model+memory' if m and (m.get('MemorySays') or m.get('Kind') == 'memory') else 'model'
+
+
+def workstream(cx, d) -> str:
+    """The workstream of the item a decision was on (task.Workstream, since the 2026-11-01 workstream slice), '' before it or off a task."""
+    if d['target'][0] != 'task': return ''
+    try: r = cx.execute('SELECT Workstream FROM task WHERE TaskId=?', (d['target'][1],)).fetchone()
+    except sqlite3.OperationalError: return ''
+    return (r['Workstream'] if r else '') or ''
 
 
 def _ids(xs): return ', '.join(f"{d['target'][0]}:{d['target'][1]} #{d['ids'][0]}" for d in xs[:5])    # target ids and press ids only
@@ -311,7 +340,7 @@ def _group(ds, f) -> dict:
     return g
 
 
-def report(ds, since, replayed=False) -> str:
+def report(ds, since, replayed=False, cx=None) -> str:
     out = [line(tally(ds), since)]
     def by(f, lit='lit'):
         g = defaultdict(list)
@@ -323,6 +352,9 @@ def report(ds, since, replayed=False) -> str:
         return rows
     out += ['', 'by lit button (who lit it):'] + by(lambda d: f"{d['lit']} ({d['by']})")
     out += ['', "by rule state ('~' read off the button; the kept decision is only an item's latest):"] + by(lambda d: d['state'])
+    if cx is not None:
+        out += ['', 'by cause (who decided, and whether a memory line was behind it):'] + by(lambda d: cause(cx, d))
+        if any(workstream(cx, d) for d in ds): out += ['', 'by workstream:'] + by(lambda d: workstream(cx, d) or '(none)')
     out += ['', 'top misses (lit, by, state -> what the owner did; e.g. target and first press id):']
     out += [f"  {len(xs):>3}  {lit} ({who}, {st}) -> {act}   e.g. {_ids(xs)}" for (lit, who, st, act), xs in misses(ds)]
     grey = lit_greyed(ds)
@@ -360,7 +392,7 @@ def main(argv=None):
         g = len(lit_greyed(ds))
         print(line(tally(ds), since) + (f'; {g} lit but greyed' if g else '') + f'; {three(cx, every)}'); return 0
     if a.replay: replay(cx, ds, copied_store(a.home))
-    print(report(ds, since, a.replay))
+    print(report(ds, since, a.replay, cx))
     db = dropped_balls(cx, every)
     print('\n'.join(['', f'precision, coverage, dropped balls: {three(cx, every)}']
                     + [f"  dropped: {d['target'][0]}:{d['target'][1]} #{d['ids'][0]} - nothing lit, the owner pressed {d['action']} ({d['state']})" for d in db[:8]]))

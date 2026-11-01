@@ -256,6 +256,7 @@ class Term:
         self.geom_owner = None                            # the subscriber queue that drives resize()
         self.taps = []                                    # plain callables, for server-side readers
         self.failover = None                              # availability-only replacement installed by start_on_task
+        self.signed_out = self.relogin = False            # its CLI's SessionEnd said "logout"; this pane is a sign-in reopened (signed_out)
         self._live_at = 0                                 # last run-tail emit; pty bursts fold into one
         # One published lifecycle state for every consumer (Timeline, Board, Studio, hand raise,
         # waiting room). A full-screen TUI redraws in pieces; sampling one piece used to publish
@@ -335,6 +336,15 @@ class Term:
                 except Exception as e: logger.debug(f'terminal tap failed: {e}')
         self.alive, self.ended = False, time.time()       # exited: the tab stays readable for a while
         self.keep()                                       # the transcript must outlive the pty
+        # SIGNING OUT IS NOT FINISHING: the same CLI opens again, in this pane, BEFORE the sockets hear the end - their onExit
+        # looks for the task's live session and finds the new one, so the pane never falls to a Result in between
+        if signed_out(self) and sign_in_again(self):
+            self._emit(None)
+            from . import browserview as _bv
+            _bv.close(self.sid, self.task_id)             # bound to this pane by name; the new one opens its own
+            from . import handraise
+            handraise.moved(self.task_id)
+            return
         # The peers still here are NOT told - they read who is live when they next look
         # (blackboard.briefing / `taskuary --board`), and this session's notes leave every live
         # surface with it (PW-178). Telling them cost a turn each to hear it (removed 2026-09-22).
@@ -2826,6 +2836,36 @@ INTERRUPTING = ('shutdown', 'startup')
 def resume_task(store, task_id, actor='owner') -> bool:
     """A worker is starting on the task by the owner's choice: the interruption is over. Both starters call this."""
     return store.tag_task(task_id, INTERRUPTED, False, actor)
+
+
+# SIGNING OUT IS NOT FINISHING (the owner, 2026-11-01: "if you hit logout on agent working in the agent pane (claude cli) the agent
+# closes instead of letting me logout and log back in"). Claude Code's /logout clears its sign-in, paints LOGGED_OUT and exits 0
+# 200 ms later, its SessionEnd hook saying reason "logout" (read out of 2.1.316); Codex's /logout deletes its stored sign-in and
+# exits. The EOF read as the agent gone: the task released to "nobody is working it", the pane on its Result, no way to /login.
+LOGGED_OUT = 'Successfully logged out from your Anthropic account'
+SIGNED_OUT_NOTE = "Signed out - sign in again here. The agent's conversation carries on once you are back in."
+
+def signed_out(t) -> bool:
+    """Did this session's CLI end because it was signed out? Its hook's word first; Claude's own line on the last screen where
+    no hook is wired; Codex says nothing either way, so it is asked (`codex login status`) - once, never of a reopened sign-in,
+    which an owner quitting it unsigned would otherwise reopen for ever. A close is somebody's decision, never a sign-out."""
+    if getattr(t, 'on_purpose', False) or not (getattr(t, 'task_id', None) and getattr(t, 'agent', None)): return False
+    if getattr(t, 'signed_out', False): return True
+    if ''.join(LOGGED_OUT.split()) in ''.join(plain(t.tail_chars(4000)).split()): return True
+    if getattr(t, 'cli', '') != 'codex' or getattr(t, 'relogin', False): return False
+    from .clisetup import signed_in
+    return signed_in('codex') is False
+
+
+def sign_in_again(t):
+    """Open the same CLI again on the same task, profile, folder and conversation - nothing typed in, since what it shows
+    first is its own sign-in. The dead pane leaves the list so nothing lands on it; its transcript is already filed (keep)."""
+    try: n = open_session(t.store, t.agent, t.task_id, None, t.cwd, t.rows, t.cols, 'owner', resume=t.ext_id or None, brain=t.cli or None)
+    except Exception as e: logger.warning(f'{t.sid} signed out and could not be reopened ({e}); its session ends'); return None
+    n.relogin = True
+    SESSIONS.pop(t.sid, None)
+    t.store.add_comment(t.task_id, 'terminal', 'agent', SIGNED_OUT_NOTE)
+    return n
 
 
 def release_task(store, task_id, actor='terminal', note=None) -> bool:

@@ -3174,7 +3174,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {/* it takes what is left between the strip above and the waiting room below, and
                         never less than a readable terminal - a fixed 64vh pushed the waiting room under
                         the fold the moment the strip above it had anything to say */}
-                    <Box ref={termBox} sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 }, position: "relative",
+                    <Box ref={termBox} data-tq-term-box="" sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 }, position: "relative",
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
                     </Box>

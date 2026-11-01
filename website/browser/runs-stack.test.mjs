@@ -50,3 +50,64 @@ test("a task with two runs: the latest report on top, the earlier one listed bel
   assert.match(await page.$eval("[data-tq-result-did]", (e) => e.innerText), LATEST, "the latest report still leads");
   assert.deepEqual(errors, []);
 });
+
+// A LIVE AGENT KEEPS ITS ROOM (the owner, 2026-11-01, on a coding agent waiting on them with eight earlier runs listed under its terminal:
+// "it's taking up from the coding cli view which we never want to do. make it smaller earlier runs until the agent stops running"). While
+// the session is live the earlier runs are one line under the terminal that opens the list and shuts it; once it stops, the list shows.
+// TASKUARY_SHOT_DIR: where the 1440x900 frames go. Invented repository and people (fixture coding-live).
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+test("a live agent with eight earlier runs: the runs are one line under the terminal until it stops", { timeout: 180000 }, async (t) => {
+  const harness = await startHarness();
+  t.after(() => harness.close());
+  const page = await harness.newPage();
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
+  const post = (p, b) => page.evaluate(async (p, b) => (await fetch(p, { method: "POST", body: JSON.stringify(b),
+    headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json(), p, b);
+  const made = await post("/api/fixture/task/coding-live", { runs: 8 });
+  assert.ok(made.taskId, JSON.stringify(made));
+  await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
+  await page.waitForSelector("[data-tq-term-box] .xterm-rows", { visible: true, timeout: 30000 });
+  await page.waitForSelector("[data-tq-term-box] ~ * [data-tq-runs-before]", { visible: true, timeout: 20000 })
+    .catch(async () => assert.fail(`no earlier runs under the live terminal: ${await page.$eval("[data-tq-task-page]", (w) => w.innerText)}`));
+  await sleep(1500);
+  const shot = async (name) => process.env.TASKUARY_SHOT_DIR && page.screenshot({ path: `${process.env.TASKUARY_SHOT_DIR}/${name}.png` });
+  const measure = () => page.evaluate(() => {
+    const term = document.querySelector("[data-tq-term-box]"), col = term.parentElement, list = col.querySelector("[data-tq-runs-before]");
+    const r = (e) => e.getBoundingClientRect();
+    return { term: r(term).height, below: r(col).bottom - r(term).top, list: r(list).height, head: list.innerText.split("\n")[0],
+      rows: [...list.querySelectorAll("[data-tq-run-before]")].filter((e) => e.offsetParent).length };
+  });
+  await shot("live-shut");
+  const shut = await measure();
+  assert.ok(shut.term >= 0.85 * shut.below, `the terminal keeps its room: ${JSON.stringify(shut)}`);
+  assert.ok(shut.list <= 26, `the earlier runs are one line: ${JSON.stringify(shut)}`);
+  assert.match(shut.head, /Earlier runs · 8 ▸/i);
+  assert.equal(shut.rows, 0);
+
+  // ...the line opens the list, and a second press shuts it - the terminal back at its height
+  await page.click("[data-tq-runs-before] [role=button][aria-expanded=false]");
+  await page.waitForFunction(() => document.querySelectorAll("[data-tq-runs-before] [data-tq-run-before]").length === 8, { timeout: 5000 });
+  await sleep(300);
+  await shot("live-open");
+  const opened = await measure();
+  assert.equal(opened.rows, 8);
+  assert.ok(opened.term >= 0.5 * opened.below, `the open list leaves the terminal most of its room: ${JSON.stringify(opened)}`);
+  await page.click("[data-tq-runs-before] > [role=button][aria-expanded=true]");
+  await sleep(300);
+  const again = await measure();
+  assert.equal(again.rows, 0);
+  assert.ok(Math.abs(again.term - shut.term) <= 2, `the terminal is back at its height: ${JSON.stringify({ shut, again })}`);
+
+  // ONCE IT STOPS the list shows as it did - every run a line
+  assert.ok((await post("/api/fixture/task/coding-live/end", { taskId: made.taskId })).ended);
+  await page.waitForFunction(() => { const l = document.querySelector("[data-tq-runs-before]:not([data-tq-folded-list])");
+    return l && [...l.querySelectorAll("[data-tq-run-before]")].filter((e) => e.offsetParent).length >= 7; }, { timeout: 20000 })
+    .catch(async () => assert.fail(`the earlier runs did not show after the stop: ${await page.$eval("[data-tq-task-page]", (w) => w.innerText)}`));
+  await sleep(800);
+  await shot("stopped");
+  assert.deepEqual(errors, []);
+});

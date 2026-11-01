@@ -22,6 +22,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/agent-closed',
         '/api/fixture/task/tracker-closeout',
         '/api/fixture/task/coding-saved',
+        '/api/fixture/task/coding-live', '/api/fixture/task/coding-live/end',
         '/api/fixture/task/chat-burst',
         '/api/fixture/task/chat-saved',
         '/api/fixture/task/closed-asked',
@@ -706,6 +707,36 @@ def install_processing_changes(app, store):
                   text='Sign in to northwind.example to continue', source='api')
         answer_paths.add(f'/api/tasks/{tid}/worker/answer')
         return {'taskId': tid, 'sid': pane.sid}
+
+    live_panes = {}
+
+    @app.post('/api/fixture/task/coding-live')
+    def coding_live(body: dict):
+        """A coding task whose agent is live and waiting on the owner, with `runs` earlier runs kept under its terminal, each with its own
+        report (the owner, 2026-11-01: eight of them took the terminal's room). Invented repository and people."""
+        n = body.get('runs')
+        if set(body) != {'runs'} or not isinstance(n, int) or not 0 <= n <= 20: raise HTTPException(422, 'runs, 0 to 20, is required')
+        from taskuary import terminal
+        tid = store.create_task({'Title': 'org/app#412 roster export drops the night shift', 'Kind': 'coding', 'Status': 'in_progress',
+                                 'Source': 'assistant', 'Assignee': 'agent:coding', 'Tags': 'repo:org/app'}, 'router')
+        for i in range(1, n + 1):
+            then = (datetime.now() - timedelta(hours=2 * (n - i + 1))).isoformat(' ', timespec='seconds')
+            sid = f'fixture-live-{tid}-{i}'
+            store.add_transcript(tid, sid, f'Run {i} on the roster export.\n> pytest tests/test_roster.py -q\n{i} passed', agent='coding', cwd='C:/work/org-app', brain='claude')
+            cid = store.add_comment(tid, 'coding', 'agent', f'AGENT REPORT\nSummary: Pass {i} on the roster export; Erin Blake checks the night shift.\n\nLAST MESSAGE\nPass {i} done.')
+            store._exec('UPDATE transcript SET CreatedAt=? WHERE Sid=?', (then, sid))
+            store._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (then, cid))
+        pane = live_panes[tid] = _demo.Replay(store, tid, 'Claude Code', lines=[('Reading the roster export...', 0), ('Which shift file should I use?', 0.1)])
+        terminal.SESSIONS[pane.sid] = pane
+        return {'taskId': tid, 'sid': pane.sid}
+
+    @app.post('/api/fixture/task/coding-live/end')
+    def coding_live_end(body: dict):
+        "...and its agent stops: the session closes, as a CLI that exits"
+        if set(body) != {'taskId'} or body['taskId'] not in live_panes: raise HTTPException(422, 'the taskId of a coding-live task is required')
+        pane = live_panes.pop(body['taskId']); pane.close()
+        for loop, q in list(pane.subs): loop.call_soon_threadsafe(q.put_nowait, None)   # the exit marker a real pty's watchers get
+        return {'ended': True}
 
     @app.get('/api/fixture/signin/typed/{tid}')
     def signin_typed(tid: int): return {'typed': ''.join(panes[tid].got) if tid in panes else ''}

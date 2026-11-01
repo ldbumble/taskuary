@@ -1,5 +1,29 @@
 # Browser use vs computer use — what Taskuary should drive
 
+> **2026-10-31 update: the desktop rung is built, on Vercel's agent-desktop.** The owner asked for
+> "agent desktop from the same vercel package we use for browser". It exists:
+> [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0, npm
+> `agent-desktop`, 1.0.2 on 2026-10-30, ~4.4K stars; first published 2026-02 and moved to vercel-labs
+> since). It is agent-browser's sibling and is exactly the "Windows desktop without pixels" rung
+> below. It is a Rust CLI that reads any app through the OS accessibility tree (UI Automation on
+> Windows, AX on macOS, AT-SPI on Linux) and acts on a ref per control. It needs no MCP server and no
+> vision model.
+>
+> Tried on a Windows 11 box: `status`, `list-apps`, `list-windows` and `snapshot` worked. Clicking
+> Calculator's refs gave 7 + 5 = 12, `set-value` filled a WinForms text box, and `screenshot
+> --window-id` saved a PNG. None of it moved the mouse or took focus. Ref actions are UI Automation
+> calls, which answers the "whose screen" objection below for everything but keystrokes. `type`,
+> `focus` and the multi-clicks need `--headed`. That takes the foreground, and Windows refuses it from
+> a background process ("did not become foreground"). So agents use `set-value` and never `--headed`.
+> Two quirks: `screenshot --app` did not find a packaged app that `snapshot --app` did (use
+> `--window-id`), and `launch notepad` attaches to an already-open Notepad with the owner's tabs in
+> it.
+>
+> Built as the **Agent Desktop** connector (agentdesktop.py), with the browser's terms. The card is
+> off by default, there is none on a stranger's task, and looks pass. Every other act is judged over
+> the control it names, and what can't be undone is held for the owner's Approve as a `desktop_act`
+> proposal. The model of a second, isolated desktop below still stands for anything that must type.
+
 *2026-09-14. Asked after TQ-0514 ("log into ADP every morning at 9am and clock me in"): which of the
 two open-source families makes this seamless, given that for local work the shell already does most
 of it.*
@@ -133,6 +157,9 @@ Treat Windows UIA over MCP as the next rung *if* a native app ever blocks a job,
 computer use as a sandboxed last resort we have not yet needed — the day we do, the shape is Bytebot's
 (the agent gets its own desktop; the owner watches a stream), never a model taking the owner's mouse.
 
+*2026-10-31:* the UIA rung is taken, with agent-desktop rather than an MCP server: the same vendor
+and CLI shape as agent-browser, and one gate (the shell hook) holds both. See the update at the top.
+
 ## Sources
 
 - [Browser Use (MIT, CDP rewrite)](https://github.com/browser-use/browser-use) ·
@@ -150,6 +177,8 @@ computer use as a sandboxed last resort we have not yet needed — the day we do
   [Bytebot (Apache-2.0)](https://github.com/bytebot-ai/bytebot) · [E2B desktop](https://e2b.dev/docs/use-cases/computer-use)
 - [Azure computer-use](https://learn.microsoft.com/en-us/azure/foundry-classic/openai/how-to/computer-use) ·
   [Copilot Studio computer use GA](https://www.digitalapplied.com/blog/copilot-studio-computer-use-agents-ga-deep-dive)
+- [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) ·
+  [npm](https://www.npmjs.com/package/agent-desktop)
 - Windows UIA over MCP: [FlaUI-MCP](https://github.com/shanselman/FlaUI-MCP) ·
   [windows-mcp-server (MIT)](https://github.com/deploymenttheory/windows-mcp-server) ·
   [UIInspect.MCP](https://github.com/ChrisPulman/UIInspect.MCP)

@@ -474,6 +474,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] == 'reason_network':
             from . import reasonnet
             detail = reasonnet.test()
+        elif c['Type'] == 'agent_desktop':
+            from . import agentdesktop
+            detail = agentdesktop.test()
         elif c['Type'] == 'treg':
             from .treg import run_treg_tools
             from .reports import resolve_cfg

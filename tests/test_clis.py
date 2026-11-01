@@ -55,7 +55,7 @@ class OptionalToolTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         j = TestClient(server.app).get('/api/cli/detect').json()
-        self.assertIn('data', j); self.assertEqual([t['name'] for t in j['tools']], ['agent-browser'])
+        self.assertIn('data', j); self.assertEqual([t['name'] for t in j['tools']], ['agent-browser', 'agent-desktop'])
 
 
 if __name__ == '__main__': unittest.main()

@@ -2382,6 +2382,18 @@
       ]
     },
     {
+      "type": "agent_desktop",
+      "title": "Agent Desktop",
+      "group": "Agent tools",
+      "planned": false,
+      "desc": "Your agents read and operate the desktop apps on this computer through their accessibility tree, not pixels (Vercel's agent-desktop). Off until you turn it on; a step that sends, pays or deletes waits for your Approve.",
+      "match": [
+        "agent desktop",
+        "agent-desktop",
+        "desktop app"
+      ]
+    },
+    {
       "type": "oracle",
       "title": "Oracle Database",
       "group": "Databases",

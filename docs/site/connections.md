@@ -307,6 +307,27 @@ What Taskuary cannot stop: a session it does not run, an agent typing `reason-ne
 shell, or anything while Taskuary is closed — there, Reason Network's own held-message setting is the
 guard, and it holds whatever is not trusted until you are back.
 
+**Agent Desktop** — your agents read and operate the desktop apps on this computer through each app's
+accessibility tree: the list of buttons, boxes and menus the app keeps for screen readers, not
+screenshots. It runs on [agent-desktop](https://github.com/vercel-labs/agent-desktop), Vercel's sibling
+of the `agent-browser` tool, on Windows, macOS and Linux. You install it yourself
+(`npm install -g agent-desktop`); Taskuary finds it and never installs or updates it. Use it for a
+desktop app with no connection and no web page. A connection comes first, then the browser.
+
+- **Off until you turn it on.** With the card off, no agent is told about it, and any agent-desktop
+  command from one of Taskuary's sessions is refused. On macOS the program asks for Accessibility
+  permission the first time; the card's **Test** says whether it has it.
+- **Your own tasks only.** A task with a message from someone you have not vouched for never drives
+  your desktop. The task does not get it, as it does not get the browser.
+- **What can't be undone waits for you.** A command that only looks (a snapshot, a list of apps or
+  windows) runs. Any other command goes to your AI with the control it names. A command that would
+  send, pay, delete, submit or close unsaved work is refused to the agent and put on the task for your
+  **Approve**. Approving runs that exact command. If the control has gone since, agent-desktop refuses
+  it and nothing is done. With no AI connected, typing into a box passes and everything else waits.
+- **Beside you, not instead of you.** It acts through the apps' own controls without moving your
+  mouse or taking your keyboard, so you can keep working. Agents are told never to take the foreground,
+  and never to type a password or code into an app. A sign-in is yours.
+
 **Your own documents** — the **Knowledge base** card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with `pypdf`) into Taskuary's own
 SQLite. Once anything is indexed, a `kb_search` report answers questions from it on a schedule,

@@ -1775,6 +1775,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : conn.Type === "mssql" ? <MssqlDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
+    : conn.Type === "agent_desktop" ? <DesktopDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
   const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
@@ -1857,6 +1858,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       // teammates' coding agents and the owner's, messaging each other - the owner's own install, found here (ReasonNetwork.jsx)
       ...specialCards("reason_network", "Reason Network", "", "reason network teammates coding agents peer to peer messages trusted people",
         (c) => (c.Active ? "on · only the people you trust reach your agents" : "off · teammates' agents and yours, peer to peer")),
+      // the owner's desktop apps through their accessibility tree - Vercel's agent-desktop, off until the owner turns it on (agentdesktop.py)
+      ...specialCards("agent_desktop", "Agent Desktop", "", "agent desktop agent-desktop vercel desktop apps windows computer use accessibility",
+        (c) => (c.Active ? "on · your agents can operate desktop apps; what can't be undone waits for you" : "off · your agents leave desktop apps alone")),
       ...catalogCards("Agent tools")] },
     { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
     { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]), ...catalogCards("Project management")] },
@@ -2709,6 +2713,59 @@ function ReasonDetail({ conn, reload, onBack, onCreated }) {
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <ReasonPanel conn={conn} reload={reload} />
+      <CardPlaybooks type={conn.Type} />
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+    </Box>
+  );
+}
+
+/* ── Agent Desktop: Vercel's agent-desktop, which the owner installs; the card finds it and holds the one switch (agentdesktop.py) ── */
+function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
+  // the switch is the card's own press, saved at once as on every connection (useCardDraft.setOn) - the card has nothing else to save
+  const draft = useCardDraft(savedConn, [], reload);
+  const { conn } = draft;
+  const [tool, setTool] = useState(null);
+  const [test, setTest] = useState(null);
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    api.get("/api/cli/detect").then(({ data }) => setTool((data.tools || []).find((t) => t.name === "agent-desktop") || {})).catch(() => setTool({}));
+  }, []);
+  const runTest = async () => {
+    setBusy("test");
+    try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
+    catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
+    setBusy(""); reload();
+  };
+  return (
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>
+        Your agents read and operate the desktop apps on this computer through their accessibility tree - the list of buttons
+        and boxes each app keeps, not screenshots - with Vercel <a href={tool?.url || "https://github.com/vercel-labs/agent-desktop"} target="_blank"
+        rel="noreferrer">agent-desktop</a>. Only your own tasks get it, never one from someone you have not vouched for. A step that would
+        send, pay, delete or submit waits on the task for your Approve.
+      </Typography>
+      {tool && !tool.installed && (
+        <Alert severity="info" sx={{ mb: 1.5, maxWidth: 720 }}>
+          agent-desktop is not installed on this computer. Install it yourself with <code>{tool.install || "npm install -g agent-desktop"}</code>,
+          then press Test. Taskuary never installs or updates it.
+        </Alert>
+      )}
+      {tool?.installed && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>Found at <code>{tool.path}</code></Typography>}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: .75, borderBottom: `1px solid ${BORDER}`, maxWidth: 720 }}>
+        <Switch checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: e.target.checked })} />
+        <Typography variant="body2" sx={{ color: INK }}>
+          {conn.Active ? "On: your agents may use desktop apps on this computer while you work beside them."
+            : "Off: your agents leave desktop apps alone, and any try is refused."}
+        </Typography>
+      </Box>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
+        <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
+          startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+      </Box>
+      <TestLine test={test} mt={1} />
+      {draft.err && <Typography role="alert" sx={{ mt: 1, color: "#8a3646", fontSize: 12 }}>{draft.err}</Typography>}
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>

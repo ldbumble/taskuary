@@ -43,6 +43,10 @@ class AgentFailures(unittest.TestCase):
         for t in self.tasks: failed(self.s, t, 'Graph said (401) token expired')
         self.assertEqual(reportideas.ideas(self.s, NOW), [])
 
+    def test_a_usage_limit_is_the_plans_not_a_bug(self):
+        for t in self.tasks: failed(self.s, t, 'claude has reached its seven-day usage limit, so it did not run.')
+        self.assertEqual(reportideas.ideas(self.s, NOW), [])
+
     def test_a_strangers_task_is_never_counted(self):
         theirs = [self.s.create_task({'Title': 'Look', 'Status': 'open', 'OriginBase': 'stranger'}, 'triage') for _ in range(3)]
         for t in theirs: failed(self.s, t)

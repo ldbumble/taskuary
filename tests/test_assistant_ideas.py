@@ -57,6 +57,15 @@ class HealthTests(unittest.TestCase):
         self.assertFalse(assistant.fresh(state, fail('2026-09-18 09:00:00', 'login timed out after 31s'), now))   # the same failure
         self.assertTrue(assistant.fresh(state, fail('2026-09-18 10:00:00', 'the password was changed'), now))     # a new one
 
+    def test_a_report_resting_on_a_usage_limit_is_no_broken_report(self):
+        # three runs refused on the plan's seven-day limit became a line asking for a bug hunt into a quota
+        s, lim = A.store(), 'the model pass failed: claude has reached its seven-day usage limit, so it did not run.'
+        for at in ('06:00', '07:00', '08:00'):
+            s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': lim})
+        self.assertNotIn(f"health:report:{A.AR['sid']}", {i['key'] for i in assistant.health_ideas(s)})
+        s.add_report_run(A.AR['sid'], {'at': '2026-09-18 09:00:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'login timed out'})
+        self.assertIn(f"health:report:{A.AR['sid']}", {i['key'] for i in assistant.health_ideas(s)})    # a real fault still speaks
+
     def test_a_seen_failure_stays_seen_until_a_new_one(self):
         s = A.store()
         for at in ('06:00', '07:00', '08:00'):

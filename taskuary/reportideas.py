@@ -65,12 +65,14 @@ def agent_failures(store, now: datetime) -> list:
     """An agent run failing with the same error N_SAME+ times on N_TASKS+ tasks this week - or N_SINCE+ times since an update, never
     before it. One task failing three times is that task; three tasks failing one way is the app."""
     from .outbound import auth_fix
+    from .agents import _UNAVAILABLE
     since, upd = _stamp(now - timedelta(days=max(DAYS, BEFORE_DAYS))), updated_at(store, now)
     rows = store._rows("SELECT TaskId, AgentName, LastError, IFNULL(FinishedAt, IFNULL(UpdatedAt, StartedAt)) At FROM run "
                        "WHERE Status='error' AND IFNULL(LastError,'')<>'' AND IFNULL(FinishedAt, IFNULL(UpdatedAt, StartedAt))>=?", (since,))
     groups = {}
     for r in rows:
         if auth_fix(r['LastError']) or not _owners(store, r['TaskId']): continue          # a sign-in is the owner's to fix
+        if _UNAVAILABLE.search(str(r['LastError'])): continue                             # ...and a usage limit is the plan's, not a bug
         groups.setdefault((_cli(store, r['AgentName']), _shape(r['LastError'])), []).append(r)
     from . import __version__
     week, fresh_update = _stamp(now - timedelta(days=DAYS)), upd >= _stamp(now - timedelta(days=AFTER_DAYS))

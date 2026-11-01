@@ -977,7 +977,7 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
 }
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
-export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
+export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, table = null }) {
   const a = card.action || {};
   // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
@@ -1001,9 +1001,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
     : a.source?.label ? <span>{a.source.label}</span> : null;
   const facts = [["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", why && <>{from}{from && ": "}{why}</>]].filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";
-  return (
-    <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
-      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
+  const foot = (
       <Foot
         verb={card.idea_kind === "connect" && a.connector_type ? (
           <Button size="small" variant="contained" disableElevation sx={primary}
@@ -1018,7 +1016,29 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
           : rule ? <><b>Make it a rule</b> adds it under Settings, Rules - switch it off there to undo it.</>
           // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
           : null}
-        where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
+        where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />);
+  // ON THE TABLE, IN THE THREE SECTIONS EVERYTHING ELSE COMES IN (ItemSections; the owner, 2026-10-31: "it looks pretty dumb this idea ... it
+  // should go in the coming from tab like fyi's"): what the Advisor noticed opens in Came from - the idea, its suggestion and the mail it is
+  // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
+  if (table != null) return (
+    <ItemSections kind="idea" itemKey={card.key} label="Advisor" height={table} about="from" lays title={card.title}
+      aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
+      sections={[
+        { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
+          body: <><ItemPart data-tq-idea-from="">
+            <div className="tq-card-lead">{card.title}</div>
+            {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason */}
+            <Facts rows={[["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>]]} />
+          </ItemPart><CardErr err={err} /></> },
+        { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
+          body: <ItemPart data-tq-idea-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
+            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
+        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on its panes"],
+          body: <ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart> }]} />);
+  return (
+    <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
+      {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
+      {foot}
       <CardErr err={err} />
     </CardShell>
   );
@@ -1462,7 +1482,7 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
       { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
         body: <ItemPart data-tq-fyi-close="">
           <div className="tq-card-note">Nothing to decide - {n === 1 ? "it only wants" : "they only want"} you to know.</div>
-          <RowMoves next={next} on={batch ? "" : "at the top of Came from"} />
+          <RowMoves next={next} on={batch ? "" : "on its panes"} />
           {foot}
         </ItemPart> }]} />;
 }

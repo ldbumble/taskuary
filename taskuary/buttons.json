@@ -65,9 +65,10 @@
     "copy":            {"label": "Copy", "hint": "Copies the draft to paste where it came from - nothing is sent, and the task stays open", "row": ["copy"],
                         "states": {"done": "Copied"}},
     "report_bug":      {"label": "Report this bug", "hint": "Opens a bug report with what went wrong filled in - you read it before anything is sent", "row": [],
-                        "states": {"feature": "Request a feature", "ask": "Report this?"},
+                        "states": {"feature": "Request a feature", "ask": "Report this?", "connect": "Request this connection"},
                         "state_hints": {"feature": "Opens a feature request with what you asked for filled in - you read it and submit it on GitHub yourself",
-                                        "ask": "Opens a bug report about what keeps failing - you read it and submit it on GitHub yourself"}},
+                                        "ask": "Opens a bug report about what keeps failing - you read it and submit it on GitHub yourself",
+                                        "connect": "Opens a request for a card for what you searched - you read it and submit it on GitHub yourself"}},
     "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": [],
                         "states": {"fix": "New task to fix this"}, "state_hints": {"fix": "A task of its own, carrying what failed and why - for an agent or for you to work"}}
   },

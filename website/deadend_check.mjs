@@ -132,6 +132,7 @@ const WALK_SKIP = {
   "new_task:fix": "offered by the Advisor on a failure nothing fixes - the walk has no AI to offer it",
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
   "report_bug:feature": "the Assistant's feature-request draft, offered only after the owner asks for something it cannot do - the demo chat asks nothing; report-it.test.mjs presses it",
+  "report_bug:connect": "Connections' Request <name>, shown only when a search matches no card - the walk types no search; request-connection.test.mjs presses it",
   "report_bug:ask": "the Advisor's Report this?, raised only after Taskuary fails one way 3+ times - the demo world has no such run of failures; report-it.test.mjs presses it",
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
   "approve:check": "Check delivery on a send nobody can confirm - the faults pass checks it is offered",

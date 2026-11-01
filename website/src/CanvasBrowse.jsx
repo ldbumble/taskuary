@@ -25,7 +25,7 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
 export function BrowseFrame({ title, summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
-  openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false }) {
+  openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false, noneAction = null }) {
   // ONE WAY TO SAY A PAGE'S BOX FOUND NOTHING (verify, 2026-10-20): a page that forgot to pass its own line said "Nothing here." under
   // the words typed - Settings did. `query` is the box's words; while there are any, the frame says it, the way the search does
   const none = String(query || "").trim() ? nothingMatches(query, searched || title) : empty || "Nothing here.";
@@ -106,6 +106,8 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
               </Box>
             ))}
             {!cards.length && <Typography data-tq-browse-empty="" sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{none}</Typography>}
+            {/* ...and what the page offers when the words typed found nothing (Connections: Request <name>) */}
+            {!cards.length && String(query || "").trim() && noneAction && <Box sx={{ px: 1, pb: 1 }}>{noneAction}</Box>}
           </Box>
         </>
       )}

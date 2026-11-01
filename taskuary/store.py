@@ -703,6 +703,8 @@ PILE_BLIND_SETTINGS = (
     'assistant_current:',        # concierge.CURRENT_KEY - the item on the table, written as each press puts it there
     'concierge_cli_sid:',        # concierge.SID_KEY - the CLI conversation, resumed turn to turn
     'assistant_last_undo',       # concierge.LAST_UNDO - what the phone's Undo pill runs
+    'rail_walk',                 # railwalk.KEY - where the one walk stands, written by every walk move (the pile is the line it reads)
+    'assistant_active_at',       # welcome.ACTIVE_KEY - the owner's last press, written after every one (owner_presence)
 )
 
 # Settings whose key changed: (old, new), moved once as the store opens (Store.__init__) so an install keeps its value.
@@ -3755,6 +3757,17 @@ class SQLiteStore:
             if self._rail_cx is not None:
                 with self._rail_lock: return self._rail_cx.execute(sql).fetchone()[0]
             with self.lock: return self.cx.execute(sql).fetchone()[0]
+        except sqlite3.OperationalError: return None
+
+    def rail_written(self, low, high):
+        """The (kind, id) pairs written in (low, high] - None when that cannot be known (rows trimmed, or the table not there)."""
+        sql = ('SELECT MIN(Id) FROM processing_dirty_row WHERE Id>?', 'SELECT DISTINCT Kind, LocalId FROM processing_dirty_row WHERE Id>? AND Id<=?')
+        try:
+            cx, lock = (self._rail_cx, self._rail_lock) if self._rail_cx is not None else (self.cx, self.lock)
+            with lock:
+                first = cx.execute(sql[0], (low,)).fetchone()[0]
+                if first is None or first > low + 1: return None
+                return {(str(k), str(i)) for k, i in cx.execute(sql[1], (low, high))}
         except sqlite3.OperationalError: return None
 
     def rail_cold_building(self) -> bool:

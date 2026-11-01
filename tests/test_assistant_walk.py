@@ -89,6 +89,7 @@ def test_a_typed_turn_builds_the_pipe_once_and_says_the_owners_line_once():
         concierge.say(s, 'bring up TQ-12', llm=llm)
         whole.clear(); asked.clear()
         concierge.say(s, "what's this one about", key='msg:17', llm=llm)
-    assert len(whole) == 1, f'the pipe was built {len(whole)} times in one typed turn'
+    # ...at most once: since 2026-10-31 the owner's line - a write to the Assistant's own conversation only - leaves the built pipe warm
+    assert len(whole) <= 1, f'the pipe was built {len(whole)} times in one typed turn'
     assert 'OWNER: bring up TQ-12' in asked[0] and "OWNER: what's this one about" not in asked[0]
     assert asked[0].count("what's this one about") == 1

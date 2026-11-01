@@ -149,6 +149,7 @@ test("/send-document sends the very bytes as a WhatsApp document - with the toke
 // LID from a person picked by NUMBER, a group and a stranger turned away, the owner's own LID heard, the address book's key missing.
 const TRUTH = `
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 export const DisconnectReason = { loggedOut: 401 };
 const me = { id: "15550100100:1@s.whatsapp.net", lid: "7000:1@lid", name: "Alex Doyle" };
 export const useMultiFileAuthState = async () => ({ state: { creds: { me }, keys: { set: async () => {} } }, saveCreds: async () => {} });
@@ -157,6 +158,7 @@ export const decryptPollVote = () => { throw new Error("no polls here"); };
 const quiet = () => {};
 export const DEFAULT_CONNECTION_CONFIG = { logger: { child: () => ({ info: quiet, warn: quiet, error: quiet, debug: quiet, trace: quiet }) } };
 export default function makeWASocket(config) {
+  fs.writeFileSync("socket-config.json", JSON.stringify({ fireInitQueries: config.fireInitQueries }));
   const ev = new EventEmitter();
   const sock = { ev, user: me, groupFetchAllParticipating: async () => ({}), resyncAppState: async () => {},
     onWhatsApp: async (...jids) => jids.map((jid) => ({ jid, exists: true, lid: jid.startsWith("15550100200") ? "8000@lid" : undefined })) };
@@ -204,6 +206,8 @@ test("/status says how many chats are let in and turned away, when the last mess
     assert.ok(st.lastInboundAt > 0, "the message from the picked person arrived");
     assert.deepEqual([st.contactSync.failures, st.contactSync.why, st.lastFailure.kind], [1, "missing key", "contacts"]);
     assert.equal(st.loggedOut, false);
+    // the props/blocklist/privacy queries timed out (408) on every connect, and nothing reads them (TQ-1251)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "socket-config.json"), "utf8")).fireInitQueries, false);
     assert.ok(st.lidMapped >= 2, "the owner's pair and the looked-up number");
     const { messages } = await get(port, "/messages?after=0", token);
     assert.deepEqual(messages.map((m) => [m.jid, m.text]), [["15550100200@s.whatsapp.net", "the export is late"],

@@ -92,11 +92,28 @@ def test_the_desktop_window_opens_on_a_keyed_url(monkeypatch):
     assert made['maximized']        # a fixed 1280x840 hung off a laptop's screen on every launch (TQ-1251)
 
 def test_the_desktop_view_of_a_running_instance_asks_it_for_a_key(monkeypatch):
-    made = {}
-    fake = types.SimpleNamespace(create_window=lambda *a, **k: made.update(k) or object(), start=lambda f=None: None)
+    made, started = {}, []
+    fake = types.SimpleNamespace(create_window=lambda *a, **k: made.update(k) or object(), start=lambda f=None, a=(): started.append((f, a)))
     monkeypatch.setitem(sys.modules, 'webview', fake)
     monkeypatch.setattr(desktop, 'already_serving', lambda: 'http://127.0.0.1:7787')
     monkeypatch.setattr(launchkey, 'remote_link', lambda url, tok: f'{url}/?k=fromserver')
     monkeypatch.setattr(sys, 'argv', ['taskuary-desktop'])
     desktop.main()
     assert made['url'] == 'http://127.0.0.1:7787/?k=fromserver'
+
+
+def test_a_view_follows_the_server_it_shows_and_closes_with_it(monkeypatch):
+    # a view (Taskuary started a second time) outlived its server's exit for an Update and held Taskuary.exe: the swap could not
+    # replace it in 30 tries and the old version came back (TQ-1251)
+    made, started = {}, []
+    fake = types.SimpleNamespace(create_window=lambda *a, **k: made.update(k) or object(), start=lambda f=None, a=(): started.append((f, a)))
+    monkeypatch.setitem(sys.modules, 'webview', fake)
+    monkeypatch.setattr(desktop, 'already_serving', lambda: 'http://127.0.0.1:7787')
+    monkeypatch.setattr(launchkey, 'remote_link', lambda url, tok: f'{url}/?k=fromserver')
+    monkeypatch.setattr(sys, 'argv', ['taskuary-desktop'])
+    desktop.main()
+    assert started and started[0][0] is desktop.follow_server and started[0][1][0] == 'http://127.0.0.1:7787'
+    answers, gone = iter([True, True, False]), []
+    monkeypatch.setattr(desktop, 'serving', lambda url, secs=0: next(answers))
+    desktop.follow_server('http://127.0.0.1:7787', types.SimpleNamespace(destroy=lambda: gone.append(1)), poll=0)
+    assert gone == [1]

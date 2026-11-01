@@ -90,6 +90,13 @@ class TheSwapScript(unittest.TestCase):
         self.assertGreater(reset, -1)
         self.assertLess(reset, s.find('start "'))                      # before ALL three relaunches
 
+    def test_a_swap_that_gave_up_names_what_still_runs_the_program(self):
+        # "could not replace the old program after 30 tries" and nothing else: the old process HAD exited, and a second copy of
+        # the program - a view of it - still held the exe (TQ-1251). The log now says which copies were running
+        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'), PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242, [])
+        giveup = s.find(':giveup')
+        self.assertLess(giveup, s.find('tasklist /FI "IMAGENAME eq Taskuary.exe" >> "%update_log%"'))
+
     def test_no_arguments_leaves_no_trailing_space(self):
         s = update.swap_script(Path('T.exe'), Path('T.new.exe'), 1, [])
         self.assertIn('start "" /D "." "T.exe"\r\n', s)

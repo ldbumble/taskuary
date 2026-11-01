@@ -1929,9 +1929,9 @@ def task_trust(task_id: int, scope: str = ''):
     o, why = origin.of_task(store, task_id)
     return {'origin': o, 'why': why, **({'org': org} if org else {})}
 
-def _calendar_of(task_id: int):
+def _calendar_of(task_id: int, msgs=None):
     from . import calwrite
-    try: return calwrite.of_task(store, task_id)
+    try: return calwrite.of_task(store, task_id, msgs)
     except Exception as e:
         logger.debug(f'task {task_id}: the calendar ask was not read - {e}'); return None
 
@@ -1993,12 +1993,15 @@ def task_detail(task_id: int):
     # "Run again on the strong model" is offered only on an open task whose agent failed or whose reader was unsure (TaskPage's
     # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
     strong = _brainroute().strong_offered(d['task'], judged, ran, story)
-    o = dict(zip(('origin', 'why'), origin.of_task(store, task_id)))
-    dm = next((m for m in store.list_messages(task_id) if m.get('Danger')), {})
+    # ...each reader handed the messages already read, and every verdict in one read: on a 1,500-line chat each asked again, line by
+    # line, and the page drew a spinner over an empty frame while it did (the owner, 2026-11-01: "this still happens")
+    msgs, verdicts = d.get('messages') or [], store.task_verdicts(task_id)
+    o = dict(zip(('origin', 'why'), origin.of_task(store, task_id, msgs)))
+    dm = next((m for m in msgs if m.get('Danger')), {})
     return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'origin': {**o,                                                                  # who's words are on it (origin.py)
                        # ...and the presses that trust them, in the same words as the held box's (senders.trust_offer)
-                       **({'trust': _trust_offer(task_id)} if o['origin'] == 'stranger' else {}),
+                       **({'trust': _trust_offer(task_id, msgs)} if o['origin'] == 'stranger' else {}),
                        # ...and what one of them tries to make an AI or the owner do, as triage or ranking read it (message.Danger) - and
                        # whom: 'owner' for a scam on them, 'agent' for text written to steer the AI (the owner, 2026-10-30)
                        'danger': dm.get('Danger'), 'danger_aim': (dm.get('DangerAim') or 'agent') if dm else None},
@@ -2009,10 +2012,10 @@ def task_detail(task_id: int):
             # which of the owner's workstreams it is under, for its small label and the picker (workstreams.py, the owner 2026-11-01)
             'workstream': hub_ws.label(store, hub_ws.of_task(store, task_id)),
             # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
-            'calendar': _calendar_of(task_id),
+            'calendar': _calendar_of(task_id, msgs),
             # ...and what triage said an agent could do for the owner about the main ask - one press starts it (/api/tasks/{id}/offer)
             'offer': _offer_of(task_id),
-            'messages': [_readable(x) for x in d.get('messages') or []],
+            'messages': [_readable(x, verdicts.get(x['MessageId'])) for x in msgs],
             # ...and the earlier messages triage said its ask rests on, shown with them, never moved onto this task (rests_on, 2026-10-22)
             'earlier': _earlier(d),
             # ...and a task Taskuary itself raised (an Advisor idea): who, and its one sentence - Came from's line, not a message card
@@ -2028,7 +2031,7 @@ def task_detail(task_id: int):
             # agent's own close read "stopped and saved" and opened on Close out (the owner, 2026-10-21)
             'state': (st := _task_state(task_id, d, session)),
             # ...and WHERE IT IS UP TO, at rest (stages.json, the owner 2026-10-26): the page reads its own from what it draws, the same rules
-            'stage': stages.of_task(store, d['task'], st),
+            'stage': stages.of_task(store, d['task'], st, msgs=msgs),
             # ...and who closed it and why, one line, when its agent did (taskstate.closed_why)
             'closedWhy': taskstate.closed_why(store, d['task'], d.get('comments')),
             # ...and how its last run ENDED, in the run's own word (finished / failed / stopped / disconnected) - what taskstate read
@@ -2084,10 +2087,10 @@ def _ended_line(task_id: int, comments=None):
         logger.debug(f'task {task_id}: ended line skipped - {e}'); return None
 
 
-def _trust_offer(task_id: int):
+def _trust_offer(task_id: int, msgs=None):
     "senders.trust_offer, never in the way of opening the task: an offer that could not be worded is the plain Trust them."
     from . import senders
-    try: return senders.trust_offer(store, task_id)
+    try: return senders.trust_offer(store, task_id, msgs)
     except Exception as e:
         logger.debug(f'task {task_id}: trust offer skipped - {e}'); return {'person': 'Trust them', 'org': None}
 
@@ -3216,11 +3219,13 @@ def _drop_task(tid: int):
         logger.warning(f'could not close the session on deleted task {tid}: {e}')
     store.delete_task(tid)
 
-def _readable(m: dict) -> dict:
+def _readable(m: dict, verdict=False) -> dict:
     """A message with its ReadText beside the body as stored (triage.read_text) - what every screen shows, less the wrapper its
-    triage named (a banner, a stamp, a legal footer: the verdict's `wrapper`)."""
+    triage named (a banner, a stamp, a legal footer: the verdict's `wrapper`). `verdict`: its verdict when already read (task_verdicts)."""
     from .triage import read_text, wrapper_of
-    try: return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'), wrapper_of(store.message_verdict(m['MessageId'])))} if m else m
+    try:
+        v = store.message_verdict(m['MessageId']) if m and verdict is False else verdict
+        return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'), wrapper_of(v))} if m else m
     except Exception: return m
 
 

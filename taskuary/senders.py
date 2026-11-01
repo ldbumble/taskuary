@@ -54,10 +54,10 @@ def org_of(store, domain: str = '', tenant: str = '', team: str = '') -> dict | 
     return next((o for o in trusted_orgs(store) if any(v and o.get(k) == v for k, v in want.items())), None)
 
 
-def _opener(store, tid: int) -> dict | None:
+def _opener(store, tid: int, msgs=None) -> dict | None:
     "The task's first line that is not ours - whose organisation Trust their organisation names (ingest.from_opener's reading)."
     from .ingest import is_ours
-    return next((m for m in store.list_messages(tid) if not is_ours(m)), None)
+    return next((m for m in (store.list_messages(tid) if msgs is None else msgs) if not is_ours(m)), None)
 
 
 def sender_org(store, m: dict) -> dict:
@@ -97,11 +97,11 @@ def trust_org(store, tid: int, actor: str) -> dict:
     return {'domain': o.get('domain', ''), 'tenant': o.get('tenant', ''), **{k: o[k] for k in ('team', 'name') if o.get(k)}}
 
 
-def trust_offer(store, tid: int) -> dict | None:
+def trust_offer(store, tid: int, msgs=None) -> dict | None:
     """The two presses that lift a stranger's hold, worded for the channel (the owner, 2026-10-26: "we should have button on untrusted
     user to either trust user or trust domain and then we won't have issue again"): {'person': 'Trust Erin', 'org': 'Trust everyone at
     vendor.example' | 'Trust <workspace>' | None} - no organisation button where there is none to name, rather than one that fails."""
-    m = _opener(store, tid)
+    m = _opener(store, tid, msgs)
     if not m: return None
     meta, ch = _chat_meta(m), (m.get('Channel') or '').lower()
     # a Slack line's name is a user id (U0...): its profile's real name when the poller recorded one, else "them"
@@ -199,21 +199,22 @@ def _person(msg: dict, addr: str = '') -> str:
     return addr or name or 'This sender'
 
 
-def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
+def known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = None) -> tuple:
     """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
     to PW-081): a chat person the owner talks with (or a workspace item); the owner's own domains; and
     verified SENT evidence that THIS mailbox wrote to the exact address - what the store already
     holds, a hit remembered from an earlier lookup, and (deep) the mail server's own Sent Items,
     asked once per address. Prior incoming mail is never trust: a stranger's second message is a
-    stranger's message. A lookup that fails is not proof either way and is said as such."""
-    cfg = store.get_settings()
+    stranger's message. A lookup that fails is not proof either way and is said as such. `memo`: one dict across one task's messages
+    (origin.of_task) - the settings and each person's history are read once, not once a line (store._witnessed)."""
+    cfg = store.get_settings() if memo is None else memo.get('cfg') or memo.setdefault('cfg', store.get_settings())
     on = lambda k: cfg.get(k, '1') == '1'
     from .store import OWN_CHANNELS
     ch = msg.get('channel') or ''
     if ch in OWN_CHANNELS:                                                                # X3: never "a chat you control"
         return True, _said('Taskuary wrote this report.' if ch == 'report' else "Taskuary's assistant wrote this.")
     from .ingest import CHAT_CHANNELS
-    if ch.lower() in CHAT_CHANNELS: return _chat_known(store, msg, ch.lower(), exclude_mid, on('trust_non_email'))
+    if ch.lower() in CHAT_CHANNELS: return _chat_known(store, msg, ch.lower(), exclude_mid, on('trust_non_email'), memo)
     # a tracker, an alert or the local API is a workspace item, not a room of people - and GitHub has its own gate (GH_AUTO)
     if ch != 'email':
         return (True, _said(f'It came from {channel_name(ch) or "a workspace"}, a workspace you control.')) if on('trust_non_email') else \
@@ -235,8 +236,8 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
         return False, _said(f'{who} is new here, and checking your Sent Items for people you know is switched off in Settings, {NOBODY}.', True)
     mailbox = (msg.get('source_name') or '').strip().lower()
     sent = _said(f'You have written to {addr} before - it is in your Sent Items.')
-    if (r := store.trusted_sender(mailbox, addr)): return True, sent if r == 'in your Sent Items' else _said(f'You vouched for {who}.')
-    if store.wrote_to_locally(mailbox, addr, exclude_mid): return True, _said(f'You have written to {addr} before.')
+    if (r := _vouched(store, mailbox, addr, memo)): return True, sent if r == 'in your Sent Items' else _said(f'You vouched for {who}.')
+    if store.wrote_to_locally(mailbox, addr, exclude_mid, memo=memo): return True, _said(f'You have written to {addr} before.')
     if deep:
         try: hit = wrote_to(store, mailbox, addr)
         except Exception as e:
@@ -247,6 +248,14 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
             store.remember_trust(mailbox, addr, 'in your Sent Items')
             return True, sent
     return False, _said(f'{who} is not on your domain and you have never written to them, {NOBODY}.', True)
+
+
+def _vouched(store, where: str, who: str, memo: dict = None):
+    "store.trusted_sender, read once per person across one task's lines when a memo is handed in (known)."
+    if memo is None: return store.trusted_sender(where, who)
+    k = ('vouched', str(where or '').lower(), str(who or '').lower())
+    if k not in memo: memo[k] = store.trusted_sender(where, who)
+    return memo[k]
 
 
 def chat_key(msg: dict) -> str:
@@ -311,7 +320,7 @@ def _teams_trusted_org(store, msg: dict, who: str, vouched: list) -> dict | None
     return o
 
 
-def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
+def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool, memo: dict = None) -> tuple:
     """A chat is trusted per PERSON, not per room: anyone in a connected group chat could start an agent with full
     permissions. The owner's own line; someone the owner has talked with one-to-one in this channel, or answered (their
     line, then the owner's, in any of its chats - store.talked_with); or someone the owner vouched for (release, Trust this
@@ -321,7 +330,7 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     name = ' '.join(str(msg.get('from_name') or msg.get('FromName') or '').split()) or who
     if not on: return False, _said(f'{name or "Someone"} wrote in {room}, where only your own messages start an agent by themselves (Settings).')
     if not who: return False, _said(f'Nobody can tell who wrote this in {room}, so no agent starts on it by itself.')
-    vouched = [r for k in (who, *alias) if (r := store.trusted_sender(ch, k))]
+    vouched = [r for k in (who, *alias) if (r := _vouched(store, ch, k, memo))]
     # TEAMS IS INTERNAL (the owner, 2026-10-21: "Teams should be always safe since it's internal"): a colleague in the owner's own
     # organisation needs no history - the directory's word, recorded at ingest or remembered per person (channels.ORG_REASON), or
     # an address on the owner's own domain or the Teams account's. A line recorded before anyone could tell (no 'internal': Graph
@@ -337,7 +346,7 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
         if _slack_own(store, msg, team): return True, _said(f'{name} is in your own Slack workspace.')
         if (o := org_of(store, team=team)): return True, _said(f"{name} is in {o.get('name') or 'a Slack workspace'}, a workspace you trust.")
     if vouched: return True, _said(f'You vouched for {name}.')
-    how = store.talked_with(ch, who, exclude_mid, alias)
+    how = store.talked_with(ch, who, exclude_mid, alias, memo=memo)
     # A TEAMS SENDER'S HISTORY BEFORE THEIR ID (2026-10-26, the owner: "we have talked to this person a million times"): until
     # 2026-10-14 a Teams sender the directory could not place - a colleague in a sister tenant - was stored with no address, so
     # their lines are keyed by display name; since then by Graph id, which none of those lines carry, and weeks of answers in a
@@ -345,7 +354,7 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     # conversation, so copying a colleague's name elsewhere borrows nothing (the reason the id replaced the name).
     conv = str(msg.get('conversation_id') or msg.get('ConversationId') or '')
     if not how and ch == 'teams' and who.startswith('teams:') and name and name.lower() != who and conv:
-        how = store.talked_with(ch, who, exclude_mid, (*alias, name), conversation=conv)
+        how = store.talked_with(ch, who, exclude_mid, (*alias, name), conversation=conv, memo=memo)
     if how == 'dm': return True, _said(f'You talk with {name} one-to-one on {room}.')
     if how == 'answered': return True, _said(f'You have answered {name} on {room} before.')
     return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one or answered them there, {NOBODY}.")

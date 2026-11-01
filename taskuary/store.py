@@ -628,6 +628,8 @@ def meta_expr(key: str) -> str: return f"(CASE WHEN json_valid(MailMetaJson) THE
 INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_external ON message(ExternalId)',
     'CREATE INDEX IF NOT EXISTS idx_message_conversation ON message(ConversationId, SentAt)',
+    # ...and by arrival: store.talked_with walks a chat from each of their lines to the owner's next one
+    'CREATE INDEX IF NOT EXISTS idx_message_conversation_id ON message(ConversationId, MessageId)',
     'CREATE INDEX IF NOT EXISTS idx_message_task ON message(TaskId)',
     'CREATE INDEX IF NOT EXISTS idx_message_status ON message(Status)',
     'CREATE INDEX IF NOT EXISTS idx_message_sent ON message(SentAt, MessageId)',
@@ -2731,6 +2733,14 @@ class SQLiteStore:
                           'WHERE v.Promise=1 AND v.DeliveredBy IS NULL AND m.SentAt>=? AND m.SentAt<=? '
                           + ('AND m.ConversationId=? ' if conversation_id else '') + 'ORDER BY m.SentAt DESC',
                           (since, before) + ((conversation_id,) if conversation_id else ()))
+    def task_verdicts(self, task_id) -> dict:
+        "message_verdict for every message on a task in one read: {MessageId: verdict} - the newest route that kept one."
+        out = {}
+        for r in self._rows('SELECT r.MessageId, r.VerdictJson FROM route r JOIN message m ON m.MessageId=r.MessageId '
+                            'WHERE m.TaskId=? AND r.VerdictJson IS NOT NULL ORDER BY r.RouteId', (task_id,)):
+            try: out[r['MessageId']] = json.loads(r['VerdictJson'])
+            except (TypeError, ValueError): out[r['MessageId']] = None
+        return out
     def message_verdict(self, mid):
         """Triage's stored verdict on one message (route.VerdictJson), newest - None when triage never judged it."""
         row = self._one('SELECT VerdictJson FROM route WHERE MessageId=? AND VerdictJson IS NOT NULL ORDER BY RouteId DESC LIMIT 1', (mid,))
@@ -5691,12 +5701,12 @@ class SQLiteStore:
         if skip: q += f" AND Kind NOT IN ({','.join('?' * len(skip))})"; args += list(skip)
         return self._one(q + ' ORDER BY Id DESC LIMIT 1', tuple(args))
     def worker_event_exists(self, event_id: str) -> bool: return self._one('SELECT 1 x FROM worker_event WHERE EventId=?', (event_id,)) is not None
-    def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None) -> bool:
+    def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None, memo=None) -> bool:
         """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own
         words on a thread with this address (a 'context' row or an outbound one from the mailbox), or a reply
-        to them the owner approved or sent. Incoming rows alone never count (PW-079)."""
+        to them the owner approved or sent. Incoming rows alone never count (PW-079). `memo`: see _witnessed."""
         if not (email and mailbox): return False
-        return self._one("""SELECT 1 x FROM message m
+        return self._witnessed(memo, ('wrote', mailbox.lower(), email.lower()), exclude_mid, lambda ex, n: [r['x'] for r in self._rows("""SELECT m.MessageId x FROM message m
                              WHERE m.Channel='email' AND LOWER(m.SourceName)=LOWER(?)
                                AND LOWER(m.FromEmail)=LOWER(?) AND m.MessageId<>? AND (
                                EXISTS (SELECT 1 FROM message o WHERE o.ConversationId=m.ConversationId AND o.ConversationId IS NOT NULL
@@ -5704,8 +5714,17 @@ class SQLiteStore:
                                        AND LOWER(o.SourceName)=LOWER(?) AND LOWER(o.FromEmail)=LOWER(?)
                                        AND (o.Status='context' OR o.Direction='out'))
                              OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
-                             LIMIT 1""", (mailbox, email, exclude_mid or 0, mailbox, mailbox)) is not None
-    def talked_with(self, channel: str, who: str, exclude_mid=None, aliases=(), conversation=None):
+                             LIMIT ?""", (mailbox, email, ex, mailbox, mailbox, n))])
+    @staticmethod
+    def _witnessed(memo, key, exclude_mid, find):
+        """Is there a witness row other than exclude_mid? `find(exclude, n)` lists up to n witnesses. With a `memo` (one dict across a
+        task's messages, origin.of_task) a person is asked ONCE: up to two witnesses, excluding none - one of them is not this row
+        exactly when the question asked for this row alone would find one. Judging a 1,500-line group chat asked it once a line, and a
+        big task's page waited on that before it drew (the owner, 2026-11-01: "this still happens")."""
+        if memo is None: return bool(find(exclude_mid or 0, 1))
+        if key not in memo: memo[key] = find(0, 2)
+        return any(w != exclude_mid for w in memo[key])
+    def talked_with(self, channel: str, who: str, exclude_mid=None, aliases=(), conversation=None, memo=None):
         """How the owner has talked with `who` in this chat channel, or None. 'dm': a conversation the PLATFORM called
         one-to-one (the poller's {'dm': true} on their line - who has spoken proves nothing, a group's one talker looks
         alone), with the owner's own line AFTER one of theirs (other than exclude_mid), and nobody else's. 'answered':
@@ -5714,7 +5733,7 @@ class SQLiteStore:
         still read "someone you haven't worked with"). `who` is senders.chat_key's key - their address or platform id,
         else their name; `aliases` the same person's other ids (WhatsApp's phone and LID forms), matched against a
         row's key and its MailMetaJson alias alike. `conversation` keeps the search to that one conversation (senders._chat_known's
-        name-keyed Teams history)."""
+        name-keyed Teams history). `memo`: see _witnessed."""
         keys = sorted({str(x).strip().lower() for x in (who, *aliases) if str(x or '').strip()})
         if not (channel and keys): return None
         k = "LOWER(TRIM(COALESCE(NULLIF(TRIM({0}.FromEmail),''), NULLIF(TRIM({0}.FromName),''), '')))"
@@ -5723,21 +5742,26 @@ class SQLiteStore:
                 f"THEN json_extract({{0}}.MailMetaJson, '$.alias') END, '')) IN ({qs}))")
         # code sets these; a sender who calls themselves 'You' is not the owner (ingest.is_ours reads names, this must not)
         mine = "(COALESCE({0}.Status,'')='context' OR COALESCE({0}.Direction,'')='out')"
-        head = f"""SELECT 1 x FROM message m WHERE m.Channel=? AND m.ConversationId IS NOT NULL AND m.MessageId<>?
+        head = f"""SELECT m.MessageId x FROM message m WHERE m.Channel=? AND m.ConversationId IS NOT NULL AND m.MessageId<>?
                    AND NOT {mine.format('m')} AND {them.format('m')}""" + (' AND m.ConversationId=?' if conversation else '')
-        args = (channel, exclude_mid or 0, *keys, *keys, *((conversation,) if conversation else ()), *keys, *keys)
-        if self._one(f"""{head} AND (CASE WHEN json_valid(m.MailMetaJson) THEN json_extract(m.MailMetaJson, '$.dm') END)=1
+        args = lambda ex, n: (channel, ex, *keys, *keys, *((conversation,) if conversation else ()), *keys, *keys, n)
+        ask = lambda sql: lambda ex, n: [r['x'] for r in self._rows(sql, args(ex, n))]
+        key = (channel, tuple(keys), conversation)
+        if self._witnessed(memo, ('dm', *key), exclude_mid, ask(f"""{head} AND (CASE WHEN json_valid(m.MailMetaJson) THEN json_extract(m.MailMetaJson, '$.dm') END)=1
                          AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
                                      AND o.MessageId>m.MessageId AND {mine.format('o')})
                          AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
                                          AND NOT {mine.format('x')} AND NOT {them.format('x')})
-                       LIMIT 1""", args) is not None: return 'dm'
-        if self._one(f"""{head} AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
-                                     AND o.MessageId>m.MessageId AND {mine.format('o')}
-                                     AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
-                                                     AND x.MessageId>m.MessageId AND x.MessageId<o.MessageId
-                                                     AND NOT {mine.format('x')} AND NOT {them.format('x')}))
-                       LIMIT 1""", args) is not None: return 'answered'
+                       LIMIT ?""")): return 'dm'
+        # ...the owner's FIRST line after theirs is the only one to look at: anyone between it and theirs is between every later one
+        # and theirs too. Every pair of lines was tried, each against the lines between: one person in a 1,500-line group took minutes
+        first = f"""(SELECT MIN(f.MessageId) FROM message f WHERE f.Channel=m.Channel AND f.ConversationId=m.ConversationId
+                     AND f.MessageId>m.MessageId AND {mine.format('f')})"""
+        if self._witnessed(memo, ('answered', *key), exclude_mid, ask(f"""{head} AND {first} IS NOT NULL
+                         AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
+                                         AND x.MessageId>m.MessageId AND x.MessageId<{first}
+                                         AND NOT {mine.format('x')} AND NOT {them.format('x')})
+                       LIMIT ?""")): return 'answered'
         return None
     def trusted_sender(self, mailbox: str, email: str):
         r = self._one('SELECT * FROM sender_trust WHERE LOWER(Mailbox)=LOWER(?) AND LOWER(Address)=LOWER(?)', (mailbox or '', email or ''))
@@ -6018,8 +6042,6 @@ class SQLiteStore:
                        CASE WHEN json_valid(m.MailMetaJson) AND json_extract(m.MailMetaJson, '$.unsub.done') IS NULL
                             THEN json_extract(m.MailMetaJson, '$.unsub.via') END Unsub,
                        t.Title, t.Status TaskStatus, t.Priority, t.Kind TaskKind, t.Tags TaskTags, {self.NEEDS_YOU} NeedsYou,
-                       CASE WHEN m.TaskId IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM message c
-                            WHERE c.TaskId=m.TaskId AND c.Status NOT IN ('context','history')) END ChainSize,
                        rt.Decision, rt.Reason RouteReason,
                        rv.ReviewId, rv.Status ReviewStatus, rv.Kind ReviewKind,
                        CASE WHEN rv.ReviewId IS NULL THEN NULL WHEN IFNULL(rv.DraftText,'')<>'' THEN 1 ELSE 0 END HasDraft, rv.DraftError, rv.DraftNeeds,
@@ -6050,6 +6072,12 @@ class SQLiteStore:
         if task_id is not None: q += ' AND m.TaskId=?'; p.append(int(task_id))   # one task's rows (funnel.item_for_key)
         q += f' ORDER BY m.SentAt DESC, m.MessageId DESC LIMIT {int(limit)} OFFSET {int(offset)}'
         rows = self._rows(q, p)
+        # ...and each row's chain size, once per task: counted per output row it walked the whole task for every line of it, and a
+        # 1,500-line chat on one task held each rail build - and so every rail press - for 0.4 s of the 0.45 (the owner, 2026-11-01)
+        tids = sorted({int(r['TaskId']) for r in rows if r.get('TaskId') is not None})
+        chain = {c['TaskId']: c['n'] for c in self._rows(f"SELECT TaskId, COUNT(*) n FROM message WHERE TaskId IN ({','.join(map(str, tids))}) "
+                                                          "AND Status NOT IN ('context','history') GROUP BY TaskId")} if tids else {}
+        for r in rows: r['ChainSize'] = chain.get(r.get('TaskId'), 0)
         # the one-word tag every row wears (categories.py) - decided here, once, so the feed,
         # the digest and the task page never disagree about what a message is
         from .categories import category_of, team_domains_of
@@ -6210,15 +6238,18 @@ class SQLiteStore:
         message and outlive it."""
         return self._rows('SELECT * FROM route WHERE MessageId=? ORDER BY RouteId', (mid,))
 
-    def _links(self, task_id) -> list:
+    def _links(self, task_id, msgs=None) -> list:
         from . import linkdocs
-        try: return linkdocs.of_task(self, task_id)
+        try: return linkdocs.of_task(self, task_id, msgs)
         except Exception as e: logger.debug(f'task {task_id}: linked documents not listed - {e}'); return []
 
     def task_detail(self, task_id):
         t = self.get_task(task_id)
         if not t: return None
-        msgs = self.list_messages(task_id)
+        msgs, atts = self.list_messages(task_id), {}
+        # ...the files in one read, in the messages' order: a read per message was 1,500 on a long chat (the owner, 2026-11-01)
+        for a in self._rows('SELECT a.* FROM attachment a JOIN message m ON m.MessageId=a.MessageId WHERE m.TaskId=? ORDER BY a.AttachmentId',
+                            (task_id,)): atts.setdefault(a['MessageId'], []).append(a)
         reviews = self._rows('SELECT rv.*, m.FromName, m.FromEmail, m.Channel, m.SourceName, m.ConversationId FROM review rv '
                              'LEFT JOIN message m ON m.MessageId=rv.MessageId WHERE rv.TaskId=? ORDER BY rv.ReviewId DESC', (task_id,))
         # ...and a reply to a promise's own mail answers whom it was made to, not its author: "sends this to Alex Doyle" was the owner
@@ -6228,9 +6259,9 @@ class SQLiteStore:
                 if r.get('MessageId') == p['MessageId']: r.update(FromName=who, FromEmail='')
         return {'task': {**t, 'ChecklistMd': self.checklist_markdown(task_id)}, 'ref': task_ref(task_id), 'messages': msgs,
                 'checklist': self.task_checklist(task_id),
-                'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
+                'attachments': [a for m in msgs for a in atts.get(m['MessageId'], ())],
                 # ...and the documents its messages LINK to (linkdocs), once each - counted beside the files ("6 attachments · 2 links")
-                'links': [{k: d[k] for k in ('id', 'label', 'url')} for d in self._links(task_id)],
+                'links': [{k: d[k] for k in ('id', 'label', 'url')} for d in self._links(task_id, msgs)],
                 'artifacts': self.list_task_artifacts(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),

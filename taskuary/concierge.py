@@ -2480,15 +2480,26 @@ def select_items(store, sel: dict) -> list:
     return out
 
 
-def _clear_one(store, key: str, actor: str, note: str) -> bool:
+def _clear_one(store, key: str, actor: str, note: str, why: list = None) -> bool:
     """One item off the pipe, and say whether it actually went. A sweep that dies on its third item
-    left the first two read and told the owner nothing had moved."""
+    left the first two read and told the owner nothing had moved. `why` collects what stopped it, in words."""
     try:
         funnel.settle(store, key, 'done', actor, note=note)
         return True
     except (ValueError, RuntimeError) as e:
         logger.warning(f'concierge: {key} stayed in the pipe - {e}')
+        if why is not None: why.append(clear_refused(e))
         return False
+
+
+def clear_refused(e) -> str:
+    """Why an item would not clear, in the owner's words. "28 items would not clear" said nothing, "why not?" had no answer to give,
+    and the Assistant sent an agent to find out (TQ-1251)."""
+    t = str(e)
+    if 'reconciled before settlement' in t: return 'new mail kept landing while they were being marked - ask again in a minute'
+    if 'target is unavailable' in t: return 'they are still being filed - ask again in a minute'
+    if 'context changed' in t: return 'they changed after you saw them - look again and ask'
+    return t[:160] or type(e).__name__
 
 
 def _set_words(sel: dict) -> str:
@@ -3044,14 +3055,16 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                         "not by a sweep. Nothing has been touched.")
                 record_related(store, tid, item, 'assistant', say_)
                 return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-            cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner')]
+            why = []
+            cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner', why)]
             # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
             # is left; the line counts what went and says it is not gone
             n = len(cleared)
             # the total, said as all of them, when it reached past the table's handful
             every = scope == 'all' and n == len(hits) and not mine and n > len(table_keys)
             say_ = (f"Marked {'all ' if every else ''}{_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
-                    + (f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
+                    + (f" {plural(len(hits) - n, 'item')} would not clear - {max(set(why), key=why.count)}." if len(hits) > n and why else
+                       f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
                     + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
             # ...but ROWS THE MODEL NAMED are listed, each its link (bulk.py): a set chosen by judgement is checked by reading which went
             if sel.get('keys') and n: say_ += '\n' + bulk_mod.listing(cleared)

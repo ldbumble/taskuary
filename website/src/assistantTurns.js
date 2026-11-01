@@ -92,6 +92,14 @@ export function placeLine(messages = [], line) {
   const old = messages[at];
   return [...messages.slice(0, at), ...messages.slice(at + 1), { ...line, alias: [...new Set([...ids(old).filter((v) => v !== line.id), ...(line.alias || [])])] }];
 }
+// ...and A LINE IS KEYED BY ITS ITEM on screen, not its id: placeLine moves an item opened again to the end under the new answer's id, and
+// keyed by id that unmounted the task view on the table and mounted a fresh one - a #task= link whose pull landed after the task had come up
+// dropped the Send to agent pressed in between (agent-presses, 2026-11-01). The newest copy wears the item; an older one keeps its id
+export function lineKeys(messages = []) {
+  const seen = new Set(), keys = new Map();
+  for (const m of [...messages].reverse()) { const k = itemKey(m); keys.set(m.id, k && !seen.has(k) ? (seen.add(k), `item:${k}`) : m.id); }
+  return keys;
+}
 // ...and the owner's pick of it ("Show me ..." from the rail) is said once too: picking between two rows added another line per pick, the
 // same title twice and more (verify, 2026-10-19). The pick is the page's own line - the server never records it - so the last stands
 export const pickLine = (messages = [], line) => (line?.pick ? [...messages.filter((m) => !(m.role === "user" && m.pick === line.pick)), line] : [...messages, line]);

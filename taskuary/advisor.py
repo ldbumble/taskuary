@@ -11,7 +11,7 @@ a per-hour cap, the light gear, a small prompt, the bigger read only for the ite
 import hashlib, json, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
-from . import buttons, concierge, words
+from . import buttons, calibrate, concierge, words
 from .llm import build_llm, ask_json
 L = buttons.label        # the prompt names a button by its one label (buttons.json)
 
@@ -1047,8 +1047,13 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if str(store.get_setting(ON_KEY, '1') or '1') != '1': return {'key': key, 'none': 'off'}
     rev = revision(store, *tgt)
     # an agent at work is nothing for the owner to do, whatever the card was judged as (the owner, 2026-10-13)
-    if _at_work(store, *tgt): return {'key': key, 'state': 'working', 'verb': 'next', 'label': buttons.label('next'), 'line': '', 'by': 'rule',
-                                      'revision': rev, 'pill': '', 'evidence': [], 'ask': False, 'needs_ai': False}
+    if _at_work(store, *tgt):
+        # ...kept, so a press on it records 'working' (calibrate counts what the owner does while an agent works: Next, or Stop)
+        nx = 'next' if calibrate.trusted(store, 'working', 'next') else None
+        d = {'key': key, 'state': 'working', 'verb': nx, 'label': buttons.label('next') if nx else '', 'line': '', 'by': 'rule',
+             'revision': rev, 'pill': '', 'evidence': [], 'ask': False, 'needs_ai': False}
+        kept(store, d)
+        return d
     item = _item(store, *tgt, key=key)
     if not item: return {}
     verbs = offered(store, item)
@@ -1127,6 +1132,8 @@ def decide(store, key: str, preread: bool = True) -> dict:
                                           and not (r['state'] == 'idea' and mv == verb))):
             verb, line, ev = None, '', []
     if pending and r['ask'] and not m: notice(store, SHOWN, tgt[0], tgt[1], tier=2, key=key)
+    # QUIET UNLESS SURE (the owner, 2026-11-01): a rule's button the owner picks under 80% of the time in this state goes dark (calibrate)
+    if by == 'rule' and verb and not calibrate.trusted(store, r['state'], verb, item.get('workstream')): verb, line, ev = None, '', []
     if preread: _preread(store, key)
     d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind},
                 {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])}) if verb else \

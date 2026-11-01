@@ -30,7 +30,7 @@ test("selection freshness preserves explicit action advancement while background
   // explicit advancement after a confirmed proposal: only a success that settles the item on the table moves the walk (PW-125)
   assert.match(view, /const step = afterConfirm\(p, out, current\);/);
   assert.match(view, /if \(step === "advance"\) walkOn\(\);/);
-  assert.match(view, /else if \(step === "settle"\) await done\(null\);/);
+  assert.match(view, /else if \(step === "settle"\) done\(null\);/);
   assert.match(view, /else \{ if \(step === "offer"\) clearTable\(\); loadPile\(\); \}/);
 });
 

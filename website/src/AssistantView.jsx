@@ -1409,7 +1409,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // never the stream, which words a turn around a move instead of making it
     const walkRoute = { next: body.key ? "open" : "next", back: "back", start: "start", leave: "leave", section: "open" }[body.mode];
     if (walkRoute) return (await api.post(`/api/walk/${walkRoute}`, { key: body.key || null, from_key: body.from_key || null, press: body.press || null,
-      read: body.read || [], fyi: fyiWant.current, ...(body.level ? { level: body.level } : {}), ...(body.how ? { how: body.how, note: body.note || null, until: body.until || null } : {}) })).data;
+      read: body.read || [], fyi: fyiWant.current, ...(body.level ? { level: body.level } : {}), ...(body.how ? { how: body.how, note: body.note || null, until: body.until || null, pressed: body.pressed || null } : {}) })).data;
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : "/api/concierge/say";
@@ -2389,7 +2389,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       else if (step === "advance") walkOn();
       // PUT IT ON MY LIST keeps the new task on the table, at the report's place: no move (the walk has one owner, 2026-10-30, W49)
       else if (step === "keep") deferInChat(() => surfaceRef.current?.(`task:${out.tid}`, null, p.key), 120);
-      else if (step === "settle") await done(null);
+      // ...not awaited: the walk's leave waits for no move to be out, and this press holds `busy` until it returns - awaited, Not ours on an FYI
+      // waited on itself and the walk never went on (2026-10-31)
+      else if (step === "settle") done(null);
       else { if (step === "offer") clearTable(); loadPile(); }
     } finally { setBusy(false); }
   };
@@ -2624,7 +2626,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and the row is settled and the walk goes on in ONE move (railwalk.leave "settle"); a settle that did NOT happen unfolds the card
     // with the reason - folding it and walking on said it had
     if (!current) { await surfaceRef.current?.(); return; }
-    const { error } = await leave(current, "settle");
+    const { error } = await leave(current, "settle", pressed ? { pressed } : {});      // ...its badge the server's too: a reload draws it
     if (error) setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
       { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: btn("next") }] }]);
   };
@@ -3642,6 +3644,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             {/* ...and a decision that lights NOTHING on purpose (an agent asking is answered in its own pane, the design's state 7): no
                 word, no button - only a mark, so the dead-end walk can tell it from one that never got its decision */}
             {!shownAdvice && advice?.for === onTable && advice?.state && !advice.verb && !advice.none && <div hidden data-tq-advice="" data-tq-silent="" data-tq-unlit={advice.state} />}
+            {/* ...and one that found nothing to do here (advice.none - a task closed behind its card, kept on screen by the walk): Next is lit
+                by it (advice.stripWord's quiet pick), so it leaves the same mark */}
+            {!shownAdvice && !litNow && stripPick?.verb === "next" && advice?.none && advice.for === onTable && <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb="next" />}
           </>}
           {!firstRun && !chatApart && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
@@ -3711,7 +3716,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
       // a task Removed as not a task leaves the rail with "Removed <title> - Undo" over it (Removed.jsx); Undo puts it back on the rail
       top={<><UndoLine kinds={["task"]} onRestored={() => { loadPile(true); onChanged?.(); }} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
-        current={old || table.folded || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
+        // ...folded by a walk press, its rows keep their place on the rail until the answer lands (rule 7): a batch folded by "All read, next"
+        // lost the cap's hold on its rows, and the band counted them as "10 more fyi" between the batch and the next
+        current={old || (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} /></>}

@@ -25,6 +25,7 @@ export function mergeDurableTurns(local = [], durable = []) {
   const ids = new Set(messages.flatMap((m) => [m.id, m.commentId, ...(m.alias || [])]).filter((v) => v != null));
   const claimed = new Set();
   const added = [];
+  let at2 = -1;
   for (const turn of durable || []) {
     if (ids.has(turn.id)) {
       // ...except the day's opener, which the server draws at once and fills in its place when the mail is in (welcome.arrive):
@@ -62,6 +63,11 @@ export function mergeDurableTurns(local = [], durable = []) {
                        ...(bubble.role === "receipt" ? { role: "receipt", tid: bubble.tid, ref: bubble.ref, chips: bubble.chips,
                                                          ...(bubble.status ? { status: bubble.status } : {}) } : {}) };
       claimed.add(at);
+    } else if ((at2 = cardOf(turn) ? messages.findIndex((m, i) => claimed.has(i) && sameTurn(m, turn)) : -1) >= 0) {
+      // ...AN ITEM OPENED TWICE BEFORE ONE READ (railwalk.open records each opening): the server has two lines, the page one (placeLine).
+      // The older line claimed the bubble just now; the newer is the same bubble too - pushed at the end, it stood a live card over the
+      // page opened since (the search walk: Enter on Gmail, the reopened task back over its card a read later, 2026-10-31)
+      messages[at2] = { ...messages[at2], alias: [...new Set([...(messages[at2].alias || []), turn.id])] };
     } else {
       messages.push(turn);
       added.push(turn);

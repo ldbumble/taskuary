@@ -428,6 +428,15 @@ HOW = {'done': 'task.complete', 'note': 'task.complete', 'remind': 'task.defer',
        'removed': 'task.not_a_task', 'put_on_list': 'task.create_from_message'}
 
 
+def _badge(store, op, actor):
+    """The press worn on its card, from the server, so a reload draws it - what the operations road the buttons took before did
+    (concierge.receipt_turn, press=True): a close made through the walk went past it, and Mark done folded bare (2026-10-31)."""
+    if not op: return
+    from . import concierge, live as live_bus
+    try: concierge.receipt_turn(store, op, actor, table=True, press=True); live_bus.emit(live_bus.CHAT)
+    except Exception as e: logger.debug(f'railwalk: no badge for {op.get("id")} - {e}')
+
+
 def _act(store, item: dict, how: str, actor: str, note: str = None, until: str = None) -> dict:
     """The act `how` names, through the existing operation (3.6) - the same road the page's buttons take, so the demo runs it locally."""
     from . import concierge, operations
@@ -445,7 +454,7 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
     if how == 'remind' and item.get('tid'):
         from . import remind
         out = remind.set_reminder(store, int(item['tid']), until, actor)
-        operations.record_direct(store, 'task.defer', int(item['tid']), {'until': until or 'none'}, actor, out)
+        _badge(store, operations.record_direct(store, 'task.defer', int(item['tid']), {'until': until or 'none'}, actor, out), actor)
         return {'closed': True, 'outcome': out}
     if how == 'done' and item.get('kind') in ('agentdone', 'report', 'fyis') or (how == 'done' and not item.get('tid')):
         funnel.settle(store, item['key'], 'done', actor); return {'closed': True}
@@ -460,6 +469,7 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
         else {'learn': False} if kind == 'message.file' else {'kind': 'task'} if kind == 'task.create_from_message' else {}
     done = concierge.run_proposal(store, operations.propose(store, kind, int(target), params, actor), actor)
     if done.get('status') != 'done': raise RuntimeError(done.get('error') or f'{kind} did not run')
+    if how != 'put_on_list': _badge(store, done, actor)
     o = done.get('outcome') or done.get('result') or {}
     return {'closed': how != 'put_on_list', 'made': o.get('taskId') or o.get('task_id') or o.get('tid'), 'outcome': o}
 

@@ -5309,6 +5309,7 @@ class SurfaceBody(BaseModel):
 class RailWalkBody(BaseModel):
     from_key: str | None = None; key: str | None = None; press: str | None = None; how: str | None = None
     note: str | None = None; until: str | None = None; read: list[str] = []; level: str | None = None; fyi: int | None = None
+    pressed: str | None = None
 class ConciergeSayBody(BaseModel):
     text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
     view: dict | None = None; react: str = ''
@@ -5586,6 +5587,11 @@ def walk_leave(body: RailWalkBody):
     except LookupError as e: raise HTTPException(404, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
     except RuntimeError as e: raise HTTPException(409, str(e))
+    # ...and the card wears what its press did, from the server too, so a reload draws it: "All read, next" on an fyi batch folded with its
+    # badge on the page and lost it on the next read (concierge._stamp_next). A button's own word, never free text
+    if body.pressed and body.pressed in buttons.labels():
+        from . import concierge, general
+        concierge._stamp_next(store, general.dock_task(store, ACTOR)[0]['TaskId'], body.key, body.pressed)
     return _walk_answer(out, body)
 
 @app.post('/api/concierge/open')

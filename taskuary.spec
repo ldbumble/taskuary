@@ -47,7 +47,10 @@ a = Analysis(['taskuary/desktop.py'],
              # [tool.setuptools.package-data] in pyproject.toml: the two must say the same thing.
              datas=[('taskuary/web', 'taskuary/web'), ('taskuary/templates', 'taskuary/templates'),
                     ('taskuary/skills', 'taskuary/skills'), ('taskuary/*.json', 'taskuary'),   # lanes, triage kind rules, settings schema, connector catalogue
-                    ('taskuary/whatsapp', 'taskuary/whatsapp'), *datas],
+                    ('taskuary/whatsapp', 'taskuary/whatsapp'),
+                    # the help pages docs.search reads (lookups.SITE_DOCS): left out, an installed app's Assistant could not
+                    # answer how Taskuary itself works (TQ-1251: "Taskuary doesnt know about itself")
+                    ('docs/site/*.md', 'docs/site'), *datas],
              binaries=bins,
              hiddenimports=['taskuary.server', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
                             'websockets', 'uvicorn.protocols.websockets.websockets_impl', 'pyte', *hidden],

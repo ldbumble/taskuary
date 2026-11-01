@@ -75,12 +75,15 @@ def units(view):
     from .concierge import DISCUSSION_ASSISTANT_TYPE, DISCUSSION_USER_TYPE
     from .messengers import GROUP_CHAT
     back, talk = {new: old for old, new in RENAMED.items()}, (DISCUSSION_ASSISTANT_TYPE, DISCUSSION_USER_TYPE)
+    # ...each message's files found by its id, not by walking every file on the item for every line (a 1,500-line chat, 2026-11-01)
+    files_of = {}
+    for a in view.get('attachments', ()): files_of.setdefault(a.get('MessageId'), []).append(a)
     for row in view.get('messages', ()):
         # History/context remains available in details, not an independent arrival.
         if row.get('Status') in ('context', 'history', 'skipped', 'autoreply') or row.get('Status') is None:
             continue
         old = _pick(row, _OLD_MESSAGE)
-        old['attachments'] = [_pick(a, _OLD_ATTACHMENT) for a in view.get('attachments', ()) if a.get('MessageId') == row['MessageId']]
+        old['attachments'] = [_pick(a, _OLD_ATTACHMENT) for a in files_of.get(row['MessageId'], ())]
         add('message', row, 'MessageId', _pick(row, MESSAGE_SUBSTANCE), old,
             {**old, 'attachments': []} if old['attachments'] else None,            # read before its files were filed
             {**old, 'SourceName': GROUP_CHAT} if row.get('Channel') == 'whatsapp' and row.get('SourceName') != GROUP_CHAT else None)

@@ -27,15 +27,15 @@ def parts(key: str) -> dict:
     return STAGE.get(key) or {}
 
 
-def facts(store, t: dict, state: str | None = None) -> dict:
+def facts(store, t: dict, state: str | None = None, msgs=None) -> dict:
     """The rules' facts for a task, from its rows. `state` is its taskstate key (blocked, working, approve, theirs, closed...),
-    read once by the caller - the detail already has it - else read here."""
+    read once by the caller - the detail already has it - else read here; `msgs` its messages, when the caller read them too."""
     from . import kinds, taskstate
     tid = int(t['TaskId'])
     st = state or taskstate.state(store, t)
     closed = t.get('Status') in ('done', 'dropped') or st in ('closed', 'dropped')
     # ...somebody owed an answer: a message on it from someone, on a task the owner or a reply works - an agent's task answers in its Result
-    msgs = [] if closed else (store.list_messages(tid) or [])
+    msgs = [] if closed else ((store.list_messages(tid) if msgs is None else msgs) or [])
     sender = any(str(m.get('Direction') or 'in') == 'in' and str(m.get('Status') or '') != 'context' for m in msgs)
     try: checklist = bool(str(store.checklist_markdown(tid) or '').strip())
     except Exception: checklist = False
@@ -59,7 +59,7 @@ def state_of(store, t: dict, session=None) -> str:
     return taskstate.state(store, row, session, store.get_dispatch(tid))
 
 
-def of_task(store, t: dict, state: str | None = None, session=None) -> str | None:
+def of_task(store, t: dict, state: str | None = None, session=None, msgs=None) -> str | None:
     """The stage of task `t`, or None when it cannot be read. `state`: its taskstate key when the caller has it (the task detail)."""
-    try: return of(facts(store, t, state or state_of(store, t, session)))
+    try: return of(facts(store, t, state or state_of(store, t, session), msgs))
     except Exception: return None

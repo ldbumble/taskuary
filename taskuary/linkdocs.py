@@ -145,7 +145,7 @@ def _unsub_url(m: dict) -> str:
     from . import unsubscribe
     u = m.get('unsub') if isinstance(m.get('unsub'), dict) else unsubscribe.of(m)
     url = str((u or {}).get('url') or '')
-    return (classify(url) or {}).get('url') or url              # spelled as find() spells what it found
+    return ((classify(url) or {}).get('url') or url) if url else ''     # spelled as find() spells what it found
 
 
 def of_msg(m: dict) -> list:
@@ -163,10 +163,10 @@ def of_msg(m: dict) -> list:
 def of_message(store, mid) -> list: return [{**d, 'mid': mid} for d in of_msg(store.get_message(mid) or {})]
 
 
-def of_task(store, tid) -> list:
+def of_task(store, tid, msgs=None) -> list:
     "Every document on a task's messages, once each - the one quoted under four replies is one document - oldest mention first."
     out = {}
-    for m in store.list_messages(int(tid)) or []:
+    for m in (store.list_messages(int(tid)) if msgs is None else msgs) or []:
         for d in of_msg(m): out.setdefault(d['id'], {**d, 'mid': m['MessageId']})
     # ...and the task's own description: a hand-off from the chat ("go through the bills in <link>") has no message, only the
     # owner's words - which are the owner's, so mid None reads as trusted. Only a task the OWNER made: triage writes a mailed

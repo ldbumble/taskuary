@@ -414,16 +414,18 @@ def slots_for(store, msg: dict, act: str) -> dict:
 def open_on(store, m: dict) -> tuple:
     """(the invite still waits on the owner's answer, the thread's ask for a time is still open) for one message. A DRAFTED answer
     keeps both open - another press replaces it; an answer the calendar took (its review sent) closes its own."""
+    inv, meet = needs_answer(invite_of(m)), bool(meet_of(m))
+    if not (inv or meet): return False, False         # ...and no read of its reviews: a long chat's every line asked (2026-11-01)
     sent = {env_of(r).get('act') for r in store.reviews_for_message(m['MessageId']) if r.get('DeliveryState') == 'sent' and env_of(r).get('kind') == 'calendar'}
-    return needs_answer(invite_of(m)) and not sent & {'accept', 'decline', 'propose'}, bool(meet_of(m)) and 'schedule' not in sent
+    return inv and not sent & {'accept', 'decline', 'propose'}, meet and 'schedule' not in sent
 
 
-def of_task(store, tid: int) -> dict | None:
+def of_task(store, tid: int, msgs=None) -> dict | None:
     """What the task page's row answers the calendar with: the newest message on the task that is an invite waiting on the owner,
     or a thread asking for a time - {mid, invite, meet, line, clash} - and None once the calendar has the answer or the task is closed."""
     t = store.get_task(int(tid)) or {}
     if not t or t.get('Status') in ('done', 'dropped'): return None
-    msgs = [m for m in store.list_messages(int(tid)) if m.get('Direction') != 'out' and m.get('Status') not in ('context', 'history')]
+    msgs = [m for m in (store.list_messages(int(tid)) if msgs is None else msgs) if m.get('Direction') != 'out' and m.get('Status') not in ('context', 'history')]
     for m in sorted(msgs, key=lambda m: (str(m.get('SentAt') or ''), m['MessageId']), reverse=True):
         inv, meet = open_on(store, m)
         if not (inv or meet): continue

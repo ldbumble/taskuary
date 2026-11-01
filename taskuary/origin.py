@@ -11,8 +11,8 @@ def worse(a, b): return a if ORDER.index(a) <= ORDER.index(b) else b
 
 def _own(row): return row.get('Direction') == 'out' or row.get('Status') == 'context'
 
-def of_message(store, row: dict) -> tuple:
-    "(origin, why) for one stored message row. No network: senders.known is never asked to look deeper."
+def of_message(store, row: dict, memo: dict = None) -> tuple:
+    "(origin, why) for one stored message row. No network: senders.known is never asked to look deeper. `memo`: senders.known's."
     if _own(row): return 'owner', 'your own words'
     ch = row.get('Channel') or ''
     # the assistant and reports speak in Taskuary's voice, but carry what they read - mail, the web - so they are not
@@ -27,7 +27,7 @@ def of_message(store, row: dict) -> tuple:
     ok, why = senders.known(store, {'channel': ch, 'from_email': row.get('FromEmail'), 'from_name': row.get('FromName'),
                                     'source_name': row.get('SourceName'), 'conversation_id': row.get('ConversationId'),
                                     'direction': row.get('Direction'), 'status': row.get('Status'),
-                                    'MailMetaJson': row.get('MailMetaJson')}, exclude_mid=row.get('MessageId'))
+                                    'MailMetaJson': row.get('MailMetaJson')}, exclude_mid=row.get('MessageId'), memo=memo)
     return ('trusted' if ok else 'stranger'), why
 
 # concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor
@@ -35,8 +35,8 @@ def of_message(store, row: dict) -> tuple:
 # the owner's, or its example mail's sender's when that is worse.
 OWNER_REFS = ('assistant:setup', 'assistant:handoff', 'assistant:agent')
 
-def of_task(store, tid: int) -> tuple:
-    "(origin, why) for a task, refreshing the card's cache."
+def of_task(store, tid: int, msgs=None) -> tuple:
+    "(origin, why) for a task, refreshing the card's cache. `msgs`: its messages when already read, in list_messages' order."
     t = store.get_task(tid) or {}
     o, why = t.get('OriginBase') or 'trusted', 'you made it' if t.get('OriginBase') == 'owner' else 'no stranger wrote on it'
     # an idea the Advisor or a report wrote carries what it read; promoting it to a task is not the owner vouching for it
@@ -46,11 +46,14 @@ def of_task(store, tid: int) -> tuple:
     if not t.get('OriginBase') and is_dock(t): o, why = 'owner', 'your own guide chat'
     elif not t.get('OriginBase') and t.get('SourceRef') in OWNER_REFS: o, why = 'owner', 'you asked the assistant for it'
     elif not t.get('OriginBase') and t.get('Source') in ('assistant', 'report'): o, why = 'stranger', f"written by Taskuary's {t['Source']} from what it read"
-    through = int(t.get('TrustedThrough') or 0)
-    for m in store.list_messages(tid):
+    through, memo = int(t.get('TrustedThrough') or 0), {}
+    # ...every task page reads this, so a long group chat is judged per PERSON (memo), and its first stranger ends it: nothing is worse
+    # (the owner, 2026-11-01: a 1,500-line chat held its page behind a spinner while each line asked again)
+    for m in store.list_messages(tid) if msgs is None else msgs:
         if m['MessageId'] <= through: continue
-        mo, mwhy = of_message(store, m)
+        mo, mwhy = of_message(store, m, memo)
         if worse(mo, o) != o: o, why = mo, mwhy
+        if o == 'stranger': break
     # a bare UPDATE: a read must not move UpdatedAt/UpdatedBy and reorder the lists
     if (t.get('Origin'), t.get('OriginWhy')) != (o, why): store._exec('UPDATE task SET Origin=?, OriginWhy=? WHERE TaskId=?', (o, why, tid))
     if o != 'stranger': _drop_stale_hold(store, t, why)

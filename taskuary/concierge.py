@@ -39,6 +39,7 @@ MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 # where the owner's own words start in the prompt - the demo's scripted brain reads them by this same constant (demo.brain), and grepped
 # for "USER: " while this said "The owner says:", so it never saw the question and gave every ask one line (2026-10-19 UI walk)
 OWNER_SAYS = 'The owner says: '
+NO_ANSWER = "I didn't get an answer to that one - say it again, or put it another way."
 READ_ROUNDS = 3          # a bucket, then a look-up, then one more - never an open-ended crawl (tools are disclosed on demand)
 LAST_READ = ('That was your last look-up for this turn - there is no other. Answer now with what you have. If nothing '
              'written down here answers it and it needs somebody to go and find out - research, a repository, a website - '
@@ -1577,8 +1578,12 @@ def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, 
 # listed the whole pipe; asked about another task by its person, it searched for the sentence and found nothing
 # ...but ALL of a kind is that whole lane: "Ignore all the FYI, I mean make a mark and read" over a batch of 4 marked the 4 on the table
 # read while the rest waited behind it (the owner, 2026-10-27: "I asked to mark all read and it did the 4 on the table??")
+# ...and the item is only what "it" and "this" mean: "Help me set up Any mailbox (IMAP)" over a bank's mail was answered with that mail's
+# story (TQ-1251; the owner: "if it asks a different question don't respond about the task. it's really dumb")
 WHAT_ABOUT = ('WHAT THEIR WORDS ARE ABOUT, in this order: the item on the table - a question that names nothing else is about it, '
-              'never the whole pipe - but words that say ALL of a kind ("all the FYI", "every report") mean every one of that kind '
+              'never the whole pipe. Words about SOMETHING ELSE - a connection, a setting, the page on screen, the app, a general '
+              'question - are answered about THAT, and the item on the table is not mentioned at all: never its story, its sender or '
+              'why it is there. But words that say ALL of a kind ("all the FYI", "every report") mean every one of that kind '
               'waiting, the table\'s and the rest: pipe.clear with scope: all; ANOTHER task when they name one (its TQ ref, its title or its person) - read that task with '
               'task.read, finding its ref with tasks.list or timeline.search on the person and a subject word, never their whole '
               'sentence; an old task they ask you to FIND - search for it.')
@@ -1746,7 +1751,8 @@ def table_line(store, item: dict | None) -> str:
     if not item: return ''
     refs = ', '.join(x for x in (task_ref(item['tid']) if item.get('tid') else '', f"m{item['mid']}" if item.get('mid') else '',
                                  f"report source_id {item['source_id']}" if item.get('source_id') else '') if x)
-    return (f"ON THE TABLE (what 'it' and 'this' mean, and what an action names when it names nothing else): "
+    return (f"ON THE TABLE (what 'it' and 'this' mean, and what an action names when it names nothing else - words about something else "
+            f"never mention it): "
             f"[{item.get('kind')}] {item.get('title') or ''} - from {item.get('who') or '?'}" + (f" ({refs})" if refs else '')
             + (f"\n{table_actions(store, item)}"))
 
@@ -5525,7 +5531,14 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line
     # ...a REACTION with nothing worth saying is silent (pageview): the owner typed nothing, and a filler line would be noise
     if not reply and turn.get('react') and failed is None: return {'say': '', 'options': [], 'chips': [], 'decision': None}
-    if not reply: reply = fallback(item, False, p['items'], brain=True, store=store)
+    # A BRAIN THAT SAID NO WORDS IS NEVER ANSWERED WITH THE TABLE'S STORY: "Help me set up Any mailbox (IMAP)" came back as VIEW lines alone,
+    # and the item's facts filled the gap - a bank's mail, told over a question about a mailbox (TQ-1251; the owner: "it's really dumb").
+    # What it did on the page is its answer (the steps draw under it); with nothing done either, it says it got no answer
+    if not reply and turn.get('view_ops'): return {'say': '', 'options': [], 'chips': [], 'decision': None}
+    if not reply:
+        say_ = NO_ANSWER
+        rec('assistant', say_)
+        return {'say': say_, 'options': [], 'chips': [{'label': buttons.label('try_again'), 'ask': text}], 'decision': None}
     said = reply + (f"\nOPTIONS: {' | '.join(options)}" if options else '')
     # THE APP'S OWN TROUBLE, ANSWERED IN THE CHAT (troubleshoot.py): the steps it took ride on the line, and what it found decides the
     # buttons under it - none when it works again, the fix's own place, else Report this bug. A phone has no buttons: the words say it

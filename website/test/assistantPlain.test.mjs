@@ -54,11 +54,12 @@ test("every item put on the table goes through putOnTable, which pins its card t
   assert.match(view, /if \(pin\.current && m && \(m\.proposal \|\| \(!m\.card && m\.role !== "receipt" && m\.role !== "browse"\)\)\) pin\.current = false;/);
 });
 
-test("the first screen has one headline count, and reports and FYI are to read (U6)", () => {
+// ...and the reading is not on the opener at all (the owner, 2026-10-31: "don't need to read vs tasks, just what's open"): the rail has it
+test("the first screen has one headline count, and reports and FYI stay on the rail (U6)", () => {
   assert.doesNotMatch(view, /m\.card\.away\}/, "the away line repeated SinceBlock's count");
   // which sections are reading is lanes.json's `to_read`, never a list of its own in the card
-  assert.match(cards, /isRead = \(g\) => !!SECTION\[g\.key\]\?\.to_read/);
-  assert.match(cards, /To read · /);
+  assert.match(cards, /isRead = \(g\) => !!SECTION\[g\.key\]\?\.to_read, act = groups\.filter\(\(g\) => !isRead\(g\)\)/);
+  assert.doesNotMatch(cards, /To read/);
   assert.doesNotMatch(cards, /tq-day-h">Waiting · /);
 });
 

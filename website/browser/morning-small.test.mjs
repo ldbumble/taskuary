@@ -132,3 +132,52 @@ test("the opener counts the tasks the rail counts: one number", { timeout: 30000
   assert.ok(got.marks.some((k) => ["working", "theirs"].includes(k)), `the demo has a task that is not on you: ${JSON.stringify(got.marks)}`);
   assert.deepEqual(errors, []);
 });
+
+/* THE OPENER ON A 13" LAPTOP (the owner, 2026-10-31: "more compact please. not everything has that much screen ... make sure it matches if
+   left side has 10 meetings or none it still looks normal"): the day and the open work are two cards of one height, the reading is the
+   rail's, and with a long day the cards, the digest's first lines and the way-in buttons all stand above the fold */
+test("the opener's two cards stand one height with ten meetings or none, and the whole opener fits a 1366x768 screen", { timeout: 300000 }, async (t) => {
+  const { harness, page, errors } = await boot(t);
+  await page.setViewport({ width: 1366, height: 768, deviceScaleFactor: 1 });
+  const pad = (n) => String(n).padStart(2, "0"), d = new Date(), base = Math.max(0, Math.min(d.getHours() - 4, 11));
+  const at = (h, m) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(h)}:${pad(m)}`;
+  let meetings = 12;
+  const day = () => ({ date: d.toLocaleDateString("en-CA"), sources: [{ type: "m365" }], errors: [],
+    events: Array.from({ length: meetings }, (_, i) => ({ start: at(base + i, 0), end: at(base + i, 30), subject: `Meeting ${i + 1}`, who: ["Erin Blake", "Gail Moreno"] })) });
+  // a digest long enough to need More - the demo world writes none
+  const digest = ["🙋 People want", ...[1, 2, 3, 4].map((i) => `- Erin Blake asks for item ${i}`), "⏳ Waiting on you", ...[1, 2, 3].map((i) => `- Ray Colton: sign-off ${i}`),
+    "🚀 In flight", ...[1, 2, 3].map((i) => `- An agent is on job ${i}`), "✅ Finished", ...[1, 2, 3, 4].map((i) => `- Report ${i} went out`)].join("\n");
+  const since = { overnight: {}, cards: [], learned: {}, digest: { source_id: 1, at: new Date(Date.now() - 3600e3).toISOString(), text: digest } };
+  const guard = page.fixtureRequestGuard;
+  page.off("request", guard);
+  page.on("request", (r) => {
+    const p = new URL(r.url()).pathname, body = p === "/api/calendar/today" ? day() : p === "/api/since" ? since : null;
+    if (body) r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) }); else guard(r);
+  });
+  const look = async (heading) => {
+    await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.waitForFunction((h) => (document.querySelector(".tq-day-agenda .tq-day-h")?.textContent || "").includes(h)
+      && /^tasks$/i.test(document.querySelector(".tq-day-wait .tq-day-h")?.textContent.trim() || "") && document.querySelector("[data-tq-digest-text]"), { timeout: 30000 }, heading);
+    await sleep(1500);
+    return page.evaluate(() => {
+      const r = (s) => document.querySelector(s)?.getBoundingClientRect(), body = document.querySelector(".tq-chat-body");
+      const fold = body.getBoundingClientRect().top + body.clientHeight, evs = document.querySelector("[data-tq-day-evs]");
+      return { cal: Math.round(r(".tq-day-agenda").height), open: Math.round(r(".tq-day-wait").height), modes: Math.round(r(".tq-welcome .tq-modes").bottom), fold: Math.round(fold),
+        reading: /to read/i.test(document.querySelector(".tq-day-box").innerText), more: !!document.querySelector("[data-tq-digest-more]"),
+        scrolls: evs ? evs.scrollHeight > evs.clientHeight + 1 : false, digestTop: Math.round(r("[data-tq-since]").top - r(".tq-day").bottom) };
+    });
+  };
+  const long = await look("12 meetings");
+  assert.equal(long.cal, long.open, `ten meetings and more: the two cards stand one height: ${JSON.stringify(long)}`);
+  assert.ok(long.cal <= 180, `...a short one - the rest of the day scrolls in its card: ${JSON.stringify(long)}`);
+  assert.ok(long.scrolls, `the day's list scrolls inside the card: ${JSON.stringify(long)}`);
+  assert.ok(long.modes <= long.fold, `the cards, the digest's first lines and the way-in buttons fit above the fold: ${JSON.stringify(long)}`);
+  assert.ok(long.more && long.digestTop <= 10, `the digest right under the cards, its first lines then More: ${JSON.stringify(long)}`);
+  assert.equal(long.reading, false, "no To read on the opener - reports and FYI are the rail's");
+  meetings = 0;
+  const none = await look("no meetings");
+  assert.equal(none.cal, none.open, `no meetings: still one height: ${JSON.stringify(none)}`);
+  assert.ok(none.cal <= 100, `...and no tall empty box: ${JSON.stringify(none)}`);
+  assert.ok(none.modes <= none.fold, JSON.stringify(none));
+  assert.deepEqual(errors, []);
+});

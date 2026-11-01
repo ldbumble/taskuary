@@ -34,8 +34,11 @@ test("Settings has no empty Agents destination and profile links go straight to 
 test("the opening card is the day and the tasks, the digest's first lines under them, More for the rest", () => {
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
   assert.match(view, /top=\{<SinceBlock onOpen=\{\(k\) => pull\(k, null\)\} onReading=\{setMailReading\} \/>\}/);
-  assert.match(cards, /\{read\.map\(row\)\}[\s\S]{0,200}\{top\}\s*<\/div>/, "the digest stands under the two cards");
-  assert.match(view, /<DigestText text=\{open \? dg\.text : preview\} sourceId=\{dg\.source_id\} \/>/, "its first lines, the whole on More");
+  assert.match(cards, /\{act\.map\(row\)\}[\s\S]{0,200}\{top\}\s*<\/div>/, "the digest stands under the two cards");
+  // ...as many of its lines as the screen has room for, never fewer than three (the owner, 2026-10-31: "depending on screen size")
+  assert.match(view, /style=\{more \? \{ maxHeight: fit \} : undefined\}/, "its first lines, cut at the fold");
+  assert.match(view, /<DigestText text=\{dg\.text\} sourceId=\{dg\.source_id\} \/>/, "the whole on More");
+  assert.match(view, /const n = Math\.max\(PREVIEW_MIN, ends\.filter/);
   assert.match(view, /\{open \? "Less ▴" : "More ▾"\}/);
   assert.match(view, /api\.post\(`\/api\/reports\/\$\{dg\.source_id\}\/rerun`\)/, "Write a fresh one runs the digest now");
   assert.doesNotMatch(view, /data-tq-since-card|data-tq-learned/, "no away cards and no memory line on the opener");

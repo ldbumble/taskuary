@@ -588,12 +588,15 @@ def health_ideas(store, now: datetime = None) -> list:
     """A report that failed its last three runs; a workflow never run since it was saved; a live
     connection erroring; a brain left blank while mail waits. One row each, the door is the tab that fixes it."""
     from . import appfacts
+    from .agents import _UNAVAILABLE
     out, now = [], now or datetime.now()
     seen = _workflows_seen(store, appfacts.reports(store), now)
     for r in appfacts.reports(store):
         if not r['active']: continue
         runs = store.report_runs(r['source_id'], 3) or []
-        if len(runs) >= 3 and all(x.get('failed') for x in runs):
+        # a usage limit is the plan's week, not a broken report: the run's own words say "nothing is wrong with this report"
+        # (agents.rate_limit_msg), and the line asked for a bug hunt into a quota that resets on its own (TQ-1264)
+        if len(runs) >= 3 and all(x.get('failed') for x in runs) and not _UNAVAILABLE.search(str(runs[0].get('error') or '')):
             # the SAME failure is one idea, said once: the sig is the error, numbers read as one (a timestamp, a run
             # id). It was the last run's time, so every failed run re-raised it (the owner, 2026-09-28: "as long as
             # it's not the same idea a 100 times"); a different error is a new fact and comes back

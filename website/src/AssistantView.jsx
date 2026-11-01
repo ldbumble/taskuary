@@ -1946,8 +1946,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ONE ROAD AHEAD OF THE ANSWER (G8 swap-never-clear + the prepared Next, 2026-10-20): a press draws its next line at once and the
   // press's own answer fills that SAME line in place - its id kept, so the view in it stays mounted - or takes it down when it brought
   // something else; a refusal or a failure takes it down and puts back what was on the table. What is drawn: the server's PREPARED
-  // answer (prepared_next, its words and chips) when it was worked out for exactly this selection, else the rail's own row for the
-  // item the capture names (surface) - or the one a close names, drawn at the close's press (drawNextEarly). The line is `ahead` until
+  // answer for the row on screen (walk.below, railwalk.peek: its words and chips), else the rail's own row for the item named
+  // (surface) - or the one a close names, drawn at the close's press (drawNextEarly). The line is `ahead` until
   // its answer lands: no copy of the item yet (itemKey), so the older line of that item stays where it stood until the answer is
   // placed - and goes back to being the item's line if this one comes down.
   const aheadRef = useRef(null);      // { id, key, hash, say, table } of the line drawn before its answer (drawAhead, landed, unshow)

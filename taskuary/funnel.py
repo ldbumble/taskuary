@@ -1540,7 +1540,7 @@ TAIL_FIELDS = ('key', 'kind', 'title', 'who', 'agent', 'shows_who', 'ref', 'tid'
 
 def _plain_fyi(i) -> bool:
     return (i.get('lane') == 'fyi' and i.get('order_band') == 4 and i.get('kind') != 'idea' and not str(i.get('kind') or '').startswith('goal')
-            and not any(i.get(k) for k in ('settling', 'put_down', 'deferred', 'surfaced', 'news')))
+            and not any(i.get(k) for k in ('settling', 'deferred', 'surfaced', 'news')))
 
 
 def page_fyi(payload: dict, n: int, keep=()) -> dict:

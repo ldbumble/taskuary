@@ -473,6 +473,20 @@ invoice (or credit memo) PDFs on the report — at most 25 new ones a run, since
 on request at about one a minute; one already fetched is kept and not asked for again. An agent can
 fetch a single one by number with the <code>amazon_invoice_pdf</code> lookup. See Amazon&#39;s
 <a href="https://developer-docs.amazon.com/amazon-business/docs">Amazon Business API documentation</a>.</p>
+<p><strong>Taking payments with Stripe</strong> — the <strong>Stripe</strong> card reads your Stripe account: the balance,
+balance transactions with fees and net, charges, payments (PaymentIntents), payouts, refunds,
+disputes, customers, subscriptions with each one&#39;s monthly recurring revenue, and invoices. Like the
+Amazon card it is a data card for reports, dashboards and agent lookups, never a source of work, and
+it is read-only by construction: it only sends GET requests, so nothing on it can refund, pay out or
+cancel. To connect it, open the Stripe Dashboard → Developers → API keys → <strong>Create restricted key</strong>,
+give it Read on Balance, Balance transaction sources, Charges, Refunds, Customers, Disputes,
+PaymentIntents, Payouts, Invoices and Subscriptions and None on everything else, then paste the key
+(<code>rk_live_…</code> or <code>rk_test_…</code>) onto the card, where it is kept write-only. A full secret key (<code>sk_</code>)
+works too, but it can move money; the restricted one is the one to give. <strong>Test</strong> reads the balance
+and says whether the key is live or test. Amounts come back in money rather than cents — a
+zero-decimal currency such as JPY stays as it is — lists are read a page at a time within the window
+you ask for, and a rate-limited call waits and retries. See Stripe&#39;s
+<a href="https://docs.stripe.com/keys#create-restricted-api-secret-key">restricted keys documentation</a>.</p>
 <p><strong>Markets</strong> — Yahoo Finance, CoinGecko, Alchemy, ECB reference rates, SEC EDGAR filings, and a
 strategy screen that filters another card&#39;s rows. With a key: <strong>Twelve Data</strong> (quotes and computed
 indicators across stocks, FX and crypto), <strong>Alpha Vantage</strong> (slow limits, no card, no expiry),
@@ -616,7 +630,7 @@ Content-Type: application/json
 
     </article>
     <nav class="pager"><a class="pn prev" href="./how-it-works"><span>Previous</span>How it works</a><a class="pn next" href="./tasks-and-agents"><span>Next</span>Tasks and agents</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.10.10 · updated 2026-11-01</p>
+    <p class="stamp">Documentation for Taskuary 0.3.10.11 · updated 2026-11-01</p>
   </main>
 </div>
 <script src="./docs.js"></script>

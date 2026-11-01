@@ -860,7 +860,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'sharepoint_save': _lazy('sharepoint', 'run_sharepoint_save'), 'onedrive_save': _lazy('sharing', 'run_onedrive_save'),
             # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
             'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
-            'image_generate': _lazy('images', 'run_image_generate'),   # a picture, filed on the message
+            'image_generate': _lazy('images', 'run_image_tool'),   # a picture, filed on its task or message
             'handbook_search': _lazy('handbook', 'run_handbook_search'), 'handbook_write': _lazy('handbook', 'run_handbook_write'),
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             'hub_search': _lazy('hub', 'run_hub_search'), 'hub_write': _lazy('hub', 'run_hub_write'),
@@ -1180,7 +1180,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 # run_due_reports runs these FIRST for that reason, so keep the two uses of this list together.
 STORE_BACKED = ('onedrive_save', 'taskuary', 'taskuary_data', 'dashboard', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
                 'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
-                'hub_search', 'hub_write', 'hub_vote', 'hub_comment')
+                'hub_search', 'hub_write', 'hub_vote', 'hub_comment', 'image_generate')
 
 
 def gate(store, cfg: dict) -> None:

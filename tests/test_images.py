@@ -10,7 +10,9 @@ and decoding the RESPONSE shape it answers with, which is where the bugs in this
 """
 import base64
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from taskuary import images
@@ -233,6 +235,22 @@ class TheToolAgentsCallTests(unittest.TestCase):
         self.assertEqual(len(atts), 1)
         self.assertTrue(str(atts[0]['ContentType']).startswith('image/'))
         self.assertIn('attachment_id', out)
+
+    def test_an_agents_call_through_the_tools_endpoint_lands_in_its_tasks_outputs(self):
+        # reports.REGISTRY handed the store-first function a cfg: every agent's picture failed on a missing argument (TQ-1251)
+        from taskuary import outputs, reports
+        s = MemoryStore(); _conn(s, 'openai_image')
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(outputs, 'folder', lambda tid: Path(d) / f'TQ-{tid:04d}'),              mock.patch.object(images.requests, 'post', return_value=_resp(payload={'data': [{'b64_json': B64}]})):
+            head, out = reports.REGISTRY['image_generate'](reports.resolve_cfg(s, {'type': 'image_generate', 'prompt': 'a duck', 'task_id': 73}))
+            self.assertIn("TQ-0073's outputs", head)
+            self.assertEqual((Path(d) / 'TQ-0073' / json.loads(out)['name']).read_bytes(), PNG)
+
+    def test_a_picture_with_nowhere_to_land_is_never_drawn(self):
+        # it drew, said how many bytes, kept nothing - "image created" and the owner never saw it (TQ-1251)
+        s = MemoryStore(); _conn(s, 'openai_image')
+        with mock.patch.object(images.requests, 'post') as post:
+            with self.assertRaisesRegex(RuntimeError, 'needs a task to land on'): images.run_image_generate(s, {'prompt': 'a duck'})
+        post.assert_not_called()
 
 
 if __name__ == '__main__':

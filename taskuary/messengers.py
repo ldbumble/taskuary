@@ -10,7 +10,7 @@ Taskuary's side is ~40 lines either way.
 Both are CHAT: messages land with a conversation id per chat, replies go back into the same
 chat, and the responder already knows not to sign chat messages.
 """
-import base64, json, os, time
+import base64, json, os, re, time
 from loguru import logger
 from . import net as requests     # pooled Session + (connect, read) timeouts, same call shape
 
@@ -738,6 +738,16 @@ def send_document(store, channel: str, chat: str, data: bytes, name: str, mime: 
     return {'channel': channel, 'chat': chat, 'name': name, 'bytes': len(data)}
 
 
+def wa_jid(chat) -> str:
+    """A chat as WhatsApp addresses it. An Assistant chat saved as a phone number went to the bridge as it was, and Baileys answered
+    "Cannot destructure property 'user' of 'jidDecode(...)'" to every walk handed to the phone (TQ-1251): a number is that person's chat."""
+    j = str(chat or '').strip()
+    if '@' in j: return j
+    digits = re.sub(r'[\s()+.-]', '', j)
+    if digits.isdigit() and len(digits) >= 7: return f'{digits}@s.whatsapp.net'
+    raise RuntimeError(f'{j!r} is not a WhatsApp chat - pick the Assistant chat again on the WhatsApp card')
+
+
 def wa_send(store, jid: str, body: str, connector_id=None, poll: list = None) -> dict:
     """`poll`: the choices numbered in `body`, sent again under it as a WhatsApp poll - one tap picks (the bridge
     turns the vote back into the option's words)."""
@@ -745,5 +755,6 @@ def wa_send(store, jid: str, body: str, connector_id=None, poll: list = None) ->
         store.get_connector_by_type('whatsapp', with_secret=True)
     if c and c.get('Type') != 'whatsapp': c = None
     if not c: raise RuntimeError('the WhatsApp connection is not set up')
+    jid = wa_jid(jid)
     _wa(c, '/send', {'jid': jid, 'text': body[:4000], **({'poll': {'name': 'Pick one', 'values': list(poll)}} if poll else {})})
     return {'channel': 'whatsapp', 'chat': jid}

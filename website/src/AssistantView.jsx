@@ -1184,6 +1184,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // sat on the rail as an open task already seen: under For later (the owner, 2026-10-01: "it first went to Later ... and
   // did not disappear right away"). Held until the pile no longer carries it, so a reopened task is never hidden.
   const [leavingTid, setLeavingTid] = useState(null);
+  // ...and the rows a walk press READS (rule 4), by key: {keys, coming, after} - `coming` the fyi batch below them, `after` the rail they
+  // wait out when the answer brought none (surface)
+  const [readGone, setReadGone] = useState(null);
   // A TASK BEING CONTINUED rings at the press the same way: "Continuing" said so at 0.3 s while its row sat still until the next
   // pile, two seconds on (press audit, 2026-10-01). Held until the pile has it working; it stays where it is, under Tasks.
   const [continuingTid, setContinuingTid] = useState(null);
@@ -2036,6 +2039,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setMsgs((m) => [...m, { id, role: "assistant", text: "", options: [], chips: [], card: belowItem, ahead: true }]);
       putOnTable(belowItem); setFlight((f) => (f ? { ...f, drawn: true } : f));   // ...its Next live at once, held until this move is in
     }
+    // ...AND WHAT IT READS LEAVES THE RAIL AT THE PRESS (rule 4): Next on a row the walk says it reads (walk.reads - a report, an idea, an fyi),
+    // a batch's "All read, next" (a settle). Held to the answer, a slow one kept a read batch in the FYI heading's count and a passed idea on
+    // the rail for seconds (the owner, 2026-11-01); taken off the pile, not unringed, so the band never counts them as "more fyi" (cd80e9000)
+    const reads = putDown && walkNow?.on === putDown && (how === "leave" ? left?.how === "settle" : walkNow.reads);
+    // ...and the batch coming in its place is drawn on the table already: its rows uncapped for that moment, the band said "4 more fyi"
+    if (reads) setReadGone({ keys: [putDown, ...(walkNow.members || [])], coming: walkNow.below?.startsWith("fyis:") ? walkNow.below : null });
     const epoch = chatEpoch.current;
     let failed = null, data = null;
     try {
@@ -2046,14 +2055,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // Back at the top moves nothing: what is on the table stays
       if (how === "back" && !data.item && data.top) { if (data.pile) holdPile(data.pile); }
       else landed(data);
-      if (how === "leave") onChanged?.();             // a draft may have gone out: the Review badge recounts
+      // ...the rail the answer brought is the server's word on them; brought later (pileLater), held until that rail lands
+      if (reads) setReadGone((g) => (!g || data?.pile ? null : { ...g, after: pileRef.current }));
+      if (how === "leave") onChanged?.();            // a draft may have gone out: the Review badge recounts
       // ...and A CLOSE KEPT OPEN (a Send with work still live on it, 2026-11-01) is back on the rail as well as the table: the row put down
       // at the press stayed hidden from the rail, its canvas drawn over nothing - the two say the same thing or the owner is lost
       if (how === "leave" && data?.kept) { leftKey.current = null; setLeavingTid(null); }
     } catch (e) {
       failed = e;
       if (optimisticId) setMsgs((m) => m.filter((message) => message.id !== optimisticId));
-      if (putDown) { setFoldedKey((k) => (k === putDown ? null : k)); leftKey.current = null; setLeavingTid(null); }
+      if (putDown) { setFoldedKey((k) => (k === putDown ? null : k)); leftKey.current = null; setLeavingTid(null); setReadGone(null); }
       if (worn) wear(false);
       // ...and the row drawn ahead comes down, the table back on the row the press left
       const ahead = belowRef.current; belowRef.current = null;
@@ -3233,9 +3244,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a press away here - the browser's own Back, the road onPlace already takes. Only over a step of ours (appLinks.canGoBack)
   const [canBack, setCanBack] = useState(canGoBack);
   useEffect(() => onStep(() => setCanBack(canGoBack())), []);
-  const railPile = useMemo(() => ((leavingTid || continuingTid) && pile?.items
-    ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid }) } : pile),
-    [pile, leavingTid, continuingTid]);
+  const railPile = useMemo(() => ((leavingTid || continuingTid || readGone) && pile?.items
+    ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid, read: readGone?.keys }) } : pile),
+    [pile, leavingTid, continuingTid, readGone]);
+  useEffect(() => { if (readGone?.after && pile !== readGone.after) setReadGone(null); }, [pile, readGone]);
   useEffect(() => {                                   // the close has landed: the server's pile no longer has it, or has it For later
     if (leavingTid && pile?.items && putDownLanded(pile.items, leavingTid)) setLeavingTid(null);
   }, [pile, leavingTid]);
@@ -3760,7 +3772,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       top={<><UndoLine kinds={["task"]} onRestored={() => { loadPile(true); onChanged?.(); }} sx={{ mx: 1, mt: 1, mb: 1 }} /><Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
         // ...folded by a walk press, its rows keep their place on the rail until the answer lands (rule 7): a batch folded by "All read, next"
         // lost the cap's hold on its rows, and the band counted them as "10 more fyi" between the batch and the next
-        current={old || (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
+        // ...unless the press read them: then they are off the pile already (readGone), the ring would only put them back (onTable), and
+        // the fyi batch below them takes the bracket at the press - the answer puts the same one on the table
+        current={old ? null : readGone?.keys.includes(currentItem?.key) ? (readGone.coming ? { key: readGone.coming, kind: "fyis", members: readGone.coming.slice(5).split(",") } : null)
+          : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} /></>}

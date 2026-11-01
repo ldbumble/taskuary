@@ -333,8 +333,9 @@ export const pulledRow = (card) => (card?.tid && ((card.kind === "agent" && AGEN
 // THE RAIL AS PRESSED: a press the server has not answered yet still moves its row (the put-down, ac051beb). `leaving`: the
 // task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn working - its
 // ring spinning, where it is under Tasks - not two seconds later with the next pile (press audit B23b, 2026-10-01).
-export const asPressed = (items, { leaving = null, continuing = null } = {}) => (!leaving && !continuing ? items
-  : items.filter((i) => !leaving || i.tid !== leaving)
+// `read`: the keys a walk press reads (rule 4) - they leave with the press, as the server's answer will have them
+export const asPressed = (items, { leaving = null, continuing = null, read = null } = {}) => (!leaving && !continuing && !read?.length ? items
+  : items.filter((i) => (!leaving || i.tid !== leaving) && !read?.includes(i.key))
     .map((i) => (continuing && i.tid === continuing
       ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
 // ...and a put-down has LANDED when the server's pile no longer has the row - or has it put away: Remind me keeps the task on the

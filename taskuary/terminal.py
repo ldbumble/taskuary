@@ -1234,6 +1234,8 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from . import browserview as _bv, ingest as _ingest
         if _ingest.mark_browser(store, task_id):         # ...or that triage read the work as done on a web page (2026-10-29)
             threading.Thread(target=_bv.start, args=(t.sid,), daemon=True).start()
+        from . import agentdesktop as _ad
+        _ad.mark_from_triage(store, task_id)               # ...and in a desktop app, with Agent Desktop on (2026-10-31)
     if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
         from .witness import RolloutTail
         RolloutTail(t).start()
@@ -1826,6 +1828,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if _batch.is_batch(store, tid): return _batch.seed(store, tid, repo, cwd, instruction)
     from . import ingest as _ingest
     _ingest.mark_browser(store, tid)                 # what triage read the work to need, before the brief below reads the tag (2026-10-29)
+    from . import agentdesktop as _ad
+    _ad.mark_from_triage(store, tid)                 # ...the desktop's the same way, only with its card on (2026-10-31)
     t = store.get_task(tid) or {}
     msgs = [m for m in store.list_messages(tid) if m.get('Status') != 'context']
     m = msgs[-1] if msgs else None
@@ -1849,9 +1853,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # the hold is promised only to a CLI whose hook can refuse (llm.HOLDS_CLI): Codex was told "held" and paid (2026-10-25)
     from .llm import HOLDS_CLI
     if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
-    # ...and the owner's desktop apps, once Agent Desktop is on - never on a stranger's task (agentdesktop.py; its hook refuses there too)
-    from . import agentdesktop as _ad
-    if not stranger and _ad.on(store): parts.append(_ad.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
+    # ...and the owner's desktop apps, once Agent Desktop is on and the task is marked "needs desktop" - never on a stranger's task
+    # (agentdesktop.py; its hook refuses there too)
+    if not stranger and _ad.on(store) and _ad.wanted(store.get_task(tid)): parts.append(_ad.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
     from . import blackboard as bb
     # the overlap model would read a stranger's title and summary, and its sentence would land in this prompt
     aware = bb.briefing(store, cwd, exclude_tid=tid, assess_for=None if stranger else tid) if cwd else ''

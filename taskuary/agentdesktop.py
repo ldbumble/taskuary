@@ -11,6 +11,8 @@ Ref actions there are UI Automation calls that neither move the mouse nor take f
 WHAT KEEPS IT SAFE, the browser's rules applied to the desktop:
 - OFF BY DEFAULT. Its connector card is seeded off (store.py); off, or not installed, no agent is told of it and every act of
   agent-desktop in one of our sessions is refused by the shell hook (hooks.browser).
+- ONLY ON A TASK MARKED "needs desktop" (WANTS, the owner 2026-10-31): the card on is not enough - an unmarked task's agent is told
+  nothing and its acts are refused.
 - NEVER ON A STRANGER'S TASK: a stranger's words do not get the owner's desktop to drive, as they do not get the browser.
 - AN ACT THAT CAN'T BE UNDONE WAITS FOR THE OWNER'S PRESS. A command that only looks (LOOKS: snapshot, find, get, list-...) passes.
   Any other goes to the model with the control it names (`get <ref>`); send, pay, delete, submit - or unsure, or no verdict - is held
@@ -50,11 +52,53 @@ def card(store) -> dict: return (store.get_connector_by_type(TYPE) or {}) if sto
 def on(store) -> bool: return bool(card(store).get('Active')) and installed()
 
 
+# A TASK MARKED "needs desktop" is the only one that gets it (the owner, 2026-10-31): the card on is not enough. The mark is a tag,
+# as "needs a browser" is (browserview.WANTS): the New sheet's box, the task's mark (POST /api/tasks/{id}/desktop), or triage reading
+# the work as done in a desktop app with the card on (mark_from_triage). Unmarked, the agent is told nothing and the hook refuses.
+WANTS = 'needs:desktop'
+HOW = 'To use it, turn the Agent Desktop card on and mark a task "needs desktop".'
+
+
+def wanted(task: dict | None) -> bool:
+    "Is this task marked \"needs desktop\"?"
+    return bool(re.search(rf'(^|[\s,]){re.escape(WANTS)}([\s,]|$)', str((task or {}).get('Tags') or '')))
+
+
 def offered(store, tid: int, pick: str = '') -> bool:
-    "Does this task's agent get the desktop? The card on, a CLI with hands, the owner's own task - never the dock or a stranger's."
-    if not on(store): return False
+    "Does this task's agent get the desktop? The card on, the task marked, a CLI with hands, the owner's own task - never the dock or a stranger's."
+    if not on(store) or not wanted(store.get_task(tid)): return False
     from . import general
     return general.browser_offered(store, tid, pick)
+
+
+def mark(store, tid: int, want: bool = True, actor: str = 'owner') -> bool:
+    "Mark (or unmark) a task \"needs desktop\". True when it now carries the mark."
+    if not store.get_task(tid): raise ValueError('task not found')
+    store.tag_task(tid, WANTS, on=want, actor=actor)
+    return want
+
+
+def mark_from_triage(store, tid) -> bool:
+    """Mark the task when triage said its work is done in a desktop app (its verdict's needs_desktop) - only with the card on, never on a
+    stranger's task, said once on the task. True when it now wants the desktop. The doors that start an agent call it (ingest.mark_browser's)."""
+    t = store.get_task(tid) if tid else None
+    if not t: return False
+    if wanted(t): return True
+    if not on(store): return False
+    for r in store._rows("SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson LIKE '%\"needs_desktop\"%' ORDER BY RouteId DESC LIMIT 5", (tid,)):
+        try: v = json.loads(r.get('VerdictJson') or 'null') or {}
+        except (TypeError, ValueError): continue
+        if not isinstance(v, dict) or not isinstance(v.get('needs_desktop'), bool): continue
+        if not v['needs_desktop']: return False
+        from . import origin
+        try:
+            if origin.of_task(store, tid)[0] == 'stranger': return False
+        except Exception as e: logger.debug(f'desktop: origin unread on task {tid}, not marked - {e}'); return False
+        store.tag_task(tid, WANTS, actor='triage')
+        store.add_comment(tid, 'triage', 'agent', 'Triage read this as work in a desktop app - the agent may use Agent Desktop on it, '
+                          'and anything that would send, pay or delete waits for your Approve.')
+        return True
+    return False
 
 
 def _run(args: list, wait: float, tag: str) -> tuple:
@@ -84,7 +128,7 @@ def test() -> str:
     d = st.get('data') or {}
     acc = ((d.get('permissions') or {}).get('accessibility') or {}).get('state') or 'unknown'
     tip = ' - on macOS run `agent-desktop permissions --guide` to grant it' if acc not in ('granted', 'not_required') else ''
-    return f"agent-desktop {d.get('version') or '?'} on {d.get('platform') or '?'} - accessibility {acc}{tip}"
+    return f"agent-desktop {d.get('version') or '?'} on {d.get('platform') or '?'} - accessibility {acc}{tip}. {HOW}"
 
 
 # ── what the agent is told ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -110,10 +154,6 @@ def brief(held: bool = True) -> str:
             'into an app, never read the clipboard for one, and never touch Taskuary\'s own window: a sign-in is the owner\'s - end '
             'your turn and say what they need to do. Snapshots can hold private text: never paste one into a reply, a file or a post. '
             + (HOLD_LINE if held else ASK_FIRST_LINE))
-
-
-OFF_LINE = ('THE OWNER\'S DESKTOP IS NOT YOURS on this task: Agent Desktop is off (Connections) or this task carries a message from someone '
-            'the owner has not vouched for. Do not drive desktop apps with agent-desktop or any other tool.')
 
 
 # ── which part of a shell command is a desktop act ────────────────────────────────────────────────────────────────────────
@@ -245,6 +285,9 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     except Exception: stranger = True                                  # unreadable is not a vouch
     if stranger: return _deny('This task carries a message from someone the owner has not vouched for, so it does not drive the '
                               "owner's desktop. Say what you would have done instead.")
+    if not wanted(store.get_task(tid)):
+        return _deny('This task is not marked "needs desktop", so it does not drive the owner\'s desktop. Say in one line that the owner can '
+                     'mark it "needs desktop" if the work needs a desktop app, and what you would have done there.')
     for a in todo:
         ctl = control(a)
         v = judge(store, a, ctl, brain)

@@ -2217,6 +2217,24 @@ def assistant_browser(task_id: int):
         threading.Thread(target=browserview.start, args=(session.sid,), daemon=True).start()
     return _assistant_payload(task_id, session)
 
+class DesktopMarkBody(BaseModel): on: bool = True
+
+@app.post('/api/tasks/{task_id}/desktop')
+def task_desktop(task_id: int, body: DesktopMarkBody):
+    """Mark a task "needs desktop" (or take the mark off): with Agent Desktop on, only a marked task's agent may operate the owner's
+    desktop apps (agentdesktop.py, the owner 2026-10-31). The owner's door - an agent cannot mark its own task (guard.AGENT_WRITES)."""
+    from . import agentdesktop
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    agentdesktop.mark(store, task_id, body.on, actor=ACTOR)
+    return {'task_id': task_id, 'needs_desktop': body.on, **desktop_status()}
+
+@app.get('/api/desktop')
+def desktop_status():
+    """Agent Desktop as the New sheet and its card read it: the card on, the program found, and how to use it, in one line."""
+    from . import agentdesktop
+    c = agentdesktop.card(store)
+    return {'on': agentdesktop.on(store), 'active': bool(c.get('Active')), 'installed': agentdesktop.installed(), 'how': agentdesktop.HOW}
+
 @app.post('/api/tasks/{task_id}/assistant/cancel')
 def assistant_cancel(task_id: int):
     """The stop button. The ONLY thing that stops an answer being written - walking away does

@@ -78,7 +78,7 @@ every other act waits. Approving runs that exact command, only while the browser
 was held on.
 
 **A desktop act that can't be undone waits for you too.** Agent Desktop (Connections) is off until
-you turn it on, and never runs on a stranger's task. With it on, an `agent-desktop` command that only
+you turn it on, runs only on a task marked "needs desktop", and never runs on a stranger's task. With it on, an `agent-desktop` command that only
 looks passes. Any other goes to your AI with the control it names, and one that would send, pay,
 delete or submit is held for your **Approve** the same way. Approving runs that exact command, and
 does nothing if that control is gone.

@@ -55,6 +55,7 @@ import { validEmail } from "./recipientOptions.js";
 import { waLabel, waMatches, waPhone } from "./waChats.js";
 import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
+import { DESKTOP_HOW } from "./newTask.js";
 import { openHelp, sayEarlier, viewResult } from "./pageView.js";
 
 /* ── Get AI to set it up: THE ASSISTANT, IN THE CHAT (the owner, 2026-10-30: "don't you think this sort of ai troubleshooting should go
@@ -2753,6 +2754,7 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
         </Alert>
       )}
       {tool?.installed && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>Found at <code>{tool.path}</code></Typography>}
+      <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 1 }}>{DESKTOP_HOW}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: .75, borderBottom: `1px solid ${BORDER}`, maxWidth: 720 }}>
         <Switch checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: e.target.checked })} />
         <Typography variant="body2" sx={{ color: INK }}>

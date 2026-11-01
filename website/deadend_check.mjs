@@ -794,17 +794,25 @@ async function faults() {
     page.expect.add("/dispatch");                                      // its status is the subject here, judged by WAYOUT and WORDS
     // every task row in turn until one offers Send to agent: the rail's order follows the clock, so the first "on you" row was a task with
     // no Send to agent when CI ran just after midnight (2026-10-19) - and a coding issue whose folder the task already names when CI ran
-    // after midnight UTC (2026-10-21). The rows are taken in the order of their keys: the same task at any hour
+    // after midnight UTC (2026-10-21). The rows are taken in the order of their task numbers, which the seed hands out the same every
+    // run: the same task at any hour. Their keys were no order at all - a processing row's key is a random id (store.py, pi_<uuid4>),
+    // so the task taken changed from run to run and the faults pass failed on some runs and not others (2026-11-01)
     let started = false;
-    const rows = (await look(page)).rail.filter((x) => x.status === "yours").sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true }));
+    const tid = Object.fromEntries(((await srv.api("GET", "/api/funnel/pile?force=1")).items || []).filter((i) => i.tid).map((i) => [i.key, i.tid]));
+    const rows = (await look(page)).rail.filter((x) => x.status === "yours")
+      .sort((a, b) => (tid[a.key] ?? Infinity) - (tid[b.key] ?? Infinity) || a.key.localeCompare(b.key, "en", { numeric: true }));
     // ...and for the folder that is not there, a task that names no folder first: one that names one answers "Change where the code
     // is", and CI took such a task (2026-10-22), so "Choose where the code is" was pressed nowhere and COVER failed
-    if (f === "badrepo") {
-      const tid = Object.fromEntries(((await srv.api("GET", "/api/funnel/pile?force=1")).items || []).filter((i) => i.tid).map((i) => [i.key, i.tid]));
-      const named = new Set();
-      for (const r of rows) if (tid[r.key]) { const d = await srv.api("GET", `/api/tasks/${tid[r.key]}`); if (/(^|[\s,])repo:\S/.test(String((d.task || d).Tags || ""))) named.add(r.key); }
-      rows.sort((a, b) => named.has(a.key) - named.has(b.key));
+    // ...and for the coding tool that is not there, a task whose code is already known first: on any other the coding start waits on
+    // "choose where the code is" - rightly, since nothing has tried the tool yet - so its Start was pressed while greyed and the tool's
+    // failure, the subject here, never came (the general tour task, switched to the coding agent, 2026-11-01)
+    const last = new Set();
+    for (const r of rows) {
+      if (!tid[r.key]) { if (f === "nocli") last.add(r.key); continue; }
+      if (f === "badrepo") { const d = await srv.api("GET", `/api/tasks/${tid[r.key]}`); if (/(^|[\s,])repo:\S/.test(String((d.task || d).Tags || ""))) last.add(r.key); }
+      else if (!(await srv.api("GET", `/api/tasks/${tid[r.key]}/repos`)).picked) last.add(r.key);
     }
+    rows.sort((a, b) => last.has(a.key) - last.has(b.key));
     for (const r of rows) {
       if (!(await openItem(page, r.key))) continue;
       // the coding agent by its own button where the row splits Send to agent in two, else Send to agent and the card's question

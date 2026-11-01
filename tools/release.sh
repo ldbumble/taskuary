@@ -41,6 +41,10 @@ for p in ('README.md', 'README.zh-CN.md'):   # the badge's cache-buster: a new U
     t = open(p, encoding='utf8', newline='').read(); open(p, 'w', encoding='utf8', newline='').write(re.sub(r'asof=[0-9a-z.-]+', f'asof={new}', t))
 EOF
 
+# WHAT THIS RELEASE CHANGED, on the docs page the Assistant searches (tools/whatsnew.py, TQ-1251) - a section already there is kept
+say "write what's new in $V"
+python tools/whatsnew.py "$V" || die "whatsnew failed"
+
 say "build the UI, the demo and the docs"
 (cd website && "${N[@]}" npm run build >/dev/null && "${N[@]}" npm run build:demo >/dev/null && "${N[@]}" npm run build:docs >/dev/null) || die "a build failed"
 

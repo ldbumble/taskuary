@@ -101,7 +101,9 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
     await t.test("Agent open: Redraft on Close out's spine; the agent's start is its form's, not the bar's", async () => {
       await openSec(page, "agent");
       // ...once the draft card's own verbs have come round again after the switch
-      await page.waitForSelector(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`, { timeout: 5000 }).catch(() => {});
+      // - its Redraft, not the spine's first button: Hand it to a person stands there before the draft card has registered again (CI, 0.3.10.5)
+      await page.waitForFunction((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`)]
+        .some((b) => b.textContent.trim() === "Redraft"), { timeout: 8000 }, CUR).catch(() => {});
       const m = await look(page);
       assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 3), ["Redraft", "Hand it to a person", "Mark done"], JSON.stringify(m.close));
       assert.ok(m.close.between && m.close.rule);

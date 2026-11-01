@@ -81,6 +81,12 @@
       "file": "troubleshooting.md",
       "title": "When something is wrong",
       "desc": "What to check, in the order worth checking it."
+    },
+    {
+      "slug": "whats-new",
+      "file": "whats-new.md",
+      "title": "What's new",
+      "desc": "What each release changed, newest first."
     }
   ]
 }

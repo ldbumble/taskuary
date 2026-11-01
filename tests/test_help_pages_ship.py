@@ -9,3 +9,14 @@ def test_the_exe_carries_the_help_pages_where_docs_search_looks():
     spec = (ROOT / 'taskuary.spec').read_text(encoding='utf-8')
     assert "('docs/site/*.md', 'docs/site')" in spec
     assert lookups.SITE_DOCS.relative_to(ROOT).as_posix() == 'docs/site' and any(lookups.SITE_DOCS.glob('*.md'))
+
+
+def test_the_assistant_finds_what_a_release_changed():
+    import importlib.util
+    from taskuary.store import MemoryStore
+    out = lookups.docs_search(MemoryStore(), {'query': 'what changed in the last update'})
+    assert '[help/whats-new' in out, out[:300]
+    spec = importlib.util.spec_from_file_location('whatsnew', ROOT / 'tools' / 'whatsnew.py'); w = importlib.util.module_from_spec(spec); spec.loader.exec_module(w)
+    assert all(w.CHORE.match(s) for s in ('Release 0.3.10.11', "Refresh the README's PyPI pill for 0.3.10.11", 'Rebuild the UI and demo for X'))
+    assert not w.CHORE.match('A mail account goes to the mailbox card')
+    assert w.has(w.section('9.9.9', '2026-11-01', ['x']), '9.9.9') and not w.has(w.section('9.9.9', '2026-11-01', []), '9.9.90')

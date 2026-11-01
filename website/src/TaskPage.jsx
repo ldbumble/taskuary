@@ -1950,7 +1950,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   );
   // ...WHAT CAME IN: who, on what, when, and their words - the conversation's newest from them (the one Close out answers), else the
   // workflow that made it, else where it was made; the facts under it (its files, how hard, whose words and the trust presses)
-  const CARD = { border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
+  // ...on white, as the mail itself reads (the owner, 2026-11-01: "shouldn't the came from full email be white") - the pane's tint is chrome
+  const CARD = { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderRadius: "12px", px: 2, py: 1.75, minWidth: 0, display: "flex", flexDirection: "column", gap: 0.75 };
   const cardHead = { fontSize: 12, fontWeight: 600, color: DIM };
   const fromCards = () => (
     <Box data-tq-from-cards="" sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 2, "@container (min-width: 620px)": { gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } }}>

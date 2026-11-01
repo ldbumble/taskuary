@@ -624,6 +624,15 @@ class ClearingASet(unittest.TestCase):
         self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
         self.assertEqual(len(said), 1, 'the set ran on the first CALL - no miss sent the model to Next')
 
+    def test_a_set_that_would_not_clear_says_why(self):
+        # "28 items would not clear" said nothing, "why not?" had no answer, and the Assistant sent an agent to find out (TQ-1251)
+        s = store(); tid, item = on_table(s); notices(s, 3)
+        lag = ValueError('processing membership must be reconciled before settlement')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(concierge.funnel, 'settle', side_effect=lag):
+            out = concierge.say(s, 'mark all the fyi read', key=item['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}}}')
+        self.assertIn('3 items would not clear - new mail kept landing while they were being marked', out['say'])
+        self.assertNotIn('reconciled', out['say'])
+
     def test_a_cleared_table_moves_the_walk_on(self):
         s = store(); notices(s, 3)
         key = fyis(s)[0]['key']

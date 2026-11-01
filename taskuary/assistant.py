@@ -796,6 +796,13 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short
             'this field is the ONLY thing that ties the line to a task, so a line about a task always names it here>", '
             '"task": "<idea:* only - a task title the owner could accept as-is, or null>", '
             '"kind": "<when task is not null: coding if it needs a repository/system changed, otherwise general>", '
+            # THE KINDS OF LINE WORTH RAISING (the design's S7, 2026-11-01): what each idea:* line IS, so the owner's record says which
+            # kinds have earned their place (ideagrade) - the useful ones in the audit all joined things the owner could not see at once
+            '"type": "<idea:* only - second_ask (a thread holds a second ask the reply or task leaves out), pattern (the same failure '
+            'or complaint from several runs or people), decides (one thread\'s answer settles another\'s open point), clash (two of the '
+            'owner\'s commitments - in two of their workstreams, or a promise against a date - collide), drift (an agent at work has '
+            'gone a way the ask no longer wants), promise (something the owner said they would do, not done), prep (what a meeting\'s '
+            'people are waiting on), or null for anything else>", '
             '"premise_unanswered": <true when the line rests on nobody having replied or told them (no answer yet, nobody told X), else false>, '
             '"memory": "<the key in [memory:...] of the line under WHAT YOU KNOW ABOUT HOW THE OWNER WORKS this line rests on, or null>", '
             '"threads": [<connect:* only - the T numbers of every thread under SYSTEMS NOTHING HERE READS really about that system>], '
@@ -828,6 +835,11 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short
             'ALREADY SAID they dismissed, say which KINDS of line are worth their eye - an idea of a kind they said no to again and again '
             'stays unsaid, however it is worded; a kind they took up is worth saying. A promise they keep on a schedule (promise:every-*) '
             'that has not gone this time is worth saying. '
+            # ...and THE NOISE THE AUDIT FOUND (2026-11-01): a third of the ideas restated one failure row a report had already shown, and
+            # two were about work the owner was steering that very day
+            'One failure row a report already shows is not a line - it is on the report; the same failure across runs, or from several '
+            'people, is a pattern and is. Work the owner acted on in the last day is not news to them. The owner\'s workstreams are in '
+            'JOB.md: a line that joins two of them (a clash, a person in both) is worth more than one inside one. '
             'Facts only from what you are given; never invent a name, a date or a number. Nothing new to say -> {"say": []}.')
 
 
@@ -1178,7 +1190,9 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             if key in seen: continue
             for f in ('tid', 'mid'):
                 if act.get(f): aimed.setdefault((f, act[f]), key)      # two lines in one answer about one thing: one idea
-            out.append({'key': key[:120], 'kind': 'idea', 'sig': txt[:60], 'text': txt, 'action': act,
+            from .ideagrade import TYPES
+            typ = str(s.get('type') or '').strip().lower()
+            out.append({'key': key[:120], 'kind': typ if typ in TYPES else 'idea', 'sig': txt[:60], 'text': txt, 'action': act,
                         'why': why or 'the model gave no reason - treat it as a hunch' + (f' (about mid {mid})' if mid else '')})
         else: continue
         seen.add(key)
@@ -1969,6 +1983,12 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
             say = ([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
                    + list(say))[:c['max']]
         except Exception as e: logger.warning(f'assistant: the health check was skipped - {e}')
+    # THE SECOND LOOK (ideacheck, the design's S7): a kind under 80% useful, an item the owner acted on today, and a line the model says
+    # they would already know are held - said in the post's own record of what it read, never raised
+    if say and not systems_only:
+        from . import ideacheck
+        say, held = ideacheck.check(store, say)        # its own brain call (job='advisor'), never the post's own answer
+        if held: rv['held'] = [{'key': k, 'why': w} for k, w in held]
     stamp = now.strftime('%Y-%m-%d %H:%M:%S')
     # the report's routing card reads the lines BEFORE they post; a judge that fails leaves the run
     # unjudged, and an unjudged run reaches the owner (reports.decide's rule)
@@ -2163,7 +2183,11 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
     if i.get('Kind') == 'workstream':
         from . import wsboot
         if verb in ('accept', 'done', 'dismiss', 'dismiss_kind'): out |= wsboot.answer_card(store, i, verb in ('accept', 'done'), actor)
-    elif verb == 'accept': raise ValueError('only a workstream card is added')
+    # ...and A HABIT CARD (habits.py): Adopt / Keep it, or No - asked once, never again after No
+    elif i.get('Kind') == 'habit':
+        from . import habits
+        if verb in ('accept', 'done', 'dismiss', 'dismiss_kind'): out |= habits.answer(store, i, verb in ('accept', 'done'), actor)
+    elif verb == 'accept': raise ValueError('only a workstream or habit card is added')
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
     if verb == 'rule':
         from . import promote

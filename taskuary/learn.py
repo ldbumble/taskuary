@@ -541,6 +541,8 @@ def reflect(store, llm=None) -> bool:
     learnedgraph.record(store, new, settled, 'decay')          # and what the clock did to the ones it left alone
     voice_out(store)                               # what it learned about how the owner writes goes where the drafter reads it
     auto_adopt(store)                              # what the owner already said does not wait for a click
+    from . import habits                           # ...a habit the Advisor is sure of is adopted, a useful unsure one asked once (S7)
+    habits.tick(store)
     try:                                           # ...and each line says which workstream it was learned under (workstreams.tag_lines)
         from .workstreams import tag_lines
         tag_lines(store)

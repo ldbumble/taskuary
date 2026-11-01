@@ -13,7 +13,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import { FOCUS, FOCUS_EDGE, MINI_W, PaneStrip, SECTION, SHADE, SLOT, STACK_BELOW, STRIP_H, SectionHead, SectionTab, TAB_W } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
-import { layTable } from "./actionRow.js";
+import { layTable, onPressing, useSpineAll } from "./actionRow.js";
 
 // a section's white card on the warm ground, as a task's focus is
 export const ItemPart = ({ children, sx = null, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0, ...sx }}>{children}</Box>;
@@ -35,13 +35,19 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(on); ro.observe(el); return () => ro.disconnect();
   }, []);
-  const closedW = (k) => (k === about ? TAB_W : MINI_W);
+  // ...and a section with a STAGE MOVE on its spine (an FYI's Agent: Send to agent) folds to a full tab, as a task's does, so the move can stand
+  // there (the owner, 2026-10-31); a press on it opens that section, as a task's spine does
+  const spine = useSpineAll(), staged = (k) => k !== about && (spine[k] || []).length > 0;
+  const closedW = (k) => (k === about || staged(k) ? TAB_W : MINI_W);
   const openW = (k) => Math.max(240, w - sections.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === sections[0].key ? 0 : 1));
   const at = (k) => sections.findIndex((s) => s.key === k);
   // ON A PHONE THEY STACK, as a task's sections do under STACK_BELOW (trust audit R1, 2026-10-28): slim side tabs left a report 240px wide
   const stacked = w > 0 && w < STACK_BELOW, keys = sections.map((s) => s.key), kq = keys.join(" ");
   const laid = React.useMemo(() => (lays && w > 0 && !stacked ? { all: about, keys: kq.split(" ") } : null), [lays, w > 0, stacked, about, kq]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { layTable(itemKey, laid); return () => layTable(itemKey, null); }, [itemKey, laid]);
+  const spineAt = useRef(spine); spineAt.current = spine;
+  useEffect(() => (laid ? onPressing((id) => { const k = laid.keys.find((x) => x !== about && (spineAt.current[x] || []).some((v) => v.id === id)); if (k) setOpen(k); }) : undefined),
+    [laid, about]);
   return (
     <ItemLay.Provider value={laid}>
     <Box data-tq-item-sections={kind} sx={{ ...frameInner, height, display: "flex", flexDirection: "column", boxSizing: "border-box", minWidth: 0 }}>

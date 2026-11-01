@@ -1457,7 +1457,7 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
           <div className="tq-thr-h"><b>No agent yet</b></div>
           <div className="tq-thr-did muted">Nobody is working on {n === 1 ? "this" : "these"}.</div>
           {(batch || handOff) && <div className="tq-item-note">{batch ? `To hand one to an agent, press its line under Came from - ${btn("regular_agent")} is among its moves.`
-            : `${btn("regular_agent")} on the row hands it to one - it gets the message and its attachments.`}</div>}
+            : `${btn("regular_agent")} hands it to one - it gets the message and its attachments.`}</div>}
         </ItemPart> },
       { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
         body: <ItemPart data-tq-fyi-close="">

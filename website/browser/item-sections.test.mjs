@@ -80,8 +80,9 @@ test("an FYI opens on what came in: one message, or a batch's all together, Agen
   assert.ok(await clickRow(page, await findRow(page, /Regional operations newsletter/)));
   const one = await settled(page, "fyi");
   assert.equal(one.main, "from");
-  assert.deepEqual(one.slots.map((s) => [s.key, s.open, s.mini]), [["from", true, false], ["agent", false, true], ["close", false, true]]);
-  assert.deepEqual(one.slots.filter((s) => s.mini).map((s) => s.w), [44, 44]);
+  // ...its Agent a full spine, Send to agent standing on it as on a task's (the owner, 2026-10-31); Close out, with no move of its own, slim
+  assert.deepEqual(one.slots.map((s) => [s.key, s.open, s.mini]), [["from", true, false], ["agent", false, false], ["close", false, true]]);
+  assert.deepEqual(one.slots.filter((s) => !s.open).map((s) => s.w), [156, 44]);
   assert.equal(one.msgs.length, 1);
   assert.equal(one.msgs[0].who, "Priya Shah");
   assert.ok(one.msgs[0].at && /Sharing for visibility/.test(one.msgs[0].words), JSON.stringify(one.msgs));

@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.12 - 2026-11-01
+
+- A What's new page the Assistant reads, written by each release
+- The chat never answers a question with the story of the task under it
+
 ## 0.3.10.10 - 2026-11-01
 
 - Next's card drawn at once stays mounted when its answer fills it

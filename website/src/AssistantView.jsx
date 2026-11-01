@@ -2009,7 +2009,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const fromKey = how === "start" ? null : key ? leaving || null : leaving || currentRef.current?.key || null;
     // NEXT AND A CLOSE PUT THE TABLE DOWN AT ONCE (the owner, 2026-09-30): the row folds to its title line and the dots stand under it until
     // the answer draws (rule 7: never blank); a move that fails opens it again. Back folds nothing - it never reads or passes anything (rule 3)
-    const putDown = !key && (how === "next" || how === "leave") ? fromKey : null;
+    // ...but a close the page knows will be kept open (`stays`: a Send with work still live on it, 2026-11-01) puts nothing down: its row stays
+    const putDown = !key && (how === "next" || (how === "leave" && !left?.stays)) ? fromKey : null;
     if (putDown) { setExpanded(false); setFoldedKey(putDown); leftKey.current = putDown; }
     // ...AND A PAGE OPEN OVER THE TABLE GOES WITH IT (the owner, 2026-10-29), AND THE REPORT OPEN ON IT IS READ (2026-10-30: "i hit next on
     // reports on github reports and it did not mark it as read and disappear"): its rail rows go with the press, read by the server's Next

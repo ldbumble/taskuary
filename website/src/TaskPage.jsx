@@ -1272,7 +1272,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
     if (closes && walkLeave) {
       if (!liveWork) onLeave?.();
-      try { const d = await walkLeave("sent"); if (d?.kept) onStay?.(); } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
+      // ...and the walk is told it stays (`stays`), so it draws no row below at the press: the next row stood on the table until the kept
+      // answer brought this one back, a beat on a quick server and seconds on a slow one
+      try { const d = await walkLeave("sent", liveWork ? { stays: true } : {}); if (d?.kept) onStay?.(); } catch (e) { onStay?.(e?.response?.data?.detail || e?.message || "Could not close it"); }
       loadDetail(selected); loadTasks(); onChanged?.(); return;
     }
     if (closes) {

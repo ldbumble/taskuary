@@ -35,10 +35,22 @@ const look = (page) => page.evaluate((CUR) => {
     strips: Object.fromEntries(open.map((s) => [s.dataset.tqSlot, [...s.querySelectorAll("[data-tq-pane-strip] [data-tq-pane-moves] button")].filter(vis).map((b) => b.textContent.trim())])),
     spines: [...body.querySelectorAll("[data-tq-section-tab]")].map((t) => t.dataset.tqSectionTab),
     // ...each open section's region laid inside its own slot, so nothing in one half is cut by the other
-    fits: open.every((s) => { const r = s.querySelector(":scope > [role=region]")?.getBoundingClientRect(), o = s.getBoundingClientRect(); return r && r.right <= o.right + 2; }) };
+    fits: open.every((s) => { const r = s.querySelector(":scope > [role=region]")?.getBoundingClientRect(), o = s.getBoundingClientRect(); return r && r.right <= o.right + 2; }),
+    // ...and each open strip's moves on one line inside it: what does not fit is behind its ▾, never cut off at the edge
+    cut: open.filter((s) => { const b = s.querySelector("[data-tq-pane-moves]"); return b && b.scrollWidth > b.clientWidth + 1; }).map((s) => s.dataset.tqSlot) };
 }, CUR);
 const shot = async (page, name) => { const dir = process.env.TASKUARY_SHOT_DIR; if (!dir) return; mkdirSync(dir, { recursive: true }); await sleep(600); await page.screenshot({ path: path.join(dir, name) }); };
-const flip = async (page, strip) => { await page.click(`${CUR} [data-tq-pane-strip=${strip}] [data-tq-strip-pair]`); await sleep(700); };
+// ...pressed, the page has settled once each open slot has slid to the width its body is laid at and its strip's moves have folded to fit
+const settled = (page) => page.waitForFunction((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-task-body] [data-tq-slot][data-tq-open]`)].every((s) => {
+  const r = s.querySelector(":scope > [role=region]"), b = s.querySelector("[data-tq-pane-moves]");
+  return r && Math.abs(s.getBoundingClientRect().width - r.getBoundingClientRect().width) <= 3 && (!b || b.scrollWidth <= b.clientWidth + 1); }), { timeout: 8000 }, CUR).catch(() => {});
+const flip = async (page, strip) => { await page.click(`${CUR} [data-tq-pane-strip=${strip}] [data-tq-strip-pair]`); await sleep(300); await settled(page); };
+// ...the verbs behind a strip's ▾
+const tucked = async (page, sec) => { if (!(await page.$(`${CUR} [data-tq-more=${sec}]`))) return [];
+  await page.click(`${CUR} [data-tq-more=${sec}]`); await page.waitForSelector("[role=menu] [role=menuitem]", { timeout: 5000 });
+  const vs = await page.$$eval("[role=menu] [role=menuitem]", (xs) => xs.map((x) => x.dataset.tqVerb));
+  await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("[role=menu]"), { timeout: 5000 }); return vs; };
+const CHANGE = ["reshape", "kind", "priority"];
 
 test("side by side: Agent beside Close out and Came from beside Agent, each with its moves; back to one; none narrow or over a live agent", { timeout: 300000 }, async (t) => {
   const hz = await startHarness();
@@ -74,6 +86,7 @@ test("side by side: Agent beside Close out and Came from beside Agent, each with
     assert.deepEqual(m.spines, ["from"], "Came from stays a spine");
     assert.ok(Math.abs(m.widths[0] - m.widths[1]) <= 4 && m.widths[0] > 400, `two halves of about one width ${JSON.stringify(m)}`);
     assert.ok(m.fits, `each body inside its half ${JSON.stringify(m)}`);
+    assert.deepEqual(m.cut, [], `no move cut off at a half's edge ${JSON.stringify(m)}`);
     assert.deepEqual(m.toggles.map((x) => x.slice(0, 2)), [["agent", "on"], ["close", "on"]], "each half can go back to one");
     assert.ok(m.strips.close.includes("Mark done"), `Close out's moves on its strip ${JSON.stringify(m.strips)}`);
     assert.ok(m.strips.agent.length > 0, `Agent's moves on its strip ${JSON.stringify(m.strips)}`);
@@ -106,7 +119,11 @@ test("side by side: Agent beside Close out and Came from beside Agent, each with
     assert.equal(m.pair, "from+agent", JSON.stringify(m));
     assert.deepEqual(m.open, ["from", "agent"]);
     assert.ok(Math.abs(m.widths[0] - m.widths[1]) <= 4, JSON.stringify(m));
-    assert.ok(m.strips.from.includes("Change ▾") && m.strips.from.some((x) => /Not a task|Remind me/.test(x)), `Came from's moves ${JSON.stringify(m.strips)}`);
+    assert.deepEqual(m.cut, [], `no move cut off at a half's edge ${JSON.stringify(m)}`);
+    assert.ok(m.strips.from.some((x) => /Not a task|Remind me/.test(x)), `Came from's moves ${JSON.stringify(m.strips)}`);
+    // ...its Change with them: on the strip, or - a 1440 half has no room for it - its Split or merge, who and priority behind the ▾
+    const behind = m.strips.from.includes("Change ▾") ? CHANGE : await tucked(page, "from");
+    assert.ok(CHANGE.every((v) => behind.includes(v)), `Came from's Change ${JSON.stringify(m.strips)} ${behind}`);
     // ...no arrow points at the other open half; Agent's outer one shows Close out beside it
     const arrows = await page.evaluate((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-strip-fold]`)].map((a) => `${a.closest("[data-tq-pane-strip]").dataset.tqPaneStrip}:${a.dataset.tqStripFold}`), CUR);
     assert.deepEqual(arrows, ["agent:right"], `${arrows}`);
@@ -169,6 +186,7 @@ test("side by side: Agent beside Close out and Came from beside Agent, each with
     await flip(page, "from");
     m = await look(page);
     assert.equal(m.pair, "from+agent", JSON.stringify(m));
+    assert.ok(m.strips.from.includes("Change ▾") && !m.cut.length, `a 1920 half has room for Came from's Change ${JSON.stringify(m)}`);
     await shot(page, "from-agent-1920x1080.png");
   });
 

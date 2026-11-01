@@ -547,16 +547,18 @@ export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
   const up = all.filter((v) => !v.tucked || v.tone === "p"), tucked = all.filter((v) => !up.includes(v));
   const items = [...up.map((v) => ({ key: v.id, v, head: !!v.quiet })), ...task.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true })),
     ...(change.length ? [{ key: "change", change }] : [])];
-  const box = useRef(null), [n, setN] = useState(99), [at, setAt] = useState(null);
+  const box = useRef(null), [n, setN] = useState(99), [, refit] = useState(0), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setN(99); }, [sig]);
   const keep = 1 + items.reduce((k, x, i) => (x.v && (isDoneMove(x.v) || x.v.tone === "p") ? i : k), 0);
   useLayoutEffect(() => { const b = box.current; if (b && n > keep && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.max(keep, Math.min(k, items.length) - 1)); });
+  // ...and a width change measures again even when nothing was folded: setN(99) on an n already 99 drew nothing, so a pane narrowing into
+  // a half (side by side) left its last move cut off at the edge until some unrelated draw folded it seconds later
   useEffect(() => {
     const b = box.current?.parentElement;
     if (!b || typeof ResizeObserver === "undefined") return undefined;
     let w = b.clientWidth;
-    const ro = new ResizeObserver(() => { if (Math.abs(b.clientWidth - w) > 2) { w = b.clientWidth; setN(99); } });
+    const ro = new ResizeObserver(() => { if (Math.abs(b.clientWidth - w) > 2) { w = b.clientWidth; setN(99); refit((k) => k + 1); } });
     ro.observe(b);
     return () => ro.disconnect();
   }, []);

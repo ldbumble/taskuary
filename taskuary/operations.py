@@ -32,6 +32,7 @@ KINDS = {
     'task.complete':            ('task', (), None),
     'task.reopen':              ('task', (), None),
     'task.defer':               ('task', ('until',), None),
+    'task.watching':            ('task', (), None),          # Watch it: kept open under Watching, off the walk (watch.py)
     'preference.exclude_sender': ('message', ('scope',), None),
     'preference.sender_rule':   ('message', (), None),      # the Settings rule, not the learned verdict
     'preference.sender_rule':   ('message', (), None),      # the Settings rule, not the learned verdict

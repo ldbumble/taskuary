@@ -84,6 +84,9 @@ def level_of(item: dict) -> str:
     # FOR LATER IS WHAT YOU PUT THERE WITH A DATE - Remind me - never a card merely shown (the owner, 2026-10-08: "it moved 1003
     # automatically to later?"), and no longer Next either: Next moves the walk on and the task stays in Tasks, where it was
     # (the owner, 2026-10-21). The walk never skips it: Next is the row below, whatever was shown (2026-10-30).
+    # WATCHING (the owner, 2026-11-01): a task that is not theirs, kept open with Watch it while somebody else handles it - its own small
+    # group at the foot of Tasks, never walked (railwalk.line), back in Tasks when its thread moves or after a quiet week (watch.py)
+    if band in (1, 2) and item.get('watching'): return 'watching'
     if band in (1, 2) and item.get('deferred'): return 'later'      # ...an urgent row too: Remind me puts it away like any task
     if band == 4 and item.get('kind') == 'idea': return 'ideas'
     return LEVEL_OF_BAND.get(band, 'fyi')

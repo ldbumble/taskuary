@@ -255,10 +255,12 @@
       "hint": "the task was dropped - nobody works it any more, and search still finds it"
     }
   ],
-  "_sections": "THE RAIL'S SECTIONS, in the rail's order: the heading (`word`; a sentence says it in lower case), the attention band whose rows it holds (null for a section placed by more than its band: For later by Remind me or a goal scheduled to come back, Advisor ideas by an fyi-band idea), what its heading's tip says (`{button:<id>}` is that button's name), `on_you` - what the opener's headline, the greeting and the header count as on you - and `to_read` - the reading that sits apart. There is no Urgent section (the owner, 2026-10-22): see `urgent`.",
+  "_sections": "THE RAIL'S SECTIONS, in the rail's order: the heading (`word`; a sentence says it in lower case), the attention band whose rows it holds (null for a section placed by more than its band: Watching by Watch it, For later by Remind me or a goal scheduled to come back, Advisor ideas by an fyi-band idea), what its heading's tip says (`{button:<id>}` is that button's name), `on_you` - what the opener's headline, the greeting and the header count as on you - and `to_read` - the reading that sits apart. There is no Urgent section (the owner, 2026-10-22): see `urgent`.",
   "sections": [
     { "key": "task", "word": "Tasks", "band": 2, "on_you": true,
       "hint": "every open task, whether an agent is working on it or not - a spinning ring is an agent at work, a goal with news is here and its steps are rows of their own. Next goes to the row below and the task stays here, in its place" },
+    { "key": "watching", "word": "Watching", "band": null,
+      "hint": "not yours - kept open with {button:watch} while somebody else handles it, and never walked; each comes back when its thread moves, or after a quiet week" },
     { "key": "later", "word": "For later", "band": null,
       "hint": "still yours - put away with Remind me, or a goal waiting for its next news; each comes back when its time says" },
     { "key": "reports", "word": "Reports", "band": 3, "to_read": true,

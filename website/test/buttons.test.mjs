@@ -36,7 +36,8 @@ test("buttons.js reads buttons.json: one label, its state words, its hint, the r
 });
 
 test("a removed verb is never drawn: an old word lands on the verb it became, Prep me on nothing", () => {
-  assert.deepEqual(REMOVED, { prep: null, later: "defer", skip: "defer", archive: "not_ours", done: "close", ask_sender: "reply" });
+  assert.deepEqual(REMOVED, { prep: null, later: "defer", skip: "defer", archive: "not_ours", done: "close", ask_sender: "reply", assign: "regular_agent" });
+  assert.equal(liveVerb("assign"), "regular_agent", "Assign it is gone (the owner, 2026-11-01): who works a task is the Agent section's Send to agent");
   assert.equal(liveVerb("ask_sender"), "reply", "Ask sender is gone (the owner, 2026-10-27): a question for the sender is a Reply");
   assert.equal(liveVerb("later"), "defer"); assert.equal(liveVerb("done"), "close"); assert.equal(liveVerb("prep"), null);
   assert.equal(label("skip"), label("defer")); assert.equal(label("prep"), "");

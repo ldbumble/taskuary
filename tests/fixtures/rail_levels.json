@@ -48,6 +48,22 @@
   ],
   [
     {
+      "lane": "theirs",
+      "order_band": 2,
+      "watching": true
+    },
+    "watching"
+  ],
+  [
+    {
+      "lane": "time",
+      "order_band": 1,
+      "watching": true
+    },
+    "watching"
+  ],
+  [
+    {
       "lane": "time",
       "order_band": 1,
       "surfaced": true

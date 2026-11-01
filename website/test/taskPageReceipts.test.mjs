@@ -21,9 +21,9 @@ test("the task page's owner acts are the task tools, not the endpoints under the
   assert.doesNotMatch(reshape, /\/split`|\/merge`, /);
 });
 
-test("the menus' unassigned is a change, and a blur that moved no day presses nothing", () => {
+test("a blur that moved no day presses nothing, and the header has no assignee menu to change", () => {
   const page = read("TaskPage.jsx");
-  assert.match(page, /change\("task\.update", \{ assignee: v \|\| "none" \}\)/);
+  assert.doesNotMatch(page, /assignee: v \|\| "none"/, "the Assigned to menu is gone (the owner, 2026-11-01)");
   const move = page.slice(page.indexOf("const moveDate = async"), page.indexOf("const tick = async"));
   assert.ok(move.indexOf("return;") > -1 && move.indexOf("return;") < move.indexOf('op("task.update"'), "an unchanged day returns first");
 });

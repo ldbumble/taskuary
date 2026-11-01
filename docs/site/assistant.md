@@ -40,6 +40,7 @@ phone the task view is the screen, and **Expand** takes the session full screen 
 | **Send back to the agent** | a draft reply on a task (under More actions); a close-out GitHub refuses for merge conflicts (the main button) | Picks the task's own agent back up with your note - or, on a conflict, GitHub's reason - as the first thing it hears. The card comes back when it stops | at once |
 | **Stop and save** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
 | **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: under For later on your rail, with its day. On the phone the days come as choices | you pick the day |
+| **Watch it** | any card with an open task behind it | Somebody else is handling it: nothing is sent, the task stays open under Watching and leaves the walk until its thread moves or a quiet week passes | at once |
 
 A handful of fyi comes as one card with its own **All read, next** button. A close-out card for a pull request also
 shows **Decline** (close it without merging) - on the card only, never as a chat word or a phone choice - and no
@@ -74,6 +75,10 @@ Every open task has **Remind me** on its page: tomorrow, next week, in 2 weeks, 
 from the calendar. Until that day the task waits under **For later** on your rail, saying when it comes back. That
 morning a note goes on the task and it is back under **Tasks**, however long ago it arrived. Ask the
 Assistant the same thing — "bring TQ-0123 back in two weeks" — and it brings TQ-0123 up with **Remind me** lit; you pick the day.
+
+Beside it, **Watch it** is for a task that is not yours to do but that you want to see through. Nothing is sent. The task stays
+open under **Watching** at the foot of Tasks, and the walk goes past it. It comes back to Tasks when anybody else writes on it -
+with **Mark done** lit when triage reads the new message as handled - or after a quiet week, with **Chase them** and **Let it go**.
 
 ## Everything the task page can do
 

@@ -528,6 +528,10 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
     # ...said off the morning's note: remind.due clears the date as it files the note, so the date alone never said it (R13)
     due = any(c.get('Body') == remind.DUE_NOTE and str(c.get('CreatedAt') or '')[:10] == f'{now:%Y-%m-%d}' for c in view.get('comments') or [])
     if active and not read.get('deferred') and due: card['why'] = 'you asked to be reminded about this today'
+    # WATCHING (watch.py, the owner, 2026-11-01): kept open for somebody else to handle - under Watching, off the walk - unless its agent
+    # is asking, which gets through as it does through a reminder
+    from . import watch
+    card['watching'] = bool(active and watch.watching(task) and not asking_now and not read.get('deferred'))
     # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it - a row put away
     # with Remind me, on its date. Nothing else has a time to say: nothing is "passed" any more (Q7, 2026-10-30)
     card.pop('surfaced', None); card.pop('surfaced_at', None)
@@ -538,7 +542,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
                      and r.get('Key') in [card['key'], *card['aliases']]]
         if summaries:
             card['summary'] = next((r for r in summaries if r['Key'] == card['key']), summaries[-1])['Summary']
-    card['actionable'] = bool(unread and not card['deferred'] and not card.get('settling') and not funnel._not_yet(card))
+    card['actionable'] = bool(unread and not card['deferred'] and not card['watching'] and not card.get('settling') and not funnel._not_yet(card))
     card['arrived_at'] = arrived_at(store, card, task, view, allowed)
     card.update(news_since_seen(view, read, allowed))
     return card
@@ -605,7 +609,8 @@ def on_rail(card) -> bool:
     kept put-away rows that pile() then dropped (the final review)."""
     if card.get('folded'): return False
     if str(card.get('kind') or '').startswith('goal') and card.get('tid') and not card.get('closed'): return True
-    return bool(card.get('unread') or (card.get('deferred') and card.get('tid') and not card.get('closed')))
+    # ...and a task under Watching, open and off the walk until its thread moves (watch.py)
+    return bool(card.get('unread') or ((card.get('deferred') or card.get('watching')) and card.get('tid') and not card.get('closed')))
 
 
 def _fyi_mail(c) -> bool:

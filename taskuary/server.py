@@ -306,6 +306,27 @@ async def owner_presence(request: Request, call_next):
         except Exception as e: logger.debug(f'presence not kept - {e}')
     return resp
 
+# ANY MOVE ENDS A WATCH (watch.py, the owner, 2026-11-01: "un-watch it by opening it and pressing any move"): a press on the task's own
+# moves, its draft's or its mail's reply - never a read, a note, a picture for the agent or Watch it itself. Mark done ends it by closing.
+WATCH_ENDS = re.compile(r'^/api/(?:tasks/(?P<tid>\d+)(?:/(?:remind|dispatch|code|continue|continue-session|continue-work|resume|not-coding|'
+                        r'not-a-task|split|merge|handoff|emails|offer|clarify|answer|wrap|repo|strong-again|agent/stop|pause))?'
+                        r'|reviews/(?P<rid>\d+)/(?:decide|closeout/[a-z_]+|draft)|messages/(?P<mid>\d+)/(?:reply|calendar|dispatch))$')
+
+def _end_watch(m) -> None:
+    from . import watch
+    tid = m['tid'] or (m['rid'] and (store.get_review(int(m['rid'])) or {}).get('TaskId')) or (m['mid'] and (store.get_message(int(m['mid'])) or {}).get('TaskId'))
+    if tid: watch.stop(store, int(tid), ACTOR)
+
+@app.middleware('http')
+async def watch_ends(request: Request, call_next):
+    resp = await call_next(request)
+    if request.method != 'GET' and resp.status_code < 400 and (m := WATCH_ENDS.match(request.url.path)) \
+            and guard.scope_of(cfg['server'], request.headers) == guard.OWNER:
+        # ...on anyio's own workers: asyncio.to_thread makes a threading.Thread, which a test patching it would hold forever
+        try: await run_in_threadpool(_end_watch, m)
+        except Exception as e: logger.debug(f'watch not ended after {request.url.path} - {e}')
+    return resp
+
 @app.middleware('http')
 async def request_log(request: Request, call_next):
     t0 = _time.time()
@@ -1233,7 +1254,25 @@ class DiscussBody(BaseModel): body: str; actor: str = 'owner'
 
 def _run_operation(op: dict, background: BackgroundTasks):
     """The shared handler for each kind."""
-    return _run_kind(op, background)
+    out = _run_kind(op, background)
+    # ...and a move on a watched task, from a card, a chip, the phone or the walk, ends the watch as the page's own press does (watch_ends)
+    if op['kind'] not in WATCH_KEEPS:
+        tid = op['target'] if op.get('targetKind') == 'task' else _item_tid(op) if op.get('targetKind') == 'item' else None
+        if tid:
+            from . import watch
+            try: watch.stop(store, int(tid), ACTOR)
+            except Exception as e: logger.debug(f'watch not ended after {op["kind"]} - {e}')
+    return out
+
+# what is not a move on the task: Watch it itself, the Assistant's own watch for a reply (asks.py), a note, a checklist tick
+WATCH_KEEPS = frozenset({'task.watching', 'task.watch', 'task.comment', 'task.check', 'task.checklist', 'routing.remember'})
+
+def _item_tid(op: dict):
+    key = str((op.get('params') or {}).get('key') or '')
+    if key.startswith('task:') and key[5:].isdigit(): return int(key[5:])
+    from . import funnel
+    try: return (funnel.item_for_key(store, key) or {}).get('tid') if key else None
+    except Exception: return None
 
 def _run_kind(op: dict, background: BackgroundTasks):
     """The shared handler for each kind - the same code the task page and the timeline run."""
@@ -1481,6 +1520,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import remind
         try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)
         except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 422, str(e))
+    # Watch it (watch.py): kept open under Watching, off the walk - nothing is sent; `off` is the same button pressed on a watched task
+    if kind == 'task.watching':
+        from . import watch
+        if p.get('off'): return {'taskId': tid, 'watching': False, 'stopped': watch.stop(store, tid, ACTOR)}
+        try: return watch.watch(store, tid, ACTOR)
+        except ValueError as e: raise HTTPException(404 if 'not found' in str(e) else 409, str(e))
     # the assistant's proposals (concierge.PROPOSALS): each runs the same code the page's own button runs
     if kind == 'task.create_from_text':
         from . import concierge
@@ -1527,12 +1572,17 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # ...and only while it IS slipped: pressed after they wrote back, or on a card that never slipped, nothing is changed
         # ...or a Chase the rule lit on a wait past its day (rulebook.adds) - it answers the thread rulebook.chase_thread names
         from . import rulebook
-        ct = rulebook.chase_thread(store, item) if kind == 'task.chase' and item.get('lane') != 'forgotten' and rulebook.adds(store, item) == ['chase'] else None
-        if item.get('lane') != 'forgotten' and not ct: raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
+        ct = rulebook.chase_thread(store, item) if kind == 'task.chase' and item.get('lane') != 'forgotten' and 'chase' in rulebook.adds(store, item) else None
+        # ...or a watch back after a quiet week (watch.py): its Chase goes to the thread chase_thread names, its Let it go drops the task
+        quiet = item.get('lane') != 'forgotten' and rulebook.quiet_watch(store, item)
+        if item.get('lane') != 'forgotten' and not ct and not (quiet and kind == 'task.let_go'):
+            raise HTTPException(409, 'That one is not slipped any more - they wrote back, or it moved on. Nothing was changed.')
         who, tid_, iid, text = str(item.get('who_email') or ''), item.get('tid'), item.get('idea'), str(p.get('text') or '').strip()[:300]
         if ct: who, tid_ = ct['who'], ct['tid']
         task_ = store.get_task(tid_) if tid_ else None
         step = bool(task_ and str(task_.get('Assignee') or '').startswith('person:') and task_.get('Status') not in ('done', 'dropped'))   # a step somebody owes
+        # ...and a watched task let go is put down the same way: the owner's press, nobody chasing it further (watch.py)
+        step = step or bool(quiet and task_ and task_.get('Status') not in ('done', 'dropped'))
         if kind == 'task.chase':
             # the thread's last word FROM THE PERSON WHO OWES IT: a follow-up's own inbound, or the step's conversation filtered by them
             a = item.get('action') or {}

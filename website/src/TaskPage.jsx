@@ -26,6 +26,7 @@ import { notePress, pagePress } from "./pressLog.js";
 import { VERBS, choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
 import BlockIcon from "@mui/icons-material/Block";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
@@ -63,7 +64,7 @@ import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { WorkstreamSelect } from "./Workstream.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, DraftField, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -108,7 +109,7 @@ import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
-import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint, AGENT_SHOWN } from "./kinds.js";
+import { KIND_OPTIONS, KINDS, kindLabel, shortKind, shownAgent, instructionsHint } from "./kinds.js";
 import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
@@ -136,7 +137,8 @@ const INTERRUPTED = "Taskuary closed while an agent was working this. Nothing re
 const NAT_TITLE = "Removes this task. Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it.";
 
 // WHAT TRIAGE DECIDED READS AS FACTS, NOT CONTROLS (the owner, 2026-10-16) - said as one plain line (taskSources.sortedLine), the last
-// line of From since the redesign (2026-10-21); changing who does it, the priority, the assignee or the repository is on the bar.
+// line of From since the redesign (2026-10-21); changing who does it, the priority or the repository is on the bar. Who WORKS it has no
+// menu of its own (the owner, 2026-11-01): the Agent section's Send to agent / Start decides it.
 // "09:06" today, "Oct 9" before - a row of messages reads its times at a glance
 const whenShort = (s) => {
   if (!s) return "";
@@ -361,9 +363,9 @@ const barBtn = { minHeight: 34, py: 0, px: 1.6, fontSize: 12.5, color: INK, bord
 const TRUST_PILL = { minHeight: 22, py: 0, px: 1.1, ml: 0.5, my: 0.25, fontSize: 12, lineHeight: 1.6, borderRadius: 999, textTransform: "none", color: INK, borderColor: BORDER, verticalAlign: "baseline" };
 // ...and the one filled move beside them. Every card's bar reads [ primaryBtn ] | [ barBtn ] [ barBtn ].
 const primaryBtn = { minHeight: 34, py: 0, px: 1.75, fontSize: 12.5 };
-const BAR_FOLD = { change: 1, reshape: 2, hand: 3, sep: 3, nat: 4 }, HIDE = { display: "none" };   // the Tasks tab bar's fold order (useFoldBar)
+const BAR_FOLD = { change: 1, reshape: 2, hand: 3, sep: 3, watch: 4, nat: 4 }, HIDE = { display: "none" };   // the Tasks tab bar's fold order (useFoldBar)
 // ...less the button the Advisor lit, which never folds (one object per lit button, so useFoldBar re-fits only when the light moves)
-const BAR_FOLD_BUT = Object.fromEntries(["", "nat", "hand", "reshape"].map((k) => [k, Object.fromEntries(Object.entries(BAR_FOLD).filter(([i]) => i !== k))]));
+const BAR_FOLD_BUT = Object.fromEntries(["", "nat", "hand", "reshape", "watch"].map((k) => [k, Object.fromEntries(Object.entries(BAR_FOLD).filter(([i]) => i !== k))]));
 // A LIVE SESSION'S CONTROLS LOOK LIKE CONTROLS. These were bare text buttons sitting next to
 // the outlined role/brain/repo pills, so the two things you could press had less edge than the
 // three facts you can only read - "buttons are still not clear what they are. and they are
@@ -480,7 +482,7 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
 // Advisor's pick filled (.p); a move that takes the task a stage on (`fwd`) outlined in the slate, slate words on white; Mark done the same
 // with a stronger edge (`done`), filled only when it is the pick; what acts on the whole task (`task`: Close with a note, Change, Share) quiet
 // words that take a tint on hover; a put-down (`down`: Not a task, Remind me) quiet and secondary, a faint edge - no new hue anywhere
-const PUT_DOWN = new Set(["nat", "remind"]);
+const PUT_DOWN = new Set(["nat", "remind", "watch"]);
 export const rankOf = (v, head = false) => { const k = String(v?.id || "").split(":").pop(); return head ? (k === "done" ? "done" : "task") : PUT_DOWN.has(k) ? "down" : "fwd"; };
 const OUTLINED = { bgcolor: "#fff", borderColor: ACCENT, color: ACCENT };
 export const MOVE_LOOK = {
@@ -512,7 +514,7 @@ function ChangeMoves({ change }) {
   const [at, setAt] = useState(null);
   return <>
     <button type="button" className="tq-ab s task" aria-haspopup="menu" aria-expanded={!!at} data-tq-more="change"
-      title="Split or merge, who does it, the priority, who it is assigned to" onClick={(e) => setAt(e.currentTarget)}>{"Change ▾"}</button>
+      title="Split or merge, who does it or the priority" onClick={(e) => setAt(e.currentTarget)}>{"Change ▾"}</button>
     <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
       {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
         onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></>;
@@ -1083,7 +1085,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     cameFromRef.current?.querySelector(`[data-tq-letter="${seekLetter}"]`)?.scrollIntoView({ block: "end", behavior: "smooth" });
     setSeekLetter(null);
   }, [seekLetter]);
-  // the menu the old pills were: { what: "menu" | "kind" | "priority" | "assign", at } - opened from the row or the Tasks tab's bar
+  // the menu the old pills were: { what: "menu" | "kind" | "priority", at } - opened from the row or the Tasks tab's bar
   const [pick, setPick] = useState(null);
   // a batch's items start FOLDED to their progress line: with them open, the agent's session - the thing being watched -
   // was pushed below the fold (the owner, 2026-10-13: "the coding agent should be the main view"). One click opens them.
@@ -1283,6 +1285,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // Remind me: put away until a day - the page around this view decides where to go next; on the walk's table the day is the walk's close
   const reminded = (out) => { onReminded?.(out); loadTasks(); onChanged?.(); };
   const remindAct = walkLeave ? (until) => walkLeave("remind", { until }).then((d) => d?.left || { remindAt: until }) : null;
+  // WATCH IT (watch.py, the owner, 2026-11-01): not the owner's - kept open under Watching, off the walk, back when the thread moves. Nothing
+  // is sent. On the walk's table it is the walk's close (railwalk.leave "watch"); on a task already watched the same press ends the watch
+  const watching = !!t?.WatchedAt && !["done", "dropped"].includes(t.Status);
+  const watchIt = async () => {
+    const off = watching;
+    if (!off) onLeave?.();
+    try { if (walkLeave && !off) await walkLeave("watch"); else await runOperation(api, "task.watching", selected, off ? { off: true } : {}); }
+    catch (e) { const msg = opError(e, "Could not watch it - it is still here; press Watch it again."); setErr(msg); if (!off) onStay?.(msg); return; }
+    loadDetail(selected); loadTasks(); onChanged?.();
+  };
   const dismiss = () => onClose?.();
   // The report is identified by its durable marker, not the actor label. Named coding agents
   // appear as coding/claude/codex in the record; requiring ActorType === "agent" hid valid results.
@@ -1505,8 +1517,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
   const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? codingProfile(agents, kinds) : "");
-  // the profile the Assigned to picker's one Taskuary row keeps: the task's own, else the one its kind starts with (general.py)
-  const asProfile = runRole || ownProfile || "";
   // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
   // general session (general.info), so the one card that could not say which brain was running
   // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
@@ -2348,7 +2358,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /> : null;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;
   // Mark done and Remind me never fold, nor the button the Advisor lit
-  const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape" }[liveVerb(taskAdvice?.verb)] || ""], `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}`);
+  const bar = useFoldBar(BAR_FOLD_BUT[{ remove: "nat", forward: "hand", split: "reshape", watch: "watch" }[liveVerb(taskAdvice?.verb)] || ""],
+    `${t?.TaskId}|${notDone}|${finishing}|${t?.RemindAt || ""}|${watching}`);
   const [barAt, setBarAt] = useState(null);
   // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
   // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Each DRAFTS into Close out for the
@@ -2397,7 +2408,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const changeVerbs = !notDone ? [] : [
     { id: "kind", group: "more", label: labelOfRow("kind"), run: (e, a) => setPick({ what: "kind", at: steady(a || e?.currentTarget) }), title: hintOfRow("kind") },
     { id: "priority", group: "more", label: labelOfRow("priority"), run: (e, a) => setPick({ what: "priority", at: steady(a || e?.currentTarget) }), title: hintOfRow("priority") },
-    { id: "assign", group: "more", label: labelOfRow("assign"), run: (e, a) => setPick({ what: "assign", at: steady(a || e?.currentTarget) }), title: hintOfRow("assign") },
     // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
     // ...and a start HELD for it is the row's own move, not a More item: "It needs a repository" sat over a row with nothing to press
     ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
@@ -2460,6 +2470,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "nat", group: "more", label: labelOfRow("nat"), run: notATask, title: NAT_TITLE },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => remindHere(steady(a || e?.currentTarget)),
         title: hintOfRow("remind") },
+      { id: "watch", group: "more", label: labelOfRow("watch", watching ? "on" : null), run: watchIt, title: hintOfRow("watch", watching ? "on" : null) },
       // ...a reply that went needs at most Reply on its row: Hand it to a person waits in the ▾ (the owner, 2026-10-28)
       { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand"), tucked: !!sentReview },
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
@@ -2677,6 +2688,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <RemindMe task={t} compact onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} />
+                      <Tooltip title={`${labelOfRow("watch", watching ? "on" : null)} - ${hintOfRow("watch", watching ? "on" : null)}`}>
+                        <IconButton size="small" sx={{ color: "#55697a" }} onClick={watchIt} data-tq-verb="watch">
+                          <VisibilityOutlinedIcon sx={{ fontSize: 15 }} /></IconButton>
+                      </Tooltip>
                       <Tooltip title={`${labelOfRow("hand")} - ${hintOfRow("hand")}`}>
                         <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -3505,6 +3520,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       title={NAT_TITLE}
                       onClick={notATask}>{labelOfRow("nat")}</Button>
                     <RemindMe task={t} sx={barLit("defer") ? primaryBtn : barBtn} lit={barLit("defer")} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession} said={saidDay} />
+                    <Button size="small" variant={barLit("watch") ? "contained" : "outlined"} disableElevation sx={barLit("watch") ? primaryBtn : barBtn}
+                      data-tq-bar-item="watch" data-tq-verb="watch" style={bar.shown("watch") ? undefined : HIDE}
+                      startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 15, color: barLit("watch") ? "inherit" : "#55697a" }} />}
+                      title={hintOfRow("watch", watching ? "on" : null)} onClick={watchIt}>{labelOfRow("watch", watching ? "on" : null)}</Button>
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} data-tq-bar-item="sep" style={bar.shown("sep") ? undefined : HIDE} />
                     <Button size="small" variant={barLit("forward") ? "contained" : "outlined"} disableElevation sx={barLit("forward") ? primaryBtn : barBtn}
                       data-tq-bar-item="hand" style={bar.shown("hand") ? undefined : HIDE}
@@ -3517,12 +3536,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
                       onClick={() => setReshape(true)}>{labelOfRow("reshape")}</Button>
                     <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />} data-tq-bar-item="change" style={bar.shown("change") ? undefined : HIDE}
-                      title={`Who does it, the priority${canCode ? ", who it is assigned to, or the repository" : " or who it is assigned to"}`}
+                      title={`Who does it${canCode ? ", the priority or the repository" : " or the priority"}`}
                       onClick={(e) => setPick({ what: "menu", at: e.currentTarget })}>Change</Button>
                     {/* ...what did not fit, behind one ▾ - the same handlers, in the bar's order */}
                     {bar.folded.length > 0 && <Button size="small" variant="outlined" sx={{ ...barBtn, minWidth: 34, px: 0.75 }} data-tq-bar-more=""
                       aria-haspopup="menu" aria-expanded={!!barAt} aria-label="More actions" onClick={(e) => setBarAt(e.currentTarget)}>▾</Button>}
                     <Menu open={!!barAt} anchorEl={barAt} onClose={() => setBarAt(null)}>
+                      {bar.folded.includes("watch") && <MenuItem sx={{ fontSize: 12.5 }} title={hintOfRow("watch", watching ? "on" : null)} onClick={() => { setBarAt(null); watchIt(); }}>{labelOfRow("watch", watching ? "on" : null)}</MenuItem>}
                       {bar.folded.includes("nat") && <MenuItem sx={{ fontSize: 12.5 }} title={NAT_TITLE} onClick={() => { setBarAt(null); notATask(); }}>{labelOfRow("nat")}</MenuItem>}
                       {bar.folded.includes("hand") && <MenuItem sx={{ fontSize: 12.5 }} onClick={() => { setBarAt(null); setHandoff(true); }}>{labelOfRow("hand")}</MenuItem>}
                       {bar.folded.includes("reshape") && <MenuItem sx={{ fontSize: 12.5 }} onClick={() => { setBarAt(null); setReshape(true); }}>{labelOfRow("reshape")}</MenuItem>}
@@ -3545,8 +3565,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {pick?.what === "menu" && [
           <MenuItem key="kind" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "kind" })}>Who does it · {kindLabel(t.Kind || "task")}</MenuItem>,
           <MenuItem key="priority" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "priority" })}>Priority · {level(t.Priority)}</MenuItem>,
-          <MenuItem key="assign" sx={{ fontSize: 12.5 }} title={instructionsHint(assignedAgent(t.Assignee)) || undefined}
-            onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
           ...(!isGeneral && canCode ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
         ]}
         {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS])
@@ -3557,20 +3575,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {/* no Status here: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12) */}
         {pick?.what === "priority" && PRIORITIES.map((p) =>
           <MenuItem key={p} selected={p === level(t.Priority)} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== level(t.Priority)) change("task.update", { priority: p }); }}>{p}</MenuItem>)}
-        {/* WHO, NOT WHICH INSTRUCTIONS (the owner, 2026-10-29: profile names hidden in the Assigned to picker too): one Taskuary
-            row, the profile it keeps - the task's own, else the one its kind starts with - told on hover; the profile itself is
-            the agent section's pick and Settings', never a name here */}
-        {pick?.what === "assign" && [
-          ["", "unassigned"], ["owner", "you"], ...(asProfile ? [[agentAssignee(asProfile), AGENT_SHOWN]] : []),
-          ...(t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee) ? [[t.Assignee, t.Assignee]] : []),
-        ].map(([v, name]) =>
-          <MenuItem key={v || "none"} selected={v === (t.Assignee || "")} sx={{ fontSize: 12 }} title={instructionsHint(assignedAgent(v)) || undefined} onClick={() => {
-            setPick(null);
-            if (v === (t.Assignee || "")) return;
-            const worker = assignedAgent(v);
-            change("task.update", { assignee: v || "none" });
-            if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
-          }}>{assignedAgent(v) && <><TaskuaryMark size={12} />&nbsp; </>}{name}</MenuItem>)}
       </Menu>}
       {/* ── review the change: the widest drawer of the three, because code needs the room.
              Read-only by construction - it runs git diff and git status and nothing else, so

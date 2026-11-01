@@ -46,6 +46,8 @@ export const levelOf = (item) => {
   // later (spec 2026-10-12) - the rail-order rule wins. Only Remind me puts it there, as for any task (lanes.py level_of)
   // For later is what you PUT there with a date - Remind me - never a card merely shown (2026-10-08), and no longer Next: Next
   // moves the walk on and the task stays in Tasks (the owner, 2026-10-21)
+  // ...and Watching is what Watch it keeps open for somebody else to handle: its own group at the foot of Tasks, never walked (lanes.py)
+  if ((b === 1 || b === 2) && item?.watching) return "watching";
   if ((b === 1 || b === 2) && item?.deferred) return "later";      // ...an urgent row too: Remind me puts it away like any task
   if (b === 4 && item?.kind === "idea") return "ideas";
   return LEVEL_OF_BAND[b] || "fyi";

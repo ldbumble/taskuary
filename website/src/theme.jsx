@@ -22,13 +22,13 @@ export const ACCENT2 = "#6f8a6e";      // sage - section labels, secondary empha
 // sage, brass and oat are the shade that carries white text at 4.5:1, since pills are solid with white words.
 export const PALETTE = { slate: "#55697a", sage: "#5f7a5f", oxblood: "#8a3646", brass: "#827356", oat: "#7b7366" };
 // ...one per rail band: the pill, the row's dot and the day card's dot all wear it
-export const LEVEL_COLOR = { task: PALETTE.sage, later: PALETTE.oat,
+export const LEVEL_COLOR = { task: PALETTE.sage, watching: PALETTE.oat, later: PALETTE.oat,
   reports: PALETTE.brass, ideas: PALETTE.brass, fyi: PALETTE.oat };
 // THE THREE PRIORITIES IN THE APP'S OWN COLOURS (the owner, 2026-10-25: "match the app's scheme"): regular is the task band's sage,
 // important the brand's slate, urgent the one loud oxblood - no new hues
 export const PRIORITY_COLOR = { regular: PALETTE.sage, important: PALETTE.slate, urgent: PALETTE.oxblood };
 // ...and the pale tint of each, for the row on the table: green in Tasks, brass in Reports (the owner, 2026-10-06)
-export const LEVEL_TINT = { task: "#e5ece2", later: "#efece6",
+export const LEVEL_TINT = { task: "#e5ece2", watching: "#efece6", later: "#efece6",
   reports: "#ede7da", ideas: "#ede7da", fyi: "#ece8e1" };
 // the primary was a slate-to-sage gradient; the brand is slate, solid
 export const GRADIENT = ACCENT;

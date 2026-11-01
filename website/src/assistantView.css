@@ -43,7 +43,7 @@
 .tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #fff; background: #5f7a5f; border: 1px solid #5f7a5f; }
 .tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #fff; background: #827356; border: 1px solid #827356; }
 .tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #fff; background: #7b7366; border: 1px solid #7b7366; }
-.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }   /* put off: the oat, as an outline */
+.tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later, .tq-pile-head span.lvl-watching, .tq-sum-head span.lvl-watching { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }   /* put off: the oat, as an outline */
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-danger { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
@@ -299,19 +299,19 @@
 .tq-day-row.lvl-task .dot { background: #5f7a5f; }
 .tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
 .tq-day-row.lvl-fyi .dot { background: #7b7366; }
-.tq-day-row.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
+.tq-day-row.lvl-later .dot, .tq-day-row.lvl-watching .dot { background: transparent; border: 1px dashed #7b7366; }
 /* the label and the count wear the band's colour, the rail's own section pill (the owner, 2026-10-22: "the count should be the same
    colour as tasks/reports/fyi") */
 .tq-day-row.lvl-task .n { color: #5f7a5f; }
 .tq-day-row.lvl-reports .n, .tq-day-row.lvl-ideas .n { color: #827356; }
-.tq-day-row.lvl-fyi .n, .tq-day-row.lvl-later .n { color: #7b7366; }
+.tq-day-row.lvl-fyi .n, .tq-day-row.lvl-later .n, .tq-day-row.lvl-watching .n { color: #7b7366; }
 /* ...and the label IS the rail's section pill - same fill, same capitals - so a band reads as the one on the rail */
 .tq-day-row .lbl { justify-self: start; max-width: 100%; color: #fff; background: #b8afa1; border-radius: 99px; padding: 2px 10px;
   font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
 .tq-day-row.lvl-task .lbl { background: #5f7a5f; }
 .tq-day-row.lvl-reports .lbl, .tq-day-row.lvl-ideas .lbl { background: #827356; }
 .tq-day-row.lvl-fyi .lbl { background: #7b7366; }
-.tq-day-row.lvl-later .lbl { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }
+.tq-day-row.lvl-later .lbl, .tq-day-row.lvl-watching .lbl { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }
 .tq-day-row .dot { display: none; }
 .tq-day-row { grid-template-columns: 96px minmax(0, 1fr) auto; }
 @container (max-width: 640px) { .tq-day-row { grid-template-columns: 84px minmax(0, 1fr) auto; } }
@@ -334,7 +334,7 @@
 .tq-day-card.lvl-task .dot { background: #5f7a5f; }
 .tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #827356; }
 .tq-day-card.lvl-fyi .dot { background: #7b7366; }
-.tq-day-card.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
+.tq-day-card.lvl-later .dot, .tq-day-card.lvl-watching .dot { background: transparent; border: 1px dashed #7b7366; }
 .tq-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
 .tq-chip { border: 1px solid #d8d1c5; background: #fffdfb; color: #262521; border-radius: 99px; padding: 7px 14px; font: 500 12.5px 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; transition: all .15s; }
 .tq-chip:hover { border-color: #55697a; background: #f4f6f8; }

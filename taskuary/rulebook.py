@@ -226,6 +226,11 @@ def state(store, item: dict, verbs: list) -> tuple:
     # ...the fix named after its place is the way past it, at once; with none named, the model reads the cause (a mail too large is
     # redrafted, a dead address is fixed, a run that hit a wall is tried again) while the rule's Try again / New task stands lit
     if f: return ('failed' if f.get('fix') else 'failed_cause'), {'why': _plain_why(f.get('why'), f.get('what'))}
+    # A WATCH THAT CAME BACK (watch.py, the owner, 2026-11-01): Mark done only where triage read the new message as handled by somebody
+    # else - never closed for the owner - and a quiet week lights Chase them / Let it go; a thread that merely moved is read as any task
+    from . import watch
+    if (wb := watch.back(t)) == 'handled': return 'watch_handled', {'who': _name((_inbound(store, it) or [{}])[-1])}
+    if wb == 'quiet': return 'watch_quiet', {}
     # THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - the work is an agent's, so Continue the one that worked it,
     # else Send to agent. Its reason is on the card already, so nothing is said (walk 2026-10-29: it lit "New task to fix this")
     if advisor.draft_needs(store, it): return 'needs_agent', {}
@@ -512,12 +517,21 @@ def _plain_why(*said, default: str = 'it stopped without saying why') -> str:
     return next((_cut(w, 60) for w in said if w and not words.jargon_in(w)), default)
 
 
+def quiet_watch(store, item: dict) -> bool:
+    """A watched task back after a quiet week (watch.py 'quiet') - where Chase them and Let it go are its answers until the owner's move."""
+    from . import watch
+    try: return watch.back(store.get_task(int(item['tid'])) if item.get('tid') else None) == 'quiet'
+    except Exception: return False
+
+
 def adds(store, item: dict) -> list:
     """The verbs a state lights that the row draws only when the Advisor names them: Chase on a waiting item past its day and on a late
     goal step - the design's "Chase (offered on every waiting lane)" and "(added to goals)". The row draws the advised move in its type
     (ActionRow.AdvisorNext); the phone already carries it on the slipped lane."""
     it = item or {}
     lane, kind = it.get('lane'), str(it.get('kind') or '')
+    # ...and a watch back after a quiet week (watch.py): Chase them where there is somebody to write to, Let it go always
+    if it.get('tid') and quiet_watch(store, it): return (['chase'] if chase_thread(store, it) else []) + ['let_go']
     if lane not in ('theirs', 'forgotten') and not kind.startswith('goal'): return []
     try: st, _f = state(store, it, [{'verb': 'chase'}])
     except Exception: return []

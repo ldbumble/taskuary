@@ -11,7 +11,7 @@ across its top while open.
 
 | Section | What it records | Its moves | What it never does by itself |
 |---|---|---|---|
-| **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Not a task**, **Change ▾** (split or merge, who does it, priority, assign it, where the code is) | Changing the task does not start or stop an agent |
+| **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not a task**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
 | **Agent** | One or more runs by a coding or general agent, and the Result each left | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** | Ending a session does not mark the task done or send a reply |
 | **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve**, **Decline**, **Not yet** | Closing the task: sending and approving never do — the task stays open until you **Mark done** |
 
@@ -81,6 +81,7 @@ These never end a task:
 | **Reject** a draft | The draft is rejected; the task is untouched |
 | **Next** | The row below comes up; the task stays in its place under Tasks, and Back brings it again |
 | **Remind me** | Put away until the day you pick, then back on your rail that morning |
+| **Watch it** | Not yours - nothing is sent. The task stays open under **Watching** and leaves the walk until its thread moves, or a quiet week passes. Press **Stop watching** on it, or any move, to walk it again |
 | A stopped or quiet session | Nothing — only you, or the agent saying so, ends a task |
 
 Reopening a completed task starts a fresh task lifecycle rather than pretending an old terminal
@@ -347,6 +348,7 @@ Neither moves a row. A priority you set by hand stays yours: triage never raises
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Tasks** | Every open task, whoever is on it: a person's ask, a task ready to send, an agent working on it (a ring spins round the row's icon until the agent finishes, asks, fails or is stopped), an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished. A task stays here whatever its agent does; **Next** moves the walk on and leaves it here. A goal with news is here too - "🎯 Migrate the census export · 2 of 5 steps", *slipped* in red when it is late - and each of its steps is a task row of its own | For later work when its time comes |
+| **Watching** | Tasks that are not yours, kept open with **Watch it** while somebody else handles them - never offered by the walk. A new message on one brings it back to Tasks, with **Mark done** lit when triage reads it as handled; a quiet week brings it back with **Chase them** and **Let it go** | - |
 | **For later** | Tasks put away with **Remind me**, and a goal waiting for its next news - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first; a goal's says its date | - |
 | **Reports** | A report run that landed | - |
 | **Advisor** | Something the Advisor noticed, while it is still only an idea - made a task it moves to Tasks; dismissed it leaves | - |
@@ -360,6 +362,7 @@ Neither moves a row. A priority you set by hand stays yours: triage never raises
 | **Next** on a report, an idea, an FYI or an agent's result | read, and off | a new message, note or edit on it |
 | **Mark done** | off | THEY write after the close - your own reply does not count |
 | **Remind me** | For later, with its day | 07:00 on that day, saying "you asked to be reminded about this today" |
+| **Watch it** | Watching, still open | a new message from anybody else on it; else after 7 quiet days, once. Nothing ever closes it for you |
 | Its agent closes the task | "Agent finished" until you read it | a new message on it |
 | A draft decided anywhere, an idea dismissed | off | they write again |
 | An auto-reply, a withdrawn message, a thread where yours is the last word | never shown (Settings → Hide auto-replies and answered threads) | - |

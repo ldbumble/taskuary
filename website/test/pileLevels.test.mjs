@@ -9,8 +9,8 @@ import { LEVEL_META, LEVEL_ORDER, isUrgent, levelLabel, levelOf, levelsOf } from
 // 2026-09-07: "why work and reports combined ... just make each one it's own thing").
 test("every level has its own word and its own hint", () => {
   // the canvas redesign (2026-09-29), and since 2026-10-21 one Tasks for every open task - no Agents working, no Goals - and
-  // since 2026-10-22 no Urgent: an urgent row is shaded in its place in Tasks
-  assert.deepEqual(LEVEL_ORDER, ["task", "later", "reports", "ideas", "fyi"]);
+  // since 2026-10-22 no Urgent: an urgent row is shaded in its place in Tasks - and since 2026-11-01 Watching at the foot of Tasks (watch.py)
+  assert.deepEqual(LEVEL_ORDER, ["task", "watching", "later", "reports", "ideas", "fyi"]);
   for (const level of LEVEL_ORDER) {
     assert.ok(levelLabel(level).length, `${level} needs a word`);
     assert.ok(LEVEL_META[level].hint.length, `${level} needs a hint`);

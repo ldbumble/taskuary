@@ -7,6 +7,8 @@
     "redraft":         {"label": "Redraft", "hint": "Has the AI write the draft again", "row": ["redraft"], "states": {"none": "Draft with AI"}},
     "close":           {"label": "Mark done", "hint": "Closes the task - it stops coming back", "row": ["done"]},
     "defer":           {"label": "Remind me", "hint": "Put the task away until a day - it waits under For later on your rail and is back in front of you that morning", "row": ["remind"]},
+    "watch":           {"label": "Watch it", "hint": "Not yours - keep it open and bring it back when the thread moves. Nothing is sent; it waits under Watching on your rail, and comes back after a quiet week too", "row": ["watch"],
+                        "states": {"on": "Stop watching"}, "state_hints": {"on": "You are watching this for somebody else to handle - press to stop, and it is walked again"}},
     "not_ours":        {"label": "Not ours", "hint": "File it, just this once - From now on is offered after", "row": []},
     "not_ours_sender": {"label": "Ignore this sender", "hint": "Their mail is filed for you from now on", "row": []},
     "block_sender":    {"label": "Block this sender", "hint": "A rule in Settings - their mail never comes in", "row": []},
@@ -57,7 +59,6 @@
     "walk_here":       {"label": "Walk it here", "hint": "Brings the walk back from the phone chat to this screen", "row": []},
     "change_kind":     {"label": "Change who does it", "hint": "You, an assistant, or a drafted reply for you to approve", "row": ["kind"]},
     "priority":        {"label": "Change priority", "hint": "Regular, important or urgent", "row": ["priority"]},
-    "assign":          {"label": "Assign it", "hint": "You, an agent's profile, or nobody", "row": ["assign"]},
     "pick_repo":       {"label": "Choose where the code is", "hint": "Which folder of code the agent works in", "row": ["repo"], "states": {"set": "Change where the code is"}},
     "attach":          {"label": "Attach a file", "hint": "Adds a file to the reply - nothing is sent until you approve it", "row": ["attach"],
                         "states": {"more": "Attach another"}},
@@ -80,7 +81,7 @@
     "share": [["email", "Email the result"], ["summary", "Email a summary"], ["link", "Shared link"], ["onedrive", "OneDrive"], ["gdrive", "Google Drive"]]
   },
   "removed": {
-    "_": "Buttons that no longer exist - an old saved card or a typed word lands on the verb named, the button is never drawn",
-    "prep": null, "later": "defer", "skip": "defer", "archive": "not_ours", "done": "close", "ask_sender": "reply"
+    "_": "Buttons that no longer exist - an old saved card or a typed word lands on the verb named, the button is never drawn. Assign it was the header's Assigned to menu: who works a task is decided only in the Agent section, by Send to agent (the owner, 2026-11-01)",
+    "prep": null, "later": "defer", "skip": "defer", "archive": "not_ours", "done": "close", "ask_sender": "reply", "assign": "regular_agent"
   }
 }

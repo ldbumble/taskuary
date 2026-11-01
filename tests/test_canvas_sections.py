@@ -34,8 +34,9 @@ class LevelOfTests(unittest.TestCase):
 
     def test_every_section_has_its_heading_word(self):
         # no Agents working and no Goals: every open task is under Tasks (the owner, 2026-10-21) - and no Urgent: an urgent row is
-        # shaded in its place under Tasks (the owner, 2026-10-22)
-        self.assertEqual(list(funnel.SECTION_WORDS), ['task', 'later', 'reports', 'ideas', 'fyi'])
+        # shaded in its place under Tasks (the owner, 2026-10-22) - and Watching at the foot of Tasks, what Watch it keeps open (2026-11-01)
+        self.assertEqual(list(funnel.SECTION_WORDS), ['task', 'watching', 'later', 'reports', 'ideas', 'fyi'])
+        self.assertEqual(funnel.SECTION_WORDS['watching'], 'Watching')
         self.assertEqual(funnel.SECTION_WORDS['later'], 'For later')
         self.assertEqual(funnel.SECTION_WORDS['task'], 'Tasks')
 

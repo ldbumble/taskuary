@@ -6,7 +6,7 @@ import { askWidth, startHarness } from "./harness.mjs";
 /* THE STAGE MOVES RIDE ON THEIR PANE, THE CHAT IS ITS OWN UNIT (the owner, 2026-10-29, after three mockups). On the demo world at 1440 and
    1366: the bar keeps Back and Next and what acts on the whole task (Mark done, Change, Share, Hand it to a person, Close with a note,
    Attach a file); the moves that take the task a stage on - Send to agent / Continue / Run another, Draft reply / Reply / Redraft / Hand it
-   to a person, and Came from's Not a task / Remind me - stand on their pane's spine while it is folded, under a rule below its words, and
+   to a person, and Came from's Not a task / Remind me / Watch it (2026-11-01) - stand on their pane's spine while it is folded, under a rule below its words, and
    inside it while it is open, never on the bar. A spine's press opens its pane and starts the step there - Hand it to a person a compose
    card in Close out. Open, a pane wears a white strip across its top: its name, its moves and the arrows that fold it back. A live agent's bar is Back, Next and Stop and save. The chat is a small pill in the
    corner, apart from the bar, typeable at rest: typing opens it out of its corner into the window, and a line sent lands in it.
@@ -37,8 +37,8 @@ const look = (page) => page.evaluate((CUR) => {
     from: spine("from"), agent: spine("agent"), close: spine("close"),
     pane: { from: words(`${CUR} [data-tq-pane-moves=from] button`), agent: words(`${CUR} [data-tq-pane-moves=agent] button`), close: words(`${CUR} [data-tq-pane-moves=close] button`) } };
 }, CUR);
-const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Not a task|Back .+)$/;
-const FROM = ["Not a task", "Remind me"];
+const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Watch it|Not a task|Back .+)$/;
+const FROM = ["Not a task", "Remind me", "Watch it"];
 // ...the task's own moves that ride on Close out after its stage moves (the owner, 2026-10-30)
 const TASK_MOVE = /^(Mark done|Close with a note|Attach a file|Share)$/, stageWords = (sp) => sp.moves.map((x) => x.word).filter((w) => !TASK_MOVE.test(w));
 
@@ -73,7 +73,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       assert.deepEqual([...new Set(rest.map((x) => x.rank))].sort(), ["done", "down", "fwd", "task"], `all four weights on this task ${JSON.stringify(rest)}`);
       assert.equal(rest.find((x) => x.word === "Mark done")?.rank, "done");
       // ...and Change ▾ on it too (the owner, 2026-10-30: "Change should be on Came from")
-      assert.deepEqual(m.from.moves.map((x) => x.word).sort(), [...FROM, "Change ▾"].sort(), `Came from's spine: Not a task, Remind me, Change ${JSON.stringify(m.from)}`);
+      assert.deepEqual(m.from.moves.map((x) => x.word).sort(), [...FROM, "Change ▾"].sort(), `Came from's spine: Not a task, Remind me, Watch it, Change ${JSON.stringify(m.from)}`);
       assert.ok(m.from.between && m.from.rule);
       assert.match(m.agent.text, /^\W*Agent\s+not started[\s\S]*Send to agent[\s\S]*2$/, "the spine's words as they were, the move in their middle");
       // ...the bar is Back and Next alone (the owner, 2026-10-29); the task's own moves ride on Close out, the title bar has none (2026-10-30)
@@ -128,7 +128,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openSec(page, "from");
       const m = await look(page);
       assert.deepEqual([m.agent.moves.map((x) => x.word), stageWords(m.close)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
-      assert.deepEqual([...m.pane.from].sort(), [...FROM, "Change ▾"].sort(), `Came from open: its heading carries Not a task, Remind me and Change ${JSON.stringify(m.pane)}`);
+      assert.deepEqual([...m.pane.from].sort(), [...FROM, "Change ▾"].sort(), `Came from open: its heading carries Not a task, Remind me, Watch it and Change ${JSON.stringify(m.pane)}`);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-n]`);
       await page.waitForSelector(`${CUR} [data-tq-slot=agent][data-tq-open]`, { timeout: 5000 });

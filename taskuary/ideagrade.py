@@ -55,6 +55,14 @@ def record(store, days: int = DAYS) -> dict:
     return {k: tally(v) for k, v in by.items()}
 
 
+SINCE_KEY = 'ideas_checked_since'
+
+
 def quiet_kinds(store) -> set:
-    """The model's kinds of idea that are quiet now: under BAR on MIN or more graded in the window."""
-    return {k for k, t in record(store).items() if k in MODEL_KINDS and t['n'] >= MIN and t['pct'] is not None and t['pct'] < BAR * 100}
+    """The model's kinds of idea that are quiet now: under BAR on MIN or more graded in the window - counting only ideas raised since the
+    second look began (SINCE_KEY, set on its first run): graded on the old Advisor's record, an untyped idea was 38% useful on one owner's
+    home and every model line would have gone silent at once, the good with the noise (a replay, 2026-11-01)."""
+    since = store.get_setting(SINCE_KEY) or ''
+    if not since: return set()
+    days = max(0.0, min(DAYS, (datetime.now() - datetime.fromisoformat(since[:19])).total_seconds() / 86400))
+    return {k for k, t in record(store, days).items() if k in MODEL_KINDS and t['n'] >= MIN and t['pct'] is not None and t['pct'] < BAR * 100}

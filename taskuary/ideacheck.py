@@ -15,13 +15,17 @@ from loguru import logger
 from . import ideagrade
 
 TOUCHED_H = 24
+# ...asked as JOIN OR RESTATE (a live replay over the 32 graded ideas, 2026-11-01): "would the owner already know this?" held half the
+# useful lines and kept most of the obvious ones - a model cannot know what a person knows. What separated them in the audit is checkable
+# in the note itself: every useful one joined two things, every obvious one said one thing again.
 SYSTEM = ("You check an assistant's notes to a busy owner before they are shown. For each note you get what it says, why, the "
-          "workstream it is under (the owner's own description) and what the owner last did on the item. Answer which notes the owner "
-          "would ALREADY KNOW - they did it themselves, it is the obvious next step of what they are doing, it repeats what a report or "
-          "the mail already showed them, or it is about work they are steering right now. A note that joins things they could not see "
-          "at once - two threads, a promise against a date, a clash between two of their workstreams, a second ask buried in a thread - "
-          "is NOT known. When unsure, call it known: a missed note costs less than noise. "
-          'Answer JSON: {"known": [<the numbers of the notes the owner would already know>]}')
+          "workstream it is under and what the owner last did on the item. A note EARNS its place only when it JOINS things the owner "
+          "could not see in one place: two threads or two people asking about the same thing, an answer in one thread that settles "
+          "another, the same failure across several runs or days, a promise or ask against a date or a meeting, a second ask buried "
+          "beside a reply, a draft that leaves part of an ask out, two commitments that collide. A note RESTATES when it tells one "
+          "thing a single message, report row, auto-reply or failure notice already says - however it is worded, and whatever it "
+          "suggests doing about it. Answer which notes only restate. "
+          'Answer JSON: {"known": [<the numbers of the notes that only restate one thing>]}')
 WANT = {'name': 'known', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['known'],
                                     'properties': {'known': {'type': 'array', 'items': {'type': 'integer'}}}}}
 
@@ -64,6 +68,8 @@ def _workstream(store, act: dict) -> str:
 def check(store, say: list, llm=None) -> tuple:
     """(the lines to raise, [(key, why it was held)]). The model's own lines only; everything else passes."""
     held, keep, ask = [], [], []
+    if not store.get_setting(ideagrade.SINCE_KEY):           # the kinds' record starts with the second look (ideagrade.quiet_kinds)
+        store.set_setting(ideagrade.SINCE_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'advisor')
     try: quiet = ideagrade.quiet_kinds(store)
     except Exception as e: logger.debug(f'idea record not read: {e}'); quiet = set()
     for s in say:

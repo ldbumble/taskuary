@@ -25,6 +25,8 @@ def test_a_kind_under_eighty_percent_useful_on_ten_graded_is_quiet_and_the_apps_
     for n in range(21, 31): _idea(s, n, 'health', 'done', 'sweep')                                # the app's own kind: counted, never quiet
     for n in range(31, 36): _idea(s, n, 'clash', 'dismissed', 'owner')                            # five: too few to say
     assert ideagrade.record(s)['idea']['pct'] == 60
+    assert ideagrade.quiet_kinds(s) == set(), 'nothing is quiet on the record from before the second look began'
+    s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
     assert ideagrade.quiet_kinds(s) == {'idea'}
 
 
@@ -34,6 +36,7 @@ def _say(key, kind='pattern', **act): return {'key': key, 'kind': kind, 'text': 
 def test_the_second_look_holds_a_quiet_kind_work_touched_today_and_what_the_owner_would_already_know():
     s = MemoryStore()
     for n in range(1, 11): _idea(s, n, 'idea', 'done', 'sweep')                                   # 'idea' is quiet: 0 of 10
+    s.set_setting(ideagrade.SINCE_KEY, ago(days=40), 't')
     f = Factory(s)
     t = f.task(title='Q4 variance'); u = f.task(title='Board pack')
     s._exec("INSERT INTO outcome (Kind,TargetKind,TargetId,Actor,At,FactsJson) VALUES ('reply.sent','task',?,'owner',?,'{}')", (t, ago(hours=2)))

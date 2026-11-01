@@ -76,9 +76,9 @@ class LookupTests(unittest.TestCase):
             if lookups.SITE_DOCS.is_dir():
                 self.assertIn('help/', read(s, 'docs.search', query='connect whatsapp phone'))
         with fake_embed.no_embedder():         # no embedder: a question is found only where it is written whole
-            self.assertIn('Nothing in the help', read(s, 'docs.search', query='zzzqqq'))
+            self.assertIn('No passage carries', read(s, 'docs.search', query='zzzqqq'))
             self.assertIn('your doc COUNSEL.md > Tone', read(s, 'docs.search', query='keep replies to two sentences'))
-            self.assertIn('Nothing in the help', read(s, 'docs.search', query='what tone should replies take'))
+            self.assertIn('No passage carries', read(s, 'docs.search', query='what tone should replies take'))
 
 
 class CutTests(unittest.TestCase):

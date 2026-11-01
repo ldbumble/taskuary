@@ -915,9 +915,10 @@ One person at a glance - how often they write, their recent messages, their open
 
 ### `docs.search`
 
-How Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, COUNSEL...). Use it for any "how do I", "what does X do" or "why did it" about the app.
+How Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, COUNSEL...) and what each release changed (help/whats-new). Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app.
 
 - `query` - the words
+- `section` - one section read whole, as its contents list names it
 
 <p class="runs">Runs at once and changes nothing.</p>
 

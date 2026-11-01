@@ -121,12 +121,32 @@ def _corpus(store):
         for f in sorted(SITE_DOCS.glob('*.md')): yield from _sections(f'help/{f.stem}', f.read_text(encoding='utf-8'))
     for n in store.doc_names(): yield from _sections(f'your doc {n}', store.doc(n) or '')
 
+def _contents(parts: list) -> str:
+    """The help pages and docs as their section names, page by page - what the model picks a `section` from."""
+    pages = {}
+    for where, _ in parts:
+        page, _, sec = where.partition(' > ')
+        pages.setdefault(page, [])
+        if sec and sec not in pages[page]: pages[page].append(sec)
+    return NL.join(f"{page}: {' | '.join(secs)}" if secs else page for page, secs in pages.items())
+
+
 def docs_search(store, p: dict) -> str:
+    """Passages that bear on `query`; or one `section` (a page, or "page > heading") read whole. With no passage found - and with no
+    embedder only the whole phrase is found, so "what changed in the last release" found nothing on most installs (TQ-1251: "Taskuary
+    doesnt know about itself") - the contents come back, and which section answers is the model's to pick, never a word list's."""
+    parts = list(_corpus(store))
+    sec = ' '.join(str(p.get('section') or '').split())
+    if sec:
+        got = [(w, t) for w, t in parts if w.lower() == sec.lower() or w.lower().startswith(sec.lower() + ' >')]
+        if not got: return f'No section "{sec}". The contents:{NL}{_contents(parts)}'
+        return _cut((NL * 2).join(f'[{w}]{NL}{t}' for w, t in got), 5600)
     q = ' '.join(str(p.get('query') or '').split())
-    if not q: return 'docs.search needs the words to look for.'
-    chunks = {f'doc:{where}#{i}': (where, t) for i, (where, t) in enumerate(_corpus(store))}
+    if not q: return 'docs.search needs the words to look for, or a `section` to read.'
+    chunks = {f'doc:{where}#{i}': (where, t) for i, (where, t) in enumerate(parts)}
     hits = _find(store, q, [(k, t) for k, (_, t) in chunks.items()])[:4]
-    if not hits: return f'Nothing in the help pages or your docs bears on "{q}".'
+    if not hits: return (f'No passage carries "{q}" word for word. These are the help pages and your docs by section - CALL docs.search '
+                         f'again with `section` set to the one that answers it (a page, or "page > heading" exactly as written):{NL}{_contents(parts)}')
     return (NL * 2).join(f'[{chunks[k][0]}]{NL}{_cut(chunks[k][1], CHUNK)}' for k in hits)
 
 def _days(p, default):

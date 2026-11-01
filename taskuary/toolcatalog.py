@@ -287,7 +287,9 @@ def select_values(store=None, items: list = None) -> str:
     """The values SELECT's category, kind and lane can take in the pipe as it is NOW - said with each turn, never in the index:
     the index is a CLI brain's launch instructions, and a value that came or went (an FYI cleared, a mail landed) restarted it."""
     v = vocabularies(store, items)
-    return ('SELECT VALUES IN THE PIPE NOW - category: ' + ', '.join(v['category']) + (f"; kind: {' | '.join(v['kind'])}" if v['kind'] else '')
+    # category is triage's own filing (feed, filed...), not the rail's sections: "clear all the FYI" went out as category: feed and cleared one
+    # of four (the live sweep, 2026-11-01) - the rail's FYI, Reports and Tasks are kinds
+    return ('SELECT VALUES IN THE PIPE NOW - category (how triage filed each row - the rail sections FYI, Reports and Tasks are kinds): ' + ', '.join(v['category']) + (f"; kind: {' | '.join(v['kind'])}" if v['kind'] else '')
             + '; lane: ' + ' | '.join(v['lane']))
 
 
@@ -566,7 +568,8 @@ READS = {
     'sender.read':      ('one person at a glance - how often they write, their recent messages, their open tasks, when you last '
                          'wrote back and what the owner told you to remember about them. `who`: a name or an address'),
     'docs.search':      ("how Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, "
-                         'COUNSEL...). `query`: the words. Use it for any "how do I", "what does X do" or "why did it" about the app'),
+                         'COUNSEL...) and what each release changed (help/whats-new). `query`: the words; `section`: one section read whole, '
+                         'as its contents list names it. Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app'),
     # THE APP AT WORK (lookups.py, 2026-09-24): which agent is on what, what waits on a yes, the
     # calendar past today, what happened, and every place a failure is written down.
     'agents.now':       'every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something',
@@ -662,7 +665,7 @@ def valid(kind: str, params: dict) -> str:
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),
-                'sender.read': ('who', 'sender'), 'docs.search': ('query',), 'agents.now': (), 'approvals.list': (), 'pipe.list': (), 'pipe.read': (),
+                'sender.read': ('who', 'sender'), 'docs.search': ('query', 'section'), 'agents.now': (), 'approvals.list': (), 'pipe.list': (), 'pipe.read': (),
                 'calendar.read': (), 'activity.list': (), 'errors.list': (), 'memory.list': (), 'memory.about': ('who',), 'rules.list': (), 'missed.check': (), 'app.health': (),
                 'repos.list': (), 'tools.list': (), 'tools.describe': ('kind',), 'deleted.list': (), 'outputs.find': ()}[kind]
         if need and not any(str((params or {}).get(n) or '').strip() for n in need):

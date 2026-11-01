@@ -20,3 +20,13 @@ def test_the_assistant_finds_what_a_release_changed():
     assert all(w.CHORE.match(s) for s in ('Release 0.3.10.11', "Refresh the README's PyPI pill for 0.3.10.11", 'Rebuild the UI and demo for X'))
     assert not w.CHORE.match('A mail account goes to the mailbox card')
     assert w.has(w.section('9.9.9', '2026-11-01', ['x']), '9.9.9') and not w.has(w.section('9.9.9', '2026-11-01', []), '9.9.90')
+
+
+def test_a_search_no_passage_carries_hands_the_model_the_contents_to_pick_from():
+    """With no embedder only the whole phrase is found - "latest release what changed" found nothing, and the model read no help at all."""
+    from taskuary.store import MemoryStore
+    out = lookups.docs_search(MemoryStore(), {'query': 'latest release what changed'})
+    assert 'help/whats-new:' in out and '`section`' in out
+    page = lookups.docs_search(MemoryStore(), {'section': 'help/whats-new'})
+    assert page.startswith('[help/whats-new]') and '## 0.' in page
+    assert lookups.docs_search(MemoryStore(), {'section': 'help/nope'}).startswith('No section')

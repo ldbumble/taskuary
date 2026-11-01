@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -246,6 +246,9 @@ test("the three sections come in the flow's order, and each closed tab says wher
     msgs: [{ who: "Erin Blake", words: "So let's\nbuild one." }, { who: "You", words: "A link" }, { who: "Erin Blake", words: "Look" }, { who: "Ray Colton", words: "Old" }] }),
     { lines: ["WhatsApp · 5 messages", "Erin Blake: “So let's build one.”", "You: “A link”", "Erin Blake: “Look”", "Ray Colton: “Old”"], foot: "✓ Sorted: a reply to send · regular priority" });
   assert.deepEqual(fromStatus({ workflow: { title: "Nightly check" } }).lines, ["Routine · Nightly check"], "a workflow run has no sender");
+  // ...and a long chat gives the spine no more lines than it can hold: the newest, the rest never drawn to be measured and hidden (2026-11-01)
+  const chat = fromStatus({ channel: "WhatsApp", count: 1500, msgs: Array.from({ length: 1500 }, (_, i) => ({ who: "Gail Moreno", words: `line ${1500 - i}` })) });
+  assert.equal(chat.lines.length, 1 + TAB_MOST); assert.equal(chat.lines[1], "Gail Moreno: “line 1500”");
   assert.equal(agentWord({}), "not started");
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");
   assert.equal(agentWord({ failed: true, result: true }), "failed");

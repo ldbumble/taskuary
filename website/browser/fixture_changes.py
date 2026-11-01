@@ -42,6 +42,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/matrix',
         '/api/fixture/task/advisor-raised',
         '/api/fixture/task/long-chat',
+        '/api/fixture/task/big-chat',
         '/api/fixture/task/workstreams',
         '/api/fixture/advisor/report-idea',
         '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
@@ -279,6 +280,35 @@ def install_processing_changes(app, store):
                                'SentAt': (start + timedelta(minutes=7 * i)).isoformat(' ', 'seconds'), 'Status': 'routed'})
         todo = [{'id': f't{i}', 'text': f'Move step {i + 1}: ' + ('label the crates' if i % 2 else 'book the lift'), 'done': i < 6} for i in range(22)]
         store._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps(todo), tid))
+        return {'taskId': tid}
+
+    @app.post('/api/fixture/task/big-chat')
+    def big_chat(body: dict):
+        """A BIG task (the owner, 2026-11-01: a rail row clicked drew a spinner in an empty frame for seconds - "this still happens"): a
+        WhatsApp group of 1,500 lines from three people and the owner on one task, a photo every fifth line, drafts, notes, twenty agent
+        runs and their saved sessions. Its read judged where every line came from, one line at a time (tests/test_big_task_opens_fast.py)."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        tid = store.create_task({'Title': 'Site ops: the walk-in cooler', 'Kind': 'reply', 'Status': 'open', 'Source': 'whatsapp',
+                                 'Summary': 'The site team needs the walk-in cooler repair booked.'}, 'router')
+        start, who = datetime.now() - timedelta(hours=30), (('Ray Colton', '15550003@s.whatsapp.net'), ('Gail Moreno', '15550002@s.whatsapp.net'),
+                                                            ('Paula Vance', '15550004@s.whatsapp.net'))
+        for j in range(1500):
+            mine = j % 4 == 3
+            name, addr = ('Alex Doyle', 'alex@northwind.example') if mine else who[j % 4 % 3]
+            mid = store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'SourceName': 'Site ops', 'ExternalId': f'fixture-big-{tid}-{j}',
+                                     'ConversationId': f'fixture-big-{tid}', 'FromName': name, 'FromEmail': addr, 'Direction': 'out' if mine else 'in',
+                                     'BodyText': f'Cooler note {j + 1}: ' + ('the compressor is cycling again' if j % 2 else 'the engineer can come Thursday') * 4,
+                                     'SentAt': (start + timedelta(minutes=j)).isoformat(' ', 'seconds'), 'Status': 'context' if mine else 'routed'})
+            store.add_route(mid, tid, 'create' if j == 0 else 'attach', None, 'same chat', [], 'triage', verdict={'intent': 'reply_only', 'summary': 'the cooler'})
+            if j % 5 == 0: store.add_attachment({'MessageId': mid, 'Name': f'cooler{j}.jpg', 'ContentType': 'image/jpeg'})
+        for k in range(30):
+            store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'sent' if k else 'pending', 'Reason': 'needs a reply',
+                              'DraftText': f'Thanks Paula - booking the engineer for Thursday ({k}).'})
+        for k in range(100): store.add_comment(tid, 'general', 'agent', f'Note {k}: checked the service log for the cooler.')
+        for k in range(20):
+            rid = store.start_run(tid, 'general', 'Find the earliest engineer slot for the cooler.', 'owner'); store.update_run(rid, {'Status': 'done'}, finished=True)
+            store.add_transcript(tid, f'fixture-big-{tid}-{k}', 'Looked up the engineer rota.\n' * 4000, agent='general', ext_id=f'fixture-big-ext-{k}', brain='claude')
+        store.reconcile_processing_membership()
         return {'taskId': tid}
 
     @app.post('/api/fixture/task/chat-burst')

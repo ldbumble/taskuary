@@ -114,7 +114,7 @@ import { PICK_REPO, openAppLink, takeRepoPick } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { place } from "./words.js";
 import { announceRemoved, fromAnswer } from "./removed.js";
-import { heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
+import { aheadTask, heldSteps, heldTask, heldTerm, keepTask, keepTerms, pageRead } from "./taskDetail.js";
 import { coalesce } from "./coalesce.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -847,10 +847,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       setErr(e?.response?.data?.detail || "Failed to load task");
     }
   });
-  const loadDetail = useCallback(async (id) => {
+  const loadDetail = useCallback(async (id, first = false) => {
     if (!id) { setDetail(null); return; }
-    const ahead = heldTask(id);
+    const ahead = heldTask(id), coming = !ahead && first && aheadTask(id);
     if (ahead) setDetail((d) => (d?.task?.TaskId === id ? d : ahead));
+    // ...and the read a rail press asked ahead, still on its way, IS the mount's read: a second one beside it doubled a big task's wait
+    // under the spinner (the owner, 2026-11-01: "this still happens")
+    if (coming) { const data = await coming; if (stale(id)) return; if (data?.task?.TaskId === id) { setDetail(data); return; } }
     return detailReads.current.run(id, id);
   }, []);
   // ...and the read of the task just left is let go of: its answer would be thrown away (stale) after the server spent on it
@@ -885,7 +888,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...nor with no coding tool connected: every start is the general agent's then, and the coding profile is refused (B3)
     if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff || !canCode) && !run.agent)) setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), model: "" }));
   }, [agents, kinds, run.agent, generalTask, handOff, canCode]);
-  useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
+  useEffect(() => { loadDetail(selected, true); }, [selected, loadDetail]);
   useEffect(() => {
     const task = detail?.task;
     if (!task || task.TaskId !== selected || !agents.length || pickerTask.current === task.TaskId) return;

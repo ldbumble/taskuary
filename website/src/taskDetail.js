@@ -45,6 +45,8 @@ export const heldTerm = (tid) => {
 };
 export const keepTerms = (rows) => { if (Array.isArray(rows)) terms = { at: now(), rows }; };
 // the task as last read, while it is fresh - what a view draws on its first frame
+// ...and a read asked ahead and still on its way (a rail row under the pointer, pressed): the view waits for it rather than asking beside it
+export const aheadTask = (tid) => { const e = held.get(Number(tid)); return fresh(e) && !e.data ? e.p : null; };
 export const heldTask = (tid) => { const e = held.get(Number(tid)); return fresh(e) && e.data?.task?.TaskId === Number(tid) ? e.data : null; };
 export const heldSteps = (tid) => { const e = held.get(Number(tid)); return fresh(e) && Array.isArray(e.steps) ? e.steps : null; };
 // ...a view's own read is the newest word on its task; an act on any task makes every held read old. `asked`: when that read was asked

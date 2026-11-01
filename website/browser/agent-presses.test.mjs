@@ -230,7 +230,14 @@ test("a coding agent on an open task: Send to agent, Continue, Run another agent
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
     await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    // A PANE THE OWNER OPENED NEVER FOLDS UNDER THEM: Close out pressed while the write-up runs stays open through its end and through the
+    // task's status catching up (in_progress -> open, seconds after the stop - the press landing in between folded it back, 2026-11-01)
+    await page.click("[data-tq-section-tab=close] [data-tq-tab-name]");
+    await page.waitForSelector("[data-tq-slot=close][data-tq-open]", { timeout: 5000 });
     await writtenUp(page);
+    for (let i = 0; i < 40 && (await w.api(`/api/tasks/${tid}`)).task?.Status === "in_progress"; i++) await sleep(250);
+    await sleep(1500);
+    assert.ok(await page.$("[data-tq-slot=close][data-tq-open]"), "Close out, opened by hand, folded back under the owner");
     await continueInsideAgent(page);
     await continueWith(page, "now rerun the importer", () => w.backend.output()).catch(async (e) => { throw new Error(`${e.message}
 --- terminals: ${JSON.stringify(await w.api("/api/terminals")).slice(0, 3000)}`); });

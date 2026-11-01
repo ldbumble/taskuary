@@ -1658,7 +1658,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advised}|${!!writingUp}`;
   if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : sectionHere({ stage: taskStage, advised }) };
   const main = mainHeld.current.main;
-  const section = threeUp ? (secPick.key === mainKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionHere({ stage: taskStage, advised });
+  // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
+  // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
+  // with an agent that already ended (in_progress -> open lands seconds after Stop and save: Close out, pressed in between, folded back)
+  const pickKey = `${selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${["done", "dropped"].includes(t?.Status)}`;
+  const section = threeUp ? (secPick.key === pickKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionHere({ stage: taskStage, advised });
   // ...and the Advisor's line stands in that section, the one it is about
   const adviceIn = advisorAt(advised);
   // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -
@@ -1666,7 +1670,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
   const outsideSays = outside && outsideLine({ who: replyMessage?.FromName || "", where: outside.SourceName || channelName(outside.Channel),
     when: (() => { const w = whenShort(outside.SentAt); return !w ? "" : asUtc(String(outside.SentAt)).toDateString() === new Date().toDateString() ? `at ${w}` : `on ${w}`; })() });
-  const openSection = (s) => setSecPick({ key: mainKey, sec: s });
+  const openSection = (s) => setSecPick({ key: pickKey, sec: s });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : TAB_W);

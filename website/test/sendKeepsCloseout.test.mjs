@@ -24,7 +24,9 @@ test("once open, the main view and its section are held: only a new task, its de
   assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{t\?\.Status\}\|\$\{advised\}\|\$\{!!writingUp\}`/);
   assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : sectionHere\(\{ stage: taskStage, advised \}\) \};/);
   assert.match(src, /const main = mainHeld\.current\.main;/);
-  // ...a tab's press opens its section for the view it was pressed in, and only that
-  assert.match(src, /const section = threeUp \? \(secPick\.key === mainKey \? secPick\.sec : mainHeld\.current\.sec\) : null/);
-  assert.match(src, /const openSection = \(s\) => setSecPick\(\{ key: mainKey, sec: s \}\);/);
+  // ...a tab's press opens its section, and it stays open under the owner: only another task, an agent starting or stopping, a close or
+  // reopen or the width fold it - not the detail, the Advisor's pick, the write-up's end or in_progress -> open catching up (2026-11-01)
+  assert.match(src, /const pickKey = `\$\{selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{\["done", "dropped"\]\.includes\(t\?\.Status\)\}`;/);
+  assert.match(src, /const section = threeUp \? \(secPick\.key === pickKey \? secPick\.sec : mainHeld\.current\.sec\) : null/);
+  assert.match(src, /const openSection = \(s\) => setSecPick\(\{ key: pickKey, sec: s \}\);/);
 });

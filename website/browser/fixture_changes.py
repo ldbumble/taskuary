@@ -41,6 +41,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/matrix',
         '/api/fixture/task/advisor-raised',
         '/api/fixture/task/long-chat',
+        '/api/fixture/task/workstreams',
         '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
     })
 
@@ -60,6 +61,9 @@ def install_processing_changes(app, store):
             return ''
         # ...and Keep / Wrong / Forget pressed from the Advisor's Why? on a task: that press reaching the task is what the Advisor test checks
         if method == 'POST' and path == '/api/learned/mark':
+            return ''
+        # ...and the task's workstream picker: moving the fixture's task is the thing the workstream test checks
+        if method == 'PUT' and re.fullmatch(r'/api/tasks/\d+/workstream', path):
             return ''
         return refuse(method, path)
 
@@ -223,6 +227,22 @@ def install_processing_changes(app, store):
         tid = json.loads(store.get_idea(i['IdeaId'])['ActionJson'] or '{}').get('tid')
         if not tid: raise HTTPException(409, 'the idea opened no task')
         return {'taskId': tid, 'mails': [first, again]}
+
+    @app.post('/api/fixture/task/workstreams')
+    def workstreams_task(body: dict):
+        """Alex's three workstreams (the owner, 2026-11-01) and Omar's bug report from the Ledger app's tester, placed there by its people -
+        the task's picker shows it and moves it."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        from taskuary import workstreams
+        workstreams.save(store, [{'name': 'Northwind finance systems', 'domains': ['northwind.example']},
+                                 {'name': 'Ledger app', 'people': ['omar@ledger.example']}, {'name': 'Personal', 'personal': True}])
+        tid = store.create_task({'Title': 'Export button greyed in the Ledger app', 'Kind': 'task', 'Status': 'open', 'Source': 'email',
+                                 'Summary': 'Omar Keller says the export button is greyed out.'}, 'router')
+        mid = store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'fixture-ws-{tid}', 'FromName': 'Omar Keller',
+                                 'FromEmail': 'omar@ledger.example', 'Subject': 'Export greyed', 'BodyText': 'The export button is greyed out.',
+                                 'SentAt': datetime.now().isoformat(' ', 'seconds'), 'Status': 'routed'})
+        workstreams.stamp_message(store, mid)
+        return {'taskId': tid, 'workstream': workstreams.of_task(store, tid)}
 
     @app.post('/api/fixture/task/long-chat')
     def long_chat(body: dict):

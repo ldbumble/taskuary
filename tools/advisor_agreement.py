@@ -207,7 +207,21 @@ def mirror(cx, d) -> tuple:
     if lit == 'continue' and st == 'stopped' and d['by'] == 'rule': return '', 'quiet'
     if lit == 'defer' and st == 'waiting' and d['by'] == 'rule': return '', 'quiet'
     if lit == 'regular_agent' and not (tk == 'task' and failed_at(cx, ti, d['at'])): return '', 'quiet'
+    if d['by'] == 'rule' and not calibrated(cx, d): return '', 'calibrated'
     return lit, ''
+
+
+def calibrated(cx, d) -> bool:
+    """taskuary.calibrate as it would have stood at the decision: the owner's answers in its state over the 30 days BEFORE it (never after -
+    the replay does not peek), its rule button trusted at 80% on five or more, or with less record."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from taskuary import calibrate
+    st = d['state'].lstrip('~') if not d['state'].startswith('~') else ''      # a state guessed off the button has no record to read
+    if not st: return True
+    rows = _rows(cx, 'SELECT Key, Revision, State, Pressed FROM advice_press WHERE State=? AND CreatedAt>=? AND CreatedAt<? ORDER BY Id',
+                 (st, _later(d['at'], -24 * calibrate.DAYS), d['at']))
+    sh, n = calibrate.share(calibrate.choices(rows).get(st, {}), d['lit'])
+    return n < calibrate.MIN or sh >= calibrate.BAR
 
 
 def replay(cx, ds, store=None) -> list:

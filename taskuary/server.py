@@ -5335,12 +5335,12 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
                                                        *((walk or {}).get('members') or ()), *railwalk.members_of(below)))
     return funnel.present(store, p)
 
-def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict | None:
+def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None, force: bool = True) -> dict | None:
     """The rail read once after a write and carried in that write's answer, so the page holds it
     instead of asking for the same rows again (design B, 2026-09-17: a press of Next was two of these
     reloads at 1.5-2 s each). Scoped the way the page will hold it. Never the answer's failure: the
     page falls back to its own load when nothing rides along."""
-    try: return _pile_payload(force=True, only=only, include_surfaced=include_surfaced, exclude=exclude, fyi=fyi)
+    try: return _pile_payload(force=force, only=only, include_surfaced=include_surfaced, exclude=exclude, fyi=fyi)
     except Exception as e:
         logger.debug(f'the pile did not ride along: {e}'); return None
 
@@ -5529,7 +5529,9 @@ def _with_pile(out: dict, body) -> dict:
 # THE WALK'S OWN ROUTES (railwalk, 2026-10-30): the page sends an action and draws the Answer that comes back - the row, its words and
 # chips, where the walk now stands, and the rail as the move left it with the next answer prepared in it.
 def _walk_answer(out: dict, body: RailWalkBody) -> Response:
-    out = {**out, 'pile': _pile_along(fyi=body.fyi)}
+    # ...the cached rail unless something moved since it was built (funnel.pile's own check: a write anywhere, a worker): forced, a walk
+    # move built the whole rail a second time after the one its own writes had already cost it (2026-10-31, 0.5 s a press on a real home)
+    out = {**out, 'pile': _pile_along(fyi=body.fyi, force=False)}
     _refresh_after(out)
     return _encoded(out)
 

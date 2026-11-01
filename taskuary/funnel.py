@@ -1420,6 +1420,16 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
                        'n': sum(1 for i in items if i['lane'] == l)} for l in LANES]}
 
 
+def _chat_only(store, low, high) -> bool:
+    """Every write since the cached build was the Assistant's own conversation - a line it said, a badge it stamped, on its dock task. The
+    rail draws nothing from that task, and each walk move writes there: counted as a change, every press rebuilt the whole rail for its
+    own words (0.5-0.7 s on a real home, 2026-10-31)."""
+    written = getattr(store, 'rail_written', None)
+    dock = str(store.get_setting('assistant_dock_task_id') or '') if callable(written) else ''
+    got = written(low, high) if dock else None
+    return bool(got) and got <= {('task', dock)}
+
+
 def _rail_top(store):
     top = getattr(store, 'rail_top', None)
     return top() if callable(top) else None
@@ -1462,8 +1472,10 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         same_store = _CACHE.get('store') is store
         def moved():                                   # written to, or a worker moved, since the cached build began
             top = _rail_top(store)
-            return (top is not None and _CACHE.get('mark') is not None and top != _CACHE['mark']) \
-                   or workers is None or workers != _CACHE.get('workers')
+            if workers is None or workers != _CACHE.get('workers'): return True
+            if top is None or _CACHE.get('mark') is None or top == _CACHE['mark']: return False
+            if not _chat_only(store, _CACHE['mark'], top): return True
+            _CACHE['mark'] = top; return False         # ...the Assistant's own words only: the build stands, at the new mark
         if same_store and _CACHE['pile'] and not force and moved(): _CACHE.update(at=0.0); force = True
         # One websocket event wakes every open browser. If they all arrive while the first forced
         # rebuild is running, that one result satisfies all of them; rebuilding once per tab is a

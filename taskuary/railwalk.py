@@ -18,6 +18,7 @@ import builtins
 import hashlib
 import json
 import threading
+import time
 from collections import OrderedDict
 from datetime import datetime
 
@@ -42,8 +43,31 @@ def line(items: list) -> list:
 
 
 def _rows(store) -> list:
-    """The rail as last built - the cached pile, the same one /api/funnel/pile serves; built only when something moved since."""
+    """The rail as last built - the cached pile, the same one /api/funnel/pile serves; built only when something moved since. ...Or the
+    line a walk move left in hand (_hold), while nothing but that move has written: a Next's own writes (the read, the badge, its line in
+    the chat, the walk's place) emptied the pile's cache, and the next press rebuilt the whole rail for them - 0.5-0.7 s a press on a
+    real home of 5,600 rows, twice a Next (2026-10-31). Spec 7.3: the walk reads the rail, it never builds it."""
+    # ...and no older than the pile's own cache may be: a Later row comes due with nothing written
+    if _HAND.get('store') is store and _HAND.get('mark') is not None and time.time() - _HAND['at'] < funnel.PILE_EVERY             and _mark(store) == _HAND['mark']: return list(_HAND['rows'])
     return list(funnel.pile(store)['items'])
+
+
+_HAND = {}
+
+
+def _mark(store):
+    """Everything that moves the rail: a write anywhere (the store's dirty-row top) and the live workers (funnel.pile's own two checks)."""
+    from . import terminal
+    try: workers = funnel.workers_signature(terminal.live_sessions(tail=6))
+    except Exception: workers = None
+    top = funnel._rail_top(store)
+    return None if top is None or workers is None else (top, workers)
+
+
+def _hold(store, rows):
+    """The rows a move computed with its own effect applied, held as the rail until anything else writes - taken after the move's last
+    write, so its own writes do not count against it."""
+    _HAND.update(store=store, rows=list(rows), mark=_mark(store), at=time.time())
 
 
 def _is(row: dict, key: str) -> bool: return bool(key) and (row.get('key') == key or key in (row.get('aliases') or ()))
@@ -218,6 +242,9 @@ def as_key(store, ln, n, down=True) -> str:
 
 
 def _answer(store, st, rows, out: dict) -> dict:
+    """The move's Answer, its `rows` the rail with the move's own effect in it: held (_hold) for the next move, so the move's own writes -
+    made by now, `out` included - never cost the next press a rebuild."""
+    _hold(store, rows)
     out = {**out, 'walk': _walk(store, st, rows)}
     out['answer_hash'] = answer_hash(out)
     return out
@@ -273,19 +300,19 @@ def reset(store):
 
 def _effect(store, st, rows, frm, actor, dock):
     """Next's effect on the row it leaves (3.5): `reads` reads every member still on the rail - it leaves; `stays` writes nothing but the
-    "Next" badge; `none` nothing at all. A row no longer there is not read."""
+    "Next" badge; `none` nothing at all. A row no longer there is not read. Returns the rail keys it read."""
     from . import concierge
-    if not frm: return False
+    if not frm: return []
     held = frm == st.get('on') or frm in (st.get('members') or ())
     keys = (st.get('members') or members_of(frm)) if held else members_of(frm)
     kind = st.get('kind') if held else kind_of(find(rows, frm))
-    read = False
+    read = []
     if kind == 'reads':
         with store.one_poke() if hasattr(store, 'one_poke') else _null():
             for k in keys:
                 row = find(rows, k)
                 if row is None: continue
-                try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True); read = True
+                try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True); read.append(row['key'])
                 except Exception as e: logger.debug(f'railwalk: {k} was not read - {e}')
     try: concierge._stamp_next(store, dock, st.get('on') if held else frm)
     except Exception as e: logger.debug(f'railwalk: no badge for {frm} - {e}')
@@ -313,13 +340,14 @@ def next(store, from_key: str = None, actor: str = 'owner', press: str = None, r
             logger.debug(f'railwalk: {frm} has no place - the walk starts at the top')
             return _remember(press, start(store, actor, llm=llm))
         dock = _dock(store, actor)
-        moved = _effect(store, st, rows, frm, actor, dock) if effect and frm else False
+        gone = _effect(store, st, rows, frm, actor, dock) if effect and frm else []
         for k in read or ():
             row = find(rows, k)
             if row is not None:
-                try: funnel.settle(store, row['key'], 'surfaced', actor, read=True); moved = True
+                try: funnel.settle(store, row['key'], 'surfaced', actor, read=True); gone.append(row['key'])
                 except Exception as e: logger.debug(f'railwalk: {k} on the page over the table was not read - {e}')
-        if moved: rows = _rows(store)
+        # ...what was read has left the rail: taken off the rows in hand, never the whole rail rebuilt to see it gone
+        if gone: rows = [r for r in rows if r['key'] not in set(gone)]
         ln = line(rows)
         n = _below(ln, place[1], skip=members_of(frm))
         if n is None:
@@ -449,7 +477,8 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
         place = place_of(store, key, st, rows)
         if how in ('all_read', 'next'): return _remember(press, next(store, key, actor))
         done = _act(store, item, how, actor, note, until)
-        funnel.invalidate()
+        # ...the rail as the act left it, built once: an act that ran elsewhere ('left') was read on its own rows already
+        if how != 'left': funnel.invalidate()
         rows = _rows(store)
         if how == 'put_on_list' and done.get('made'):
             made = _lookup(store, f"task:{int(done['made'])}")
@@ -462,6 +491,7 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
             return _remember(press, _answer(store, st, rows, {**_present(store, fresh, actor, picked=True, record=False, rows=rows), 'kept': done.get('kept') or []}))
         st.update(on=key, members=members_of(key), first=list(place[0]), last=list(place[1]))
         _write(store, st)
+        _hold(store, rows)                            # ...and Next below goes on from that same rail, never a second build of it
         # ...with what the act said (a removed task's Undo line, a reminder's warning) riding along for the page to draw
         return _remember(press, {**next(store, key, actor, effect=False), **({'left': done['outcome']} if done.get('outcome') else {})})
 

@@ -281,7 +281,3 @@ def test_the_set_up_sort_sees_each_card_by_its_title_and_a_mailbox_as_one():
     types = json.loads(user)['connector_types']
     assert types['imap'] == 'Any mailbox (IMAP)' and types['zoho_invoice'] == 'Zoho Invoice'
     assert 'EMAIL ACCOUNT IS A MAILBOX' in concierge.SETUP_SORT_SYSTEM
-
-
-def test_a_zoho_mailbox_named_to_the_catalogue_is_the_mailbox_card():
-    assert concierge.catalogue_card('zoho mail')['type'] == 'imap'

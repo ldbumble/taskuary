@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
-from taskuary import concierge, counsel, desktop, funnel, general, lookups, toolcatalog, welcome
+from taskuary import concierge, counsel, desktop, funnel, general, lookups, railwalk, toolcatalog, welcome
 from taskuary.store import MemoryStore, task_ref
 
 BANNED = ('agent', 'AI', 'model', 'brain', 'triage', 'pipe', 'FYI', 'lane', 'sync', 'session', 'connector', 'API', 'token',
@@ -213,6 +213,18 @@ class ArrivalTests(unittest.TestCase):
         self.assertEqual(turns[-1]['text'], out['said']); self.assertEqual(turns[-1]['card']['kind'], 'brief')
         self.assertEqual(self.arrive(s, now + timedelta(minutes=5))['said'], '')        # once a day
 
+    def test_the_opener_puts_the_walk_down(self):
+        # the owner, 2026-11-01: yesterday's row kept "on the table" on the rail while the screen showed the greeting
+        s = store(); now = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        s.set_setting(welcome.CLOSED_KEY, ago(14, now=now), 't')
+        s.set_setting(railwalk.KEY, json.dumps({**railwalk._blank(), 'on': 'msg:1', 'members': ['msg:1']}), 't')
+        self.assertEqual(railwalk.on(s), 'msg:1')
+        self.assertTrue(self.arrive(s, now)['cleared'])
+        self.assertFalse(railwalk.on(s), 'nothing is on the table under the greeting')
+        s.set_setting(railwalk.KEY, json.dumps({**railwalk._blank(), 'on': 'msg:2', 'members': ['msg:2']}), 't')
+        self.assertNotIn('cleared', self.arrive(s, now + timedelta(minutes=5)))         # a second look the same morning leaves it
+        self.assertEqual(railwalk.on(s), 'msg:2')
+
     def test_a_fresh_install_and_a_second_look_the_same_morning_say_nothing(self):
         s = store(); now = datetime.now().replace(hour=9, minute=0)
         self.assertEqual(self.arrive(s, now)['said'], '')                               # nobody to welcome back yet
@@ -389,8 +401,10 @@ class CatchUpTests(unittest.TestCase):
         for n in range(3): mail(s, 'Erin Blake', 'erin@northwind.example', f'Weekend {n}', stamp(datetime(2026, 10, 3, 9 + n)))
         with mock.patch('taskuary.live.emit') as emit: welcome.catch_up_ended()
         emit.assert_called_once_with('arrive')
-        said = self.arrive(s, now + timedelta(minutes=2))['said']
+        s.set_setting(railwalk.KEY, json.dumps({**railwalk._blank(), 'on': 'msg:1', 'members': ['msg:1']}), 't')
+        out = self.arrive(s, now + timedelta(minutes=2)); said = out['said']
         self.assertIn('Over the weekend: 3 came in', said)
+        self.assertNotIn('cleared', out); self.assertEqual(railwalk.on(s), 'msg:1', 'filled in place, the walk begun under it stays')
         turns = concierge.history(s, tid)
         self.assertEqual([(t.get('card') or {}).get('kind') for t in turns], ['brief', None], 'filled where it stood - above the walk')
         card = turns[0]['card']

@@ -73,7 +73,7 @@ import { ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, walkOf } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
@@ -1724,7 +1724,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const arrive = (leaving = false) => {
       if (!leaving && Date.now() - last < 60_000) return;
       if (!leaving) last = Date.now();
-      api.post("/api/concierge/arrive", { leaving }).then(({ data }) => { if (data?.said || data?.drawn) readChat().catch(() => {}); }).catch(() => {});
+      // ...and a new opener comes up with nothing on the table (the owner, 2026-11-01): the server put the walk down (welcome._clear_walk),
+      // and the row the page still held kept "on the table" on the rail under the greeting
+      api.post("/api/concierge/arrive", { leaving }).then(({ data }) => {
+        if (data?.cleared && !turnFlight.current) { putOnTable(null, "sync"); setFoldedKey(null); loadPileRef.current?.(true); }
+        if (data?.said || data?.drawn) readChat().catch(() => {});
+      }).catch(() => {});
     };
     const back = () => { if (document.visibilityState !== "hidden") arrive(false); };
     const away = () => arrive(true);
@@ -1735,7 +1740,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the server says when the mail is in, and the page asks again - past the minute's throttle, which the catch-up can beat
     const off = onLive(["arrive"], (ev) => { if (ev?.type === "arrive") { last = 0; arrive(false); } });
     return () => { off(); window.removeEventListener("focus", back); window.removeEventListener("blur", away); document.removeEventListener("visibilitychange", back); };
-  }, [active, readChat]);
+  }, [active, readChat, putOnTable]);
   // Writes push an event and force one fresh rebuild. The timer is only a disconnected-socket
   // safety net: rebuilding this multi-source pile every five seconds starved Board, Tasks and
   // Past chats behind work whose answer had not changed.
@@ -3068,7 +3073,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { if (busy || !nextHeld.current) return; nextHeld.current = false; if (!resetting) runChip({ verb: "next" }); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...and Back the same: pressed while a move is landing it runs once that move is in, from the item it brought
   useEffect(() => { if (busy || !backHeld.current) return; backHeld.current = false; if (!resetting) goBack(); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const shown = old ? old.messages : msgs;
+  // THE DAY'S OPENER IS THE TOP OF THE CONVERSATION (the owner, 2026-11-01: "let's move the greeting all the way to the top always"):
+  // welcome.arrive records it into the same chat, under yesterday's walk, and a folded task card stood over "Good morning". The lines
+  // before the last opener are the record of an earlier day - kept on the server, never drawn above the greeting
+  const sinceDay = useMemo(() => sinceOpener(msgs), [msgs]), shown = old ? old.messages : sinceDay;
   const walkDots = starting && (msgs.length ? msgs[msgs.length - 1].id : null) === startLast.current;
   const lastBriefId = [...shown].reverse().find((m) => m.card?.kind === "brief")?.id;
   // the live browse card: the newest one, unless the walk has put an item on the table since

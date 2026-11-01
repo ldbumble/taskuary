@@ -530,6 +530,27 @@ the trust switch.</li>
 <p>What Taskuary cannot stop: a session it does not run, an agent typing <code>reason-network send</code> in its
 shell, or anything while Taskuary is closed — there, Reason Network&#39;s own held-message setting is the
 guard, and it holds whatever is not trusted until you are back.</p>
+<p><strong>Agent Desktop</strong> — your agents read and operate the desktop apps on this computer through each app&#39;s
+accessibility tree: the list of buttons, boxes and menus the app keeps for screen readers, not
+screenshots. It runs on <a href="https://github.com/vercel-labs/agent-desktop">agent-desktop</a>, Vercel&#39;s sibling
+of the <code>agent-browser</code> tool, on Windows, macOS and Linux. You install it yourself
+(<code>npm install -g agent-desktop</code>); Taskuary finds it and never installs or updates it. Use it for a
+desktop app with no connection and no web page. A connection comes first, then the browser.</p>
+<ul>
+<li><strong>Off until you turn it on.</strong> With the card off, no agent is told about it, and any agent-desktop
+command from one of Taskuary&#39;s sessions is refused. On macOS the program asks for Accessibility
+permission the first time; the card&#39;s <strong>Test</strong> says whether it has it.</li>
+<li><strong>Your own tasks only.</strong> A task with a message from someone you have not vouched for never drives
+your desktop. The task does not get it, as it does not get the browser.</li>
+<li><strong>What can&#39;t be undone waits for you.</strong> A command that only looks (a snapshot, a list of apps or
+windows) runs. Any other command goes to your AI with the control it names. A command that would
+send, pay, delete, submit or close unsaved work is refused to the agent and put on the task for your
+<strong>Approve</strong>. Approving runs that exact command. If the control has gone since, agent-desktop refuses
+it and nothing is done. With no AI connected, typing into a box passes and everything else waits.</li>
+<li><strong>Beside you, not instead of you.</strong> It acts through the apps&#39; own controls without moving your
+mouse or taking your keyboard, so you can keep working. Agents are told never to take the foreground,
+and never to type a password or code into an app. A sign-in is yours.</li>
+</ul>
 <p><strong>Your own documents</strong> — the <strong>Knowledge base</strong> card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with <code>pypdf</code>) into Taskuary&#39;s own
 SQLite. Once anything is indexed, a <code>kb_search</code> report answers questions from it on a schedule,

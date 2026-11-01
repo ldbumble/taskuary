@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import funnel
 
-WALKED = ('task', 'later', 'reports', 'ideas', 'fyi')   # the sections a chat offers to walk - Tasks holds every open task (2026-10-21)
+WALKED = ('task', 'watching', 'later', 'reports', 'ideas', 'fyi')   # the sections a chat offers to walk - Tasks holds every open task (2026-10-21)
 
 
 def section_rows(items: list) -> list:

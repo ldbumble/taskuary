@@ -28,7 +28,7 @@ The fix is structural. **One server module owns the walk's state and rules.** Th
 2. **Next is the row directly below the one on screen.** That includes a row the owner clicked anywhere on the rail.
 3. **Back is the row directly above the one on screen,** even if the walk did not start at the top. It is greyed out at the top. Back never reads or passes anything.
 4. **Next on a task leaves the task on the rail.** Next on a report, an FYI (single or batch) or an agent-finished task reads it, and it leaves the rail. Opening, clicking or looking never reads.
-5. **These close the row and move on to the row that was below it, in one step:** Mark done, Close with a note, a Send that closes the task, Remind me, Not a task.
+5. **These close the row and move on to the row that was below it, in one step:** Mark done, Close with a note, a Send that closes the task, Remind me, Watch it, Not a task. (Watch it added 2026-11-01: the task stays open but leaves the walk, under Watching - see 3.1 and the Watching row in section 5.)
 6. **Never skip.** Next is always the row directly below. There is no hidden "passed" state for tasks and no "seen in this walk" skipping. Rows leave the rail only by rule 4 or 5, or by being closed somewhere else.
 7. **The next item draws at once.** Prepared-next / draw-ahead may stay only if it asks the same module. Dots show until the item lands. The canvas is never blank and the owner never presses twice.
 
@@ -69,10 +69,10 @@ These stay as they are: the rail is fixed by arrival (2026-10-22), Next walks do
 ```
 line(pile) = [r for r in pile.items in funnel.order_key order
               if not r.settling            # still being triaged: not arrived in a section yet
-              and level_of(r) != 'later']  # For later rows left the walk by Remind me (rule 5)
+              and level_of(r) not in ('later', 'watching')]  # For later rows left the walk by Remind me, Watching rows by Watch it (rule 5)
 ```
 
-- **It is the rail's own drawing order,** minus For later and minus rows still settling. Sections are taken from lanes.json: Tasks, (For later), Reports, Advisor ideas, FYI.
+- **It is the rail's own drawing order,** minus For later, minus Watching and minus rows still settling. Sections are taken from lanes.json: Tasks, (Watching), (For later), Reports, Advisor ideas, FYI.
 - **Nothing else filters it.** There is no `actionable`, `put_down`, `surfaced`, `unread` or `not_yet` test, and no `exclude`. If the rail draws a row, the walk can stand on it.
 - **One pile.** The line is read from the cached `funnel.pile` build (the same one `/api/funnel/pile` serves). It never triggers a second build.
 - **A scoped walk** (`only`: mail, or a `view:` filter) is the same line filtered by that scope.
@@ -156,6 +156,7 @@ This removes the need for `selection_revision` / `expected_next_key` / `Navigati
 | Close with a note | `task.complete` with the note; leaves; move on | - | - | as Mark done |
 | Send that closes | the send has gone through first (ReviewDecision), then `concierge.close_after_send`. **Closed:** leaves; move on. **Kept open:** stays on screen folded "Sent", no move | - | - | - |
 | Remind me | `task.defer` until the day; it goes to For later (off the line); move on | - | - | moves its day; stays For later; stays on screen |
+| Watch it (2026-11-01) | `task.watching`: nothing is sent, the task stays open and goes to Watching (off the line); move on | - | - | on a Watching row the same button is Stop watching: the watch ends, the row stays on screen and is walked again from its place |
 | Not a task | `task.not_a_task`; leaves; move on | - | - | as Tasks |
 | Not ours (message.file) | files the message; leaves; move on | an FYI's Not ours: files it; leaves; move on | - | - |
 | Put it on my list (report or FYI to task) | - | the act runs; the new task appears under Tasks at its arrival; **the table keeps the new task, no move**; Next/Back measure from the report's stored place | - | - |
@@ -221,6 +222,7 @@ Typed put-downs (`concierge._put_down`, `PUT_DOWN`) and the phone's settled acts
 | **The phone's Next** (remote_assistant) | `carry_out` / `_move_on` / `_ran` / section taps call `railwalk.next` / `leave` / `open`. `doorway_browse.hold` / `next_in` and the `seen` list go. A section pick is `open(first row of section)`. |
 | **The Board** (BoardView) | Its open calls `open`. Its Close agent is a close somewhere else (above). It never moves the desk's table. |
 | **Remind me's For later rows** | They leave the line. A For later row clicked is on screen at its drawn place. Next goes to the row below on the rail (the next For later row, then the first Report). Back goes to the row above (the previous For later row, then the last Task). Next from the last Task goes to the first Report, not into For later (Q4). |
+| **Watch it's Watching rows** (2026-11-01, watch.py) | A task the owner watches for somebody else to handle: open, drawn in its own group at the foot of Tasks, never on the line - exactly as For later. It comes back on the line (under Tasks, at its arrival place) when a new inbound message joins its task (ingest calls `watch.moved`; triage's `handled_elsewhere` lights Mark done, rulebook `watch_handled`) or once after a quiet week (`watch.due` on the reminder clock; Chase them / Let it go lit, rulebook `watch_quiet`). Any move the owner presses on it ends the watch. Nothing closes it but the owner. |
 | **A closed task opened by name** | On screen with Reopen only (`item_for_key`'s `closed`). Placed under Tasks by its arrival. Next goes to the row below that place, Back to the row above. Nothing is read. |
 | **Urgent rows** | Walked in their place. Start is still the top. |
 | **A meeting not yet due** | Drawn under Tasks, so it is on the line and walked in its place (never skip). Next leaves it (default Q3). It leaves the rail on its own after its grace minutes. |
@@ -340,7 +342,7 @@ Off rail:   C1 (closed task, arrived between T2 and T3)
   - the Answer's row
   - the read receipts, through `funnel_state` / `pile.items`
   - `walk.above is not None` == `back`
-  - the line equals the rail's own drawing order with For later and settling rows removed (the invariant that keeps page and server one order)
+  - the line equals the rail's own drawing order with For later, Watching and settling rows removed (the invariant that keeps page and server one order)
 - **`website/browser/walk-table.test.mjs`** reads the same JSON. It drives the demo app with `walkdriver.mjs`: `clickRow`, `pressNext`, a `pressBack` on `[data-tq-walk-back]`, `doVerb` for the leaves, and the fixture API for `arrive` / `close-elsewhere` / `agent-closes`. It asserts:
   - the ringed rail row (`.tq-pile-row.current`)
   - the live card's key

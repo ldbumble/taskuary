@@ -38,8 +38,12 @@ _PRESSES = OrderedDict()                              # press id -> the Answer i
 # ── the line ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def line(items: list) -> list:
     """The rows the walk stands on, in the rail's own drawing order: everything the rail draws but For later (rows Remind me put away,
-    rule 5) and rows still being triaged. Nothing else filters it - if the rail draws a row, the walk can stand on it."""
-    return sorted((r for r in items or () if not r.get('settling') and lanes.level_of(r) != 'later'), key=funnel.order_key)
+    rule 5), Watching (tasks Watch it keeps open for somebody else, never walked - watch.py) and rows still being triaged. Nothing else
+    filters it - if the rail draws a row, the walk can stand on it."""
+    return sorted((r for r in items or () if not r.get('settling') and lanes.level_of(r) not in AWAY), key=funnel.order_key)
+
+
+AWAY = ('later', 'watching')                          # the sections the walk never stands on: put away with a date, or watched
 
 
 def _rows(store) -> list:
@@ -88,12 +92,12 @@ def batchable(row: dict) -> bool:
 
 def kind_of(row: dict | None) -> str:
     """The effect Next has on a row, taken from its section WHEN IT WAS PUT ON SCREEN (3.5): `stays` under Tasks, `reads` under Reports,
-    Advisor ideas and FYI (an agent's finished task included), `none` for a For later row or a closed task opened by name."""
+    Advisor ideas and FYI (an agent's finished task included), `none` for a For later or Watching row or a closed task opened by name."""
     if not row: return 'none'
     if row.get('kind') in ('agentdone', 'fyis'): return 'reads'
     level = lanes.level_of(row)
     if row.get('closed') and level == 'task': return 'none'
-    return 'stays' if level == 'task' else 'none' if level == 'later' else 'reads'
+    return 'stays' if level == 'task' else 'none' if level in AWAY else 'reads'
 
 
 def _arrival(store, item: dict):
@@ -131,7 +135,7 @@ def place_of(store, key: str, st: dict = None, rows: list = None):
     it = _lookup(store, key)
     if not it: return None
     if it.get('tid') and not find(rows, it.get('key')):
-        it = {**it, 'order_band': 2, 'deferred': False, 'arrived_at': _arrival(store, it)}
+        it = {**it, 'order_band': 2, 'deferred': False, 'watching': False, 'arrived_at': _arrival(store, it)}
     return (funnel.order_key(it),) * 2
 
 
@@ -396,7 +400,7 @@ def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at:
         if not item:
             from . import concierge
             return _remember(press, _answer(store, st, rows, concierge.missing_turn(store, key, actor)))
-        if row is not None and lanes.level_of(row) in ('task', 'later'):
+        if row is not None and lanes.level_of(row) in ('task', *AWAY):
             try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True)
             except Exception as e: logger.debug(f'railwalk: the +N on {key} was not cleared - {e}')
         place = place_of(store, at, st, rows) if at else place_of(store, item['key'], st, rows) if row is None else None
@@ -415,7 +419,7 @@ def top(store) -> dict | None:
 def section(store, level: str, actor: str = 'owner', press: str = None) -> dict:
     """A section heading clicked: its first row, and Next walks on down the rail past the section's end (Q6: no "Reports done." stop)."""
     rows = _rows(store)
-    first = next_in(line(rows) if level != 'later' else rows, level)
+    first = next_in(line(rows) if level not in AWAY else rows, level)
     if not first: return {'item': None, 'say': '', 'options': [], 'chips': [], 'walk': _walk(store, state(store), rows)}
     return open(store, first['key'], actor, press)
 
@@ -427,7 +431,7 @@ def next_in(rows, level):
 
 
 HOW = {'done': 'task.complete', 'note': 'task.complete', 'remind': 'task.defer', 'not_task': 'task.not_a_task', 'not_ours': 'message.file',
-       'removed': 'task.not_a_task', 'put_on_list': 'task.create_from_message'}
+       'removed': 'task.not_a_task', 'put_on_list': 'task.create_from_message', 'watch': 'task.watching'}
 
 
 def _badge(store, op, actor):
@@ -477,7 +481,7 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
 
 
 def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, note: str = None, until: str = None) -> dict:
-    """Mark done, Close with a note, a Send that closes, Remind me, Not a task, Not ours, Remove on the row on screen: the act, and IN THE
+    """Mark done, Close with a note, a Send that closes, Remind me, Watch it, Not a task, Not ours, Remove on the row on screen: the act, and IN THE
     SAME CALL the row that was directly below it (rule 5). An act that did not close it - a Send that kept the task open - leaves the same
     row on screen, re-presented. Put it on my list keeps the new task on the table; Next and Back still measure from the report's place."""
     with _LOCK:

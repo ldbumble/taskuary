@@ -142,6 +142,8 @@ const WALK_SKIP = {
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
   "copy": "under a draft its channel cannot send (Teams) - neither world drafts one; test/unsendableReply.test.mjs holds it to copy and close nothing",
   "copy:done": "as Copy: the badge its own press leaves",
+  "watch": "Watch it takes the task off the walk under Watching - pressed by browser/watch-it.test.mjs, which sees the row move there; the walk keeps the seeded tasks on it",
+  "watch:on": "Watching, the same button on a task already watched (it ends the watch) - watch-it.test.mjs presses it",
 };
 
 // --cover a.json,b.json: COVER over the presses of a walk run in parts (CI runs its passes as four jobs, 2026-10-20) - no browser,

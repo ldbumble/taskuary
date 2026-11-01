@@ -95,7 +95,7 @@ ALLOWED_WRITES = (
 # What a confirmed proposal may run here: each writes the demo's own database and nothing else. Start (dispatch.prepare,
 # agent.*) would start a program on the host, Send (review.approve, task.clarify, task.chase) would mail someone, and
 # reports, settings and connections reach systems - those stay refused, as before.
-LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
+LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'task.watching', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
              'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember', 'memory.wrong',
              'routing.remember', 'task.split', 'task.update', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.merge',
              'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'script.start'}

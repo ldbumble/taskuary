@@ -111,8 +111,9 @@ bot API and has no such caveat.
 
 The morning line and the walk offer the rail's sections as choices - **Walk Tasks**, **Walk For later**, **Walk Reports**,
 **Walk FYI** - and you stay inside the one you picked until it is empty, whether you press **Next** or act on the item
-(Make a task, Send to agent, Remind me). When the section runs out it says so, and the walk carries on. Rows under For
-later say when they come back ("back in 3h").
+(Make a task, Send to agent, Remind me, Watch it). When the section runs out it says so, and the walk carries on. Rows under For
+later say when they come back ("back in 3h"). **Walk Watching** opens the tasks you keep an eye on for somebody else - press any
+move on one to stop watching it.
 
 **Connections**, **Reports**, **Hub** and **Settings** are choices too - the desktop sidebar's four, as picks:
 

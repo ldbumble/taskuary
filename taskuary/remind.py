@@ -159,7 +159,8 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     # Put away with an agent still open, it was deferred anyway and its row stayed under "agent waiting on you" (press
     # audit, 2026-10-01). The owner: the agent is open - save and end it first. Bringing it back is never refused.
     if at and agent_open(tid): raise AgentOpen(OPEN_SAYS)
-    store.update_task(tid, {'RemindAt': at or ''}, actor)
+    # ...one road back at a time: a day set ends a watch (watch.py)
+    store.update_task(tid, {'RemindAt': at or '', **({'WatchedAt': '', 'WatchBack': ''} if at and (t.get('WatchedAt') or t.get('WatchBack')) else {})}, actor)
     if at:
         from . import asks
         asks.reminder_set(store, tid)       # said at the door it was set from when it comes due
@@ -278,4 +279,8 @@ def tick(store, now: datetime = None) -> int:
         n = due(store, now)
         try: n += deadlines(store, now)
         except Exception as e: logger.warning(f'due days not checked: {e}')
+        # ...and a watch a quiet week old comes back once on the same clock (watch.py)
+        from . import watch
+        try: n += watch.due(store, now)
+        except Exception as e: logger.warning(f'quiet watches not checked: {e}')
     return n

@@ -913,7 +913,7 @@ def delivery_fix(store, item: dict) -> dict | None:
     return ok((out or {}).get('fix')) if isinstance(out, dict) else None
 
 
-NOT_MOVES = frozenset({'priority', 'assign', 'change_kind', 'pick_repo', 'attach', 'close_note', 'next'})
+NOT_MOVES = frozenset({'priority', 'change_kind', 'pick_repo', 'attach', 'close_note', 'next'})
 
 
 def offered(store, item: dict) -> list:

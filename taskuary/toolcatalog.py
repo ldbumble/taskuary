@@ -444,7 +444,9 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'attach': "opens the file picker on the draft - a file is the owner's to choose",
              'copy': "puts an unsendable draft on the owner's own clipboard, which only the page can reach",
              'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
-             'assign': 'a picker; the model uses task.update', 'pick_repo': 'a picker; the model uses task.set_repo',
+             'pick_repo': 'a picker; the model uses task.set_repo',
+             # ...Watch it a press, never a decision: as one it pushed the index past the 7950 it is trimmed to (2026-10-28)
+             'watch': "keeps a task somebody else is handling open, off the walk - the owner's own press on the task or its chip (watch.py)",
              'unsubscribe': "an FYI from a list leaves it on the owner's press alone (unsubscribe.py) - a newsletter's words never reach it",
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',
              'walk': "the day card's own start, and the walk's again at its end - the model's walk is concierge.surface",

@@ -12,7 +12,7 @@ import { labelOfRow } from "../src/buttons.js";
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: labelOfRow(id) || id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const next = v("next", "next", { label: "Next" });
 const task = (live = false) => [v("done", "more", { promote: !live, beside: live }), v("nat", "more"), v("remind", "more"), v("hand", "more"), v("reshape", "more"),
-  v("kind", "more"), v("priority", "more"), v("assign", "more")];
+  v("watch", "more"), v("kind", "more"), v("priority", "more")];
 const draft = (rid, extra = {}) => [v(`${rid}:approve`, "decide", { tone: "p", label: "Send", card: true, ...extra }), v(`${rid}:redraft`, "decide", { label: "Redraft", card: true })];
 
 // what each surface registers, read off TaskPage's rowVerbs, ReviewDecision and the cards (invented items; labels from buttons.json)
@@ -94,7 +94,7 @@ test("three pills: Mark done, the agent's move and the reply's lead the move pil
   const row = rowOf({ ref: "TQ-1", list: STATES["new task"] }, PICKS["new task"]), all = foldsOf(row);
   assert.deepEqual(all[0].map((g) => [g.type, g.label]), [["move", ""], ["change", "Change"]], "no REPLY / AGENT / CLOSE words");
   assert.deepEqual(all[0][0].shown.slice(0, 3).map((x) => x.id), ["done", "start-agent", "reply"]);
-  assert.deepEqual(all[0][1].shown.map((x) => x.id).slice(0, 3), ["remind", "reshape", "nat"], "Remind me first");
+  assert.deepEqual(all[0][1].shown.map((x) => x.id).slice(0, 3), ["remind", "watch", "reshape"], "Remind me first, Watch it beside it (2026-11-01)");
   // ...folding: Change first, to its ▾ alone, then the move pill from its end, then one ▾ for both
   const shape = (l) => l.map((g) => `${g.type}:${g.shown.length}+${g.rest.length}`).join(" ");
   const ch = all.findIndex((l) => l.find((g) => g.type === "change")?.shown.length === 0);

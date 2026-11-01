@@ -142,8 +142,10 @@ test("the task view draws the new section: read-only pills, no in-section button
   // ...in a box as tall as the window leaves, never the 360px that held three lines of seven (the owner, 2026-10-20)
   assert.match(page, /const THREAD_MAX = "max\(360px, calc\(100vh - 160px\)\)";/);
   assert.doesNotMatch(page, /maxHeight=\{360\}|showAll \? \{ maxHeight: 360/);
-  // the edits the pills offered are reachable from the bar: kind, priority, who, repository
-  for (const id of ["kind", "priority", "assign"]) assert.ok(page.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
+  // the edits the pills offered are reachable from the bar: kind, priority, repository - and no assignee (the owner, 2026-11-01: who works
+  // a task is the Agent section's to decide)
+  for (const id of ["kind", "priority"]) assert.ok(page.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
+  assert.ok(!page.includes(`{ id: "assign", group: "more"`), "the row carries an assignee picker");
   // the repository is a More item too - and the row's own move while a start is held for it
   assert.ok(page.includes(`{ id: "repo", group: heldRepo ? "decide" : "more"`), "the row carries repo");
 });

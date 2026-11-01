@@ -316,9 +316,9 @@ const TYPE_OF = {
   reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", hand: "reply", attach: "reply", "email-file": "reply", copy: "reply",
   "start-agent": "agent", "run-another": "agent", "strong-again": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
   done: "close", "close-note": "close", reopen: "close",
-  remind: "task", nat: "task", reshape: "task",
+  remind: "task", watch: "task", nat: "task", reshape: "task",
   // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes
-  kind: "task", priority: "task", assign: "task", repo: "task",
+  kind: "task", priority: "task", repo: "task",
   // the Advisor's moves a card has no button for join the row in their type (AdvisorNext), never beside the line (2026-10-16)
   chase: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
   elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task",
@@ -356,7 +356,8 @@ export function pillsOf(row) {
   return { move, share: of("share"), change: of("task").map((v, i) => [v, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([v]) => v), pin, lead: leadOf(row), held: leadOf(row, false) };
 }
 // ...the Change pill's most used first (the owner's list, 2026-10-28: split / merge / not a task / Remind me - Remind me the one pressed most)
-const CHANGE_FIRST = ["remind", "defer", "reshape", "split", "nat"];
+// ...and Watch it beside Remind me (watch.py, the owner, 2026-11-01)
+const CHANGE_FIRST = ["remind", "defer", "watch", "reshape", "split", "nat"];
 // a pill with `n` of its moves in view: `must` first claims its places, the rest go by the pill's order; drawn in that order
 const pill = (type, vs, n, must) => {
   const can = vs.filter((v) => !v.tucked || v.tone === "p"), keep = new Set(must.filter((v) => vs.includes(v)));
@@ -438,7 +439,7 @@ const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray le
 // tab): carried WITH the verbs, so the row never draws a set where the item's moves and the panes they ride on disagree (row-draws-once).
 // The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
 const CLOSE_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decline_invite", "propose_time", "find_time", "hand"]);
-const FROM_STAGE = new Set(["nat", "remind"]);
+const FROM_STAGE = new Set(["nat", "remind", "watch"]);
 // ...a verb may name its pane itself (`stage`): an FYI's Should be a task rides its Came from, where a task's Not a task does
 export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
   return v?.stage || (CLOSE_STAGE.has(k) ? "close" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""); };

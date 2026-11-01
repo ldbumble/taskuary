@@ -12,17 +12,15 @@ test("agent ownership storage syntax never leaks into the UI", () => {
   assert.equal(assigneeLabel(""), "unassigned");
 });
 
-// PROFILE NAMES HIDDEN IN SETTINGS AND THE ASSIGNED TO PICKER (the owner, 2026-10-29), as on every other screen (kinds.json `shown_`):
-// the picker is who - unassigned, you, Taskuary - with the profile on hover; Settings' mail pick reads Taskuary and its instructions
-test("the Assigned to picker offers one Taskuary row and Settings names no profile as a worker", () => {
+// PROFILE NAMES HIDDEN IN SETTINGS (the owner, 2026-10-29), as on every other screen (kinds.json `shown_`): Settings' mail pick reads
+// Taskuary and its instructions. The task header's Assigned to picker is GONE (the owner, 2026-11-01): who works a task is decided only in
+// the Agent section - Send to agent / Start - and the server's Assignee is set from there
+test("the task header has no Assigned to menu and Settings names no profile as a worker", () => {
   const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
   const page = read("TaskPage.jsx"), settings = read("SettingsView.jsx");
-  const at = page.indexOf('{pick?.what === "assign" && [');
-  const picker = page.slice(at, page.indexOf("</Menu>}", at));
-  assert.match(picker, /\["", "unassigned"\], \["owner", "you"\], \.\.\.\(asProfile \? \[\[agentAssignee\(asProfile\), AGENT_SHOWN\]\] : \[\]\)/);
-  assert.doesNotMatch(picker, /agents\.map\(/, "no row per profile");
-  assert.match(picker, /title=\{instructionsHint\(assignedAgent\(v\)\) \|\| undefined\}/, "the profile is told on hover");
-  assert.match(page, /const asProfile = runRole \|\| ownProfile \|\| "";/);
+  assert.ok(!page.includes('what: "assign"') && !page.includes('pick?.what === "assign"'), "the Assigned to menu is back");
+  assert.doesNotMatch(page, /Assigned to ·|id: "assign"/);
+  assert.doesNotMatch(page, /who it is assigned to/, "a Change hover still offers the assignee");
   const pick = settings.slice(settings.indexOf('if (m.type === "profile") return ('), settings.indexOf('if (m.type === "agents")'));
   assert.match(pick, /renderValue=\{\(v\) => \(v \? AGENT_SHOWN : "nobody - leave it for me to pick"\)\}/);
   assert.match(pick, /\{AGENT_SHOWN\}\s*<Box component="span"[^>]*>\{instructionsHint\(n\)\}<\/Box>/);

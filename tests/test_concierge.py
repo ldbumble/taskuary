@@ -900,7 +900,7 @@ class ClosingTests(unittest.TestCase):
         t = s.create_task({'Title': 'Run the tests', 'Kind': 'task', 'Status': 'open', 'Source': 'whatsapp'}, 'promise')
         verbs = lambda item: [c['verb'] for c in concierge.chips_for(s, item)]
         self.assertEqual(verbs({'key': 'k', 'kind': 'todo', 'lane': 'yours', 'tid': t, 'ref': f'TQ-{t:04d}'}),
-                         ['close', 'regular_agent', 'defer', 'next'])
+                         ['close', 'regular_agent', 'defer', 'watch', 'next'])   # ...and Watch it beside Remind me (2026-11-01)
         self.assertNotIn('close', verbs({'key': 'k', 'kind': 'todo', 'lane': 'yours', 'mid': 5}))   # no task yet: nothing to mark done
 
     def test_closing_dismisses_a_draft_that_was_still_waiting(self):

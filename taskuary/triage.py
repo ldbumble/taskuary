@@ -169,6 +169,7 @@ OFFER = _bullet('offer')         # what an agent could do for the owner about th
 NEEDS_BROWSER = _bullet('needs_browser')   # the work is done on a web page: the agent gets Taskuary's browser, wherever it starts (2026-10-29)
 NEEDS_DESKTOP = _bullet('needs_desktop')   # ...in a desktop app: the task is marked "needs desktop" when Agent Desktop is on (agentdesktop, 2026-10-31)
 WRAPPER = _bullet('wrapper')     # the text its sender did not write, for a screen to leave out (2026-10-28)
+HANDLED = _bullet('handled_elsewhere')   # a watched task's new line: does it show somebody else dealt with it (watch.py, 2026-11-01)
 DATA_CLASSES = ('ordinary', 'sensitive')
 DIFFICULTIES = ('quick', 'standard', 'hard')
 
@@ -204,7 +205,7 @@ def note_id(line: str) -> str:
 
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
-                   earlier=False, thread_task=False, notes=False, workstreams=False) -> dict:
+                   earlier=False, thread_task=False, notes=False, workstreams=False, watched=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -268,6 +269,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     if same: p['same_as'] = {'type': ['integer', 'null']}
     # THE THREAD IS A HINT (the owner, 2026-10-26): a message on a task's thread joins it unless this says why it is another job
     if thread_task: p['new_job'] = {'type': ['string', 'null']}
+    # ...and on a task the owner is WATCHING, whether this line shows somebody else handled it (watch.py) - it lights Mark done, never closes
+    if watched: p['handled_elsewhere'] = {'type': ['boolean', 'null']}
     # ...and whether a line that joins changes what the task ITSELF asks - only then is it retitled (the owner, 2026-10-28)
     if thread_task or same or candidates is not None:
         p['refines'] = {'type': ['boolean', 'null']}
@@ -810,6 +813,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             earlier_ids = {int(x) for l in (thread or {}).get('exchange') or [] for x in re.findall(r'^\[#(\d+)\]', str(l))}
             home = ((thread or {}).get('thread_task') or {}).get('tid')
+            watched = bool(((thread or {}).get('thread_task') or {}).get('watching'))
             how = addressed_to_you(msg, mine)
             # THE SENDER'S OWN WORDS ON TOP, the chain they wrote on top of quoted under them, and the
             # budget's cut taken out of the chain (sender_body). `own_text` is Graph's uniqueBody where
@@ -861,6 +865,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
             if not shape and '**needs_desktop**' not in base: system += '\n\n' + NEEDS_DESKTOP   # ...or in a desktop app (2026-10-31)
             if not shape and '**wrapper**' not in base: system += '\n\n' + WRAPPER    # ...and what its sender did not write (2026-10-28)
+            if watched and '**handled_elsewhere**' not in base: system += '\n\n' + HANDLED   # ...and whether a watched task looks handled (2026-11-01)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -870,7 +875,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             from .llm import ask_json
             answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
-                                                                     notes=bool(note_ids), workstreams=bool(workstreams)),
+                                                                     notes=bool(note_ids), workstreams=bool(workstreams), watched=watched),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -967,6 +972,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if j.get('difficulty') in DIFFICULTIES: out['difficulty'] = j['difficulty']
                 if isinstance(j.get('sure'), bool): out['sure'] = j['sure']
                 if isinstance(j.get('asks_owner'), bool): out['asks_owner'] = j['asks_owner']
+                if watched and isinstance(j.get('handled_elsewhere'), bool): out['handled_elsewhere'] = j['handled_elsewhere']
                 if j.get('refines') is True and (home or same_ids or candidates is not None): out['refines'] = True
                 wide = ' '.join(str(j.get('task_title') or '').split())[:120]
                 if wide and wide.lower() not in ('null', 'none') and not out.get('refines') and (home or same_ids or candidates is not None):

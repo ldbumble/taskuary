@@ -99,18 +99,19 @@ CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # button") - it asks for the day, then the walk moves on; cannot() drops it where there is no task to put away
 # ...and Redraft is back on a draft: its choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is
 # useless - it should be redraft or close task")
-CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+# ...and Watch it beside Remind me wherever a task carries it (watch.py, the owner, 2026-11-01)
+CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
-         'agent': ('stop_agent', 'defer', 'next'), 'meeting': ('prepare', 'next'),
+         'agent': ('stop_agent', 'defer', 'watch', 'next'), 'meeting': ('prepare', 'next'),
          # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
          'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
-         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
-         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
+         'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'watch', 'next'),
+         'asked': ('reply', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
-         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
+         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'watch', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
          'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else
@@ -723,13 +724,13 @@ def assent_verb(item: dict | None) -> str | None:
 # through task.create_from_text from the item's facts and the owner's words.
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
-         'rerun': 'source_id', 'report_off': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
+         'rerun': 'source_id', 'report_off': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'watch': 'tid', 'continue': 'tid',
          'chase': 'key', 'let_go': 'key', 'elsewhere': 'key',
          'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid', 'prepare': 'event'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'report_off': 'pause', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
-             'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
+             'split': 'split', 'defer': 'put away', 'watch': 'watch', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
 
 def _coding(store) -> bool:
     from . import capabilities
@@ -788,8 +789,14 @@ IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coding_agent': 'agent', '
 def _chasable(store, item) -> bool:
     if store is None: return False
     from . import rulebook
-    try: return rulebook.adds(store, item) == ['chase']
+    try: return 'chase' in rulebook.adds(store, item)
     except Exception: return False
+
+
+def _quiet_watch(store, item) -> bool:
+    if store is None: return False
+    from . import rulebook
+    return rulebook.quiet_watch(store, item)
 
 
 def cannot(item: dict | None, verb: str, store=None) -> str:
@@ -803,7 +810,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
     # ...save a Chase the rule lit on a wait past its day (rulebook.adds: 3 working days on 'theirs', a late goal step - the owner,
     # 2026-10-23), which goes to the thread rulebook.chase_thread names
-    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten' and not (verb == 'chase' and _chasable(store, item)):
+    # ...and a watch back after a quiet week (watch.py): Chase them where there is somebody to write to, and Let it go
+    if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten' and not (verb == 'chase' and _chasable(store, item)) \
+            and not (verb == 'let_go' and _quiet_watch(store, item)):
         return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
     # A SENTENCE NAMES ONLY A BUTTON THE ITEM SHOWS (2026-10-17): these said Not ours, reply and Continue over cards with none of them
@@ -858,6 +867,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # card offered Stop and save over nothing to stop; Continue, Mark done and the write-up's own actions are what apply
         return f"{what} isn't running right now - there's nothing to stop."
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
+    if verb == 'watch' and (item.get('closed') or not item.get('tid')): return f"{what} is not an open task - there is nothing to watch."
     need = NEEDS.get(verb)
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
@@ -959,6 +969,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
     # SLIPPED (spec 2026-10-12): the four answers, whatever row leads the item - Chase, Let it go, They answered elsewhere, Remind me
     if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
+    # ...and a WATCH back after a quiet week (watch.py, the owner, 2026-11-01): Chase them / Let it go lead, the task's own moves after
+    elif item.get('tid') and _quiet_watch(store, item): verbs = ['chase', 'let_go'] + [v for v in verbs if v not in ('chase', 'let_go')]
     # THE HABITS ROW (habits.py; the owner, 2026-11-01: "what does keep it/remind me do here? doesn't make much sense"): each habit carries
     # its own Adopt / No / Not right inside the row, so the row itself is only passed - no task, agent, reminder or Not ours of an idea
     if item.get('kind') == 'idea' and item.get('idea_kind') == 'habit': verbs = ['next']
@@ -1019,7 +1031,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
 # the chips whose verb is not itself a decision tool, and the tool each one is
 CHIP_TOOL = toolcatalog.CHIP_TOOL
 # ...and a task row's pickers, each the tool that sets what it picks (toolcatalog.PAGE_ONLY says so to the model)
-PICKER_TOOL = {'priority': 'task.update', 'assign': 'task.update', 'change_kind': 'task.set_kind', 'pick_repo': 'task.set_repo'}
+PICKER_TOOL = {'priority': 'task.update', 'change_kind': 'task.set_kind', 'pick_repo': 'task.set_repo'}
 
 def table_actions(store, item: dict | None, chips: list = None) -> str:
     """THE BUTTONS UNDER THE LINE, BY NAME. The model was told the action words "are already chosen for this item" and
@@ -1080,13 +1092,14 @@ def _there() -> str: return 'bring it up' if routes() else 'do it there'
 
 # the operation a tool names -> the row's own button for it (buttons.json); a question for the sender is Reply's - the row has no Ask sender
 # since the owner took it off (2026-10-27), and the parked question an agent or the phone writes still waits in Review for its Send
-KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.reopen': 'reopen', 'review.approve': 'approve',
+KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.watching': 'watch', 'task.reopen': 'reopen', 'review.approve': 'approve',
                'agent.continue': 'continue', 'agent.stop': 'stop_agent', 'agent.answer': 'answer_agent', 'task.split': 'split', 'task.merge': 'split',
                'task.handoff': 'forward', 'task.clarify': 'reply', 'task.share': 'share', 'task.not_a_task': 'remove',
                'message.retriage': 'retriage', 'task.set_kind': 'change_kind', 'task.set_repo': 'pick_repo', 'dispatch.prepare': 'regular_agent',
                'report.rerun': 'rerun', 'connection.test': 'test_connection', **{k: 'not_ours' for k in OP_BUTTON}}
 # ...a task's fields: each one its own picker on the row; a title or a due day is written on the task itself
-FIELD_BUTTON = {'priority': 'priority', 'assignee': 'assign'}
+# ...who works it has no picker of its own (the owner, 2026-11-01): the Agent section's Send to agent decides it
+FIELD_BUTTON = {'priority': 'priority', 'assignee': 'regular_agent'}
 WAITS = 'Nothing happens until you say yes.'
 
 
@@ -3692,7 +3705,7 @@ def card_for(item: dict) -> dict:
                                        'unsub',
                                        # ...and what triage read the words as trying to make an AI do, beside the mail's own subject (B3)
                                        'danger', 'danger_aim', 'subject',
-                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'actionable', 'paused', 'closed',
+                                       'presentation_revision', 'order_band', 'processing_id', 'member_ids', 'members', 'aliases', 'unread', 'deferred', 'watching', 'actionable', 'paused', 'closed',
                                        # ...and an FYI row speaking for its email thread: the mails it opens on (processing_unread.fold_fyi_threads)
                                        'brief_today', 'thread', 'thread_n', 'thread_items')} | ({'dashboard': True} if item.get('dashboard') else {})   # a dashboard's row draws the dashboard
 
@@ -3855,6 +3868,8 @@ def triage_agent(store, item: dict) -> str:
 _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('task.create_from_message', True), 'mine': ('task.create_from_message', True),
         'not_ours': ('message.file', True), 'not_ours_sender': ('preference.exclude_sender', True), 'not_ours_kind': ('idea.act', True),
         'block_sender': ('preference.sender_rule', True), 'close': ('task.complete', True),
+        # Watch it keeps the task open and takes it off the walk, under Watching (watch.py) - nothing is sent
+        'watch': ('task.watching', True),
         # ...a send is NOT a settle (the owner, 2026-10-18: "sending and closing are two steps"): the item stays on the table with
         # its receipt, and Mark done or Next moves it - Approve on an agent's proposal runs that act alone, the same way
         'approve': ('review.approve', False),
@@ -3883,6 +3898,7 @@ AUTO = ('close', 'stop_agent', 'continue',                              # settle
         # ...and the ANSWER to an agent that asked: the words matched to its Answer pill go to the run at once, desktop and phone alike -
         # the phone used to skip the AI for this and sent "next" to the agent (the owner, 2026-10-08: "ai should match to pill action")
         'answer_agent',
+        'watch',                                                        # ...and Watch it, which sends nothing and closes nothing (watch.py)
         'prepare')                                                      # ...and Prepare's press: a researcher that writes to nobody
 # the verbs that start or resume an agent: a press of their button runs them, typed words only ever PROPOSE them
 AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue', 'prepare')
@@ -4583,6 +4599,12 @@ def away_line(o: dict) -> str:
     return f"Away until {o['when']} - it is under {places.name('later')}, and back in front of you that morning." + (f" {o['warn']}" if o.get('warn') else '')
 
 
+def watch_line(o: dict) -> str:
+    """Watch it's receipt, one sentence for the page, the chat and the phone. `o` is watch.watch's answer (or the off press's)."""
+    if not o.get('watching'): return 'Not watching it any more - it is back in your walk.'
+    return f"Watching it under {places.name('watching')} - nothing was sent. It comes back when the thread moves, or after a quiet week."
+
+
 def _day_said(until) -> str:
     """A Remind me day the way the page says it ("Tue 20 Oct"), not the model's 2026-10-20 - as written when it is no day remind reads."""
     from . import remind
@@ -4625,6 +4647,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'idea.act': label = {'task': L('mine'), 'agent': L('regular_agent'), 'dismiss': L('not_ours'),
                                     'dismiss_kind': L('not_ours_kind')}.get(str(p.get('verb')), label)
     if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"{L('defer')}: {_day_said(p.get('until'))}"
+    if kind == 'task.watching': label = 'Stop watching it' if p.get('off') else L('watch')
     return label[0].upper() + label[1:] if label else kind
 
 
@@ -4687,6 +4710,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.share': return f" The summary for {o.get('to') or 'them'} waits in Close out for your yes - nothing has gone."
     if kind == 'review.reject': return ' The draft is rejected; the task stays open.'
     if kind == 'task.defer': return ' ' + away_line(o)
+    if kind == 'task.watching': return ' ' + watch_line(o)
     if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('answered', o.get('ok')) else 'did not answer'}: {str(o.get('detail') or '')[:300]}"
     if kind in ('connection.pause', 'connection.resume'): return f" {o.get('name') or 'It'} is {'on' if o.get('active') else 'off'}."
     if kind == 'script.start': return f" Starting: {o.get('script')}."

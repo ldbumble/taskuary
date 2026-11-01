@@ -14,7 +14,7 @@ from .routing import first_line, draft_task_fields
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
-from . import buttons, remind, senders, textsim, words, workstreams
+from . import buttons, remind, senders, textsim, watch, words, workstreams
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -960,6 +960,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - "
                               + ('no new work, it stays closed' if kept else 'fyi, nothing to do'))
             logger.info(f"ingest: filed onto {task_ref(tid)} as {'a reply on a closed task' if kept else 'fyi'} - {msg.get('subject') or ''}")
+            # ...and a WATCHED task's thread moved: maybe nothing for the owner to do, but the watch is over - it is back on the walk, and
+            # triage's handled_elsewhere says whether it looks dealt with (watch.py)
+            watch.moved(store, tid, msg, follow, mine, actor)
             # nothing for the owner, but the answer the waiting agent asked for all the same - it was typed in when a
             # busy thread skipped triage, and judging it must not strand the agent (B6, 2026-10-11)
             if talking: _hand_to_agent(store, cfg, tid, msg, actor)
@@ -984,6 +987,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if remind.waiting(store.get_task(tid) or {}) and str(msg.get('from_email') or '').lower() not in mine:
             store.update_task(tid, {'RemindAt': ''}, actor)
             store.add_comment(tid, actor, 'agent', f"{msg.get('from_name') or msg.get('from_email') or 'They'} wrote again - brought back from {words.name('later')}.")
+        # ...and a WATCHED task comes back on the walk when its thread moves, any line from anybody else (watch.py, the owner, 2026-11-01)
+        watch.moved(store, tid, msg, follow, mine, actor)
         # NEW WORK goes to the task's agent first (_carry_on): a live one hears it as its next turn, a stopped one carries its
         # conversation on where it would have started by itself, and a REPLY task whose new line needs an agent gets one
         # (agent_on_reply) - which then drafts the reply itself, so the tool-less writer below is not asked for one too
@@ -1647,7 +1652,9 @@ def thread_task(store, tid) -> dict | None:
     t = store.get_task(tid) if tid else None
     if not t: return None
     return {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(t.get('Summary') or '').split())[:300],
-            'status': 'closed' if t.get('Status') == 'done' else 'open'}
+            'status': 'closed' if t.get('Status') == 'done' else 'open',
+            # ...and the owner WATCHING it for somebody else to handle (watch.py): triage says whether this message shows it handled
+            **({'watching': True} if watch.watching(t) else {})}
 
 
 def _split_note(store, old, msg: dict, res: dict) -> dict:

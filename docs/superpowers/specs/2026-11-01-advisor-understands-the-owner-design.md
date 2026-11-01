@@ -1,6 +1,6 @@
 # The Advisor understands the owner (design, 2026-11-01)
 
-Status: **phase 1, diagnose and design.** Nothing here is built yet, and the Advisor's behaviour has not changed.
+Status: **phase 2, building.** The owner answered the open questions on 2026-11-01 (section 8). The slices land in order.
 The owner asked for this on 2026-11-01: "Work on the advisor ideas really making it killer though you will have to make the
 job.md/soul.md and memory working better from history of mail and understanding saving things about the user. especially when it
 comes to users that work on multiple things."
@@ -117,7 +117,7 @@ Where multiple workstreams are lost:
 - The 600-character cuts mean the event Advisor never sees a second workstream section, even if one existed.
 
 There is also a gap against an existing ruling. **"Pause learning" in Settings, ruled 2026-10-23, does not exist in the code**: the
-setting is deleted at startup.
+setting is deleted at startup. The owner has since dropped it (decision 11), so the leftover is removed instead.
 
 ## 4. The top five root causes
 
@@ -180,14 +180,16 @@ address is never a person.
 
 **Bootstrap**, at setup or from "Generate from history":
 
-1. **Read N months of mail in both directions.** The default is 6 (an open question), through the same brain and connections as today.
+1. **Read N months of mail in both directions.** It reads 6 months (decision 3), through the same brain and connections as today.
    **Sent mail and threads Alex started weigh most**, because they show what Alex does rather than what lands on Alex.
 2. **Cluster without a model.** Build a graph of who Alex writes to together, in which thread, mailbox, chat group, repository and
    domain. Its dense groups are the candidate workstreams. This step is cheap and deterministic, and it catches sister companies that
    share one domain.
 3. **Name each cluster with the model.** For each cluster the model reads a sample of Alex's own sent words in it, then writes the
    section: what it is, the role, the people, the season and the cadences.
-4. **Write the result into JOB.md's markers** for Alex to correct in Docs, or confirm it on one screen (an open question).
+4. **Write the result into JOB.md's markers.** At first setup Alex confirms it on one screen, "Here's what I think you work on". After
+   that, a new or changed workstream comes as an Advisor card (decision 2). A new connector or a generated GitHub project whose
+   traffic shows another hat triggers the same suggestion; when the Advisor is sure, it adds the workstream itself (decision 1).
 
 **Keeping current:**
 
@@ -275,14 +277,15 @@ No new button is needed.
   - season goals: their end date
   - promises: when kept, or 14 days after they were due, at which point the unkept promise becomes an idea instead of memory
   - people's roles: never on their own; they go quiet with their workstream
-- **How it is corrected.** Keep / Wrong / Forget are unchanged. A line or idea in the wrong workstream needs a way to say so (an open
-  question). **Pause learning in Settings is restored as ruled on 2026-10-23.**
-- **Proposed rules** stop waiting silently. The open question is whether the Advisor may bring up the strongest one once, in its own
-  section.
+- **How it is corrected.** Keep / Wrong / Forget are unchanged. A wrong workstream is corrected inside Wrong here, or with the
+  workstream picker on the task. There is no Pause switch (decision 11).
+- **Habits.** One the Advisor is sure of is adopted without asking. A useful one it is unsure of is asked about once, as Adopt / No,
+  and never again after No (decision 7).
 
 ### 5.6 Privacy
 
-- **Personal is a workstream that is never learned from.** Its messages are sorted by triage, which has to read a message to sort it.
+- **Personal is a workstream that is never learned from.** A personal ask is an FYI, never a task (decision 6). Its messages are
+  sorted by triage, which has to read a message to sort it.
   Nothing from Personal reaches LEARNED, JOB, the idea rail, an agent or the Advisor's prompts. Personal is detected by:
   - the mailbox flag (as today)
   - a chat or person Alex marks personal
@@ -323,14 +326,41 @@ Each slice lands on its own tests and is measured with the replay before the nex
 | S2 | **Workstream on everything.** The JOB.md index and markers, a `Workstream` on message, task, idea and memory line, the mapping order, and triage's verdict naming it | a multi-workstream fixture world; mapping tests |
 | S3 | **Personal is never learned.** Detection, plus the exclusion checked at every reader | the privacy-invariant test |
 | S4 | **Readers by layer.** The Advisor gets the item's section whole, agents get their workstream, triage gets the index; the 600-char cuts go | prompt-capture tests (as in `test_advisor_memory_live` plumbing) |
-| S5 | **Memory hygiene.** People roles per workstream, Promises filled from sent words, Bring-up filled from idea decisions, one-offs expire, no system senders, valid-until dates, per-workstream caps, Pause learning restored | reflection tests with a scripted brain |
+| S5 | **Memory hygiene.** People roles per workstream, Promises filled from sent words, Bring-up filled from idea decisions, one-offs expire, no system senders, valid-until dates, per-workstream caps; the leftover Pause setting removed | reflection tests with a scripted brain |
 | S6 | **Bootstrap from history.** Clustering, naming and JOB sections, then the weekly refresh and quiet streams | the clustering is deterministic on a fixture mailbox; naming uses a scripted brain |
 | S7 | **Killer idea kinds.** Cross-thread patterns, a buried second ask, one thread deciding another, cross-workstream clashes, an agent drifting; the "would Alex already know" check; per-kind calibrated quiet; single-row restatements dropped | `rail_advisor_cases` worlds per kind, with noise held to zero |
 | S8 | **Yardsticks.** Multi-workstream worlds in both live A/Bs, and the idea grader's line added to the release line | the live scripts, run on a copy |
+| S9 | **STYLE per workstream** (decision 10). Style lines tagged by workstream; a draft falls back to the shared style; one setting turns it off | drafter prompt-capture tests |
 
 The proposed order is S0, S1, S2, S3, S4, S5, S6, S7, S8. S1 alone should lift lit precision visibly within a week of presses.
 
-## 8. Open questions for the owner
+## 8. Decisions (the owner, 2026-11-01)
+
+These answer the questions below, and they override the design above wherever the two differ.
+
+1. **Workstreams are sections in JOB.md.** When a new connector is added, or GitHub projects are generated, and its traffic shows
+   another job or hat, the Advisor notices. It suggests the new workstream, or adds it itself when sure. Triage **uses** the
+   workstreams to put each item in the right bucket. That is sorting context; press habits still never reach triage.
+2. **Confirm at first setup on one screen**, "Here's what I think you work on". After that, a new or changed workstream is confirmed
+   through an **Advisor card**, with no extra screen.
+3. **The history pass reads 6 months.**
+4. **Wrong workstream** is corrected inside **Wrong here**. The workstream can also be changed **on the task itself**, with the same
+   picker pattern dev tasks use for their GitHub repository.
+5. **A small workstream label** goes on ideas and tasks.
+6. **Personal asks become FYI** and are never learned from.
+7. **Habits.** When the Advisor is sure, it adopts a habit without asking. It asks (Adopt / No) only about a really useful habit it is
+   unsure of. It asks once, and never again after No.
+8. **Calendars.** All of them may be read. A personal calendar is used only to say "this clashes"; a personal event's content is never
+   stored or repeated.
+9. **Quiet unless sure.** The 80% precision bar holds, even though fewer buttons light at first.
+10. **STYLE per workstream:** "try it". It ships as a measured option that is easy to revert. A draft falls back to the one shared
+    style when its workstream has no style lines.
+11. **Pause learning is dropped.** The leftover setting and the code that deletes it at startup are removed, and no switch is built.
+
+UI additions are limited to: the setup confirm screen, the Advisor card for workstream changes and for unsure habits, the workstream
+label, and the workstream picker on the task.
+
+## 9. Open questions for the owner (answered in section 8)
 
 These decide what Alex sees or how Alex interacts, so none is assumed.
 

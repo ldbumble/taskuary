@@ -996,6 +996,22 @@
 .tq-chat-unit > .tq-compose-box .tq-compose-tools svg { font-size: 17px !important; }
 .tq-chat-unit > .tq-compose-box .tq-send { grid-area: send; justify-self: end; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #55697a; transition: background-color .12s, color .12s; }
 .tq-chat-unit > .tq-compose-box .tq-send:disabled { opacity: 1; background: #ebe8e2; color: #a19b91; }
+/* ...A TRIAL: GROWN UNDER THE MOUSE (AssistantView's `grow`, the owner 2026-10-31: "try it"): the card stands on its slot's foot and right
+   edge at rest too, so it can grow up over the canvas without moving the slot - the bar beside it and the canvas stay where they are.
+   Never wider (the owner, 2026-10-31: "size of the chat should never change"). Two lines of words the card's width, the whole hint;
+   attach, voice and send on the line under them, as open */
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) > .tq-compose-field { position: absolute; right: 0; bottom: 0; width: 100%;
+  transition: border-color .12s, box-shadow .12s; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { transition: height .15s ease-out; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) > .tq-compose-field { z-index: 6; border-radius: 18px;
+  grid-template-areas: "words words words" "tools . send"; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) textarea { height: 46px !important; line-height: 20px; padding: 4px 6px 2px; overflow-y: auto; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) textarea::placeholder { white-space: normal; }
+.tq-chat-unit > .tq-compose-box > .tq-chat-unseen { z-index: 7; }
+.tq-chat-unit > .tq-compose-box[data-tq-grow]:not([data-tq-open]) > .tq-chat-unseen { top: -43px; }
+@media (prefers-reduced-motion: reduce) {
+  .tq-chat-unit > .tq-compose-box > .tq-compose-field, .tq-chat-unit > .tq-compose-box textarea { transition: none; }
+}
 .tq-model-pick { grid-area: model; justify-self: end; display: inline-flex; align-items: center; gap: 3px; max-width: 180px; height: 24px; padding: 0 6px; border: 0;
   border-radius: 8px; background: transparent; color: #6e685f; font: 500 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
 .tq-model-pick > span { overflow: hidden; text-overflow: ellipsis; }

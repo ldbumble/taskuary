@@ -3397,9 +3397,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // widget; pressed, it opens up out of its corner into the chat window, and shut it is the small pill again. Under 760px nothing moves
   // ...not during setup, which has no chat: its bar keeps the whole width
   const chatApart = deskChat && !firstRun;
+  // ...A TRIAL: THE PILL GROWS UNDER THE MOUSE (the owner, 2026-10-31: "try it"): taller (two lines of words, its tools under them) over
+  // its own corner, back to the pill a moment after the mouse leaves - so a pass across it does not flicker. Never wider (the owner,
+  // 2026-10-31: "size of the chat should never change"): the open window's width too, so a press on it changes no width. Only the pill:
+  // open (focus, dictation, a picture) it is the window and stays until its × or Esc; with words typed it stays grown
+  const [hover, setHover] = useState(false), hoverT = useRef(0);
+  useEffect(() => () => clearTimeout(hoverT.current), []);
+  const grow = chatApart && !boxWide && (hover || !!text.trim());
+  const growIn = () => { clearTimeout(hoverT.current); setHover(true); };
+  const growOut = () => { clearTimeout(hoverT.current); hoverT.current = setTimeout(() => setHover(false), 350); };
   const composeBox = (
     <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined} ref={boxRef} data-tq-open={boxWide ? "" : undefined}
-    data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} onFocus={openBox} onKeyDown={escShut}>
+    data-tq-continue={!boxWide && isMini && winLines.length ? "" : undefined} data-tq-grow={grow ? "" : undefined}
+    onMouseEnter={growIn} onMouseLeave={growOut} onFocus={openBox} onKeyDown={escShut}>
     {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
     {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
         field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}

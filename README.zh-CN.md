@@ -188,8 +188,8 @@ Taskuary 在本机运行。使用云端模型时，完成工作所需的上下�
 
 ### Windows 应用
 
-下载并打开最新版 [Taskuary.exe](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe)，
-无需单独安装 Python。
+下载并运行最新版 [Windows 安装程序](https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe)，
+无需管理员权限，也无需单独安装 Python。
 
 ### Python
 

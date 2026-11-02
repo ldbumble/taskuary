@@ -245,9 +245,8 @@ you find through [SECURITY.md](SECURITY.md).
 
 ### Windows app
 
-Download the latest single-file
-[Taskuary.exe](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe)
-and open it. No Python or installer is required.
+[Download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe) - the installer - and run it.
+It installs for you alone, with no admin rights and no Python, and adds Taskuary to the Start menu.
 
 ### Python
 

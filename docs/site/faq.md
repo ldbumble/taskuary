@@ -7,7 +7,7 @@ Yes. Taskuary is an app on your own machine, not a service you sign up for. It k
 in a SQLite file under `~/.taskuary/` and serves its interface at `http://127.0.0.1:7787`, for you
 only. There is no Taskuary account and no Taskuary server: nothing you connect passes through us.
 
-Setup on Windows is one file, [Taskuary.exe](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe).
+On Windows, [download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe) - the installer - and run it.
 Anywhere with Python 3.10+, it is `pip install taskuary`. Docker works too. From there, **Set up
 Taskuary** walks four steps: who you are, one AI, one work source, and a first read. See
 [Start here](index#install-on-windows).

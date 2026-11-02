@@ -89,7 +89,8 @@ class StagingTests(unittest.TestCase):
         seen = {}
         def download(url, dest, progress=None):
             dest.write_bytes(b'MZ' + b'x' * 64); seen['dest'] = dest; return 66
-        with mock.patch.object(update.sys, 'executable', str(self.exe)),              mock.patch.object(update, '_download', side_effect=download),              mock.patch.object(update, '_launch_swap', side_effect=lambda s, c: seen.update(script=s)):
+        with mock.patch.object(update.sys, 'executable', str(self.exe)), mock.patch.object(update, 'install_dir', return_value=self.d / 'P'), \
+             mock.patch.object(update, '_download', side_effect=download), mock.patch.object(update, '_launch_swap', side_effect=lambda s, c: seen.update(script=s)):
             update._apply_exe('https://example.invalid/Taskuary.exe')
         return seen
 
@@ -111,14 +112,15 @@ class StagingTests(unittest.TestCase):
         script = seen['script'].read_text(encoding='utf-8')
         self.assertIn(str(update.staging() / 'taskuary-update.log'), script)
 
-    def test_the_move_still_targets_the_real_program(self):
-        """Staging is only about where it is BUILT; it still has to land on the running exe."""
+    def test_the_installer_runs_from_staging_and_only_then_the_one_file_exe_goes(self):
+        """Staging is only about where it is BUILT; the program's own folder is touched once, by removing the exe the install replaced."""
         seen = self._apply()
         script = seen['script'].read_text(encoding='utf-8')
-        self.assertIn(f'move /Y "{update.staging() / "Taskuary.new.exe"}" "{self.exe}"', script)
+        self.assertLess(script.find(f'start "" /wait "{update.staging() / "TaskuarySetup.exe"}"'), script.find(f'del /F /Q "{self.exe}"'))
+        self.assertGreater(script.find('start "" /wait'), -1)
 
     def test_a_half_finished_download_is_cleared_first(self):
-        stale = update.staging() / 'Taskuary.new.exe'
+        stale = update.staging() / 'TaskuarySetup.exe'
         stale.parent.mkdir(parents=True, exist_ok=True)
         stale.write_bytes(b'half a download from a run that died')
         seen = self._apply()

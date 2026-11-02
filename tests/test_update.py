@@ -1,7 +1,7 @@
 """Update in place (update.py). The data folder is never touched - an update is only a program
-swap - and nothing here may ever swap in a half-downloaded file or fire on a version it could not
-parse. The exe road cannot be run here (the running exe is locked), so the pieces are tested one
-by one and the batch is read like a program.
+swap - and nothing here may ever run a half-downloaded file or fire on a version it could not
+parse. The installer cannot be run here, so the pieces are tested one by one and the batch is read
+like a program.
 """
 import os, sys, tempfile, unittest
 from pathlib import Path, PureWindowsPath
@@ -34,21 +34,28 @@ class Checking(unittest.TestCase):
         r.raise_for_status = mock.Mock(side_effect=None if code == 200 else RuntimeError('boom'))
         return r
 
-    def test_reads_the_release_tag_and_the_exe_asset(self):
+    def test_reads_the_release_tag_and_the_installer_asset_whichever_road(self):
+        """The one-file exe takes the installer too (the owner, 2026-11-02: the download is only the installer) - never Taskuary.exe."""
         j = {'tag_name': 'v9.9.9', 'html_url': 'https://github.com/x/releases/tag/v9.9.9',
              'assets': [{'name': 'taskuary-9.9.9.whl', 'browser_download_url': 'w'},
-                        {'name': 'Taskuary.exe', 'browser_download_url': 'https://dl/Taskuary.exe'}]}
+                        {'name': 'Taskuary.exe', 'browser_download_url': 'https://dl/Taskuary.exe'},
+                        {'name': 'TaskuarySetup.exe', 'browser_download_url': 'https://dl/TaskuarySetup.exe'}]}
+        for road in ('exe', 'setup'):
+            update._cache.update({'at': 0.0, 'result': None})
+            with mock.patch.object(update.requests, 'get', return_value=self._resp(j)), mock.patch.object(update, 'how', return_value=road):
+                self.assertEqual(update.check(force=True)['url'], 'https://dl/TaskuarySetup.exe')
         with mock.patch.object(update.requests, 'get', return_value=self._resp(j)):
             out = update.check(force=True)
-        self.assertEqual((out['latest'], out['newer'], out['url']), ('9.9.9', True, 'https://dl/Taskuary.exe'))
+        self.assertEqual((out['latest'], out['newer']), ('9.9.9', True))
         self.assertEqual(out['current'], update.__version__)
         self.assertIn(out['how'], ('exe', 'pip', 'source'))
         self.assertIsNone(out['error'])
 
-    def test_no_exe_asset_falls_back_to_the_fixed_latest_url(self):
+    def test_no_installer_asset_falls_back_to_the_fixed_latest_url(self):
         j = {'tag_name': 'v9.9.9', 'assets': []}
         with mock.patch.object(update.requests, 'get', return_value=self._resp(j)):
-            self.assertEqual(update.check(force=True)['url'], update.EXE_URL)
+            self.assertEqual(update.check(force=True)['url'], update.SETUP_URL)
+        self.assertTrue(update.SETUP_URL.endswith('/releases/latest/download/TaskuarySetup.exe'))
 
     def test_github_unreachable_is_an_answer_not_an_exception(self):
         with mock.patch.object(update.requests, 'get', side_effect=OSError('[Errno 11001] getaddrinfo failed')):
@@ -64,41 +71,66 @@ class Checking(unittest.TestCase):
         self.assertEqual(get.call_count, 1)
 
 
-class TheSwapScript(unittest.TestCase):
-    def test_it_waits_swaps_relaunches_with_the_same_arguments_and_removes_itself(self):
-        # This function writes a Windows batch file even when the test suite runs on Linux/macOS;
-        # keep Windows path semantics instead of letting the host OS reinterpret the backslashes.
-        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'),
-                               PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242,
-                               ['--port', '7787', '--debug'])
+# The one-file exe's road: the installer, pointed at this user's install. Windows path semantics even on Linux/macOS CI.
+SETUP_EXE, ONE_FILE, HOME = (PureWindowsPath(r'C:\h\update\TaskuarySetup.exe'), PureWindowsPath(r'C:\Users\a\Downloads\Taskuary.exe'),
+                             PureWindowsPath(r'C:\Users\a\AppData\Local\Programs\Taskuary'))
+def migrate(args=(), also=()): return update.setup_script(SETUP_EXE, ONE_FILE, 4242, list(args), also=also, into=HOME)
+
+
+class TheMigrationScript(unittest.TestCase):
+    def test_it_waits_installs_for_this_user_into_the_install_starts_it_and_removes_the_one_file_exe(self):
+        s = migrate(['--port', '7787', '--debug'])
         self.assertIn('PID eq 4242', s)                                  # waits for THIS process to go
-        self.assertIn('move /Y "C:\\Apps\\Taskuary.new.exe" "C:\\Apps\\Taskuary.exe"', s)
-        self.assertIn('start "" /D "C:\\Apps" "C:\\Apps\\Taskuary.exe" "--port" "7787" "--debug"', s)
+        self.assertIn(r'start "" /wait "C:\h\update\TaskuarySetup.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', s)
+        self.assertIn('/CURRENTUSER', s); self.assertNotIn('/ALLUSERS', s)
+        self.assertIn(r'/DIR="C:\Users\a\AppData\Local\Programs\Taskuary"', s)
+        ok = s.split('goto failed', 1)[1].split(':failed', 1)[0]
+        self.assertIn(r'start "" /D "C:\Users\a\AppData\Local\Programs\Taskuary" "C:\Users\a\AppData\Local\Programs\Taskuary\Taskuary.exe" "--port" "7787" "--debug"', ok)
+        self.assertLess(ok.find('start "" /D'), ok.find(r'del /F /Q "C:\Users\a\Downloads\Taskuary.exe"'))   # the new one runs before the old goes
         self.assertIn('del "%~f0"', s)                                   # leaves nothing behind
-        self.assertIn('geq 30 goto giveup', s)                          # a stuck swap still relaunches something
         self.assertIn('taskuary-update.log', s)                         # the other machine leaves a verdict
         self.assertTrue(s.endswith('\r\n'))                              # batch wants CRLF
+
+    def test_a_failed_install_starts_the_old_program_and_removes_nothing(self):
+        s = migrate()
+        self.assertLess(s.find('/VERYSILENT'), s.find('if not "%code%"=="0" goto failed'))
+        self.assertIn(r'if not exist "C:\Users\a\AppData\Local\Programs\Taskuary\Taskuary.exe" goto failed', s)
+        failed = s.split(':failed', 1)[1].split(':stuck', 1)[0]
+        self.assertIn(r'start "" /D "C:\Users\a\Downloads" "C:\Users\a\Downloads\Taskuary.exe"', failed)
+        self.assertNotIn('del /F', failed)
+
+    def test_an_installed_app_is_never_deleted_as_the_one_file_exe(self):
+        s = update.setup_script(SETUP_EXE, HOME / 'Taskuary.exe', 1, [], into=HOME)
+        self.assertNotIn('del /F', s)
+        self.assertNotIn('del /F', update.setup_script(SETUP_EXE, HOME / 'Taskuary.exe', 1, []))
+
+    def test_it_also_waits_for_the_bootloader_that_holds_the_exe(self):
+        s = migrate(also=[77])
+        self.assertTrue(s.index('PID eq 4242') < s.index('PID eq 77') < s.index('/VERYSILENT')); self.assertIn('find " 77 "', s)
+
+    def test_the_install_folder_is_the_one_inno_setup_recorded_else_its_default(self):
+        with mock.patch.dict(os.environ, {'LOCALAPPDATA': r'C:\Users\a\AppData\Local'}):
+            if os.name != 'nt': self.assertEqual(update.install_dir().name, 'Taskuary'); return
+            import winreg
+            k = mock.MagicMock(); k.__enter__.return_value = k
+            with mock.patch.object(winreg, 'OpenKey', return_value=k) as op, mock.patch.object(winreg, 'QueryValueEx', return_value=('D:\\Apps\\Taskuary\\', 1)):
+                self.assertEqual(update.install_dir(), Path(r'D:\Apps\Taskuary'))
+            self.assertIn(update.APP_ID + '_is1', op.call_args[0][1])
+            with mock.patch.object(winreg, 'OpenKey', side_effect=FileNotFoundError):
+                self.assertEqual(update.install_dir(), Path(r'C:\Users\a\AppData\Local\Programs\Taskuary'))
 
     def test_every_relaunch_is_a_fresh_program_not_the_old_ones_child(self):
         """The helper inherits the old exe's environment, and the new exe sits at the SAME path. Since
         PyInstaller 6.9 that makes its bootloader think it is the old process's own child: it skips
         unpacking and loads python312.dll from the old _MEI folder - which went when the old process
         exited. "Failed to load Python DLL ... _MEIxxxx\\python312.dll" on the first run after Update."""
-        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'),
-                               PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242, [])
+        s = migrate()
         reset = s.find('set "PYINSTALLER_RESET_ENVIRONMENT=1"')
         self.assertGreater(reset, -1)
         self.assertLess(reset, s.find('start "'))                      # before ALL three relaunches
 
-    def test_a_swap_that_gave_up_names_what_still_runs_the_program(self):
-        # "could not replace the old program after 30 tries" and nothing else: the old process HAD exited, and a second copy of
-        # the program - a view of it - still held the exe (TQ-1251). The log now says which copies were running
-        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'), PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242, [])
-        giveup = s.find(':giveup')
-        self.assertLess(giveup, s.find('tasklist /FI "IMAGENAME eq Taskuary.exe" >> "%update_log%"'))
-
     def test_no_arguments_leaves_no_trailing_space(self):
-        s = update.swap_script(Path('T.exe'), Path('T.new.exe'), 1, [])
+        s = update.setup_script(Path('S.exe'), Path('T.exe'), 1, [])
         self.assertIn('start "" /D "." "T.exe"\r\n', s)
 
     @unittest.skipUnless(os.name == 'nt', 'Windows creation flags')
@@ -167,12 +199,13 @@ class Applying(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e: update.apply()
         self.assertIn('already on the latest', str(e.exception))
 
-    def test_the_exe_road_downloads_writes_the_script_and_detaches_it(self):
+    def test_the_exe_road_downloads_the_installer_writes_the_script_and_detaches_it(self):
         d = Path(tempfile.mkdtemp()).resolve(); fake_exe = d / 'Taskuary.exe'; fake_exe.write_bytes(b'MZold')   # resolve: Windows short names
         with mock.patch.object(update, 'how', return_value='exe'), \
              mock.patch.object(update, 'check', return_value={'newer': True, 'error': None, 'url': 'https://dl/T.exe'}), \
              mock.patch.object(update.sys, 'executable', str(fake_exe)), \
              mock.patch.object(update.sys, 'argv', ['Taskuary.exe', '--port', '7787']), \
+             mock.patch.object(update, 'install_dir', return_value=d / 'Programs' / 'Taskuary'), \
              mock.patch.object(update, '_download', return_value=1234) as dl, \
              mock.patch.object(update, '_launch_swap') as launch:
             out = update.apply()
@@ -181,13 +214,14 @@ class Applying(unittest.TestCase):
         # Controlled Folder Access and antivirus stop, and for a downloaded single file that
         # folder is Downloads (update.staging)
         stage = update.staging()
-        self.assertEqual(dl.call_args[0][1], stage / 'Taskuary.new.exe')
+        self.assertEqual(dl.call_args[0][:2], ('https://dl/T.exe', stage / 'TaskuarySetup.exe'))
         self.assertEqual(sorted(p.name for p in d.iterdir()), ['Taskuary.exe'])
         script = stage / 'taskuary-update.cmd'
         self.assertTrue(script.is_file())
         body = script.read_text(encoding='utf-8')
         self.assertIn(f'PID eq {os.getpid()}', body); self.assertIn('"--port" "7787"', body)
-        launch.assert_called_once_with(script, fake_exe.parent)
+        self.assertIn(f'/CURRENTUSER /DIR="{d / "Programs" / "Taskuary"}"', body); self.assertIn(f'del /F /Q "{fake_exe}"', body)
+        launch.assert_called_once_with(script, stage)
 
     def test_the_pip_road_upgrades_then_relaunches_the_same_command_line(self):
         ok = mock.Mock(returncode=0, stdout='Successfully installed taskuary-9.9.9', stderr='')
@@ -249,18 +283,17 @@ class TheHelperDoesNotStrandTheOwner(unittest.TestCase):
     """
 
     def test_the_wait_is_bounded_so_a_process_that_never_exits_still_gives_the_app_back(self):
-        s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'),
-                               PureWindowsPath(r'C:\Apps\Taskuary.new.exe'), 4242, [])
+        s = migrate()
         self.assertIn('goto stuck', s)                    # the loop has a way out that is not the PID
         self.assertIn(':stuck', s)
         # and giving up must still leave a running program - the old one, which is known good
         stuck = s.split(':stuck', 1)[1]
-        self.assertIn(r'start "" /D "C:\Apps" "C:\Apps\Taskuary.exe"', stuck)
+        self.assertIn(r'start "" /D "C:\Users\a\Downloads" "C:\Users\a\Downloads\Taskuary.exe"', stuck); self.assertNotIn('/VERYSILENT', stuck)
 
     def test_it_does_not_sleep_with_a_command_that_refuses_redirected_stdin(self):
         """_launch_swap passes stdin=DEVNULL, and `timeout` answers redirected stdin with
         "ERROR: Input redirection is not supported" - so the poll never slept, it spun."""
-        s = update.swap_script(Path('T.exe'), Path('T.new.exe'), 1, [])
+        s = migrate()
         self.assertNotIn('timeout /t', s)
         self.assertIn('ping -n', s)                       # works with no console and no stdin
 

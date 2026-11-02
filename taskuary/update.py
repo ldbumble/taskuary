@@ -9,17 +9,17 @@ Four ways Taskuary can be installed, four roads:
   setup   installed by TaskuarySetup.exe (the website's download since 2026-11-02): one folder under Programs, Start menu,
           an uninstall entry. The new installer is downloaded and run quietly after we exit; it replaces the folder and
           asks Windows for admin rights only when the app was installed for all users. Then the app is started again.
-  exe     Taskuary.exe (PyInstaller, taskuary.spec). A running exe cannot overwrite itself on
-          Windows, so the new one is downloaded beside it as Taskuary.new.exe and a tiny batch
-          script does the rest after we exit: wait for our PID to go, move the new file over
-          the old, start it with the same arguments, delete itself.
+  exe     a one-file Taskuary.exe (the download before 2026-11-02, when the owner made the website's download only the
+          installer). It moves into the installed app: the same TaskuarySetup.exe runs quietly for this user after we exit,
+          into the install already there or the default one, the app starts from there, and the one-file exe is removed.
   pip     a wheel in a venv: `pip install -U taskuary`, then relaunch the same command line.
   source  a checkout (`pip install -e .`, the developer's machine): updating means `git pull`,
           which is not ours to run in somebody's repository - say so instead.
 
-The latest version is the GitHub release the publish workflow cuts on every tag, and the exe is
-the asset it attaches at a fixed URL (releases/latest/download/Taskuary.exe). No token, no extra
-service, and the same file a person would download by hand.
+The latest version is the GitHub release the publish workflow cuts on every tag, and every road that downloads takes the
+installer it attaches at a fixed URL (releases/latest/download/TaskuarySetup.exe). No token, no extra service, and the
+same file a person would download by hand. Taskuary.exe is still attached for a while: builds up to 0.3.10.20 download
+it by name, and that one-file build is what brings them onto this road.
 """
 import os, re, subprocess, sys, threading, time
 from pathlib import Path
@@ -31,9 +31,9 @@ from . import __version__
 
 REPO = 'ldbumble/taskuary'
 LATEST_API = f'https://api.github.com/repos/{REPO}/releases/latest'
-EXE_URL = f'https://github.com/{REPO}/releases/latest/download/Taskuary.exe'
 SETUP = 'TaskuarySetup.exe'
 SETUP_URL = f'https://github.com/{REPO}/releases/latest/download/{SETUP}'
+APP_ID = '{6306b40a-3228-4273-8f53-a5c04956d201}'      # installer/taskuary.iss's AppId: where Inno Setup records the install
 TIMEOUT = 20
 # How long the helper waits for the old program to go before deciding it never will. Unbounded
 # was the bug (2026-09-15): Update left a console spinning on a PID that stayed, and no app.
@@ -73,10 +73,9 @@ def check(force: bool = False) -> dict:
         r.raise_for_status()
         j = r.json()
         tag = str(j.get('tag_name') or '').lstrip('v')
-        name, url = (SETUP, SETUP_URL) if out['how'] == 'setup' else ('Taskuary.exe', EXE_URL)
         out.update({'latest': tag or None, 'newer': newer(tag, __version__), 'notes': j.get('html_url'),
                     'url': next((a.get('browser_download_url') for a in j.get('assets') or []
-                                 if str(a.get('name') or '').lower() == name.lower()), url)})
+                                 if str(a.get('name') or '').lower() == SETUP.lower()), SETUP_URL)})
     except Exception as e:
         # the reason is for the log; the card says what it means and what to do about it
         logger.warning(f'update check failed: {e}')
@@ -86,10 +85,10 @@ def check(force: bool = False) -> dict:
     return out
 
 
-# ── the exe road ────────────────────────────────────────────────────────────────────────
+# ── downloading ─────────────────────────────────────────────────────────────────────────
 def _download(url: str, dest: Path, progress=None) -> int:
-    """Stream the new exe beside the old one. Size-checked against Content-Length and sniffed
-    for the PE header: a half-downloaded or HTML-error-page 'exe' must never be swapped in."""
+    """Stream the new installer into staging. Size-checked against Content-Length and sniffed
+    for the PE header: a half-downloaded or HTML-error-page 'exe' must never be run."""
     with requests.get(url, stream=True, timeout=TIMEOUT, allow_redirects=True) as r:
         r.raise_for_status()
         total = int(r.headers.get('Content-Length') or 0)
@@ -137,74 +136,6 @@ def wait_lines(pids, stuck: str) -> list:
         out += [f':{lbl}', f'tasklist /FI "PID eq {p}" 2>nul | find " {p} " >nul', 'if not errorlevel 1 (',
                 '  set /a waited+=1', f'  if %waited% geq {WAIT_S} goto {stuck}', '  ping -n 2 127.0.0.1 >nul', f'  goto {lbl}', ')']
     return out
-
-
-def swap_script(exe: Path, new: Path, pid: int, args: list, also=()) -> str:
-    """The batch that finishes the job after this process has gone. Waits for the PID (the exe
-    is locked while it runs), moves the new file over the old (retrying - antivirus likes to hold
-    a fresh download for a second), starts the new build with the SAME arguments, removes itself.
-    `also`: more PIDs that hold the exe - the one-file bootloader that started us runs the same
-    Taskuary.exe and holds it locked while it cleans up after us (unpack.bootloader)."""
-    q = lambda s: '"' + str(s).replace('"', '""') + '"'
-    argstr = ' '.join(q(a) for a in args)
-    # beside the DOWNLOAD, not beside the program: the whole point of staging is that the
-    # program's own folder is written to exactly once, by the move below
-    log = Path(new).with_name('taskuary-update.log')
-    return '\r\n'.join([
-        '@echo off',
-        'setlocal',
-        # This batch carries the OLD exe's environment, and the new build lands at the same path.
-        # PyInstaller >= 6.9 reads that pair as "I am my own onefile child", skips unpacking, and
-        # looks for python312.dll in the old _MEI folder - deleted when the old process exited.
-        # The first run after Update died on "Failed to load Python DLL" (an owner's machine,
-        # 2026-09-24). This variable is PyInstaller's own switch for "start as a new program".
-        'set "PYINSTALLER_RESET_ENVIRONMENT=1"',
-        f'set "update_log={log}"',
-        '> "%update_log%" echo update helper started %date% %time%',
-        'set /a waited=0',
-        # `ping`, not `timeout`: this helper runs with its stdin on DEVNULL, and timeout answers
-        # redirected stdin with "ERROR: Input redirection is not supported" - so the poll never
-        # slept, it spun. ping -n 2 is one second and needs neither a console nor stdin.
-        *wait_lines([pid, *also], 'stuck'),
-        '>> "%update_log%" echo old process exited %date% %time%',
-        'set /a tries=0',
-        ':swap',
-        f'move /Y {q(new)} {q(exe)} >nul 2>&1',
-        'if errorlevel 1 (',
-        '  set /a tries+=1',
-        '  if %tries% geq 30 goto giveup',
-        # same reason as the wait loop: timeout cannot run with stdin on DEVNULL, so "retry for
-        # 30 seconds while the scanner lets go of the download" was really 30 tries in a few
-        # milliseconds - and then it gave up on a file that would have been free a second later.
-        '  ping -n 2 127.0.0.1 >nul',
-        '  goto swap',
-        ')',
-        '>> "%update_log%" echo program swapped; launching new build %date% %time%',
-        f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
-        'if errorlevel 1 goto launchfail',
-        '>> "%update_log%" echo launch requested successfully %date% %time%',
-        'del "%~f0"',
-        'exit /b 0',
-        ':stuck',
-        # The old program never exited. Leaving the owner with no app at all is the worst
-        # outcome available, so put the KNOWN GOOD one back in front of them and say why in the
-        # log; the new build stays staged and the next Update tries again.
-        '>> "%update_log%" echo ERROR: the old process never exited; starting it again unchanged %date% %time%',
-        f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
-        'del "%~f0"',
-        'exit /b 3',
-        ':giveup',
-        '>> "%update_log%" echo ERROR: could not replace the old program after 30 tries %date% %time%',
-        # ...and WHO still runs it: a second copy (a view of this one, TQ-1251) holds the exe as surely as the old process did
-        '>> "%update_log%" echo still running from this program:',
-        f'tasklist /FI "IMAGENAME eq {exe.name}" >> "%update_log%" 2>&1',
-        f'start "" /D {q(exe.parent)} {q(exe)} {argstr}'.rstrip(),
-        'del "%~f0"',
-        'exit /b 1',
-        ':launchfail',
-        '>> "%update_log%" echo ERROR: Windows refused to launch the new program %date% %time%',
-        'exit /b 2',
-    ]) + '\r\n'
 
 
 def _launch_swap(script: Path, cwd: Path, env: dict = None):
@@ -265,29 +196,6 @@ def _why_refused(new: Path, exe: Path, err: OSError) -> str:
             'does not help: the block is on the program, not on your account.')
 
 
-def _apply_exe(url: str, progress=None) -> dict:
-    exe = Path(sys.executable).resolve()
-    stage = staging()
-    new = stage / 'Taskuary.new.exe'
-    new.unlink(missing_ok=True)          # a leftover from a run that never finished is not our copy
-    try:
-        size = _download(url, new, progress)
-        script = stage / 'taskuary-update.cmd'
-        from . import unpack
-        boot = unpack.bootloader()
-        script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:], also=[boot] if boot else ()), encoding='utf-8')
-    except OSError as e:
-        if getattr(e, 'errno', None) != 13 and getattr(e, 'winerror', None) not in (5, 32):
-            raise
-        raise RuntimeError('the new build could not be saved. '
-                           + _why_refused(new, exe, e)
-                           + f' (Windows said: {e})') from e
-    # detached and, where Windows permits it, outside any parent Job: it must outlive us.
-    _launch_swap(script, exe.parent)
-    logger.info(f'update: {size:,} bytes downloaded to {new.name}; {script.name} takes over when this process exits')
-    return {'how': 'exe', 'downloaded': size, 'restarting': True}
-
-
 # ── the setup road ──────────────────────────────────────────────────────────────────────
 def for_all_users(exe) -> bool:
     """Installed for everyone (Program Files) - that install, and so its update, needs Windows' admin yes; a per-user one never does."""
@@ -295,48 +203,84 @@ def for_all_users(exe) -> bool:
     return any(r and spawn.inside(str(exe), r) for r in (os.environ.get(k) for k in ('ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432')))
 
 
-def setup_script(setup, exe, pid: int, args: list, all_users: bool = False) -> str:
+def install_dir() -> Path:
+    """Where this user's TaskuarySetup.exe install lives: the folder Inno Setup recorded for it, else its default."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf'Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_ID}_is1') as k:
+            d = str(winreg.QueryValueEx(k, 'InstallLocation')[0] or '').rstrip('\\/')
+        if d: return Path(d)
+    except (ImportError, OSError): pass
+    return Path(os.environ.get('LOCALAPPDATA') or Path.home() / 'AppData' / 'Local') / 'Programs' / 'Taskuary'
+
+
+def setup_script(setup, exe, pid: int, args: list, all_users: bool = False, also=(), into=None) -> str:
     """The batch that runs the new installer once this process has gone, then starts the app again. Quiet (/VERYSILENT): the
     owner already pressed Update. /ALLUSERS keeps an all-users install where it is - Windows asks for the admin yes then, as for
-    any installer; /CURRENTUSER never asks. The app is started by this batch, not by the installer, so it never runs elevated."""
+    any installer; /CURRENTUSER never asks. The app is started by this batch, not by the installer, so it never runs elevated.
+    `also`: more PIDs to wait for - the one-file bootloader that started us holds Taskuary.exe while it cleans up (unpack.bootloader).
+    `into`: a one-file Taskuary.exe moving into the installed app - the installer is pointed at that folder (/DIR) and the app
+    started from it; the one-file exe is removed only once the install is there. A failed install starts the old program unchanged."""
     q = lambda s: '"' + str(s).replace('"', '""') + '"'
-    run = f'{q(exe)} ' + ' '.join(q(a) for a in args)
+    argstr = ' '.join(q(a) for a in args)
+    go = lambda x: f'start "" /D {q(x.parent)} {q(x)} {argstr}'.rstrip()
+    to = into / 'Taskuary.exe' if into is not None else exe
     log, slog = Path(setup).with_name('taskuary-update.log'), Path(setup).with_name('taskuary-setup.log')
     return '\r\n'.join([
         '@echo off', 'setlocal',
+        # the helper carries the old exe's environment; PyInstaller >= 6.9 would read that as "I am my own onefile child"
         'set "PYINSTALLER_RESET_ENVIRONMENT=1"',
         f'set "update_log={log}"',
         '> "%update_log%" echo update helper (installer) started %date% %time%',
         'set /a waited=0',
-        *wait_lines([pid], 'stuck'),
+        *wait_lines([pid, *also], 'stuck'),
         '>> "%update_log%" echo old process exited; running the installer %date% %time%',
         f'start "" /wait {q(setup)} /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS '
-        f'{"/ALLUSERS" if all_users else "/CURRENTUSER"} /LOG={q(slog)}',
-        'if errorlevel 1 >> "%update_log%" echo ERROR: the installer stopped with code %errorlevel% - starting the app as it is',
+        f'{"/ALLUSERS" if all_users else "/CURRENTUSER"}{f" /DIR={q(into)}" if into is not None else ""} /LOG={q(slog)}',
+        'set "code=%errorlevel%"',
+        'if not "%code%"=="0" goto failed',
+        *([f'if not exist {q(to)} goto failed'] if into is not None else []),
         '>> "%update_log%" echo starting the app %date% %time%',
-        f'start "" /D {q(Path(exe).parent)} {run.rstrip()}',
+        go(to),
+        # the one-file exe was this program; left behind it would open the old version on the same data folder
+        *([f'del /F /Q {q(exe)} >nul 2>&1'] if into is not None and str(exe).lower() != str(to).lower() else []),
         'del "%~f0"', 'exit /b 0',
+        ':failed',
+        '>> "%update_log%" echo ERROR: the install did not finish ^(installer code %code%^) - starting the app as it was %date% %time%',
+        go(exe),
+        'del "%~f0"', 'exit /b 1',
         ':stuck',
         '>> "%update_log%" echo ERROR: the old process never exited; nothing installed %date% %time%',
-        f'start "" /D {q(Path(exe).parent)} {run.rstrip()}',
+        go(exe),
         'del "%~f0"', 'exit /b 3',
     ]) + '\r\n'
 
 
-def _apply_setup(url: str, progress=None) -> dict:
+def _run_setup(url: str, road: str, progress=None, **kw) -> dict:
     exe, stage = Path(sys.executable).resolve(), staging()
     new = stage / SETUP
     new.unlink(missing_ok=True)          # a leftover from a run that never finished is not our copy
     try:
         size = _download(url, new, progress)
         script = stage / 'taskuary-update.cmd'
-        script.write_text(setup_script(new, exe, os.getpid(), sys.argv[1:], for_all_users(exe)), encoding='utf-8')
+        script.write_text(setup_script(new, exe, os.getpid(), sys.argv[1:], **{'all_users': for_all_users(exe), **kw}), encoding='utf-8')
     except OSError as e:
         if getattr(e, 'errno', None) != 13 and getattr(e, 'winerror', None) not in (5, 32): raise
         raise RuntimeError('the new installer could not be saved. ' + _why_refused(new, exe, e) + f' (Windows said: {e})') from e
+    # detached and, where Windows permits it, outside any parent Job: it must outlive us
     _launch_swap(script, stage)
     logger.info(f'update: {size:,} bytes downloaded to {new.name}; {script.name} runs it when this process exits')
-    return {'how': 'setup', 'downloaded': size, 'restarting': True}
+    return {'how': road, 'downloaded': size, 'restarting': True}
+
+
+def _apply_setup(url: str, progress=None) -> dict: return _run_setup(url, 'setup', progress)
+
+
+def _apply_exe(url: str, progress=None) -> dict:
+    """The one-file exe moves into the installed app, for this user, wherever that install already is."""
+    from . import unpack
+    boot = unpack.bootloader()
+    return _run_setup(url, 'exe', progress, all_users=False, also=[boot] if boot else (), into=install_dir())
 
 
 # ── the pip road ────────────────────────────────────────────────────────────────────────
@@ -369,8 +313,8 @@ def apply(progress=None, info: dict = None) -> dict:
     """Do it. Returns what happened; the caller ends the process (exit_soon) when 'restarting'."""
     info = info or ready()
     h = how()
-    if h == 'setup': return _apply_setup(info.get('url') or SETUP_URL, progress)
-    return _apply_exe(info.get('url') or EXE_URL, progress) if h == 'exe' else _apply_pip(progress)
+    if h in ('setup', 'exe'): return (_apply_setup if h == 'setup' else _apply_exe)(info.get('url') or SETUP_URL, progress)
+    return _apply_pip(progress)
 
 
 # AN UPDATE WAITS FOR RUNNING WORK (the owner, 2026-10-25): the swap ends this process, and with it every agent and workflow run it

@@ -81,9 +81,31 @@ class TheInstallerScript(unittest.TestCase):
         self.assertIn('PrivilegesRequiredOverridesAllowed=dialog commandline', self.s)   # the update passes /CURRENTUSER or /ALLUSERS
         self.assertNotIn('.taskuary', self.s.split('[Setup]', 1)[1])
 
+    def test_its_app_id_is_the_one_the_update_finds_the_install_by(self):
+        """A reinstall over the install, and a one-file exe moving into it (update.install_dir), both hang on this one id."""
+        self.assertIn('AppId={' + update.APP_ID + '\n', self.s.replace('\r\n', '\n'))
+        self.assertIn('[InstallDelete]', self.s)       # an update over an install drops the last bundle first
+
     def test_it_packs_the_folder_the_spec_builds(self):
         self.assertIn(r'..\dist\onedir\Taskuary\*', self.s)
         self.assertIn("os.getenv('TASKUARY_ONEDIR')", (ROOT / 'taskuary.spec').read_text(encoding='utf-8'))
+
+
+class TheDownloadIsTheInstaller(unittest.TestCase):
+    """The owner, 2026-11-02: "Website download should only be the installer." Taskuary.exe is still attached for old builds' updates."""
+    def test_every_download_link_is_the_installer(self):
+        pages = ['README.md', 'README.zh-CN.md', 'site/index.html', 'website/tools/build-docs.mjs', 'website/src/AssistantView.jsx',
+                 *(str(p.relative_to(ROOT)) for p in (ROOT / 'docs' / 'site').glob('*.md'))]
+        for f in pages:
+            s = (ROOT / f).read_text(encoding='utf-8')
+            self.assertNotIn('releases/latest/download/Taskuary.exe', s, f)
+        for f in ('README.md', 'site/index.html', 'docs/site/start-here.md', 'website/tools/build-docs.mjs'):
+            self.assertIn('releases/latest/download/TaskuarySetup.exe', (ROOT / f).read_text(encoding='utf-8'), f)
+
+    def test_the_release_still_carries_the_one_file_exe_old_builds_update_from(self):
+        s = (ROOT / '.github' / 'workflows' / 'publish.yml').read_text(encoding='utf-8')
+        self.assertIn('dist/Taskuary.exe', s); self.assertIn('dist/TaskuarySetup.exe', s)
+        self.assertIn('Get-AuthenticodeSignature dist\\TaskuarySetup.exe', s)
 
 
 if __name__ == '__main__': unittest.main()

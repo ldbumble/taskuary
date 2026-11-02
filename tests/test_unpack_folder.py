@@ -218,10 +218,10 @@ def test_the_bridge_in_the_home_keeps_running_and_one_in_the_folder_is_stopped(f
 
 
 # ── the safety net: nothing left over becomes a dialog ─────────────────────────────────────
-def test_the_swap_also_waits_for_the_bootloader_that_holds_the_exe():
-    s = update.swap_script(PureWindowsPath(r'C:\Apps\Taskuary.exe'), PureWindowsPath(r'C:\Apps\T.new.exe'), 4242, [], also=[77])
+def test_the_update_also_waits_for_the_bootloader_that_holds_the_exe():
+    s = update.setup_script(PureWindowsPath(r'C:\h\S.exe'), PureWindowsPath(r'C:\Apps\Taskuary.exe'), 4242, [], also=[77], into=PureWindowsPath(r'C:\P\Taskuary'))
     assert 'PID eq 4242' in s and 'PID eq 77' in s and 'find " 77 "' in s
-    assert s.index('PID eq 77') < s.index('move /Y')
+    assert s.index('PID eq 77') < s.index('/VERYSILENT') < s.index(r'del /F /Q "C:\Apps\Taskuary.exe"')
 
 
 def test_the_sweeper_waits_for_us_and_names_the_folder_only_through_the_environment():

@@ -1,6 +1,6 @@
 // Downloads are the number the stats page exists for (the owner, 2026-10-14: "why does this not say how many people
 // hit the download button, that's the most important number... it should be on top"). The landing page counts each
-// Taskuary.exe click as cta/download. And the page is a dashboard in plain words (2026-10-15: "I have no idea what any of
+// Windows download click (any .exe: the installer) as cta/download. And the page is a dashboard in plain words (2026-10-15: "I have no idea what any of
 // the data means right now").
 import test from "node:test";
 import assert from "node:assert/strict";

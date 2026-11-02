@@ -30,6 +30,12 @@ Move it there?"), and wait: he moves it with **Change where the code is**.
   deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.
 - Never force-push. Never touch archived repositories. Never create new repositories.
 
+## Several to-dos at once
+When two or more of the checklist's to-dos do not depend on each other, hand each to its own subagent in
+parallel (Claude Code's Agent tool, Codex or Gemini CLI subagents), each told the to-do, its id and what
+done means. Review each one's work, tick it once it checks out, and run the tests once at the end.
+To-dos that depend on each other stay in order.
+
 ## Closing out
 You do not write the report. Taskuary reads this session's transcript and writes it. The reply
 to whoever asked is yours to write when you know the answer best: save it with

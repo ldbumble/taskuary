@@ -325,6 +325,14 @@ _ELSEWHERE_NOW = ('\n## The work is in another repository\n'
                   'Work that lives in another repository is NOT "nothing to do": no `taskuary --done`, and stay out of that\n'
                   'checkout. Ask John, naming where you think it is ("Not in northwind/ledger - looks like northwind/portal.\n'
                   'Move it there?"), and wait: he moves it with **Change where the code is**.\n')
+# Independent to-dos were worked one by one in a CLI that can run them side by side (the owner, 2026-11-02: "not hard coded in the
+# code but in coding.md"). An edited copy takes the section under the line it follows, where that line still reads as shipped.
+_FANOUT_AT = '- Never force-push. Never touch archived repositories. Never create new repositories.\n'
+_FANOUT_NOW = ('\n## Several to-dos at once\n'
+               "When two or more of the checklist's to-dos do not depend on each other, hand each to its own subagent in\n"
+               "parallel (Claude Code's Agent tool, Codex or Gemini CLI subagents), each told the to-do, its id and what\n"
+               "done means. Review each one's work, tick it once it checks out, and run the tests once at the end.\n"
+               'To-dos that depend on each other stay in order.\n')
 _PROMISE_AT = '- "Nothing to do here" is also an ending'
 _PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
                 '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
@@ -1586,6 +1594,15 @@ class SQLiteStore:
                 if body.count(at) == 1 and '## The work is in another repository' not in body:
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_to_move', '1', 'migration')")
+            # ...and INDEPENDENT TO-DOS GO TO SUBAGENTS (_FANOUT_NOW), the same way, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_fans_out_todos'").fetchone():
+                row = self.cx.execute("SELECT Content FROM doc WHERE Name='coding'").fetchone()
+                body = (row['Content'] or '') if row else ''
+                nl = '\r\n' if '\r\n' in body else '\n'
+                at, now = _FANOUT_AT.replace('\n', nl), _FANOUT_NOW.replace('\n', nl)
+                if body.count(at) == 1 and '## Several to-dos at once' not in body:
+                    self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_fans_out_todos', '1', 'migration')")
             # ...and THE GUIDE REPLACES THE PATCHWORK (the owner, 2026-10-09: "make it clear how to triage things, what to
             # look for, signs that would suggest things"). The sentence swaps above each fixed one rule; the template is now
             # one guide written as questions and signs, and the judgement code used to append lives in it. A document only

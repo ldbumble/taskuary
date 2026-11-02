@@ -1823,8 +1823,11 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     # ...THE ADVISOR NOTICES A NEW HAT (the owner, 2026-11-01): a connector or GitHub project whose traffic no workstream places is judged
     # here, added when sure, else an Advisor card - and each section kept current once a week (wsboot.tick; cheap when nothing is new)
     if report_id is None:
-        from . import wsboot
+        from . import wsboot, lookout
         wsboot.tick(store)
+        # ...and LOOKING OUT FOR THE OWNER'S JOB, once a week (the owner, 2026-11-02): credit they are owed, a pain of others they could
+        # fix, money left on the table, a problem developing - at most two ideas, each past a second look (lookout.py)
+        if lookout.CLOCK: lookout.tick(store)
     # its reads - minutes of them over the whole mail history - go to a reader connection, never the writer's lock every request
     # queues on (store.reads_off_writer, 2026-10-23); what it writes still goes through the writer
     with _LOCK, (store.reads_off_writer() if hasattr(store, 'reads_off_writer') else contextlib.nullcontext()):
@@ -2154,6 +2157,9 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     if agent:
         brief = str(a.get('title') or i.get('Text') or '').strip()
         if a.get('why'): brief += f"\n\nWhy the assistant raised it: {a['why']}"
+        if a.get('type') == 'lookout':                    # ...its next step, the pitch and the ids it rests on (lookout.brief)
+            from . import lookout
+            brief += lookout.brief(a)
         # ...and the report it points at, or the agent can only ask for it to be pasted (2026-09-23)
         if m and m.get('Channel') != 'assistant' and m.get('BodyText'):
             brief += f"\n\nThe source - {m.get('Subject') or 'the message'}:\n" + m['BodyText'].split('\n--- raw data ---')[0].strip()[:6000]

@@ -1318,7 +1318,7 @@ def _bring_up(store, prop: dict, actor: str = 'owner') -> str:
     tid = int(target) if str(target or '').isdigit() and prop.get('targetKind') in ('task', 'item') else None
     if kind == 'item.settle': b, key = concierge.canon_verb(str(p.get('verb') or 'close')), p.get('key') or (f'task:{tid}' if tid else '')
     else:
-        b = concierge.KIND_BUTTON.get(kind) or ('regular_agent' if kind == 'task.create_from_message' and str(p.get('kind')) in task_kinds.AGENT else '')
+        b = concierge.kind_button(store, kind, {'tid': tid} if tid else None) or ('regular_agent' if kind == 'task.create_from_message' and str(p.get('kind')) in task_kinds.AGENT else '')
         key = f'task:{tid}' if tid and prop.get('targetKind') == 'task' else str(p.get('key') or '')
         if not key and prop.get('targetKind') == 'message' and str(target or '').isdigit():   # a mail's act: the card that holds it
             from . import funnel

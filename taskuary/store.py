@@ -726,6 +726,7 @@ SETTING_RENAMES = (('coder_auto_enabled', 'coding_auto_enabled'), ('coder_contex
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
 DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coding_auto_enabled': '1',
+                    'developer_mode': '0',          # coding agents only for a developer who turns it on (agents.developer_mode, devmode.py)
                     'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)

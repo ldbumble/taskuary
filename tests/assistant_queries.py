@@ -1279,6 +1279,10 @@ def _guards(stack, sort=None, live=None, agenda=None):
     from taskuary import concierge, funnel, ingest, llm as llm_mod, terminal
     # ...and a calendar where a case's seed laid one (meeting_row): the demo world has none
     if agenda: stack.enter_context(mock.patch.object(funnel, '_agenda', lambda store, block=True: list(agenda)))
+    # ...and THE INDEX NAMES EVERY TOOL, coding's too: the corpus measures what the prompt carries for its coding asks, while the world here
+    # has no coding tool, so its hand-offs still go the regular road. The index without them is test_developer_mode's (toolcatalog.CODING_ONLY)
+    from taskuary import toolcatalog
+    stack.enter_context(mock.patch.object(toolcatalog, '_offered', lambda store, kind: True))
     # ...nor a general hand-off's chat session: no first turn is sent to an AI (concierge.handoff_task)
     from taskuary import general
     stack.enter_context(mock.patch.object(general, 'start_session', return_value=mock.Mock()))

@@ -183,18 +183,23 @@ CODING_ONLY = 'With a coding tool connected'
 NO_CODING = ("No coding tool is connected on this computer: never mention, offer or ask about a coding agent or a repository. "
              f"Every hand-off is {buttons.label('regular_agent')} - a regular agent.")
 
-def without_coding(text: str) -> str:
+# ...and with DEVELOPER MODE OFF the same, with where the switch is: a regular person's every job is a general agent's (2026-11-02)
+NO_DEV = ("Developer mode is off: never offer a coding agent or a repository. Every hand-off is "
+          f"{buttons.label('regular_agent')} - a regular agent; asked for a coding agent, hand it to one - Settings has Developer mode.")
+
+def without_coding(text: str, say: str = NO_CODING) -> str:
     out, skip = [], False
     for line in (text or '').splitlines():
         if line.startswith('- ') or line.startswith('#') or not line.strip(): skip = line.startswith(f'- {CODING_ONLY}')
         if not skip: out.append(line)
     t = '\n'.join(out) if len(out) < len((text or '').splitlines()) else text
-    return f'{t}\n\n{NO_CODING}' if re.search(r'coding|repositor', t, re.I) else t
+    return f'{t}\n\n{say}' if re.search(r'coding|repositor', t, re.I) else t
 
 def for_chat(store) -> str:
     from . import capabilities
     text = load(store)
-    return text if capabilities.can_code(store) else without_coding(text)
+    from . import agents
+    return text if capabilities.can_code(store) else without_coding(text, NO_CODING if agents.developer_mode(store) else NO_DEV)
 def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 def for_worker(store) -> str: return pick(store, VOICE_HEAD)

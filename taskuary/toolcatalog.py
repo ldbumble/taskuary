@@ -369,15 +369,15 @@ def block(store=None) -> str:
     ]
     # ...as the tool and its params, not a whole CALL line apiece: the same wrapper seventeen times was 500 characters of the index (2026-10-28)
     for said, kind, params in WHERE:
-        lines.append(f'  {said} -> "{kind}" {json.dumps(params)}')
+        if _offered(store, kind): lines.append(f'  {said} -> "{kind}" {json.dumps(params)}')
     lines += ['', """TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} for a bucket's tools,""",
               'or tools.describe with {"kind": "<tool>"}. A tool you know, CALL directly.']
     for name, what, kinds in BUCKETS:
-        lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds)}')
+        lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds if _offered(store, k))}')
     # ...and every look-up WHERE does not already show, by name: "what is the agent doing?" and "what drafts wait for my yes?" had their
     # look-ups (agents.now, approvals.list) only behind a `look` bucket the index never named (the 2026-10-20 query walk)
     shown = {k for _, k, _ in WHERE} | {'tools.list', 'tools.describe'}
-    lines.append('  look - more look-ups: ' + ', '.join(k for k in READS if k not in shown))
+    lines.append('  look - more look-ups: ' + ', '.join(k for k in READS if k not in shown and _offered(store, k)))
     # ...ONE LABEL PER BUTTON: the names it wears in a state ("Send anyway", "All read, next") are in tools.describe - the line was a
     # seventh of the index (the owner, 2026-10-28: "keep the index at 7950 by trimming")
     lines += ['', 'THE BUTTONS BY NAME (tool "name"; tools.describe has its other names) - use only these names:',
@@ -488,6 +488,15 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'sync_now': "the sync clock's own press beside its line - the scheduler reads on its own, so a sentence never needs it",
              'share_result': "a result's Share menu - a draft, a link on this network or a Drive upload, each the owner's own press (sharing.py)",
 }
+# THE TOOLS THAT ARE CODING'S ALONE: with no coding agent here (agents.coding_ready - no coding tool, or developer mode off) the index
+# never names them, so a "have a coding agent fix this" can only become the regular agent's hand-off (the owner, 2026-11-02)
+CODING_ONLY = frozenset({'coding_agent', 'task.set_repo', 'repos.list'})
+NO_CODING = 'there is no coding agent here: a job that would be coding is regular_agent'
+def _offered(store, kind: str) -> bool:
+    if store is None or kind not in CODING_ONLY: return True
+    from . import capabilities
+    return capabilities.can_code(store)
+
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""
     if store is None or buttons.VERBS.get(v, {}).get('needs') != 'coding': return True
@@ -551,8 +560,9 @@ def signature(kind: str) -> str:
     return kind
 
 
-def describe(kind: str) -> str:
+def describe(kind: str, store=None) -> str:
     """One tool in full: what it does, what it needs, and whether it waits for the owner's yes."""
+    if not _offered(store, kind): return f'{kind} is not here - {NO_CODING}'
     if kind in DECISIONS:
         return f'{kind} (bucket table) - {DECISIONS[kind]}. Takes `on` for another item than the one on the table.{_also(kind)}'
     if kind in READS: return f'{kind} (a look-up - runs at once, changes nothing) - {READS[kind]}'
@@ -567,15 +577,15 @@ def describe(kind: str) -> str:
     return f'There is no tool {kind!r}. The buckets: ' + ', '.join(n for n, _, _ in BUCKETS) + ', look.'
 
 
-def bucket_list(name: str) -> str:
+def bucket_list(name: str, store=None) -> str:
     """tools.list: each tool in one bucket, described - or the buckets, when the name is not one."""
     name = str(name or '').strip().lower()
     if name in ('look', 'looks', 'look-ups', 'lookups', 'read', 'reads'):
-        return 'LOOK-UPS (run at once, change nothing):\n' + '\n'.join(f'  {describe(k)}' for k in READS)
+        return 'LOOK-UPS (run at once, change nothing):\n' + '\n'.join(f'  {describe(k)}' for k in READS if _offered(store, k))
     hit = next((b for b in BUCKETS if b[0] == name), None)
     if not hit:
         return 'The buckets: ' + '; '.join(f'{n} ({w})' for n, w, _ in BUCKETS) + '; look (every look-up).'
-    return f'{hit[0].upper()} - {hit[1]}:\n' + '\n'.join(f'  {describe(k)}' for k in hit[2])
+    return f'{hit[0].upper()} - {hit[1]}:\n' + '\n'.join(f'  {describe(k)}' for k in hit[2] if _offered(store, k))
 
 
 # READS. Everything above CHANGES something and waits for the owner's yes; these change nothing, so

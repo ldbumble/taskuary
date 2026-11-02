@@ -2288,7 +2288,8 @@ def _as_general(store, tid: int, instruction: str = None, actor: str = 'owner') 
     t = store.get_task(tid) or {}
     if not general.handles(t): store.update_task(tid, {'Kind': 'general'}, actor)
     session = general.start_session(store, tid, actor=actor)
-    store.add_comment(tid, 'router', 'agent', f'No coding tool is connected, so the general agent works this on {session.provider}.')
+    from . import agents as hub_agents
+    store.add_comment(tid, 'router', 'agent', f'{hub_agents.no_coding_why(store)}, so the general agent works this on {session.provider}.')
     if not general.history(store, tid):
         ask = str(instruction or t.get('Summary') or t.get('Title') or '').strip()
         # ...the task's own Summary, or an instruction no owner typed, is Taskuary's brief (general.BRIEF_ACTOR), never put under YOU
@@ -2345,13 +2346,19 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if not brain and not resume and not _chain and not hub_agents.resolved_command(store, 'coding') \
             and hub_agents.resolve_brain(store, 'general').startswith('connector:'):
         return _as_general(store, tid, instruction, actor)
+    # ...and DEVELOPER MODE OFF, new work is general work whatever CLI is connected (the owner, 2026-11-02); a task that is already
+    # coding keeps its coding agent on the CLI there is - the switch takes nothing away from work under way. ALREADY is a coding task a
+    # coding session has worked: a routine or a typed ask minting a coding task with the switch off is new work, and goes general
+    already = str(t.get('Kind') or '').lower() == 'coding' and bool(store.last_transcript(tid) or store.list_runs(tid)) and hub_agents.cli_ready(store)
+    if not brain and not resume and not _chain and not hub_agents.developer_mode(store) and not already:
+        return _as_general(store, tid, instruction, actor)
     # NO CODING TOOL CHOSEN, NO START (owner-approved, 2026-10-21): with none connected, Send to coding agent found a tool on the
     # computer by itself and started it with its permission checks off, in a folder nobody named. Every road comes through here - a
     # press, a queue drain, a workflow - so the refusal is here, not only on the button. It comes after the general agent's turn above:
     # with an AI connection the work still runs, as general work; with no coding tool and none of that, nothing starts. A coding tool
     # is one connected that starts here (agents.coding_ready - the fact triage and the pickers read), and which one runs is the
     # resolver's (agents.resolve_brain), never a tool found on the computer by itself.
-    if not resume and not hub_agents.coding_ready(store): raise ValueError(NO_CODING_TOOL)
+    if not resume and not hub_agents.coding_ready(store) and not already: raise ValueError(NO_CODING_TOOL)
     # ...and SENSITIVE DATA STAYS WITH THE AIs MARKED FOR IT, once the owner turns that rule on (brainroute): the pane opens on one of
     # them or not at all - a backup the rule keeps out is no backup for it
     chain, held = brainroute.session_allowed(store, t, chain)

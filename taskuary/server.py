@@ -63,6 +63,13 @@ except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not seed the shipped agent profiles: {_e}')
 cli_connections.sync(cfg, store)
+# DEVELOPER MODE, decided once for a home from before the switch: one that already codes keeps its coding agents (devmode.py)
+try:
+    from . import devmode
+    devmode.migrate(store, cfg)
+except Exception as _e:
+    from loguru import logger as _log
+    _log.warning(f'could not decide developer mode: {_e}')
 try:
     # tasks routed to a CLI back when naming a worker named a brain (the 2026-09-16 spec)
     # name the brain this install is already running, once - the line that moves it onto the
@@ -1409,6 +1416,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         store.set_setting(key, v, ACTOR)
         store.audit('setting', 0, 'set', 'assistant', detail={'key': key, 'from': prev, 'to': v})
         said = settings_schema.describe(key, v)
+        if key == hub_agents.DEV_MODE: live_bus.emit(live_bus.FEED)     # the screens read capabilities again: coding comes or goes
         return {'key': key, 'label': meta['label'], 'value': v, 'said': said}
     if kind in ('connection.test', 'connection.pause', 'connection.resume'):
         c = store.get_connector(tid)
@@ -4020,6 +4028,8 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     requested = str(body.kind or '').lower()
     if requested and requested not in task_kinds.AGENT:
         raise HTTPException(422, 'kind must be general or coding')
+    # DEVELOPER MODE OFF, a coding hand-off is a general agent's (the owner, 2026-11-02) - a task already coding keeps its kind
+    if requested == 'coding' and task_kind != 'coding' and not hub_agents.developer_mode(store): requested = 'general'
 
     # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue
     # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
@@ -4096,11 +4106,13 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
         raise HTTPException(422, 'Choose an agent type: general or coding')
     _learn_promotion(m, background, body.standing)
     verdict, route_id = operations.verdict_of_message(store, m)
-    tid = m.get('TaskId') or task_from_message(
-        store, mid, ACTOR, requested if requested in task_kinds.AGENT else 'coding')
+    # ...a coding one with developer mode off is a general agent's (_dispatch_one says the same for a task that is not already coding)
+    want = requested if requested in task_kinds.AGENT else 'coding'
+    if want == 'coding' and not hub_agents.developer_mode(store): want = 'general'
+    tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, want)
     try:
         out = _dispatch_task_to_its_agent(tid, body, background)
-        operations.record_direct(store, 'task.create_from_message', mid, {'kind': requested if requested in task_kinds.AGENT else 'coding'}, ACTOR,
+        operations.record_direct(store, 'task.create_from_message', mid, {'kind': want}, ACTOR,
                                  {'taskId': tid, 'dispatch': out.get('dispatch')}, verdict=verdict, route_id=route_id)
         return out
     except HTTPException as e:
@@ -10662,6 +10674,7 @@ def set_setting(body: SettingBody):
     elif body.name == 'owner_email': store_mod.set_owner(store, (store.get_setting('owner_name') or '').strip(), str(body.value or ''), ACTOR)
     else: store.set_setting(body.name, body.value, ACTOR)
     store.audit('setting', 0, 'set', ACTOR, detail={'key': body.name, 'from': prev, 'to': body.value})   # as the chat's setting.set does
+    if body.name == hub_agents.DEV_MODE: live_bus.emit(live_bus.FEED)
     # the share-only listener follows its switch and its port at once (sharing.sync_listener)
     if body.name in ('share_links_lan', 'share_port'):
         from . import sharing

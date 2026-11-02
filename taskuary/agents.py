@@ -471,8 +471,28 @@ def _codex_tool(item: dict):
 
 def coding_ready(store) -> bool:
     """CODING EXISTS ONLY WHERE A CODING TOOL CAN START (the owner, 2026-10-16: "if no cli tool like cloud api tools no coding"):
-    a connected CLI whose command runs on this computer. A ChatGPT sign-in or an API card - HIPAA AI included - is no coding tool."""
+    a connected CLI whose command runs on this computer. A ChatGPT sign-in or an API card - HIPAA AI included - is no coding tool.
+    ...and ONLY IN DEVELOPER MODE (the owner, 2026-11-02: "for regular people everything should be a general agent, not coding"):
+    off, every job is a general agent's whatever CLI is connected - triage, the pickers and the Assistant all read this one answer."""
+    return developer_mode(store) and cli_ready(store)
+
+
+def cli_ready(store) -> bool:
+    "A connected CLI that starts on this computer - what a coding agent runs on, developer mode or not (a task already coding keeps it)."
     return any(runs_here(conn) for _key, conn in connection_brains(store))
+
+
+DEV_MODE = 'developer_mode'
+
+def developer_mode(store) -> bool:
+    "The owner's Developer mode switch (Settings, setup). Off on a fresh install; an upgraded home that used coding was turned on (devmode.py)."
+    try: return store is not None and str(store.get_setting(DEV_MODE) or '').strip().lower() in ('1', 'true', 'on')
+    except Exception: return False
+
+
+def no_coding_why(store) -> str:
+    "Why there is no coding agent here, in one plain clause - the switch when it is off, else the missing tool."
+    return 'Developer mode is off (Settings, Developer mode)' if not developer_mode(store) else 'No coding tool is connected'
 
 
 def runs_here(profile: dict) -> bool:

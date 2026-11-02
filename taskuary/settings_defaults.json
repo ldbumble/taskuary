@@ -32,6 +32,7 @@
     "repo_trust_private": "ours",
     "repo_trust_public": "writers",
     "outside_prs": "review",
+    "developer_mode": "0",
     "answer_to_agent": "ask",
     "git_flow": "pr",
     "ci_watch": "off",

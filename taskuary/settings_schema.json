@@ -22,6 +22,7 @@
     "Assistant",
     "Assistant on your phone",
     "Advisor",
+    "Developer",
     "Coding agent",
     "Agent permissions",
     "Notifications",
@@ -325,6 +326,13 @@
       "optionLabels": {"review": "review and fix here", "cloud": "review here, fix in GitHub's cloud"},
       "desc": "What an outside contributor's pull request gets. Fix it in the cloud runs the agent and the tests on a machine GitHub throws away, never yours.",
       "help": "With \"fix in GitHub's cloud\", an outside pull request that ranking warned about, and whose review asks for changes, is fixed in GitHub's cloud instead of here. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine."
+    },
+    "developer_mode": {
+      "group": "Developer",
+      "label": "Developer mode",
+      "type": "switch",
+      "desc": "Coding agents that work in a code repository (needs a coding CLI such as Claude Code or Codex). Off: every job goes to a general agent.",
+      "help": "Off (the default on a new install): triage never calls anything coding, and every job you hand over goes to a general agent - research, drafting, reading, the browser - on the AI you connected. Nothing asks you about repositories.\n\nOn: work that changes code goes to a coding agent, which runs your coding CLI (Claude Code, Codex and the like, connected under Connections). GitHub is optional: with no repository connected the coding agent works in a scratch folder. Setup offers to connect GitHub once this is on.\n\nA task that is already a coding task keeps its coding agent either way. A home that was already using coding agents before this switch existed was turned on for you when it updated."
     },
     "answer_to_agent": {
       "group": "Coding agent",

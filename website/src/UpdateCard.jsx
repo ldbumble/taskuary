@@ -10,7 +10,7 @@ import { BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const HOW = {
   setup: "the installed desktop app — the new installer is downloaded and runs quietly after this window closes; it reopens by itself. Windows asks for your OK only if Taskuary was installed for all users",
-  exe: "the desktop app (Taskuary.exe) — the new build is downloaded beside the old one and swapped in after this window closes; it reopens by itself",
+  exe: "the one-file desktop app (Taskuary.exe) — the installer is downloaded and runs quietly after this window closes; Taskuary moves into its installed home with a Start menu entry, the one file is removed, and it reopens by itself",
   pip: "a pip install — `pip install -U taskuary` runs, then the same command line is relaunched",
   source: "a source checkout — update it with `git pull` in the repository, then restart; nothing here can do that for you",
 };
@@ -75,7 +75,7 @@ export default function UpdateCard({ asked = false, at = 0 }) {
     setLit(false); setBusy("apply"); setErr(""); setNote("");
     try {
       const { data } = await api.post("/api/update", {});
-      if (data.restarting) { setBusy("restarting"); setNote(data.how === "exe" ? "downloaded — swapping the program and reopening…" : "installed — relaunching…"); await waitForNew(info?.current); }
+      if (data.restarting) { setBusy("restarting"); setNote(data.how === "exe" || data.how === "setup" ? "downloaded — installing and reopening…" : "installed — relaunching…"); await waitForNew(info?.current); }
       else if (updateWaiting(data)) { setBusy("waiting"); setNote(waitingNote(data)); await waitForIdle(info?.current); }
       else { setNote(data.detail || "done"); setBusy(""); }
     } catch (e) { setErr(e?.response?.data?.detail || "the update did not start"); setBusy(""); }

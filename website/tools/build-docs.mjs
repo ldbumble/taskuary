@@ -154,7 +154,7 @@ function html(p, i) {
       <a href="/docs/" aria-current="true">Docs</a>
       <a href="/demo/">Demo</a>
       <a href="https://github.com/ldbumble/taskuary">GitHub</a>
-      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe">Download</a>
+      <a class="btn" href="https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe">Download</a>
     </nav>
   </div>
 </header>

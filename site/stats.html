@@ -221,7 +221,7 @@ function render(d){
   var dlChange = change(visits, 'downloads', 'vs the week before');
 
   var h = '<section class="band"><div><div class="label">Downloads</div><div class="n" data-n="' + downloads + '">' + fmt(downloads) + '</div>'
-    + '<div class="hint">pressed Download for Taskuary.exe · <b>' + pct(downloads, landing) + '</b> of site visitors</div>'
+    + '<div class="hint">pressed Download for the Windows installer · <b>' + pct(downloads, landing) + '</b> of site visitors</div>'
     + (dlChange ? '<div class="chip">' + dlChange.replace(/class="(up|down)"/, '') + '</div>' : '') + '</div>'
     + '<div>' + columns(visits) + '</div></section>';
 

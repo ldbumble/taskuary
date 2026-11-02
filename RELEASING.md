@@ -101,10 +101,10 @@ not a stored private key. Previous releases are not retroactively attested.
 After downloading an artifact, verify its digest and repository identity with GitHub CLI:
 
 ```bash
-gh attestation verify Taskuary.exe --repo ldbumble/taskuary --signer-workflow ldbumble/taskuary/.github/workflows/publish.yml
+gh attestation verify TaskuarySetup.exe --repo ldbumble/taskuary --signer-workflow ldbumble/taskuary/.github/workflows/publish.yml
 ```
 
-Replace `Taskuary.exe` with the downloaded wheel or source archive to verify those artifacts.
+Replace `TaskuarySetup.exe` with the downloaded wheel or source archive to verify those artifacts.
 The image carries its attestation in the registry, so it verifies without downloading anything:
 
 ```bash
@@ -146,5 +146,6 @@ docker run -d -p 127.0.0.1:7787:7787 -v taskuary-data:/data ghcr.io/ldbumble/tas
   file. Test on TestPyPI first, and bump rather than re-upload.
 - **`0.x` says what it means.** Breaking changes are expected before 1.0, and the README says
   so at the top.
-- The single-file `Taskuary.exe` is a separate artifact built by `ci.yml` on push to master;
-  PyPI carries the Python package only.
+- The Windows download is `TaskuarySetup.exe`, built and signed by `publish.yml` on every tag (and built by `ci.yml` on
+  push to master); PyPI carries the Python package only. The one-file `Taskuary.exe` is still attached to each release
+  for builds up to 0.3.10.20, which update by downloading it by name; nothing links to it.

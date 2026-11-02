@@ -40,7 +40,7 @@ It bumps the seven version places (pyproject, both READMEs + their badge `asof=`
 fixture fields), builds UI/demo/docs, runs the fast gates (node unit, eslint no-undef, version/docs/catalog/timewords pytest),
 commits, pushes, waits for `ci.yml` on **that exact commit**, prints failing tests, reruns failed jobs **once** (CI's slower
 machines flake on timing), tags only when green, waits for `publish.yml` (reruns once - the exe's signing download flakes),
-verifies PyPI + the GitHub release with `Taskuary.exe`, and fast-forwards the main checkout. Red twice -> it stops and names
+verifies PyPI + the GitHub release with `TaskuarySetup.exe`, and fast-forwards the main checkout. Red twice -> it stops and names
 the tests: fix them on master, run it again with the **same** number (it was never tagged).
 
 Run it in the background and report when it ends; do not babysit runs by hand.

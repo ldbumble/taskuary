@@ -31,10 +31,9 @@ Every push to `master` redeploys. A one-off deployment is simply `npx wrangler d
   keyboard navigation, and `prefers-reduced-motion`.
 - `floor.js` — the previous canvas hero, retained for reference but no longer loaded by the page.
 - `og.png` — the 1200×630 social card, cropped from `docs/screenshot-floor.png`.
-- The Download button points at `releases/latest`; `publish.yml` attaches `Taskuary.exe` to
-  every tagged release, so the direct link
-  `https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe` works from the
-  first release cut after that change.
+- The Download button is the installer only (2026-11-02): `publish.yml` attaches `TaskuarySetup.exe` to every tagged
+  release, so `https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe` is always the newest.
+  The one-file `Taskuary.exe` is still attached for the builds that update from it, but no page links to it.
 
 ## Counting the demo
 

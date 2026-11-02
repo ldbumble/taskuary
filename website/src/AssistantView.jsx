@@ -2797,7 +2797,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // ...an `a` id: the Assistant speaking up, so the chat window it is said in opens on it (popLast) - a `w` one was said into a shut window
       setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text:
         "## Set up Taskuary on your own machine\n\nThis browser demo uses fictional data and cannot connect an inbox. "
-        + "[Download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe) or "
+        + "[Download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe) or "
         + "[follow the installation guide](https://taskuary.com/docs/).\n\n"
         + "In your installed app: enter your name, choose an AI, connect one mailbox or chat, and sync your first messages. "
         + "The setup guide helps you through each step. Hosted AI receives the context needed for the task; a local model keeps those prompts on your machine." }]);

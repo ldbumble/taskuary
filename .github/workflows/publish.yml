@@ -113,8 +113,11 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   exe:
-    # The Windows downloads, at stable targets: .../releases/latest/download/TaskuarySetup.exe is taskuary.com's Download
-    # button (the installer, 2026-11-02); .../Taskuary.exe is the one-file build that installs made before it update from.
+    # The Windows download, at a stable target: .../releases/latest/download/TaskuarySetup.exe is taskuary.com's Download button
+    # and what every install updates from (the owner, 2026-11-02: "Website download should only be the installer").
+    # TRANSITION: .../Taskuary.exe (the one-file build) is still attached because builds up to 0.3.10.20 update by downloading
+    # it by name and cannot be changed now. The one-file build they get moves itself into the installed app on its next
+    # update (update.py, the exe road). Drop Taskuary.exe once those builds are gone - never before, or they are stranded.
     runs-on: windows-latest
     needs: ci-green
     if: startsWith(github.ref, 'refs/tags/v')
@@ -196,6 +199,7 @@ jobs:
           path: |
             dist/Taskuary.exe
             dist/TaskuarySetup.exe
+          # dist/Taskuary.exe: the transition above - no page links to it
 
   ghcr:
     # The image nobody has to build themselves: ghcr.io/ldbumble/taskuary:<version>.

@@ -27,9 +27,8 @@ rule trips — an alert that waits for approval is not an alert.
 
 ## Install on Windows
 
-Download [Taskuary.exe](https://github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe)
-and open it. It is one file: the app and the desktop shell together, with no Python and no
-installer.
+[Download Taskuary for Windows](https://github.com/ldbumble/taskuary/releases/latest/download/TaskuarySetup.exe) - the installer - and run it. It installs for you alone, with
+no admin rights and no Python, and adds Taskuary to the Start menu.
 
 The first run creates `%USERPROFILE%\.taskuary\` and opens the interface.
 

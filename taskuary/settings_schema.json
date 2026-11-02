@@ -22,7 +22,6 @@
     "Assistant",
     "Assistant on your phone",
     "Advisor",
-    "Developer",
     "Coding agent",
     "Agent permissions",
     "Notifications",
@@ -328,7 +327,7 @@
       "help": "With \"fix in GitHub's cloud\", an outside pull request that ranking warned about, and whose review asks for changes, is fixed in GitHub's cloud instead of here. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine."
     },
     "developer_mode": {
-      "group": "Developer",
+      "group": "Agent permissions",
       "label": "Developer mode",
       "type": "switch",
       "desc": "Coding agents that work in a code repository (needs a coding CLI such as Claude Code or Codex). Off: every job goes to a general agent.",

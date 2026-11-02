@@ -159,11 +159,14 @@ def health(store, name: str = '', connector_id=None, n: int = 0, chat: str = '')
     steps, typ, nm = [], c['type'], c['name']
     card = {'label': OPEN_CARD, 'href': f'#connector={typ}'}
     sync = f"last sync {c['last_sync'][:16]}" if c['last_sync'] else 'never synced'
-    said = 'switched off' if not c['active'] else f"on, {sync}" + (f" - last error: {c['last_error']}" if c['last_error'] else '')
+    # ...a card never given a key and never synced is the catalogue's, not set up - "gmial wont conect" was told Gmail "is switched off",
+    # as if the owner had turned off a mailbox they never connected (the Connections audit, 2026-11-02)
+    off = 'not set up yet' if not (c['has_secret'] or c['last_sync']) else 'switched off'
+    said = off if not c['active'] else f"on, {sync}" + (f" - last error: {c['last_error']}" if c['last_error'] else '')
     steps.append(step(n + 1, 'read', f"Checked {nm}: {_cut(said, 110)}", c['last_error'], ok=c['active'] and not c['last_error']))
     out = {'name': nm, 'type': typ, 'cid': c['connector_id'], 'ok': c['active'] and not c['last_error'], 'why': said, 'repair': '', 'fix': None,
            'steps': steps, 'log': []}
-    if not c['active']: return {**out, 'why': f'{nm} is switched off', 'fix': card}
+    if not c['active']: return {**out, 'why': f'{nm} is {off}', 'fix': card}
     if typ == 'whatsapp':
         b = _bridge(store, c)
         steps.append(step(n + 2, 'read', f"Asked the WhatsApp bridge: {b['line'] or 'no answer'}",
@@ -213,7 +216,7 @@ def repair(store, name: str, how: str, n: int = 0, chat: str = '') -> dict:
     if not h['cid']: return {**h, 'did': '', 'said': f'There is no connection called {name!r}.'}
     how = how if how in HOW else h['repair']
     # a sync and a test are safe on any connection that is on; a bridge is restarted only where this computer runs it
-    if not how or h['why'].endswith('switched off') or (how == 'restart_bridge' and h['repair'] != how):
+    if not how or h['why'].endswith(('switched off', 'not set up yet')) or (how == 'restart_bridge' and h['repair'] != how):
         return {**h, 'did': '', 'said': f"{h['name']} has no {how or 'repair'} to run here - {h['why']}."}
     # what it read before the press is not drawn twice: the model read it a step ago (app.health), and the press reads it again after
     nm, ok, detail = h['name'], True, ''

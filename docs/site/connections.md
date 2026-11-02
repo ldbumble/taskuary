@@ -21,6 +21,9 @@ Secrets are write-only in the interface: you can replace a password, never read 
 database connection string may contain `{password}` so the saved password stays separate from the
 readable part of the configuration.
 
+A key or a password goes on its card, never into the Assistant's chat. Ask the Assistant on a card and it
+fills the other boxes and presses **Test** for you; a secret box is yours to paste into.
+
 ## The five roles
 
 A role is a permission, not a ranking.
@@ -200,6 +203,9 @@ card's settings name one (`status_column`, `people_column`).
 ## Data and report sources
 
 The full list is long and grows; these are the ones worth knowing about by shape.
+
+A data card feeds reports, dashboards and agent look-ups. It never puts work on your rail or your
+task list: what it holds reaches you through a report you set up on it.
 
 **Databases and files** — SQL Server, SQLite, SharePoint Lists, Google Sheets, a Windows/SMB
 share, SFTP, REST and RSS, and any MCP server tool. **PostgreSQL**, **MySQL**, **ClickHouse**,
@@ -391,6 +397,21 @@ the fastest way to find out that a sign-in expired.
 
 Every CLI card has a **light model** as well as a main one. Naming the same CLI as the brain your coding
 agent runs on and as your triage brain is normal and cheap, and it is the light gear that keeps it cheap.
+
+## Voice notes and dictation
+
+A card under **AI · voice** turns speech into text: a voice note that arrives (a WhatsApp voice
+message) and the microphone beside each box. Groq (Whisper), OpenAI transcription, Google Gemini
+transcription, Deepgram and ElevenLabs Scribe take a key; **Any Whisper server** points at one you
+run; **Local Whisper** runs on this computer with no key, and the audio never leaves it
+(`pip install taskuary[voice]`). With no voice card a voice note still lands, filed with a line
+saying it was not transcribed and why, its audio attached so one click transcribes it later.
+
+## A system with no card
+
+Search the catalogue first. When nothing matches, **Request** under the empty grid drafts a feature
+request for that card, and the Assistant offers the same when you ask it to connect something the
+catalogue lacks. You read the draft and submit it on GitHub yourself; nothing is filed for you.
 
 ## Adding another of the same kind
 

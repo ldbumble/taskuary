@@ -573,6 +573,90 @@ AREA_RAIL = [
 ]
 CASES += AREA_RAIL
 
+# THE CONNECTIONS PAGE, asked about while it is up (the audit, 2026-11-02): the catalogue's grid, a card being set up, a card connected -
+# its boxes filled and its Test pressed on the page, a key never typed by the Assistant, a system with no card a request for one, a data
+# card a report's (never the rail's), the AI and voice cards brought up, and the work that needs this computer an agent's
+CONNGRID = {'area': 'connections', 'title': 'Connections', 'fields': [{'key': 'search_connectors', 'label': 'Search connectors', 'value': ''}],
+            'buttons': [{'id': 'email', 'label': 'Email'}, {'id': 'messaging', 'label': 'Messaging'}, {'id': 'ai_agents_models', 'label': 'AI · agents & models'},
+                        {'id': 'ai_voice', 'label': 'AI · voice'}, {'id': 'corporate_systems', 'label': 'Corporate systems'}, {'id': 'sync_now', 'label': 'Sync now'},
+                        {'id': 'slack', 'label': 'Slack - channels and DMs through triage'}, {'id': 'gmail', 'label': 'Gmail - your Google mailbox'}]}
+NOHIT = {**CONNGRID, 'fields': [{'key': 'search_connectors', 'label': 'Search connectors', 'value': 'Frobnitz'}],
+         'buttons': CONNGRID['buttons'][:6] + [{'id': 'request_frobnitz', 'label': 'Request Frobnitz'}], 'text': 'Nothing matches Frobnitz in Connections.'}
+SLACKCARD = {'area': 'connections', 'title': 'the Slack card (Connections)', 'item': {'kind': 'connector', 'id': 'slack', 'title': 'Slack'},
+             'fields': [{'key': 'name', 'label': 'Name', 'value': 'Slack'}, {'key': 'Secret', 'label': 'Bot token (xoxb-…)', 'value': '', 'secret': True, 'state': 'empty'}],
+             'buttons': [{'id': 'messaging', 'label': 'Messaging'}, {'id': 'save', 'label': 'Save'}, {'id': 'test', 'label': 'Test'}]}
+FAILED = {**SLACKCARD, 'fields': [{**SLACKCARD['fields'][0]}, {**SLACKCARD['fields'][1], 'state': 'saved'}],
+          'last': {'action': 'test', 'ok': False, 'detail': 'Slack answered invalid_auth'}}
+WORKCARD = {'area': 'connections', 'title': 'the Work mail card (Connections)', 'item': {'kind': 'connector', 'id': 'outlook', 'title': 'Work mail'},
+            'fields': [{'key': 'name', 'label': 'Name', 'value': 'Work mail'}, {'key': 'on', 'label': 'On', 'kind': 'switch', 'value': 'on'}],
+            'buttons': [{'id': 'email', 'label': 'Email'}, {'id': 'rename', 'label': 'Rename'}, {'id': 'add_another_outlook', 'label': 'Add another Outlook'},
+                        {'id': 'test', 'label': 'Test'}, {'id': 'sync_now', 'label': 'Sync now'}, {'id': 'remove_connection', 'label': 'Remove connection'}]}
+def gen(text, title): return c('task.create_from_text', kind='general', text=text, title=title)
+AREA_CONNECTIONS = [
+    # ── the grid: what is here, what is on, finding a card ──
+    Q('connections', 'what can I connect here?', None, ['Mail, chat, trackers, data for reports, and the AI and voice cards - pick a section above.'],
+      'words', tools=('words',), view=CONNGRID, freq=3),
+    Q('connections', 'which of these are connected?', None, [c('connections.list'), 'Work mail (Outlook) is on.'], 'read:connections.list', view=CONNGRID, freq=4),
+    Q('connections', 'find zoho', None, [v(op='set', field='search_connectors', value='zoho')], 'view:set:search_connectors', tools=('words',), view=CONNGRID, freq=3),
+    Q('connections', 'show me just the AI ones', None, [v(op='press', button='AI · agents & models')], 'view:press:ai_agents_models', tools=('words',),
+      view=CONNGRID, freq=2),
+    Q('connections', 'open the slack card', None, c('connection.create', type='slack'), 'open:#connector=slack&step=1', view=CONNGRID, freq=4),
+    Q('connections', 'sync everything now', None, [v(op='press', button='Sync now')], 'view:press:sync_now', tools=('words',), view=CONNGRID, freq=2),
+    # ── a card being set up: its boxes, its Save and Test - the key is the owner's to paste ──
+    Q('connections', 'call it Team chat', None, ['Named it.\n' + v(op='set', field='Name', value='Team chat')], 'view:set:name', tools=('words',),
+      view=SLACKCARD, freq=2),
+    Q('connections', 'my bot token is xoxb-1111-2222-abcd, put it in', None, ['It goes in its box from you - I never type a key.\n'
+      + v(op='set', field='Bot token (xoxb-…)', value='xoxb-1111-2222-abcd')], 'view:refused', tools=('words',), view=SLACKCARD, freq=3,
+      note='the model reached for the secret box anyway: the server turns it down, and the token is never set'),
+    Q('connections', 'save it and test it', None, [v(op='press', button='Save') + '\n' + v(op='press', button='Test')], 'view:press:test', tools=('words',),
+      view=SLACKCARD, freq=4),
+    Q('connections', 'why did the test fail', None, ['Slack turned the token down (invalid_auth) - paste a fresh Bot token and press Test.'], 'words',
+      tools=('words',), view=FAILED, freq=4, note="the card's own Test answer rides the view (pageView.viewResult)"),
+    Q('connections', 'walk me thru setting this up', None, ['Paste the Bot token from your Slack app into its box, then press Test.\n'
+      + v(op='point', target='Bot token (xoxb-…)')], 'view:point:Secret', tools=('words',), view=SLACKCARD, freq=3,
+      note="walked in words with its box lit - Get AI to set it up is the door into this chat, kept out of the view (ConnectorsView AiWalkButton)"),
+    Q('connections', 'go back to all of them', None, [v(op='press', button='Messaging')], 'view:press:messaging', tools=('words',), view=SLACKCARD, freq=2,
+      note="the card's back button says the section it came from"),
+    Q('connections', 'list my slack channels', None, gen('list the Slack channels the bot token can see', 'Slack channels'), 'new:agent:general',
+      view=SLACKCARD, freq=2, note='a token used on this computer is an agent job (pageview.GUIDE), never the chat'),
+    # ── a card connected: on and off, rename, another of the kind, remove ──
+    Q('connections', 'switch it off for now', None, [v(op='set', field='On', value='off')], 'view:set:on', tools=('words',), view=WORKCARD, freq=3),
+    Q('connections', 'rename it to Office mail', None, [v(op='set', field='Name', value='Office mail') + '\n' + v(op='press', button='Rename')],
+      'view:press:rename', tools=('words',), view=WORKCARD, freq=2),
+    Q('connections', 'add a second outlook', None, [v(op='press', button='Add another Outlook')], 'view:press:add_another_outlook', tools=('words',),
+      view=WORKCARD, freq=2),
+    Q('connections', 'remove this connection', None, [v(op='press', button='Remove connection')], 'view:press:remove_connection', tools=('words',),
+      view=WORKCARD, freq=2, note='the card keeps its Undo; nothing goes out'),
+    # ── off the page: a card by name, its switch and its Test on its own page ──
+    Q('connections', 'turn off work mail', None, c('connection.pause', name='Work mail'), 'open:#connector=outlook', freq=3),
+    Q('connections', 'test my work mail', None, c('connection.test', name='Work mail'), 'open:#connector=outlook', freq=3),
+    # ── troubleshooting a card ──
+    Q('connections', 'gmial wont conect', None, [c('app.health', name='gmail'), 'Gmail is not set up yet - its card, under this, connects it.'],
+      'read:app.health', freq=3, note='a misspelling: the model reads it'),
+    Q('connections', 'is work mail syncing ok?', None, [c('app.health', name='Work mail'), 'Work mail synced a few minutes ago; nothing is failing.'],
+      'read:app.health', view=WORKCARD, freq=3),
+    # ── a system with no card: a request for one, the owner's to submit (the owner, 2026-11-01) ──
+    Q('connections', 'connect Frobnitz', None, [c('connection.create', type='frobnitz'),
+      c('issue.draft', kind='feature', trying='connect Frobnitz', happened='a card under Connections for Frobnitz'), 'There is no Frobnitz card - a request for one is drafted below for your Submit.'],
+      'read:issue.draft', freq=2, note='the miss says a card the catalogue lacks is a feature request (concierge.call_turn, 2026-11-02)'),
+    Q('connections', 'nothing for frobnitz - can you ask for it?', None, [v(op='press', button='Request Frobnitz')], 'view:press:request_frobnitz',
+      tools=('words',), view=NOHIT, freq=2, note="the grid's own Request button, pressed: it opens the drafted request, nothing is filed"),
+    # ── data cards feed reports, never the rail ──
+    Q('connections', 'will quickbooks put bills on my task list?', None, [c('docs.search', section='help/connections > Data and report sources'),
+      'No - a data card feeds reports, dashboards and agent look-ups; it never puts work on your list.'], 'read:docs.search', freq=2),
+    Q('connections', 'make a report of my quickbooks bills over 30 days', None, c('setup', text='a report of QuickBooks bills over 30 days'), 'new:report',
+      sort={'kind': 'report'}, freq=3),
+    # ── the AI brains and voice ──
+    Q('connections', 'set up claude as my ai', None, c('connection.create', type='anthropic'), 'open:#connector=anthropic&step=1', freq=3),
+    Q('connections', 'use my chatgpt plan', None, c('connection.create', type='chatgpt'), 'open:#connector=chatgpt&step=1', freq=2),
+    Q('connections', 'which ai answers you?', None, [c('agents.list'), 'The Assistant runs on the brain set under Settings.'], 'read:agents.list', freq=2),
+    Q('connections', 'transcribe my voice notes on this computer', None, c('connection.create', type='local_whisper'), 'open:#connector=local_whisper&step=1',
+      freq=2, note='the AI · voice cards: Local Whisper keeps audio on the machine'),
+    Q('connections', 'how do voice notes get transcribed?', None, [c('docs.search', section='help/connections > Voice notes and dictation'),
+      'A card under AI · voice does it; without one a voice note lands untranscribed with its audio.'], 'read:docs.search', freq=2),
+]
+CASES += AREA_CONNECTIONS
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

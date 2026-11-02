@@ -81,9 +81,11 @@ function useAiWalk({ conn }) {
 }
 
 // the button, in the card's own row beside Save and Test - outlined, never the card's one filled button
+// ...and out of the view the Assistant is sent (data-tq-view-skip): it is the door INTO that chat, so a press from the chat ("walk me
+// thru setting this up") typed a second line the owner never wrote - the Assistant walks the card in words (the Connections audit, 2026-11-02)
 function AiWalkButton({ ai }) {
   return (
-    <Button variant="outlined" onClick={ai.start} data-tq-ai-setup="start" title="Optional - opens the chat, and the Assistant sets this card up with you"
+    <Button variant="outlined" onClick={ai.start} data-tq-ai-setup="start" data-tq-view-skip="" title="Optional - opens the chat, and the Assistant sets this card up with you"
       startIcon={<BoltIcon sx={{ fontSize: 15 }} />}>
       Get AI to set it up
     </Button>

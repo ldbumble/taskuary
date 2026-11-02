@@ -187,7 +187,9 @@ PURPOSE = {
     'report.create':            'create a scheduled report or workflow - `config`; the composer builds it from what the owner asked for',
     'connection.create':        ('bring up a connector card to connect it - `type`: the catalogue type or title (linkedin, slack, "QuickBooks Online"), `name` '
                                  'optional; a second one of a kind opens with its Add another. An email account is a mailbox: gmail, outlook, else imap (Zoho Mail, '
-                                 'Yahoo, a domain address) - never another product of the same company. Never carrying a secret: the owner gives it on the card'),
+                                 'Yahoo, a domain address) - never another product of the same company. Never carrying a secret: the owner gives it on the card. '
+                                 # a system with no card was "said so" and left there (the Connections audit, 2026-11-02)
+                                 'A system the catalogue has no card for is a feature request: issue.draft'),
     # A ROLE IS A WALK, NOT A GUESS (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up
     # new role and work"): the chat asks the two questions a role needs, then puts the whole set-up on one card.
     'role.apply':               ("set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. `role`: "

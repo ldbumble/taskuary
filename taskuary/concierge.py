@@ -3286,8 +3286,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             if not c or c.get('planned'):
                 want = str(params.get('type') or params.get('name') or '').strip()
                 near = ', '.join(x['title'] for x in catalogue_near(want))
+                # ...and a system Taskuary truly lacks is a FEATURE REQUEST (the owner, 2026-11-01): "connect Frobnitz" heard only "say so,
+                # naming those" - with nothing to name and no word of the request the setup road and the grid's Request button offer. Which it
+                # is, a misspelt card or a missing one, is the model's to read (the Connections audit, 2026-11-02)
                 return _miss(f"There is no {want or 'such'} connector{' yet' if c else ''}{'; the closest are ' + near if near else ''}. "
-                             'Say so in plain words, naming those. Nothing was changed.')
+                             f"Say so in plain words{', naming those' if near else ''}. If they mean a system with no card, issue.draft (kind "
+                             'feature) drafts a request for one for their Submit on GitHub. Nothing was changed.')
             ex = store.get_connector_by_type(c['type'])
             # a few words beside the card it opens (the owner, 2026-10-21): the card lights its own first step
             said = (f"Opened your {c['title']} card - Add another connects a second one." if ex and ex.get('Active')

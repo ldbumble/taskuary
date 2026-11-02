@@ -62,7 +62,10 @@ class TargetTests(unittest.TestCase):
         self.assertIsNone(p); self.assertIn('noted', [c['Body'] for c in s.list_comments(other)])
         self.assertNotIn('noted', [c['Body'] for c in s.list_comments(tid)])
         p, out = call(s, 'task.comment', text='noted', ref='TQ-9999')
-        self.assertIsNone(p); self.assertIn('Name the task', out['say'])
+        # nothing written anywhere, and what the owner reads is the MODEL's words - never the tool's miss ("Name the task ..."),
+        # which is the model's to read (the owner, 2026-11-02: "never ever put code in front of a issue")
+        self.assertIsNone(p); self.assertEqual(sum(c['Body'] == 'noted' for t in (tid, other) for c in s.list_comments(t)), 1)
+        self.assertNotIn('Name the task', out['say']); self.assertEqual(out['say'], 'On it.')
 
 
     def test_an_agent_is_never_put_on_the_task_on_the_table_unless_the_call_names_it(self):

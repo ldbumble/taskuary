@@ -35,6 +35,8 @@ def spec_data() -> set:
 class TheExeShipsWhatTheWheelShipsTests(unittest.TestCase):
     def test_every_data_file_in_the_wheel_is_in_the_exe(self):
         missing = {d for d in wheel_data() if d not in spec_data()}
+        # ...the wheel's help/ is docs/site/*.md copied in at publish (publish.yml); the exe carries docs/site itself, which lookups reads first
+        if "('docs/site/*.md', 'docs/site')" in (ROOT / 'taskuary.spec').read_text(encoding='utf-8'): missing.discard('help')
         self.assertFalse(missing, f'the wheel ships {sorted(missing)} and taskuary.spec does not - '
                                   'an exe without them is a different program')
 

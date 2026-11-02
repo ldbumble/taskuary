@@ -78,8 +78,16 @@ class BuiltinVoiceTests(unittest.TestCase):
 
     def test_windows_voice_typing_comes_first_and_system_speech_says_how_to_reach_it(self):
         """The owner, 2026-11-02: "do the changes to use desktop if the machine has it" - System.Speech is only the last resort."""
-        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), mock.patch.object(voice, '_live_ok', return_value=True):
+        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), mock.patch.object(voice, '_live_ok', return_value=True), \
+             mock.patch.object(voice, 'speech_on', return_value=True):
             self.assertEqual(voice.builtin(), voice.LIVE)
+        # ...but never while Online speech recognition is off: it compiles, then stops at the first word (TQ-1251)
+        reg = types.SimpleNamespace(HKEY_LOCAL_MACHINE=0, OpenKey=mock.MagicMock(), QueryInfoKey=lambda k: (1,))
+        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), mock.patch.object(voice, '_live_ok', return_value=True), \
+             mock.patch.object(voice, 'speech_on', return_value=False), mock.patch.dict(sys.modules, {'winreg': reg}):
+            self.assertEqual(voice.builtin()['engine'], voice.BUILTIN['engine'])
+            with mock.patch.object(voice, 'speech_on', return_value=True): self.assertEqual(voice.builtin(), voice.LIVE, 'on at the next press, no restart')
+        self.assertEqual(voice._why('the speech privacy policy was not accepted'), "Voice typing stopped: " + voice._LIVE_WHY['privacy'])
         reg = types.SimpleNamespace(HKEY_LOCAL_MACHINE=0, OpenKey=mock.MagicMock(), QueryInfoKey=lambda k: (1,))
         with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), \
              mock.patch.object(voice, '_live_ok', return_value=False), mock.patch.dict(sys.modules, {'winreg': reg}):

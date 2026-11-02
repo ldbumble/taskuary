@@ -186,17 +186,29 @@ _HAS = {}
 def builtin():
     """The computer's own recogniser, once per run: Windows voice typing (LIVE) when it will take dictation, else System.Speech
     (BUILTIN, with how to turn the better one on) when the registry has a recogniser, else None - macOS and Linux included."""
+    # ...and voice typing only while Online speech recognition is on: it compiles with the setting off, then stops at the first word with
+    # "the speech privacy policy was not accepted" - which one user met as the mic's only answer (TQ-1251). Read each time, so turning it
+    # on takes effect at the next press, no restart
+    if 'live' not in _HAS: _HAS['live'] = sys.platform == 'win32' and _live_ok()
+    if _HAS['live'] and speech_on(): return LIVE
     if 'v' not in _HAS:
         v = None
         if sys.platform == 'win32':
-            if _live_ok(): v = LIVE
-            else:
-                try:
-                    import winreg
-                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _RECOGNISERS) as k: v = {**BUILTIN, 'hint': SPEECH_OFF} if winreg.QueryInfoKey(k)[0] else None
-                except OSError: v = None
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _RECOGNISERS) as k: v = {**BUILTIN, 'hint': SPEECH_OFF} if winreg.QueryInfoKey(k)[0] else None
+            except OSError: v = None
         _HAS['v'] = v
     return _HAS['v']
+
+
+def speech_on() -> bool:
+    """Is Online speech recognition on (Windows' speech privacy setting, which voice typing needs)? Off when never set - Windows' default."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy') as k:
+            return int(winreg.QueryValueEx(k, 'HasAccepted')[0]) == 1
+    except (OSError, ValueError, ImportError): return False
 
 # Recognize() answers null for a stretch it could not match, so a null is no end: the end is the engine letting go of the file, which throws
 _SAPI = r'''$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -237,10 +249,11 @@ started cannot be cancelled from PowerShell); a silence ends each listen after 3
 It hears this computer's own microphone, so it serves only a page on this computer (server: loopback). macOS has no such door for an
 unbundled process - Apple's Speech framework kills a caller whose app carries no usage description - so a Mac uses its Dictation key."""
 LIVE = {'engine': 'windows_voice_typing', 'label': 'Windows voice typing (on this computer)', 'live': True}
-SPEECH_OFF = "Windows voice typing is more accurate: turn on Online speech recognition in Windows' speech privacy settings"
+SPEECH_OFF = "For better results, turn on Online speech recognition in Windows' speech privacy settings, then press the mic again"
 # what the child's stop means to the owner, by the WinRT status it names
 _LIVE_WHY = {'MicrophoneUnavailable': 'no microphone Windows will lend - turn on "Let desktop apps access your microphone" in the microphone privacy settings of Windows',
-             'NetworkFailure': 'it needs the internet, and could not reach it', 'privacy': SPEECH_OFF,
+             'NetworkFailure': 'it needs the internet, and could not reach it',
+             'privacy': "it needs Online speech recognition - turn it on in Windows' speech privacy settings, then press the mic again",
              'TopicLanguageNotSupported': "it does not take dictation in this computer's language"}
 _WINRT = r'''$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
 try {
@@ -277,7 +290,7 @@ def _live_ok() -> bool:
 
 def _why(err: str) -> str:
     k = next((k for k in _LIVE_WHY if k.lower() in err.lower()), None)
-    return f"{LIVE['label']} stopped: {_LIVE_WHY[k] if k else err[:200]}"
+    return f"Voice typing stopped: {_LIVE_WHY[k] if k else err[:200]}"
 
 _LISTEN, _LISTEN_LOCK = {}, threading.Lock()
 

@@ -512,10 +512,11 @@ The walk and sets of items, and filing mail.
 
 ### `pipe.clear`
 
-Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said - ALL in their words is every one waiting, never just the batch on the table. It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
+Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said - ALL in their words is every one waiting, never just the batch on the table. It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule. Rows already filed as not ours (pipe.remove, Not ours) are off the rail: "those should be read, not Not ours" is this with `keys` - their m-numbers, as the Not ours receipt listed them - and each one's Not ours is taken back (nothing taught from it) and it is marked read.
 
 - `select` - below
 - `scope` (optional) - all (the default - every one waiting that `select` matches, the batch on the table and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: "mark these read", "these four")
+- `keys`
 
 <p class="runs">Runs at once and says what it changed.</p>
 

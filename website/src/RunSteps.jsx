@@ -49,7 +49,9 @@ export default function RunSteps({ steps, onFix, fixing, dense, repairs }) {
         <Typography variant="caption" sx={{ color: failed ? ALERT_INK : DIM, fontWeight: 600, flex: 1, minWidth: 0 }}>{runWords(steps, true)}</Typography>
         {app && <Button size="small" variant="outlined" component="a" href={app.href} onClick={(e) => e.stopPropagation()}
           sx={{ fontSize: 12, py: 0.1 }} title={app.name}>{btnLabel("fix")}</Button>}
-        {failed && !app && onFix && <Button size="small" variant="outlined" disabled={fixing} onClick={(e) => { e.stopPropagation(); onFix(); }}
+        {/* ...the AI's fix is a door to the Assistant (pageView.openHelp), out of its view (the owner, 2026-11-02): the chat repairs a step with
+            the editor's own Repair the failed step */}
+        {failed && !app && onFix && <Button size="small" variant="outlined" disabled={fixing} data-tq-view-skip="" onClick={(e) => { e.stopPropagation(); onFix(); }}
           startIcon={fixing ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 12, py: 0.1 }}>{btnLabel("fix")}</Button>}
       </Box>
       {(repairs || []).map((x, k) => (

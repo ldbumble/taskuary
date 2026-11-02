@@ -126,7 +126,8 @@ export default function NewPlaybookDialog({ connectorType = "", initialText = ""
       </> : <>
         <Button onClick={onManual} disabled={busy} sx={{ mr: "auto" }}>Write manually</Button>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" onClick={start} disabled={busy || !mode || (mode === "email" ? !selected : !text.trim())}
+        {/* a door to the chat, never pressed from it (data-tq-view-skip, the owner, 2026-11-02) */}
+        <Button variant="contained" onClick={start} data-tq-view-skip="" disabled={busy || !mode || (mode === "email" ? !selected : !text.trim())}
           startIcon={busy ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}>{busy ? "Starting…" : "Set up with AI"}</Button>
       </>}
     </DialogActions>

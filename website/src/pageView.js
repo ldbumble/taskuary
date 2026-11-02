@@ -335,6 +335,8 @@ export async function run(ops = [], onStep = () => {}) {
 }
 
 // ── THE DOORS: "Get AI to set it up", "Set up with AI", "Fix with AI" - each opens the chat with its ask ──
+// ...and each wears data-tq-view-skip (the owner, 2026-11-02): it opens the Assistant itself, so the chat never sees it to press it
+// (test/viewDoors.test.mjs holds every one to that)
 export const HELP = "tq-view-help", EARLIER = "tq-view-earlier";
 export const openHelp = (line, opts = {}) => window.dispatchEvent(new CustomEvent(HELP, { detail: { line, ...opts } }));
 export const sayEarlier = (record) => window.dispatchEvent(new CustomEvent(EARLIER, { detail: record }));

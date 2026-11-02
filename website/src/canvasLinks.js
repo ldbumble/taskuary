@@ -7,6 +7,15 @@ const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
 // every reload (the final review, 2026-09-29)
 export const SETTINGS_PAGES = ["about", "docs", "config", "policies", "audit", "updates"];
 
+// WHO A REPORT IS SENT TO, ASKED IN THE CHAT (the owner, 2026-11-02: "send this report to gail@northwind.example every run"): the
+// Assistant brings the builder up as #report=<id>&line=send&to=<address>[&how=always] (concierge.report_page) and the route card's box is
+// filled for the owner's Save - an act the link asks for once, like &fix=, never a place
+export function routeOfHash(hash) {
+  const q = new URLSearchParams(String(hash || "").split("&").slice(1).join("&"));
+  const line = q.get("line"), to = (q.get("to") || "").trim(), how = q.get("how");
+  return ["send", "alert"].includes(line) && to ? { line, to, ...(["always", "never"].includes(how) ? { how } : {}) } : null;
+}
+
 export function canvasRequestFromHash(hash, n = 0) {
   const h = String(hash || "");
   let m;
@@ -32,7 +41,8 @@ export function canvasRequestFromHash(hash, n = 0) {
         // ...and New playbook asked for (New's Playbook tab): the shelf, its dialog open - `newPb` numbers the ask, so a second one opens it again
         : v === "new-playbook" ? { section: "playbooks", open: null, newPb: n + 1 }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
-          : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}) }
+          : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}),
+            ...(routeOfHash(h) ? { route: routeOfHash(h) } : {}) }
             : { section: "reports", open: null };
     return { kind: "browse", area: "reports", state, n };
   }

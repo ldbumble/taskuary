@@ -38,6 +38,7 @@ import { DASH, placeName } from "./words.js";
 import DashboardEditor from "./DashboardEditor.jsx";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import { routeOfHash } from "./canvasLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
 import SetupWithAi from "./SetupWithAi.jsx";
@@ -373,6 +374,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const [carry, setCarry] = useState(null);
   const [running, setRunning] = useState(null);
   const [fixRun, setFixRun] = useState(null);     // {sid, runId}: Fix with AI pressed on a run in the list - the editor takes it
+  const [routeAsk, setRouteAsk] = useState(null); // {sid, line, to, how}: the Assistant's "send it to ..." - the builder fills its box once
   useEffect(() => {
     const fromHash = () => {
       const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
@@ -384,6 +386,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         // a failed run's Fix with AI pressed on its task (RunSteps): the workflow opens with the fix on its way
         const fix = /&fix=(\d+)/.exec(window.location.hash || "")?.[1];
         if (fix) setFixRun({ sid: Number(value), runId: Number(fix) });
+        const route = routeOfHash(window.location.hash);
+        if (route) setRouteAsk({ sid: Number(value), ...route });
       }
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
@@ -401,11 +405,17 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
       // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08)
-      if (data.task_id) { setNote({ ok: true, detail: `${data.title || "Routine"} started as ${data.ref} — opening it.` }); openAppLink(`task=${data.task_id}`); }
+      if (data.task_id) { setNote({ sid, ok: true, detail: `${data.title || "Routine"} started as ${data.ref} — opening it.` }); openAppLink(`task=${data.task_id}`); }
       // where a report lands is its own routing, and a failure is the bell's alone (reports.run_lands)
-      else setNote({ ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
-    } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
+      else setNote({ sid, ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
+    } catch (e) { setNote({ sid, ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
     setRunning(null); load();
+  };
+  // a report's clock, on or off - its row's switch and its builder's are this one road (the owner, 2026-11-02)
+  const switchOn = async (s) => {
+    try { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); }
+    catch (e) { setNote({ sid: s.SourceId, ok: false, detail: `${titleOf(s)} could not be switched ${s.Active ? "off" : "on"} — ${e?.response?.data?.detail || "the app did not answer"}. Try again.` }); }
+    load();
   };
   const syncNow = async () => {
     setSyncing(true); setNote(null);
@@ -539,11 +549,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
               onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
             <Button size="small" aria-label={`Edit: ${c.title || s.Address}`} onClick={() => openOne(s.SourceId)}>Edit</Button>
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()} inputProps={{ "aria-label": `${c.title || s.Address} on its clock` }}
-              onChange={async () => {
-                try { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); }
-                catch (e) { setNote({ ok: false, detail: `${titleOf(s)} could not be switched ${s.Active ? "off" : "on"} — ${e?.response?.data?.detail || "the app did not answer"}. Try again.` }); }
-                load();
-              }} />
+              onChange={() => switchOn(s)} />
           </Box>
           {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} onChanged={load}
             onFix={lastRuns[s.SourceId].run_id ? (runId) => { setFixRun({ sid: s.SourceId, runId }); openOne(s.SourceId); } : null} />}
@@ -582,10 +588,15 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     ? <InvoiceWorkflowWizard key={String(bucketNow)} sourceId={openId} sources={sources}
         connectors={connectors} draft={selectedConfig} reload={load} onBack={onBack} onSaved={saved(onSaved)}
         note={wizardNote} carry={carried} onCarried={() => setCarry(null)} />
+    // ...a report's builder: its row's Run now and switch in its header, the same handlers and what they said (the owner, 2026-11-02), and
+    // who a route sends to, when the Assistant brought it up with one (concierge.report_page: &line=&to=) - filled in for its Save
     : <ReportWizard key={String(bucketNow) + (draft ? "-draft" : "")} sourceId={openId} sources={sources}
         types={types} connectors={connectors} draft={selectedConfig} workflow={workflowOpen}
         reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote} lastRun={lastRuns[openId]}
-        carry={carried} onCarried={() => setCarry(null)} />;
+        carry={carried} onCarried={() => setCarry(null)}
+        onRun={() => runNow(openId)} running={running === openId} onSwitch={switchOn} said={note}
+        routeAsk={routeAsk?.sid === openId ? routeAsk : browse && browseState.route && browseState.open === openId ? browseState.route : null}
+        onRouteTaken={() => { setRouteAsk(null); if (browse && browseState.route) onBrowseState?.({ ...browseState, route: null }); }} />;
 
   if (browse) {
     const openSource = sources.find((x) => x.SourceId === browseState.open);
@@ -1169,7 +1180,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
 }
 
 function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, onSaved, draft, workflow = false,
-  note = null, lastRun = null, carry = null, onCarried }) {
+  note = null, lastRun = null, carry = null, onCarried, onRun = null, running = false, onSwitch = null, said = null, routeAsk = null, onRouteTaken }) {
   const cur = sources.find((s) => s.SourceId === sourceId);
   // a composed draft is a STARTING POINT, not a saved report: it lands in the same boxes the
   // owner would have filled in, and nothing exists until they preview it and press save
@@ -1197,6 +1208,15 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   });
   const [drag, setDrag] = useState(null);
   const [step, setStep] = useState(carry?.step ?? 0);
+  // WHO GETS IT, ASKED IN THE CHAT (the owner, 2026-11-02): the address lands in its line's "to — who gets it" box, and the line goes as
+  // asked - unsaved, on the Pipeline step that holds both, so Save is the owner's (a send is never set up from the chat)
+  useEffect(() => {
+    if (!routeAsk || !cur) return;
+    const k = routeAsk.line === "alert" ? "alert" : "deliver";
+    setCfg((c) => ({ ...c, [k]: { ...(k === "deliver" ? { gate: "review" } : {}), ...(c[k] || {}), channel: "email", to: routeAsk.to },
+      ...(routeAsk.how ? { route: { ...(c.route || {}), [routeAsk.line]: { how: routeAsk.how } } } : {}) }));
+    onRouteTaken?.();
+  }, [routeAsk, cur?.SourceId]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (carry) onCarried?.(); }, []);   // read once, at mount: the carry is spent
   const [test, setTest] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -1371,11 +1391,22 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           <Crumb section={workflow ? "Routines" : "Reports"} onBack={onBack}
             title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
         </Box>
+        {/* ITS ROW'S RUN NOW AND SWITCH, HERE TOO (the owner, 2026-11-02), as a routine's header has them: the shelf's own handlers, named so
+            the Assistant's view finds them - "run it" and "pause it" over an open builder press these */}
+        {cur && onSwitch && <Box sx={{ display: "flex", alignItems: "center", mt: 0.25, flexShrink: 0 }}>
+          <Switch size="small" checked={!!cur.Active} onChange={() => onSwitch(cur)}
+            inputProps={{ "aria-label": `${parse(cur.ConfigJson).title || cur.Address} on its clock` }} />
+          <Typography variant="caption" sx={{ color: DIM }}>{cur.Active ? "on" : "off"}</Typography>
+        </Box>}
+        {cur && onRun && <Button size="small" variant="outlined" disabled={running} onClick={onRun} sx={{ mt: 0.25, flexShrink: 0 }}
+          startIcon={running ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 16 }} />}>{running ? "Running…" : "Run now"}</Button>}
         {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
           onClick={remove} sx={{ mt: 0.25, flexShrink: 0 }}>
           Remove {workflow ? "routine" : "report"}
         </Button>}
       </Box>
+      {/* ...and what they answered, here: the shelf's line is off screen while the builder is open */}
+      {cur && said?.sid === cur.SourceId && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: said.ok ? "#47654a" : "#6b2733" }}>{said.ok ? "✓" : "✗"} {said.detail}</Typography>}
       {removeErr && <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>{removeErr}</Alert>}
       {/* the bell's "Open the report" lands here: the failure it rang for is the first thing on the page */}
       {cur && lastRun?.failed && (
@@ -1841,7 +1872,8 @@ function SourceComposer({ typeHint, one, hint, onSources }) {
   };
   useViewExtras("reports", { fields: [{ key: `sources${n}`, label: what, value: "", set: fill, said: (v) => `Asked for the cards: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
   return (
-    <Button size="small" data-tq-setup-ai="sources" onClick={() => openHelp(one ? `Fill in the ${typeHint || "source"} card with me` : `Help me with this: ${hint}`)}
+    // ...the button is a door to the chat, out of its view (data-tq-view-skip, 2026-11-02): the chat fills the cards through the field above
+    <Button size="small" data-tq-setup-ai="sources" data-tq-view-skip="" onClick={() => openHelp(one ? `Fill in the ${typeHint || "source"} card with me` : `Help me with this: ${hint}`)}
       startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>
   );
 }

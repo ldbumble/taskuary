@@ -3341,6 +3341,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                                            or str(params.get('how') or '').lower() not in ('always', 'ai', 'rule', 'never')):
                 return _miss('Say which line (timeline, alert or send) and how it goes: every run (always), '
                              'the AI decides (ai, with what to look for), a rule, or never.')
+            # ...and WHO GETS IT (the owner, 2026-11-02: "send this report to gail@northwind.example every run"): `to` fills the route card's
+            # "to - who gets it" box - an address as typed, a name only when one person answers to it; else one question, nothing guessed
+            if kind == 'report.route' and str(params.get('to') or '').strip():
+                if str(params.get('line') or '').lower() == 'timeline': return _miss('`to` is for the send or the alert line - the timeline is yours.')
+                addr, ask = route_to(store, params['to'])
+                if ask: return _miss(f'{ask}. Ask the owner one short question - who should get it, a name or an address - and set nothing yet.')
+                params['to'] = addr
         elif tk == 'connector' and kind != 'connection.create':
             name, cid = str(params.pop('name', '') or ''), params.pop('connector_id', None) or params.get('target')
             if not name and not cid and str(it.get('key') or '').startswith('conn:'): cid = it['key'][5:]
@@ -3446,15 +3453,55 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
 REPORT_SAYS = {'report.run': 'run it', 'report.rerun': 'run it again', 'report.pause': 'pause it', 'report.resume': 'switch it back on',
                'report.route': 'change where it goes', 'report.edit': 'change it', 'report.delete': 'remove it'}
 # ...except Run now and the clock's switch on a report or a dashboard (the everyday-asks audit, 2026-11-02): those sit on its ROW on the
-# shelf - its editor has neither, and "run it" over the AP ageing's editor opened that same editor, "run it there" with nothing to press.
-# A routine's own page carries both (WorkflowEditor), so a routine still opens at itself
+# shelf, a page that lists them all. A routine's own page carries both (WorkflowEditor), so a routine still opens at itself
 ON_ITS_ROW = {'report.run': 'press Run now on its row', 'report.rerun': 'press Run now on its row', 'report.pause': 'its row has the switch that turns it off',
               'report.resume': 'its row has the switch that puts it back on'}
-def report_page(store, sid: int, kind: str, named: str) -> tuple:
+# ...and OVER ITS OWN OPEN PAGE the act is pressed there (the owner, 2026-11-02): a report's builder wears its row's Run now and switch in its
+# header now, as a routine's page always did - "run it" over the AP ageing's builder sent the owner to the shelf for a button on screen
+ON_PAGE = {'report.run': 'Run now', 'report.rerun': 'Run now', 'report.pause': 'off', 'report.resume': 'on'}
+def on_its_page(sid: int, kind: str, named: str) -> tuple:
+    """(the page op that does `kind` to the report open on screen - {} when it is done already, the line that says so); (None, '') when that
+    page is not the one up, or has no such button or switch (a run already going greys Run now)."""
+    view = (_TURN.get() or {}).get('view') or {}
+    vi = view.get('item') or {}
+    if kind not in ON_PAGE or view.get('area') != 'reports' or vi.get('kind') != 'report' or str(vi.get('id')) != str(sid): return None, ''
+    if ON_PAGE[kind] == 'Run now':
+        b = next((b for b in view.get('buttons') or [] if str(b.get('label') or '').strip() == 'Run now' and b.get('enabled') is not False), None)
+        return ({'op': 'press', 'button': b['id']}, f'Pressed Run now on {named}.') if b else (None, '')
+    f = next((f for f in view.get('fields') or [] if f.get('kind') == 'switch' and str(f.get('label') or '').endswith(' on its clock')), None)
+    if not f: return None, ''
+    if f.get('value') == ON_PAGE[kind]: return {}, f'{named} is already {ON_PAGE[kind]} its clock.'
+    return {'op': 'set', 'field': f['key'], 'value': ON_PAGE[kind]}, f'Switched {named} {ON_PAGE[kind]} its clock.'
+
+
+def route_to(store, who: str) -> tuple:
+    """(the address a report's `to` names, '') - or ('', what makes it unsure) when it is not sure who: a name nobody by it has written as, or
+    one several people answer to equally. An address is taken as typed; a name is never guessed into one (the owner, 2026-11-02)."""
+    from . import peoplesearch as ps
+    w = ' '.join(str(who or '').split())
+    if '@' in w and ' ' not in w: return w.lower(), ''
+    words = ps._words(w)
+    if not words: return '', 'No one is named'
+    try: ps.directory(store, w)
+    except Exception as e: logger.debug(f'concierge: the directory did not answer for a route - {e}')
+    hits = sorted(((s, r) for r in ps.known(store, 'email') if '@' in str(r.get('to')) and (s := ps.score(words, r))), key=lambda x: -x[0])
+    top = [r for s, r in hits if s == hits[0][0]] if hits else []
+    if len(top) == 1: return top[0]['to'].lower(), ''
+    if not top: return '', f'Nobody called {w} has written here, so there is no address for them'
+    return '', f'{w} could be ' + ' or '.join(f"{r.get('name') or r['to']} ({r['to']})" for r in top[:3])
+
+
+def report_page(store, sid: int, kind: str, named: str, params: dict | None = None) -> tuple:
     "Where a report act is pressed, and the line that says so: (href, said)."
     try: cfg = json.loads((store.get_source(int(sid)) or {}).get('ConfigJson') or '{}')
     except (TypeError, ValueError): cfg = {}
     named, t = named or str(cfg.get('title') or 'the report'), str(cfg.get('type') or '')
+    # ...who it goes to rides the link (canvasLinks.routeOfHash): the route card's "to - who gets it" box is filled for the owner's Save
+    p = params or {}
+    if kind == 'report.route' and str(p.get('to') or '').strip():
+        line, how = str(p.get('line') or 'send').lower(), str(p.get('how') or '').lower()
+        q = f"&line={line}&to={quote(str(p['to']).strip(), safe='@')}" + (f'&how={how}' if how in ('always', 'never') else '')
+        return f'#report={int(sid)}{q}', f"Opened {named} under Reports with {str(p['to']).strip()} in who gets it - Save there sets it."
     # ...the page's own shelf rule (website/src/sourceShape.js isWorkflowConfig): only an agent with write access opens on WorkflowEditor
     if kind in ON_ITS_ROW and not (t == 'agent' and cfg.get('access') == 'write'):
         shelf = 'dashboards' if t == 'dashboard' else 'workflows' if t == 'zoho_monthly_invoices' else 'reports'
@@ -3571,10 +3618,16 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if tk == 'connector':
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
         if typ: return _page(store, tid, table, f'#connector={typ}', f"Opened {named or typ}'s card under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
+    # A REPORT'S OWN PAGE UP, its act is pressed there (on_its_page): its Run now, its switch - steps the chat shows as they run
+    op, said = on_its_page(target, kind, named) if tk == 'source' and target else (None, '')
+    if said:
+        if op: turn = _TURN.get(); turn['view_ops'] = (turn.get('view_ops') or []) + [op]
+        record(store, tid, 'assistant', said)
+        return {'say': said, 'options': [], 'chips': [], 'decision': None}
     on, b = _row_button(store, kind, target, params, table)
     # ...and over the report's own run on the table too, when its row has no button for the act: "run it" (report.run) there was refused
     # as having no button, while Run now waited on the shelf a page away (2026-11-02)
-    if tk == 'source' and target and not (on and b): return _page(store, tid, table, *report_page(store, target, kind, named))
+    if tk == 'source' and target and not (on and b): return _page(store, tid, table, *report_page(store, target, kind, named, params))
     if on and b:
         why = cannot(on, b, store)
         if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
@@ -4890,7 +4943,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind in ('report.run', 'report.rerun'):
         return f" {o.get('title') or 'It'} is running. {o.get('lands') or 'If it fails, the bell says why.'}"
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
-    if kind == 'report.route': return f" {o.get('title') or 'It'} now goes - {o.get('route')}."
+    if kind == 'report.route': return f" {o.get('title') or 'It'} now goes - {o.get('route')}{' - to ' + o['to'] if o.get('to') else ''}."
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
     if kind == 'report.delete': return f" {o.get('title') or 'It'} is removed - Restore brings it back from Recently deleted on Reports for 30 days."
     if kind == 'setting.set': return f" {o.get('said') or ''}"

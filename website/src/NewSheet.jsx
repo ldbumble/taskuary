@@ -590,7 +590,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
         borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
         <Button size="small" onClick={close} sx={{ color: DIM }}>Cancel</Button>
+        {/* ...a playbook's Set up with AI opens the build in the chat: a door, out of the Assistant's view (the owner, 2026-11-02) */}
         {!REPEATS.includes(kind) && kind !== "meeting" && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
+          {...(kind === "playbook" ? { "data-tq-view-skip": "" } : {})}
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
           sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>}
       </Box>

@@ -115,6 +115,11 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
 - **Send it somewhere** — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
   the task for approval by default. "Send it without asking" is the one place in Taskuary where
   that gate can be switched off, and it is deliberate.
+- **Who gets it, asked in the chat** — "send this report to gail@northwind.example every run"
+  brings up the report with that address in its **to — who gets it** box, ready for your Save; the
+  Assistant never saves a send for you. A name works when exactly one person by it has written to
+  you. When it is not sure who - nobody by that name, or two people who share it - it asks you one
+  question and fills in nothing.
 - **Let triage judge it when it fires** is a switch under a Reports line that asks the AI or waits
   for a rule, and it is off unless you turn it on: most reports are news to read, and a daily summary
   never reaches triage. On, a run that meets the condition goes to triage, which reads it against
@@ -145,12 +150,16 @@ catch-up off does not stop them.
 | Button | What it does |
 |---|---|
 | **Run due now** | Every report that is owed, and nothing else |
-| **Run now** on a row | That report, now. It does not use up "once a day" or move the next slot |
-| **The switch** on a row | Takes the report off its clock, and puts it back on. Off, it still runs when you press Run now; saving an edit never switches it back on |
+| **Run now** on a row, or top of its builder | That report, now. It does not use up "once a day" or move the next slot |
+| **The switch** on a row, or top of its builder | Takes the report off its clock, and puts it back on. Off, it still runs when you press Run now; saving an edit never switches it back on |
 | **Remove report**, top of its builder | Removes it at once; **Recently deleted** on the shelf brings it back for 30 days |
 
-Run now and the switch live on the report's row on the shelf, not in its builder - a dashboard's
-row the same. A routine's own page carries its Run now and its switch.
+Run now and the switch sit on the report's row on the shelf and again at the top of its builder,
+beside Remove report - the same buttons, doing the same thing. A dashboard's are on its row; a
+routine's own page carries its Run now and its switch.
+
+Ask the Assistant to "run it" or "pause it" with a report's builder open and it presses that
+builder's own Run now or switch, and you watch it happen in the chat.
 
 A scheduled run that fails is tried again at its next scheduled time, never in between. A report runs one at a time; a second
 Run now while it runs is told so.

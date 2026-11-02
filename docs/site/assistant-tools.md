@@ -14,7 +14,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
-| **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
+| **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete |
 | **app** | settings, connections, scripts, memory, rules, the Hub, the Board and Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?) |
 | **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
@@ -657,6 +657,7 @@ Change where one line of a report's route card goes.
 
 - `line` - timeline | alert | send
 - `how` - always | ai | rule | never
+- `to` (optional) - send or alert: who gets it - an address, or a name as the owner said it; not sure who: ask them, never guess
 - `title`
 - `when` - for ai: what to look for
 - `rule` - /`count`/`text` (for rule)

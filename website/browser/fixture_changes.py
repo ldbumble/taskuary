@@ -690,12 +690,22 @@ def install_processing_changes(app, store):
     @app.post('/api/fixture/task/agent-draft')
     def agent_draft(body: dict):
         """The task's agent saved a message for the person who asked - `taskuary --reply` (wrapup.agent_reply): the pending draft marked as the
-        agent's, waiting on the owner's Send (agent-draft-popup). Invented words only."""
-        if set(body) != {'task_id', 'text', 'agent'} or type(body['task_id']) is not int or not all(isinstance(body[k], str) and 0 < len(body[k]) < 2000 for k in ('text', 'agent')):
-            raise HTTPException(422, 'exact task_id, text and agent are required')
+        agent's, waiting on the owner's Send (agent-draft-popup). `answered`: the owner then answered that person themselves, outside Taskuary -
+        their reply on the thread, newer than the message the draft answers. Invented words only."""
+        if set(body) - {'answered'} != {'task_id', 'text', 'agent'} or type(body['task_id']) is not int                 or not all(isinstance(body.get(k, 'x'), str) and 0 < len(body.get(k, 'x')) < 2000 for k in ('text', 'agent', 'answered')):
+            raise HTTPException(422, 'exact task_id, text and agent are required; answered is optional')
+        import json
         from taskuary import funnel, wrapup
         out = wrapup.agent_reply(store, body['task_id'], body['text'], body['agent'])
         if not out.get('review_id'): raise HTTPException(409, f"the agent's draft was refused: {out.get('why') or out}")
+        if body.get('answered'):
+            m = store.get_message(out['message_id']) or {}
+            store.add_message({'TaskId': body['task_id'], 'Channel': m.get('Channel') or 'email', 'ExternalId': f"fixture-answered-{out['review_id']}",
+                               'ConversationId': m.get('ConversationId'), 'SourceName': 'alex@northwind.example', 'FromName': 'Alex Doyle',
+                               'FromEmail': 'alex@northwind.example', 'Subject': f"RE: {m.get('Subject') or ''}", 'BodyText': body['answered'],
+                               'OwnText': body['answered'], 'Direction': 'out', 'Status': 'context', 'RecipientsJson': json.dumps({'to': [m.get('FromEmail') or '']}),
+                               # ...a minute on, so a message that arrived this same second is still the older one
+                               'SentAt': (datetime.now() + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')})
         funnel.invalidate()
         return {'reviewId': out['review_id']}
 

@@ -104,10 +104,9 @@ export const CalendarLine = ({ meta }) => (
 // `liveWork`: what is still working on the task ("the agent is working") - the server keeps it open after the send, and the line says so.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
-// `compact`: the agent's draft asked where the agent is (AgentDraftAsk.jsx) - who it goes to, the draft and its buttons; what they wrote
-// and why it was drafted stay in Close out. `field`/`fieldLabel`: the draft box's name for the Assistant (pageView.js), told apart there.
+// `answered`: "You already answered <who> at <time>: ..." (agentDraftAsk.alreadyAnswered) - said over the draft, and its Send a second reply.
 export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "",
-  compact = false, field = "draft", fieldLabel = "Reply draft" }) {
+  answered = "" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
@@ -171,7 +170,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}${closesIt && sendable ? ` - ${stays}` : ` - and only that; the task stays open until you ${btn("close")}`}.`
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
     : isCal && !r.Stale ? `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`
-    : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)} - ${stays}.` : "";
+    : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)}${answered ? " as a second reply" : ""} - ${stays}.` : "";
   // A DRAFT THAT CANNOT LEAVE FROM HERE is copied (the owner, 2026-10-22: "buttons do the talking"): Copy beside Redraft, which
   // copies and closes nothing; why it cannot be sent is the Copy button's hover - the three lines that said so are gone
   const [copied, setCopied] = useState(false);
@@ -437,7 +436,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         setText(res.edits[r.ReviewId] ?? value); setCompare(res.compare); setInterrupt(null);
       }} />
       {/* a close-out says what it closes, whatever an older row's Reason worded it as */}
-      {compact ? null : proposal?.kind === "closeout" ? (
+      {/* ...and a reply the owner already sent that person is said over everything (the owner, 2026-11-02): Send would be a second one */}
+      {answered && !proposal && <Alert severity="warning" data-tq-already-answered="" sx={{ mb: 1, py: 0.25 }}>{answered}</Alert>}
+      {proposal?.kind === "closeout" ? (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
       ) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
@@ -452,7 +453,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       {!proposal && draftState(r).state === "needs" && (
         <Typography variant="body2" data-tq-draft-needs="" sx={{ color: DIM, mb: 1 }}>{draftState(r).line}</Typography>
       )}
-      {!proposal && !compact && <Inbound r={r} />}
+      {!proposal && <Inbound r={r} />}
       {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not - and a
           calendar answer goes to the calendar: what it will be told stands in their place, with no copies and no files */}
       {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
@@ -491,7 +492,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       </Box>}
       {/* ...named for the Assistant when the owner asks it about this draft (pageView.js): the reply's own box, filled through its onChange */}
       {/* ...and while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting") */}
-      <Box ref={draftRef} data-tq-draft-box="" data-tq-field={field} data-tq-label={fieldLabel} sx={{ position: "relative" }}>
+      <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative" }}>
         {drafting && <CircularProgress size={14} data-tq-drafting-spin="" sx={{ position: "absolute", top: 12, right: 12, zIndex: 1, color: FAINT }} />}
         <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={blanks}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}

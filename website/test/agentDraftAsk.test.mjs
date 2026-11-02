@@ -2,45 +2,59 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { agentAsks, askWhere, draftKey, isAgentDraft } from "../src/agentDraftAsk.js";
+import { agentAsks, alreadyAnswered, answeredLine, askWhere, isAgentDraft, noticeLine } from "../src/agentDraftAsk.js";
 
-// THE AGENT'S DRAFT IS ASKED WHERE THE AGENT IS (the owner, 2026-11-02): a pop-up over a CLI agent's terminal, a card under a general
-// agent's chat - the agent's own pending draft only, one per draft, and Later puts one off. Invented people only.
-const mine = { ReviewId: 7, Kind: "draft_reply", Status: "pending", DraftText: "Hi Erin - which week should the report cover?", DraftBy: "agent:Claude Code" };
+// THE AGENT'S DRAFT IS SAID WHERE THE AGENT IS AND SENT FROM CLOSE OUT (the owner, 2026-11-02: "in agent we should just say 'agent drafted a
+// message' and take you to the Close out screen"), and a draft the owner already answered says so. Invented people only.
+const mine = { ReviewId: 7, Kind: "draft_reply", Status: "pending", DraftText: "Hi Erin - which week should the report cover?", DraftBy: "agent:Claude Code",
+  MessageId: 40, FromName: "Erin Blake", FromEmail: "erin@northwind.example" };
 
-test("only a pending draft the agent wrote is asked about", () => {
+test("only a pending draft the agent wrote is said in the agent's pane", () => {
   assert.equal(isAgentDraft(mine), true);
   assert.equal(isAgentDraft({ ...mine, Kind: "clarification", DraftBy: "" }), true, "the agent's question to the sender");
-  assert.equal(isAgentDraft({ ...mine, DraftBy: "responder" }), false, "triage's own draft stays in Close out");
-  assert.equal(isAgentDraft({ ...mine, Status: "approved" }), false, "sent: gone from both places");
-  assert.equal(isAgentDraft({ ...mine, DraftText: "  " }), false, "nothing to approve yet");
-  assert.equal(isAgentDraft({ ...mine, Kind: "slot" }), false, "one of the task's emails is Close out's");
-  assert.equal(isAgentDraft({ ...mine, Kind: "action" }), false);
-});
-
-test("one ask per pending agent draft; Later puts that draft off, and a new letter on it comes back", () => {
-  const two = { ...mine, ReviewId: 8, DraftText: "Hi Gail - is Friday still on?" };
-  const reviews = [{ ReviewId: 6, Kind: "draft", Status: "pending", DraftText: "Thanks", DraftBy: "" }, mine, two];
-  assert.deepEqual(agentAsks(reviews).map((r) => r.ReviewId), [7, 8]);
-  const off = new Set([draftKey(mine)]);
-  assert.deepEqual(agentAsks(reviews, off).map((r) => r.ReviewId), [8], "Later hides that one only");
-  assert.deepEqual(agentAsks([{ ...mine, DraftText: "Hi Erin - a second thought." }, two], off).map((r) => r.ReviewId), [7, 8],
-    "the agent saved a new letter on the same review: asked again");
+  assert.equal(isAgentDraft({ ...mine, DraftBy: "responder" }), false, "Taskuary's own draft is Close out's alone");
+  assert.equal(isAgentDraft({ ...mine, Status: "approved" }), false, "sent: the notice goes");
+  assert.equal(isAgentDraft({ ...mine, Status: "no_reply" }), false, "dropped: the notice goes");
+  assert.equal(isAgentDraft({ ...mine, DraftText: "  " }), false);
+  assert.equal(isAgentDraft({ ...mine, Kind: "slot" }), false, "an email the task owes is Close out's");
+  const two = { ...mine, ReviewId: 8 };
+  assert.deepEqual(agentAsks([{ ReviewId: 6, Kind: "draft", Status: "pending", DraftText: "Thanks" }, mine, two]).map((r) => r.ReviewId), [7, 8], "one notice per draft");
   assert.deepEqual(agentAsks(undefined), []);
 });
 
-test("a CLI agent's terminal gets the pop-up, a general agent's chat the card, nothing else either", () => {
+test("the notice names the agent and the person, never the address", () => {
+  assert.equal(noticeLine(mine, "Taskuary"), "Claude Code drafted a message to Erin Blake");
+  assert.equal(noticeLine({ ...mine, Kind: "clarification", DraftBy: "" }, "Taskuary"), "Taskuary drafted a question to Erin Blake");
   assert.equal(askWhere("live"), "popup");
   assert.equal(askWhere("general"), "chat");
   for (const m of ["wrapping", "", null, undefined]) assert.equal(askWhere(m), null);
 });
 
-test("the pop-up lies over the terminal, never beside it, and hands ReviewDecision Close out's own Send", () => {
-  const pop = readFileSync(new URL("../src/AgentDraftAsk.jsx", import.meta.url), "utf8");
-  assert.match(pop, /position: "absolute"/, "laid over the pane: the terminal keeps its size");
-  assert.match(pop, /<ReviewDecision review=\{r\} \{\.\.\.decision\} compact/, "the card Close out draws, its props");
-  assert.match(pop, /send: true/, "the Assistant is told its Send is an outward send");
+test("already answered: a reply to that person newer than the message the draft answers - outside Taskuary or from here", () => {
+  const against = { MessageId: 40, FromEmail: "erin@northwind.example", SentAt: "2026-11-02 09:00:00" };
+  const outside = { at: "2026-11-02 09:30:00", text: "Hi Erin, the report covers the week of the 26th - all of it, night shift too.",
+    msg: { RecipientsJson: JSON.stringify({ to: ["erin@northwind.example"] }) } };
+  const a = alreadyAnswered({ draft: mine, sent: [outside], against });
+  assert.equal(a.who, "Erin Blake");
+  assert.equal(a.at, "2026-11-02 09:30:00");
+  assert.ok(a.words.startsWith("Hi Erin, the report covers") && a.words.endsWith("...") && a.words.length < 70, a.words);
+  assert.equal(answeredLine(a, () => "9:30 AM"), `You already answered Erin Blake at 9:30 AM: "${a.words}"`);
+  const fromHere = { at: "2026-11-02 10:00:00", text: "Sent from Taskuary", review: { ReviewId: 3, FromEmail: "erin@northwind.example" } };
+  assert.equal(alreadyAnswered({ draft: mine, sent: [outside, fromHere], against }).words, "Sent from Taskuary", "the newest one");
+  // ...not: one older than the message the draft answers, one to someone else, the draft itself, or nothing at all
+  assert.equal(alreadyAnswered({ draft: mine, sent: [{ ...outside, at: "2026-11-02 08:00:00" }], against }), null);
+  assert.equal(alreadyAnswered({ draft: mine, sent: [{ ...outside, msg: { RecipientsJson: '["gail@northwind.example"]' } }], against }), null);
+  assert.equal(alreadyAnswered({ draft: mine, sent: [{ ...fromHere, review: mine }], against }), null);
+  assert.equal(alreadyAnswered({ draft: null, sent: [outside], against }), null);
+  assert.equal(answeredLine(null), "");
+});
+
+test("the notice lies over the terminal and opens Close out; the draft is drawn in Close out alone, its answered line on it", () => {
+  const notice = readFileSync(new URL("../src/AgentDraftNotice.jsx", import.meta.url), "utf8");
+  assert.match(notice, /position: "absolute"/, "laid over the pane: the terminal keeps its size");
+  assert.doesNotMatch(notice, /ReviewDecision|DraftField|textarea/, "no draft, no Send in the agent's pane");
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /draftDecision = \{ closeout: closeoutRv, onMarkDone: askFinish, onSent: sent, closeOnSend: true, liveWork,/);
-  assert.match(page, /<TerminalPane sid=\{term\.sid\}[^\n]*\n[^\n]*\n\s*\{askAt === "popup" && <AgentDraftPopup/, "inside the terminal's own box");
+  assert.match(page, /<TerminalPane sid=\{term\.sid\}[^\n]*\n[^\n]*\n\s*\{askAt === "popup" && <AgentDraftNotice asks=\{agentDrafts\} at="popup"/, "inside the terminal's own box");
+  assert.match(page, /<ReviewDecision review=\{pendingReview\}[^\n]*\n[^\n]*answered=\{answeredYet\}/);
+  assert.equal(page.match(/<ReviewDecision review=\{pendingReview\}/g).length, 1, "one card for the draft: Close out's");
 });

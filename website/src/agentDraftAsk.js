@@ -1,26 +1,38 @@
-// THE AGENT'S DRAFT IS APPROVED WHERE THE AGENT IS (the owner, 2026-11-02: "when we ask the agent to ask the sender, we should have the
-// approve right there instead of having to go to the Close out tab to confirm sending a clarification. Keep as much space as possible for
-// the CLI tool, so for a CLI agent it should be a POP-UP. A general agent should show it where we ask questions, in the bottom space").
-// A draft an agent saved for a person (`taskuary --reply`, wrapup.agent_reply: DraftBy "agent:<name>"; or its question to the sender,
-// the clarification kind) is drawn over the terminal's corner, or at the foot of the general agent's conversation, with the very card
-// Close out draws for it (ReviewDecision) - the same Send, the same rules. Close out keeps it too; a send from either clears both.
-import { useEffect, useState } from "react";
+// THE AGENT'S DRAFT IS SAID WHERE THE AGENT IS, AND SENT FROM CLOSE OUT (the owner, 2026-11-02). First: "when we ask the agent to ask the
+// sender, we should have the approve right there" - a pop-up over the terminal, a card under the chat. Then, the same day: "then Close out
+// has the same thing?? ... in agent we should just say 'agent drafted a message' and take you to the Close out screen". So the agent's pane
+// says it in one small notice - who drafted it, to whom - and its one press opens Close out at the draft, the one place it is sent from.
+// A draft an agent saved for a person: its own `taskuary --reply` (wrapup.agent_reply: DraftBy "agent:<name>"), or its question to the
+// sender (the clarification kind). Taskuary's own drafts and the emails a task owes are Close out's alone, as before.
+import { deliveryMeta, deliveryTo } from "./replyDelivery.js";
 
 const isReply = (r) => r?.Kind !== "action" && r?.Kind !== "slot";
-// the agent wrote it: its own --reply, or the question it asked the sender (server clarify_with_sender)
 export const isAgentDraft = (r) => !!r && r.Status === "pending" && isReply(r) && !!String(r.DraftText || "").trim()
   && (String(r.DraftBy || "").startsWith("agent:") || r.Kind === "clarification");
-// ...one per draft as filed: an agent that saves a new letter on the same review brings it back up after a Later
-export const draftKey = (r) => `${r.ReviewId}|${String(r.DraftText || "")}`;
-// the drafts the agent pane asks about, in the order the task holds them, less those put off on this visit
-export const agentAsks = (reviews = [], off = new Set()) => (reviews || []).filter((r) => isAgentDraft(r) && !off.has(draftKey(r)));
-// where it is asked: over a terminal (a CLI agent) as a pop-up, in a general agent's conversation as its card - nowhere else
+// the drafts the agent pane says, in the order the task holds them
+export const agentAsks = (reviews = []) => (reviews || []).filter(isAgentDraft);
+// where it is said: over a terminal (a CLI agent) in its corner, at the foot of a general agent's conversation - nowhere else
 export const askWhere = (mode) => (mode === "live" ? "popup" : mode === "general" ? "chat" : null);
+// the notice's words: the agent by the name it wrote under, the person by name ("Erin Blake", not "Erin Blake <erin@...>")
+export const draftedBy = (r, agent = "The agent") => (String(r?.DraftBy || "").startsWith("agent:") ? String(r.DraftBy).slice(6) || agent : agent);
+export const draftedTo = (r) => deliveryTo(r).split(",").map((a) => a.replace(/\s*<[^>]*>/, "").trim() || a.trim()).filter(Boolean).join(", ");
+export const noticeLine = (r, agent) => (r.Kind === "clarification" ? `${draftedBy(r, agent)} drafted a question to ${draftedTo(r)}` : `${draftedBy(r, agent)} drafted a message to ${draftedTo(r)}`);
 
-// LATER PUTS IT OFF FOR THIS VISIT: the draft stays in Close out, and opening the task again brings the pop-up back. `all` is the chat's:
-// the card at the conversation's foot covers nothing, so it has no Later
-export function useAgentAsks(taskId, reviews) {
-  const [off, setOff] = useState(() => new Set());
-  useEffect(() => { setOff(new Set()); }, [taskId]);
-  return { all: agentAsks(reviews), asks: agentAsks(reviews, off), later: (r) => setOff((s) => new Set([...s, draftKey(r)])) };
+// ALREADY ANSWERED (the owner, 2026-11-02: "if you responded to it already, the draft should say you responded already"): a reply that went
+// to that person after the message the draft answers - sent outside Taskuary (the round's "You answered ... in <mailbox>") or from here.
+// `sent`: the current round's replies (closeoutRounds: [{at, text, review | msg}]); `against`: the message the draft was written against
+// (its MessageId); `ms` the app's clock. -> {who, at, words} of the newest such reply, or null.
+const emails = (v) => (JSON.stringify(v ?? "").toLowerCase().match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]+/g) || []);
+const toOf = (s) => emails(s.msg ? s.msg.RecipientsJson : [deliveryMeta(s.review).to, s.review?.FromEmail]);
+export function alreadyAnswered({ draft, sent = [], against = null, ms = (s) => Date.parse(s) || 0 } = {}) {
+  if (!draft) return null;
+  const t = (s) => ms(s) || 0, after = against ? t(against.SentAt) || t(against.CreatedAt) : 0;
+  const person = emails([deliveryMeta(draft).to, draft.FromEmail, against?.FromEmail])[0] || "";
+  // ...to that person: a reply that names its recipients and leaves them out went to someone else on the thread
+  const hit = (sent || []).filter((s) => s.review?.ReviewId !== draft.ReviewId && t(s.at) > after && String(s.text || "").trim()
+    && (!person || !toOf(s).length || toOf(s).includes(person))).at(-1);
+  if (!hit) return null;
+  const flat = String(hit.text).replace(/\s+/g, " ").trim(), words = flat.length > 60 ? `${flat.slice(0, 60).replace(/\s+\S*$/, "")}...` : flat;
+  return { who: draftedTo(draft) || against?.FromName || "them", at: hit.at, words };
 }
+export const answeredLine = (a, when = (s) => s) => (a ? `You already answered ${a.who} at ${when(a.at)}: "${a.words}"` : "");

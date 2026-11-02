@@ -161,7 +161,9 @@ PURPOSE = {
                                  'and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: '
                                  '"mark these read", "these four") - ALL in their words is every one waiting, never just the batch on the table. '
                                  'It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL '
-                                 'preference.exclude_sender or preference.sender_rule'),
+                                 'preference.exclude_sender or preference.sender_rule. Rows already filed as not ours (pipe.remove, Not ours) are off '
+                                 'the rail: "those should be read, not Not ours" is this with `keys` - their m-numbers, as the Not ours receipt '
+                                 'listed them - and each one\'s Not ours is taken back (nothing taught from it) and it is marked read'),
     'pipe.defer':               ('put a SET away until a day - `select` (below) and `until` (as task.defer takes it): "snooze everything '
                                  'from Gail until Monday" is select sender: Gail. Runs at once and the count is said'),
     'pipe.close':               ('close a SET at once - `select` (below): each task in it is marked done, each notice read. "Close all '

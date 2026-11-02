@@ -3313,13 +3313,21 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             named = any(v not in (None, '', [], False) for v in (sel or {}).values())
             hits = [i for i in (hits if named else _pipe(store)) if i.get('key') in table_keys and i.get('lane') not in ('blocked', 'working')]
             if not named: sel = {'kind': 'fyi'} if it.get('kind') == 'fyis' else {}
-        if not hits and not any(v not in (None, '', [], False) for v in (sel or {}).values()):
+        # ROWS FILED AS NOT OURS, NAMED BY THEIR KEYS, are read instead: the verdict is taken back and each is marked read (bulk.unfile).
+        # They are off the rail, so the set found none of them - "Marked 0 items read" with every one still filed as not ours (the owner,
+        # 2026-11-02: 'it should be "read" not marked as "Not ours"')
+        on = {k for i in hits for k in (i.get('key'), f"msg:{i.get('mid')}")}
+        back = [store.get_message(int(k[4:])) for k in sorted(bulk_mod.handles(sel.get('keys') or [])) if k.startswith('msg:') and k not in on
+                and k[4:].isdigit() and bulk_mod.filed_not_ours(store, int(k[4:]))]
+        back = [m for m in back if m and bulk_mod.unfile(store, m['MessageId'], actor)]
+        if back: funnel.invalidate()
+        if not hits and not back and not any(v not in (None, '', [], False) for v in (sel or {}).values()):
             # a set that names nothing ("mark them all read" with nothing before it) is a question, not "nothing matches"
             say_ = (f"Which ones? {pipe_holds(store)} Say the notices, the reports, everything from one sender - or "
                     "everything - and I'll clear that. Nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-        if not hits:
+        if not hits and not back:
             # ...in words, as the hit's receipt says them: "matches kind: fyi" read the selector's own field out (the 2026-10-22 re-walk)
             w, sw = _what_of(sel), _set_words(sel)
             what = 'FYI' if w in ('fyi', 'fyis') else 'reports' if w in ('report', 'reports') else f'{w} items' if w else 'items'
@@ -3340,7 +3348,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # ...AND ON A PHONE THE SAME (the owner, 2026-11-02: small changes act without asking): marking read sends nothing and closes
         # nothing, and the desk never asked a yes for it
         mine = sum(map(lanes.on_you, hits))
-        hits = [i for i in hits if not lanes.on_you(i)]
+        hits = [i for i in hits if not lanes.on_you(i)] + [{'key': f"msg:{m['MessageId']}", 'mid': m['MessageId'], 'who': m.get('FromName'),
+                                                              'title': m.get('Subject')} for m in back]
         if not hits:
             say_ = (f"{plural(mine, 'item')} {'is' if mine == 1 else 'are'} waiting on you - each is put down with its own button, "
                     "not by a sweep. Nothing has been touched.")
@@ -3356,7 +3365,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         say_ = (f"Marked {'all ' if every else ''}{_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
                 + (f" {plural(len(hits) - n, 'item')} would not clear - {max(set(why), key=why.count)}." if len(hits) > n and why else
                    f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
-                + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
+                + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else '')
+                + (f" {plural(len(back), 'item')} had been filed as not ours - that is taken back." if back else ''))
         # ...but ROWS THE MODEL NAMED are listed, each its link (bulk.py): a set chosen by judgement is checked by reading which went
         if sel.get('keys') and n: say_ += '\n' + bulk_mod.listing(cleared)
         record_related(store, tid, item, 'assistant', say_)

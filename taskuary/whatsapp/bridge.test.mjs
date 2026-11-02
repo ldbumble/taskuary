@@ -209,7 +209,8 @@ test("/status says how many chats are let in and turned away, when the last mess
     // the props/blocklist/privacy queries timed out (408) on every connect, and nothing reads them (TQ-1251)
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "socket-config.json"), "utf8")).fireInitQueries, false);
     assert.ok(st.lidMapped >= 2, "the owner's pair and the looked-up number");
-    const { messages } = await get(port, "/messages?after=0", token);
+    const { messages, boot } = await get(port, "/messages?after=0", token);
+    assert.match(boot, /^[0-9a-f-]{36}$/, "a start-up id: a restarted bridge counts from 0 again, and Taskuary reads all it holds (TQ-1251)");
     assert.deepEqual(messages.map((m) => [m.jid, m.text]), [["15550100200@s.whatsapp.net", "the export is late"],
       ["15550100200@s.whatsapp.net", "sent while the link was down"]],
       "the LID arrives as the number it was picked by; what the owner wrote to an unpicked chat stays out; what waited out a drop comes in");

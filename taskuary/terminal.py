@@ -1783,11 +1783,13 @@ TICK_HEAD = 'tick each to-do the moment you finish it, by the id in brackets aft
 _OPEN_BOX = re.compile(r'^- \[ \] .*\[[A-Za-z0-9_-]{4,}\]', re.M)
 def _tickable(md: str) -> bool: return bool(_OPEN_BOX.search(md or ''))    # an open box carrying an id (store.checklist_markdown ids=True)
 # SEVERAL TO-DOS FAN OUT (the owner, 2026-11-02): a checklist of independent items for one repo was worked one by one in a CLI that
-# can run them side by side. Said at the checklist, only with 2+ open boxes and only to a CLI that has subagents (Claude Code's Agent tool).
-SUBAGENT_CLI = ('claude',)
-SUBAGENT_HEAD = ('to-dos that do not depend on each other go to their own subagents in parallel (your Agent tool), each told the to-do, '
+# can run them side by side. Said at the checklist, only with 2+ open boxes and only to a CLI that has subagents (Claude Code, Codex, Gemini CLI).
+SUBAGENT_TOOL = {'claude': 'your Agent tool', 'codex': 'your subagents', 'gemini': 'your subagents'}   # each CLI's own name for it
+SUBAGENT_HEAD = ('to-dos that do not depend on each other go to their own subagents in parallel ({tool}), each told the to-do, '
                  'its id and what done means; you review each, tick it once it checks out, and run the tests once at the end')
-def _fans_out(md: str, cli: str) -> bool: return len(_OPEN_BOX.findall(md or '')) > 1 and bool(cli) and cli_named({'cmd': cli}) in SUBAGENT_CLI
+def _fan_line(md: str, cli: str) -> str:
+    tool = SUBAGENT_TOOL.get(cli_named({'cmd': cli})) if cli else None
+    return f'; {SUBAGENT_HEAD.format(tool=tool)}' if tool and len(_OPEN_BOX.findall(md or '')) > 1 else ''
 
 
 def with_fence_rule(rules: str) -> str:
@@ -1921,7 +1923,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     md = b['checklist']
     if md: say('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority'
                + (f' ({TICK_HEAD}: `taskuary --tick <id>`)' if _tickable(md) else '')
-               + (f'; {SUBAGENT_HEAD}' if _fans_out(md, cli) else '') + ':\n' + fence(md), theirs_too=True)
+               + _fan_line(md, cli) + ':\n' + fence(md), theirs_too=True)
     if m: say(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
               f"subject \"{m.get('Subject') or ''}\": "
               f"{fence(_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS))}", theirs_too=True)

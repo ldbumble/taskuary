@@ -216,11 +216,57 @@ def test_a_census_that_moved_under_a_settle_is_reconciled_instead_of_refused(sto
     add(store, 'A late arrival')                       # census dirty; nothing has reconciled it yet
     census = store.processing_reconcile_status()
     assert census['dirty_generation'] > census['reconciled_generation']
-    with pytest.raises(ValueError, match='reconciled before settlement'):
-        store.set_funnel_state(key, 'done', 'owner')   # the raw write is what refused
-    funnel.settle(store, key, 'done', 'owner')         # ...and the pipe's own road settles it anyway
+    store.set_funnel_state(key, 'done', 'owner')       # mail landing on ANOTHER row is reconciled in the settle itself (2026-11-02)
     assert store.funnel_states()[key]['Status'] == 'done'
+    assert not store.processing_reconcile_status()['pending']
     assert key not in {i['key'] for i in both(store)[1]['items']}
+
+
+def test_a_row_whose_own_item_moved_under_the_press_is_refused_raw_and_settled_by_the_pipe(store):
+    """The savepoint still guards the row being settled: mail filed onto a task after the card was drawn is not read by a press
+    that never showed it - the raw write refuses, and the pipe reconciles and settles."""
+    mid = add(store, 'Loose FYI')
+    both(store)
+    tid = store.create_task({'Title': 'Somewhere to file it'}, 'fixture')
+    store.place_message(mid, tid, 'routed')            # its item moves into the task's; nothing has reconciled it yet
+    with pytest.raises(ValueError, match='reconciled before settlement'):
+        store.set_funnel_state(f'msg:{mid}', 'done', 'owner')
+    funnel.settle(store, f'msg:{mid}', 'done', 'owner')
+    assert store.funnel_states()[f'msg:{mid}']['Status'] == 'done'
+
+
+def stale_draft(s):
+    "A reply draft whose mail was refiled under another task: the draft still names the first one - a census conflict that stays."
+    a, b = (s.create_task({'Title': t}, 'fixture') for t in ('First home', 'Second home'))
+    mid = add(s, 'Refiled thread', tid=a)
+    rid = s.add_review({'TaskId': a, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending'})
+    s.reconcile_processing_membership()
+    s.place_message(mid, b, 'routed')
+    assert s.reconcile_processing_membership()['status'] == 'conflicted'
+    return rid
+
+
+def test_a_conflict_elsewhere_never_blocks_marking_fyi_read(store):
+    """"All read, next" on a pile of FYI failed EVERY time (2026-11-02, a busy mailbox): one conflict anywhere left the census
+    pending for good, so each settle re-ran it, met the same unrelated conflict and refused - three tries, then the raw sentence."""
+    rid = stale_draft(store)
+    fyis = [add(store, f'Notice {i}') for i in range(4)]
+    for i, mid in enumerate(fyis):
+        if i: add(store, f'Arrived meanwhile {i}')    # mail keeps landing between presses
+        funnel.settle(store, f'msg:{mid}', 'done', 'owner')
+        assert store.funnel_states()[f'msg:{mid}']['Status'] == 'done'
+    st = store.processing_reconcile_status()
+    assert st['pending'] and st['conflicts'][0]['local_id'] == str(rid), 'the conflict stays recorded, not hidden'
+
+
+def test_a_conflict_on_the_row_itself_still_refuses_in_plain_words(store):
+    from taskuary import concierge
+    rid = stale_draft(store)
+    add(store, 'Arrived meanwhile')
+    with pytest.raises(ValueError, match='conflicts on this item') as e:
+        store.set_funnel_state(f'review:{rid}', 'done', 'owner')
+    said = concierge.clear_refused(e.value)
+    assert 'processing' not in said and 'membership' not in said
 
 
 def test_a_row_that_just_landed_can_be_settled_before_the_worker_reaches_it(store):

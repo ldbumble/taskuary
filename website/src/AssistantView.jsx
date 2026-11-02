@@ -2735,8 +2735,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // with the reason - folding it and walking on said it had
     if (!current) { await surfaceRef.current?.(); return; }
     const { error } = await leave(current, "settle", pressed ? { pressed } : {});      // ...its badge the server's too: a reload draws it
+    // ...and "didn't answer" only when it did not: a refusal Taskuary gave has its own words on the line below (errText)
     if (error) setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
-      { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: btn("next") }] }]);
+      { id: `r${Date.now()}`, role: "receipt", status: "error", chips: [{ verb: "next", label: btn("next") }],
+        text: error?.response ? "Not done - it is still here." : "Not done - Taskuary didn't answer. It is still here; press it again." }]);
   };
   // A SEND KEEPS THE ITEM ON THE TABLE (the owner, 2026-10-18: "sending and closing are two steps"): the card folds to its line and
   // the row by the prompt is the two ways on - Mark done (the one close) while there is a task, and Next. Nothing is settled and the

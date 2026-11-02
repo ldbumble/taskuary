@@ -313,12 +313,14 @@ def test_own_display_clear_and_done_keep_clean_census_but_never_clear_peer_dirt(
         db.set_funnel_state(key, 'surfaced')
         db.clear_funnel_state(key)
         assert db.processing_reconcile_status()['pending']
-        with pytest.raises(ValueError, match='reconciled'):
-            db.set_funnel_state(key, 'done')
-        assert db.resolve_processing_target('legacy_funnel', f'msg:{newcomer}') is None
-        assert not db.cx.execute('''SELECT 1 FROM processing_member
-            WHERE EntityKind='message' AND LocalId=?''', (str(newcomer),)).fetchone()
-        assert processing_reads.state(picture(db, mid), NOW)['unread']
+        # the peer's newcomer is another row: the settle reconciles it in (2026-11-02 - refusing here failed every press on a
+        # busy mailbox), and it stays unread - this done covers only its own item
+        db.set_funnel_state(key, 'done')
+        assert not db.processing_reconcile_status()['pending']
+        got = db.resolve_processing_target('legacy_funnel', f'msg:{newcomer}')
+        assert got and got['item_id'] != item_id(db, mid)
+        assert not processing_reads.state(picture(db, mid), NOW)['unread']
+        assert processing_reads.state(picture(db, newcomer), NOW)['unread']
     finally:
         peer.close()
 

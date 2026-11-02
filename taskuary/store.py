@@ -2992,8 +2992,7 @@ class SQLiteStore:
                         raise ValueError('processing target is unavailable')
                     if target is not None:
                         if not calendar and not clean:
-                            self._processing_validate_settlement_census(cur, stamp)
-                            clean = True
+                            clean = self._processing_validate_settlement_census(cur, stamp, key, target)
                         iid, kind, local_id = target
                         verified_picture = None
                         if not calendar and expected_context is not None:
@@ -3094,33 +3093,48 @@ class SQLiteStore:
                 SET AttemptedGeneration=DirtyGeneration, ReconciledGeneration=DirtyGeneration
                 WHERE Singleton=1''')
 
-    def _processing_validate_settlement_census(self, cur, stamp):
-        """Accept pending writes only when a fresh census changes no identity structure.
+    def _processing_validate_settlement_census(self, cur, stamp, key, target):
+        """Bring the census current before a settle, and refuse only what it says about THIS row. Returns whether it came out clean.
 
-        This is an explicit writer, never a GET. A savepoint prevents a failed
-        validation from accidentally accepting newly arrived/moved members. Done
-        still covers current substantive versions; this is not a content-CAS API.
+        This is an explicit writer, never a GET. A conflict ANYWHERE used to refuse every settle on every row, for good: a conflicted
+        census never advances ReconciledGeneration, so each press re-ran it, met the same unrelated conflict and raised - "All read,
+        next" on a pile of FYI failed every time (2026-11-02: one reply draft whose mail had been refiled under another task). Now what
+        the census changes on OTHER items is applied here, as the background reconcile would. A settle is refused only when the row's
+        own item moved (the savepoint keeps it from accepting members the card never showed) or a conflict touches it.
+        Done still covers current substantive versions; this is not a content-CAS API.
         """
         from .processing_membership import reconcile_membership, census_current, mark_census
         if census_current(cur):         # nothing the census reads moved since a clean one: it would change nothing
             cur.execute('''UPDATE processing_reconcile_state SET AttemptedGeneration=DirtyGeneration,
                 ReconciledGeneration=DirtyGeneration, LastAttemptAt=? WHERE Singleton=1''', (stamp,))
-            return
+            return True
+        def members(i): return {tuple(r) for r in cur.execute(
+            'SELECT EntityKind,LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL', (i,))}
+        def item_of(c):
+            r = cur.execute('SELECT ItemId FROM processing_member WHERE EntityKind=? AND LocalId=? AND RetiredAt IS NULL',
+                            (c['entity_kind'], c['local_id'])).fetchone()
+            return self._processing_follow(cur, r[0]) if r else None
+        iid = target[0]; before = members(iid)
         cur.execute('SAVEPOINT processing_settlement_census')
-        before_changes = self.cx.total_changes
         try:
             result = reconcile_membership(cur, stamp=stamp, new_item_id=self._processing_item_id,
                                           follow_item=self._processing_follow)
-            structural = self.cx.total_changes != before_changes
-            if structural or result['conflicts']:
+            now = self._processing_read_target(cur, key)
+            if now is None or now[0] != iid or members(iid) != before:
                 raise ValueError('processing membership must be reconciled before settlement')
-            mark_census(cur, True)
+            if any((c['entity_kind'], c['local_id']) in before or item_of(c) == iid for c in result['conflicts']):
+                raise ValueError('processing membership conflicts on this item')
+            clean = not result['conflicts']
+            mark_census(cur, clean)
+            # ...a conflict elsewhere stays pending, recorded, for the reconcile that can see it resolved
             cur.execute('''UPDATE processing_reconcile_state
-                SET AttemptedGeneration=DirtyGeneration,ReconciledGeneration=DirtyGeneration,
+                SET AttemptedGeneration=DirtyGeneration,
+                    ReconciledGeneration=CASE WHEN ? THEN DirtyGeneration ELSE ReconciledGeneration END,
                     LastAttemptAt=?,ConflictsJson=?,DiagnosticsJson=? WHERE Singleton=1''',
-                (stamp, json.dumps(result['conflicts'], sort_keys=True),
+                (int(clean), stamp, json.dumps(result['conflicts'], sort_keys=True),
                  json.dumps(result['diagnostics'], sort_keys=True)))
             cur.execute('RELEASE processing_settlement_census')
+            return clean
         except BaseException:
             cur.execute('ROLLBACK TO processing_settlement_census')
             cur.execute('RELEASE processing_settlement_census')

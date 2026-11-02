@@ -5693,6 +5693,13 @@ def _walk_answer(out: dict, body: RailWalkBody) -> Response:
     _refresh_after(out)
     return _encoded(out)
 
+def _refused(e: ValueError) -> str:
+    """A settle the store turned down, in words: the owner's chat showed "processing membership must be reconciled before
+    settlement" under "All read, next" (2026-11-02). Said as the Assistant says it (concierge.clear_refused); anything else as raised."""
+    from . import concierge
+    why = concierge.clear_refused(e)
+    return f'Not marked - {why}.' if why != str(e)[:160] else str(e)
+
 @app.post('/api/walk/start')
 def walk_start(body: RailWalkBody = None):
     from . import railwalk
@@ -5703,7 +5710,9 @@ def walk_start(body: RailWalkBody = None):
 def walk_next(body: RailWalkBody = None):
     from . import railwalk
     body = body or RailWalkBody()
-    return _walk_answer(railwalk.next(store, body.from_key, ACTOR, press=body.press, read=body.read), body)
+    try: out = railwalk.next(store, body.from_key, ACTOR, press=body.press, read=body.read)
+    except ValueError as e: raise HTTPException(422, _refused(e))
+    return _walk_answer(out, body)
 
 @app.post('/api/walk/back')
 def walk_back(body: RailWalkBody = None):
@@ -5724,7 +5733,7 @@ def walk_leave(body: RailWalkBody):
     if not body.key or not body.how: raise HTTPException(422, 'a key and how it is left are required')
     try: out = railwalk.leave(store, body.key, body.how, ACTOR, press=body.press, note=body.note, until=body.until)
     except LookupError as e: raise HTTPException(404, str(e))
-    except ValueError as e: raise HTTPException(422, str(e))
+    except ValueError as e: raise HTTPException(422, _refused(e))
     except RuntimeError as e: raise HTTPException(409, str(e))
     # ...and the card wears what its press did, from the server too, so a reload draws it: "All read, next" on an fyi batch folded with its
     # badge on the page and lost it on the next read (concierge._stamp_next). A button's own word, never free text

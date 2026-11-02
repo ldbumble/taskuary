@@ -232,6 +232,35 @@ def busy(store) -> list:
         logger.warning(f'closing: could not count running work - {e}'); return []
 
 
+def allow_text_menus() -> str:
+    """A misspelt word in a box can be fixed with a right-click, as in any browser (TQ-1251: "taskuary is catching the typos, but not
+    allowing me to edit them by clicking on it"). pywebview turns the web view's own menu off outside debug - WebView2's
+    AreDefaultContextMenusEnabled on Windows, every item removed in WKWebView on a Mac - and the suggestions live in that menu. This
+    lets it open again; the page (textMenu.js) keeps it to a box or selected text, so a right-click anywhere else still does nothing.
+    Returns which window it reached ('' when none: no pywebview, or a backend this does not know)."""
+    if sys.platform == 'win32':
+        try:
+            from webview.platforms import edgechromium as ec      # after dotnet(): .NET is loaded on this, the main, thread
+            ready = ec.EdgeChrome.on_webview_ready
+            if getattr(ready, '_tq_menus', False): return 'windows'
+            def on_ready(self, sender, args):
+                ready(self, sender, args)
+                try: sender.CoreWebView2.Settings.AreDefaultContextMenusEnabled = True
+                except Exception as e: logger.debug(f'menus: the web view kept its menu off - {e}')
+            on_ready._tq_menus = True; ec.EdgeChrome.on_webview_ready = on_ready
+            return 'windows'
+        except Exception as e: logger.debug(f'menus: not reached on this pywebview - {e}'); return ''
+    if sys.platform == 'darwin':
+        try:
+            from webview.platforms import cocoa
+            host = cocoa.BrowserView.WebKitHost
+            def willOpenMenu_withEvent_(self, menu, event): pass      # keep WebKit's menu; pywebview's empties it
+            host.willOpenMenu_withEvent_ = willOpenMenu_withEvent_
+            return 'mac'
+        except Exception as e: logger.debug(f'menus: not reached on this pywebview - {e}'); return ''
+    return ''
+
+
 def allow_downloads(webview) -> bool:
     """Every Download in the window SAVES. pywebview (5+) ships ALLOW_DOWNLOADS off, and its WebView2 handler then cancels each
     download as it starts - so Download on a file an agent made, a mail attachment or a published page was a click that did
@@ -494,6 +523,7 @@ def main():
         try: window.destroy()
         except Exception as e: logger.debug(f'tray: the window was already gone - {e}')
     dotnet()                              # imported here, on the main thread; the icon comes up in opened(), once the window has
+    allow_text_menus()                    # a right-click on a misspelt word offers the fix again
     try: window.events.closing += closing_handler(window, lambda: _server_store() if 'server' in held else None, shell=shell)
     except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
 

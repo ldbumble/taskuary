@@ -242,6 +242,7 @@ class Term:
         self.seeded = ''                                  # the prompt we typed: echoed back, not said
         self.accepted = None                              # None: no prompt yet; True: submitted; False: typed but not taken (PW-209)
         self.seeding = False                              # the seed is being typed in: the box is up, and nobody is waiting on anyone
+        self.draft, self.keyed_at = '', 0.                # the OWNER's unsent words in the box, from their own keys (keyed / owner_drafting)
         self.store = store                                # so the pty can file its own transcript when it ends
         self.keep_transcript = True                       # off for a session the owner types secrets into (aisetup)
         self.subs = []                                    # (loop, asyncio.Queue)
@@ -525,6 +526,17 @@ class Term:
         return ''.join(reversed(out))[-n:]
     def write(self, s):
         if self.alive: self.pty.write(s)
+    def keyed(self, s: str):
+        """The OWNER's keys from the pane (server.terminal_ws), replayed as a bare line editor: what they have typed and not sent.
+        Only the pane calls this - Taskuary's own typing (type_into) goes straight to write() and is never the owner's draft.
+        Arrows and mid-line edits are not followed, so owner_drafting() checks it against the screen before trusting it."""
+        s = _PASTE.sub(lambda m: ' '.join(m.group(1).split()), s)     # a bracketed paste's newlines are words, not Enter
+        d = self.draft
+        for c in _ESC_SEQ.sub('', s):
+            if c in '\r\n\x03\x15': d = ''                    # sent, or ^C / ^U cleared the box
+            elif c in '\x7f\b': d = d[:-1]
+            elif c >= ' ': d += c
+        self.draft, self.keyed_at = d[-2000:], time.time()
     def _saw_output(self):
         """Silence is the signal (see idle()) - but not ALL output breaks it. The reattach
         wiggle forces a full REPAINT, which is output that says nothing about the agent:
@@ -2652,10 +2664,13 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     try: busy = waitroom.state(store, task_id)[0] == 'working'
     except Exception as e: busy = False; logger.debug(f'relay: could not read whether the agent is working - {e}')
     # ...codex's own queue holds a line for the next turn by design (queue_codex): only a TYPED line is lost mid-turn
-    if busy and not (getattr(t, 'cli', '') == 'codex' and getattr(t, 'ext_id', '')):
+    # ...nor into a box the OWNER is typing in (2026-11-02): it went in mid-sentence, their words split around it, one garbled prompt
+    drafting = owner_drafting(t)
+    if drafting or (busy and not (getattr(t, 'cli', '') == 'codex' and getattr(t, 'ext_id', ''))):
         waitroom.add(store, task_id, line, actor='router')
-        store.add_comment(task_id, actor, 'agent', f"{who}'s {'new message' if new else 'answer'} waits for the agent to finish what it "
-                          'is doing - it is typed in when the agent stops.')
+        store.add_comment(task_id, actor, 'agent', f"{who}'s {'new message' if new else 'answer'} waits "
+                          + ('until you send what you are typing to the agent' if drafting and not busy else 'for the agent to finish what it is doing')
+                          + ' - it is typed in when the agent stops.')
         store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who, 'held': True})
         return True
     def landed(how):
@@ -2691,6 +2706,40 @@ def in_box(t, frag: str):
     i = next((i for i in range(len(lines) - 1, -1, -1) if _PROMPT.match(lines[i])), max(0, len(lines) - 6))
     box = ''.join(''.join(lines[i:]).split())
     return ''.join(frag.split()) in box or '[Pastedtext' in box
+
+
+_PASTE = re.compile(r'\x1b\[200~(.*?)\x1b\[201~', re.S)
+_ESC_SEQ = re.compile(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|O.|.)?', re.S)
+_RULE = re.compile(r'^[\s─━═╭╮╰╯┌┐└┘_-]*$')
+DRAFT_FRESH = 120                   # seconds: words the owner typed this recently still count where the screen cannot show them
+
+
+def box_text(t):
+    """What the session's input box holds right now, as the screen draws it ('' for an empty box); None without a screen.
+    The LAST prompt line, from its marker on, and the rows it wraps onto - down to the box's rule, a blank row or the footer."""
+    try: lines = render_visible(t.scrollback(), t.cols, t.rows).splitlines()
+    except (AttributeError, TypeError): return None
+    i = next((i for i in range(len(lines) - 1, -1, -1) if _PROMPT.match(lines[i])), None)
+    if i is None: return ''
+    out = [_PROMPT.sub('', lines[i], count=1)]
+    for l in lines[i + 1:]:
+        if not l.strip() or _RULE.match(l.strip(' │|')) or _PARKED.search(l) or _WORKING.search(l): break
+        out.append(l)
+    return ' '.join(' '.join(o.strip().strip('│|') for o in out).split())
+
+
+def owner_drafting(t) -> bool:
+    """Is the OWNER half-way through typing in this session's box? Then nothing may be typed into it: a queued note went in
+    mid-sentence and arrived as one garbled prompt, the owner's words split around it (2026-11-02). Both witnesses, because
+    neither is enough alone: the keys say whose the words are (a CLI's grey placeholder or suggested prompt is text on the
+    screen too, and would hold a note forever), the screen says they are still there (sent, or cleared some way the keys
+    did not show). Their typed tail on screen holds the note; other text in the box holds it while they typed recently."""
+    d = ''.join(str(getattr(t, 'draft', '') or '').split())
+    if not d: return False
+    b = box_text(t)
+    if b is None: return True
+    b = ''.join(b.split())
+    return bool(b) and (d[-12:] in b or time.time() - float(getattr(t, 'keyed_at', 0) or 0) < DRAFT_FRESH)
 
 
 def _until(cond, secs: float, t) -> bool:

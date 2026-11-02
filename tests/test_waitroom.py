@@ -290,6 +290,75 @@ class DripTests(unittest.TestCase):
             self.assertEqual(c.get('/api/tasks').json()['data'][0]['Waiting'], 3)
 
 
+CLAUDE_BOX = '\r\n'.join(['Done - the export path is fixed.', '', '─' * 60, '❯ {}', '─' * 60, '  ⏵⏵ bypass permissions on (shift+tab to cycle)'])
+CODEX_BOX = '\r\n'.join(['• Updated the import.', '', '› {}', '', '  ⏎ send   ⌃J newline   ⌃T transcript'])
+
+
+class ScreenTerm(FakeTerm):
+    """A parked session with a rendered screen and the owner's own keys (Term.keyed)."""
+    def __init__(self, tid, box=CLAUDE_BOX, text=''):
+        super().__init__(tid, idle=terminal.IDLE_WAITING + 5, tail=['Done.'])
+        self.cols, self.rows, self.box, self.draft, self.keyed_at = 110, 32, box, '', 0.
+        self.show(text)
+    def show(self, text): self.screen = self.box.format(text)
+    def scrollback(self): return self.screen
+    def keyed(self, s): terminal.Term.keyed(self, s)
+
+
+class OwnerTypingTests(unittest.TestCase):
+    """2026-11-02: the owner typed in the box while the agent worked; it stopped, and a queued note went in mid-sentence -
+    "also if you cl" + the note + "ick" arrived as one garbled prompt."""
+    def test_the_keys_are_replayed_as_the_line_the_owner_has_not_sent(self):
+        t = ScreenTerm(1)
+        t.keyed('also if you clx\x7f'); self.assertEqual(t.draft, 'also if you cl')
+        t.keyed('\x1b[D\x1b[C'); self.assertEqual(t.draft, 'also if you cl', 'arrows change no letters')
+        t.keyed('\x1b[200~two\r\nlines\x1b[201~'); self.assertEqual(t.draft, 'also if you cltwo lines', 'a pasted newline is not Enter')
+        t.keyed('\r'); self.assertEqual(t.draft, '', 'Enter sent it')
+        t.keyed('abc\x15'); self.assertEqual(t.draft, '', '^U cleared it')
+
+    def test_the_box_is_read_off_the_screen_for_claude_and_codex(self):
+        for box in (CLAUDE_BOX, CODEX_BOX):
+            self.assertEqual(terminal.box_text(ScreenTerm(1, box, 'also if you cl')), 'also if you cl')
+            self.assertEqual(terminal.box_text(ScreenTerm(1, box)), '')
+        self.assertIsNone(terminal.box_text(FakeTerm(1)), 'no screen to read')
+
+    def test_drafting_needs_the_owners_keys_and_the_screen_to_agree(self):
+        t = ScreenTerm(1, text='Try "fix the lint errors"')
+        self.assertFalse(terminal.owner_drafting(t), "a CLI's placeholder is not the owner typing")
+        t.keyed('also if you cl'); t.show('also if you cl')
+        self.assertTrue(terminal.owner_drafting(t))
+        t.show(''); self.assertFalse(terminal.owner_drafting(t), 'the box is empty - sent or cleared')
+        t.show('Try "fix the lint errors"'); t.keyed_at = time.time() - terminal.DRAFT_FRESH - 1
+        self.assertFalse(terminal.owner_drafting(t), 'cleared some way the keys did not show, long ago: not held forever')
+
+    def test_a_note_waits_while_the_owner_types_and_goes_in_once_they_send(self):
+        s = MemoryStore(); tid = task(s)
+        t = ScreenTerm(tid)
+        t.keyed('also if you cl'); t.show('also if you cl')
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            out = waitroom.add(s, tid, 'Erin wrote again: the download goes to the local computer', 'router')
+            for _ in range(3): self.assertEqual(waitroom.tick(s), 0)
+            time.sleep(0.3)
+            self.assertEqual((out['delivered'], out['state']), (0, 'owner_typing'))
+            self.assertEqual(t.writes, [], 'nothing typed into the half-written line')
+            self.assertEqual(len(s.waiting_notes(tid)), 1, 'it keeps its place')
+            t.keyed('ick\r'); t.show('')                          # the owner sent their own line
+            self.assertEqual(waitroom.tick(s), 1)
+            time.sleep(0.5)
+        self.assertIn('Erin wrote again', t.typed()); self.assertNotIn('also if you', t.typed())
+
+    def test_a_relayed_message_to_a_parked_agent_waits_while_the_owner_types(self):
+        s = MemoryStore(); tid = task(s)
+        t = ScreenTerm(tid)
+        t.keyed('also if you cl'); t.show('also if you cl')
+        with mock.patch.dict(terminal.SESSIONS, {'a': t}, clear=True):
+            self.assertTrue(terminal.say_to_task(s, tid, {'FromName': 'Erin Blake', 'Channel': 'whatsapp', 'BodyText': 'use the shared folder'}, new=True))
+            time.sleep(0.3)
+            self.assertEqual(t.writes, [])
+            self.assertEqual([n['Note'][:22] for n in s.waiting_notes(tid)], ['Erin Blake wrote again'])
+            self.assertTrue(any('until you send what you are typing' in c['Body'] for c in s.list_comments(tid)))
+
+
 class ApiTests(unittest.TestCase):
     def test_round_trip(self):
         from fastapi.testclient import TestClient

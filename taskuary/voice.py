@@ -230,16 +230,16 @@ def _windows(data: bytes) -> str:
 """WINDOWS VOICE TYPING FIRST (the owner, 2026-11-02, after System.Speech wrote a dictation as "a predetermined trading land on my left
 arm": "do the changes to use desktop if the machine has it"). Windows 10 and 11 ship two recognisers. System.Speech (above) is the 2006
 one, untrained and offline. Windows.Media.SpeechRecognition is the one behind Win+H and Edge's tabs: Microsoft's online service, on when
-Settings > Privacy & security > Speech > Online speech recognition is. It hears the MICROPHONE, never a file, so it is a session the
+Online speech recognition is on in Windows' speech privacy settings. It hears the MICROPHONE, never a file, so it is a session the
 server holds: started by the mic's press, each phrase read as it settles, stopped by the next press. PowerShell 5.1 reaches it as a WinRT
 type - no Python package, nothing added to the exe. A phrase still being said at the stop gets up to 3.5s to settle (an operation it has
 started cannot be cancelled from PowerShell); a silence ends each listen after 3s and the next starts at once, so nothing falls between.
 It hears this computer's own microphone, so it serves only a page on this computer (server: loopback). macOS has no such door for an
 unbundled process - Apple's Speech framework kills a caller whose app carries no usage description - so a Mac uses its Dictation key."""
 LIVE = {'engine': 'windows_voice_typing', 'label': 'Windows voice typing (on this computer)', 'live': True}
-SPEECH_OFF = 'Windows voice typing is more accurate: turn on Online speech recognition in Settings > Privacy & security > Speech'
+SPEECH_OFF = "Windows voice typing is more accurate: turn on Online speech recognition in Windows' speech privacy settings"
 # what the child's stop means to the owner, by the WinRT status it names
-_LIVE_WHY = {'MicrophoneUnavailable': 'no microphone Windows will lend - check Settings > Privacy & security > Microphone, "Let desktop apps access your microphone"',
+_LIVE_WHY = {'MicrophoneUnavailable': 'no microphone Windows will lend - turn on "Let desktop apps access your microphone" in the microphone privacy settings of Windows',
              'NetworkFailure': 'it needs the internet, and could not reach it', 'privacy': SPEECH_OFF,
              'TopicLanguageNotSupported': "it does not take dictation in this computer's language"}
 _WINRT = r'''$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [Text.Encoding]::UTF8

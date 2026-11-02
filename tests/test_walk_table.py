@@ -230,3 +230,19 @@ def test_next_says_what_it_read(world):
     assert w.do('next')['read'] == [r1], 'Next on a report reads it'
     w.do('open T1')
     assert w.do('next')['read'] == [], 'Next on a task reads nothing'
+
+def test_peek_says_what_comes_above_the_row_above(world):
+    """`walk.above_then` and `walk.above_reads` are the page's word for a Back, or a Next, pressed on the row a Back drew while that Back is
+    still out (the owner, 2026-11-02: "the Back button takes way too long, not like the Next button"): the row above the one above, and whether
+    Next reads the one above - so the second press draws its own row at once. They are exactly what two Backs bring, and what Next reads."""
+    from taskuary import railwalk
+    s, src = world
+    w = Walk(s, src)
+    for sym in ('T3', 'M1', 'L1', 'R2', 'I1', 'F2', 'F6'):
+        w.do(f'open {sym}')
+        walk = railwalk.peek(s)
+        w.do('back')
+        assert w.on == walk['above'], f'{sym}: Back went to {w.on}, peek said {walk["above"]}'
+        assert railwalk.peek(s)['reads'] == walk['above_reads'], f'{sym}: above_reads={walk["above_reads"]} for {w.on}'
+        w.do('back')
+        assert w.on == walk['above_then'], f'{sym}: a second Back went to {w.on}, peek said {walk["above_then"]}'

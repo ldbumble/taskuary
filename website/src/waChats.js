@@ -41,3 +41,7 @@ export function waMatches(q, jid, name = "") {
   const hay = fold(`${bareName(name, jid) ? "" : name} ${fmtPhone(num)}`);
   return q.split(/\s+/).every((w) => hay.includes(fold(w)));
 }
+
+// A switched-on chat's last saved message, one line under its name (the owner, 2026-11-02): "Gail Moreno: standup moved · 5m ago".
+// The server sends `said` only for a chat that is on (wanames.said); an off one shows nothing here either, the moment it is flipped.
+export const waSaid = (said, on, age = "") => (on && said?.text ? [said.from ? `${said.from}: ${said.text}` : said.text, age].filter(Boolean).join(" · ") : "");

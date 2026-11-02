@@ -143,6 +143,50 @@ def kept(store, rows, connector_id=None) -> list:
     return sorted(out, key=lambda r: str(r.get('last') or ''), reverse=True)
 
 
+PREVIEW = 90                    # one line on the card's row
+
+
+def preview(body, ct='', file='') -> str:
+    """One line of a saved message: its words, or what it was - "photo", "voice note: <transcript start>", "file <name>" - never the
+    voice module's own trailer or the poller's "(no text - see the attachment)" placeholder."""
+    from . import voice
+    t = str(body or '')
+    if t.startswith('(no text - see the attachment)'): t = ''
+    note = ct.startswith('audio') or t.startswith(voice.MARK)
+    if voice.is_placeholder(t): t = ''
+    elif note: t = re.sub(r'\n\n\(' + re.escape(voice.MARK.lower()) + r'[^\n]*\)\s*$', '', t)
+    if t.strip() == '(nothing audible)': t = ''
+    kind = 'voice note' if note else 'photo' if ct.startswith('image') else f'file {file}'.strip() if ct else ''
+    t = ' '.join(t.split())
+    line = f'{kind}: {t}' if kind and t else kind or t
+    return line if len(line) <= PREVIEW else line[:PREVIEW - 1].rstrip() + '…'
+
+
+def said(store, rows, connector_id=None) -> list:
+    """Each SWITCHED-ON chat's last saved message on its row: `said` = {from, text, at} - who wrote it (a group's sender, "You" for
+    the owner's own line), one line of it, and when. The owner, 2026-11-02: see the recent messages from the chats turned on.
+    Only a chat that is on: an off chat's messages are never taken in, and the bridge's list carries no text. One read for all."""
+    on = set()
+    try: on = {str(s.get('Address') or '').strip() for s in store.list_sources(active_only=True) if s.get('Channel') == 'whatsapp'
+               and (connector_id is None or not s.get('ConnectorId') or int(s['ConnectorId']) == int(connector_id))}
+    except Exception: pass
+    jids = [r['jid'] for r in rows if r.get('jid') in on]
+    if not jids: return rows
+    q = f"""SELECT m.ConversationId Cid, m.FromName, m.Direction, m.BodyText, m.SentAt,
+                   (SELECT a.ContentType FROM attachment a WHERE a.MessageId=m.MessageId ORDER BY a.AttachmentId LIMIT 1) Ct,
+                   (SELECT a.Name FROM attachment a WHERE a.MessageId=m.MessageId ORDER BY a.AttachmentId LIMIT 1) File
+            FROM (SELECT MessageId, ROW_NUMBER() OVER (PARTITION BY ConversationId ORDER BY SentAt DESC, MessageId DESC) k
+                  FROM message WHERE Channel='whatsapp' AND ConversationId IN ({','.join('?' * len(jids))})) x
+            JOIN message m ON m.MessageId=x.MessageId WHERE x.k=1"""
+    try: last = {r['Cid'][9:]: r for r in store._rows(q, tuple(f'whatsapp:{j}' for j in jids))}
+    except Exception: return rows
+    for r in rows:
+        if not (m := last.get(r.get('jid'))): continue
+        who = 'You' if (m.get('Direction') or 'in') == 'out' else (m.get('FromName') or '').strip() if r.get('group') else ''
+        r['said'] = {'from': who, 'text': preview(m.get('BodyText'), m.get('Ct') or '', m.get('File') or ''), 'at': str(m.get('SentAt') or '')}
+    return rows
+
+
 def _signed(store) -> dict:
     """{number or LID: the name they last signed a WhatsApp message with}, under both of a person's ids (the poller keeps the
     other one as the message's `alias`). Read once per fill, and only when a row has no better name."""

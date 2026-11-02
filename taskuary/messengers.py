@@ -427,8 +427,9 @@ def _named(store, rows, kept_for=None) -> list:
         for r in rows: r['phone'] = wanames.phone(r['jid'])
         return rows
     wanames.remember(store, rows)
-    if kept_for is not None: rows = wanames.kept(store, rows, kept_for.get('ConnectorId'))
-    return wanames.fill(store, rows)
+    if kept_for is None: return wanames.fill(store, rows)
+    rows = wanames.kept(store, rows, kept_for.get('ConnectorId'))
+    return wanames.said(store, wanames.fill(store, rows), kept_for.get('ConnectorId'))
 
 
 GROUP_CHAT = 'group chat'       # what a group's messages were stored under before the group's own name was

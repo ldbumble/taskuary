@@ -69,6 +69,13 @@ refresh token is kept as the card's secret and renews itself from then on.
 Taskuary your browser cannot reach on `localhost`: one running on another computer, or a headless
 box. It shows a code to type at microsoft.com/devicelogin. It is never used unless you pick it.
 
+**Microsoft shows "Need admin approval" or error AADSTS900971 ("No reply address provided")?** Your
+company lets only an IT admin approve a new app, so the sign-in stops on Microsoft's page and never
+comes back - after a minute and a half the card says so and shows the approval link. Your IT admin
+opens that link once, signs in and clicks Accept; nothing is registered in your tenant. Then press
+Sign in with Microsoft again. The same link answers AADSTS65001, AADSTS90094, AADSTS50105 (the app
+is limited to people IT assigned) and AADSTS53003 (a Conditional Access policy).
+
 :::note For an IT admin approving Taskuary
 - **No device-code flow by default.** Sign-in is the authorization-code flow with PKCE in the
   system browser, so a Conditional Access policy that blocks device-code authentication does not

@@ -165,10 +165,10 @@ jobs:
       - name: Build TaskuarySetup.exe
         shell: pwsh
         run: |
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -First 1).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          & $iscc "/DAppVersion=$("${{ github.ref_name }}".TrimStart('v'))" installer	askuary.iss
+          & $iscc "/DAppVersion=$("${{ github.ref_name }}".TrimStart('v'))" installer/taskuary.iss
           if ($LASTEXITCODE) { throw "the installer did not build" }
       - name: Sign TaskuarySetup.exe
         if: vars.AZURE_SIGNING_ACCOUNT != ''

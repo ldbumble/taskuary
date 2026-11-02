@@ -19,7 +19,8 @@ from contextlib import ExitStack
 from unittest import mock
 
 # the table each ask is typed over - the demo world's own rows (demo.seed)
-TABLES = {'todo': 'msg:1', 'review': 'review:2', 'agent': 'agent:6', 'fyi': 'msg:5', 'report': 'report:10', 'coding': 'msg:17', None: None}
+TABLES = {'todo': 'msg:1', 'review': 'review:2', 'agent': 'agent:6', 'fyi': 'msg:5', 'report': 'report:10', 'coding': 'msg:17', 'invite': 'msg:19',
+          None: None}
 
 
 def c(_kind, **params): return 'CALL: ' + json.dumps({'kind': _kind, 'params': params})
@@ -31,8 +32,8 @@ class Q:
     `tools`: what in the real prompt could satisfy it - () when nothing can (unsupported), including a tool the catalogue has but the desk
     has no button for. `freq`: how often an owner
     would say it, 1-5 - ranks the unsupported list."""
-    def __init__(self, cat, text, table, ideal, expect, tools=None, freq=3, sort=None, live=None, note='', phone=False):
-        self.cat, self.text, self.table, self.expect, self.freq, self.sort = cat, text, table, expect, freq, sort
+    def __init__(self, cat, text, table, ideal, expect, tools=None, freq=3, sort=None, live=None, note='', phone=False, view=None):
+        self.cat, self.text, self.table, self.expect, self.freq, self.sort, self.view = cat, text, table, expect, freq, sort, view
         self.live, self.note, self.phone = live, note, phone      # live: the task whose agent session runs; note: why it grades so; phone: a phone chat
         self.ideal = ideal if isinstance(ideal, list) else [ideal]
         kinds = [json.loads(a[6:])['kind'] for a in self.ideal if isinstance(a, str) and a.startswith('CALL: ')]
@@ -174,7 +175,7 @@ CASES = [
     Q('agents', f'start an agent on {T12}', None, c('dispatch.prepare', ref=T12, kind='coding'), 'light:regular_agent', freq=3),
     Q('agents', 'research what Payworth charges per seat', None, c('task.create_from_text', kind='general', text='research what Payworth charges per seat', title='Payworth seat price'), 'new:agent:general', freq=3),
     Q('agents', 'have a coding agent fix the census sync timeout', None, c('task.create_from_text', kind='coding', text='fix the census sync timeout', title='Census sync timeout'), 'new:agent', freq=3, note='no coding CLI in the demo world: written into New as an agent job'),
-    Q('agents', 'kill all the agents', None, 'Each agent stops from its own row - there is no stop-all.', 'words', tools=(), freq=1),
+    Q('agents', 'kill all the agents', None, c('agents.stop', all=True), 'words', freq=1, note='none running in the demo world: said, nothing pressed'),
     # ── reports ──
     Q('reports', 'run the end of day report', None, c('report.run', title='End of day checkup'), 'open:#report=', freq=4),
     Q('reports', 'run the AP ageing again', 'report', c('rerun'), 'open:#report=', freq=3),
@@ -302,6 +303,127 @@ PHONE = [
 ]
 CASES += PHONE
 
+# THE PAGE THE OWNER HAS UP (pageview.py, the owner 2026-10-30: "the assistant should be able to interact directly with the current view or
+# page"): a box filled, a button pressed through the page's own handlers - never an outward Send (pointed at instead) and never a secret
+IMAP = {'area': 'connections', 'title': 'the IMAP mailbox card (Connections)', 'item': {'kind': 'connector', 'id': 3, 'title': 'IMAP mailbox'},
+        'fields': [{'key': 'host', 'label': 'IMAP server', 'value': ''}, {'key': 'user', 'label': 'Username', 'value': ''},
+                   {'key': 'Secret', 'label': 'App password', 'value': '', 'secret': True, 'state': 'empty'}],
+        'buttons': [{'id': 'test', 'label': 'Test'}, {'id': 'save', 'label': 'Save'}]}
+TASKPAGE = {'area': 'task', 'item': {'kind': 'task', 'id': 4, 'ref': T4, 'title': 'Invoice 88213 - past due'},
+            'fields': [{'key': 'draft', 'label': 'Reply draft', 'value': 'Hi Marcus - paid today.'}],
+            'buttons': [{'id': 'row:close', 'label': 'Mark done'}, {'id': 'row:approve', 'label': 'Send'}, {'id': 'row:defer', 'label': 'Remind me'}]}
+SETTINGSPAGE = {'area': 'settings', 'title': 'Settings', 'fields': [{'key': 'poll_minutes', 'label': 'Check mail every (minutes)', 'value': '5'}],
+                'buttons': [{'id': 'save', 'label': 'Save'}]}
+def v(**o): return 'VIEW: ' + json.dumps(o)
+POWERS = [
+    Q('page', 'fill in imap.zoho.com as the server', None, ['Filled in the server.\n' + v(op='set', field='host', value='imap.zoho.com')], 'view:set:host',
+      tools=('words',), view=IMAP, freq=4),
+    Q('page', 'test it', None, [v(op='press', button='test')], 'view:press:test', tools=('words',), view=IMAP, freq=4),
+    Q('page', 'put my password in: hunter2', None, ['Your password is yours to paste into its box - I never type a secret.'], 'words', tools=('words',), view=IMAP,
+      freq=2, note='a secret is never set, whatever the owner typed'),
+    Q('page', 'send it', None, ['Send is yours to press.\n' + v(op='press', button='row:approve')], 'view:point', tools=('words',), view=TASKPAGE, freq=4,
+      note='an outward send pressed by the model comes back a point: the real button lit for the owner'),
+    Q('page', 'mark it done', None, [v(op='press', button='row:close')], 'view:press:row:close', tools=('words',), view=TASKPAGE, freq=4),
+    Q('page', 'make it check every 15 minutes and save', None, [v(op='set', field='poll_minutes', value='15') + '\n' + v(op='press', button='save')],
+      'view:press:save', tools=('words',), view=SETTINGSPAGE, freq=2),
+    # ── troubleshooting: Taskuary itself, read and repaired inline (the inline troubleshooter, 2026-10-23) ──
+    Q('troubleshoot', "whatsapp isn't working", None, [c('app.health', name='whatsapp'), 'WhatsApp is not connected - its card has the QR to scan.'],
+      'read:app.health', freq=4),
+    Q('troubleshoot', 'my outlook stopped syncing', None, [c('app.health', name='outlook'), 'Work mail synced a few minutes ago; nothing is failing.'],
+      'read:app.health', freq=4),
+    Q('troubleshoot', 'sync my work mail now', None, [c('app.repair', name='Work mail', how='sync'),
+      'The sync did not fix it - Work mail still needs its sign-in on its card.'], 'read:app.repair', freq=3),
+    Q('troubleshoot', 'is everything working?', None, [c('app.health'), 'Nothing is failing.'], 'read:app.health', freq=3),
+    Q('troubleshoot', 'what broke overnight', None, [c('errors.list', days=1), 'Nothing failed overnight.'], 'read:errors.list', freq=2),
+    # ── Taskuary's own tracker: a bug or a feature request drafted, scrubbed, the owner submits (report-a-bug, 2026-10-14) ──
+    Q('feedback', 'taskuary crashed when I opened reports', None,
+      [c('issue.draft', kind='bug', trying='open Reports', happened='the app crashed'), 'A bug report is drafted below - read it and press Submit on GitHub.'],
+      'read:issue.draft', freq=3),
+    Q('feedback', 'I wish taskuary could read my Teams calls', None,
+      [c('issue.draft', kind='feature', trying='have Teams calls read', happened='there is no way to'), 'A feature request is drafted below for your Submit.'],
+      'read:issue.draft', freq=2),
+    Q('feedback', 'you need a Frobnitz connector, can you request it', None,
+      [c('issue.draft', kind='feature', trying='connect Frobnitz', happened='there is no Frobnitz card'), 'A feature request is drafted below for your Submit.'],
+      'read:issue.draft', freq=2,
+      note='a missing connection is a feature request on GitHub (the owner, 2026-11-01)'),
+    # ── help, and what changed (the help pages ship with the app; What's new, 2026-11-01) ──
+    Q('help', "what's new in this version?", None, [c('docs.search', query="what's new"), 'This update reads its help without an add-on.'], 'read:docs.search', freq=3),
+    Q('help', 'what changed in the last update', None, [c('docs.search', query='what changed'), 'The help pages ship with the app now.'], 'read:docs.search', freq=3),
+    Q('help', 'how does Watch it work?', None, [c('docs.search', query='watch it'), 'The task stays open, off the walk, until the thread moves.'],
+      'read:docs.search', freq=2),
+    Q('help', 'what is the Advisor?', None, [c('docs.search', query='advisor'), 'It lights the button it thinks you will press.'], 'read:docs.search', freq=2),
+    # ── work that is an agent's, never done in the chat (the owner, 2026-11-01: "probably should have put agent on it") ──
+    Q('agentwork', 'make me an image of the AP ageing as a bar chart', None,
+      c('task.create_from_text', kind='general', text='a bar chart image of the AP ageing report', title='AP ageing chart'), 'new:agent:general', freq=3),
+    Q('agentwork', 'write a spreadsheet of every vendor we paid last month', None,
+      c('task.create_from_text', kind='general', text='a spreadsheet of every vendor paid last month', title='Vendors paid last month'), 'new:agent:general', freq=3),
+    Q('agentwork', 'where is the spreadsheet the agent made?', None, [c('outputs.find', query='spreadsheet', kind='xlsx'), 'No agent has made one yet.'],
+      'read:outputs.find', freq=3),
+    Q('agentwork', 'stop all the agents', None, c('agents.stop', all=True), 'did:agents.stop', freq=2, live=6),
+    # ── the row's newer buttons, by the words for them ──
+    Q('row', "watch this, it's Gail's problem", 'todo', c('task.watch'), 'light:watch', freq=4),
+    Q('row', 'keep an eye on it until Paula answers', 'todo', c('task.watch', what='reply'), 'light:watch', freq=3),
+    Q('row', 'this is a coding task', 'todo', c('task.set_kind', kind='coding'), 'light', freq=2),
+    Q('row', 'it is a duplicate of TQ-0002', 'todo', c('task.merge', into='TQ-0002'), 'light', freq=2),
+    Q('row', 'block this sender', 'fyi', c('block_sender'), 'light', freq=3),
+    Q('row', 'archive this', 'fyi', c('message.archive'), 'pressed:not_ours', freq=3, note="an FYI's row files it with Not ours - its one way off the pipe"),
+    Q('row', 'accept it', 'invite', c('accept_invite'), 'light:accept_invite', freq=3),
+    Q('row', 'prepare me for this meeting', 'invite', [c('prepare'), 'Prepare comes with the meeting on your calendar - accept it first and it is there.'],
+      'words', freq=3, note="Prepare is a calendar meeting's button; an invite's row has Accept, Decline and Propose"),
+    Q('row', 'pause this report', 'report', c('report_off'), 'light', freq=2),
+    # ── sets of mail, newer verbs ──
+    Q('sets', 'dismiss the newsletters', 'todo', c('pipe.remove', select={'contains': 'newsletter'}), 'did:pipe.remove', freq=3),
+    Q('sets', 'unsubscribe me from the newsletters', 'todo', [c('pipe.block', select={'contains': 'newsletter'}, how='unsubscribe'),
+      'None of them has an unsubscribe link - say block them and their sender never reaches triage again.'], 'words', freq=2),
+    Q('sets', 'block whoever sends the newsletters', 'todo', c('pipe.block', select={'contains': 'newsletter'}), 'did:pipe.block', freq=2),
+    Q('sets', 'put the vendor portal mail on my list', 'todo', c('pipe.mine', select={'contains': 'vendor portal'}), 'did:pipe.mine', freq=2),
+    # ── new things: a meeting, a dashboard, a routine ──
+    Q('new', 'set up a meeting with Gail about the budget on friday', None, c('meeting.new', who=['Gail Moreno'], about='the budget', when='friday'),
+      'go:#connector', freq=3, note='no calendar in the demo world: the card that connects one, as a button under the line'),
+    Q('new', 'make me a dashboard of open tasks by person', None, c('setup', text='a dashboard of open tasks by person'), 'new:report',
+      sort={'kind': 'report'}, freq=2),
+    Q('new', 'walk me through setting up a report', None, c('script.start', name='set up a report'), 'new:report', freq=2),
+    # ── people and the routing they teach ──
+    Q('people', 'Erin is my manager', None, c('people.relate', who='Erin Blake', relation='manager'), 'did:people.relate', freq=3),
+    Q('people', 'Ray owns payroll', None, c('people.relate', who='Ray Colton', owns='payroll'), 'did:people.relate', freq=3),
+    Q('people', "jobs like this are mine, not an agent's", 'todo', c('routing.remember', field='kind', value='task'),
+      'did:routing.remember', freq=2),
+    # ── the app's own things, read and brought back ──
+    Q('app', 'what did I delete recently?', None, [c('deleted.list'), 'Nothing removed in the last 30 days.'], 'read:deleted.list', freq=1),
+    Q('app', 'bring back the headcount report', None, [c('deleted.restore', what='Headcount by site'), 'Nothing was deleted in the last 30 days - it is still under Reports.'],
+      'words', freq=1, note='nothing deleted in the demo world: said'),
+    Q('app', 'turn the GitHub connection back on', None, c('connection.resume', name='GitHub'), 'open:#connector=github', freq=2),
+    Q('app', 'put the headcount report back on its schedule', None, c('report.resume', title='Headcount by site'), 'open:#report=', freq=2),
+    Q('app', 'remove the vendor portal rule', None, [c('rule.change', about='vendor portal', how='remove'), 'There is no rule for the vendor portal to remove.'],
+      'words', freq=1, note='the demo world has no rules: said'),
+    Q('app', 'which repositories can agents work in?', None, [c('repos.list'), 'northwind/importers.'], 'read:repos.list', freq=2),
+    Q('app', 'what notification settings are there?', None, [c('settings.list', group='Notifications'), 'Sound and desktop notifications.'],
+      'read:settings.list', freq=2),
+    Q('app', 'how is the Work mail connection set up?', None, [c('connection.read', name='Work mail'), 'Outlook, on.'], 'read:connection.read', freq=2),
+    Q('app', 'show me the board', None, c('page.open', page='board'), 'open', freq=2),
+    Q('app', 'search everything for 88213', None, c('page.open', page='search', query='88213'), 'open', freq=2),
+    Q('app', 'save to the hub: the bank feed lags a day at month end', None,
+      [c('hub.publish', title='The bank feed lags a day at month end', body='Reconcile on the 2nd, not the 1st.'),
+       'The Hub is not set up here - Hub under Connections joins one.'], 'words', freq=1, note='no Hub joined in the demo world: said'),
+    # ── the rest of the catalogue an owner says in passing ──
+    Q('row', 'decline it', 'invite', c('decline_invite'), 'light:decline_invite', freq=3),
+    Q('row', 'can we do thursday instead', 'invite', c('propose_time', text='thursday'), 'light:propose_time', freq=3),
+    Q('row', 'triage this again', 'fyi', [c('message.retriage'), 'Triage already sorted this one as an FYI - Should be a task makes it one.'], 'words', freq=1,
+      note="Sort it again is for a message triage could not sort; an FYI's row has none"),
+    Q('row', 'make this a task', 'fyi', c('task.create_from_message', kind='task'), 'light:mine', freq=3),
+    Q('row', 'put it in northwind/importers', 'coding', c('task.set_repo', repo='northwind/importers'), 'light', freq=1),
+    Q('row', 'email what it found to gail@northwind.example', 'agent', c('task.share', who='gail@northwind.example'), 'light:share_result', freq=2,
+      note="Email a summary is one of Share's ways now - Share comes up lit"),
+    Q('app', 'what am I connected to?', None, [c('connections.list'), 'Work mail (Outlook).'], 'read:connections.list', freq=3),
+    Q('app', 'only alert me on the AP ageing when there are over 10 rows', None,
+      c('report.route', title='AP ageing', line='alert', how='rule', rule='count', count=10), 'open:#report=', freq=2),
+    Q('people', 'that is wrong about Gail', None, [c('memory.about', who='Gail'), 'Nothing in the memory about Gail yet, so nothing to take out.'],
+      'read:memory.about', freq=2),
+    Q('app', 'set me up as an AP rep', None, c('role.apply', role='ap_rep'),
+      'open:#profiles', freq=2, note="on the desk a role is Profiles' own Set up - its questions are asked there"),
+]
+CASES += POWERS
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 
@@ -335,7 +457,7 @@ def _guards(stack, sort=None, live=None):
     def never(*a, **k): raise AssertionError('a real model was asked for')
     stack.enter_context(mock.patch.object(llm_mod, 'make_cli_llm', never))
     stack.enter_context(mock.patch.object(llm_mod, 'build_llm', never))
-    stack.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[]))
+    stack.enter_context(mock.patch.object(terminal, 'live_sessions', return_value=[{'taskId': int(live), 'sid': f's{live}'}] if live else []))
     # a running session on one task, where the case says so - what Stop and save is drawn by (concierge._agent_running)
     stack.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live and int(tid) == int(live) else None))
     stack.enter_context(mock.patch.object(ingest, '_spawn'))
@@ -346,12 +468,14 @@ def _guards(stack, sort=None, live=None):
 # THE ACT, SAID (the owner, 2026-10-20: "it should show what it chose to do"): an answer that acted or lit leads with what it did - never a
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
 ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
-        'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ')
+        'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ', 'Filed ', 'Put on ', 'Blocked', 'Stopped ', 'Triage already ', 'Org chart: ',
+        'Nothing went', 'Saved ')
 def said_what(say: str, got: list, q) -> bool:
     acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)
-    if any(g.split(':')[0] in ('light', 'pressed') for g in got): return not say.startswith('Lit ')
-    return not acted or say.startswith(ACTS) and len(say.split()) > 3
+    # ...and so does a press on the page itself: the chat shows each one as it runs (pageview.GUIDE)
+    if any(g.split(':')[0] in ('light', 'pressed', 'view') for g in got): return not say.startswith('Lit ')
+    return not acted or say.startswith(ACTS) and len(say.split()) > 2
 
 
 def outcomes(out: dict, reads: list) -> list:
@@ -369,6 +493,8 @@ def outcomes(out: dict, reads: list) -> list:
     if out.get('did'): o.append(f"did:{out['did']}")
     if out.get('card') or out.get('opened') or out.get('item'): o.append('card')
     if out.get('proposal'): o.append(f"proposal:{out['proposal'].get('kind')}")
+    o += [f"go:{ch.get('href') or ''}" for ch in out.get('chips') or [] if ch.get('verb') == 'go']
+    o += [f"view:{v['op']}:{v.get('field') or v.get('button') or v.get('target') or v.get('area') or ''}" for v in out.get('view_ops') or []]
     o += [f'read:{k}' for k in reads]
     o += [f'link:{h}' for h in re.findall(r'\]\((#[^)]+)\)', out.get('say') or '')]
     return o or ['words']
@@ -389,7 +515,7 @@ def ideal_turn(q: Q) -> dict:
         st.enter_context(mock.patch.object(concierge, '_read', read))
         err = None
         if q.phone: st.enter_context(concierge.delivering(concierge.PHONE))
-        try: out = concierge.say(s, q.text, key=TABLES[q.table], llm=_scripted(q.ideal, seen))
+        try: out = concierge.say(s, q.text, key=TABLES[q.table], llm=_scripted(q.ideal, seen), view=q.view)
         except Exception as e: out, err = {'say': f'RAISED {type(e).__name__}: {e}'}, e
     heard = next((l[len(concierge.OWNER_SAYS):] for _, u in seen[:1] for l in u.splitlines() if l.startswith(concierge.OWNER_SAYS)), '')
     prompt = '\n'.join(f'{a}\n{b}' for a, b in seen[:1])

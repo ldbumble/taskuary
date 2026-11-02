@@ -120,8 +120,9 @@ PURPOSE = {
     'task.checklist':           ("change what a task's checklist asks for - `add`: new to-dos to append (\"add a to-do: call the bank\"); `items`: the full list of item words in order (one left out "
                                  'is removed, emails untouched); `emails`: [{to, about}] to add emails that must go out before it closes; '
                                  '`drop`: recipients whose email is no longer owed; `ref`'),
-    'task.watch':               ("tell the owner here when something happens on a task nobody needs to start - `what`: done (when it is "
-                                 'finished) | reply (when someone writes on it) | any (the default) | off; `ref`'),
+    'task.watch':               ("Watch it - a task that is someone else's to move but the owner wants kept open and followed (\"watch this\", "
+                                 '"keep an eye on it until Paula answers"): it leaves the walk for Watching and comes back when the thread moves '
+                                 'or after 7 quiet days; nothing is sent - `what`: done | reply | any (the default) | off; `ref`'),
     'task.comment':             'file a note on a task - `text`; `ref`',
     'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
                                  "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),

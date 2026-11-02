@@ -7,7 +7,7 @@ from taskuary import concierge
 from tests import assistant_queries as Q
 
 # what no tool or desk button does today - a new tool takes its ask off this list on purpose (ASK OWNER before building one)
-UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigger', 'kill all the agents'}
+UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigger'}
 # ...and the row buttons a phone chat cannot reach - each opens something only a screen has (the diff, a second agent's form, a file picker)
 # ...and Copy, which puts an unsendable draft on the screen's own clipboard - a phone chat's draft is already text to copy
 # ...and a result's Share: its link goes on the screen's clipboard and its Email it picks people in a dialog (ASK OWNER: Email it by phone)
@@ -20,10 +20,13 @@ class EverydayAsks(unittest.TestCase):
     def setUpClass(cls): cls.rows = Q.run_all()
 
     def test_there_are_enough_of_them_in_every_category(self):
-        self.assertGreaterEqual(len(self.rows), 180)
+        self.assertGreaterEqual(len(self.rows), 240)
         cats = {r['q'].cat for r in self.rows}
+        # ...and the powers the pop-up Assistant gained since (the owner, 2026-11-01: "we now expanded the scope of the pop up assistant
+        # powers"): the page it is shown, Taskuary's own trouble, its tracker, its help, work that is an agent's, the newer row buttons
         self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
-                                'bring-up', 'connectors', 'phone', 'memory'})
+                                'bring-up', 'connectors', 'phone', 'memory', 'page', 'troubleshoot', 'feedback', 'help', 'agentwork',
+                                'row', 'sets', 'new', 'people', 'app'})
 
     def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
         self.assertEqual({v for v, d, p in Q.reach() if not d}, set())
@@ -65,6 +68,17 @@ class EverydayAsks(unittest.TestCase):
             with self.subTest(ask=r['q'].text):
                 self.assertEqual(r['demo']['line'], 'out', r['demo']['say'][:160])
                 self.assertNotEqual(r['demo']['say'].strip(), concierge.RECEIPTS['next'])
+
+    def test_on_the_page_a_send_is_lit_for_the_owner_and_a_secret_never_set(self):
+        r = next(r for r in self.rows if r['q'].cat == 'page' and r['q'].text == 'send it')
+        self.assertEqual([g for g in r['ideal']['got'] if g.startswith('view:')], ['view:point:row:approve'])
+        r = next(r for r in self.rows if r['q'].text.startswith('put my password in'))
+        self.assertFalse([g for g in r['ideal']['got'] if g.startswith('view:')])
+
+    def test_work_that_is_an_agents_goes_to_one_never_done_in_the_chat(self):
+        # the owner, 2026-11-01: an image asked of the Assistant was "created" in the chat and never shown - it is an agent's job
+        for r in (r for r in self.rows if r['q'].cat == 'agentwork' and r['q'].text.startswith(('make me', 'write'))):
+            with self.subTest(ask=r['q'].text): self.assertIn('new:agent:general', r['ideal']['got'])
 
     def test_a_number_on_the_desk_is_the_action_word_it_numbers(self):
         r = next(r for r in self.rows if r['q'].text == '2')

@@ -1093,9 +1093,10 @@ def _there() -> str: return 'bring it up' if routes() else 'do it there'
 
 # the operation a tool names -> the row's own button for it (buttons.json); a question for the sender is Reply's - the row has no Ask sender
 # since the owner took it off (2026-10-27), and the parked question an agent or the phone writes still waits in Review for its Send
-KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.watching': 'watch', 'task.reopen': 'reopen', 'review.approve': 'approve',
+# ...and task.watch is Watch it: "watch this, it is Gail's problem" was refused as having no button, the row's Watch it beside it (2026-11-01)
+KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.watching': 'watch', 'task.watch': 'watch', 'task.reopen': 'reopen', 'review.approve': 'approve',
                'agent.continue': 'continue', 'agent.stop': 'stop_agent', 'agent.answer': 'answer_agent', 'task.split': 'split', 'task.merge': 'split',
-               'task.handoff': 'forward', 'task.clarify': 'reply', 'task.share': 'share', 'task.not_a_task': 'remove',
+               'task.handoff': 'forward', 'task.clarify': 'reply', 'task.share': 'share_result', 'task.not_a_task': 'remove',
                'message.retriage': 'retriage', 'task.set_kind': 'change_kind', 'task.set_repo': 'pick_repo', 'dispatch.prepare': 'regular_agent',
                'report.rerun': 'rerun', 'connection.test': 'test_connection', **{k: 'not_ours' for k in OP_BUTTON}}
 # ...a task's fields: each one its own picker on the row; a title or a due day is written on the task itself
@@ -3324,6 +3325,16 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         if not note: raise CallMiss('task.comment needs `text` - the note itself. Nothing was written.')
         store.add_comment(target, actor, 'human', note)
         return _did(store, tid, f"Added a note to {named}: \u201c{_title_cut(note, 120)}\u201d.", 'task.comment')
+    # ...and WHERE WORK LIKE THIS GOES, taught and said (2026-11-01): a lesson for triage that moves nothing - "bugs like this go to
+    # northwind/importers" was refused as having no button, on the desk where the owner said it
+    if kind == 'routing.remember' and target:
+        r = run_proposal(store, operations.propose(store, kind, target, params, actor), actor)
+        if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not take'} - nothing was learned.")
+        o = r.get('outcome') or {}
+        how = ({'task': 'is yours, with no agent', 'general': 'goes to a general agent', 'coding': 'goes to a coding agent'}.get(str(o.get('value')))
+               if o.get('field') == 'kind' else None) or f"has {o.get('field')} {o.get('value')}"
+        if o.get('already'): return _did(store, tid, f"Triage already knows work like {named} {how}.", kind)
+        return _did(store, tid, f"Remembered that work like {named} {how} - triage learns from it; nothing moved.", kind)
     # THE TO-DOS, RUN AND SAID (the owner, 2026-10-20): tick, untick, note one, add some - the task page's own writes
     if kind == 'task.check' and target:
         hit = task_contract(store, kind, target, params)['item']

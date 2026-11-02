@@ -119,6 +119,13 @@ SHIPPED = re.sub(r'<!--.*?-->', '', (_Path(__file__).parent / 'templates' / 'tri
 _m = re.search(r'^\*\*How far to combine\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re.M | re.S)
 FIELDS['combine'] = ("combine is the owner's setting for this message's connection - {connection, level}, level 1 (keep separate) to 5 (combine). "
                      + (_m.group(0) if _m else ''))
+# ...and an agent at work on a task this may join, in the guide's own words the same way (ingest.with_agent, 2026-11-02)
+_m = re.search(r'^\*\*An agent already on it\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re.M | re.S)
+FIELDS['agent_on_it'] = ("agent_on_it, on a task in thread_task, room_tasks or open_work, is the agent on that task right now - {state: working or "
+                         "waiting for its next turn, kind, brief: what it was put to, doing: the task's latest line}. "
+                         + (_m.group(0) if _m else ''))
+FIELDS['open_todos'] = "open_todos, on a task in thread_task, room_tasks or open_work, is that task's to-dos not yet done."
+ON_TASKS = ('agent_on_it', 'open_todos')      # the FIELDS that ride on a task in the payload rather than at its top
 
 
 JOB_CHARS = 2500             # triage's cut of JOB.md - with workstreams their index and sections lead it (job_doc); the assistant and the chat read it whole (job_doc)
@@ -767,7 +774,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # every signal in this payload the document says nothing about, explained in the shipped
             # words: a field handed over unexplained is a field the model guesses at, and the exchange
             # (the prior mail on the thread) reached this install's generated doc as an unnamed key
-            unsaid = [t for k, t in FIELDS.items() if (thread or {}).get(k) and k not in base]
+            # ...the keys on the tasks it carries too (agent_on_it, open_todos): a nested field is as unexplained as a top-level one
+            held = {k for k, v in (thread or {}).items() if v} | {k for v in (thread or {}).values() for e in (v if isinstance(v, list) else [v])
+                                                                  if isinstance(e, dict) for k in ON_TASKS if e.get(k)}
+            unsaid = [t for k, t in FIELDS.items() if k in held and k not in base]
             if unsaid: base += '\n\nTHE PAYLOAD ALSO CARRIES:\n' + '\n'.join(unsaid)
             # ...and the same for what the ANSWER must carry. A generated document describes how to
             # judge and never restates the output shape, so asking for it again here is not

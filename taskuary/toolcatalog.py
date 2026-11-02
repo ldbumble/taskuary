@@ -138,7 +138,10 @@ PURPOSE = {
                                  'a coding task asks which repository when it is not clear; `ref`'),
     'agent.continue':           "pick up the agent's own last session on a task where it left off, coding or not - `ref`, "
                                 "and `note` when the owner said what to tell it as it picks up",
-    'review.reject':            'reject the draft reply waiting on a task - nothing is sent, the task stays open; `ref` names the task',
+    # ...never the road for a reply draft (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): "scrap the
+    # draft" picked this from its old words and the desk refused it, Redraft and Mark done on the row (the task-page audit, 2026-11-02)
+    'review.reject':            (f'reject the draft waiting on a task - nothing is sent, the task stays open; `ref` names the task. A REPLY draft '
+                                 f'is never rejected: {L("redraft")} (redraft) writes it again, {L("close")} (close) closes the task with nothing sent'),
     'hub.publish':              ('save to the company Hub - `title`: one durable claim, `body`: why it matters and what to do, `topic`, '
                                  '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. Only a '
                                  'reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, '

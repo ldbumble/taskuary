@@ -424,6 +424,87 @@ POWERS = [
 ]
 CASES += POWERS
 
+# THE TASK PAGE, ASKED ABOUT WHILE IT IS UP (the audit, 2026-11-02): Came from, the Agent section, Close out, the action row, the to-dos, the
+# notes, the draft - each ask typed with the task on the table AND its view sent, as the chat does (AssistantView: the table's key + context())
+def _row(*vs): return [{'id': f'row:{v}', 'label': l} for v, l in vs]
+TASK1V = {'area': 'task', 'title': f'{T1} - Month-end close is short by 4,180', 'item': {'kind': 'task', 'id': 1, 'ref': T1, 'title': 'Month-end close is short by 4,180'},
+          'fields': [{'key': 'title', 'label': 'Title', 'value': 'Month-end close is short by 4,180'},
+                     {'key': 'what_should_the_agent_do', 'label': 'What should the agent do?', 'value': ''}],
+          'buttons': _row(('reply', 'Reply'), ('close', 'Mark done'), ('regular_agent', 'Send to agent'), ('defer', 'Remind me'), ('watch', 'Watch it'),
+                          ('split', 'Split or merge'), ('share_result', 'Share'), ('forward', 'Hand it to a person'), ('remove', 'Not a task'),
+                          ('close_note', 'Close with a note'))
+                     + [{'id': 'show_where_this_came_from', 'label': 'Show where this came from'}, {'id': 'expand_to_the_whole_canvas', 'label': 'Expand to the whole canvas'}]}
+TASK4V = {'area': 'task', 'title': f'{T4} - Invoice 88213 - past due', 'item': {'kind': 'task', 'id': 4, 'ref': T4, 'title': 'Invoice 88213 - past due'},
+          'fields': [{'key': 'title', 'label': 'Title', 'value': 'Invoice 88213 - past due'},
+                     {'key': 'draft', 'label': 'Reply draft', 'value': 'Hi Tom - we recieved it and it is paid today.'}],
+          'buttons': _row(('approve', 'Send'), ('redraft', 'Redraft'), ('close', 'Mark done'), ('defer', 'Remind me'), ('watch', 'Watch it'), ('attach', 'Attach a file'))}
+TASK6V = {'area': 'task', 'title': f'{T6} - Reconcile the August GL export', 'item': {'kind': 'task', 'id': 6, 'ref': T6, 'title': 'Reconcile the August GL export'},
+          'fields': [{'key': 'title', 'label': 'Title', 'value': 'Reconcile the August GL export'}],
+          'buttons': _row(('stop_agent', 'Stop and save'), ('close', 'Mark done'), ('defer', 'Remind me'), ('watch', 'Watch it'))}
+AREA_TASK = [
+    # ── questions about the task on screen: its facts ride the turn, or task.read reads the whole story ──
+    Q('task', 'what is this task about?', 'todo', [c('task.read', ref=T1), 'Marcus says the month-end close is short by 4,180.'], 'read:task.read', view=TASK1V, freq=5),
+    Q('task', 'who sent this?', 'todo', 'Marcus Reed.', 'words', tools=('words',), view=TASK1V, freq=4),
+    Q('task', 'where did this come from', 'todo', ['From a mail from Marcus.\n' + v(op='press', button='show_where_this_came_from')],
+      'view:press:show_where_this_came_from', tools=('words',), view=TASK1V, freq=3, note="Came from is a fold on the page: its own button opens it"),
+    Q('task', 'what did the agent do on this?', 'agent', [c('task.read', ref=T6), 'It is reconciling the export now.'], 'read:task.read', view=TASK6V, freq=4, live=6),
+    # ── the row's buttons, by the owner's words for them ──
+    Q('task', 'remind me about this on monday', 'todo', c('task.defer', until='monday 9am'), 'light:defer', view=TASK1V, freq=5),
+    Q('task', 'remnd me tomorow', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', view=TASK1V, freq=3, note='a misspelling: the model reads it'),
+    Q('task', 'watch it till marcus answers', 'todo', c('task.watch', what='reply'), 'light:watch', view=TASK1V, freq=4),
+    Q('task', 'close it out with a note: the bank fixed the feed', 'todo', c('task.complete', note='the bank fixed the feed'), 'pressed:close_note', view=TASK1V,
+      freq=3, tools=('task.complete',)),
+    Q('task', "this isn't a task", 'todo', c('task.not_a_task'), 'pressed:remove', view=TASK1V, freq=3),
+    Q('task', 'make this urgent', 'todo', c('task.update', priority='urgent'), 'light:priority', view=TASK1V, freq=3),
+    Q('task', 'split this into two jobs', 'todo', c('task.split', text='the bank feed; the 4,180 gap'), 'light:split', view=TASK1V, freq=2),
+    Q('task', 'this is the same as TQ-0004, merge them', 'todo', c('task.merge', into=T4), 'light:split', view=TASK1V, freq=2),
+    Q('task', 'hand this to Paula', 'todo', c('task.handoff', who='Paula Vance'), 'light:forward', view=TASK1V, freq=3),
+    Q('task', 'share this with erin@northwind.example', 'todo', c('task.share', who='erin@northwind.example'), 'light:share_result', view=TASK1V, freq=2),
+    Q('task', 'reply to marcus saying we are looking into it', 'todo', c('reply', text='we are looking into it'), 'draft:reply', view=TASK1V, freq=4),
+    # ── the Agent section: Send to agent with the job in its box; a live one stopped ──
+    Q('task', 'get an agent to find the 4,180', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'light:regular_agent', view=TASK1V, freq=4),
+    Q('task', 'put "reconcile against the bank statement" in the agent box and start it', 'todo',
+      [v(op='set', field='what_should_the_agent_do', value='reconcile against the bank statement') + '\n' + v(op='press', button='row:regular_agent')],
+      'view:press:row:regular_agent', tools=('words',), view=TASK1V, freq=2, note='Send to agent starts work here and sends nothing out: pressed, not pointed'),
+    Q('task', 'stop the agent', 'agent', c('agent.stop'), 'light:stop_agent', view=TASK6V, freq=3, live=6),
+    Q('task', 'send this to the coding agent', 'coding', c('coding_agent', text='fix the census sync when a site has no manager'), 'light:regular_agent',
+      freq=3, note="the Agent section's one Send to agent starts either kind"),
+    Q('task', 'continue the agent', 'agent', [c('agent.continue'), 'There is no saved session on TQ-0006 to pick up - Send to agent starts a new one.'], 'words',
+      view=TASK6V, freq=3, note='no saved session: said, and what starts one - never "name the task" over the task on screen'),
+    Q('task', 'tell the agent to use the main branch', 'agent', [c('agent.answer', text='use the main branch'),
+      'The agent is working, not asking - type it into its session on the page, or Stop and save and Continue with it.'], 'words', view=TASK6V, live=6, freq=2,
+      note='an agent at work is not waiting on an answer: said in words'),
+    Q('task', 'change who does this to me', 'todo', c('task.set_kind', kind='task'), 'light:change_kind', view=TASK1V, freq=2),
+    Q('task', 'expand this', 'todo', [v(op='press', button='expand_to_the_whole_canvas')], 'view:press:expand_to_the_whole_canvas', tools=('words',), view=TASK1V, freq=2),
+    # ── the to-dos and the notes: the task page's own writes, run and said ──
+    Q('task', 'tick of the first step', 'todo', c('task.check', item='1'), 'did:task.check', view=TASK1V, freq=4, note='a misspelling: the model reads it'),
+    Q('task', 'untick find the 4,180', 'todo', c('task.check', item='2', done=False), 'did:task.check', view=TASK1V, freq=2),
+    Q('task', 'add a step: email the bank', 'todo', c('task.checklist', add=['email the bank']), 'did:task.checklist', view=TASK1V, freq=4),
+    Q('task', 'add a note: Paula is checking the bank feed', 'todo', c('task.comment', text='Paula is checking the bank feed'), 'did:task.comment', view=TASK1V, freq=4),
+    Q('task', 'set the due date to friday', 'todo', c('task.update', due='friday'), 'did:task.update', view=TASK1V, freq=3),
+    Q('task', 'rename this to Month-end close - bank feed gap', 'todo', [v(op='set', field='title', value='Month-end close - bank feed gap')], 'view:set:title',
+      tools=('words',), view=TASK1V, freq=2),
+    # ── the draft under Close out: fixed in its box, redrafted, its Send lit for the owner ──
+    Q('task', 'fix the typo in the draft', 'review', ['Fixed "recieved".\n' + v(op='set', field='draft', value='Hi Tom - we received it and it is paid today.')],
+      'view:set:draft', tools=('words',), view=TASK4V, freq=3),
+    Q('task', 'redraft it shorter', 'review', c('redraft', text='shorter'), 'draft:redraft', view=TASK4V, freq=3),
+    Q('task', 'cc gail on the reply', 'review', c('redraft', text='copy Gail Moreno'), 'draft:redraft', view=TASK4V, freq=2),
+    Q('task', 'scrap the draft, no reply needed', 'review', c('close'), 'pressed:close', view=TASK4V, freq=3,
+      note='a reply draft is never rejected (the owner, 2026-10-01): Mark done closes it with nothing sent'),
+    Q('task', 'reject the draft', 'review', [c('review.reject'), c('redraft', text='write it again')], 'draft:redraft', view=TASK4V, freq=2,
+      tools=('review.reject',), note="the miss names Redraft and Mark done, the draft's real ways out"),
+    Q('task', 'ask tom when it was paid', 'review', c('task.clarify', text='When was it paid?'), 'light:reply', view=TASK4V, freq=2),
+    Q('task', 'aprove and send', 'review', ['Send is yours to press.\n' + v(op='press', button='row:approve')], 'view:point:row:approve', tools=('words',),
+      view=TASK4V, freq=4, note='a send is lit for the owner, never pressed'),
+    Q('task', 'attach the invoice pdf', 'review', c('button.light', button='Attach a file'), 'light:attach', view=TASK4V, freq=2,
+      note='a file picker is the owner\'s to fill: its button lit'),
+    # ── how the page works: its help ──
+    Q('task', 'wat does close out do', 'todo', [c('docs.search', query='close out'), 'Close out holds the reply and Mark done.'], 'read:docs.search', view=TASK1V, freq=2),
+    Q('task', "why can't I see the agent section", 'todo', [c('docs.search', query='agent section task page'), 'It opens when an agent is on the task.'],
+      'read:docs.search', view=TASK1V, freq=2),
+]
+CASES += AREA_TASK
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

@@ -377,7 +377,7 @@ The owner's yes to what is drafted: sends the reply as it stands - and on a task
 
 ### `review.reject`
 
-Reject the draft reply waiting on a task - nothing is sent, the task stays open.
+Reject the draft waiting on a task - nothing is sent, the task stays open. A REPLY draft is never rejected: Redraft (redraft) writes it again, Mark done (close) closes the task with nothing sent.
 
 - `ref` (optional) - the task
 

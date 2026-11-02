@@ -3173,6 +3173,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # and tell the coding agent to merge it in" on a close-out card was refused for want of a ref, and the retry
         # fell to the close-out itself). On the table, with a session to reopen, the table's task is what they mean.
         resumes = kind == 'agent.continue' and not ref and it.get('tid') and store.resumable_session(it['tid'])
+        # ...and "continue the agent" over a task with NO saved session was told to name the task it had named (the one on the table) - its
+        # retry then missed again. The fact goes back: nothing to pick up, and Send to agent is what starts one (the task-page audit, 2026-11-02)
+        if kind == 'agent.continue' and not ref and it.get('tid') and not resumes:
+            raise CallMiss(f"{task_ref(it['tid'])} has no saved agent session to pick up - {buttons.label('regular_agent')} (dispatch.prepare) starts "
+                           "a new one, the owner's press. Say so in plain words. Nothing was started.")
         if kind in toolcatalog.ATTACH_AGENT and not ref and not resumes:
             raise CallMiss(f"{kind} puts an agent on a task that already exists - name it (its TQ ref, the one on the table "
                            "included). A new job is task.create_from_text. Nothing was started.")
@@ -3192,7 +3197,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # stop with nothing running were offered as cards that failed only at the press, in jargon. The fact goes back to the model,
         # which asks or says so - never a card nobody can run
         # ...and so does a summary sent out: a name nobody by it wrote as has no address to draft it to
-        if kind in ('task.handoff', 'task.share'):
+        # ...on a phone, where it would be a card. ON THE DESK a hand-off is the row's Hand it to a person lit, whose form takes a name OR an
+        # address typed there (Handoff.jsx) - "hand this to Paula" over a task Paula never wrote on was refused while that button stood on
+        # the row (the task-page audit, 2026-11-02)
+        if kind in ('task.handoff', 'task.share') and not (kind == 'task.handoff' and routes()):
             who = str(params.get('who') or '').strip()
             if who and not person(store, who):
                 raise CallMiss(f"Nobody called {who} has written here, so there is no address to hand {named} to - ask the owner for "
@@ -3424,6 +3432,11 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         record(store, tid, 'assistant', said)
         return {'say': said, 'options': [], 'chips': [], 'decision': None,
                 'light': {'verb': '', 'label': '', 'key': on.get('key') or '', 'tid': on.get('tid'), 'ref': on.get('ref') or ''}}
+    # ...and a REPLY DRAFT has no Reject (ReviewDecision, the owner 2026-10-01): the miss names the two buttons that are its way out, so
+    # "reject the draft" ends on one of them rather than "not something done from here" (the task-page audit, 2026-11-02)
+    if kind == 'review.reject':
+        raise CallMiss(f"A reply draft is never rejected here: {buttons.label('redraft')} (redraft) writes it again, {buttons.label('close')} (close) "
+                       "closes the task with nothing sent. CALL the one they meant, or ask which. Nothing was changed.")
     raise CallMiss(f"{kind} has no button the owner presses here, so it is not yours to run from the chat - say in plain words where they "
                    "do it, or that it is not something done from here. Nothing was changed.")
 

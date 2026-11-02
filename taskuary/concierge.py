@@ -2879,6 +2879,20 @@ def read_chars(kind: str) -> int:
     return RAIL_READ_CHARS + 600 if kind == 'pipe.read' else 6000
 
 
+def look_rounds(store, item: dict | None, call: dict | None, ask, rounds: int = READ_ROUNDS, may=None, on_read=None) -> tuple:
+    """THE LOOK-UP ROUND - one engine for the pop-up Assistant's turn and the Advisor (advisor.judge): while the model's answer names a look-up
+    it may run (`may`, toolcatalog.runs_now by default), run it at once (read_op: it changes nothing) and hand what it says back with
+    `ask(call, found, last)`, which returns the model's next (answer, call). At most `rounds` - the last one says so (`last`) - never an open
+    crawl. (answer, call, reads): the answer None when nothing was read; a look-up still asked for when the rounds ran out is the caller's."""
+    may, ans, reads = may or toolcatalog.runs_now, None, []
+    for n in range(rounds):
+        if not (call and may(call['kind'])): break
+        on_read and on_read(call)
+        found = _read(store, item, call); reads.append((call, found))
+        ans, call = ask(call, found, n == rounds - 1)
+    return ans, call, reads
+
+
 def _read(store, item: dict | None, call: dict) -> str:
     """A look-up in a turn: a task or message that does not exist, asked for over an item with no thread, says why."""
     found = read_op(store, call['kind'], call['params'])
@@ -5600,18 +5614,16 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # nothing here has ever written down - a GitHub project to research - searched, searched again and
         # ended on a bare CALL with no words, which read as "No AI is connected" (the owner, 2026-09-24:
         # "i asked it to research for me which should open a agent card but it did nothing")
-        for n in range(READ_ROUNDS):
-            if not (call and toolcatalog.runs_now(call['kind'])): break
-            did_read = True; _strays(item, call)
-            found = _read(store, item, call)
-            trace and trace('tool', call['kind'], {'params': call['params']})
-            then = (LAST_READ if n == READ_ROUNDS - 1 else
+        def again(call, found, last):
+            then = (LAST_READ if last else
                     'Answer them with what you just read, briefly. If it did not answer them and another look-up would, CALL that one now - never offer to look.')
             # ...with the page still in front of it: "turn off the digest" reads settings.list, then sets the switch it found (pageview)
             raw = _view_lines(str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, read_chars(call['kind']))}\n\n"
                                   f"{on_page}The owner asked: {text}\n{then}{SUMMARY_GUIDE if call['kind'] in SUMMARY_READS else ''}",
                           max_tokens=answer_tokens(call['kind'])) or '').strip())
-            raw, call = parse_call(raw)
+            return parse_call(raw)
+        got, call, reads = look_rounds(store, item, call, again, on_read=lambda c: (_strays(item, c), trace and trace('tool', c['kind'], {'params': c['params']})))
+        if reads: raw, did_read = got, True
         # the budget is spent and it still wants to read: that is as far as this turn goes. A read is
         # never handed on to call_turn, which only knows operations that CHANGE something.
         out_of_reads = bool(call and toolcatalog.runs_now(call['kind']))

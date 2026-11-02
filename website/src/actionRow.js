@@ -132,7 +132,8 @@ export const press = (id, e, anchor, of = null) => {
   if (Date.now() - (flying.get(k) ?? -Infinity) < FLIGHT_MS) return undefined;
   announce(id);
   const out = v?.run?.(e, anchor);
-  if (typeof out?.then === "function" && v?.group !== "next") flying.set(k, Date.now());
+  // ...and Back the same as Next (2026-11-02): a second Back while the first is out was dropped here, never reaching the walk's own hold
+  if (typeof out?.then === "function" && v?.group !== "next" && v?.group !== "back") flying.set(k, Date.now());
   Promise.resolve(out).catch(() => {}).then(() => { flying.delete(k); acted(id); });
   return out;
 };

@@ -232,7 +232,8 @@ def answer_hash(out: dict) -> str:
     return hashlib.sha256(json.dumps(shown, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _walk(store, st: dict, rows: list) -> dict:
+def _walk(store, st: dict, rows: list, at: bool = False) -> dict:
+    """`at`: the line index of `above` rides along as `_above`, for peek's step further up."""
     ln = line(rows)
     first = _tuple(st.get('first'))
     if st.get('ended') and st.get('last'):
@@ -241,7 +242,7 @@ def _walk(store, st: dict, rows: list) -> dict:
     # `reads`: Next on the row on screen reads it and it leaves the rail (rule 4, its kind as it was put up) - so the page takes it off at
     # the press, not when the answer lands: a slow answer held a read FYI batch in its heading's count, an idea passed on the rail (2026-11-01)
     return {'on': st.get('on'), 'members': st.get('members') or [], 'ended': bool(st.get('ended')), 'reads': st.get('kind') == 'reads',
-            'above': (as_key(store, ln, n, down=False) if n is not None else None)}
+            'above': (as_key(store, ln, n, down=False) if n is not None else None), **({'_above': n} if at else {})}
 
 
 def as_key(store, ln, n, down=True) -> str:
@@ -519,11 +520,19 @@ def leave(store, key: str, how: str, actor: str = 'owner', press: str = None, no
 
 
 def peek(store, actor: str = 'owner') -> dict:
-    """Pure: {on, ended, below, above} for the row on screen - `below` the key `next` would bring, `above` the key `back` would. Keys,
+    """Pure: {on, ended, below, above, then, above_then} for the row on screen - `below` the key `next` would bring, `above` the key `back` would. Keys,
     never Answers: the page draws only what a move answers, and reads these to grey Back and Next (one pass over the line, spec 7.3)."""
     with _LOCK:
         st, rows = state(store), _rows(store)
-        walk, ln = _walk(store, st, rows), line(rows)
+        walk, ln = _walk(store, st, rows, at=True), line(rows)
+        # ...and ONE STEP UP the same way (the owner, 2026-11-02: "the Back button takes way too long, not like the Next button"): the row
+        # Back would bring from the row above, and whether Next reads that row - a Back, or a Next, pressed on the row a Back drew while it is
+        # still out draws its own row at once. Back reads nothing, so the line is the same one
+        a = walk.pop('_above')
+        rows_a = _batch(store, ln, a, False) if a is not None else []
+        u = _above(ln, funnel.order_key(rows_a[0])) if rows_a else None
+        walk.update(above_then=as_key(store, ln, u, down=False) if u is not None else None,
+                    above_reads=len(rows_a) > 1 or (bool(rows_a) and kind_of(rows_a[0]) == 'reads'))
         if st.get('on') or st.get('ended'):
             last = _tuple(st.get('last'))
             n = (0 if ln else None) if last is None else _below(ln, last, skip=st.get('members') or ())

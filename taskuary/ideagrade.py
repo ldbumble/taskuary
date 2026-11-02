@@ -18,7 +18,8 @@ GRADES = ('taken', 'handled', 'wrong', 'walked')
 BAR, MIN, DAYS = 0.8, 10, 30
 # the kinds the model raises - the app's own (health, report, connect, rule, workstream, habit) are counted, never thought, and stay
 TYPES = ('second_ask', 'pattern', 'decides', 'clash', 'drift', 'promise', 'prep')      # what the model may say a line of its own is
-MODEL_KINDS = ('idea',) + TYPES
+LOOKOUT = ('credit', 'pitch', 'money', 'early_warning', 'leverage')                       # the looking-out-for-you pass's families (lookout.py)
+MODEL_KINDS = ('idea',) + TYPES + LOOKOUT
 
 
 def _later(at, h): return (datetime.fromisoformat(str(at)[:19]) + timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')

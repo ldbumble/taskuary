@@ -1,8 +1,9 @@
 The Advisor is the one of Taskuary's three models that thinks about your work as a whole. Triage
 judges each arrival and the assistant moves things on a turn; the Advisor reads everything, on a
 clock, and says what should happen next: what is late, what nobody followed up, which step a mail
-served, what worked, which system is worth connecting. It never acts. It leaves a line, an idea
-row or a proposal, and you or the assistant do the rest. `COUNSEL.md` is its voice and the
+served, what worked, which system is worth connecting - and, once a week, what would make a
+difference to your job itself (below: *Looking out for you*). It never acts. It leaves a line, an
+idea row or a proposal, and you or the assistant do the rest. `COUNSEL.md` is its voice and the
 assistant's both.
 
 The operational side - the report that runs it, its schedule, the five words under an idea - is on
@@ -65,6 +66,40 @@ connection twice in two weeks. These are counts, not the AI's reading: a refused
 fix, and a task with words from someone you have not vouched for is never read. Each problem is
 raised once, and **Not ours** keeps it down
 ([Troubleshooting](troubleshooting#report-a-bug)).
+
+**Looking out for you.** Once a week the Advisor stops thinking about the app and thinks about your
+job, the way a sharp chief of staff would: what could you tell your boss - "I see this pain, and
+here is the fix"? It reads `JOB.md` and `SOUL.md`, the last 30 days of mail, chat, tasks and reports
+counted and grouped (a report that comes every Monday, a question asked again and again, a notice
+that keeps failing), how often the people you write to most wrote each week, and what it raised
+before and what you did with it. It proposes at most two ideas, from five families:
+
+| Family | What it looks for |
+|---|---|
+| Credit | Work you did that leadership likely does not see, with the numbers, and a way to show it |
+| Pitch | A pain other people keep having - the same question, the same report fixed by hand, the same vendor problem - and a fix you could build or propose |
+| Money | Money or time left on the table: a duplicate charge or record, a credit owed, an unused licence, a late fee, a retirement date with a cost on it - the work version of asking for a refund when a price dropped |
+| Early warning | A problem developing: a job that will fail again on a date it can name, a report that stopped coming, a deadline at risk, a colleague whose pattern changed sharply |
+| Leverage | Who depends on you, who to loop in, an introduction that would unblock something |
+
+Each idea says what was seen (counts and dates), the messages and tasks it rests on, why it matters,
+the next step, and the one sentence you could say to your boss. Then a second, short look reads each
+idea beside the messages it cites and keeps only what is specific, supported, not something one
+message already told you, and worth a boss's time. Generic advice - "communicate more", "hold a
+meeting", "document the process" - never gets through. An idea about a person states only what
+changed (counts, dates), never a diagnosis or a motive, and its next step is private and kind. No
+word list decides any of this: the two prompts are the bar, and the code checks only what it can -
+every message or task an idea cites was really in what the Advisor read, and nothing rests on a
+personal workstream.
+
+What passes is an ordinary idea row: **Send to agent** has an agent draft the pitch or build the fix
+(its brief carries the next step, the pitch and the messages to read first), **Make a task**,
+**Remind me**, **Not ours**, and **No more ideas like this**, which stops that whole family. What you
+did with each idea, and what the second look held back, is what the next week's pass reads first;
+each family is held to the same 80% bar as the Advisor's other kinds of line. It costs two calls on
+the Advisor's model a week (three at most, when an answer has to be asked for again), it does not look
+again while two of its ideas still wait on you, and the setting `lookout_every_days` changes how often it
+looks.
 
 **On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
 off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a

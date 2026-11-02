@@ -6,6 +6,14 @@ import fs from "node:fs";
 import test from "node:test";
 import { describeCall, isWork, stepsOf } from "../src/agentSteps.js";
 
+test("a heredoc written into a file reads as that file written, never 'Read <<EOF, and N more' (stress test 2026-11-02)", () => {
+  const said = (command) => describeCall("Bash", { command }).summary;
+  assert.equal(said(`cat > /work/outputs/TQ-0001/desk.svg <<'EOF'\n<svg width="10" a='b'></svg>\nEOF`), "Wrote desk.svg");
+  assert.equal(said("mkdir -p out && cat <<EOF > out/notes.md\nhi\nEOF"), "Wrote notes.md");
+  assert.equal(said("cat notes.md"), "Read notes.md");
+  assert.doesNotMatch(said("cat notes.md > /dev/null"), /^Wrote/);
+});
+
 const DIR = new URL("../../tests/fixtures/agent_steps/", import.meta.url);
 const trace = (b) => JSON.parse(fs.readFileSync(new URL(`${b}.trace.json`, DIR), "utf8"));
 const ANSWER = "The budget review is waiting on Gail Moreno's sign-off: TQ-1142 holds the thread, and the status board reads approvedTotal "

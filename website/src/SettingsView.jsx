@@ -69,6 +69,8 @@ const JSON_KNOBS = new Set(["profile_brains"]);
 function SignatureSetting({ value, save }) {
   const [text, setText] = useState(value), [busy, setBusy] = useState(false), [note, setNote] = useState("");
   const [boxes, setBoxes] = useState(null), [offer, setOffer] = useState("");   // each mailbox's own (null: not read yet); the one read off the sent mail, unconfirmed
+  // what the account signs with by itself while nothing is typed here - Gmail's own, or the one the sent mail plainly ends with (signatures.account)
+  const [acct, setAcct] = useState({ accounts: [], regrant: [] });
   useEffect(() => { setText(value); }, [value]);
   // OFFERED ONCE (2026-10-28): with nothing saved, the signature the sent mail ends with is read and put to the owner to confirm -
   // never saved behind their back
@@ -77,6 +79,7 @@ function SignatureSetting({ value, save }) {
     api.get("/api/signature").then(({ data }) => {
       if (!live) return;
       setBoxes(data.mailboxes || []);
+      setAcct({ accounts: data.accounts || [], regrant: data.regrant || [] });
       if (data.offer) api.post("/api/signature/learn", {}, { timeout: 120_000 }).then(({ data: d }) => live && d.signature && setOffer(d.signature)).catch(() => {});
     }).catch(() => {});
     return () => { live = false; };
@@ -114,8 +117,19 @@ function SignatureSetting({ value, save }) {
       </Box>
       {(boxes || []).map((b) => <MailboxSignature key={b.address} box={b} save={saveBox} />)}
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
-        {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || <span style={{ color: DIM }}>(no signature - your sign-off in STYLE.md, else your name)</span>}
+        {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || acct.accounts[0]?.signature
+          || <span style={{ color: DIM }}>(no signature - your sign-off in STYLE.md, else your name)</span>}
       </Box>
+      {!text.trim() && !!acct.accounts.length && (
+        <Typography data-tq-account-signature="" sx={{ fontSize: 12, color: DIM }}>
+          Nothing typed here, so each email uses the signature its own account has{acct.accounts.length > 1 ? ` (above: ${acct.accounts[0].address}'s)` : ""}.
+        </Typography>
+      )}
+      {!!acct.regrant.length && (
+        <Typography data-tq-signature-regrant="" sx={{ fontSize: 12, color: DIM }}>
+          To use the signature Gmail has for {acct.regrant.join(", ")}, sign in with Google again on its card in Connections.
+        </Typography>
+      )}
     </Box>
   );
 }

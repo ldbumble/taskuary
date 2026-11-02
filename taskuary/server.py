@@ -6592,6 +6592,9 @@ def connectors(request: Request):
     from .peoplesearch import missing
     rows = [c | {'PeopleMissing': missing(c.get('ConfigJson'), c['Type'])} if c['Type'] in ('outlook', 'teams', 'gmail') else c
             for c in rows]
+    # SignatureMissing: a Google sign-in from before Taskuary asked for the Gmail signature - signing in again lets it (signatures.account)
+    from .googlecal import lacks_settings
+    rows = [c | {'SignatureMissing': lacks_settings(json.loads(c.get('ConfigJson') or '{}'))} if c['Type'] == 'gmail' else c for c in rows]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
     rows = [guard.masked_config(c) for c in rows]

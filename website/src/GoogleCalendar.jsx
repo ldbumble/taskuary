@@ -20,14 +20,16 @@ export function GoogleCalendar({ conn, cfg, reload }) {
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const signedIn = saved(conn, "google_refresh_token") || !!cfg.google_refresh_token;
+  // a sign-in from before Taskuary asked for the Gmail signature (googlecal.lacks_settings): the same step, offered again to add it
+  const regrant = signedIn && !!conn.SignatureMissing;
   const [can, setCan] = useState(true);        // the server's word: does this build carry a Google client (googlecal.available)
   const base = `/api/connectors/${conn.ConnectorId}/google/calendar`;
   useEffect(() => {
-    if (signedIn) return undefined;
+    if (signedIn && !regrant) return undefined;
     let alive = true;
     api.get(base).then(({ data }) => { if (alive) setCan(!!data.available); }).catch(() => {});
     return () => { alive = false; };
-  }, [base, signedIn]);
+  }, [base, signedIn, regrant]);
   useEffect(() => {
     if (!flow) return undefined;
     let alive = true;
@@ -50,9 +52,9 @@ export function GoogleCalendar({ conn, cfg, reload }) {
     return () => { alive = false; clearTimeout(id); };
   }, [flow, base, reload]);
   // a Google calendar is on the card: nothing to offer - but a sign-in from before Taskuary asked for contacts says the search skips them
-  if (signedIn && !detail && conn.PeopleMissing?.length)
+  if (signedIn && !detail && !regrant && conn.PeopleMissing?.length)
     return <Typography data-tq-google-people="" variant="caption" component="div" sx={{ color: DIM, mb: 2 }}>{PEOPLE_MISSING("this account's Google contacts")}</Typography>;
-  if (signedIn && !detail) return null;
+  if (signedIn && !detail && !regrant) return null;
   // ...and a build with no Google client draws nothing: a disabled button saying so was a dead box on the card (the setup sweep, 2026-10-28)
   if (!can && !flow && !detail) return null;
   const start = async () => {
@@ -65,8 +67,10 @@ export function GoogleCalendar({ conn, cfg, reload }) {
     <Box data-tq-google-calendar="" sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Google calendar</Typography>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        The App Password brings mail only. Sign in once and Taskuary reads this account's calendar - read-only - when it answers about times,
-        and searches its contacts when you pick someone to write to.
+        {regrant ? <>This sign-in is from before Taskuary asked to read your Gmail signature. Sign in with Google again and emails Taskuary
+          writes end with the signature Gmail already has, unless you set one of your own here or in Settings.</>
+          : <>The App Password brings mail only. Sign in once and Taskuary reads this account's calendar - read-only - when it answers about times,
+        searches its contacts when you pick someone to write to, and signs the emails it writes with your Gmail signature when you have set none here.</>}
       </Typography>
       {state === "ok" ? null : flow ? (
         <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>

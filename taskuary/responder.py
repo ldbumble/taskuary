@@ -236,16 +236,18 @@ def mailbox_in(m) -> str | None:
 
 
 def signature_for(store, mailbox: str = None) -> str:
-    """The owner's email signature: the sending mailbox's own (its card), else the `email_signature` setting when set, else
-    the `Sign off:` / `Signature:` line in STYLE.md (quotes stripped, literal newlines honoured), else the name About you gives.
+    """The owner's email signature: the sending mailbox's own (its card), else the `email_signature` setting when set, else the
+    account's own (Gmail's, or the one its sent mail plainly ends with - signatures.account), else the `Sign off:` / `Signature:`
+    line in STYLE.md (quotes stripped, literal newlines honoured), else the name About you gives.
     '' when none says anything (PW-065) - and always '' with Settings' "Sign every email" off (signatures.ON)."""
     from .outbound import card_signature
-    from .signatures import on
+    from .signatures import on, account
     if not on(store): return ''
     own = card_signature(store, mailbox) if mailbox else ''
     if own: return own.replace('\\n', '\n')
     sig = str(store.get_setting('email_signature') or '').strip()
     if sig: return sig.replace('\\n', '\n')
+    if mailbox and (acct := account(store, mailbox)): return acct
     doc = store.doc('style') or ''
     q = _SIGN_QUOTED.search(doc)
     if q: return q.group(1).strip().replace('\\n', '\n')
@@ -274,6 +276,12 @@ SIG_MAILS, SIG_LINES = 40, 10
 
 def learn_signature(store, days: int = 90, mailbox: str = None) -> str:
     """`mailbox`: only what that mailbox sent - two mailboxes are two hats, and each signs its own way."""
+    return '\n'.join(signature_tail(store, days, mailbox)[0])
+
+
+def signature_tail(store, days: int = 90, mailbox: str = None) -> tuple:
+    """(the closing lines most of the sent mail shares, how many mails end with them, how many were read) - the count is what
+    signatures.confident weighs before using it unasked."""
     from . import histgen
     from .channels import _body
     ends, box = [], str(mailbox or '').strip().lower()
@@ -282,14 +290,14 @@ def learn_signature(store, days: int = 90, mailbox: str = None) -> str:
         lines = [' '.join(l.split()) for l in histgen.cut_quoted(_body(m)).strip().splitlines()]
         ends.append([l for l in lines if l][-SIG_LINES:])
     ends = [e for e in ends if e]
-    if len(ends) < 2: return ''
-    best = []
+    if len(ends) < 2: return [], 0, len(ends)
+    best, n = [], 0
     for k in range(1, SIG_LINES + 1):
         tails = [tuple(e[-k:]) for e in ends if len(e) >= k]
         top = max(set(tails), key=tails.count) if tails else ()
         if tails.count(top) < max(2, len(ends) // 2): break
-        best = list(top)
-    return '\n'.join(best)
+        best, n = list(top), tails.count(top)
+    return best, n, len(ends)
 
 
 def with_signature(text: str, sig: str) -> str:

@@ -184,7 +184,7 @@ def _join_store_readers(budget=10):
     end = time.monotonic() + budget
     for _ in range(3):
         ts = [t for t in threading.enumerate() if t is not threading.current_thread()
-              and t.name in ('taskuary-agenda', 'refresh-after', 'taskuary-new-walk')]
+              and t.name in ('taskuary-agenda', 'refresh-after', 'taskuary-new-walk', 'account-signature')]
         if not ts: return
         for t in ts:
             while time.monotonic() < end:

@@ -54,14 +54,18 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # characters, a trap for whoever next touches that doc), while the ceiling stays reachable only in a
 # genuinely maximal seed, where the trim below cuts the ask and nothing else. 6400 since the ask-before-deploy
 # rule (2026-10-20) took it to 5,688; the seed's trim cuts the ask, never this, so the ceiling is not what bounds it.
-DOC_CHARS = 6400
+# 8000 (the owner, 2026-11-02: "you can always extend the length of what goes into it"): the subagent rule took it to ~6,600,
+# and the Docs editor now shows every profile document against this number as it is typed (doclimits.py). It is THE profile
+# number - a general worker's PROFILE RULES are cut here too (general._prompt) - so one figure is true on both roads.
+DOC_CHARS = 8000
 # AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead. At 2600 it cut the doc's own
 # 3,087 characters mid-sentence (2026-10-09), so no coding session ever read how to end with --done/--reply/
 # --no-reply - DOC_CHARS's trap again. 4000 holds the 3,358 it measures now, with room for an edit; past the
 # ceiling the ask still gives, never the rules. ...and it grew to 4,034 unnoticed, so the closing "a session John
 # opened is theirs to end" was cut away; 4800 holds the 4,249 the no-promised-later-step rule makes it (2026-10-20); 5600 the ~5,050
-# that "Files you make" (one final file per thing asked, 2026-10-28) makes it.
-AGENT_CHARS = 5600
+# that "Files you make" (one final file per thing asked, 2026-10-28) makes it. 7000 (2026-11-02) when the Docs editor's meter
+# showed it: 5,314 of 5,600 would have stood amber on a fresh install, one edit from a cut.
+AGENT_CHARS = 7000
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
@@ -1718,7 +1722,14 @@ def flatten_rules(doc: str) -> str:
 # useful slice of that on the thing the task is actually about.
 ASK_CHARS = 12000
 BRIEF_CONTEXT = 4000        # the conversation behind the latest message, in the seed (the context file has the rest)
-SEED_CEILING = 24000        # the whole prompt, leaving room for the exe path and its flags
+# The whole prompt. What really bounds it is Windows: the seed is ONE argv item (SEED_ARGV) and pywinpty hands CreateProcessW a
+# command line built by list2cmdline, which takes 32,767 UTF-16 units, the terminating NUL included. Linux caps one argument at
+# 128 KiB (MAX_ARG_STRLEN) and macOS the whole argv at 1 MiB, so Windows is the binding one. Under 32,767 must also fit the exe
+# (node.exe + cli.js through an npm shim), the flags (--add-dir/--settings paths, --session-id, auto args - ~1,500 measured
+# generously), a backslash list2cmdline adds before every " in the text, the line Codex is handed after the seed (ASK_LINE) and a
+# routine's /skill prefix: 28,000 leaves ~4,700 for those. (A prompt that goes over STDIN - agents.py, the general road - has no
+# such limit; this is the interactive terminal's.) Past it the ASK gives, never the rules (seed_text's trim).
+SEED_CEILING = 28000
 
 
 # What a canonical-mode tty holds on ONE LINE before it discards the rest - without an error,
@@ -1782,14 +1793,8 @@ TICK_LINE = ('To-dos: when you finish one of the checklist\'s to-dos, tick it wi
 TICK_HEAD = 'tick each to-do the moment you finish it, by the id in brackets after it - not all at the end'
 _OPEN_BOX = re.compile(r'^- \[ \] .*\[[A-Za-z0-9_-]{4,}\]', re.M)
 def _tickable(md: str) -> bool: return bool(_OPEN_BOX.search(md or ''))    # an open box carrying an id (store.checklist_markdown ids=True)
-# SEVERAL TO-DOS FAN OUT (the owner, 2026-11-02): a checklist of independent items for one repo was worked one by one in a CLI that
-# can run them side by side. Said at the checklist, only with 2+ open boxes and only to a CLI that has subagents (Claude Code, Codex, Gemini CLI).
-SUBAGENT_TOOL = {'claude': 'your Agent tool', 'codex': 'your subagents', 'gemini': 'your subagents'}   # each CLI's own name for it
-SUBAGENT_HEAD = ('to-dos that do not depend on each other go to their own subagents in parallel ({tool}), each told the to-do, '
-                 'its id and what done means; you review each, tick it once it checks out, and run the tests once at the end')
-def _fan_line(md: str, cli: str) -> str:
-    tool = SUBAGENT_TOOL.get(cli_named({'cmd': cli})) if cli else None
-    return f'; {SUBAGENT_HEAD.format(tool=tool)}' if tool and len(_OPEN_BOX.findall(md or '')) > 1 else ''
+# SEVERAL TO-DOS GO TO SUBAGENTS (the owner, 2026-11-02) - a standing rule, so it lives in CODING.md ("Several to-dos at once"), where
+# the owner can read and reword it, not in a line of code here
 
 
 def with_fence_rule(rules: str) -> str:
@@ -1922,8 +1927,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     elif b['objective']: say(f"OBJECTIVE: {fence(_cut(b['objective'], 600))}", theirs_too=True)
     md = b['checklist']
     if md: say('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority'
-               + (f' ({TICK_HEAD}: `taskuary --tick <id>`)' if _tickable(md) else '')
-               + _fan_line(md, cli) + ':\n' + fence(md), theirs_too=True)
+               + (f' ({TICK_HEAD}: `taskuary --tick <id>`)' if _tickable(md) else '') + ':\n' + fence(md), theirs_too=True)
     if m: say(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
               f"subject \"{m.get('Subject') or ''}\": "
               f"{fence(_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS))}", theirs_too=True)

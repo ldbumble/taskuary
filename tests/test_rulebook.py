@@ -411,3 +411,53 @@ def test_what_leaves_stands_over_the_models_agreeing_send(s):
     with mock.patch.object(advisor, 'notice'):
         d = advisor.decide(s, f'task:{t}', preread=False)
     assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'approve', 'Goes to dana@vendor.example - new to this thread.'), d
+
+
+# ── AN ACTION WAITING FOR THE OWNER'S YES (the 2026-11-02 audit: an agent's card read as asking lit nothing over a held `git push`) ──────
+def _held(s, cmd='git push origin main'):
+    from taskuary import proposals
+    t = Factory(s).task(title='Ship the ledger fix', kind='code', status='in_progress')
+    proposals.queue(s, t, {'action': 'shell_act', 'sid': 'run1', 'command': cmd, 'shell': 'Bash', 'what': 'push your commits to the code host',
+                           'why': 'it leaves this computer'}, 'agent')
+    return t, {'key': f'agent:{t}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': t, 'title': 'Ship the ledger fix'}
+
+
+def test_a_held_action_is_read_before_an_agent_asking_and_lights_its_approve(s):
+    t, it = _held(s)
+    d = rulebook.decide(s, it, _verbs('approve', 'stop_agent'))
+    assert (d['state'], d['verb']) == ('action_held', 'approve'), d
+    assert 'action_held' in rulebook.SAFE, 'no habit lights anything else over a step waiting for a yes'
+    rv = s._one("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='action'", (t,))['ReviewId']
+    s._exec("UPDATE review SET Status='dismissed' WHERE ReviewId=?", (rv,))
+    assert rulebook.decide(s, it, _verbs('approve', 'stop_agent'))['state'] == 'agent_asking', 'answered: the agent asking is read as before'
+
+
+def test_the_held_actions_approve_is_on_the_tasks_row_and_pressed_answers_that_proposal(s):
+    t, _ = _held(s)
+    funnel.invalidate()
+    rv = s._one("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='action'", (t,))['ReviewId']
+    it = advisor._item(s, 'task', t)
+    assert not it.get('rid') and concierge.cannot(it, 'approve', s) == ''
+    assert {'verb': 'approve', 'label': 'Approve'} in concierge.row_buttons(s, it)
+    with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}', preread=False)
+    assert (d['state'], d['verb'], d['label']) == ('action_held', 'approve', 'Approve'), d
+    prop = concierge.propose_direct(s, 'approve', f'task:{t}', press=True)
+    assert (prop['kind'], int(prop['target'])) == ('review.approve', rv), prop
+
+
+def test_a_close_out_or_a_playbook_is_no_held_action(s):
+    from taskuary import proposals
+    t = Factory(s).task(title='Ledger fix', kind='code', status='in_progress')
+    for p in ({'action': 'merge_pr', 'number': 7, 'closeout': True}, {'action': proposals.PLAYBOOK}):
+        s.add_review({'TaskId': t, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': 'x'})
+    assert proposals.held_pending(s, t) is None
+
+
+def test_a_held_action_moves_the_revision_and_reaches_the_advisors_prompt(s):
+    t = Factory(s).task(title='Ship the ledger fix', kind='code', status='in_progress')
+    before = advisor.revision(s, 'task', t)
+    from taskuary import proposals
+    proposals.queue(s, t, {'action': 'shell_act', 'sid': 'run1', 'command': 'git push', 'shell': 'Bash', 'what': 'push your commits to the code host'}, 'agent')
+    assert advisor.revision(s, 'task', t) != before
+    p = advisor._prompt(s, advisor.SHOWN, {'key': f'task:{t}', 'kind': 'agent', 'tid': t, 'title': 'Ship the ledger fix'}, _verbs('approve'), 1, 'task', t)
+    assert 'AN ACTION WAITS FOR YOUR YES: push your commits to the code host' in p

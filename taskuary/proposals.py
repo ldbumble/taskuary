@@ -295,6 +295,20 @@ def playbook_answered(store, tid: int, actor: str) -> None:
     store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD), **({'Status': 'done'} if shut else {})}, actor)
 
 
+def held_pending(store, tid) -> dict | None:
+    """AN ACTION WAITING FOR THE OWNER'S YES on the task - a step a hook held (a `git push` the shell gate stopped), or a proposal its agent
+    filed - as {rid, action, what}, the newest; None when none waits. Not a close-out (its own card, the reply's settle) nor the playbook
+    (asked after the work ended). The Advisor read an agent's card as asking and lit nothing over the Approve it waited on (2026-11-02 audit)."""
+    if not tid: return None
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId DESC", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): p = {}
+        if not isinstance(p, dict) or p.get('closeout') or p.get('action') in (PLAYBOOK, *CLOSEOUT): continue
+        what = (p.get('what') or str(p.get('command') or '')[:160]) if p.get('action') in HELD_ACTS else ''
+        return {'rid': r['ReviewId'], 'action': p.get('action') or '', 'what': ' '.join(str(what or r.get('Reason') or p.get('action') or 'a step').split())[:240]}
+    return None
+
+
 def owed(store, tid: int) -> bool:
     """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook."""
     return any(_action(r) != PLAYBOOK for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))

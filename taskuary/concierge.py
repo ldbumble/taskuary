@@ -907,6 +907,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     if verb == 'watch' and (item.get('closed') or not item.get('tid')): return f"{what} is not an open task - there is nothing to watch."
     need = NEEDS.get(verb)
+    # ...a task's or an agent's row with no draft carries the Approve of a step held there for the owner's yes (the 2026-11-02 audit)
+    if verb == 'approve' and need and not item.get(need) and item.get('tid') and store is not None:
+        from . import proposals
+        if proposals.held_pending(store, item['tid']): return ''
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
         state = str(item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]).strip().rstrip('.')
@@ -1202,6 +1206,8 @@ def row_buttons(store, it: dict) -> list:
     # ...and Pause this report on a report run drawn as its task's view too, so the Advisor may light it there (the owner, 2026-10-27)
     if it.get('kind') == 'report' and not cannot(it, 'report_off', store): out.append({'verb': 'report_off', 'label': buttons.label('report_off')})
     if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
+    # ...a step held for the owner's yes on a row with no draft is Approved, never Sent (cannot lets it on)
+    elif not it.get('rid'): out = [b | {'label': buttons.label('approve', 'action')} if b['verb'] == 'approve' else b for b in out]
     seen = set()
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
 
@@ -4363,8 +4369,10 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}
     elif verb == 'approve':
-        target = it.get('rid')
-        label = closeout_label(it) or label          # "Send the reply" is not what a merge card's yes does
+        # ...on a task's or an agent's row with no draft of its own, the step held there for the owner's yes (rulebook action_held lights it)
+        from . import proposals
+        target = it.get('rid') or ((proposals.held_pending(store, it['tid']) or {}).get('rid') if it.get('tid') else None)
+        label = closeout_label(it) or label         # "Send the reply" is not what a merge card's yes does
     elif verb == 'answer_agent':
         # the owner's own words when the model passed none - never a "yes" nobody said (B12, 2026-10-11)
         said = d_text or (text or '').strip()

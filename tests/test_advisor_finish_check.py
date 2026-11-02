@@ -221,3 +221,34 @@ class NoDefaultVerbTests(_Rail):
         self.assertNotIn('continue', R['stopped_done']['lit'])
         self.assertEqual(rulebook.when('2026-10-28 10:02:00', datetime(2026, 10, 28, 15, 0)), 'at 10:02')
         self.assertEqual(rulebook.when('2026-10-27 10:02:00', datetime(2026, 10, 28, 15, 0)), 'yesterday')
+
+
+class LatestInstructionTests(_Rail):
+    """0 of 5 live checks agreed (the 2026-11-02 audit): each judged the title the task began with, after the owner had changed the job in
+    the agent's pane - and one lit Continue over a draft ready to send."""
+    _stopped, _decide = FinishCheckTests._stopped, FinishCheckTests._decide
+
+    def test_the_check_reads_the_owners_latest_instruction_after_the_task_began(self):
+        s = MemoryStore(); t = self._stopped(s)
+        s._exec("UPDATE task SET CreatedAt=? WHERE TaskId=?", ((datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S'), t))
+        s.add_worker_event({'TaskId': t, 'Sid': 'run1', 'Kind': 'answered', 'RequestId': 'q1', 'Text': 'Only move the March file - leave the rest', 'Source': 'owner'})
+        s.add_comment(t, 'owner', 'human', 'Gail says the April one can wait')
+        s.add_worker_event({'TaskId': t, 'Sid': 'run1', 'Kind': 'answered', 'RequestId': 'q2', 'Text': 'answered in the pane', 'Source': 'owner'})
+        llm = brain_saying({'verdict': 'nothing', 'line': '', 'evidence': []})
+        with mock.patch('taskuary.sessionrecord.record', return_value={'sessions': []}): advisor.finish_check(s, t, wait=True, llm=llm)
+        system, user = llm.calls[0]
+        self.assertIn("THE OWNER'S LATEST INSTRUCTION", user)
+        latest = user.split("THE OWNER'S LATEST INSTRUCTION", 1)[1].split('\n\n')[0]
+        self.assertIn('Only move the March file', latest); self.assertIn('the April one can wait', latest)
+        self.assertLess(latest.index('Only move the March file'), latest.index('the April one can wait'), 'the newest last')
+        self.assertNotIn('answered in the pane', latest)
+        self.assertIn("replaces the title", system)
+
+    def test_a_dropped_verdict_never_lights_continue_over_a_draft_ready_to_send(self):
+        from taskuary.testing import Factory
+        s = MemoryStore(); t = self._stopped(s)
+        Factory(s).review(t, s.list_messages(t)[-1]['MessageId'], draft='The March export moved to the new share.'); funnel.invalidate()
+        rid = advisor.finish_check(s, t, wait=True, llm=brain_saying({'verdict': 'dropped', 'line': DROPPED, 'evidence': []}))
+        r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
+        self.assertEqual((r['Verb'], r['Dropped']), (None, 'continue over a ready draft'))
+        self.assertNotEqual(self._decide(s, t)['verb'], 'continue')

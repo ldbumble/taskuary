@@ -10,7 +10,9 @@ A DECISION is what one item had lit while the owner was on it, read from the pre
 keeps what that surface had lit - presses.py). Presses on one item under the same lit button are one decision: Next walks past it and
 leaves it open, the first other press is the owner's answer. A reply that went while it was open is the answer (Send in the draft, then
 Mark done). A decision nobody pressed an answer to takes the owner's own act on the item from the outcome ledger (a close, a send, a
-continue typed in the pane) until the item's next decision or two days; else it was walked past.
+continue typed in the pane) until the item's next decision or two days; else it was walked past. The row's pickers (priority, kind, who,
+the code's place, a split) answer nothing; the same act pressed again within SAME_M minutes, and a Stop then Mark done within them, are
+one decision (a Mark done); a Stop on a task already closed is not counted (the 2026-11-02 audit).
   right    the owner pressed the lit button (or its twin: Let go is Mark done, Try again is Continue); a reply sent as drafted agrees with
            Send, and with Reply when no draft was on the row yet; one sent in the owner's own words agrees with either
   wrong    the owner did something else - Next counts only when Next was lit
@@ -33,7 +35,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 TWIN = {'let_go': 'close', 'done': 'close', 'try_again': 'continue', 'remove': 'close'}   # Remove puts the item down, as Mark done does
-NOT_ANSWERS = {'back', 'reopen'}                    # moving about, never a move on the item's decision
+# moving about, and the row's pickers (advisor.NOT_MOVES: who does it, priority, its kind, the code's place, a split) - a field set, never a
+# move on the item's decision, so neither right nor wrong (the 2026-11-02 audit: they were counted as the owner overruling the light)
+NOT_ANSWERS = {'back', 'reopen', 'priority', 'change_kind', 'assign', 'owner', 'pick_repo', 'split', 'attach', 'close_note'}
 OWNER = ('owner', 'you')
 ACT = {'task.closed': 'close', 'reply.sent': 'approve', 'agent.continued': 'continue'}   # outcome kinds that are the owner's own acts
 HORIZON_H, LOOKBACK_H = 48, 1 / 6
@@ -41,6 +45,8 @@ CHECK = 'agent.check'                               # the finish check's advice 
 DROPPED = {'redraft', 'stop_agent', 'continue'}     # a press that picks up a ball something dropped
 FIRED_H = 1                                         # ...unflagged: no Advisor row lit anything on the item this long before it
 STEER_H = 12                                        # a Continue within this long of the owner's own Continue on the item is steering
+REOPEN_H = 2                                        # ...and a Continue this soon after the owner's own reopen of it
+SAME_M = 10                                         # minutes: the same act pressed again, or a Stop then Mark done, is one decision
 def _v(v): return TWIN.get(v or '', v or '')
 def _in(xs): return ','.join('?' * len(xs))
 
@@ -53,6 +59,17 @@ def connect(home) -> sqlite3.Connection:
     return cx
 def _rows(cx, q, a=()): return [dict(r) for r in cx.execute(q, a)]
 def _later(at, h): return (datetime.fromisoformat(str(at)[:19]) + timedelta(hours=h)).strftime('%Y-%m-%d %H:%M:%S')
+def _soon(a, b): return str(b) <= _later(a, SAME_M / 60)
+
+
+def closed_at(cx, target, key, at) -> bool:
+    """Whether the item's task was closed at `at`: its latest close in the ledger, with no reopen press or Continue after it."""
+    if target[0] != 'task': return False
+    c = cx.execute("SELECT MAX(At) a FROM outcome WHERE TargetKind=? AND TargetId=? AND Kind='task.closed' AND At<=?", (*target, at)).fetchone()['a']
+    if not c: return False
+    if cx.execute("SELECT 1 FROM advice_press WHERE Key=? AND Pressed='reopen' AND CreatedAt>=? AND CreatedAt<=? LIMIT 1", (key, c, at)).fetchone(): return False
+    return not cx.execute("SELECT 1 FROM outcome WHERE TargetKind=? AND TargetId=? AND Kind='agent.continued' AND At>? AND At<=? LIMIT 1",
+                          (*target, c, at)).fetchone()
 
 
 def model_row(cx, kind, tid, rev, verb=None):
@@ -100,22 +117,27 @@ def decisions(cx, since: str, until: str = '9999', silent: bool = False) -> list
         a = max(_later(d['at'], -LOOKBACK_H), _later(prev['end'], 0.0003) if prev else '')
         if _v(d['lit']) in ('reply', 'approve') and (s := _sent(cx, d['target'], a, until)): action, via = s, 'outcome'
         d['action'], d['via'], d['end'] = action, via, until; open_.pop(d['key'], None)
-        # ...the same answer pressed again on the same screen (a press that seemed not to take) is the same decision
+        # ...the same answer pressed again on the same screen (a press that seemed not to take), or the same act pressed again within minutes,
+        # is the same decision; a Stop then Mark done within minutes is one Mark done - putting the work down, never a dropped ball
         p = last.get(d['key'])
-        if p and d['rev'] and (p['lit'], p['rev'], p['action']) == (d['lit'], d['rev'], d['action']): p['ids'] += d['ids']; return
+        if p and d['rev'] and (p['lit'], p['rev'], p['action']) == (d['lit'], d['rev'], d['action']): p['ids'] += d['ids']; p['last'] = d['last']; return
+        if p and via == 'pressed' and p['via'] == 'pressed' and _soon(p['last'], d['at']) and (
+                _v(p['action']) == _v(action) or p['action'] == 'stop_agent' and _v(action) == 'close'):
+            if not p['lit'] and d['lit']: p.update({k: d[k] for k in ('lit', 'rev', 'live', 'greyed', 'choice', 'kept')})   # what was lit at the answer
+            p['action'], p['end'], p['last'] = action, until, d['last']; p['ids'] += d['ids']; return
         out.append(d); last[d['key']] = d
     for p in ps:
         lit = (p.get('Lit') if p.get('Surface') else p.get('Advised')) or ''      # a row before 2026-10-23 is a desk press under a line
         got, key = p['Pressed'], p['Key']
         d = open_.get(key)
-        if got in NOT_ANSWERS:
+        if got in NOT_ANSWERS or (got == 'stop_agent' and closed_at(cx, (p['TargetKind'], p['TargetId']), key, p['CreatedAt'])):   # a Stop on a closed task stops nothing
             if d: d['ids'].append(p['Id'])
             continue
         if d and _v(d['lit']) != _v(lit): close(d, 'next', 'walked past', p['CreatedAt'])
         if not lit and not silent: continue                               # nothing lit: no decision of the Advisor's to score
         if key not in open_:
             open_[key] = {'key': key, 'target': (p['TargetKind'], p['TargetId']), 'rev': p.get('Revision') or '', 'lit': lit, 'kind': p.get('ItemKind') or '',
-                          'at': p['CreatedAt'], 'live': [], 'greyed': [], 'choice': p.get('Choice') is None or bool(p['Choice']), 'ids': [], 'presses': [],
+                          'at': p['CreatedAt'], 'last': p['CreatedAt'], 'live': [], 'greyed': [], 'choice': p.get('Choice') is None or bool(p['Choice']), 'ids': [], 'presses': [],
                           'kept': (p.get('State'), p.get('By'))}        # the decision as kept at the press (since 2026-10-28)
         d = open_[key]
         try: live = json.loads(p.get('Live') or '[]') or []
@@ -124,7 +146,7 @@ def decisions(cx, since: str, until: str = '9999', silent: bool = False) -> list
         except ValueError: grey = []
         d['live'] = list(dict.fromkeys(d['live'] + live + [got]))
         d['greyed'] = list(dict.fromkeys(d['greyed'] + grey))
-        d['ids'].append(p['Id']); d['presses'].append(got)
+        d['ids'].append(p['Id']); d['presses'].append(got); d['last'] = p['CreatedAt']
         if got != 'next': close(d, got, 'pressed', _later(p['CreatedAt'], 0.05))
     # ...a decision left open takes the owner's own act from the outcome ledger, until that item's next decision (or two days)
     starts = defaultdict(list)
@@ -300,10 +322,14 @@ def fired(cx, d) -> bool:
 
 def steering(cx, d, ds) -> bool:
     """A Continue the owner presses on work they are already driving - their own Continue (a press or typed in the pane) on the same item in
-    the STEER_H hours before - is steering a long task, not a ball the Advisor dropped (the 2026-11-01 audit: 8 of 14 'dropped' were this)."""
+    the STEER_H hours before, or their own reopen of it in the REOPEN_H before - is steering a long task, not a ball the Advisor dropped
+    (the 2026-11-01 audit: 8 of 14 'dropped' were this)."""
     if _v(d['action']) != 'continue': return False
     a = _later(d['at'], -STEER_H)
     if any(o is not d and o['target'] == d['target'] and _v(o['action']) == 'continue' and a <= o['at'] < d['at'] for o in ds): return True
+    # ...and the FIRST Continue on a task the owner just reopened: they are driving it (the 2026-11-02 audit)
+    if cx.execute("SELECT 1 FROM advice_press WHERE Key=? AND Pressed='reopen' AND CreatedAt>=? AND CreatedAt<? LIMIT 1",
+                  (d['key'], _later(d['at'], -REOPEN_H), d['at'])).fetchone(): return True
     return bool(cx.execute(f"SELECT 1 FROM outcome WHERE TargetKind=? AND TargetId=? AND Kind='agent.continued' AND Actor IN ({_in(OWNER)}) AND At>=? AND At<? LIMIT 1",
                            (*d['target'], *OWNER, a, d['at'])).fetchone())
 

@@ -96,7 +96,7 @@ import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
 import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
-import { completionFact, completionLine, waitingEmails, wentOut,
+import { completionFact, completionLine, owedEmails, waitingEmails, wentOut,
   AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
@@ -1827,7 +1827,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     close: closeStatus({ advisor: adviceIn === "close" ? warn?.advice?.label || "" : "", closed: ["done", "dropped"].includes(t.Status), note: closedNote, to: replyMessage?.FromName || "",
       where: replyMessage ? replyMessage.SourceName || channelName(replyMessage.Channel) : "",
       draft: String(pendingReview?.DraftText || sentReview?.FinalText || sentReview?.DraftText || newestFirst(sentOutside)[0]?.OwnText || newestFirst(sentOutside)[0]?.BodyText || "").slice(0, 240),
-      waiting: !!pendingReview, emails: emailsWaiting, sent: !!(sentReview || sentOutside.length), owed: !!replyMessage,
+      waiting: !!pendingReview, emails: emailsWaiting, owes: owedEmails(detail?.checklist, detail?.reviews), sent: !!(sentReview || sentOutside.length), owed: !!replyMessage,
       sentWhen: sentReview?.DecidedAt ? whenShort(sentReview.DecidedAt) : newestFirst(sentOutside)[0]?.SentAt ? whenShort(newestFirst(sentOutside)[0].SentAt) : "" }),
   };
   // ...a closed section's tab, in place of the section: the arrow points the way it opens
@@ -3405,10 +3405,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
                               (replyDelivery.js). Read-only: this one is history, not a decision. Only where there is a reply:
                               a task with nobody to answer read "To You" under its own emails (2026-10-09) - and only over a letter
-                              once the item has ended, where it named a sender nothing is going to */}
+                              once the item has ended, where it named a sender nothing is going to
+                              ...and beside an email the task owes it is the REPLY's To, said so (the owner, 2026-11-02): under the owed
+                              address it read as that email's To. The email wears its own (SlotList) */}
                           {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && (
                           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
-                            <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
+                            <Typography sx={{ ...label, flexShrink: 0 }} data-tq-reply-to="">{owesEmails ? "Reply to" : "To"}</Typography>
                             <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
                               {replyContext(sentReview || sourceMessage)}
                             </Typography>

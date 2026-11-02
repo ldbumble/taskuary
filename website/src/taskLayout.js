@@ -127,10 +127,13 @@ export const agentStatus = ({ profile = "", word = "not started", said = "", mad
 // ...Close out: who it answers and where, the draft's first words, and whether it went - "Drafted · waiting for Send", "Sent", "Nothing owed"
 // ...and what is in it: the draft's first words, or what was sent and when, the emails owed, the close and its note
 // ...and at its foot the Advisor's next move when that move is Close out's (advisorAt): "Mark done is next" stood under an Agent nobody started
-export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false, advisor = "" } = {}) => ({
-  lines: [to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
-    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails ? "" : "Nothing owed",
-    emails ? `${plural(emails, "email")} waiting for Send` : ""].filter(Boolean),
+// ...and AN EMAIL THE TASK OWES LEADS, ITS OWN TO FIRST (`owes`, taskLifecycle.owedEmails - the owner, 2026-11-02): a chat asked for an email
+// to somebody else and the tab said only "Reply to <the chat's sender>"; each owed email says where it goes and where it stands, and
+// the count of drafted ones is not said again under them
+export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false, advisor = "", owes = [] } = {}) => ({
+  lines: [...(closed ? [] : owes.map((o) => `Email to ${o.to || o.name} · ${o.state}`)), to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
+    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails || owes.length ? "" : "Nothing owed",
+    emails && !owes.length ? `${plural(emails, "email")} waiting for Send` : ""].filter(Boolean),
   foot: advisor ? `Advisor: ${advisor} is next` : "" });
 
 // THE SECTION THE TASK OPENS ON, AND WHERE THE ADVISOR'S LINE STANDS (the owner, 2026-10-29: answered in Teams, the page opened on Came from

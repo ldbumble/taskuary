@@ -101,6 +101,9 @@ VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'rem
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
          'accept_invite', 'decline_invite', 'propose_time', 'find_time',    # the calendar's answers (calwrite.py)
          'rerun', 'report_off', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
+         # ...and a meeting's Prepare, a decision the model is taught (toolcatalog) - missing here, its CALL was dropped and "prepare me for
+         # this meeting" was answered "Ok." (2026-11-02)
+         'prepare',
          'confirm', 'cancel', 'none')
 # The coding hand-off had an old name (the key below), as if it were a profile or a brain - it is neither, a coding agent is any
 # profile of kind coding on any CLI. An old saved card or phone button, or a model still saying it, lands on the name it has
@@ -1283,6 +1286,7 @@ def _press_or_light(store, tid: int, table: dict | None, it: dict, verb: str, no
 # agent - on a task the task page's start (dispatch.prepare, through its dispatch door), on a mail the chip's hand-off. It supersedes "typed
 # words never start an agent" (2026-10-01). Anything that leaves the app - a reply, a Share - still only lights.
 AGENT_PRESS = ('coding_agent', 'regular_agent')
+WORD_STARTS = AGENT_PRESS + ('prepare',)      # ...and on the desk a meeting's Prepare, whose press is a researcher that writes to nobody
 
 
 def _starts_now(prop: dict, where: str = '') -> dict:
@@ -5857,8 +5861,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             # and the next "mark this done" closed TQ-1141, a task never on screen, because the model had named it (2026-10-26)
             # ...and an agent start is pressed too, on the item in front of the owner (AGENT_PRESS, the owner 2026-11-02); one named off the
             # table comes up with its Send to agent lit, as a put-down does
-            try: return (_lit(store, tid, item, target_item, verb) if elsewhere and (verb in PUT_DOWN or verb in AGENT_PRESS) else
-                         _start_agent(store, tid, item, target_item, verb, str(decision.get('text') or '').strip(), actor) if verb in AGENT_PRESS else
+            # ...and a meeting's Prepare the same: an agent start, writing to nobody - "prepare me for this meeting" presses it (2026-11-02)
+            try: return (_lit(store, tid, item, target_item, verb) if elsewhere and (verb in PUT_DOWN or verb in WORD_STARTS) else
+                         _start_agent(store, tid, item, target_item, verb, str(decision.get('text') or '').strip(), actor) if verb in WORD_STARTS else
                          _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor))
             except CallMiss:                                           # no such button on its row: the model says so in words
                 # ...except a report asked to run again: Run it again is drawn only on a failed run, and Run now is a page's - its row on

@@ -593,6 +593,12 @@ AREA_RAIL = [
     Q('rail', 'send this meeting to an agent to prep me - pull the open issues with these people', 'meeting',
       c('regular_agent', text='Prep me for this meeting: pull the open issues with Gail Moreno and Paula Vance'), 'did:task.create_from_text', freq=4, seed=meeting_row,
       note="the row's Send to agent, pressed with the owner's words; the meeting rides under them"),
+    # ...and Prepare by words: the CALL was dropped as no decision at all (prepare was missing from concierge.VERBS) and the answer was "Ok."
+    Q('rail', 'prepare me for this meeting', 'meeting', c('prepare'), 'did:calendar.prepare', freq=4, seed=meeting_row,
+      note="the row's Prepare, pressed - an agent start the Assistant may make (2026-11-02)"),
+    # ...while a job that is not about the meeting stays the model's call: `new` makes it a task of its own, written into New
+    Q('rail', 'get an agent to research three expense tools', 'meeting', c('regular_agent', text='research three expense tools', new=True), 'new:agent',
+      freq=2, seed=meeting_row, note='the model says the job is not the meeting\'s (`new`); code never decides that'),
     # ── about the rail itself ──
     Q('rail', 'why is this one at the top?', 'todo', [c('docs.search', query='work rail'), 'Rows sit in the order they arrived.'], 'read:docs.search', freq=2),
     Q('rail', 'what is the habits row', None, [c('docs.search', query='habits row'), 'One row for every habit the Advisor learned.'], 'read:docs.search', freq=1),

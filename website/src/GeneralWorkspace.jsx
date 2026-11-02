@@ -163,7 +163,7 @@ const AgentNameCtx = React.createContext("Taskuary");
 const OutputsCtx = React.createContext(null);
 const AssistantText = ({ text }) => {
   const at = React.useContext(OutputsCtx), shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
-  const { text: said, files } = at ? outputRefs(text, at.tid) : { text, files: [] }, { isShown } = shownOnce(files, shown);
+  const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
   return <>
     {!!said && <Md text={said} />}
     {files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
@@ -184,7 +184,7 @@ const ShownCtx = React.createContext({});
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx);
   const words = useAuiState((s) => textOf(s.message));
-  const { rest } = shownOnce(at ? outputRefs(words, at.tid).files : [], shown);
+  const { rest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>

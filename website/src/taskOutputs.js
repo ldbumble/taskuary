@@ -59,9 +59,19 @@ export const plainCitations = (text) => String(text ?? "").replace(CITE, (_, att
 
 // {text, files}: the answer with every reference to THIS task's outputs taken out of the words (its name stays where it was
 // said), and the names inside the folder, in order, once each - for the chips drawn under it
-export function outputRefs(text, tid) {
+export function outputRefs(text, tid, listed) {
   const files = [], add = (rel) => { if (!files.includes(rel)) files.push(rel); };
-  let out = String(text ?? "").replace(CITE, (_, attrs) => {
+  let out = String(text ?? "");
+  // a name WITH SPACES ("Open tasks 2026-11-02.xlsx"), written as a bare path: BARE stops at the first space, so the page drew a file
+  // called "Open" that was not there and left "tasks 2026-11-02.xlsx**" in the words (stress test 2026-11-02). The task's own listing
+  // knows the whole name - those are found first, longest first, so a shorter name inside a longer one never takes its place
+  const spaced = (listed || []).map((r) => r.path).filter((rel) => /\s/.test(rel || "")).sort((a, b) => b.length - a.length);
+  for (const rel of spaced) {
+    const name = rel.split("/").map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\\\/]");
+    const at = new RegExp(`(?:file:/+)?(?:[A-Za-z]:)?${STOP}*?[\\\\/]scratch[\\\\/]outputs[\\\\/]TQ-0*${Number(tid)}[\\\\/]${name}`, "gi");
+    out = out.replace(at, (all) => { add(rel); return `${/^[*_]+/.exec(all)?.[0] || ""}\`${baseName(rel)}\``; });
+  }
+  out = out.replace(CITE, (_, attrs) => {
     const p = /path\s*=\s*"([^"]*)"/.exec(attrs)?.[1];
     const rel = p && outputOf(p, tid);
     if (rel) { add(rel); return ""; }
@@ -74,12 +84,13 @@ export function outputRefs(text, tid) {
     // ...and a link into another task's folder is no link at all: its words, nothing to click into a 404 or a neighbour's file
     return label.trim() || baseName(at.rel);
   });
+  // ...and a path in bold or italics keeps its marks OUTSIDE it: "**C:\\...\\report.xlsx**" named a file "report.xlsx**" that was not there
   out = out.replace(BARE, (all) => {
-    const tail = /[.,;:!?]+$/.exec(all)?.[0] || "", path = all.slice(0, all.length - tail.length);
+    const lead = /^[*_]+/.exec(all)?.[0] || "", tail = /[.,;:!?*_]+$/.exec(all)?.[0] || "", path = all.slice(lead.length, all.length - tail.length);
     const at = parseOutput(path);
     if (!at) return all;
-    if (at.tid === Number(tid)) { add(at.rel); return `\`${baseName(at.rel)}\`${tail}`; }
-    return `\`${path}\`${tail}`;
+    if (at.tid === Number(tid)) { add(at.rel); return `${lead}\`${baseName(at.rel)}\`${tail}`; }
+    return `${lead}\`${path}\`${tail}`;
   });
   // a marker on a line of its own leaves no empty line behind
   return { text: out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n").trim(), files };
@@ -96,7 +107,7 @@ export function shownOnce(cited, shown) {
 // the task's files no answer names: listed at the foot of the conversation, so every one is reachable and none is drawn twice
 // ...and an older version of a file an answer names is that file's history, not one more file at the foot (deliverables)
 export const uncited = (listed, answers, tid) => {
-  const named = new Set((answers || []).flatMap((t) => outputRefs(t, tid).files)), fams = new Set([...named].map(family));
+  const named = new Set((answers || []).flatMap((t) => outputRefs(t, tid, listed).files)), fams = new Set([...named].map(family));
   return (listed || []).filter((r) => !named.has(r.path) && !fams.has(family(r.name || r.path)));
 };
 

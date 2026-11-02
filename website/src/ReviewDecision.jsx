@@ -70,11 +70,14 @@ export const InvoiceLine = ({ meta }) => (
 // (Redraft, the server's own) starts from itself.
 // ...and the CC the owner added with it (the overnight walk, 2026-10-27: Priya looped in, a look at another row, and the CC was back to
 // "+ loop someone in" while the edited words stood - Send would have gone without her)
-const edits = new Map();
+// ...and ONE DRAFT IN TWO PLACES reads the same in both (the agent's draft, 2026-11-02: Close out and the pop-up over the terminal): an edit in
+// either is told to the other card on the same draft, so a Send from either sends what the owner last typed
+const edits = new Map(), heard = new Set();
 const heldOf = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e : null; };
 const hold = (r, part) => {
   const e = { text: null, cc: null, ...heldOf(r), ...part, filed: reviewText(r) };
   if (e.text == null && e.cc == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
+  heard.forEach((f) => f(r.ReviewId));
 };
 
 const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose", schedule: "Invite" };
@@ -101,11 +104,17 @@ export const CalendarLine = ({ meta }) => (
 // `liveWork`: what is still working on the task ("the agent is working") - the server keeps it open after the send, and the line says so.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "" }) {
+// `compact`: the agent's draft asked where the agent is (AgentDraftAsk.jsx) - who it goes to, the draft and its buttons; what they wrote
+// and why it was drafted stay in Close out. `field`/`fieldLabel`: the draft box's name for the Assistant (pageView.js), told apart there.
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "",
+  compact = false, field = "draft", fieldLabel = "Reply draft" }) {
   const [text, setTextNow] = useState(() => heldOf(r)?.text ?? null);   // the owner's edit; null means "the draft as filed"
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
   const setCc = (v) => { hold(r, { cc: v ?? null }); setCcNow(v); };
+  const rNow = useRef(r); rNow.current = r;
+  useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null); };
+    heard.add(f); return () => { heard.delete(f); }; }, []);
   const [busyNow, setBusy] = useState(false);
   // SENT STAYS SENT until the page's re-read takes the card away (the owner, 2026-10-26: "when you hit send on close out email it grey's
   // out and then turns blue again then closes"): busy still ends when the decide answers, as 2026-10-18 ruled, but the button after it
@@ -428,7 +437,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         setText(res.edits[r.ReviewId] ?? value); setCompare(res.compare); setInterrupt(null);
       }} />
       {/* a close-out says what it closes, whatever an older row's Reason worded it as */}
-      {proposal?.kind === "closeout" ? (
+      {compact ? null : proposal?.kind === "closeout" ? (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
       ) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
@@ -443,7 +452,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       {!proposal && draftState(r).state === "needs" && (
         <Typography variant="body2" data-tq-draft-needs="" sx={{ color: DIM, mb: 1 }}>{draftState(r).line}</Typography>
       )}
-      {!proposal && <Inbound r={r} />}
+      {!proposal && !compact && <Inbound r={r} />}
       {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not - and a
           calendar answer goes to the calendar: what it will be told stands in their place, with no copies and no files */}
       {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
@@ -482,7 +491,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       </Box>}
       {/* ...named for the Assistant when the owner asks it about this draft (pageView.js): the reply's own box, filled through its onChange */}
       {/* ...and while the AI writes it, its spinner IN the box (the owner, 2026-10-30: "spin in the box of drafting") */}
-      <Box ref={draftRef} data-tq-draft-box="" data-tq-field="draft" data-tq-label="Reply draft" sx={{ position: "relative" }}>
+      <Box ref={draftRef} data-tq-draft-box="" data-tq-field={field} data-tq-label={fieldLabel} sx={{ position: "relative" }}>
         {drafting && <CircularProgress size={14} data-tq-drafting-spin="" sx={{ position: "absolute", top: 12, right: 12, zIndex: 1, color: FAINT }} />}
         <DraftField value={value} onChange={(e) => setText(e.target.value)} marks={blanks}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
@@ -500,7 +509,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Box>
         </Box>
       )}
-      <Box ref={movesRef} sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
+      <Box ref={movesRef} data-tq-moves="" sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
         {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies

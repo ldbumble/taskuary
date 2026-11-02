@@ -20,6 +20,11 @@ class ForScreenTests(unittest.TestCase):
         self.assertEqual(selfclose.for_screen('The page is open.\n[[TASKUARY-ASK]] Signed in? | Yes | No'), 'The page is open.')
         self.assertEqual(selfclose.for_screen('nothing to strip'), 'nothing to strip')
 
+    def test_the_show_line_leaves_the_progress_line(self):
+        """Left in, the trail's last paragraph never matched the filed answer and the whole answer showed twice (2026-11-02)."""
+        said = 'I drew the picture.\nC:/work/outputs/TQ-0001/desk.svg\n[[TASKUARY-SHOW: C:/work/outputs/TQ-0001/desk.svg]]\n'
+        self.assertEqual(selfclose.for_screen(said), 'I drew the picture.\nC:/work/outputs/TQ-0001/desk.svg')
+
     def test_an_answer_the_agent_also_wrote_out_is_said_once(self):
         """It wrote the answer, then the same words in the reply block; taking the markers out left both (2026-10-15)."""
         said = '3 + 3 is 6.\n\n[[TASKUARY-REPLY]]\n3 + 3 is 6.\n[[/TASKUARY-REPLY]]'

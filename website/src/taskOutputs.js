@@ -85,6 +85,14 @@ export function outputRefs(text, tid) {
   return { text: out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n").trim(), files };
 }
 
+// ONE FILE, ONE CARD: a file the answer names AND showed ([[TASKUARY-SHOW]]) is the same file twice - its output row from the path in
+// the words, and the copy the turn kept - and the owner saw two cards for one picture ("why are there 2 of them? looks broken").
+// The named row stays (Preview, Download, its size) and opens as the shown one did; the copy is drawn only when the words never named it.
+export function shownOnce(cited, shown) {
+  const names = new Set((cited || []).map(baseName)), seen = new Set((shown || []).map((p) => p.name));
+  return { isShown: (rel) => seen.has(baseName(rel)), rest: (shown || []).filter((p) => !names.has(p.name)) };
+}
+
 // the task's files no answer names: listed at the foot of the conversation, so every one is reachable and none is drawn twice
 // ...and an older version of a file an answer names is that file's history, not one more file at the foot (deliverables)
 export const uncited = (listed, answers, tid) => {

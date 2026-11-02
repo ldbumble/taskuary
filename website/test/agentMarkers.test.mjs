@@ -28,3 +28,7 @@ test("the done marker leaves the box, so the answer's last paragraph is seen as 
                { type: "text", text: "Booked the room for Thursday." }];
   assert.deepEqual(dropEcho(msg), [{ type: "reasoning", text: "Checking rooms." }, msg[1]]);
 });
+
+test("the show line leaves the trail, so an answer that showed a file is drawn once (stress test 2026-11-02)", () => {
+  assert.equal(forScreen("Drew it.\nC:/a/outputs/TQ-0001/desk.svg\n[[TASKUARY-SHOW: C:/a/outputs/TQ-0001/desk.svg]]"), "Drew it.\nC:/a/outputs/TQ-0001/desk.svg");
+});

@@ -31,7 +31,7 @@ import { Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
 import PublishedPages from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
-import { outputRefs, outputRow, uncited } from "./taskOutputs.js";
+import { outputRefs, outputRow, shownOnce, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
 import { heldOn, isTurn, TURN_BACK } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
@@ -162,11 +162,11 @@ const AgentNameCtx = React.createContext("Taskuary");
 // asked to send the workbook it wrote a link to an /outputs/ address the server never had - a 404 (outputs.py).
 const OutputsCtx = React.createContext(null);
 const AssistantText = ({ text }) => {
-  const at = React.useContext(OutputsCtx);
-  const { text: said, files } = at ? outputRefs(text, at.tid) : { text, files: [] };
+  const at = React.useContext(OutputsCtx), shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
+  const { text: said, files } = at ? outputRefs(text, at.tid) : { text, files: [] }, { isShown } = shownOnce(files, shown);
   return <>
     {!!said && <Md text={said} />}
-    {!!files.length && <PublishedPages pages={files.map((f) => outputRow(at.tid, f, at.listed))} />}
+    {files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
   </>;
 };
 const UserMessage = () => useAuiState((s) => !!s.message.metadata?.custom?.brief) ? (
@@ -182,13 +182,15 @@ const UserMessage = () => useAuiState((s) => !!s.message.metadata?.custom?.brief
 // what each answer published or showed, by the answer's id (the server's `after`): drawn under it, open - the agent chose it
 const ShownCtx = React.createContext({});
 const AssistantMessage = () => {
-  const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
+  const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx);
+  const words = useAuiState((s) => textOf(s.message));
+  const { rest } = shownOnce(at ? outputRefs(words, at.tid).files : [], shown);
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
       <div className="tq-aui-agent-body">
         <MessagePrimitive.Parts components={{ Text: AssistantText, data: { by_name: { agent_steps: AgentSteps } } }} />
-        {!!shown?.length && <PublishedPages pages={shown} open />}
+        {!!rest.length && <PublishedPages pages={rest} open />}
       </div>
     </MessagePrimitive.Root>
   );

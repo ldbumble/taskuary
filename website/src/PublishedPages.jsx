@@ -26,7 +26,11 @@ export const isPicture = (p) => /^image\//.test(type(p)) && !/svg/.test(type(p))
 // ...and a file the agent made for its task (taskOutputs.js, outputs.py): previewed by what it is, everything else Download only
 const isOutput = (p) => p?.kind === "output";
 const OUTPUT_LABEL = { sheet: "spreadsheet", table: "table", pdf: "PDF", picture: "picture", text: "text", page: "page", document: "document" };
-const label = (p) => isOutput(p) ? (OUTPUT_LABEL[p.preview] || (/\.xlsm?$/i.test(p.name) ? "spreadsheet" : "file")) : (p.kind === "shown" ? (isPicture(p) ? "picture" : /csv/.test(type(p)) ? "table" : "page") : "published page");
+// ...an SVG previews through the page frame (isPicture) but it IS a picture, and the card says so: "page" read as a broken image
+const isImage = (p) => /^image\//.test(type(p)) || /\.svg$/i.test(p?.name || "");
+const label = (p) => isImage(p) && (isOutput(p) || p.kind === "shown") ? "picture"
+  : isOutput(p) ? (OUTPUT_LABEL[p.preview] || (/\.xlsm?$/i.test(p.name) ? "spreadsheet" : "file"))
+  : (p.kind === "shown" ? (/csv/.test(type(p)) ? "table" : "page") : "published page");
 
 // a workbook's sheet as the server read it (outputs.sheet): capped rows and columns, a tab per sheet
 function SheetPreview({ page }) {

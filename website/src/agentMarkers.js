@@ -1,7 +1,9 @@
 // Taskuary's own markers, out of what the owner reads (selfclose.for_screen on the server). A task that saved its progress before the
 // server stripped them still drew the reply block, and the answer twice (2026-10-15).
 const REPLY = /\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\][\s\S]*?\[\[\s*\/\s*TASKUARY[-_ ]?REPLY\s*\]\]/gi;
-const LINE = /^[ \t]*\[\[\s*TASKUARY[-_ ]?(?:ATTACH|ASK)\b[^\n]*\n?/gim;
+// ...and the show line: its file is drawn under the answer, and left in the trail it kept the last paragraph from matching the filed
+// answer (which has it out) - so a general agent's whole answer showed twice, the first copy ending in the raw marker (stress test 2026-11-02)
+const LINE = /^[ \t]*\[\[\s*TASKUARY[-_ ]?(?:ATTACH|ASK|SHOW)\b[^\n]*\n?/gim;
 // ...and the done line: its sentence is filed as a comment (or is the answer), and left in it kept dropEcho from seeing the echo (walk 2026-10-29)
 const DONE = /[ \t]*\[\[\s*TASKUARY[-_ ]?DONE\s*\]\][^\n]*/gi;
 export const forScreen = (text) => String(text || "").replace(REPLY, "").replace(LINE, "").replace(DONE, "").trim();

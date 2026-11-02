@@ -380,9 +380,10 @@ class DeskRoutes(unittest.TestCase):
         call = {'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': ask, 'recurs': recurs}}
         out, spawn = say(s, ask, None, 'CALL: ' + json.dumps(call))
         self.assertEqual(out['new']['kind'], 'workflow')
-        self.assertEqual(out['new']['text'], 'every Monday at noon - run the weekly review')
+        # ...the repository and skill in the words, which are all Set up with AI carries to the builder (2026-11-02)
+        self.assertEqual(out['new']['text'], 'every Monday at noon - run the weekly review - in northwind/ledger, with the /weekly-review skill')
         self.assertEqual(out['new']['routine'], {'coding': True, 'repo': 'northwind/ledger', 'skill': 'weekly-review'})
-        self.assertEqual(out['say'], 'Wrote it into New - Build it there starts it.')
+        self.assertEqual(out['say'], 'Wrote it into New - Set up with AI there starts it.')
         spawn.assert_not_called(); self.assertEqual(proposals(s), []); self.assertEqual(len(s.list_sources()), had)   # nothing saved
         # ...the same verdict from the set-up sort
         sort = {'kind': 'routine', 'why': 'it repeats', 'recurs': {'schedule': 'every weekday at 7', 'objective': 'review the failed imports'}}

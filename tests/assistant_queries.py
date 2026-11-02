@@ -817,6 +817,104 @@ AREA_SETTINGS = [
 ]
 CASES += AREA_SETTINGS
 
+# NEW, ASKED ABOUT WITH IT UP (the audit of every page, 2026-11-02): the card the sidebar's New posts (CanvasBrowse area "new", NewSheet.jsx),
+# as pageView.js reads it - its tabs, its forks, the about box under the label it wears, the brain and model pickers, its own press. The
+# Assistant fills it and presses its tabs; a job asked for in words is written into New on its tab, never started by the Assistant
+TABS = [{'id': i, 'label': l} for i, l in (('send_something', '✉️Send something'), ('give_an_agent_a_job', 'Give an agent a job'),
+        ('note_to_self', '💡Note to self'), ('meeting', '📅Meeting'), ('set_a_goal', '🎯Set a goal'), ('report', '📊Report'),
+        ('dashboard', '📈Dashboard'), ('routine', '🔁Routine'), ('playbook', '📖Playbook'), ('close_new_task', 'Close new task'))]
+NEWAGENT = {'area': 'new', 'title': '', 'text': 'What are we starting? Give an agent a job WHO WORKS IT A live session A general agent',
+            'fields': [{'key': 'about', 'label': 'What should it find out or write', 'kind': 'text', 'value': ''},
+                       {'key': 'brain', 'label': 'Brain', 'kind': 'choice', 'value': 'the brain it runs on'},
+                       {'key': 'model', 'label': 'Model', 'kind': 'choice', 'value': "the agent's default model"}],
+            'buttons': TABS + [{'id': 'a_live_session_a_cli_agent_on_a_keyboard_in_a_checkout_it_edits_runs_and_reports',
+                                'label': 'A live session a CLI agent on a keyboard, in a checkout — it edits, runs and reports back.'},
+                               {'id': 'a_general_agent_a_researcher_analyst_or_writer_on_its_own_it_looks_things_up_dr',
+                                'label': 'A general agent a researcher, analyst or writer on its own. It looks things up, drafts and r'},
+                               {'id': 'cancel', 'label': 'Cancel'}, {'id': 'send_to_agent', 'label': 'Send to agent', 'enabled': False}]}
+NEWCODING = {**NEWAGENT, 'fields': [{'key': 'about', 'label': 'What should it do', 'kind': 'text', 'value': 'fix the census sync'},
+                                    {'key': 'repository_the_session_opens_in', 'label': 'Repository the session opens in', 'kind': 'choice',
+                                     'value': 'Auto - picks from what you write', 'options': ['Auto - picks from what you write', 'northwind/ledger',
+                                                                                             'northwind/portal', 'Another repository…']}],
+             'text': 'Give an agent a job A live session No coding tool is connected - Connect one',
+             'buttons': [b for b in NEWAGENT['buttons'] if b['id'] != 'send_to_agent']
+                        + [{'id': 'connect_one', 'label': 'Connect one'}, {'id': 'send_to_coding_agent', 'label': 'Send to coding agent', 'enabled': False}]}
+NEWMEET = {'area': 'new', 'title': '', 'text': 'What are we starting? Meeting WITH ABOUT HOW LONG WHEN',
+           'fields': [{'key': 'with', 'label': 'With', 'kind': 'text', 'value': ''}, {'key': 'about', 'label': 'About', 'kind': 'text', 'value': 'the budget'},
+                      {'key': 'note', 'label': 'Note or agenda', 'kind': 'text', 'value': ''}],
+           'buttons': TABS + [{'id': f'{m}_min', 'label': f'{m} min'} for m in (15, 30, 45, 60)]
+                      + [{'id': 'soon', 'label': 'Soon'}, {'id': 'this_week', 'label': 'This week'}, {'id': 'next_week', 'label': 'Next week'},
+                         {'id': 'find_times', 'label': 'Find times'}, {'id': 'tue_3_nov_10_00', 'label': 'Tue 3 Nov, 10:00'},
+                         {'id': 'use_this_time', 'label': 'Use this time', 'enabled': False}, {'id': 'cancel', 'label': 'Cancel'}]}
+NEWREPORT = {'area': 'new', 'title': '', 'text': 'What are we starting? Report Set up with AI Set it up by hand',
+             'fields': [], 'buttons': TABS + [{'id': 'set_up_with_ai', 'label': 'Set up with AI'}, {'id': 'set_it_up_by_hand', 'label': 'Set it up by hand'},
+                                               {'id': 'cancel', 'label': 'Cancel'}]}
+NEWNOTE = {'area': 'new', 'title': '', 'text': 'What are we starting? Note to self COME BACK TO IT',
+           'fields': [{'key': 'about', 'label': 'What do you want to remember', 'kind': 'text', 'value': 'call the bank'},
+                      {'key': 'when', 'label': 'Come back to it', 'kind': 'text', 'value': ''}],
+           'buttons': TABS + [{'id': 'cancel', 'label': 'Cancel'}, {'id': 'note_it', 'label': 'Note it'}]}
+AREA_NEW = [
+    # ── its form, filled and pressed through its own handlers ──
+    Q('new', 'make it a general agent', None, [v(op='press', button='A general agent')], 'view:press:a_general_agent', tools=('words',), view=NEWAGENT, freq=4),
+    Q('new', 'write in the box: find out why invoice 88213 is past due', None,
+      ['Wrote it in.\n' + v(op='set', field='about', value='find out why invoice 88213 is past due')], 'view:set:about', tools=('words',), view=NEWAGENT, freq=4),
+    Q('new', 'use claude code for it', None, [v(op='set', field='Brain', value='Claude Code')], 'view:set:brain', tools=('words',), view=NEWAGENT, freq=2,
+      note='the brain picker reads as "Brain" on the page now (ui.jsx AgentPicker, 2026-11-02) - it had no name and was never sent'),
+    Q('new', 'swich to the meeting tab', None, [v(op='press', button='Meeting')], 'view:press:meeting', tools=('words',), view=NEWAGENT, freq=3,
+      note='a typo: the model reads it'),
+    # ...a tab pressed reveals its boxes, and the box after it is the page's to find (pageview.take, 2026-11-02)
+    Q('new', 'make it a goal due friday', None, [v(op='press', button='Set a goal') + '\n' + v(op='set', field='By', value='2026-11-06')], 'view:set:By',
+      tools=('words',), view=NEWAGENT, freq=2, note='the By box is drawn by the press - it was dropped as a box the view never had'),
+    Q('new', 'make it 45 minutes', None, [v(op='press', button='45 min')], 'view:press:45_min', tools=('words',), view=NEWMEET, freq=3),
+    Q('new', 'add gail@northwind.example to it', None, [v(op='set', field='With', value='gail@northwind.example')], 'view:set:with', tools=('words',),
+      view=NEWMEET, freq=3),
+    Q('new', 'find us a time next week', None, [v(op='press', button='Next week') + '\n' + v(op='press', button='Find times')], 'view:press:find_times',
+      tools=('words',), view=NEWMEET, freq=4),
+    Q('new', 'take the tuesday 10am one', None, ['That drafts the invite on a task of its own, for your Send.\n' + v(op='press', button='Tue 3 Nov, 10:00')],
+      'view:press:tue_3_nov_10_00', tools=('words',), view=NEWMEET, freq=3, note='a pick only drafts the invite - its Send is in Close out'),
+    Q('new', 'send the invite', None, ['A pick drafts it on a task of its own - its Send waits in Close out there. Pick a time first.'], 'words',
+      tools=('words',), view=NEWMEET, freq=3, note='New has no Send: nothing to light, said where it is'),
+    Q('new', 'come back to it friday at 9', None, [v(op='set', field='Come back to it', value='2026-11-06T09:00')], 'view:set:when', tools=('words',),
+      view=NEWNOTE, freq=3, note='the date box reads as "Come back to it" now (NewSheet.jsx, 2026-11-02) - it had no name and was never sent'),
+    Q('new', 'set it up by hand', None, [v(op='press', button='Set it up by hand')], 'view:press:set_it_up_by_hand', tools=('words',), view=NEWREPORT, freq=2),
+    Q('new', 'close this', None, [v(op='press', button='Close new task')], 'view:press:close_new_task', tools=('words',), view=NEWAGENT, freq=3),
+    Q('new', 'put it in northwind/ledger', None, [v(op='set', field='Repository the session opens in', value='northwind/ledger')],
+      'view:set:repository_the_session_opens_in', tools=('words',), view=NEWCODING, freq=2),
+    # ── questions about it, answered from what is on it or from the help ──
+    Q('new', "what's the difference between a live session and a general agent?", None,
+      ['A live session is a coding tool working in a checkout; a general agent looks things up and writes, with no repository.'], 'words',
+      tools=('words',), view=NEWAGENT, freq=3),
+    Q('new', 'why is send to coding agent greyed out', None, ['No coding tool is connected - [connect one](#cli-agents), then it lights.'],
+      'link:#cli-agents', tools=('pages',), view=NEWCODING, freq=3),
+    Q('new', 'how do I start a coding agent?', None, [c('docs.search', query='start a coding agent'), 'New, then Give an agent a job, then A live session.'],
+      'read:docs.search', freq=3),
+    Q('new', 'can I attach a screenshot?', None, ['Paste it into the box or use its paperclip - it goes with the words.'], 'words', tools=('words',),
+      view=NEWAGENT, freq=2),
+    # ── New brought up, blank or on the builder its tab opens ──
+    Q('new', 'I want to start something new', None, ['Here: [New](#new-task).'], 'link:#new-task', tools=('pages',), freq=3,
+      note='New itself has an address (canvasLinks #new-task) - APP PAGES names it since 2026-11-02'),
+    Q('new', 'open the new dashboard builder', None, ['Here: [New dashboard](#report=new-dashboard).'], 'link:#report=new-dashboard', tools=('pages',), freq=2,
+      note='APP PAGES named a new report and a new routine but not a new dashboard (2026-11-02)'),
+    Q('new', 'new routine', None, ['Here: [New routine](#report=new-agent).'], 'link:#report=new-agent', tools=('pages',), freq=2),
+    # ── a job in words: written into New on its tab, the owner's press starts it ──
+    Q('new', 'have an agent look into why the census moved in july', None,
+      c('task.create_from_text', kind='general', text='why did the census move in July', title='Census move in July'), 'new:agent:general', freq=4),
+    Q('new', 'get a coding agent to fix the nightly export', None,
+      c('task.create_from_text', kind='coding', text='fix the nightly export', title='Nightly export fix'), 'new:agent:terminal', freq=4),
+    Q('new', 'write to Erin about the Q3 numbers', None, c('task.create_from_text', kind='send', text='the Q3 numbers', to='Erin Blake'), 'new:send', freq=3),
+    Q('new', 'set a goal: books closed by the 5th', None, c('task.create_from_text', kind='goal', text='books closed by the 5th'), 'new:goal', freq=2),
+    Q('new', 'note to self: call the bank', None, c('task.create_from_text', kind='task', text='call the bank'), 'new:note', freq=3),
+    Q('new', 'new dashbaord of open tasks by person', None, c('task.create_from_text', kind='dashboard', text='open tasks by person'), 'new:dashboard', freq=2,
+      note='a typo: the model reads it'),
+    Q('new', 'every friday at 4 summarise the open AP into a task', None,
+      c('task.create_from_text', kind='general', text='summarise the open AP', recurs={'schedule': 'every friday at 4', 'objective': 'summarise the open AP'}),
+      'new:workflow', freq=3),
+    Q('new', 'set up a report of AP over 30 days', None, c('setup', text='a report of AP over 30 days'), 'new:report', sort={'kind': 'report'}, freq=3),
+    Q('new', 'make me a playbook for leave balance requests', None, c('setup', text='a playbook for leave balance requests'), 'new:playbook',
+      sort={'kind': 'playbook'}, freq=2),
+]
+CASES += AREA_NEW
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

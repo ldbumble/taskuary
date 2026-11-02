@@ -259,9 +259,13 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
 
     def test_a_role_nobody_ships_is_answered_with_the_ones_there_are(self):
         s, _ = setup()
-        out = self.card(s, {'role': 'astronaut'})
+        # ...the miss goes to the model, which answers in its own words (7683dad09): the roles there are are in what it is handed
+        from taskuary import concierge, terminal
+        line, seen = 'CALL: ' + json.dumps({'kind': 'role.apply', 'params': {'role': 'astronaut'}}), []
+        def brain(system, user, max_tokens=None): seen.append(user); return line
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]): out = concierge.say(s, 'set me up as an AP rep', llm=brain)
         self.assertFalse(out.get('proposal'))
-        self.assertIn('accounts payable', out['say'].lower())
+        self.assertTrue(any('accounts payable' in u.lower() for u in seen[1:]), seen[1:])
 
     def test_the_walk_asks_its_questions_then_puts_one_card_with_what_it_lays_out(self):
         from taskuary import concierge, terminal

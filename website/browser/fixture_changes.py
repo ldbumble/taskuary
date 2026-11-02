@@ -1057,7 +1057,7 @@ def install_processing_changes(app, store):
         return {'taskId': tid}
 
     # ── THE ADVISOR AUDIT (2026-10-26): where the Advisor's words land on a task, by stage and drawer ─────────────────────────────────
-    # `world` adds the stages the demo lacks, with the Advisor's REAL rule decisions where the app's facts make one: a late ask against a
+    # `world` adds the stages the demo lacks, with the Advisor's REAL decisions (the model's - the demo script's) on the app's facts: a late ask against a
     # counted usual (three answered threads), one thread on two open tasks (duplicate), an ask with no habit, an agent at work and one
     # that finished. `say` stands in for what only a model writes (a draft warning, a caution): the decision advisor.decide hands every
     # surface, with the label the row would draw, so the page under test reads it from /api/advice like any other. Invented people.
@@ -1066,20 +1066,18 @@ def install_processing_changes(app, store):
     real_decide = advisor.decide
 
     # ...and it passes the SAME check a real answer does (advisor.checked, the judge's fix 3, 2026-10-26): a scripted Send under a draft
-    # caution, a Try again nobody can press, Reply over a ready draft - refused and the next sensible move lit, exactly as the app would.
-    # An agent at work is never advised over: the real decide answers before any model is read, and so does this
+    # caution, a Try again nobody can press - refused and nothing lit, exactly as the app would (it never swaps in a verb since 2026-11-02).
+    # An agent at work keeps the real decision (the model's read of it)
     def scripted_decide(st, key, preread=True):
         out = real_decide(st, key, preread)
         tgt = advisor.target_of(st, key)
         o = said.get(int(tgt[1])) if tgt and tgt[0] == 'task' else None
         if o is None or out.get('state') == 'working': return out
         item = advisor._item(st, *tgt, key=key)
-        verbs = advisor.offered(st, item) if item else []
-        from taskuary import rulebook
-        r = rulebook.decide(st, item, verbs) if item else {'verb': out.get('verb'), 'line': '', 'evidence': []}
+        verbs = advisor.offered(st, item) + [{'verb': 'next', 'label': 'Next'}] if item else []
         state = o.get('state', out.get('state'))
         d = advisor.checked(st, item or {}, verbs, {**out, **o, 'key': key, 'state': state, 'verb': o.get('verb', out.get('verb')), 'evidence': [],
-                            'kind': o.get('kind') or rulebook.KIND.get(state, 'other')}, {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])})
+                            'kind': o.get('kind') or 'other'})
         lbl = advisor._label(verbs, d['verb'], item) if d['verb'] else ''
         return {**d, 'label': lbl, 'pill': lbl, 'scripted': True}
     advisor.decide = scripted_decide

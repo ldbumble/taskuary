@@ -72,7 +72,8 @@ test("no AI where the move needs one: the strip says so once, and the row lights
   assert.equal(adviceNone("no_ai").move, "ai");
 });
 
-test("an agent asking lights nothing on the row: its pane holds the answers", () => {
+// ...the server may light something on an asking agent now (the model's call); where it lights nothing, the row lights nothing either
+test("a decision with no verb lights nothing on the row: an asking agent's pane holds the answers", () => {
   const decision = { verb: null, state: "agent_asking", line: "", for: KEY, key: KEY };
   assert.equal(adviceShown(decision, { key: KEY, lane: "blocked" }, false), null);
   const { pick } = stripWord({ speaks: true, shown: null, advice: decision, key: KEY, lane: "blocked" });
@@ -90,12 +91,14 @@ test("no Advisor strip at any width; the one .tq-next line left (setup's) stays 
   assert.match(css, /\.tq-next-txt \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis; \}/);
 });
 
-test("every state's words: a fact or silence, and never the filler the owner struck out", () => {
+// THE STATES ARE FACTS NOW (the owner, 2026-11-02: "never ever use hard coded rules, let the ai see everything"): each says what it means
+// and the fact said for it - no state lights a button by itself; the model decides every light (advisor.decide)
+test("every state's words: what it means and a fact or silence - never a lit list, never the filler the owner struck out", () => {
   assert.ok(Object.keys(ADVICE_RULE).length >= 25);
   for (const [st, w] of Object.entries(ADVICE_RULE)) {
-    assert.ok(Array.isArray(w.lit), st);
+    assert.deepEqual(Object.keys(w).sort(), ["is", "line"], st);
+    assert.ok(w.is.length > 0, st);
     for (const gone of ["No suggestion", "Nothing to decide", "Thinking", "the choice is yours", "Suggested"]) assert.ok(!w.line.includes(gone), `${st}: ${w.line}`);
     assert.ok(w.line.length <= 64, st);
   }
-  for (const st of ["working", "report_ok", "dashboard", "fyi_batch", "goal", "invite_no_cal"]) assert.deepEqual(ADVICE_RULE[st], { line: "", lit: ["next"] }, st);
 });

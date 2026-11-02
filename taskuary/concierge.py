@@ -432,6 +432,8 @@ def task_now(store, tid: int) -> str:
     sent = store.sent_reply(task_id=tid)
     if sent: lines.append(f"  YOU ALREADY REPLIED ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)} - do not suggest answering again")
     if rv: lines.append(f"  a {rv.get('Kind')} waits for the owner's yes (rv{rv['ReviewId']})")
+    from . import watch
+    if w := watch.said(t): lines.append(f'  {w}')
     if last: lines.append(f"  the agent last said ({str(last.get('CreatedAt') or '')[:16]}): {_cut(last.get('Body'), 300)}")
     if t.get('Status') in ('done', 'dropped'): lines.append(f"  CLOSED {str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:16]} - do not present it as open work")
     return '\n'.join(lines)
@@ -621,6 +623,12 @@ def facts(store, item: dict, whole: bool = False) -> str:
     if item['kind'] == 'report' and item.get('source_id'):
         runs = store.report_runs(item['source_id'], 3)
         if runs: lines.append('LAST RUNS: ' + '; '.join(f"{str(r.get('at') or '')[:16]} {'FAILED: ' + _cut(r.get('error'), 200) if r.get('failed') else 'ok'}" for r in runs))
+    # THE HABITS ROW SAYS ITS HABITS (the rail audit, 2026-11-02): the model read only "Learned 1 habit · 1 to check", so "what habits did
+    # you learn?" had nothing to answer from and "adopt the second one" no key to name
+    if item['kind'] == 'idea' and item.get('idea_kind') == 'habit':
+        lines.append('HABITS ON THIS ROW (each has its own buttons inside the row - Adopt / No on one asked, Not right on one adopted; '
+                     'typed, they are memory.wrong with its key - keep for Adopt, wrong for No or Not right):\n' + '\n'.join(
+                         f"  [key: {h.get('line')}] {'adopted' if h.get('adopted') else 'asking'}: {_cut(h.get('say'), 300)}" for h in (item.get('action') or {}).get('habits') or []))
     if item['kind'] == 'idea' and item.get('action', {}).get('chat'):
         lines.append('what was said about it before: ' + ' // '.join(f"{t.get('role')}: {_cut(t.get('text'), 200)}" for t in item['action']['chat'][-4:]))
     return '\n'.join(lines)
@@ -698,6 +706,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if str(p.get('as') or '').strip(): d['as'] = str(p['as']).strip().lower()       # the worker or repository - checked, never trusted
     if str(p.get('on') or '').strip(): d['on'] = str(p['on']).strip()               # the decision is about ANOTHER item, named (PW-121)
     if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
+    if verb == 'next' and str(p.get('section') or '').strip(): d['section'] = str(p['section']).strip()[:40]   # a rail heading (rail_section)
     cc = p.get('cc')                                                                # a reply's people to loop in - looked up, never trusted
     cc = [cc] if isinstance(cc, str) else cc if isinstance(cc, list) else []
     if any(str(c or '').strip() for c in cc): d['cc'] = [str(c).strip()[:120] for c in cc if str(c or '').strip()][:6]
@@ -920,6 +929,12 @@ def walk_chips(left) -> list:
     return [{'verb': 'next', 'label': CHIP_WORDS['next']}] if left else []
 
 
+def rail_section(said: str) -> str | None:
+    "A rail section by its heading or its key (Reports, For later, ideas...) - the names the rail draws, never words read for intent."
+    w = ' '.join(str(said or '').lower().split())
+    return next((s['key'] for s in lanes.SECTIONS if w in (s['key'], s['word'].lower(), s['key'].rstrip('s'), s['word'].lower().rstrip('s'))), None)
+
+
 def closeout_label(item: dict) -> str:
     """The ONE button of a task's close-out, whatever the system (the owner, 2026-09-27: "we can't have a bunch of them"):
     approve as it shows on an agent's proposal - Approve (buttons.json). What it does there is the card's sentence
@@ -1059,7 +1074,10 @@ def table_actions(store, item: dict | None, chips: list = None) -> str:
 # the table, must be one of its buttons - the chips under the line, or its own page's (a task's Send to agent while no agent
 # holds it). Anything else is answered in words. The other verbs carry their own guard (cannot, NEEDS).
 BUTTON_OF = {'not_ours_sender': 'not_ours', 'not_ours_remember': 'not_ours', 'block_sender': 'not_ours', 'archive': 'not_ours',
-             'coding_agent': 'regular_agent'}
+             'coding_agent': 'regular_agent',
+             # ...and an idea's "No more ideas like this" is one of its Not ours choices (buttons.json `choices`): "no more ideas like this"
+             # over an Advisor idea was refused "has no such button" with Not ours on the row (the rail audit, 2026-11-02)
+             'not_ours_kind': 'not_ours'}
 OP_BUTTON = {'message.file': 'not_ours', 'message.archive': 'not_ours', 'preference.exclude_sender': 'not_ours',
              'preference.sender_rule': 'not_ours'}
 BUTTONED = frozenset({'not_ours', 'mine', 'regular_agent'})
@@ -1327,8 +1345,10 @@ def _relate(store, tid: int, p: dict, actor: str) -> dict:
 def _memory(store, tid: int, kind: str, p: dict) -> dict:
     """memory.remember (a fact about how the owner works) and memory.wrong, run: the memory changed and said in one line, with the words
     of the line - or a miss the model fixes (no such line; Wrong on the owner's own line)."""
-    from . import memoryedit
-    q = lambda t: f'\u201c{_title_cut(str(t or ""), 120)}\u201d'
+    from . import habits, memoryedit
+    # ...the line as the owner reads it: "Took {{owner_first}} closes sign-in help threads... out" showed the doc's raw placeholder (the rail
+    # audit, 2026-11-02) - habits._named fills it as the memory page does
+    q = lambda t: f'\u201c{_title_cut(habits._named(store, str(t or "")), 120)}\u201d'
     try:
         if kind == 'memory.remember':
             r = memoryedit.remember(store, str(p.get('note') or ''), str(p.get('about') or ''), str(p.get('section') or ''), str(p.get('replaces') or ''))
@@ -1349,8 +1369,19 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
             return _did(store, tid, f"Remembered under {r.get('title') or 'your memory'} in {at} ({learned_cut.reads_label(r.get('section') or 'care')}): {q(r['text'])}"
                         + (f" - {q(c['text'])} is kept as history, true until {c['until']}." if c else '.'), kind)
         how = str(p.get('how') or 'wrong').strip().lower()
-        if how not in ('wrong', 'forget', 'ended'): raise ValueError(f'memory.wrong how is wrong, forget or ended - not {how!r}')
+        if how not in ('wrong', 'forget', 'ended', 'keep'): raise ValueError(f'memory.wrong how is wrong, forget, ended or keep - not {how!r}')
         key = str(p.get('key') or '')
+        # A HABIT ON THE HABITS ROW IS ANSWERED THERE (the rail audit, 2026-11-02): "adopt the one about forwarded FYI" was refused - keep was
+        # no `how` - and a habit taken out here left the row still offering it. The row's own Adopt / No / Not right (habits.answer) runs it
+        if how in ('keep', 'wrong') and (h := habits._said(store).get(key) or {}).get('state') == 'open':
+            r, said = habits.answer(store, key, how == 'keep'), h.get('say') or key
+            line = (f"Adopted {q(said)} - it is in your memory now." if how == 'keep' and not h.get('adopted') else
+                    f"Took {q(said)} back - it will not be learned again." if how == 'wrong' and h.get('adopted') else
+                    f"Kept {q(said)}." if how == 'keep' else f"Put down {q(said)} - not adopted, and never asked again.")
+            return _did(store, tid, line + (f" {plural(r['open'], 'habit')} still on the habits row." if r['open'] else ''), kind)
+        if how == 'keep':
+            r = memoryedit.mark(store, key, 'keep')
+            return _did(store, tid, f"Kept {q(r['text'])} - it is in your memory now.", kind)
         if how == 'ended':
             c = memoryedit.close(store, key)
             return _did(store, tid, f"{q(c['text'])} is kept as history - no longer true.", kind)
@@ -2777,6 +2808,8 @@ def read_op(store, kind: str, params: dict) -> str:
         if boxes: out.append('checklist: ' + '; '.join(f"{n}. [{'x' if b.get('done') else ' '}] {b['text']}" + (f" (note: {b['note']})" if b.get('note') else '')
                                                      for n, b in enumerate(boxes, 1)))
         if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} ({buttons.label('defer')})")
+        from . import watch
+        if w := watch.said(t): out.append(w)
         for msg in (store.list_messages(tid) or [])[:6]:
             out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
                        f"{_cut(msg.get('Subject') or '', 120)} - {_cut(msg.get('BodyText') or '', 400)}")
@@ -3038,6 +3071,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         on = funnel.item_for_key(store, f'task:{int(ref.group(1))}') if ref else (item or None)
         if not on: raise CallMiss('Name the task (TQ-0123) whose button to light, or bring it up first. Nothing was changed.')
         b = _button_named(store, on, said)
+        # BACK IS THE WALK BAR'S, not the row's (the rail audit, 2026-11-02): "go back to the one before" was refused "has no Back button"
+        # with Back drawn beside Next. It is that press - the row above, nothing read or marked (railwalk.back)
+        if b == 'back' and routes() and not ref:
+            from . import railwalk
+            out = railwalk.back(store, (item or {}).get('key'), actor)
+            return out if out.get('item') else {'say': 'This is the top of your list - there is no row above it.', 'options': [], 'chips': [], 'decision': None}
         if not routes():
             raise CallMiss(f"A phone has no row to light - CALL the tool or decision {b!r} is (THE BUTTONS BY NAME) and it is asked yes or no.")
         return _press_or_light(store, tid, item, on, b, str(params.get('note') or ''), actor)
@@ -3052,7 +3091,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         if not any(v not in (None, '', [], False) for v in sel.values()):
             raise CallMiss(f'{kind} needs `select` naming the set - a sender, words, a kind. Nothing was changed.')
         if not hits:
-            say_ = f"Nothing waiting is {_set_words(sel)}, so nothing was {'put away' if kind == 'pipe.defer' else 'closed'}. {pipe_holds(store)}"
+            # ...said whole when the set is only a kind or a lane: "Nothing waiting is , so nothing was closed." (the rail audit, 2026-11-02)
+            sw = _set_words(sel)
+            say_ = (f"Nothing waiting is {sw}" if sw else f"No {_what_of(sel)} row is waiting") + \
+                   f", so nothing was {'put away' if kind == 'pipe.defer' else 'closed'}. {pipe_holds(store)}"
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         if kind == 'pipe.defer':
@@ -5396,6 +5438,20 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
         target_item, elsewhere = it2, True
+    # A SECTION BY ITS HEADING (2026-11-02, the rail audit): "walk me through the reports" brought up the top row of Tasks - Next had no
+    # way to say where. It is the heading's own press (railwalk.section, a click on "Reports"): its first row, and Next walks on from there
+    if decision and verb == 'next' and decision.get('section'):
+        from . import railwalk
+        lvl = rail_section(decision['section'])
+        if not lvl:
+            say_ = f"The rail has no {decision['section']!r} section - its headings are {', '.join(s['word'] for s in lanes.SECTIONS)}."
+            rec('assistant', say_)
+            return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
+        out = railwalk.section(store, lvl, actor)
+        if out.get('item'): return out
+        say_ = f"Nothing is under {lanes.SECTION_WORDS[lvl]} right now."
+        rec('assistant', say_)
+        return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # NOTHING ON THE TABLE: next / done / later move the WALK; a verb that needs something to act on says so
     if decision and not item and not target_item:
         if verb == 'next':

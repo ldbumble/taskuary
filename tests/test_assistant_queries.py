@@ -26,7 +26,7 @@ class EverydayAsks(unittest.TestCase):
         # powers"): the page it is shown, Taskuary's own trouble, its tracker, its help, work that is an agent's, the newer row buttons
         self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
                                 'bring-up', 'connectors', 'phone', 'memory', 'page', 'troubleshoot', 'feedback', 'help', 'agentwork',
-                                'row', 'sets', 'new', 'people', 'app', 'task'})
+                                'row', 'sets', 'new', 'people', 'app', 'task', 'rail'})
 
     def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
         self.assertEqual({v for v, d, p in Q.reach() if not d}, set())
@@ -86,6 +86,29 @@ class EverydayAsks(unittest.TestCase):
         # ...and over a task drawn as its own view, which numbers nothing, it is the owner's digit as typed - never a hidden chip (2026-10-26)
         r = next(r for r in self.rows if r['q'].text == '3')
         self.assertEqual((r['ideal']['heard'], [g for g in r['ideal']['got'] if g.startswith(('pressed', 'light'))]), ('3', []))
+
+    def test_the_rail_walk_starts_at_the_section_named_and_back_is_the_row_above(self):
+        # the rail audit, 2026-11-02: "walk me through the reports" brought up the top of Tasks; "go back" was refused with Back on screen
+        r = next(r for r in self.rows if r['q'].text == 'walk me through the reports')
+        self.assertRegex(r['ideal']['say'], r'^Opened a report')
+        r = next(r for r in self.rows if r['q'].text == 'go back to the one before')
+        self.assertEqual(r['ideal']['say'], 'Opened TQ-0030.', 'Back from TQ-0001 is the row above it, Start here')
+
+    def test_the_habits_row_names_each_habit_and_answers_it_in_the_owners_words(self):
+        # the model was told only "Learned 1 habit · 1 to check"; a habit taken back read "Took {{owner_first}} closes..." (2026-11-02)
+        r = next(r for r in self.rows if r['q'].text == 'what habits did you learn about me?')
+        self.assertIn('[key: sso threads] adopted', r['ideal']['prompt']); self.assertIn('[key: fwd fyi] asking', r['ideal']['prompt'])
+        for r in (r for r in self.rows if r['q'].seed is Q.habits_row and r['q'].expect.startswith('did:')):
+            with self.subTest(ask=r['q'].text):
+                self.assertNotIn('{{', r['ideal']['say']); self.assertIn('1 habit still on the habits row', r['ideal']['say'])
+
+    def test_a_watched_task_is_said_watched_where_the_assistant_reads_it(self):
+        # "what am I watching?" and "why is it not in my walk?" read tasks.list and task.read, and neither said so (2026-11-02)
+        r = next(r for r in self.rows if r['q'].text == f'why is {Q.T2} not in my walk')
+        self.assertIn('WATCHED since', r['ideal']['told'])
+        s = Q._world(); Q.watched(s)
+        line = next(l for l in concierge.read_op(s, 'tasks.list', {}).splitlines() if l.startswith(Q.T2))
+        self.assertTrue(line.endswith('watching (Watch it)'), line)
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')

@@ -142,6 +142,15 @@ person, the same weekday, three weeks or more - is raised when its day has passe
 to them: *The headcount sheet you send Gail on Mondays hasn't gone yet.* Anything you send them puts
 it down, and so does No, for that week.
 
+**The habits row.** After each reflection, a habit the Advisor is sure of - strong, and resting on
+enough of your own acts - is adopted into `LEARNED.md` without asking, and one it is unsure of but
+thinks useful is asked about, at most two a week. They share one row under **Advisor**: *Learned 2
+habits · 1 to check*. Open it and each habit is one sentence to you - what was seen, and what changes
+because of it. An adopted one has **Not right**, which takes it back for good; one it asks about has
+**Adopt** and **No** - No leaves it unadopted and it is never asked again. Moving on from the row
+marks the adopted ones seen, and the row goes once nothing in it is open. The Assistant answers the
+same row in words: "adopt the second one", "the one about sign-in help is not right".
+
 **How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
 are, and what its prompt must carry. It runs in the suite against the demo's scripted Advisor.

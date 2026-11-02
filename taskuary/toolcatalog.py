@@ -86,8 +86,9 @@ PURPOSE = {
                                  'what is people.relate'),
     'memory.wrong':             ('take a line Taskuary learned out of its memory - `key` (from memory.about or memory.list), `how`: wrong '
                                  '(it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it '
-                                 'was true and stopped: kept as history). "forget that Ray does payroll", "that is wrong about Erin". A line '
-                                 'the owner wrote themselves takes forget only'),
+                                 'was true and stopped: kept as history) | keep (the memory page\'s Keep: a proposed line adopted as the owner\'s). '
+                                 '"forget that Ray does payroll", "that is wrong about Erin". On the habits row: Adopt is keep, No and Not right '
+                                 'are wrong. A line the owner wrote themselves takes forget only'),
     'people.relate':            ("who someone is to the owner, on their org chart - `who`: a name or address; `relation`: manager | report | none "
                                  '(none clears it); `owns`: areas they are responsible for ("payroll, benefits"), added; `drops`: areas taken off; '
                                  '`forget`: true takes them off the chart. "Erin is my manager", "Ray owns payroll", "Gail reports to me" - '
@@ -397,8 +398,11 @@ _DECIDE = {
     'close':           'the task behind the item is finished',
     # PUT DOWN IS NOT READ (the real-CLI walk, 2026-10-20): "mark the FYI read" over one FYI chose Next - "it needs nothing, so Next clears it".
     # Next marks nothing; words that mark read or clear name a set, and that is pipe.clear
+    # ...and from a SECTION, the heading's own press (railwalk.section; the rail audit, 2026-11-02: "walk me through the reports" had no way
+    # to say where and brought up the top of Tasks)
     'next':            'move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or '
-                       '"clear ..." - those name a set: pipe.clear',
+                       '"clear ..." - those name a set: pipe.clear. `section`: a rail heading (Tasks, Watching, For later, Reports, '
+                       'Advisor, FYI) - "walk me through the reports" starts at that section\'s first row, as a click on its heading does',
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "save and end the agent's session on the item",
     'rerun':           'run the report on the table again',
@@ -444,7 +448,7 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
 PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'trust_start': "a refused start's own way on - the owner's word on a stranger, never the model's", 'walk_here': 'the walk handed to a phone chat, brought back to the desk',
-             'review_changes': "opens the agent's diff", 'back': "the walk's step up the list - the row above the one on the table, a rail click the page makes", 'run_another': 'a second agent from the task page',
+             'review_changes': "opens the agent's diff", 'back': "the walk's step up the list - the row above the one on the table; button.light back brings it up", 'run_another': 'a second agent from the task page',
              'strong_again': "a failed or unsure agent's re-run on a strong model - the owner's press, never the model's (the router)",
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',

@@ -105,7 +105,9 @@ The "Mark done" button: the task behind the item is finished.
 
 ### `next`
 
-The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or "clear ..." - those name a set: pipe.clear.
+The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or "clear ..." - those name a set: pipe.clear - "walk me through the reports" starts at that section's first row, as a click on its heading does.
+
+- `section` - a rail heading (Tasks, Watching, For later, Reports, Advisor, FYI)
 
 <p class="runs">At once.</p>
 
@@ -774,10 +776,10 @@ Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, th
 
 ### `memory.wrong`
 
-Take a line Taskuary learned out of its memory. "forget that Ray does payroll", "that is wrong about Erin". A line the owner wrote themselves takes forget only.
+Take a line Taskuary learned out of its memory. "forget that Ray does payroll", "that is wrong about Erin". On the habits row: Adopt is keep, No and Not right are wrong. A line the owner wrote themselves takes forget only.
 
 - `key` - from memory.about or memory.list
-- `how` (optional) - wrong (it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it was true and stopped: kept as history)
+- `how` (optional) - wrong (it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it was true and stopped: kept as history) | keep (the memory page's Keep: a proposed line adopted as the owner's)
 
 <p class="runs">Runs at once and says what it changed.</p>
 

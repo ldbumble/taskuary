@@ -32,8 +32,9 @@ class Q:
     `tools`: what in the real prompt could satisfy it - () when nothing can (unsupported), including a tool the catalogue has but the desk
     has no button for. `freq`: how often an owner
     would say it, 1-5 - ranks the unsupported list."""
-    def __init__(self, cat, text, table, ideal, expect, tools=None, freq=3, sort=None, live=None, note='', phone=False, view=None):
+    def __init__(self, cat, text, table, ideal, expect, tools=None, freq=3, sort=None, live=None, note='', phone=False, view=None, seed=None):
         self.cat, self.text, self.table, self.expect, self.freq, self.sort, self.view = cat, text, table, expect, freq, sort, view
+        self.seed = seed      # seed(store) -> key or None: a row the demo world lacks (a watched task, the habits row), its key on the table
         self.live, self.note, self.phone = live, note, phone      # live: the task whose agent session runs; note: why it grades so; phone: a phone chat
         self.ideal = ideal if isinstance(ideal, list) else [ideal]
         kinds = [json.loads(a[6:])['kind'] for a in self.ideal if isinstance(a, str) and a.startswith('CALL: ')]
@@ -505,6 +506,73 @@ AREA_TASK = [
 ]
 CASES += AREA_TASK
 
+# THE WORK RAIL AND ITS WALK (the rail audit, 2026-11-02; the owner: "test it all works ... to be able to help the user on every page"): Next
+# and Back, a section by its heading, the FYI's All read, Watching, the Advisor's ideas and its habits row, sets put away or closed. The demo
+# world has no watched task, idea or habit: each case that needs one seeds it (invented lines, nobody real)
+T2 = 'TQ-0002'
+def watched(s):
+    from taskuary import funnel, watch
+    watch.watch(s, 2); funnel.invalidate()
+def habits_row(s):
+    "Two habits on the one row: one the Advisor adopted, one it asks about (habits.tick, as tests/test_habits_row.py builds it)."
+    from datetime import datetime
+    from taskuary import funnel, habits, learn, learnedgraph as lg
+    day = datetime.now().strftime('%Y-%m-%d')
+    ln = lambda k, t, sc, ev: lg.fmt({'key': k, 'text': t, 'ev': ev, 'score': sc, 'seen': day, 'status': 'proposed'})
+    doc = s.get_doc('learned') or '# LEARNED\n'
+    if learn.PROP_START not in doc: doc += f"\n## Proposed rules — your call\n{learn.PROP_START}\n{learn.PROP_END}\n"
+    add = '\n'.join([ln('sso threads', '{{owner_first}} closes sign-in help threads directly; they need no drafted reply', 12, [f'rv{i}' for i in range(1, 9)]),
+                     ln('fwd fyi', 'Forwarded FYI mail from the facilities team needs no reply', 5, ['rv20', 'rv21'])])
+    s.save_doc('learned', doc.replace(learn.PROP_END, add + '\n' + learn.PROP_END), 'reflect')
+    habits.tick(s); funnel.invalidate()
+    return f"idea:{s._one('SELECT * FROM idea WHERE Key=?', (habits.KEY,))['IdeaId']}"
+def idea_row(s):
+    from datetime import datetime
+    from taskuary import funnel
+    i = s.upsert_idea({'key': 'idea:weekly-ledger', 'kind': 'idea', 'sig': 'y', 'text': 'The ledger reconciliation repeats monthly - worth automating.',
+                       'action': {}}, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    funnel.invalidate(); return f"idea:{i['IdeaId']}"
+AREA_RAIL = [
+    Q('rail', 'whats nxt', 'todo', c('next'), 'next', freq=4),
+    Q('rail', 'go back to the one before', 'todo', c('button.light', button='back'), 'card', freq=4,
+      note='Back is the walk bar\'s press beside Next - it was refused "has no Back button"'),
+    Q('rail', 'walk me through the reports', None, c('next', section='Reports'), 'card', freq=3, note="the heading's own press (railwalk.section)"),
+    Q('rail', 'start me on the fyi', 'todo', c('next', section='FYI'), 'card', freq=3),
+    Q('rail', 'go through the advisor ideas', None, c('next', section='Advisor'), 'words', freq=2, note='none in the demo world: said so'),
+    Q('rail', 'all read on the fyi please', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=4),
+    Q('rail', 'mark the reports read', 'report', c('pipe.clear', select={'category': 'report'}), 'cleared', freq=4),
+    Q('rail', 'how many fyis do I have', None, [c('pipe.list'), 'Four FYI wait.'], 'read:pipe.list', freq=3),
+    Q('rail', 'snooze all the fyi til monday', 'todo', c('pipe.defer', select={'kind': 'fyi'}, until='monday 9am'), 'did:pipe.defer', freq=3),
+    Q('rail', 'put the reports away until tomorrow', 'todo', c('pipe.defer', select={'category': 'report'}, until='tomorrow 9am'), 'did:pipe.defer', freq=2),
+    Q('rail', 'close everything for later', None, [c('pipe.close', select={'lane': 'later'}), 'Nothing is put away for later.'], 'words', freq=1,
+      note='nothing For later in the demo world: said whole, never "Nothing waiting is , so"'),
+    # ── Watching (watch.py): kept open for somebody else, off the walk ──
+    Q('rail', 'what am I watching?', None, [c('tasks.list'), f'You are watching {T2}.'], 'read:tasks.list', freq=3, seed=watched),
+    Q('rail', f'why is {T2} not in my walk', None, [c('task.read', ref=T2), 'You are watching it.'], 'read:task.read', freq=2, seed=watched),
+    Q('rail', f'stop watching {T2}', None, c('task.watch', what='off', ref=T2), 'light:watch', freq=3, seed=watched,
+      note="the row's Watch it reads Stop watching while it watches - lit for the owner"),
+    Q('rail', 'watch TQ-0002 for me', None, c('task.watch', ref=T2), 'light:watch', freq=3),
+    Q('rail', 'close all the watched ones', None, [c('tasks.list'), c('pipe.close', select={'keys': [T2]})], 'did:pipe.close', freq=1, seed=watched),
+    # ── the Advisor's rows: an idea, and the one habits row (habits.py) ──
+    Q('rail', 'put the advisor idea on my list', 'idea', c('mine'), 'light:mine', freq=2, seed=idea_row),
+    Q('rail', 'no more ideas like this', 'idea', c('not_ours_kind'), 'light:not_ours', freq=2, seed=idea_row,
+      note="one of the idea's Not ours choices - it was refused as no button"),
+    Q('rail', 'what habits did you learn about me?', 'habit', 'You close sign-in help threads yourself, so I will not draft replies to them.', 'words',
+      tools=('words',), freq=2, seed=habits_row),
+    Q('rail', 'adopt the one about forwarded fyi', 'habit', c('memory.wrong', key='fwd fyi', how='keep'), 'did:memory.wrong', freq=2, seed=habits_row,
+      note='keep was no `how` - refused'),
+    Q('rail', 'the sign-in one is not right', 'habit', c('memory.wrong', key='sso threads', how='wrong'), 'did:memory.wrong', freq=2, seed=habits_row),
+    Q('rail', 'no to the fyi one', 'habit', c('memory.wrong', key='fwd fyi', how='wrong'), 'did:memory.wrong', freq=1, seed=habits_row),
+    # ── about the rail itself ──
+    Q('rail', 'why is this one at the top?', 'todo', [c('docs.search', query='work rail'), 'Rows sit in the order they arrived.'], 'read:docs.search', freq=2),
+    Q('rail', 'what is the habits row', None, [c('docs.search', query='habits row'), 'One row for every habit the Advisor learned.'], 'read:docs.search', freq=1),
+    Q('rail', 'my rail is empty, where did everything go?', None, [c('activity.list', days=1), 'You cleared them this morning.'], 'read:activity.list', freq=2),
+    Q('rail', 'open the headcount report', None, 'Here: [Headcount by site](#report=9).', 'link:#report=', tools=('pages',), freq=2),
+    Q('rail', 'collapse the FYI section', None, 'The FYI heading folds with its own arrow - that press is yours.', 'words', tools=('words',), freq=1,
+      note='folding a section is the page\'s own press; said honestly'),
+]
+CASES += AREA_RAIL
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 
@@ -550,7 +618,7 @@ def _guards(stack, sort=None, live=None):
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
 ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
         'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ', 'Filed ', 'Put on ', 'Blocked', 'Stopped ', 'Triage already ', 'Org chart: ',
-        'Nothing went', 'Saved ')
+        'Nothing went', 'Saved ', 'Adopted ', 'Kept ')
 def said_what(say: str, got: list, q) -> bool:
     acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)
@@ -587,6 +655,7 @@ MISSES = ('I could not find', 'I could not finish', 'I could not put that', 'cou
 def ideal_turn(q: Q) -> dict:
     from taskuary import concierge, server
     s, seen, reads = _world(), [], []
+    key = (q.seed(s) if q.seed else None) or TABLES[q.table]
     real_read = concierge._read
     def read(store, item, call):
         found = real_read(store, item, call); reads.append(call['kind']); return found
@@ -596,7 +665,7 @@ def ideal_turn(q: Q) -> dict:
         st.enter_context(mock.patch.object(concierge, '_read', read))
         err = None
         if q.phone: st.enter_context(concierge.delivering(concierge.PHONE))
-        try: out = concierge.say(s, q.text, key=TABLES[q.table], llm=_scripted(q.ideal, seen), view=q.view)
+        try: out = concierge.say(s, q.text, key=key, llm=_scripted(q.ideal, seen), view=q.view)
         except Exception as e: out, err = {'say': f'RAISED {type(e).__name__}: {e}'}, e
     heard = next((l[len(concierge.OWNER_SAYS):] for _, u in seen[:1] for l in u.splitlines() if l.startswith(concierge.OWNER_SAYS)), '')
     prompt = '\n'.join(f'{a}\n{b}' for a, b in seen[:1])
@@ -612,7 +681,8 @@ def ideal_turn(q: Q) -> dict:
     carried = [t for t in q.tools if (t in prompt if t not in ROADS else (ROADS[t] is None or ROADS[t] in prompt))]
     # what the model was told after its first answer - a miss's own words, when the road refused it
     told = seen[1][1].split('\n\n', 1)[-1][:400] if len(seen) > 1 else ''
-    return {'grade': grade, 'got': got, 'say': say, 'heard': heard, 'told': told, 'carried': carried, 'missing': [t for t in q.tools if t not in carried]}
+    return {'grade': grade, 'got': got, 'say': say, 'heard': heard, 'told': told, 'carried': carried, 'missing': [t for t in q.tools if t not in carried],
+            'prompt': prompt}
 
 
 def demo_line(said: str, out: dict | None = None) -> str:
@@ -627,10 +697,11 @@ def demo_line(said: str, out: dict | None = None) -> str:
 def demo_turn(q: Q) -> dict:
     from taskuary import concierge, demo, server
     s = _world()
+    key = (q.seed(s) if q.seed else None) or TABLES[q.table]
     with ExitStack() as st:
         _guards(st, q.sort, q.live)
         st.enter_context(mock.patch.object(server, 'store', s))
-        try: out = concierge.say(s, q.text, key=TABLES[q.table], llm=demo.brain(store=s))
+        try: out = concierge.say(s, q.text, key=key, llm=demo.brain(store=s))
         except Exception as e: out = {'say': f'RAISED {type(e).__name__}: {e}'}
     said = str(out.get('say') or '')
     line = demo_line(said, out)

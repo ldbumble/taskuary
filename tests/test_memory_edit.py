@@ -115,6 +115,19 @@ def test_a_fact_said_is_in_use_at_once_and_one_it_replaces_is_closed_not_deleted
     assert 'in Finance' not in s.get_doc('learned')
 
 
+def test_a_line_named_by_its_own_words_is_found_as_by_its_key(w):
+    """TQ-1251: "anything that has financial ramifications should be sent to me as an alert" - the edit named the rule it widens by its
+    wording, the one handle the page shows, and was refused with "No line in the memory has the key ...". The whole line's text finds it."""
+    s, facts, erin, ray, own = w
+    words = memoryedit.find(s.get_doc('learned'), 'erin manager hour')[1]['text']
+    assert memoryedit.resolve(s, words) == 'erin manager hour'
+    assert memoryedit.resolve(s, '  ' + words.upper() + ' ') == 'erin manager hour', 'case and spacing are not the line'
+    assert memoryedit.resolve(s, 'erin manager hour') == 'erin manager hour'
+    assert memoryedit.resolve(s, 'Erin is my manager') == 'Erin is my manager', 'a paraphrase is not the line - nothing is guessed'
+    r = memoryedit.remember(s, 'Erin Blake is your manager; answer her asks before ten', replaces=words)
+    assert r['closed']['key'] == 'erin manager hour' and learnedlines.row(s, 'erin manager hour')['Status'] == 'closed'
+
+
 def test_whos_gail_to_me_is_read_from_the_lines_and_the_org_chart(w):
     s, *_ = w
     memoryedit.remember(s, 'Gail Moreno moved to Ops', about='gail@northwind.example')

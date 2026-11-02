@@ -39,6 +39,24 @@ def find(doc: str, key: str) -> tuple:
     return None, None, False
 
 
+def _same(a, b) -> bool: return ' '.join(str(a or '').lower().split()).rstrip('.') == ' '.join(str(b or '').lower().split()).rstrip('.')
+
+
+def resolve(store, key: str) -> str:
+    """The line's key for `key` - itself when a line has it, else the key of the one line whose WORDS are `key` (TQ-1251: Gabi's "anything
+    that has financial ramifications ... as an alert" named the rule by its wording, the only handle on the page, and the edit answered
+    "No line in the memory has the key ..."). The line's own text, compared whole - never a word list."""
+    doc = store.get_doc(DOC) or ''
+    if find(doc, key)[0] or _row(store, key): return key
+    for raw, l in walk(doc):
+        if l and _same(l['text'], key): return l['key']
+    for slug, head in lc.SECTIONS.items():
+        for raw, k in lc.lines(doc, head):
+            if not TAG.match(raw) and _same(_bare(raw), key): return k
+    r = store._one('SELECT Key FROM learned_line WHERE lower(trim(Text))=? OR lower(trim(OwnerText))=?', (' '.join(str(key).lower().split()),) * 2)
+    return (r or {}).get('Key') or key
+
+
 def _without(doc: str, raw: str) -> str: return doc.replace(raw + '\n', '', 1) if raw + '\n' in doc else doc.replace(raw, '', 1)
 
 
@@ -54,6 +72,7 @@ def mark(store, key: str, how: str) -> dict:
     """Keep, Wrong or Forget one line, by its key. {ok, key, how, text}; ValueError (in plain words) when the line cannot take it."""
     from .learn import _under, PEOPLE, ADOPT_UNDER, adopt
     if how not in HOW: raise ValueError(f'say keep, wrong or forget - not {how!r}')
+    key = resolve(store, key)
     doc = store.get_doc(DOC) or ''
     raw, l, own = find(doc, key)
     r = _row(store, key)
@@ -176,6 +195,7 @@ def _key(text: str) -> str:
 
 def close(store, key: str) -> dict:
     """A fact that stopped being true: out of the document, its row closed with today's date - history, never a tombstone of a lie."""
+    key = resolve(store, key)
     doc = store.get_doc(DOC) or ''
     raw, l, own = find(doc, key)
     r = _row(store, key)

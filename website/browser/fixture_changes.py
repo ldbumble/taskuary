@@ -44,6 +44,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/advisor-raised',
         '/api/fixture/task/long-chat',
         '/api/fixture/task/big-chat',
+        '/api/fixture/task/group-chat',
         '/api/fixture/task/workstreams',
         '/api/fixture/advisor/report-idea',
         '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
@@ -310,6 +311,28 @@ def install_processing_changes(app, store):
             rid = store.start_run(tid, 'general', 'Find the earliest engineer slot for the cooler.', 'owner'); store.update_run(rid, {'Status': 'done'}, finished=True)
             store.add_transcript(tid, f'fixture-big-{tid}-{k}', 'Looked up the engineer rota.\n' * 4000, agent='general', ext_id=f'fixture-big-ext-{k}', brain='claude')
         store.reconcile_processing_membership()
+        return {'taskId': tid}
+
+    @app.post('/api/fixture/task/group-chat')
+    def group_chat(body: dict):
+        """A WhatsApp group's 87 lines from three people on one reply task (the owner, 2026-11-02): Came from as the slim column beside an open
+        Close out drew its message lines down the whole spine, and its moves (Remind me, Watch it, Not a task) stood on top of them. `live`: an
+        agent live on it too, its session ended by coding-live/end - the spines slim beside it, then full again."""
+        if set(body) - {'live'} or body.get('live', False) not in (True, False): raise HTTPException(422, 'only live, true or false, is accepted')
+        tid = store.create_task({'Title': 'Site ops: the loading bay rota', 'Kind': 'reply', 'Status': 'open', 'Source': 'whatsapp',
+                                 'Summary': 'The site team wants the loading bay rota for next week settled.'}, 'router')
+        start, who = datetime.now() - timedelta(hours=8), ('Ray Colton', 'Gail Moreno', 'Paula Vance')
+        for i in range(87):
+            store.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'SourceName': 'Site ops', 'ExternalId': f'fixture-group-{tid}-{i}',
+                               'ConversationId': f'fixture-group-{tid}', 'FromName': who[i % 3],
+                               'BodyText': f'Rota note {i + 1}: ' + ('who takes the early deliveries on Monday' if i % 2 else 'the forklift is booked for the afternoon'),
+                               'SentAt': (start + timedelta(minutes=5 * i)).isoformat(' ', 'seconds'), 'Status': 'routed'})
+        if body.get('live'):
+            from taskuary import terminal
+            store.add_transcript(tid, f'fixture-group-{tid}', 'Reading the rota thread.\nRay Colton takes Monday.', agent='general', cwd='C:/work', brain='claude')
+            store.add_comment(tid, 'general', 'agent', 'AGENT REPORT\nSummary: Ray Colton takes the Monday deliveries; the group should be told.')
+            pane = live_panes[tid] = _demo.Replay(store, tid, 'Claude Code', lines=[('Reading the rota thread...', 0), ('Who takes Monday?', 0.1)])
+            terminal.SESSIONS[pane.sid] = pane
         return {'taskId': tid}
 
     @app.post('/api/fixture/task/chat-burst')

@@ -39,7 +39,7 @@ const look = (page) => page.evaluate((CUR) => {
 }, CUR);
 const STAGE = /^(Send to agent|Continue|Try again|Run another agent|Reply|Draft reply|Redraft|Draft with AI|Starting…|Drafting…|Hand it to a person|Remind me|Watch it|Not a task|Back .+)$/;
 const FROM = ["Not a task", "Remind me", "Watch it"];
-// ...the task's own moves that ride on Close out after its stage moves (the owner, 2026-10-30)
+// ...the task's own moves that ride on Close out beside its stage moves, Mark done first (the owner, 2026-10-30, 2026-11-02)
 const TASK_MOVE = /^(Mark done|Close with a note|Attach a file|Share)$/, stageWords = (sp) => sp.moves.map((x) => x.word).filter((w) => !TASK_MOVE.test(w));
 
 for (const [w, h] of [[1440, 900], [1366, 768]]) {
@@ -105,7 +105,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await page.waitForFunction((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`)]
         .some((b) => b.textContent.trim() === "Redraft"), { timeout: 8000 }, CUR).catch(() => {});
       const m = await look(page);
-      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 3), ["Redraft", "Hand it to a person", "Mark done"], JSON.stringify(m.close));
+      // ...Mark done first (the owner, 2026-11-02: "Mark done should always be the first button in the Close out tab"), its own moves after
+      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 3), ["Mark done", "Redraft", "Hand it to a person"], JSON.stringify(m.close));
       assert.ok(m.close.between && m.close.rule);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       assert.ok(m.head.includes("Mark done"), `${m.head}`);

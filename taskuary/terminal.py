@@ -2645,7 +2645,8 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     from . import waitroom
     try: busy = waitroom.state(store, task_id)[0] == 'working'
     except Exception as e: busy = False; logger.debug(f'relay: could not read whether the agent is working - {e}')
-    if busy:
+    # ...codex's own queue holds a line for the next turn by design (queue_codex): only a TYPED line is lost mid-turn
+    if busy and not (getattr(t, 'cli', '') == 'codex' and getattr(t, 'ext_id', '')):
         waitroom.add(store, task_id, line, actor='router')
         store.add_comment(task_id, actor, 'agent', f"{who}'s {'new message' if new else 'answer'} waits for the agent to finish what it "
                           'is doing - it is typed in when the agent stops.')

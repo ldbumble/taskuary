@@ -5,6 +5,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { deliverables, family, isWorking, outputOf, outputRefs, outputRow, outputUrl, plainCitations, shownOnce, uncited } from "../src/taskOutputs.js";
 
+test("a bare path to a name with spaces is that whole file, not a file called by its first word (stress test 2026-11-02)", () => {
+  const listed = [{ path: "Open tasks 2026-11-02.xlsx", name: "Open tasks 2026-11-02.xlsx", kind: "output" }];
+  const text = "The Excel file is ready: **C:\\Users\\alex\\.taskuary\\scratch\\outputs\\TQ-0077\\Open tasks 2026-11-02.xlsx**\n\nYou have 4 open tasks.";
+  const got = outputRefs(text, 77, listed);
+  assert.deepEqual(got.files, ["Open tasks 2026-11-02.xlsx"]);
+  assert.equal(got.text, "The Excel file is ready: **`Open tasks 2026-11-02.xlsx`**\n\nYou have 4 open tasks.");
+  assert.deepEqual(uncited(listed, [text], 77), []);
+  assert.deepEqual(outputRefs(text, 77).files, ["Open"]);   // without the listing the old cut stands - the page always passes it
+});
+
+test("a bold path keeps its bold outside the file's name (stress test 2026-11-02)", () => {
+  const got = outputRefs("Saved: **C:/Users/alex/.taskuary/scratch/outputs/TQ-0077/report.xlsx**.", 77);
+  assert.deepEqual(got.files, ["report.xlsx"]);
+  assert.equal(got.text, "Saved: **`report.xlsx`**.");
+});
+
 test("a file the answer names and also showed is one card, open - the shown copy is not drawn again (stress test 2026-11-02)", () => {
   const shown = [{ id: 7, name: "desk.svg", kind: "shown" }, { id: 8, name: "chart.png", kind: "shown" }];
   const { isShown, rest } = shownOnce(["desk.svg"], shown);

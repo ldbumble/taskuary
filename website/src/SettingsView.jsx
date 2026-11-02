@@ -122,7 +122,7 @@ function SignatureSetting({ value, save }) {
       </Box>
       {!text.trim() && !!acct.accounts.length && (
         <Typography data-tq-account-signature="" sx={{ fontSize: 12, color: DIM }}>
-          Nothing typed here, so each email uses the signature its own mailbox's sent mail ends with{acct.accounts.length > 1 ? ` (above: ${acct.accounts[0].address}'s)` : ""}.
+          Nothing typed here, so each email uses the signature its own mailbox’s sent mail ends with{acct.accounts.length > 1 ? ` (above: ${acct.accounts[0].address}'s)` : ""}.
         </Typography>
       )}
     </Box>

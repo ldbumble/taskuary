@@ -220,3 +220,13 @@ def test_peek_says_what_comes_after_the_row_below(world):
         assert railwalk.peek(s)['reads'] == walk['below_reads'], f'{sym}: below_reads={walk["below_reads"]} for {w.on}'
         w.do('next')
         assert w.on == walk['then'], f'{sym}: a second Next went to {w.on}, peek said {walk["then"]}'
+
+def test_next_says_what_it_read(world):
+    """`read` on Next's answer: the rail rows that press read - the page took them off at the press and gives back only a row that is not
+    there (a read that failed), never on the strength of a rail built before the read (the owner, 2026-11-02: a passed report stayed)."""
+    s, src = world
+    w = Walk(s, src)
+    w.do('open R1'); r1 = w.on
+    assert w.do('next')['read'] == [r1], 'Next on a report reads it'
+    w.do('open T1')
+    assert w.do('next')['read'] == [], 'Next on a task reads nothing'

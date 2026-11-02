@@ -74,7 +74,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, heldStep, latestLine, pileRows, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, heldStep, latestLine, pileRows, rowKeys, sameKey, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -360,7 +360,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // `members` is the server's word for them; `items` is the same list as cards, and is what an
   // older server sends - read either, so the bracket cannot go missing on a version skew.
   const batchKeys = new Set(batch ? (batch.members || (batch.items || []).map((i) => i.key)) : []);
-  const curKey = current && !batch ? current.key : null;
+  // ...the rail's own row for it, by key or alias (sameRow): a report that re-ran on the table is that row, not a second one pulled in
+  const curKey = current && !batch ? (visibleItems.find((i) => i.key === current.key) || visibleItems.find((i) => sameRow(i, current)))?.key || current.key : null;
   // a task named in the chat is on the table without being in the pile: it joins its own band
   const known = curKey && visibleItems.some((i) => i.key === curKey);
   // SHOWN IS READ, so the moment a batch goes up its rows leave the pile - and the rail had
@@ -371,7 +372,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // the card on the table lends the row its words; WHERE the row sits is the rail's (placed) - its older lane drew a
   // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28). A row from outside the pile takes
   // its place in the order (inOrder), never the top of its section.
-  const drawn = inOrder(drawOrder(visibleItems).map((i) => (i.key === curKey ? placed(i, current) : i)),
+  const drawn = inOrder(drawOrder(visibleItems).map((i) => (i.key === curKey ? { ...placed(i, current), key: i.key } : i)),
     [...(curKey && !known ? [pulledRow(current)] : []), ...onTable]);
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
@@ -2062,7 +2063,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // RULE 7, THE NEXT ITEM DRAWS AT ONCE: the rail's own row for the one below (walk.below - railwalk.peek, the same line `next` walks) is
     // put up at the press, and the answer fills that line in place (landed) or takes it down for the row it brought. A batch has no rail
     // row of its own: the dots stand for it. Without it Next and Mark done waited a whole round trip (400-600 ms against ~100 before)
-    const walkNow = walkOf(pileRef.current), below = putDown && walkNow?.on === putDown && walkNow.below && !walkNow.below.startsWith("fyis:") ? walkNow.below
+    // ...the walk's row and the one put down are ONE ROW by key or alias (sameKey): a report that re-ran on the table has a new key
+    const walkNow = walkOf(pileRef.current), railNow = pileRef.current?.items || [];
+    const onIt = !!putDown && sameKey(railNow, walkNow?.on, putDown, hold?.fromItem || currentRef.current);
+    const below = onIt && walkNow.below && !walkNow.below.startsWith("fyis:") ? walkNow.below
       // ...AND A RAIL ROW PRESSED IS DRAWN AT ITS PRESS the same way, its task read since the pointer came down (taskDetail.js): the move's
       // answer waited on the server's whole rail build, and a big task's row put nothing on the table for seconds (the owner, 2026-11-01)
       : key && how === "next" && key !== currentRef.current?.key && !key.startsWith("fyis:") ? key : null;
@@ -2081,9 +2085,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...AND WHAT IT READS LEAVES THE RAIL AT THE PRESS (rule 4): Next on a row the walk says it reads (walk.reads - a report, an idea, an fyi),
     // a batch's "All read, next" (a settle). Held to the answer, a slow one kept a read batch in the FYI heading's count and a passed idea on
     // the rail for seconds (the owner, 2026-11-01); taken off the pile, not unringed, so the band never counts them as "more fyi" (cd80e9000)
-    const reads = putDown && walkNow?.on === putDown && (how === "leave" ? left?.how === "settle" : walkNow.reads);
+    const reads = onIt && (how === "leave" ? left?.how === "settle" : walkNow.reads);
     // ...and the batch coming in its place is drawn on the table already: its rows uncapped for that moment, the band said "4 more fyi"
-    if (reads) setReadGone({ keys: [putDown, ...(walkNow.members || [])], coming: walkNow.below?.startsWith("fyis:") ? walkNow.below : null });
+    // ...every rail row they name by key or alias going with them (rowKeys), as the ring finds its row
+    const goneKeys = reads ? rowKeys(railNow, [putDown, walkNow.on, ...(walkNow.members || [])], hold?.fromItem || currentRef.current) : [];
+    const goneRows = railNow.filter((r) => goneKeys.some((k) => answersTo(r, k)));
+    if (reads) setReadGone({ keys: goneKeys, coming: walkNow.below?.startsWith("fyis:") ? walkNow.below : null });
     const epoch = chatEpoch.current;
     let failed = null, data = null;
     try {
@@ -2096,8 +2103,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       else landed(data);
       // ...the rail the answer brought is the server's word on them; brought later (pileLater), held until that rail lands
       // ...but what a Next held over this one reads stays off: it is that press's to give back
-      const h = heldRef.current;
-      if (reads) setReadGone((g) => (h?.gone.length ? { keys: h.gone, coming: h.coming } : !g || data?.pile ? null : { ...g, after: pileRef.current }));
+      // ...AND NO RAIL BUILT BEFORE THE READ BRINGS A ROW BACK (the owner, 2026-11-02): they stay off until a rail drawn after this answer
+      // no longer has them, or the next one does. Only a read the answer says did not happen (`read`, railwalk.next) is given back now
+      const h = heldRef.current, said = Array.isArray(data?.read) ? data.read : null;
+      const back = said ? rowKeys(goneRows, goneRows.filter((r) => !said.some((k) => answersTo(r, k))).map((r) => r.key)) : [];
+      if (reads) setReadGone((g) => { if (h?.gone.length) return { keys: h.gone, coming: h.coming };
+        const keys = (g?.keys || []).filter((k) => !back.includes(k));
+        return keys.length ? { ...g, keys, after: pileRef.current } : null; });
       if (how === "leave") onChanged?.();            // a draft may have gone out: the Review badge recounts
       // ...and A CLOSE KEPT OPEN (a Send with work still live on it, 2026-11-01) is back on the rail as well as the table: the row put down
       // at the press stayed hidden from the rail, its canvas drawn over nothing - the two say the same thing or the owner is lost
@@ -3120,7 +3132,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const from = currentRef.current?.key;
     if (heldRef.current || !flight?.drawn || !from) return;
     const step = heldStep(walkOf(pileRef.current), from);
-    const h = { from, fromItem: currentRef.current, ahead: null, gone: step.gone, coming: step.reads && step.then?.startsWith("fyis:") ? step.then : null };
+    const gone = step.gone.length ? rowKeys(pileRef.current?.items, step.gone, currentRef.current) : [];
+    const h = { from, fromItem: currentRef.current, ahead: null, gone, coming: step.reads && step.then?.startsWith("fyis:") ? step.then : null };
     heldRef.current = h; setHeld(h);
     setExpanded(false); setFoldedKey(from); leftKey.current = from;
     if (h.gone.length) setReadGone((g) => ({ keys: [...(g?.keys || []), ...h.gone], coming: h.coming || g?.coming || null }));
@@ -3316,7 +3329,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const railPile = useMemo(() => ((leavingTid || continuingTid || readGone) && pile?.items
     ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid, read: readGone?.keys }) } : pile),
     [pile, leavingTid, continuingTid, readGone]);
-  useEffect(() => { if (readGone?.after && pile !== readGone.after) setReadGone(null); }, [pile, readGone]);
+  useEffect(() => { if (!readGone?.after) return;
+    if (pile !== readGone.after || !(pile?.items || []).some((i) => readGone.keys.some((k) => answersTo(i, k)))) setReadGone(null); }, [pile, readGone]);
   useEffect(() => {                                   // the close has landed: the server's pile no longer has it, or has it For later
     if (leavingTid && pile?.items && putDownLanded(pile.items, leavingTid)) setLeavingTid(null);
   }, [pile, leavingTid]);

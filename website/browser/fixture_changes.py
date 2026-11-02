@@ -34,7 +34,7 @@ def install_processing_changes(app, store):
         '/api/fixture/signin/terminal-ask',
         '/api/fixture/browser/last-frame',
         '/api/fixture/browser/view',
-        '/api/fixture/processing/arrive-during-next',
+        '/api/fixture/processing/arrive-during-next', '/api/fixture/processing/rerun',
         '/api/fixture/task/closed-elsewhere', '/api/fixture/task/live-agent',
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
@@ -559,6 +559,25 @@ def install_processing_changes(app, store):
             'SentAt': sent.isoformat(sep=' '), 'BodyText': body['body'],
         })
         return {'ok': True, 'message_id': mid}
+
+    @app.post('/api/fixture/processing/rerun')
+    def rerun_row(body: dict):
+        """A row that RE-RAN while it was on the table (a nightly report's new run): its members move to a new item and the old item
+        redirects there, so the rail's row has a new key and answers to the old one as an alias - the card on the page still says the
+        old key until the page reads its rail again (the re-run's own wake-up, poked here)."""
+        if set(body) != {'key'} or not str(body['key']).startswith('processing:'):
+            raise HTTPException(422, 'one processing key is required')
+        import uuid
+        from taskuary import funnel
+        old, new = body['key'][len('processing:'):], f'pi_{uuid.uuid4().hex}'
+        row = store._one('SELECT Kind FROM processing_item WHERE ItemId=? AND RedirectItemId IS NULL', (old,))
+        if not row: raise HTTPException(404, 'no such live item')
+        now = datetime.now().isoformat(' ')
+        store._exec('INSERT INTO processing_item (ItemId,Kind,CreatedAt,UpdatedAt) VALUES (?,?,?,?)', (new, row['Kind'], now, now))
+        store._exec('UPDATE processing_member SET ItemId=? WHERE ItemId=? AND RetiredAt IS NULL', (new, old))
+        store._exec('UPDATE processing_item SET RedirectItemId=?,ContextRevision=NULL,ViewRevision=NULL,UpdatedAt=? WHERE ItemId=?', (new, now, old))
+        funnel.invalidate(); store._poke('feed-changed')
+        return {'old': body['key'], 'new': f'processing:{new}'}
 
     @app.post('/api/fixture/processing/arrive-during-next')
     def arrive_during_next(body: dict):

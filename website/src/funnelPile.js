@@ -338,12 +338,28 @@ const AGENT_LANES = ["blocked", "working", "stopped", "saved"];
 export const pulledRow = (card) => (card?.tid && ((card.kind === "agent" && AGENT_LANES.includes(card.lane)) || card.lane === "working")
   ? { ...card, put_down: false, deferred: false, watching: false }
   : card?.tid ? { ...card, lane: "yours", order_band: 2, put_down: false, deferred: false, watching: false } : { ...card });
+// ONE ROW BY KEY OR ALIAS - the ring's own matching (AssistantView Pile `atTable`). A row that RE-RAN while it was on the table (a nightly
+// report's new run, processing_unread.names) has a new key and answers to the old one, the card on the page still saying the old: a Next
+// took off only the card's key, and the ring moved while the passed report stayed on the rail until the answer's (the owner, 2026-11-02)
+export const answersTo = (row, key) => !!row && !!key && (row.key === key || (row.aliases || []).includes(key));
+export const sameRow = (a, b) => !!a && !!b && (answersTo(a, b.key) || answersTo(b, a.key));
+// ...two keys naming one row: the same key, or one rail row (or the card on the table) answering to both
+export const sameKey = (items, a, b, card = null) => !!a && !!b
+  && (a === b || [...(items || []), ...(card ? [card] : [])].some((r) => answersTo(r, a) && answersTo(r, b)));
+// ...and every key the rail rows `keys` name answer to: what a press takes off, whichever of them the page or the server holds
+export const rowKeys = (items, keys, card = null) => {
+  const out = new Set(keys.filter(Boolean));
+  for (const r of items || [])
+    if (keys.some((k) => answersTo(r, k) || (card?.key === k && sameRow(r, card)))) for (const k of [r.key, ...(r.aliases || [])]) out.add(k);
+  return [...out];
+};
 // THE RAIL AS PRESSED: a press the server has not answered yet still moves its row (the put-down, ac051beb). `leaving`: the
 // task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn working - its
 // ring spinning, where it is under Tasks - not two seconds later with the next pile (press audit B23b, 2026-10-01).
-// `read`: the keys a walk press reads (rule 4) - they leave with the press, as the server's answer will have them
+// `read`: the keys a walk press reads (rule 4) - they leave with the press, as the server's answer will have them - a row answering to one
+// as an alias with them (answersTo)
 export const asPressed = (items, { leaving = null, continuing = null, read = null } = {}) => (!leaving && !continuing && !read?.length ? items
-  : items.filter((i) => (!leaving || i.tid !== leaving) && !read?.includes(i.key))
+  : items.filter((i) => (!leaving || i.tid !== leaving) && !read?.some((k) => answersTo(i, k)))
     .map((i) => (continuing && i.tid === continuing
       ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, watching: false, working: i.working || i.agent || "agent" } : i)));
 // ...and a put-down has LANDED when the server's pile no longer has the row - or has it put away: Remind me keeps the task on the

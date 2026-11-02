@@ -4,6 +4,7 @@ import { channelName } from "./taskSources.js";
 import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
 import { drawerLit, mainView, sectionOf as sectionOfStage, stageOf } from "./stages.js";
+import { waitingEmails } from "./taskLifecycle.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -68,6 +69,16 @@ export const closeOut = ({ hasSender = false, result = false, writeup = null } =
   return { advice: !bare, chip: !bare, writeupAt: !writeup ? null : writeup.state === "failed" ? "closeout" : "result" };
 };
 export const CLOSE_BY_HAND = "Mark done closes it, or close it with a note.";
+
+// WHAT CLOSE OUT HOLDS OF ITS OWN, which makes it where the task is up to: `waits` - a reply draft, a proposal or a drafted email waiting
+// for Send (the next move, Close out white); `has` - that, or a reply that went, a close, a write-up that failed there, an answer given
+// outside. An email the checklist owes with NOTHING DRAFTED for it is a line on Close out's list, not a draft (the owner, 2026-11-02: a
+// chat asked them to email somebody, and the task opened on a Close out holding only "<address> to draft" - "it should show the task,
+// not close out, as there is no close-out draft created"); the server's stage reads the same (stages.facts `drafted`)
+export const closeHolds = ({ pending = false, sent = false, proposals = 0, checklist = [], reviews = [], ended = false, outside = 0, closed = false, writeup = false } = {}) => {
+  const waits = !!(pending || proposals || waitingEmails(checklist, reviews));
+  return { has: waits || !!(sent || ended || outside || closed || writeup), waits };
+};
 
 // THE ONE LINE From folds to: who it came from and how many messages ("Gail Moreno · 3 messages"), a workflow's name, or - with
 // no message at all - where it was made

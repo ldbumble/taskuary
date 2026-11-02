@@ -9,7 +9,7 @@ import { stageOf, mainView, sectionOf } from "../src/stages.js";
 const src = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 
 test("a reply sent from here is Close out's: the stage stays drafted and Close out stays the page", () => {
-  assert.match(src, /const replyHas = !!\(pendingReview \|\| sentReview \|\|/, "the sent reply counts");
+  assert.match(src, /closeHolds\(\{ pending: !!pendingReview, sent: !!sentReview,/, "the sent reply counts");
   const drafted = stageOf({ focus: "reply", drafted: true }), owed = stageOf({ focus: "reply", drafted: false });
   assert.equal(mainView({ stage: drafted }), "work", "with the sent reply counted, Close out is the page");
   assert.notEqual(mainView({ stage: owed }), "work", "...which is what the page flipped to without it");

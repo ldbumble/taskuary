@@ -40,7 +40,9 @@ def _said(store) -> dict:
     except ValueError: d = {}
     return d if isinstance(d, dict) else {}
 def _keep(store, d: dict, actor='advisor'): store.set_setting(SAID, json.dumps(d), actor)
-def _seen(n, s: str) -> str: s = s.strip().rstrip('.'); return f"{s[:1].upper()}{s[1:]} (seen {n} time{'' if n == 1 else 's'})."
+def _seen(n, s: str) -> str:
+    from .timewords import plural
+    s = s.strip().rstrip('.'); return f"{s[:1].upper()}{s[1:]} (seen {plural(n, 'time')})."
 
 
 def _named(store, text: str) -> str:

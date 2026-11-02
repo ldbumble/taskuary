@@ -128,8 +128,8 @@ class EverydayAsks(unittest.TestCase):
                 self.assertNotIn('{{', r['ideal']['say']); self.assertIn('1 habit still on the habits row', r['ideal']['say'])
 
     def test_a_watched_task_is_said_watched_where_the_assistant_reads_it(self):
-        # "what am I watching?" and "why is it not in my walk?" read tasks.list and task.read, and neither said so (2026-11-02)
-        r = next(r for r in self.rows if r['q'].text == f'why is {Q.T2} not in my walk')
+        # "what am I watching?" and "where did it go?" read tasks.list and task.read, and neither said so (2026-11-02)
+        r = next(r for r in self.rows if r['q'].text == f'where did {Q.T2} go')
         self.assertIn('WATCHED since', r['ideal']['told'])
         s = Q._world(); Q.watched(s)
         line = next(l for l in concierge.read_op(s, 'tasks.list', {}).splitlines() if l.startswith(Q.T2))

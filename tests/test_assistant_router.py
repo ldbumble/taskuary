@@ -708,17 +708,14 @@ class ClearingASet(unittest.TestCase):
             concierge.say(s, 'these are read', key=batch['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"scope": "table"}}')
             self.assertEqual(len(unread(s)), 5)
 
-    def test_a_phone_yes_keeps_the_table_scope(self):
+    def test_a_phone_marks_the_table_read_at_once_in_its_scope(self):
+        # ...no yes first: marking read sends and closes nothing (the owner, 2026-11-02: small changes act without asking)
         s, batch = self._batch()
         with mock.patch.object(terminal, 'live_sessions', return_value=[]), concierge.delivering(concierge.PHONE):
             out = concierge.say(s, 'mark these read', key=batch['key'],
                                 llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}, "scope": "table"}}')
-        self.assertEqual(len(unread(s)), 9)                                         # a phone asks first
-        op = operations.get(s, out['proposal']['id'])
-        self.assertEqual(sorted(op['params']['keys']), sorted(batch['members']))
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            done = server._run_kind(op, None)                                       # the yes: the shared handler
-            self.assertEqual((done['cleared'], len(unread(s))), (4, 5))
+        self.assertFalse(out.get('proposal'))
+        self.assertEqual((out['cleared'], len(unread(s))), (4, 5))
 
     def test_the_tool_offers_the_scope(self):
         from taskuary import toolcatalog

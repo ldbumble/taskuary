@@ -1292,7 +1292,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // Remind me: put away until a day - the page around this view decides where to go next; on the walk's table the day is the walk's close
   const reminded = (out) => { onReminded?.(out); loadTasks(); onChanged?.(); };
   const remindAct = walkLeave ? (until) => walkLeave("remind", { until }).then((d) => d?.left || { remindAt: until }) : null;
-  // WATCH IT (watch.py, the owner, 2026-11-01): not the owner's - kept open under Watching, off the walk, back when the thread moves. Nothing
+  // WATCH IT (watch.py, the owner, 2026-11-01): not the owner's - kept open under Watching, walked after Tasks, back when the thread moves. Nothing
   // is sent. On the walk's table it is the walk's close (railwalk.leave "watch"); on a task already watched the same press ends the watch
   const watching = !!t?.WatchedAt && !["done", "dropped"].includes(t.Status);
   const watchIt = async () => {

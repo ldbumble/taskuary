@@ -287,7 +287,7 @@ PHONE = [
     Q('phone', 'snooze everything from Ruth until Monday', 'todo', c('pipe.defer', select={'sender': 'Ruth'}, until='monday 9am'), 'did:pipe.defer', freq=3, phone=True),
     Q('phone', 'close all from Priya', 'todo', c('pipe.close', select={'sender': 'Priya'}), 'did:pipe.close', freq=2, phone=True),
     Q('phone', 'mark this done', 'todo', c('close'), 'proposal:task.complete', freq=4, phone=True),
-    Q('phone', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'proposal:task.defer', freq=4, phone=True),
+    Q('phone', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'now:task.defer', freq=4, phone=True),
     Q('phone', 'send it', 'review', c('approve'), 'proposal:review.approve', freq=4, phone=True),
     Q('phone', 'reply to this', 'todo', c('reply'), 'draft:reply', freq=4, phone=True),
     Q('phone', 'approve all the drafts', 'review', c('review.each'), 'card', freq=2, phone=True),
@@ -350,7 +350,7 @@ POWERS = [
     # ── help, and what changed (the help pages ship with the app; What's new, 2026-11-01) ──
     Q('help', "what's new in this version?", None, [c('docs.search', query="what's new"), 'This update reads its help without an add-on.'], 'read:docs.search', freq=3),
     Q('help', 'what changed in the last update', None, [c('docs.search', query='what changed'), 'The help pages ship with the app now.'], 'read:docs.search', freq=3),
-    Q('help', 'how does Watch it work?', None, [c('docs.search', query='watch it'), 'The task stays open, off the walk, until the thread moves.'],
+    Q('help', 'how does Watch it work?', None, [c('docs.search', query='watch it'), 'The task stays open under Watching, still walked, until the thread moves.'],
       'read:docs.search', freq=2),
     Q('help', 'what is the Advisor?', None, [c('docs.search', query='advisor'), 'It lights the button it thinks you will press.'], 'read:docs.search', freq=2),
     # ── work that is an agent's, never done in the chat (the owner, 2026-11-01: "probably should have put agent on it") ──
@@ -546,9 +546,10 @@ AREA_RAIL = [
     Q('rail', 'put the reports away until tomorrow', 'todo', c('pipe.defer', select={'category': 'report'}, until='tomorrow 9am'), 'did:pipe.defer', freq=2),
     Q('rail', 'close everything for later', None, [c('pipe.close', select={'lane': 'later'}), 'Nothing is put away for later.'], 'words', freq=1,
       note='nothing For later in the demo world: said whole, never "Nothing waiting is , so"'),
-    # ── Watching (watch.py): kept open for somebody else, off the walk ──
+    # ── Watching (watch.py): kept open for somebody else, walked after Tasks (the owner, 2026-11-02) ──
     Q('rail', 'what am I watching?', None, [c('tasks.list'), f'You are watching {T2}.'], 'read:tasks.list', freq=3, seed=watched),
-    Q('rail', f'why is {T2} not in my walk', None, [c('task.read', ref=T2), 'You are watching it.'], 'read:task.read', freq=2, seed=watched),
+    Q('rail', f'where did {T2} go', None, [c('task.read', ref=T2), 'You are watching it - it is under Watching, still in your walk.'], 'read:task.read',
+      freq=2, seed=watched),
     Q('rail', f'stop watching {T2}', None, c('task.watch', what='off', ref=T2), 'light:watch', freq=3, seed=watched,
       note="the row's Watch it reads Stop watching while it watches - lit for the owner"),
     Q('rail', 'watch TQ-0002 for me', None, c('task.watch', ref=T2), 'light:watch', freq=3),
@@ -992,8 +993,8 @@ AREA_HUB_BOARD_SEARCH = [
 ]
 CASES += AREA_HUB_BOARD_SEARCH
 
-# THE SAME ASKS BY PHONE (the phone audit, 2026-11-02): each row verb reach() names, typed in a phone chat - what goes out or changes the
-# task asks yes or no, a put-down is done at once, an act the row cannot do is said (never asked, so no yes runs into nothing), and what only
+# THE SAME ASKS BY PHONE (the phone audit, 2026-11-02): each row verb reach() names, typed in a phone chat - what goes out or closes asks
+# yes or no, a put-down is done at once, so is a small change that sends and closes nothing (`now:`, the owner 2026-11-02), an act the row cannot do is said (never asked, so no yes runs into nothing), and what only
 # a screen has is said in words, at the desk
 AREA_PHONE = [
     Q('phone', 'next', 'todo', c('next'), 'next', freq=5, phone=True, note="the phone drops the bare Next. - the next card is its receipt"),
@@ -1002,7 +1003,7 @@ AREA_PHONE = [
     Q('phone', 'forward this to gail@northwind.example', 'todo', c('task.handoff', who='gail@northwind.example'), 'proposal:task.handoff', freq=3, phone=True),
     Q('phone', "this isn't a task", 'todo', c('task.not_a_task'), 'proposal:task.not_a_task', freq=3, phone=True, note='a put-down: done at once'),
     Q('phone', 'close it with a note: paid on the 3rd', 'todo', c('task.complete', note='paid on the 3rd'), 'proposal:task.complete', freq=3, phone=True),
-    Q('phone', 'remnd me firday', 'todo', c('task.defer', until='friday 9am'), 'proposal:task.defer', freq=3, phone=True),
+    Q('phone', 'remnd me firday', 'todo', c('task.defer', until='friday 9am'), 'now:task.defer', freq=3, phone=True),
     Q('phone', 'accept it', 'invite', c('accept_invite'), 'proposal:calendar.answer', freq=3, phone=True),
     Q('phone', 'decline it', 'invite', c('decline_invite'), 'proposal:calendar.answer', freq=3, phone=True),
     Q('phone', 'can we do thursday instead', 'invite', c('propose_time', text='thursday'), 'proposal:calendar.answer', freq=3, phone=True),
@@ -1010,21 +1011,22 @@ AREA_PHONE = [
     Q('phone', 'split this in two: the refund is its own job', 'todo', c('task.split', text='the refund is its own job'), 'proposal:task.split', freq=2, phone=True),
     Q('phone', f'reopen {T4}', None, [c('task.reopen', ref=T4), f'{T4} is still open - there is nothing to reopen.'], 'words', freq=2, phone=True,
       note='an open task has no Reopen: said, never asked (the phone audit, 2026-11-02)'),
-    Q('phone', 'make it high priority', 'todo', c('task.update', priority='high'), 'proposal:task.update', freq=3, phone=True),
-    Q('phone', 'this is a coding task', 'todo', c('task.set_kind', kind='coding'), 'proposal:task.set_kind', freq=2, phone=True),
-    Q('phone', 'put it in northwind/importers', 'coding', c('task.set_repo', repo='northwind/importers'), 'proposal:task.set_repo', freq=1, phone=True),
+    Q('phone', 'make it high priority', 'todo', c('task.update', priority='high'), 'now:task.update', freq=3, phone=True),
+    Q('phone', 'this is a coding task', 'todo', c('task.set_kind', kind='coding'), 'now:task.set_kind', freq=2, phone=True),
+    Q('phone', 'put it in northwind/importers', 'coding', c('task.set_repo', repo='northwind/importers'), 'now:task.set_repo', freq=1, phone=True),
     Q('phone', 'put an agent on it', 'todo', c('regular_agent'), 'proposal:task.create_from_message', freq=3, phone=True),
     Q('phone', 'stop the agent', 'agent', c('stop_agent'), 'proposal:agent.stop', freq=4, live=6, phone=True),
     Q('phone', 'keep going', 'agent', [c('agent.continue', ref=T6), 'It has no saved session to pick up.'], 'words', freq=3, phone=True,
       note='no saved session in the demo world: said, never asked (the phone audit, 2026-11-02)'),
     Q('phone', 'triage this again', 'fyi', [c('message.retriage'), 'Triage already sorted this one as an FYI.'], 'words', freq=1, phone=True,
       note="an FYI's row has no Sort it again: said, never asked (the phone audit, 2026-11-02)"),
-    Q('phone', "watch this, it's Gail's problem", 'todo', c('task.watch'), 'proposal:task.watching', freq=3, phone=True,
-      note="the row's Watch it, as its chip runs it - not the tell-me-here watch (the phone audit, 2026-11-02)"),
-    Q('phone', 'tell me when Gail replies', 'todo', c('task.watch', what='reply'), 'proposal:task.watch', freq=3, phone=True),
+    Q('phone', "watch this, it's Gail's problem", 'todo', c('task.watch'), 'now:task.watching', freq=3, phone=True,
+      note="the row's Watch it, as its chip runs it - at once: it sends and closes nothing (the owner, 2026-11-02)"),
+    Q('phone', 'tell me when Gail replies', 'todo', c('task.watch', what='reply'), 'now:task.watching', freq=3, phone=True,
+      note='Watch it as on the desk, never a second kind of watch (the owner, 2026-11-02: "both should mean same thing")'),
     Q('phone', 'block this sender', 'fyi', c('block_sender'), 'proposal:preference.sender_rule', freq=2, phone=True),
     Q('phone', 'email what it found to gail@northwind.example', 'agent', c('task.share', who='gail@northwind.example'), 'proposal:task.share', freq=2, phone=True),
-    Q('phone', 'clear all the fyi', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'proposal:pipe.clear', freq=3, phone=True),
+    Q('phone', 'clear all the fyi', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=3, phone=True),
     Q('phone', 'research what Payworth charges per seat', 'todo',
       c('task.create_from_text', kind='general', text='research what Payworth charges per seat', title='Payworth seat price'), 'proposal:task.create_from_text',
       freq=3, phone=True),
@@ -1203,6 +1205,8 @@ def outcomes(out: dict, reads: list) -> list:
     if out.get('did'): o.append(f"did:{out['did']}")
     if out.get('card') or out.get('opened') or out.get('item'): o.append('card')
     if out.get('proposal'): o.append(f"proposal:{out['proposal'].get('kind')}")
+    # ...and one a phone runs at once, no yes asked (a put-down; a small change, the owner 2026-11-02)
+    if (out.get('proposal') or {}).get('auto'): o.append(f"now:{out['proposal'].get('kind')}")
     o += [f"go:{ch.get('href') or ''}" for ch in out.get('chips') or [] if ch.get('verb') == 'go']
     o += [f"view:{v['op']}:{v.get('field') or v.get('button') or v.get('target') or v.get('area') or ''}" for v in out.get('view_ops') or []]
     o += [f'read:{k}' for k in reads]

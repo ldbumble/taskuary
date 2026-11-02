@@ -458,7 +458,8 @@ def _brain(calls):
 class TypedActBringsUpThePickerTests(PhoneCase):
     """A6: a typed act came back as "Remind me: Fri 23 Oct: TQ-0001. Nothing happens until you say yes." with yes/no under it - a confirm
     card the owner does not want (the router rule: light the real button). A typed Remind me brings up the card's own day picker, the typed
-    day first; an act that is one of the card's buttons brings the card up with that button first. A set of items keeps its yes/no."""
+    day first; an act that is one of the card's buttons brings the card up with that button first. A set of items keeps its yes/no.
+    Since 2026-11-02 a small change - Remind me with its day, marking read - is done at once (the owner: small changes act without asking)."""
     brain = _brain({'remind me': ('task.defer', {'until': 'friday'}), 'close it': ('task.complete', {})})
 
     def setUp(self):
@@ -467,13 +468,15 @@ class TypedActBringsUpThePickerTests(PhoneCase):
         first = text_of(self.ph.walk())
         self.tid = next(t for t in (self.a, self.b) if f'TQ-{t:04d}' in first)
 
-    def test_remind_me_friday_is_the_day_picker_with_friday_first(self):
+    # ...and a typed Remind me WITH ITS DAY is done at once (the owner, 2026-11-02: "yes" to "should small changes act without asking"): it
+    # sends nothing and closes nothing - no picker to tap, no yes/no; the receipt says the day
+    def test_remind_me_friday_is_done_at_once(self):
         got = self.ph.type('remind me about this friday')
-        btns = got[-1][1]
-        self.assertNotIn('yes, go ahead', btns); self.assertNotIn('Nothing happens until you say yes', text_of(got))
-        self.assertRegex(btns[0], r'^Fri \d+ \w{3}$', btns)
-        self.assertEqual(btns[1:], ['Tomorrow', 'Next week', 'In 2 weeks', 'In a month', 'Cancel'])
-        self.assertRegex(text_of(self.ph.tap(btns[0])), rf'TQ-{self.tid:04d} is away until Fri')
+        said = text_of(got)
+        self.assertNotIn('yes, go ahead', [b for _t, bs in got for b in bs]); self.assertNotIn('Nothing happens until you say yes', said)
+        self.assertNotIn('Tomorrow', [b for _t, bs in got for b in bs], 'the day picker came up for a day already said')
+        self.assertRegex(said, rf'TQ-{self.tid:04d} is away until Fri')
+        self.assertTrue(self.s.get_task(self.tid)['RemindAt'])
 
     # ...but a PUT-DOWN typed is done at once (the owner, 2026-10-23: "it should be the pill saying i have closed this task for you"):
     # no yes/no, no card brought up to tap - the short receipt, and the walk goes on
@@ -487,8 +490,16 @@ class TypedActBringsUpThePickerTests(PhoneCase):
     def test_a_set_of_items_keeps_its_yes_or_no(self):
         for subj in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=subj)
         self.ph.ready()
+        with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Ok.\n' + call('pipe.remove', select={'kind': 'fyi'})):
+            self.assertIn('yes, go ahead', self.ph.type('get rid of all the FYI')[-1][1])
+
+    def test_marking_the_fyi_read_is_done_at_once(self):
+        # ...but marking a set read sends and closes nothing - done at once, as on the desk (the owner, 2026-11-02)
+        for subj in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=subj)
+        self.ph.ready()
         with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Ok.\n' + call('pipe.clear', select={'kind': 'fyi'})):
-            self.assertIn('yes, go ahead', self.ph.type('clear all the FYI')[-1][1])
+            got = self.ph.type('clear all the FYI')
+        self.assertNotIn('yes, go ahead', [b for _t, bs in got for b in bs]); self.assertIn('read', text_of(got))
 
 
 class AfterTheHandBackTests(PhoneCase):
@@ -658,14 +669,14 @@ class UrgentMidWalkTests(PhoneCase):
 class NoPickEndsTests(PhoneCase):
     """Found while building (the owner's principle - no dead ends): "no, leave it" under a yes/no answered "Left it - nothing moved." with
     nothing to tap. A pick's answer that offers nothing gets the way on: back to the card on the table, the walk, everything else."""
-    brain = staticmethod(lambda said: 'Ok.\n' + call('pipe.clear', select={'kind': 'fyi'}) if 'clear' in said.lower() else 'Ok.')
+    brain = staticmethod(lambda said: 'Ok.\n' + call('pipe.remove', select={'kind': 'fyi'}) if 'get rid' in said.lower() else 'Ok.')
 
     def test_no_leave_it_comes_back_to_the_card(self):
         for subj in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=subj)
         a, b = _two_asks(self.f); self.ph.ready()
         first = text_of(self.ph.walk())
         ref = next(f'TQ-{t:04d}' for t in (a, b) if f'TQ-{t:04d}' in first)
-        self.ph.type('clear all the FYI')
+        self.ph.type('get rid of all the FYI')
         got = self.ph.tap('no, leave it')
         self.assertIn('Left it - nothing moved.', text_of(got))
         self.assertEqual(got[-1][1][:2], [f'Back to {ref}', 'Walk me through my tasks'], got[-1][1])

@@ -1148,6 +1148,9 @@ KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': '
 # ...a task's fields: each one its own picker on the row; a title or a due day is written on the task itself
 # ...who works it has no picker of its own (the owner, 2026-11-01): the Agent section's Send to agent decides it
 FIELD_BUTTON = {'priority': 'priority', 'assignee': 'regular_agent'}
+# what a phone runs at once, no yes-or-no (call_turn): each sends nothing and closes nothing (the owner, 2026-11-02); pipe.clear is its own road
+PHONE_NOW = frozenset({'task.update', 'task.set_kind', 'task.set_repo', 'task.defer', 'task.watching'})
+PHONE_NEEDS = {'task.set_kind': 'kind', 'task.set_repo': 'repo', 'task.defer': 'until'}
 WAITS = 'Nothing happens until you say yes.'
 
 
@@ -3067,6 +3070,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
+    # WATCH IT IS ONE THING, ON THE DESK AND THE PHONE (the owner, 2026-11-02: "both should mean same thing of course"): the desk lit the
+    # row's Watch it for every task.watch, while a phone's yes to what=done or reply ran asks.watch_task's tell-me-here watch and left the
+    # task where it was. Every task.watch is the row's task.watching now - `off` its Stop watching - on both roads
+    if kind == 'task.watch':
+        off = str(params.get('what') or '').strip().lower() == 'off' or _yes(params.get('off'))
+        kind, params = 'task.watching', {**({'off': True} if off else {}),
+                                         **{k: params[k] for k in ('ref', 'target') if k in params}}
     # WHO IS WHO, KEPT AND SAID (orgchart.py, 2026-10-22): the owner's word on a person - "Erin is my manager" - is a fact about their own
     # organisation, kept at once on the desk and the phone alike, like a note on a task: nothing leaves, and the chart has no page to bring up
     if kind == 'people.relate': return _relate(store, tid, params, actor)
@@ -3214,52 +3224,38 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                     f"{pipe_holds(store)} Say it another way and I'll look again - nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-        # ON THE DESK A NAMED SET IS MARKED READ AT ONCE. It had "no button on the desk - the owner puts each one down with Next", and
+        # A NAMED SET IS MARKED READ AT ONCE. On the desk it had "no button on the desk - the owner puts each one down with Next", and
         # the model, told so, pressed Next: "Clear all the FYI, please." was answered "Next." with four of ~90 on the table (the owner,
         # 2026-10-20: "this is clearly broken"). The selector is the owner's own words naming the set, the count is said, nothing is
         # deleted - search finds every one - and the batch card's All read is this same mark, one card at a time.
         # ...but never what is ON THE OWNER - a to-do, a draft waiting for its Send, a question: "mark everything read" swept those with the
         # notices, and each has its own button to put it down. Those stay, and the line says how many.
-        if routes():
-            mine = sum(map(lanes.on_you, hits))
-            hits = [i for i in hits if not lanes.on_you(i)]
-            if not hits:
-                say_ = (f"{plural(mine, 'item')} {'is' if mine == 1 else 'are'} waiting on you - each is put down with its own button, "
-                        "not by a sweep. Nothing has been touched.")
-                record_related(store, tid, item, 'assistant', say_)
-                return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-            why = []
-            cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner', why)]
-            # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
-            # is left; the line counts what went and says it is not gone
-            n = len(cleared)
-            # the total, said as all of them, when it reached past the table's handful
-            every = scope == 'all' and n == len(hits) and not mine and n > len(table_keys)
-            say_ = (f"Marked {'all ' if every else ''}{_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
-                    + (f" {plural(len(hits) - n, 'item')} would not clear - {max(set(why), key=why.count)}." if len(hits) > n and why else
-                       f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
-                    + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
-            # ...but ROWS THE MODEL NAMED are listed, each its link (bulk.py): a set chosen by judgement is checked by reading which went
-            if sel.get('keys') and n: say_ += '\n' + bulk_mod.listing(cleared)
+        # ...AND ON A PHONE THE SAME (the owner, 2026-11-02: small changes act without asking): marking read sends nothing and closes
+        # nothing, and the desk never asked a yes for it
+        mine = sum(map(lanes.on_you, hits))
+        hits = [i for i in hits if not lanes.on_you(i)]
+        if not hits:
+            say_ = (f"{plural(mine, 'item')} {'is' if mine == 1 else 'are'} waiting on you - each is put down with its own button, "
+                    "not by a sweep. Nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
-            # the table among them: the walk moves on, as All read, next does; otherwise the rail is read again (the page's `setting`)
-            off = bool(table_keys) and table_keys <= {i['key'] for i in cleared}
-            return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'cleared': n}
-        where = _set_words(sel)
-        label = f"Mark {_set_noun(sel, len(hits))} read"
-        # ...WHICH ones, on the card, before the yes: a count and a selector were all it said
-        shown = '; '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 60) for i in hits[:4])
-        summary = f"{_set_noun(sel, len(hits))}{' ' + where if where else ''}: {shown}{' and more' if len(hits) > 4 else ''}"
-        tail = ('They are marked read and search still finds them; nothing is deleted. '
-                + WAITS)
-        prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text, **({'keys': [i['key'] for i in hits]} if scope == 'table' else {})},
-                            label, summary, tail, actor, item)
-        # A sweep that takes the table with it has settled the table: the walk moves to the next thing
-        # instead of sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
-        # after"). The KEY is what the page matches against Current; the server does the settling.
-        held = current_key(store, tid)
-        if held and table_keys and table_keys <= {i['key'] for i in hits}: prop = {**prop, 'key': held, 'settles': True}
-        return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        why = []
+        cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner', why)]
+        # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
+        # is left; the line counts what went and says it is not gone
+        n = len(cleared)
+        # the total, said as all of them, when it reached past the table's handful
+        every = scope == 'all' and n == len(hits) and not mine and n > len(table_keys)
+        say_ = (f"Marked {'all ' if every else ''}{_set_noun(sel, n)} read. Search still finds {'it' if n == 1 else 'them'}."
+                + (f" {plural(len(hits) - n, 'item')} would not clear - {max(set(why), key=why.count)}." if len(hits) > n and why else
+                   f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
+                + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
+        # ...but ROWS THE MODEL NAMED are listed, each its link (bulk.py): a set chosen by judgement is checked by reading which went
+        if sel.get('keys') and n: say_ += '\n' + bulk_mod.listing(cleared)
+        record_related(store, tid, item, 'assistant', say_)
+        # the table among them: the walk moves on, as All read, next does; otherwise the rail is read again (the page's `setting`)
+        off = bool(table_keys) and table_keys <= {i['key'] for i in cleared}
+        return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'cleared': n}
     # everything else acts on ONE thing: the item on the table unless the call named its own target
     for f in toolcatalog.CONTEXT_FILLED:                 # a pile key is ours to supply, never the model's
         if f in operations.KINDS[kind][1] and not params.get(f):
@@ -3417,15 +3413,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if on and b and b != 'answer_agent':
         if why := cannot(on, b, store): raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
         if b not in {x['verb'] for x in row_buttons(store, on) + chips_for(store, on)}: _label_on(store, on, b)
-    # WATCH IT BY PHONE IS WATCH IT (2026-11-02): task.watch is the row's Watch it (KIND_BUTTON; its description: off the walk until the thread
-    # moves or 7 quiet days), whose light on the desk and chip on the phone run task.watching - but the phone's yes to the tool ran
-    # asks.watch_task, "I'll tell you here when anything happens on it", and the task stayed on the walk. A `what` of done or reply is
-    # still the tell-me-here watch, said at the door it was asked on (asks.py).
-    if kind == 'task.watch' and (w := str(params.get('what') or 'any').strip().lower()) in ('any', 'off'):
-        kind, params = 'task.watching', ({'off': True} if w == 'off' else {})
-        label = op_label(kind, params)
-    # the phone's words: one yes-or-no, whatever the kind
+    # the phone's words: one yes-or-no for what goes out or closes...
     instant = False
+    # ...but A SMALL CHANGE ACTS AT ONCE (the owner, 2026-11-02, asked "should small changes act without asking": "yes"): priority, the kind
+    # of work, its repository, Remind me and Watch it send nothing and close nothing, and a yes for each was a round trip for nothing. An
+    # assignee is left out - one that names an agent is Send to agent; so is a kind, a repo or a day the call did not name (PHONE_NEEDS)
+    if kind in PHONE_NOW and not params.get('assignee') and (kind not in PHONE_NEEDS or params.get(PHONE_NEEDS[kind])): instant = True
     # ...and the ANSWER to the agent asking on the table, whichever road the model took to it (the tool, or the answer_agent verb in
     # AUTO): it goes straight in, as the agent's Answer pill does - a real-brain check found the tool road waiting for a confirm the
     # verb road skips (2026-10-08; the owner's 2026-10-02 rule: an answer to an asking agent goes directly to it)
@@ -3475,7 +3468,7 @@ ON_TASK = {'task.check': 'tick it on its checklist', 'task.checklist': 'its chec
 
 def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: str, actor: str) -> dict | None:
     """THE TASK PAGE'S OWN WRITES, run by the Assistant and said - on the desk and on a phone alike (the owner, 2026-10-20: "anything you can do,
-    you can do via the Assistant"; the phone keeps its yes/no only for what goes out). None when the call is not one of them."""
+    you can do via the Assistant"; the phone keeps its yes/no only for what goes out or closes). None when the call is not one of them."""
     # A NOTE AND A DUE DAY RUN HERE, said (the owner, 2026-10-20): neither has a button on the row - a note is typed on the task page and the
     # due day had no picker - so "file a note on it" and "set the due date to friday" were refused. Both are the task page's own writes.
     if kind == 'task.comment' and target:
@@ -4065,7 +4058,7 @@ def triage_agent(store, item: dict) -> str:
 _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('task.create_from_message', True), 'mine': ('task.create_from_message', True),
         'not_ours': ('message.file', True), 'not_ours_sender': ('preference.exclude_sender', True), 'not_ours_kind': ('idea.act', True),
         'block_sender': ('preference.sender_rule', True), 'close': ('task.complete', True),
-        # Watch it keeps the task open and takes it off the walk, under Watching (watch.py) - nothing is sent
+        # Watch it keeps the task open and moves it under Watching, walked after Tasks (watch.py) - nothing is sent
         'watch': ('task.watching', True),
         # ...a send is NOT a settle (the owner, 2026-10-18: "sending and closing are two steps"): the item stays on the table with
         # its receipt, and Mark done or Next moves it - Approve on an agent's proposal runs that act alone, the same way
@@ -4306,7 +4299,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
     elif verb == 'close': target = it.get('tid')        # an agent parked on it is stopped by the same close (close_task)
-    elif verb == 'watch': target = it.get('tid')        # Watch it: the task stays open, off the walk, under Watching (watch.py)
+    elif verb == 'watch': target = it.get('tid')        # Watch it: the task stays open, under Watching, walked after Tasks (watch.py)
     elif verb in CAL_ACT:
         if not it.get('mid'): raise ValueError('nothing is on the table')
         target, params = it['mid'], {'act': CAL_ACT[verb]}
@@ -4805,8 +4798,8 @@ def away_line(o: dict) -> str:
 
 def watch_line(o: dict) -> str:
     """Watch it's receipt, one sentence for the page, the chat and the phone. `o` is watch.watch's answer (or the off press's)."""
-    if not o.get('watching'): return 'Not watching it any more - it is back in your walk.'
-    return f"Watching it under {places.name('watching')} - nothing was sent. It comes back when the thread moves, or after a quiet week."
+    if not o.get('watching'): return 'Not watching it any more - it is back under Tasks.'
+    return f"Watching it under {places.name('watching')}, still in your walk - nothing was sent. Back in Tasks when the thread moves, or after a quiet week."
 
 
 def _day_said(until) -> str:

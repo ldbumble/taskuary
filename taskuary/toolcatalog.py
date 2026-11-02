@@ -122,8 +122,8 @@ PURPOSE = {
                                  'is removed, emails untouched); `emails`: [{to, about}] to add emails that must go out before it closes; '
                                  '`drop`: recipients whose email is no longer owed; `ref`'),
     'task.watch':               ("Watch it - a task that is someone else's to move but the owner wants kept open and followed (\"watch this\", "
-                                 '"keep an eye on it until Paula answers"): it leaves the walk for Watching and comes back when the thread moves '
-                                 'or after 7 quiet days; nothing is sent - `what`: done | reply | any (the default) | off; `ref`'),
+                                 '"tell me when Paula answers"): it moves under Watching, still walked after Tasks, and goes back to Tasks when '
+                                 'the thread moves or after 7 quiet days; nothing is sent - `what`: off stops it; `ref`'),
     'task.comment':             'file a note on a task - `text`; `ref`',
     'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
                                  "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
@@ -462,7 +462,7 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
              'pick_repo': 'a picker; the model uses task.set_repo',
              # ...Watch it a press, never a decision: as one it pushed the index past the 7950 it is trimmed to (2026-10-28)
-             'watch': "keeps a task somebody else is handling open, off the walk - the owner's own press on the task or its chip (watch.py)",
+             'watch': "keeps a task somebody else is handling open, under Watching - the owner's own press on the task or its chip (watch.py)",
              'unsubscribe': "an FYI from a list leaves it on the owner's press alone (unsubscribe.py) - a newsletter's words never reach it",
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',
              'walk': "the day card's own start, and the walk's again at its end - the model's walk is concierge.surface",

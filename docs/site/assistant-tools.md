@@ -276,9 +276,9 @@ Change what a task's checklist asks for.
 
 ### `task.watch`
 
-Watch it - a task that is someone else's to move but the owner wants kept open and followed ("watch this", "keep an eye on it until Paula answers"): it leaves the walk for Watching and comes back when the thread moves or after 7 quiet days; nothing is sent.
+Watch it - a task that is someone else's to move but the owner wants kept open and followed ("watch this", "tell me when Paula answers"): it moves under Watching, still walked after Tasks, and goes back to Tasks when the thread moves or after 7 quiet days; nothing is sent.
 
-- `what` (optional) - done | reply | any (the default) | off
+- `what` (optional) - off stops it
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>

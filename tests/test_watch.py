@@ -1,5 +1,6 @@
 """Watch it (the owner, 2026-11-01): a task that is not the owner's, kept open while somebody else handles it - under Watching at the
-foot of Tasks, never walked, back on the walk when its thread moves or after a quiet week, and never closed for them."""
+foot of Tasks, still walked after Tasks (the owner, 2026-11-02), back in Tasks when its thread moves or after a quiet week, and never
+closed for them."""
 import json, unittest
 from datetime import datetime, timedelta
 from unittest import mock
@@ -78,15 +79,15 @@ class RailTests(unittest.TestCase):
 
     def settle(self, s): s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
 
-    def test_a_watched_task_sits_under_watching_and_never_on_the_walk(self):
+    def test_a_watched_task_sits_under_watching_and_stays_on_the_walk(self):
         s = store(); t = theirs(s)
         self.settle(s); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); self.settle(s)
         watch.watch(s, t); self.settle(s)
         rows = self.rail(s, t)
         self.assertTrue(rows, 'a watched task left the rail - it stays open, under Watching')
         self.assertTrue(all(lanes.level_of(i) == 'watching' and i['watching'] and not i['actionable'] for i in rows))
-        self.assertFalse([i for i in railwalk.line(rows)], 'a watched row is on the walk')
-        self.assertEqual(railwalk.kind_of(rows[0]), 'none')
+        self.assertEqual(railwalk.line(rows), rows, 'a watched row left the walk - Watch it keeps it on (the owner, 2026-11-02)')
+        self.assertEqual(railwalk.kind_of(rows[0]), 'stays', 'Next on a watched row leaves it on the rail, as on a task')
 
     def test_watching_is_its_own_section_at_the_foot_of_tasks(self):
         order = list(lanes.LEVEL_ORDER)
@@ -96,15 +97,20 @@ class RailTests(unittest.TestCase):
 
 
 class WalkTests(unittest.TestCase):
-    def test_next_walks_past_watching_and_never_stands_on_it(self):
+    def test_next_reaches_watching_after_tasks(self):
         s = store()
         rows = [row('task:1', 1), row('task:2', 2, watching=True), row('task:3', 3)]
         w = RowWalk(s, rows)
         try:
             self.assertEqual(w.start(), 'task:1')
-            self.assertEqual(w.next(), 'task:3', 'Next stood on a watched row')
-            self.assertEqual(w.back(), 'task:1')
+            self.assertEqual(w.next(), 'task:3', 'the watched row sits below Tasks, not in its arrival place')
+            self.assertEqual(w.next(), 'task:2', 'Next went past a watched row')
+            self.assertEqual(w.back(), 'task:3')
         finally: w.close()
+
+    def test_for_later_is_still_off_the_walk(self):
+        rows = [row('task:1', 1), row('task:2', 2, deferred=True), row('task:3', 3, watching=True)]
+        self.assertEqual([r['key'] for r in railwalk.line(rows)], ['task:1', 'task:3'])
 
     def test_watch_it_on_the_table_closes_the_row_and_moves_on(self):
         self.assertEqual(railwalk.HOW['watch'], 'task.watching')

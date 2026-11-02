@@ -816,17 +816,10 @@ class SweepTests(unittest.TestCase):
                            'FromEmail': 'omar@vendor.example', 'SentAt': ago(1), 'BodyText': 'please respond', 'Status': 'filed'})
         s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
         self.assertEqual(len(funnel.build(s)['items']), 4)
+        # ...marked read at once, on a phone too: it sends and closes nothing (the owner, 2026-11-02: small changes act without asking)
         out = cleared_by(s, "all the reports for paula vance you can remove. I don't need them", {'sender': 'Paula Vance'})
-        p = out['proposal']; self.assertEqual((p['kind'], p['label']), ('pipe.clear', 'Mark 3 items read'))
-        self.assertIn('Northwind Financial Report', p['summary'], 'the card names which ones before the yes')
-        # ...and the line over the card says only what the card does not (the owner, 2026-10-12: "there should not be text and a card")
-        self.assertNotIn('Northwind Financial Report', p['say_card']); self.assertNotIn(p['label'], p['say_card'])
-        self.assertIn('nothing is deleted', p['say_card'])
-        self.assertEqual(len(funnel.build(s)['items']), 4)                                       # nothing swept on the words
-        ran = run(s, p).json(); o = ran['outcome']
-        self.assertEqual(o['cleared'], 3)
-        line = ran['receipt']
-        self.assertIn('Marked 3 items read - ', line); self.assertIn('Read, not deleted', line)
+        self.assertFalse(out.get('proposal')); self.assertEqual(out['cleared'], 3)
+        self.assertIn('3 items read', out['say']); self.assertIn('Search still finds them', out['say'])
         self.assertEqual((funnel.mutes(s), memorylines.notes(s)), ([], []))   # clearing is all it does (R8)
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])                # Omar stays
         again = cleared_by(s, 'same for all resident refunds', {'contains': 'resident refund'})
@@ -850,11 +843,8 @@ class SweepPronounTests(unittest.TestCase):
         s.add_route(keep, None, 'file', None, 'triage: fyi', [], 'triage')
         first = cleared_by(s, 'skip all the northwind financial reports. Those are part of the financials process, taken care of.',
                            {'contains': 'Northwind Financial Report'})
-        self.assertEqual(first['proposal']['kind'], 'pipe.clear'); self.assertEqual(funnel.mutes(s), [])      # no rule on the words
-        ran = run(s, first['proposal']).json()
-        self.assertEqual(ran['outcome']['cleared'], 3)
-        line = ran['receipt']
-        self.assertIn('Marked 3 items read - ', line)
+        self.assertEqual(first['cleared'], 3); self.assertEqual(funnel.mutes(s), [])      # at once (2026-11-02), and no rule on the words
+        self.assertIn('3 items read', first['say'])
         self.assertEqual([i['who'] for i in funnel.build(s)['items']], ['Omar Keller'])
 
 
@@ -1289,10 +1279,11 @@ class ClearTheFyiTests(unittest.TestCase):
     def test_the_desk_counts_the_batch_on_the_table(self):
         self.assertIn('Marked 4 FYI read.', self.clear(concierge.DESK)['say'])
 
-    def test_the_phone_card_says_it_in_words(self):
-        p = self.clear(concierge.PHONE)['proposal']
-        self.assertEqual(p['label'], 'Mark 4 FYI read')
-        self.assertNotIn('kind: fyi', p['say'])
+    def test_the_phone_marks_them_at_once_and_says_it_in_words(self):
+        # ...no yes first: marking read sends and closes nothing (the owner, 2026-11-02)
+        out = self.clear(concierge.PHONE)
+        self.assertFalse(out.get('proposal')); self.assertIn('FYI read', out['say'])
+        self.assertNotIn('kind: fyi', out['say'])
         self.assertNotIn('Unknown Sender', concierge.pipe_holds(self.s))
 
 

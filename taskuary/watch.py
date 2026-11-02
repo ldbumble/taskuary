@@ -1,9 +1,9 @@
 """Watch it: a task that is not the owner's, kept open while somebody else handles it.
 
 The owner, 2026-11-01: a move beside Remind me for work that is someone else's to do, which they want to see through. Nothing is sent.
-The task stays OPEN and leaves the walk - it sits under Watching at the foot of Tasks (lanes.level_of 'watching'), and railwalk.line
-skips it as it skips For later. It comes back on the walk when its thread moves (a new inbound message joins it: ingest calls `moved`),
-and triage's `handled_elsewhere` says whether that message shows somebody else dealt with it - then Mark done is lit (rulebook
+The task stays OPEN and STAYS ON THE WALK (the owner, 2026-11-02: "it should keep it on the walk") - it moves to Watching, the group at the
+foot of Tasks (lanes.level_of 'watching'), which railwalk.line walks after Tasks; only For later is off the walk. It goes back to its place
+in Tasks when its thread moves (a new inbound message joins it: ingest calls `moved`), and triage's `handled_elsewhere` says whether that message shows somebody else dealt with it - then Mark done is lit (rulebook
 'watch_handled'). After QUIET_DAYS with nothing on the thread it comes back once, Chase them / Let it go lit (rulebook 'watch_quiet').
 Any move the owner presses on it ends the watch (`stop`); Mark done closes it as ever. Nothing here closes a task: a watch only comes back.
 """
@@ -22,13 +22,13 @@ def back(task) -> str: return str((task or {}).get('WatchBack') or '') if (task 
 # ...said to the Assistant wherever it reads a task (the rail audit, 2026-11-02): "what am I watching?" and "why is it not in my walk?" read
 # tasks.list and task.read, and neither said a task was watched - the model could not answer either
 def said(task) -> str:
-    if watching(task): return f"WATCHED since {str(task['WatchedAt'])[:10]} (Watch it) - off the walk, under Watching, until its thread moves or a quiet week"
+    if watching(task): return f"WATCHED since {str(task['WatchedAt'])[:10]} (Watch it) - under Watching, still walked after Tasks; back in Tasks when its thread moves or after a quiet week"
     return {'moved': 'back from Watching - its thread moved', 'handled': 'back from Watching - its thread looks handled',
             'quiet': 'back from Watching after a quiet week'}.get(back(task), '')
 
 
 def watch(store, tid: int, actor: str = 'owner') -> dict:
-    """Keep it open, off the walk, until its thread moves or a quiet week passes. A Remind me day is dropped: one road back at a time."""
+    """Keep it open under Watching, walked after Tasks, until its thread moves or a quiet week passes. A Remind me day is dropped: one road back at a time."""
     t = store.get_task(tid)
     if not t: raise ValueError('task not found')
     if t.get('Status') in CLOSED:
@@ -49,7 +49,7 @@ def stop(store, tid, actor: str = 'owner') -> bool:
 
 
 def moved(store, tid: int, msg: dict, follow: dict | None, mine, actor: str) -> bool:
-    """A message from somebody else joined a watched task: it is back on the walk, and 'handled' when triage read it as dealt with."""
+    """A message from somebody else joined a watched task: it is back in Tasks, and 'handled' when triage read it as dealt with."""
     t = store.get_task(tid) or {}
     if not watching(t) or str(msg.get('from_email') or '').lower() in (mine or ()): return False
     why = 'handled' if (follow or {}).get('handled_elsewhere') is True else 'moved'
@@ -58,7 +58,7 @@ def moved(store, tid: int, msg: dict, follow: dict | None, mine, actor: str) -> 
     who = msg.get('from_name') or msg.get('from_email') or 'They'
     store.add_comment(tid, actor, 'agent', f"{who} wrote on it - brought back from {words.name('watching')}"
                       + (' - it looks handled.' if why == 'handled' else '.'))
-    logger.info(f'watch: task {tid} back on the walk ({why})')
+    logger.info(f'watch: task {tid} back in Tasks ({why})')
     return True
 
 

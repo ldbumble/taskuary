@@ -24,11 +24,7 @@ SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
 # "sensitive" scopes, as calendar.readonly is: Taskuary's shipped client needs Google's verification for them before it goes public.
 G_CONTACTS, G_OTHER, G_DIRECTORY = (f'https://www.googleapis.com/auth/{s}' for s in ('contacts.readonly', 'contacts.other.readonly', 'directory.readonly'))
 PEOPLE = (G_CONTACTS, G_OTHER, G_DIRECTORY)
-# THE GMAIL SIGNATURE (a user, approved 2026-11-02: "use the signature that exists in the gmail account"): read-only use of the
-# account's sendAs settings, where Gmail keeps it (signatures.account). A sign-in from before this keeps working without it - the card
-# says signing in again lets Taskuary use it. Also a "sensitive" scope, like the calendar.
-G_SETTINGS = 'https://www.googleapis.com/auth/gmail.settings.basic'
-SCOPES = ' '.join((SCOPE, *PEOPLE, G_SETTINGS))
+SCOPES = ' '.join((SCOPE, *PEOPLE))
 TTL = 900
 # Taskuary's Desktop-app OAuth client goes HERE once it exists in Google Cloud - empty until then, and this build has no Google
 # sign-in. Its secret is not one: Google documents an installed app's client secret as not confidential, and asks for it anyway.
@@ -42,11 +38,6 @@ _TOK, _LOCK = {}, threading.Lock()     # refresh token -> (access token, expires
 
 def redirect_uri(server: dict) -> str: return f"http://127.0.0.1:{server.get('port') or 7787}/api/google/calendar/callback"
 def connected(cfg: dict) -> bool: return bool((cfg or {}).get('google_refresh_token'))
-def has_settings(cfg: dict) -> bool:
-    """May this card's sign-in read the Gmail signature - a token whose scope is unknown (pasted by hand) is tried, not assumed out."""
-    g = str((cfg or {}).get('google_scope') or '').split()
-    return connected(cfg) and (not g or G_SETTINGS in g)
-def lacks_settings(cfg: dict) -> bool: return connected(cfg) and not has_settings(cfg)
 def builtin() -> tuple: return ((os.getenv('TASKUARY_GOOGLE_CLIENT_ID') or BUILTIN_CLIENT_ID).strip(),
                                 (os.getenv('TASKUARY_GOOGLE_CLIENT_SECRET') or BUILTIN_CLIENT_SECRET).strip())
 
@@ -116,8 +107,6 @@ def _exchange(store, server, f, code, error) -> tuple:
         return False, 'Google did not grant calendar access - the box for it was left unticked. Nothing was changed.'
     own = f['client'] == (cfg.get('google_client_id') or '', cfg.get('google_client_secret') or '')
     cfg.update({'google_refresh_token': j['refresh_token'], 'google_scope': granted, 'google_signin': 'own' if own else 'builtin'})
-    from .signatures import ACCOUNT
-    cfg.pop(ACCOUNT, None)                           # the next draft asks Gmail again, with what this sign-in may read
     store.save_connector({'ConnectorId': f['cid'], 'ConfigJson': json.dumps(cfg)}, 'owner')
     store.audit('connector', f['cid'], 'google_calendar', 'owner', detail={'scope': granted})
     with _LOCK: _TOK[j['refresh_token']] = (j.get('access_token') or '', time.time() + int(j.get('expires_in') or 3600))
@@ -126,7 +115,6 @@ def _exchange(store, server, f, code, error) -> tuple:
     from . import peoplesearch
     peoplesearch.forget()                                                                   # the next search asks the new contacts
     also = ' and searches its contacts when you pick someone to write to' if G_CONTACTS in granted.split() else ''
-    also += ', and uses your Gmail signature where you have set none here' if G_SETTINGS in granted.split() else ''
     return True, f"Taskuary now reads the Google calendar of {cfg.get('address') or 'this account'} - read-only{also}."
 
 

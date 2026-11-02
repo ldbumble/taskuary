@@ -131,16 +131,14 @@ Every email Taskuary writes for you ends with one signature, taken from the firs
 
 1. the signature on the mailbox's own card (Connections, the card that sends as it)
 2. **Settings → Replies → Email signature**
-3. the account's own signature: on a Gmail card signed in with Google, the one set in Gmail
-   (read with `gmail.settings.basic`); on any other mailbox, the closing lines your sent mail
-   plainly shares — most of at least six recent mails, more than one line, with your name in it
+3. the mailbox's own signature, read from your sent mail: the closing lines it plainly
+   shares — most of at least six recent mails, more than one line, with your name in it.
+   A less certain one is only offered in Settings for you to confirm
 4. the sign-off line in STYLE.md
 5. your name
 
-Microsoft offers no way to read an Outlook signature, so an Outlook mailbox uses its sent mail.
-The account's signature is read once a day and kept on the card. A Gmail card signed in with
-Google before Taskuary asked for the signature says so on the card; signing in with Google again
-adds it.
+Gmail's own signature setting is not read yet, and Microsoft offers no way to read an Outlook
+signature, so every mailbox uses its sent mail. It is read once a day and kept on the card.
 
 ## Chat
 

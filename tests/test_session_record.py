@@ -179,3 +179,52 @@ def test_sessions_come_newest_first_each_with_its_own_report(home):
     s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,CreatedAt) VALUES (?,?,?,?,?,?)", (tid, 'b', 'coding', 'two', 'devin', '2026-10-10 09:00:03'))
     recs = sessionrecord.record(s, tid)['sessions']
     assert [(r['sid'], r['report']['summary'], r['source']) for r in recs] == [('b', 'second pass', 'screen'), ('a', 'first pass', 'screen')]
+
+
+# ONE ACCOUNT, THE LATEST (the owner, 2026-11-02: "it conflicts with each other 10 times saying it was merged but it was not"). The agent's
+# `gh pr merge` was held (shellgate); its turn ended "not merged yet - held for your approval"; the owner approved, Taskuary ran the merge
+# and told the agent, whose next turn said it was merged. The page showed both turns' words as its result, side by side.
+HELD = 'PR #7 is not merged yet. Taskuary held the merge command and it is waiting for you to approve it on the task.'
+MERGED = 'After your approval PR #7 was squash-merged into main.'
+
+
+def merge_session(home, s, tid, ext, decided, second=True, last=None):
+    """Turn 1 tries the merge and says it is held; the owner answers at `decided`; turn 2 (when `second`) says it is merged."""
+    rows = [{'type': 'user', 'timestamp': '2026-11-02 12:40:00', 'message': {'content': 'Review northwind/ledger#7 and merge it if it is sound.'}},
+            {'type': 'assistant', 'timestamp': '2026-11-02 12:45:00', 'message': {'content': [{'type': 'tool_use', 'name': 'Bash', 'input': {'command': 'gh pr merge 7 --squash'}}]}},
+            {'type': 'assistant', 'timestamp': '2026-11-02 12:45:10', 'message': {'content': [{'type': 'text', 'text': HELD}]}}]
+    if second: rows += [{'type': 'user', 'timestamp': '2026-11-02 12:51:45', 'message': {'content': 'The owner approved it and Taskuary ran it. Carry on.'}},
+                        {'type': 'assistant', 'timestamp': '2026-11-02 12:52:00', 'message': {'content': [{'type': 'text', 'text': MERGED}]}}]
+    jsonl(home / '.claude' / 'projects' / 'C--work-ledger' / f'{ext}.jsonl', rows)
+    rid = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': "held before it ran, in the agent's shell",
+                        'DraftText': json.dumps({'action': 'shell_act', 'sid': 'pane-m', 'command': 'gh pr merge 7 --squash', 'what': 'merge a pull request'})})
+    if decided: s._exec("UPDATE review SET Status='approved', DecidedBy='owner', DecidedAt=? WHERE ReviewId=?", (decided, rid))
+    s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",
+            (tid, 'claude', 'agent', 'AGENT REPORT\nSummary: Reviewed PR #7 and squash-merged it after the owner approved.\n\nLAST MESSAGE\n'
+             + (last if last is not None else f'{HELD}\n\n{MERGED}'), '2026-11-02 12:52:30'))
+    s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,ExtId,CreatedAt) VALUES (?,?,?,?,?,?,?)",
+            (tid, 'pane-m', 'coding', 'screen', 'claude', ext, '2026-11-02 12:52:40'))
+    return sessionrecord.record(s, tid)
+
+
+def test_the_turn_after_the_owners_yes_is_the_one_account_and_the_held_turn_is_not_its_result(home):
+    s = MemoryStore(); tid = Factory(s).task(title='1 pull request on northwind/ledger')
+    rec = merge_session(home, s, tid, 'm1', '2026-11-02 12:51:39')
+    [r] = rec['sessions']
+    assert r['result'] == MERGED and HELD not in r['report']['last']
+    assert [x.get('stale', False) for x in r['steps'] if x['k'] == 'said'] == [True, False]       # still in the record, as earlier words
+    assert [(h['what'], h['state'], h['answered']) for h in rec['held']] == [('merge a pull request', 'done', '2026-11-02 12:51:39')]
+
+
+def test_a_second_turn_with_no_words_of_its_own_still_never_shows_the_held_turn(home):
+    s = MemoryStore(); tid = Factory(s).task(title='1 pull request on northwind/ledger')
+    [r] = merge_session(home, s, tid, 'm2', '2026-11-02 12:51:39', second=False, last=f'{HELD}\n\nReviewed and merged PR #7')['sessions']
+    assert r['result'] == 'Reviewed and merged PR #7'
+
+
+def test_a_step_still_held_is_said_held_and_nothing_is_moved_past(home):
+    s = MemoryStore(); tid = Factory(s).task(title='1 pull request on northwind/ledger')
+    rec = merge_session(home, s, tid, 'm3', None, second=False, last=HELD)
+    [r] = rec['sessions']
+    assert r['result'] == HELD and not any(x.get('stale') for x in r['steps'])
+    assert [(h['state'], h['answered']) for h in rec['held']] == [('held', '')]

@@ -425,6 +425,35 @@ def _nearest(sessions: list, at: str):
     return next((s for s in sessions if s['at'] >= at[:16]), None) or (sessions[-1] if sessions else None)
 
 
+def held(store, tid: int) -> list:
+    """TASKUARY'S OWN RECORD of every outward step it held on this task (shellgate, browsergate, agentdesktop): what the step was, and
+    whether it is still held, ran on the owner's yes, or was turned down - with when it was answered. What the agent SAID about a merge
+    or a push is its words; this is what happened (the owner, 2026-11-02: "saying it was merged but it was not", ten times over)."""
+    from .proposals import HELD_ACTS
+    out = []
+    for r in store._rows("SELECT Status, DraftText, CreatedAt, DecidedAt FROM review WHERE TaskId=? AND Kind='action' ORDER BY ReviewId", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if p.get('action') not in HELD_ACTS: continue
+        st = r.get('Status')
+        state = 'held' if st in ('pending', 'held') else 'done' if st in ('approved', 'edited') else 'declined'
+        out.append({'what': p.get('what') or _cut(p.get('command'), 120) or 'a step', 'state': state, 'at': _when(r.get('CreatedAt')),
+                    'answered': _when(r.get('DecidedAt')) if state != 'held' else ''})
+    return out
+
+
+def _supersede(s: dict, answered: str) -> None:
+    """ONE ACCOUNT, THE LATEST: what the session said before the owner answered a held step is a turn their answer moved past - "it is
+    held, waiting for you" beside "merged after your approval". Those lines stay in the record, marked `stale`, and are not its last words;
+    and its LAST MESSAGE (the wrap's own turn text, which can carry the held turn along) drops the paragraphs that only repeat them."""
+    old = []
+    for x in s['steps']:
+        if x['k'] == 'said' and x.get('at') and _local(x['at']) < answered: x['stale'] = True; old.append(_flat(x['text']))
+    rep = s.get('report') or {}
+    if old and rep.get('last'):
+        rep['last'] = '\n\n'.join(p for p in re.split(r'\n\s*\n', rep['last']) if not (_flat(p) and any(_flat(p) in o for o in old))).strip()
+
+
 def record(store, tid: int) -> dict:
     """Every session this task has had, oldest first, each in the one shape the Agent work card draws:
     who ran it, its result, what it decided and changed, its plan, the files it wrote, and every step."""
@@ -463,7 +492,9 @@ def record(store, tid: int) -> dict:
     for a in sorted((a for a in arts if a.get('Kind') == 'agent_result'), key=lambda a: str(a.get('CreatedAt') or '')):
         p = session_artifacts.confined(a.get('Path'))
         if p and (s := _nearest(sessions, a.get('CreatedAt'))):
-            s['answer'] = re.sub(r'^# .*\n+', '', p.read_text(encoding='utf-8'), count=1).strip()
+            s['answer'], s['answer_at'] = re.sub(r'^# .*\n+', '', p.read_text(encoding='utf-8'), count=1).strip(), _when(a.get('CreatedAt'))
+    hs = held(store, tid)
+    answered = max((h['answered'] for h in hs if h['answered']), default='')
     # what the floor refused a stranger's session (floor.py): the agent carries on, so the worker state never shows it -
     # without this the owner saw a refusal only if the pane was open when it happened
     refused = {}
@@ -472,13 +503,17 @@ def record(store, tid: int) -> dict:
     ext = {r.get('Sid'): r.get('ExtId') for r in rows}     # a headless run's events carry the CLI's id (hooks.run_sid)
     for s in sessions:
         if (got := refused.get(str(s['sid'])) or refused.get(str(ext.get(s['sid']) or ''))): s['refused'] = got
+        if answered: _supersede(s, answered)
         rep = s.get('report') or {}
-        said = next((x['text'] for x in reversed(s['steps']) if x['k'] == 'said'), '')
+        said = next((x['text'] for x in reversed(s['steps']) if x['k'] == 'said' and not x.get('stale')), '')
+        answer, answer_at = s.get('answer') or '', s.pop('answer_at', '')
+        if answered and answer_at < answered: answer = ''         # saved before the owner answered: the held turn's, moved past
         # THE RESULT IS ONE THING, the fullest account the session left, shown once: the answer it saved, else its last
         # message, else the last thing its own log has it saying - the agent's words beat a second model's 55-word summary,
         # which stays in the full record as the summary it is
-        s['result'] = s.get('answer') or rep.get('last') or said or rep.get('summary') or ''
+        s['result'] = answer or rep.get('last') or said or rep.get('summary') or ''
         s.update(summarise(s['steps']))
-    # ...and what ended it upstream (a merge, a close), as a status line ADDED to the record, never in place of it
+    # ...and what ended it upstream (a merge, a close), as a status line ADDED to the record, never in place of it; and every step
+    # Taskuary held, as Taskuary recorded it - the page says a held merge is held until Taskuary ran it, whatever the agent wrote
     from .channels import ended_line
-    return {'sessions': sessions[::-1], 'ended': ended_line(store, tid)}
+    return {'sessions': sessions[::-1], 'ended': ended_line(store, tid), 'held': hs}

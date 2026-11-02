@@ -86,7 +86,9 @@ export const sourceLabel = (src) => SOURCES[src] || src || "";
 // A RUN BY ITS LAST WORDS (the owner, 2026-10-15: "main thing is the last summary message from each model run"): its last message,
 // without the prompt box a screen-read log carries along with it ("▌▌ Work in a new folder..."), else its written summary
 // ...the last thing it SAID first: `result` is every message of the run strung together, and showed the whole run as its "last" one
-const isSaid = (x) => x.k === "said" && String(x.text || "").trim();
+// ...and never a line the record marks `stale`: said before the owner answered a step Taskuary held, a turn that answer moved past
+// (sessionrecord._supersede - "held, waiting for you" beside "merged after your approval", 2026-11-02)
+const isSaid = (x) => x.k === "said" && !x.stale && String(x.text || "").trim();
 // ...but a line it said and then WORKED PAST is progress, not its last words (2026-10-18: a run that ended by filing its reply
 // through a tool led with "Next I'm checking the run log" - its written result never repeated that line, so it is the answer)
 export const lastWords = (s) => {
@@ -145,6 +147,16 @@ export const resultLine = (s, said = "") => {
   // summary - never the chat it came out of): its last words past the paragraph `did` already said
   const paras = words.split(/\n\s*\n/), rest = (norm(paras[0]) === norm(did) ? paras.slice(1) : paras).join("\n\n").trim();
   return { did, found, rest: norm(rest) === norm(found) ? "" : rest };
+};
+// WHAT TASKUARY HELD, IN ITS OWN WORDS (the owner, 2026-11-02: "saying it was merged but it was not"): each outward step it held on the
+// task (sessionrecord.held), as Taskuary recorded it - still held, ran on the owner's yes, or turned down - whatever the agent wrote of
+// it. `waiting`: the steps still held, said before the result; `after`: the rest, said under it.
+const hhmm = (t) => String(t || "").slice(11, 16);
+export const heldLines = (held) => {
+  const line = (h) => h.state === "held" ? `Not done yet: Taskuary is holding "${h.what}" for your approval.`
+    : h.state === "done" ? `Taskuary ran "${h.what}" on your approval${h.answered ? ` at ${hhmm(h.answered)}` : ""}.`
+    : `Not done: "${h.what}" was turned down.`;
+  return { waiting: (held || []).filter((h) => h.state === "held").map(line), after: (held || []).filter((h) => h.state !== "held").map(line) };
 };
 // ...and WHAT IT MADE, once: the pages it showed or published, then the files it left in the task's outputs folder - a page shown FROM that
 // folder is the same file, named the same, and is listed once (as the page, which previews as it was shown)

@@ -177,3 +177,20 @@ test("the Result's summary: the write-up's summary and what it found, else its l
   const made = madeOnce([{ id: 1, name: "Pilot-plan.md", kind: "shown" }], [{ id: "o1", name: "pilot-plan.md", kind: "output" }, { id: "o2", name: "costs.xlsx", kind: "output" }]);
   assert.deepEqual(made.map((p) => p.id), [1, "o2"]);
 });
+
+// ONE ACCOUNT, THE LATEST (the owner, 2026-11-02): "held, waiting for you" was shown under "merged after your approval" as the rest of the
+// result. The record marks the held turn's words stale (sessionrecord._supersede), and what Taskuary held is said in Taskuary's words.
+test("a line said before the owner answered a held step is never the result, and the held step is said as Taskuary recorded it", async () => {
+  const { resultLine, heldLines } = await import("../src/agentRecord.js");
+  const held = "PR #7 is not merged yet. Taskuary held the merge - waiting for you to approve it.";
+  const s = { report: { summary: "Reviewed PR #7 and squash-merged it after the owner approved." }, result: "Reviewed and merged PR #7",
+    steps: [{ k: "said", text: held, stale: true }] };
+  const r = resultLine(s);
+  assert.equal(r.did, "Reviewed PR #7 and squash-merged it after the owner approved.");
+  assert.ok(!r.rest.includes("not merged yet"), r.rest);
+  assert.deepEqual(heldLines([{ what: "merge a pull request", state: "done", answered: "2026-11-02 12:51:39" }]),
+    { waiting: [], after: ['Taskuary ran "merge a pull request" on your approval at 12:51.'] });
+  assert.deepEqual(heldLines([{ what: "merge a pull request", state: "held", answered: "" }]).waiting,
+    ['Not done yet: Taskuary is holding "merge a pull request" for your approval.']);
+  assert.deepEqual(heldLines(undefined), { waiting: [], after: [] });
+});

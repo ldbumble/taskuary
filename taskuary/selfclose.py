@@ -434,7 +434,8 @@ def for_screen(text: str) -> str:
     """A progress line as the owner reads it: no ask marker, no attach lines, no done line, and no reply block - the reply is shown
     once, as the answer. A CLI's final text streams in as a progress line too, so the box drew the markers and the answer twice
     (2026-10-15); a done line left in kept the last paragraph from matching the answer, so it was drawn twice again (walk 2026-10-29)."""
-    return attach_markers(_DONE_LINE.sub('', _REPLY_RE.sub('', without_ask(text))))[0].strip()
+    # ...and no show line: its file is drawn under the answer, and left in it kept the answer drawn twice again (stress test 2026-11-02)
+    return show_markers(attach_markers(_DONE_LINE.sub('', _REPLY_RE.sub('', without_ask(text))))[0])[0].strip()
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)

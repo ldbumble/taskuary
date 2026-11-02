@@ -106,6 +106,43 @@ def fill(store, rows, key: str = 'jid', name: str = 'name') -> list:
     return rows
 
 
+def kept(store, rows, connector_id=None) -> list:
+    """`rows` (the live bridge's roster) and the chats Taskuary already knows that it did not list: every WhatsApp source on this
+    card, every chat a message was filed from, every person a name is kept for - and the kept groups too when the bridge listed none.
+
+    "We lost the names" (2026-11-02): the roster lives in the bridge's memory, so after a restart it held only what had happened
+    since - a group roster ask that timed out left no group at all, and a person who had not written was not there. The switched-on
+    chats then fell out of the card's list onto the raw-address line under it, and a search by name found nobody, though every one of
+    their names was kept here. A row added here is `kept`; its count and time are the saved messages', never a body."""
+    have = {r.get('jid') for r in rows}
+    stats = {}
+    try:
+        for r in store.chats(None):
+            cid = str(r.get('Cid') or '')
+            if (r.get('Channel') or '').lower() == 'whatsapp' and cid.startswith('whatsapp:'): stats[cid[9:]] = r
+    except Exception: pass
+    srcs = []
+    try: srcs = [str(s.get('Address') or '').strip() for s in store.list_sources(active_only=False) if s.get('Channel') == 'whatsapp'
+                 and (connector_id is None or not s.get('ConnectorId') or int(s['ConnectorId']) == int(connector_id))]
+    except Exception: pass
+    # a group the owner left is dropped from the live roster; one kept here only stands in while the bridge lists no group at all.
+    # A LID is the bridge's to map onto the number it lists, so a kept one would be the same person twice.
+    groups = any(r.get('group') for r in rows)
+    want = [*srcs, *(j for j in [*stats, *names(store)] if not j.endswith('@lid') and not (groups and is_group(j)))]
+    out = list(rows)
+    for jid in dict.fromkeys(want):
+        if jid in have or not is_jid(jid): continue
+        have.add(jid); st = stats.get(jid) or {}
+        out.append({'jid': jid, 'group': is_group(jid), 'name': '', 'n': int(st.get('N') or 0), 'last': str(st.get('Last') or '')[:16],
+                    'snippet': '', 'people': None, 'kept': True})
+    # ...and a live row the bridge has no count or time for yet (it restarted) shows the saved ones
+    for r in out:
+        st = stats.get(r.get('jid')) or {}
+        if not r.get('last') and st.get('Last'): r['last'] = str(st['Last'])[:16]
+        if not r.get('n') and st.get('N'): r['n'] = int(st['N'])
+    return sorted(out, key=lambda r: str(r.get('last') or ''), reverse=True)
+
+
 def _signed(store) -> dict:
     """{number or LID: the name they last signed a WhatsApp message with}, under both of a person's ids (the poller keeps the
     other one as the message's `alias`). Read once per fill, and only when a row has no better name."""

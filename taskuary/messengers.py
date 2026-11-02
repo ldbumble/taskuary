@@ -360,8 +360,11 @@ def wa_self_number(store, c) -> str:
     return number
 
 
-def wa_chats(c, store=None) -> list:
+def wa_chats(c, store=None, kept: bool = False) -> list:
     """Chats reachable through the paired account, newest first.
+
+    `kept` (the card's chat list): the chats Taskuary already knows that a just-restarted bridge does not list yet are added
+    (wanames.kept), so a switched-on chat keeps its named row and is found by its name across a restart.
 
     With a `store`, every row is named and given its `phone` (wanames.fill) and the names the roster gave are kept, so a
     picker can find a chat by its name or number - never only by its JID - even while the bridge is restarting.
@@ -393,7 +396,7 @@ def wa_chats(c, store=None) -> list:
         rows.sort(key=lambda r: (-r['last'], (r['name'] or r['jid']).lower()))
         for r in rows:
             r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
-        return _named(store, rows)
+        return _named(store, rows, c if kept else None)
     by = {}
     for m in out.get('messages', []):
         jid = m.get('jid') or ''
@@ -415,15 +418,16 @@ def wa_chats(c, store=None) -> list:
                    'last': m.get('last') or 0, 'snippet': '', 'people': m.get('people')}
     rows = sorted(by.values(), key=lambda r: -r['last'])
     for r in rows: r['last'] = datetime.fromtimestamp(r['last']).strftime('%Y-%m-%d %H:%M') if r['last'] else ''
-    return _named(store, rows)
+    return _named(store, rows, c if kept else None)
 
 
-def _named(store, rows) -> list:
+def _named(store, rows, kept_for=None) -> list:
     from . import wanames
     if store is None:
         for r in rows: r['phone'] = wanames.phone(r['jid'])
         return rows
     wanames.remember(store, rows)
+    if kept_for is not None: rows = wanames.kept(store, rows, kept_for.get('ConnectorId'))
     return wanames.fill(store, rows)
 
 

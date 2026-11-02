@@ -32,6 +32,36 @@ class DeskTests(unittest.TestCase):
             self.assertIn('Monthly AR Report', out['say'])
         self.assertTrue(self.s.get_source(self.sid)['Active'])                         # paused by nobody
 
+    def test_over_its_open_builder_run_and_pause_press_its_own_header(self):
+        # the owner, 2026-11-02: a report's builder wears its row's Run now and switch - "run it" there presses them, never the shelf
+        sw = 'Monthly AR Report on its clock'
+        view = {'area': 'reports', 'item': {'kind': 'report', 'id': self.sid}, 'fields': [{'key': 'sw', 'label': sw, 'kind': 'switch', 'value': 'on'}],
+                'buttons': [{'id': 'run_now', 'label': 'Run now'}, {'id': 'remove_report', 'label': 'Remove report'}]}
+        say = lambda kind, v=view: concierge.say(self.s, 'do it', llm=call(kind, title='ar report'), view=v)
+        out = say('report.run')
+        self.assertEqual(out['view_ops'], [{'op': 'press', 'button': 'run_now'}]); self.assertNotIn('open', out); self.assertIn('Run now', out['say'])
+        self.assertEqual(say('report.pause')['view_ops'], [{'op': 'set', 'field': 'sw', 'value': 'off'}])
+        self.assertIn('already on', say('report.resume')['say'])
+        # ...another report's page, or a run already going (Run now greyed), is the road it always was
+        self.assertEqual(say('report.run', {**view, 'item': {'kind': 'report', 'id': self.sid + 99}})['open'], '#report=reports')
+        self.assertEqual(say('report.run', {**view, 'buttons': [{'id': 'run_now', 'label': 'Run now', 'enabled': False}]})['open'], '#report=reports')
+        self.assertTrue(self.s.get_source(self.sid)['Active'])                         # the page's own handlers act, nothing here
+
+    def test_who_gets_it_rides_the_link_into_its_box_and_an_unsure_name_is_one_question(self):
+        out = self._turn('report.route', title='ar report', line='send', how='always', to='Gail@Northwind.example')
+        self.assertEqual(out['open'], f'#report={self.sid}&line=send&to=gail@northwind.example&how=always')
+        self.assertIn('gail@northwind.example in who gets it', out['say'])
+        self.assertIsNone(json.loads(self.s.get_source(self.sid)['ConfigJson']).get('deliver'))            # its Save is the owner's
+        # two people answer to the name: asked, never guessed - and nothing opened or set
+        two = [{'to': 'gmoreno@northwind.example', 'name': 'Gail Moreno'}, {'to': 'gail@vendor.example', 'name': 'Gail Park'}]
+        with mock.patch('taskuary.peoplesearch.known', return_value=two):
+            self.assertEqual(concierge.route_to(self.s, 'Gail')[0], '')
+            self.assertIn('Gail Park (gail@vendor.example)', concierge.route_to(self.s, 'Gail')[1])
+            self.assertEqual(concierge.route_to(self.s, 'gail moreno'), ('gmoreno@northwind.example', ''))
+            out = self._turn('report.route', title='ar report', line='send', how='always', to='Gail')
+        self.assertNotIn('open', out)
+        self.assertIn('Nobody called Zed', concierge.route_to(self.s, 'Zed')[1])
+
     def test_a_setting_opens_its_group_with_the_knob_named(self):
         out = self._turn('setting.set', label='intent triage', value='off')
         self.assertTrue(out['open'].startswith('#settings=config&group=How%20mail%20is%20sorted&key=intent_classify_enabled'), out['open'])
@@ -114,6 +144,13 @@ class ActsTests(unittest.TestCase):
         self.assertIsNone(self._turn('report.route', title='ar report', line='timeline', how='sometimes').get('proposal'))   # not a way a line goes
         concierge.run_proposal(self.s, self._turn('report.edit', title='ar report', config={'daily_at': '08:30'})['proposal'])
         self.assertEqual(json.loads(self.s.get_source(self.sid)['ConfigJson'])['daily_at'], '08:30')
+
+    def test_route_with_who_fills_the_cards_to_box(self):
+        done = concierge.run_proposal(self.s, self._turn('report.route', title='ar report', line='send', how='always', to='gail@northwind.example')['proposal'])
+        cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
+        self.assertEqual(cfg['deliver'], {'gate': 'review', 'channel': 'email', 'to': 'gail@northwind.example'})
+        self.assertEqual(cfg['route']['send'], {'how': 'always'})
+        self.assertIn('to gail@northwind.example', concierge.receipt(self.s, done))
 
     def test_delete_waits_for_the_yes_and_then_deletes(self):
         out = self._turn('report.delete', title='ar report')

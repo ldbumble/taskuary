@@ -659,8 +659,8 @@ AREA_CONNECTIONS = [
 CASES += AREA_CONNECTIONS
 
 # REPORTS, DASHBOARDS AND ROUTINES, ON THEIR OWN PAGES (the everyday-asks audit, 2026-11-02): the shelf's rows wear Run now, Edit and a
-# switch, each named for its report (ReportsView row); a report's editor has no Run now and no switch - those stay on its row - while a
-# routine's page and a dashboard's carry their own Run now
+# switch, each named for its report (ReportsView row); a routine's page and a dashboard's carry their own Run now - and since 2026-11-02 a
+# report's builder too, its row's Run now and switch in its header (the owner): an act on the report whose page is up is pressed there
 AP, HC, EOD = 'AP ageing over 30 days, weekly', 'Headcount by site, nightly', 'End of day checkup'
 def _slug(t): return re.sub(r'[^a-z0-9]+', '_', t.lower()).strip('_')          # the page's own ids for what has no id (pageView.js slug)
 def _row(t): return [{'id': f'run_now_{_slug(t)}', 'label': f'Run now: {t}'}, {'id': f'edit_{_slug(t)}', 'label': f'Edit: {t}'}]
@@ -669,8 +669,9 @@ REPORTSHELF = {'area': 'reports', 'title': 'Reports', 'fields': [{'key': 'descri
                'buttons': [{'id': 'run_due_now', 'label': 'Run due now'}, {'id': 'new_report', 'label': '+ New report'}] + _row(AP) + _row(HC) + _row(EOD)}
 REPORTPAGE = {'area': 'reports', 'title': f'the report "{AP}" (Reports), its editor open', 'item': {'kind': 'report', 'id': 5},
               'fields': [{'key': 'title_the_headline_each_run_shows', 'label': 'title — the headline each run shows', 'value': AP},
-                         {'key': 'describe', 'label': 'Describe the report you want', 'value': ''}],
-              'buttons': [{'id': 'remove_report', 'label': 'Remove report'}, {'id': 'pipeline', 'label': 'Pipeline'},
+                         {'key': 'describe', 'label': 'Describe the report you want', 'value': ''},
+                         {'key': _slug(f'{AP} on its clock'), 'label': f'{AP} on its clock', 'kind': 'switch', 'value': 'on'}],
+              'buttons': [{'id': 'run_now', 'label': 'Run now'}, {'id': 'remove_report', 'label': 'Remove report'}, {'id': 'pipeline', 'label': 'Pipeline'},
                           {'id': 'test_preview', 'label': 'Test & preview'}, {'id': 'test_source', 'label': 'Test source'},
                           {'id': 'preview_pipeline', 'label': 'Preview pipeline'}, {'id': 'continue', 'label': 'Continue'},
                           {'id': 'schedule_save', 'label': 'Schedule & save'}],
@@ -692,10 +693,12 @@ AREA_REPORTS = [
       tools=('words',), view=REPORTSHELF, freq=3, note="the describe-it is the composer's field: its draft lands in the builder, nothing saved"),
     Q('reports', 'which of my reports failed?', None, [c('reports.list'), 'None failed; three have never run.'], 'read:reports.list', view=REPORTSHELF, freq=3),
     Q('reports', 'edit the end of day one', None, [v(op='press', button=f'Edit: {EOD}')], f'view:press:edit_{_slug(EOD)}', tools=('words',), view=REPORTSHELF, freq=2),
-    # ── one report's editor open: no Run now and no switch here - the road brings up its row on the shelf, never this same page ──
-    Q('reports', 'run it', None, c('report.run', source_id=5), 'open:#report=reports', view=REPORTPAGE, freq=4,
-      note="a report's editor has no Run now: the shelf, where its row has one"),
-    Q('reports', 'pasue this reprot', None, c('report.pause', title='AP ageing'), 'open:#report=reports', view=REPORTPAGE, freq=2, note='typos; the switch is on its row'),
+    # ── one report's builder open: its header's Run now and switch (the owner, 2026-11-02) - the road presses them there, as the view would ──
+    Q('reports', 'run it', None, c('report.run', source_id=5), 'view:press:run_now', view=REPORTPAGE, freq=4,
+      note="the builder's own Run now, pressed - never the shelf a page away"),
+    Q('reports', 'run this report now', None, [v(op='press', button='Run now')], 'view:press:run_now', tools=('words',), view=REPORTPAGE, freq=3),
+    Q('reports', 'pasue this reprot', None, c('report.pause', title='AP ageing'), f'view:set:{_slug(AP)}_on_its_clock', view=REPORTPAGE, freq=2,
+      note='typos; the switch in its header'),
     Q('reports', 'run the headcount report now', None, c('report.run', title='Headcount'), 'open:#report=reports', freq=3),
     Q('reports', 'test the source', None, [v(op='press', button='Test source')], 'view:press:test_source', tools=('words',), view=REPORTPAGE, freq=3),
     Q('reports', 'preview it', None, [v(op='press', button='Preview pipeline')], 'view:press:preview_pipeline', tools=('words',), view=REPORTPAGE, freq=3),
@@ -707,8 +710,16 @@ AREA_REPORTS = [
       note='kept 30 days under Recently deleted'),
     Q('reports', 'make it run every monday at 8', None, c('report.edit', title='AP ageing', config={'cron': '0 8 * * 1'}), 'open:#report=5', view=REPORTPAGE,
       freq=3, note='its schedule is step 3 of this page'),
-    Q('reports', 'email it to gail@northwind.example every time it runs', None, c('report.route', title='AP ageing', line='send', how='always'),
-      'open:#report=5', view=REPORTPAGE, freq=2, note="its route card is on this page; a send is never set up from the chat"),
+    # ...and who gets it, in its route card's "to - who gets it" box for the owner's Save: an address as typed, a name one person answers to
+    Q('reports', 'email it to gail@northwind.example every time it runs', None,
+      c('report.route', title='AP ageing', line='send', how='always', to='gail@northwind.example'),
+      'open:#report=5&line=send&to=gail@northwind.example&how=always', view=REPORTPAGE, freq=2, note="a send is never set up from the chat: its Save"),
+    Q('reports', 'send this report to Gail every run', None, c('report.route', title='AP ageing', line='send', how='always', to='Gail'),
+      'open:#report=5&line=send&to=gmoreno@northwind.example', view=REPORTPAGE, freq=2, note='one Gail has written: her address'),
+    # ...and a name nobody answers to is one question back, never a guessed address
+    Q('reports', 'send the AP ageing to Paula every run', None,
+      [c('report.route', title='AP ageing', line='send', how='always', to='Paula'), "What is Paula's address? Nobody by that name has written here."],
+      'words', view=REPORTPAGE, freq=1, note='the miss says ask one question; nothing is set'),
     Q('reports', 'what did it find last time?', None, [c('report.read', title='AP ageing'), 'It has never run.'], 'read:report.read', view=REPORTPAGE, freq=3),
     Q('reports', 'show me every run of the end of day checkup', None, [c('report.read', title='End of day'), 'It has not run yet.'], 'read:report.read', freq=2),
     # ── dashboards ──
@@ -848,7 +859,7 @@ NEWMEET = {'area': 'new', 'title': '', 'text': 'What are we starting? Meeting WI
                          {'id': 'find_times', 'label': 'Find times'}, {'id': 'tue_3_nov_10_00', 'label': 'Tue 3 Nov, 10:00'},
                          {'id': 'use_this_time', 'label': 'Use this time', 'enabled': False}, {'id': 'cancel', 'label': 'Cancel'}]}
 NEWREPORT = {'area': 'new', 'title': '', 'text': 'What are we starting? Report Set up with AI Set it up by hand',
-             'fields': [], 'buttons': TABS + [{'id': 'set_up_with_ai', 'label': 'Set up with AI'}, {'id': 'set_it_up_by_hand', 'label': 'Set it up by hand'},
+             'fields': [], 'buttons': TABS + [{'id': 'set_it_up_by_hand', 'label': 'Set it up by hand'},
                                                {'id': 'cancel', 'label': 'Cancel'}]}
 NEWNOTE = {'area': 'new', 'title': '', 'text': 'What are we starting? Note to self COME BACK TO IT',
            'fields': [{'key': 'about', 'label': 'What do you want to remember', 'kind': 'text', 'value': 'call the bank'},

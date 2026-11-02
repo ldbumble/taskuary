@@ -206,7 +206,7 @@ PURPOSE = {
                                  'a workflow starts as its task at once (the ref comes back)'),
     'report.pause':             'stop a report or workflow running on its clock - `title`',
     'report.resume':            'put a paused report or workflow back on its clock - `title`',
-    'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule)',
+    'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule), `to` (send or alert: who gets it - an address, or a name as the owner said it; not sure who: ask them, never guess)',
     'report.edit':              'change a report\'s configuration - `title`, `config`: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)',
     'report.delete':            'remove a report or workflow - `title` (kept 30 days under Recently deleted)',
     'setting.set':              'change one setting - `setting` (its key, or `label`: part of its name) and `value`; the schema says what it takes',
@@ -518,7 +518,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'pipe.remove': 'select, learn?', 'agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?'}
 

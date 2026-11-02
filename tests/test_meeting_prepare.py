@@ -69,4 +69,36 @@ class PrepareTests(unittest.TestCase):
         self.assertNotIn('prepare', concierge.AGENT_STARTS[:2])                  # the phone's hand-off box is for Send to agent alone
 
 
+# SEND TO AGENT ON A MEETING (the owner, 2026-11-02: "buttons to send to agent so i can prep for it ... we have way when we hit send to agent to
+# add prompt"): beside Prepare on the row, its box asks what to get ready, and the meeting rides along under the owner's words
+MEETING = {'key': 'meeting:2026-11-03T10:00:Ledger cut-over plan', 'kind': 'meeting', 'lane': 'time', 'title': 'Ledger cut-over plan',
+           'event': {**EVENT, 'start': '2026-11-03T10:00:00', 'end': '2026-11-03T10:30:00', 'join': 'https://meet.northwind.example/cutover'}}
+
+class SendToAgentTests(unittest.TestCase):
+    def setUp(self):
+        # a general hand-off opens its chat session and sends the brief as the first turn (concierge.handoff_task) - no AI here, so a stand-in
+        self.session = mock.patch('taskuary.general.start_session').start(); self.addCleanup(mock.patch.stopall)
+        mock.patch('taskuary.funnel.next_item', return_value=MEETING).start()
+
+    def test_the_row_offers_prepare_and_send_to_agent(self):
+        verbs = [b['verb'] for b in concierge.row_buttons(server.store, MEETING)]
+        self.assertEqual([v for v in verbs if v in ('prepare', 'regular_agent')], ['prepare', 'regular_agent'])      # Next is the walk bar's
+
+    def test_the_boxs_words_lead_and_the_meeting_rides_under_them(self):
+        prop = concierge.propose_direct(server.store, 'regular_agent', MEETING['key'], 'Pull the open issues with Gail and Paula.',
+                                        table=True, exact=True, press=True)
+        self.assertTrue(prop.get('auto'), prop)                                  # the box's Start was the press: no card to confirm
+        out = concierge.run_proposal(server.store, prop)
+        self.assertEqual(out.get('status'), 'done', out)
+        t = server.store.get_task(out['outcome']['taskId'])
+        self.assertTrue(t['Summary'].startswith('Pull the open issues with Gail and Paula.'), t['Summary'][:200])
+        for said in ('Ledger cut-over plan', 'Erin Blake, Gail Moreno', 'Teams', 'meet.northwind.example/cutover', 'Who moves which entities first'):
+            self.assertIn(said, t['Summary'])
+        self.assertEqual(t['Kind'], 'general'); self.assertEqual(self.session.call_args.args[1], t['TaskId'])           # ...and an agent is on it
+
+    def test_an_empty_box_hands_over_the_meeting_alone(self):
+        out = concierge.run_proposal(server.store, concierge.propose_direct(server.store, 'regular_agent', MEETING['key'], '', table=True, exact=True, press=True))
+        self.assertIn('Ledger cut-over plan', server.store.get_task(out['outcome']['taskId'])['Summary'])
+
+
 if __name__ == '__main__': unittest.main()

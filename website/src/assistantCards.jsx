@@ -817,14 +817,43 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
 
 // a meeting inside two hours: when, who, what the invite says - Join when it has a link. No "Getting prepped" line (the owner,
 // 2026-10-02); Prepare is the row's button beside Next (concierge.CHIPS, 2026-10-25), never a second one on the card
-export function MeetingCard({ card }) {
+// ...ON THE TABLE, IN A TASK'S THREE SECTIONS like everything else on the rail (ItemSections; the owner, 2026-11-02: "this should be in same
+// view as all other tasks with buttons to send to agent so i can prep for it"): Came from open on the invite - when, who, where, what it
+// says - Agent and Close out the slim tabs. Its moves are the row's own (Prepare, Send to agent, Next) on its panes; Send to agent opens
+// the one agent box every item opens (RunForm.AgentAsk, AssistantView askAgent) and the meeting rides along under the owner's words
+export function MeetingCard({ card, table = null }) {
   const e = card.event || {};
+  const join = e.join ? <Button size="small" variant="contained" disableElevation component="a" href={e.join} target="_blank" rel="noreferrer" sx={primary}>Join</Button> : null;
+  if (table != null) {
+    const when = [e.start && fmtDateTime(e.start), e.end && fmtTime12(e.end)].filter(Boolean).join(" - "), who = (e.who || []).filter(Boolean);
+    return <ItemSections kind="meeting" itemKey={card.key} label="Meeting" height={table} about="from" lays title={e.subject || card.title}
+      aside={<><SourceMark item={card} size={13} />{e.start && `coming up · ${age(e.start)}`}</>}
+      sections={[
+        { key: "from", n: 1, name: STEPS[0].name, lines: [e.subject || card.title, when, who.length ? `with ${who.slice(0, 3).join(", ")}` : ""].filter(Boolean),
+          foot: "✓ On your calendar",
+          body: <ItemPart data-tq-meeting-from="">
+            <Facts rows={[["Meeting", <b key="s">{e.subject || card.title}</b>], ["When", when], ["With", who.join(", ")], ["Where", e.where], ["Organizer", e.organizer],
+              ["Link", e.join && <a key="j" href={e.join} target="_blank" rel="noreferrer">{e.join}</a>]]} />
+            {e.about && <div className="tq-card-excerpt" data-tq-meeting-about="">{e.about}</div>}
+          </ItemPart> },
+        { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
+          body: <ItemPart data-tq-meeting-agent="">
+            <div className="tq-thr-h"><b>No agent yet</b></div>
+            <div className="tq-thr-did muted">Nobody is preparing for this.</div>
+            <div className="tq-item-note">{`${btn("regular_agent")} asks what you want first - it gets the meeting: when, who, where and what the invite says. `
+              + `${btn("prepare")} starts one at once on its people and subject through your saved mail.`}</div>
+          </ItemPart> },
+        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", join ? "Join opens the meeting link" : "Nothing to decide"],
+          body: <ItemPart data-tq-meeting-close="">
+            <RowMoves on="on its panes" />
+            <Foot verb={join} then={join ? <><b>Join</b> opens the meeting link.</> : null} />
+          </ItemPart> }]} />;
+  }
   return (
     <CardShell card={card} kicker={`coming up · ${age(e.start)}`} title={e.subject || card.title}
       sub={[e.who?.length ? `with ${e.who.slice(0, 6).join(", ")}` : "", e.where].filter(Boolean).join(" · ")}>
       {e.about && <div className="tq-card-excerpt">{e.about}</div>}
-      <Foot verb={e.join ? <Button size="small" variant="contained" disableElevation component="a" href={e.join} target="_blank" rel="noreferrer" sx={primary}>Join</Button> : null}
-        then={e.join ? <><b>Join</b> opens the meeting link.</> : null} />
+      <Foot verb={join} then={join ? <><b>Join</b> opens the meeting link.</> : null} />
     </CardShell>
   );
 }

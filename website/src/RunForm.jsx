@@ -11,11 +11,14 @@ import { AgentPicker, MicButton, TaskuaryMark, useAgents } from "./ui.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { cannotStart, useCapabilities } from "./capabilities.js";
 import { choice, label as btn } from "./buttons.js";
+import { useViewExtras } from "./pageView.js";
 import { BORDER, FAINT, INK } from "./theme.jsx";
 
 // the box's own placeholder: what the owner is asked, the same words on every door
 export const ASK_WHAT = "What should it do? What about it is the issue? - optional; paste or drop a picture too";
 export const ASK_REPORT = "What should it do? Which part of the report should change? - optional; paste or drop a picture too";
+// ...and on a meeting, what to get ready (the owner, 2026-11-02: "send to agent so i can prep for it")
+export const ASK_MEETING = "What should it get ready? e.g. pull the open issues with these people - optional; paste or drop a picture too";
 
 // The box itself, drawn the same wherever it opens. `onValue` takes a value or an updater: the mic's words land after the press,
 // so they are appended to what is in the box THEN, not to what was there when recording started.
@@ -46,7 +49,9 @@ export function RunForm({ title, picker, note, value, onValue, pics, placeholder
 // THE BOX ON AN ITEM WITH NO TASK PAGE - an email, an fyi, a report run on the walk. It holds its own answers and hands them to
 // `onStart({ verb, kind, text, agent, brain, pick, model })`; the caller runs the start through its own road and the box closes
 // when that resolves. `coding`: the kind the door asked for - the coding agent only where a coding tool is connected.
-export function AgentAsk({ coding: wantCoding = false, title, what, placeholder = ASK_WHAT, onStart, onClose, inline = false }) {
+// `view`: { item, title } - the box is the page the pop-up Assistant reads while it is open (pageView.js): its words box and its Send to agent,
+// so "prep me for this meeting: pull the open issues with these people" fills it and starts it as the owner would (the owner, 2026-11-02)
+export function AgentAsk({ coding: wantCoding = false, title, what, placeholder = ASK_WHAT, onStart, onClose, inline = false, view = null }) {
   const caps = useCapabilities(), canCode = !!caps.coding;
   const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
   const [general, setGeneral] = useState(!(wantCoding && canCode));
@@ -57,6 +62,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const why = cannotStart(caps, { coding, read: agentsRead, brains: generalBrains, codingReady });
   const box = useRef(null);
+  useViewExtras(box, view ? { item: view.item, title: view.title } : {});
   useEffect(() => { box.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, []);
   const swap = (g) => { setGeneral(g); setRun({ agent: "", brain: "", pick: "", model: "" }); };
   const start = async () => {
@@ -70,7 +76,7 @@ export function AgentAsk({ coding: wantCoding = false, title, what, placeholder 
   };
   const verb = coding ? "coding_agent" : "regular_agent";
   return (
-    <Box ref={box} data-tq-agent-ask="" sx={inline ? { p: 1.5, border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb" } : {}}>
+    <Box ref={box} data-tq-agent-ask="" data-tq-view={view ? "agent" : undefined} data-tq-view-label={view?.title} sx={inline ? { p: 1.5, border: "1px solid #d5d0c7", borderRadius: "12px", bgcolor: "#fffdfb" } : {}}>
       <RunForm title={title || btn(verb)} value={text} onValue={setText} pics={pics} autoFocus placeholder={placeholder}
         sx={inline ? { mt: 0, pt: 0, borderTop: 0 } : {}}
         note={what}

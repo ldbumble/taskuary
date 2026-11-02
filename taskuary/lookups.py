@@ -14,7 +14,13 @@ from .timewords import plural
 NL = chr(10)
 ACTIVE = ('open', 'in_progress', 'waiting')
 # the help pages the website is built from; present in a checkout, absent from a wheel
-SITE_DOCS = Path(__file__).resolve().parent.parent / 'docs' / 'site'
+# ...so a wheel and the container carry a copy beside the package (publish.yml and the Dockerfile copy docs/site/*.md into taskuary/help):
+# a `pip install taskuary` Assistant searched no help and no What's new at all - every "how do I" and "what changed" about the app
+# answered from the owner's own docs alone (2026-11-02)
+def help_dir(pkg: Path = Path(__file__).resolve().parent) -> Path:
+    site = pkg.parent / 'docs' / 'site'
+    return site if site.is_dir() else pkg / 'help'
+SITE_DOCS = help_dir()
 _H2 = re.compile(r'^## ', re.M)
 
 def _cut(s, n):

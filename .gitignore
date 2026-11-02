@@ -23,6 +23,9 @@ taskuary/whatsapp/wa-media/
 taskuary/whatsapp/wa-bridge.log
 taskuary/whatsapp/package-lock.json
 
+# the help pages' copy a wheel or the container carries (publish.yml, Dockerfile) - docs/site is the one source
+taskuary/help/
+
 # editor droppings and scratch files - a vim swap once leaked a username into the repo
 *.swp
 *.swo

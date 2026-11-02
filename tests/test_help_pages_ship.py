@@ -11,6 +11,19 @@ def test_the_exe_carries_the_help_pages_where_docs_search_looks():
     assert lookups.SITE_DOCS.relative_to(ROOT).as_posix() == 'docs/site' and any(lookups.SITE_DOCS.glob('*.md'))
 
 
+def test_the_wheel_and_the_container_carry_them_where_an_install_looks():
+    """A `pip install taskuary` has no docs/site beside the package: its Assistant searched no help and no What's new (2026-11-02).
+    publish.yml and the Dockerfile copy the pages into taskuary/help, the wheel's package data names them, and lookups falls back there."""
+    import tempfile
+    pub, dock = (ROOT / '.github' / 'workflows' / 'publish.yml').read_text(encoding='utf-8'), (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+    assert 'cp docs/site/*.md taskuary/help/' in pub and pub.index('cp docs/site/*.md') < pub.index('pipx run build') and "'help pages'" in pub
+    assert 'COPY docs/site/*.md ./taskuary/help/' in dock and '!docs/site/*.md' in (ROOT / '.dockerignore').read_text(encoding='utf-8')
+    assert '"help/*.md"' in (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    site_packages = Path(tempfile.mkdtemp())          # an install: the package, and no docs/site beside it
+    assert lookups.help_dir(site_packages / 'taskuary') == site_packages / 'taskuary' / 'help'
+    assert lookups.help_dir(ROOT / 'taskuary') == ROOT / 'docs' / 'site'
+
+
 def test_the_assistant_finds_what_a_release_changed():
     import importlib.util
     from taskuary.store import MemoryStore

@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.21 - 2026-11-02
+
+- The Assistant gives a file an agent made by its link, never a path on disk
+- A stopped agent's Result names its file, not the path into the outputs folder
+- A folded Agent pane says the file's name, not '**C:\Users\...' with its bold marks
+- The Advisor looks out for the owner's job, not only the app
+- Every download is the installer, and a single-file install updates into the installed app
+
 ## 0.3.10.20 - 2026-11-02
 
 - Windows installer: TaskuarySetup.exe, built and signed with every release

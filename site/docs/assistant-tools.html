@@ -141,7 +141,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>new</strong></td>
 <td>new work with no task yet</td>
-<td>task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text)</td>
+<td>task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text)</td>
 </tr>
 <tr>
 <td><strong>pipe</strong></td>
@@ -436,13 +436,13 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>kind</code> - coding | general | task</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="meeting-new"><code>meeting.new</code><a class="anchor" href="#meeting-new" aria-label="Link to this section">#</a></h3>
-<p>Set up a meeting or call (&quot;a meeting with Gail about the budget friday&quot;). On a task whose thread asks for a time it lights that task&#39;s Find a time; with none it brings up New → Meeting filled in, whose Find times reads the calendars; with no calendar, the card that connects one. Nothing goes out before the owner&#39;s Send. Never an agent&#39;s job.</p>
+<p>Set up a meeting or call (&quot;a meeting with Gail about the budget friday&quot;) - 15, 30, 45 or 60 (&quot;an hour&quot; is 60) - else 30, <code>ref</code> optional: the task it is about (TQ-0123) when it is not the one on the table. On a task whose thread asks for a time it lights that task&#39;s Find a time; with none it brings up New → Meeting filled in, whose Find times reads the calendars; with no calendar, the card that connects one. Nothing goes out before the owner&#39;s Send. Never an agent&#39;s job.</p>
 <ul>
 <li><code>who</code> (optional) - the names or addresses it is with</li>
 <li><code>about</code> (optional) - its subject</li>
-<li><code>when</code> (optional) - the day they said as YYYY-MM-DD, or this_week / next_week</li>
-<li><code>minutes</code> (optional) - 15, 30, 45 or 60</li>
-<li><code>ref</code> (optional) - the task it is about (TQ-0123) when it is not the one on the table</li>
+<li><code>when</code> (optional) - the day they said as YYYY-MM-DD (a weekday they name - &quot;Thursday&quot; - is its next date), or this_week / next_week</li>
+<li><code>minutes</code> (optional) - the length they said</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-setup"><code>task.setup</code><a class="anchor" href="#task-setup" aria-label="Link to this section">#</a></h3>
 <p>Open a walk-through with the assistant, for a set-up that needs digging first.</p>

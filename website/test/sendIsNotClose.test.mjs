@@ -62,7 +62,7 @@ test("no screen says a send closes the task", () => {
     const s = read(f);
     assert.doesNotMatch(s, /Send & close|Copy & close|Sending it closes the task|approving (it|them) closes the task|send and close out/, f);
   }
-  assert.match(read("ReviewDecision.jsx"), /`\$\{sendWord\} sends this to \$\{replyContext\(r\)\} - \$\{stays\}\.`/);
+  assert.match(read("ReviewDecision.jsx"), /`\$\{sendWord\} sends this to \$\{replyContext\(r\)\}\$\{answered \? " as a second reply" : ""\} - \$\{stays\}\.`/);
 });
 
 test("whether a draft can leave is asked of capabilities.js, with the row's own CanSend kept for what it knows more", () => {

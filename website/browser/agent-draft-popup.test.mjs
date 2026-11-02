@@ -4,15 +4,15 @@ import test from "node:test";
 
 import { startHarness } from "./harness.mjs";
 
-/* THE AGENT'S DRAFT IS APPROVED WHERE THE AGENT IS (the owner, 2026-11-02: "when we ask the agent to ask the sender, we should have the
-   approve right there instead of having to go to the Close out tab ... for a CLI agent it should be a POP-UP. A general agent should show it
-   where we ask questions, in the bottom space"). A CLI agent saves a message for the sender with `taskuary --reply`: a pop-up over its
-   terminal's corner, the terminal's size untouched; Later hides it, opening the task again brings it back; its Send is Close out's Send and
-   clears Close out too. A general agent's draft is a card at the foot of its chat. Invented people only. */
+/* THE AGENT'S DRAFT IS SAID WHERE THE AGENT IS AND SENT FROM CLOSE OUT (the owner, 2026-11-02: "in agent we should just say 'agent drafted a
+   message' and take you to the Close out screen"). A CLI agent saves a message for the sender with `taskuary --reply`: a small notice in its
+   terminal's corner, the terminal's size untouched, and no draft or Send in the agent's pane - its one press opens Close out at the draft,
+   whose Send sends it and takes the notice away. A general agent's notice stands at the foot of its chat; and a draft the owner already
+   answered says so in Close out, its Send a second reply. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const WORDS = "Hi - before I file it, could you confirm the purchase order number for invoice 88213?";
 
-test("a CLI agent's draft pops up over its terminal without resizing it; Later hides it; Send sends it and clears Close out", { timeout: 300000 }, async (t) => {
+test("a CLI agent's draft is a notice over its terminal, never a second draft; its press opens Close out, whose Send clears it", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -33,80 +33,62 @@ test("a CLI agent's draft pops up over its terminal without resizing it; Later h
     page.fixtureRequestGuard(req);
   });
   const tasks = (await (await api("/api/tasks")).json()).data;
-  const inv = tasks.find((x) => /^Invoice 88213/.test(x.Title)), other = tasks.find((x) => x.TaskId !== inv?.TaskId && x.Status === "open");
-  assert.ok(inv && other, "the demo's invoice task, and another to look at");
+  const inv = tasks.find((x) => /^Invoice 88213/.test(x.Title));
+  assert.ok(inv, "the demo's invoice task");
   assert.equal((await api("/api/fixture/task/live-agent", { task_id: inv.TaskId })).status, 200, "a CLI agent live on it");
-  const made = await (await api("/api/fixture/task/agent-draft", { task_id: inv.TaskId, text: WORDS, agent: "Claude Code" })).json();
-  assert.ok(made.reviewId, `the agent's draft: ${JSON.stringify(made)}`);
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
   await page.evaluate((id) => { location.hash = `task=${id}`; }, inv.TaskId);
-  const pageSel = `[data-tq-task-page="${inv.TaskId}"]`, pop = `${pageSel} [data-tq-agent-popup]`;
+  const pageSel = `[data-tq-task-page="${inv.TaskId}"]`, note = `${pageSel} [data-tq-agent-notice=popup]`;
   await page.waitForSelector(`${pageSel} [data-tq-term-box] .xterm`, { timeout: 20000 });
-  await page.waitForSelector(pop, { timeout: 20000 });
-  await sleep(600);
+  await sleep(800);
   const rects = () => page.evaluate((sel) => {
-    const box = document.querySelector(`${sel} [data-tq-term-box]`), term = box.querySelector(".xterm"), p = box.querySelector("[data-tq-agent-popup]");
+    const box = document.querySelector(`${sel} [data-tq-term-box]`), n = box.querySelector("[data-tq-agent-notice]");
     const r = (el) => { const b = el?.getBoundingClientRect(); return b ? { x: b.x, y: b.y, w: b.width, h: b.height } : null; };
-    return { box: r(box), term: r(term), pop: r(p), cols: term.querySelector(".xterm-rows")?.children.length || 0 };
+    return { box: r(box), term: r(box.querySelector(".xterm")), note: r(n) };
   }, pageSel);
-  const withPop = await rects();
-  if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: path.join(process.env.TASKUARY_SHOTS, "agent-draft-popup.png") });
-  // ...a small card over the terminal's corner, inside its box - not a modal over the page
-  assert.ok(withPop.pop.w <= 410 && withPop.pop.x + withPop.pop.w <= withPop.box.x + withPop.box.w + 1 && withPop.pop.y >= withPop.box.y - 1,
-    `the pop-up lies over the terminal's corner: ${JSON.stringify(withPop)}`);
-  assert.ok(withPop.pop.w < withPop.box.w * 0.75, `it leaves the terminal most of its width: ${JSON.stringify(withPop)}`);
-  const said = await page.$eval(pop, (el) => ({ text: el.innerText, draft: el.querySelector("textarea[data-tq-draft], textarea")?.value || "" }));
-  assert.match(said.text, /Claude Code drafted a message/);
-  assert.match(said.text, /\bTo\b/, `who it goes to: ${said.text}`);
-  assert.ok(said.draft.includes(WORDS), `the draft, editable: ${said.draft}`);
-  assert.match(said.text, /stays open while the agent is working/, `Close out's own line under its Send: ${said.text}`);
-  // ...the Assistant is told of it by name: its Send an outward send, its box told apart from Close out's
+  const before = await rects();
+  // ...the agent saves its message mid-session: the notice comes up on its own
+  const made = await (await api("/api/fixture/task/agent-draft", { task_id: inv.TaskId, text: WORDS, agent: "Claude Code" })).json();
+  assert.ok(made.reviewId, `the agent's draft: ${JSON.stringify(made)}`);
+  await page.waitForSelector(note, { timeout: 20000 });
+  await sleep(500);
+  const after = await rects();
+  if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: path.join(process.env.TASKUARY_SHOTS, "agent-draft-notice.png") });
+  assert.deepEqual({ box: after.box, term: after.term }, { box: before.box, term: before.term }, "the terminal kept its size under the notice");
+  assert.ok(after.note.w <= 470 && after.note.h < 70 && after.note.x + after.note.w <= after.box.x + after.box.w + 1 && after.note.y >= after.box.y,
+    `a small notice in the terminal's corner: ${JSON.stringify(after)}`);
+  // NEVER BOTH: the agent's pane says it, and holds no draft and no Send - the draft is Close out's alone
+  const said = await page.$eval(note, (el) => ({ text: el.innerText, boxes: el.querySelectorAll("textarea").length,
+    buttons: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()) }));
+  assert.match(said.text, /Claude Code drafted a message to Tom Alvarez/);
+  assert.equal(said.boxes, 0, "no draft box in the agent's pane");
+  assert.deepEqual(said.buttons, ["Open in Close out"]);
+  const outside = await page.evaluate((sel, w) => [...document.querySelectorAll(`${sel} textarea`)].filter((x) => x.value.includes(w) && !x.closest("[data-tq-closeout]")).length, pageSel, WORDS);
+  assert.equal(outside, 0, "the draft is drawn nowhere but Close out");
+  // ...and the Assistant reads its press as a door, never an outward send
   const view = await page.evaluate(async () => (await import("/src/pageView.js")).context());
-  assert.ok(view.buttons.some((b) => b.label === "Send in the pop-up" && b.send), `the pop-up's Send, named: ${JSON.stringify(view.buttons.map((b) => b.label))}`);
-  assert.ok(view.fields.some((f) => f.label === "Reply draft in the pop-up" && f.value.includes(WORDS)), `its box: ${JSON.stringify(view.fields.map((f) => f.label))}`);
+  const door = view.buttons.find((b) => b.label === "Open in Close out");
+  assert.ok(door && !door.send, `the notice's press, not a send: ${JSON.stringify(view.buttons.map((b) => [b.label, !!b.send]))}`);
 
-  // Later: the pop-up goes, the terminal is the size it was - the pop-up never took any of it
-  await page.$eval(`${pop} [data-tq-agent-later]`, (b) => b.click());
-  await page.waitForFunction((sel) => !document.querySelector(sel), { timeout: 5000 }, pop);
-  await sleep(400);
-  const without = await rects();
-  assert.deepEqual({ box: without.box, term: without.term }, { box: withPop.box, term: withPop.term }, "the terminal kept its size under the pop-up");
-  // ...and the draft is still in Close out
-  const close = await (await api(`/api/tasks/${inv.TaskId}`)).json();
-  assert.equal(close.reviews.find((r) => r.ReviewId === made.reviewId)?.Status, "pending", "Later sends nothing");
-
-  // opening the task again brings it back
-  await page.evaluate((id) => { location.hash = `task=${id}`; }, other.TaskId);
-  await page.waitForSelector(`[data-tq-task-page="${other.TaskId}"]`, { timeout: 20000 });
-  await page.evaluate((id) => { location.hash = `task=${id}`; }, inv.TaskId);
-  await page.waitForSelector(pop, { timeout: 20000 });
-
-  // an edit in the pop-up is what goes; its Send runs Close out's decide for that review
-  await page.click(`${pop} textarea`);
-  await page.keyboard.press("End");
-  await page.keyboard.type(" Thanks, Alex");
+  // its press opens Close out on the draft, and that Send sends it
+  await page.$eval(`${note} button`, (b) => b.click());
+  await page.waitForFunction((sel, w) => [...document.querySelectorAll(`${sel} [data-tq-closeout] textarea`)].some((x) => x.offsetParent && x.value.includes(w)),
+    { timeout: 10000 }, pageSel, WORDS).catch(async () => assert.fail(`Close out did not open on the draft: ${await page.evaluate(() => document.body.innerText.slice(0, 1500))}`));
   await page.evaluate((sel) => {
-    const b = [...document.querySelectorAll(`${sel} [data-tq-moves] button`)].find((x) => /^Send\b/.test(x.textContent.trim()) && !x.disabled);
+    const b = [...document.querySelectorAll(`${sel} [data-tq-closeout] button`)].find((x) => /^Send\b/.test(x.textContent.trim()) && !x.disabled && x.offsetParent);
     b.click();
-  }, pop);
+  }, pageSel);
   for (let i = 0; i < 20 && !decided.length; i++) await sleep(250);
   assert.equal(decided.length, 1, "one send");
   assert.equal(decided[0].rid, made.reviewId);
-  assert.equal(decided[0].body.verb, "approve");
-  assert.ok(String(decided[0].body.final_text).includes("Thanks, Alex"), `the edited words went: ${decided[0].body.final_text}`);
-  assert.equal(decided[0].recorded, 200);
-  // ...and it clears both places: the pop-up, and Close out's pending draft
-  await page.waitForFunction((sel) => !document.querySelector(sel), { timeout: 10000 }, pop);
-  if (await page.$(`${pageSel} [data-tq-section-tab=close]`)) await page.$eval(`${pageSel} [data-tq-section-tab=close]`, (b) => b.click());
-  await page.waitForFunction((sel) => {
-    const co = document.querySelector(`${sel} [data-tq-closeout]`);
-    return !!co && ![...co.querySelectorAll("button")].some((b) => /^Send\b/.test(b.textContent.trim()) && b.offsetParent);
-  }, { timeout: 10000 }, pageSel).catch(async () => assert.fail(`Close out still offers Send: ${await page.$eval(`${pageSel} [data-tq-closeout]`, (e) => e.innerText)}`));
+  assert.ok(String(decided[0].body.final_text).includes(WORDS));
+  // ...and the notice is gone with it
+  await page.waitForFunction((sel) => !document.querySelector(sel), { timeout: 10000 }, `${pageSel} [data-tq-agent-notice]`);
   assert.deepEqual(errors, []);
 });
 
-test("a general agent's draft is a card at the foot of its conversation, with Close out's Send", { timeout: 300000 }, async (t) => {
+test("a general agent's draft is a notice at the foot of its chat; one the owner already answered says so in Close out", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -117,19 +99,26 @@ test("a general agent's draft is a card at the foot of its conversation, with Cl
     headers: { "X-Taskuary-Token": harness.token, "Content-Type": "application/json" } });
   const { taskId } = await (await api("/api/fixture/general/canvas", {})).json();
   assert.ok(taskId);
-  const made = await (await api("/api/fixture/task/agent-draft", { task_id: taskId, text: "Hi Gail - which quarter should the review cover?", agent: "assistant" })).json();
+  const made = await (await api("/api/fixture/task/agent-draft", { task_id: taskId, text: "Hi Gail - which quarter should the review cover?", agent: "assistant",
+    answered: "Hi Gail, it covers the third quarter - the sign-off is all that is left." })).json();
   assert.ok(made.reviewId, `the agent's draft: ${JSON.stringify(made)}`);
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.evaluate((id) => { location.hash = `task=${id}`; }, taskId);
-  const card = `[data-tq-task-page="${taskId}"] .tq-aui-viewport [data-tq-agent-card]`;
-  await page.waitForSelector(card, { visible: true, timeout: 20000 });
-  if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: path.join(process.env.TASKUARY_SHOTS, "agent-draft-card.png") });
-  const got = await page.$eval(card, (el) => ({ text: el.innerText, draft: el.querySelector("textarea")?.value || "",
-    last: el.parentElement.lastElementChild === el, send: [...el.querySelectorAll("[data-tq-moves] button")].some((b) => /^Send\b/.test(b.textContent.trim())) }));
-  assert.match(got.text, /drafted a message/);
-  assert.ok(got.draft.includes("which quarter"), got.draft);
-  assert.ok(got.send, `its Send: ${got.text}`);
+  const pageSel = `[data-tq-task-page="${taskId}"]`, note = `${pageSel} .tq-aui-viewport [data-tq-agent-notice=chat]`;
+  await page.waitForSelector(note, { visible: true, timeout: 20000 });
+  const got = await page.$eval(note, (el) => ({ text: el.innerText, boxes: el.querySelectorAll("textarea").length, last: el.parentElement.lastElementChild === el }));
+  assert.match(got.text, /assistant drafted a message to Gail Moreno/);
+  assert.equal(got.boxes, 0, "no draft in the chat");
   assert.ok(got.last, "at the foot of the conversation, where its questions are asked");
-  assert.equal(await page.$(`[data-tq-task-page="${taskId}"] [data-tq-agent-popup]`), null, "no pop-up over a chat");
+  assert.equal(await page.$(`${pageSel} [data-tq-agent-notice=popup]`), null, "no corner notice over a chat");
+  await page.$eval(`${note} button`, (b) => b.click());
+  const co = `${pageSel} [data-tq-closeout]`;
+  await page.waitForFunction((sel) => [...document.querySelectorAll(`${sel} [data-tq-already-answered]`)].some((e) => e.offsetParent), { timeout: 10000 }, co).catch(async () => {
+    assert.fail(`no already-answered line in Close out: ${await page.$eval(co, (e) => e.innerText).catch(() => "no Close out")}`);
+  });
+  if (process.env.TASKUARY_SHOTS) { await sleep(800); await page.screenshot({ path: path.join(process.env.TASKUARY_SHOTS, "agent-draft-answered.png") }); }
+  const card = await page.$eval(co, (el) => el.innerText);
+  assert.match(card, /You already answered Gail Moreno at [^:]+:\d\d[^:]*: "Hi Gail, it covers the third quarter/);
+  assert.match(card, /as a second reply/, `Send's line says it: ${card}`);
   assert.deepEqual(errors, []);
 });

@@ -586,8 +586,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </Box>
           )}
           </ThreadPrimitive.If>
-          {/* THE AGENT'S DRAFT IS APPROVED WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's card for it (AgentDraftCard),
-              Close out's own Send - working or not, since the agent saves it mid-turn */}
+          {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
+              whose press opens Close out at it - working or not, since the agent saves it mid-turn */}
           {!dock && approve}
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">

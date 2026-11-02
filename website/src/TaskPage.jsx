@@ -78,8 +78,8 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
-import { AgentDraftCard, AgentDraftPopup } from "./AgentDraftAsk.jsx";
-import { askWhere, useAgentAsks } from "./agentDraftAsk.js";
+import AgentDraftNotice from "./AgentDraftNotice.jsx";
+import { agentAsks, alreadyAnswered, answeredLine, askWhere } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -1383,8 +1383,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pendingReview = pendingReplyReview(reviews);
   // ...and any other reply waiting, to someone else on the task - each drawn under it with its own To and Send (MoreDrafts)
   const moreDrafts = otherPendingReplies(reviews, pendingReview);
-  // ...and the agent's own draft is asked where the agent is too (AgentDraftAsk.jsx): a pop-up over its terminal, a card under its chat
-  const agentAsk = useAgentAsks(selected, reviews);
+  // ...and the agent's own draft is SAID where the agent is (AgentDraftNotice.jsx): a notice over its terminal or under its chat, whose one press
+  // opens Close out at the draft - sent from there alone (the owner, 2026-11-02: "in agent we should just say 'agent drafted a message'")
+  const agentDrafts = agentAsks(reviews);
   const allProposals = pendingProposals(reviews);
   // the task's close-out beside its reply is ONE decision on the reply's card; alone, it is its own card below
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
@@ -2644,10 +2645,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     window.addEventListener("tq-agent-ask", on);
     return () => window.removeEventListener("tq-agent-ask", on);
   });
-  // ...the agent's draft asked where the agent is gets the card Close out draws, with Close out's own props: the same Send, the same rules
-  // (never the row's: Close out registers the draft's verbs there)
-  const askAt = askWhere(workspaceMode), draftDecision = { closeout: closeoutRv, onMarkDone: askFinish, onSent: sent, closeOnSend: true, liveWork,
-    onRemind: (e, a) => remindHere(steady(a || e?.currentTarget)), onEmailInstead: () => setEmailOpen(true), onChanged: () => { loadDetail(selected); loadTasks(); onChanged?.(); } };
+  // ...the notice's press: Close out open, its draft in view - beside a live agent its slim tab opens, as the tab's own press does
+  const askAt = askWhere(workspaceMode);
+  const openDraft = () => {
+    setOpenStage("reply"); if (threeUp) openSection("close"); else if (sessionView) setPeek(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("[data-tq-draft-box]")?.scrollIntoView({ block: "center", behavior: "smooth" })));
+  };
+  // YOU ALREADY ANSWERED (the owner, 2026-11-02): a reply that went to that person after the message the draft answers - outside Taskuary or
+  // from here, in any round - is said on the draft, and its Send says it would be a second one
+  const answeredYet = answeredLine(alreadyAnswered({ draft: pendingReview, sent: rounds.flatMap((r) => r.sent),
+    against: storedMessages.find((m) => m.MessageId === pendingReview?.MessageId), ms: tsMs }), (s) => fmtDateTime(s));
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
@@ -3190,14 +3197,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
-                      // ...or holds the agent's draft waiting for your Send (AgentDraftAsk.jsx), asked where its questions are
-                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], [data-tq-agent-card], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
+                      // ...or says the agent's draft waiting in Close out (AgentDraftNotice.jsx), where its questions are asked
+                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere}
-                        approve={askAt === "chat" && agentAsk.all.length ? <AgentDraftCard asks={agentAsk.all} agent={agentName(t)} decision={draftDecision} /> : null} />
+                        approve={askAt === "chat" && agentDrafts.length ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (
@@ -3238,8 +3245,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box ref={termBox} data-tq-term-box="" sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 }, position: "relative",
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
-                      {/* THE AGENT'S DRAFT, A POP-UP OVER THE TERMINAL'S CORNER (the owner, 2026-11-02): laid over it, so the terminal keeps its size */}
-                      {askAt === "popup" && <AgentDraftPopup asks={agentAsk.asks} later={agentAsk.later} agent={agentName(t)} decision={draftDecision} />}
+                      {/* THE AGENT'S DRAFT, A NOTICE IN THE TERMINAL'S CORNER (the owner, 2026-11-02): laid over it, so the terminal keeps its size */}
+                      {askAt === "popup" && <AgentDraftNotice asks={agentDrafts} at="popup" agent={agentName(t)} onOpen={openDraft} />}
                     </Box>
                     {/* pages the session published with Claude's Artifact tool, under the session that made them */}
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>
@@ -3393,7 +3400,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (<>
                         <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
-                          onEmailInstead={() => setEmailOpen(true)} why={threeUp ? warn?.line || "" : ""}
+                          onEmailInstead={() => setEmailOpen(true)} why={threeUp ? warn?.line || "" : ""} answered={answeredYet}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   {/* the list's row moves too (T19) */}
                         <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
                       </>) : (

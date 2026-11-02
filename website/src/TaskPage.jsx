@@ -444,7 +444,9 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
     const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => fitTabLines(tab));
     mo?.observe(tab, { childList: true, subtree: true });
     return () => { ro.disconnect(); mo?.disconnect(); };
-  }, [lines.join("\n"), foot, here]);   // eslint-disable-line react-hooks/exhaustive-deps -- the words, not the array's identity
+  // ...and `mini`: a tab first drawn slim beside a live agent has no lines and no ref, and when the session ended it turned into a spine
+  // in place - nothing here ran again, so every line was drawn down the whole spine under its moves (the owner, 2026-11-02)
+  }, [lines.join("\n"), foot, here, mini]);   // eslint-disable-line react-hooks/exhaustive-deps -- the words, not the array's identity
   // ...SLIM beside a live agent: the arrow, the section's mark, and at its foot a dot for where it stands - the words are its hover
   if (mini) return (
     <Box component="button" type="button" data-tq-section-tab={sec.key} data-tq-mini="" data-tq-here={here ? "" : undefined} sx={MINI_TAB(here)}
@@ -510,9 +512,12 @@ const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="b
 // THE TASK'S OWN MOVES RIDE ON THE PANES TOO (the owner, 2026-10-30: "mark done and close with a note belong on the close out spine either when
 // open or closed ... same with share. Change should be on Came from"): the title bar keeps the status, Expand and the X. Close out carries Mark
 // done, Close with a note, Attach a file and Share after its own moves; Came from its Change ▾
+// ...MARK DONE FIRST (the owner, 2026-11-02: "Mark done should always be the first button in the Close out tab"): `done` leads Close out's
+// spine and strip, before its own moves (Find a time, Draft reply, Hand it to a person); the rest of the task's own after them, as before
 function useTaskMoves(sec) {
-  const head = useSpineVerbs("head"), share = useSpineVerbs("share"), change = useSpineVerbs("change");
-  return { task: sec === "close" ? [...head, ...share] : [], change: sec === "from" ? change : NO_MOVES };
+  const head = useSpineVerbs("head"), share = useSpineVerbs("share"), change = useSpineVerbs("change"), close = sec === "close";
+  return { done: close ? head.filter(isDoneMove) : NO_MOVES, task: close ? [...head.filter((v) => !isDoneMove(v)), ...share] : NO_MOVES,
+    change: sec === "from" ? change : NO_MOVES };
 }
 const NO_MOVES = [];
 function ChangeMoves({ change }) {
@@ -527,10 +532,11 @@ function ChangeMoves({ change }) {
 // ...`quiet`: an item's own whole-item moves laid on its one pane (actionRow.splitRow `all`: a report's Pause this report and Share) wear the
 // task's own quiet look, as its Change pill set them apart on the bar
 function SpineMoves({ sec, name = SEC_NAME[sec] }) {
-  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p"), { task, change } = useTaskMoves(sec);
-  if (!vs.length && !task.length && !change.length) return null;
+  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p"), { done, task, change } = useTaskMoves(sec);
+  if (!vs.length && !done.length && !task.length && !change.length) return null;
   return (
     <Box data-tq-spine-moves={sec} role="group" aria-label={`${name} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
+      {done.map((v) => stageBtn(v, v.label, true))}
       {vs.map((v) => stageBtn(v, v.spine || v.label, !!v.quiet))}
       {task.map((v) => stageBtn(v, v.label, true))}
       {change.length > 0 && <ChangeMoves change={change} />}
@@ -547,11 +553,11 @@ const foldArrows = (keys, k) => { const i = keys.indexOf(k), last = keys.length 
 const TASK_KEYS = ["from", "agent", "close"];
 // ...one line: what does not fit folds into its ▾ from the end - never Mark done nor what is lit
 export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
-  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { task, change } = useTaskMoves(sec);
+  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { done, task, change } = useTaskMoves(sec);
   // ...a `tucked` move keeps its rule (a sent reply's Hand it to a person): behind the strip's ▾ unless it is lit
   const up = all.filter((v) => !v.tucked || v.tone === "p"), tucked = all.filter((v) => !up.includes(v));
-  const items = [...up.map((v) => ({ key: v.id, v, head: !!v.quiet })), ...task.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true })),
-    ...(change.length ? [{ key: "change", change }] : [])];
+  const own = (vs) => vs.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true }));
+  const items = [...own(done), ...up.map((v) => ({ key: v.id, v, head: !!v.quiet })), ...own(task), ...(change.length ? [{ key: "change", change }] : [])];
   const box = useRef(null), [n, setN] = useState(99), [, refit] = useState(0), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setN(99); }, [sig]);

@@ -764,6 +764,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
   // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
   // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
+  // ...but a turn that FAILED is read without handing the read to the thread: the bump swapped in the server's copy, which has neither
+  // the reason nor - when it failed before the agent took it - the owner's own words, so a refused send left nothing on screen (the owner,
+  // 2026-11-02: "the text goes no where"). The page still learns the session is down (accept -> onSession); the thread keeps both.
+  const failed = useCallback(() => {
+    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
+  }, [accept, task.TaskId]);
   const loaded = !!data, knownSid = data?.session?.sid || "";
   useEffect(() => { if (loaded && liveSid && knownSid !== liveSid) refresh(); }, [loaded, liveSid, knownSid, refresh]);
   // ...and at once when that door says it answered (`reread`, bumped by the page): the note is on the conversation by then, and the
@@ -831,7 +837,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={refresh} onClearAttachments={clearAttachments}
+        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}

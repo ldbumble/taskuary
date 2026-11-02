@@ -2253,12 +2253,26 @@ def _refuse_closed_chat(task_id: int):
     t = store.get_task(task_id) or {}
     if t.get('Status') in ('done', 'dropped') and not general.is_dock(t): raise HTTPException(409, CLOSED_CHAT)
 
+FOLLOW_UP_STALE = 'The newest messages could not be read first, so the agent goes on from what it already has'
+
+def _refresh_for_turn(task_id: int) -> tuple[dict, str]:
+    """The chat's sync before a turn, as (refresh, why it was skipped). A FOLLOW-UP to an agent already live on the task is the owner
+    talking to work under way, as Continue is - and Continue never waits on a sync: a mail poll still running, or a mailbox's
+    old error, refused every typed word to an agent waiting on you, and the box showed nothing (the owner, 2026-11-02: "the text
+    goes no where"). It goes on and says so. Starting an agent still reads the chat first (_refresh_chat_context)."""
+    from . import general
+    try: return _refresh_chat_context(task_id=task_id), ''
+    except RuntimeError as e:
+        if not general.session_for(task_id): raise
+        logger.info(f'task {task_id}: follow-up sent without a fresh sync - {e}')
+        return {}, FOLLOW_UP_STALE
+
 @app.post('/api/tasks/{task_id}/assistant/messages')
 def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import general
     _refuse_closed_chat(task_id)
     try:
-        _refresh_chat_context(task_id=task_id)
+        _refresh_for_turn(task_id)
         session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
         reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model, pick=body.pick)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
@@ -2343,7 +2357,8 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
     def work():
         session = None
         try:
-            fresh = _refresh_chat_context(task_id=task_id)
+            fresh, stale = _refresh_for_turn(task_id)
+            if stale: put({'type': 'progress', 'name': 'sync_messages', 'detail': stale})
             if fresh.get('polled'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': fresh.get('added', 0)}})

@@ -512,7 +512,7 @@ WHERE = (
     ('one message in full', 'message.read', {'mid': 4321}),
     ('a person - how often they write, their open tasks', 'sender.read', {'who': 'Erin'}),
     ('open work', 'tasks.list', {'contains': 'export'}),
-    ('a file an agent made - the Excel, the PDF - and its link', 'outputs.find', {'query': 'vendor pricing', 'kind': 'xlsx'}),
+    ('a file an agent made - give its link, never a disk path', 'outputs.find', {'query': 'vendor pricing', 'kind': 'xlsx'}),
     ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO limit'}),
     ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
     ('reports and workflows', 'reports.list', {}),

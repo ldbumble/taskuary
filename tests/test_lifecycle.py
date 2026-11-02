@@ -61,7 +61,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(ran['status'], 'done'); self.assertEqual(dispatch.call_count, 1)
         # ...the introduction is the model's when there is one (PW-153); this walk has none, so the facts spoke
         self.assertFalse(concierge.INTRO_AI)     # the introduction is the facts, instant (2026-09-07)
-        self.assertIn(concierge.WAITS, said['say'])                                            # the proposal says what WILL happen
+        self.assertIn(buttons.label('coding_agent'), said['say'])                              # the proposal names the press (no "until you say yes", 2026-11-02)
         self.assertIn(f"Done - {buttons.label('coding_agent')}", ran['receipt'])                       # ...and the receipt what did
         self.assertNotIn('Done - ', self.chat()[-1][1])                  # ...which is no line in the chat (the owner, 2026-10-22)
         # 5. the coding agent works: the item is a task under Tasks like any other, under the agent's key, and the walk takes it

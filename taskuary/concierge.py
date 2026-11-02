@@ -2057,6 +2057,10 @@ def _system(store, llm=None) -> str:
     except Exception: mem = ''
     if mem: who += ("WHAT YOU KNOW ABOUT HOW THE OWNER WORKS (their memory, LEARNED.md - what they care about and what they do not, their "
                     f"people, their rhythm, their promises; weigh it, the documents above outrank it):\n{mem}\n\n")
+    # ...and the documents that are NOT here, by name: the tool index says docs.search is "how Taskuary itself works", so "how do I usually
+    # sign off?" and "what rules do the agents work under" had no road to STYLE.md or AGENT.md the model could see (2026-11-02)
+    who += ('THEIR OTHER DOCUMENTS are not above - STYLE.md (how they write: greeting, sign-off, tone), AGENT.md (the rules every agent '
+            'works under), TRIAGE.md, CODING.md: docs.search reads one whole with `section` "your doc style" (agent, triage, coding).\n\n')
     # ...and the repositories a coding job can open in: the model picks one by name (`as`) and code only checks it is one of these
     from . import terminal as term
     try: repos = term.known_repos(store)
@@ -2066,7 +2070,10 @@ def _system(store, llm=None) -> str:
     # a phone has no canvas to open a page on - but it still knows the screens, by name: with none, "update taskuary" from the phone had
     # no road but a link it could not open or a button it had no row for (2026-10-23)
     pages = pages_block(store) if DELIVERY.get() != PHONE else phone_screens()
-    return f"{_counsel(store)}\n\n{who}{where}{pages}{contract.format(owner=_owner(store))}"
+    # ...and which Taskuary this is: "what version am I on?" had no answer but What's new's top section, which a checkout runs ahead of
+    # or behind (2026-11-02); the bug report already says it (bugreport.py)
+    from . import __version__
+    return f"{_counsel(store)}\n\n{who}{where}{pages}THIS IS TASKUARY {__version__}.\n\n{contract.format(owner=_owner(store))}"
 
 
 def pages_block(store) -> str:

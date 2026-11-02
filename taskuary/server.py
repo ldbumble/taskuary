@@ -3796,7 +3796,7 @@ def not_mine(mid: int, body: NotMineBody, background: BackgroundTasks = None):
         fate = _file_task(tid, f'not ours - {note[:80]}')     # deleted, or archived when an agent worked it
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, f'not ours - {note[:200]}', [], ACTOR)
-    store.audit('message', mid, 'not_mine', ACTOR, detail={'scope': scope, 'key': key, 'from': em})
+    store.audit('message', mid, 'not_mine', ACTOR, detail={'scope': scope, 'key': key, 'from': em, 'was': m.get('Status')})
     # "not ours" draws a responsibility boundary: what it says about the owner - whose work this kind is, and why - is a line in their
     # memory, in words, or nothing (memorylines.teach, 2026-10-27); the owner's own words, when they typed some, are its best evidence
     memorylines.teach_soon(store, 'not_ours', src, _verdict_facts(m, said=f"the owner's words: {body.note.strip()}" if (body.note or '').strip() else ''),
@@ -3854,6 +3854,7 @@ def file_message(mid: int, body: NotATaskBody = None, background: BackgroundTask
     verdict, route_id = operations.verdict_of_message(store, m)
     store.set_message_status(mid, 'ignored')
     store.add_route(mid, None, 'ignore', None, 'nothing to do - filed by the owner', [], ACTOR)
+    store.audit('message', mid, 'filed_not_ours', ACTOR, detail={'was': m.get('Status')})     # ...what bulk.unfile puts back
     # ARCHIVE and FILE IT are "I am done with this": both filed the mail and left it UNREAD under FYI on the walk (press
     # audit, 2026-10-01). Every door here writes at least what Next writes - the read receipt - so a new reply still brings it back.
     from . import funnel

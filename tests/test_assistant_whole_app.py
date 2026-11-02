@@ -136,6 +136,37 @@ class DismissTheSpam(unittest.TestCase):
         self.assertIn('Filed as not ours: 3 rows', said['say'])
 
 
+class ReadNotNotOurs(unittest.TestCase):
+    """'It should be "read" not marked as "Not ours"' (the owner, 2026-11-02): the rows just filed as not ours are off the rail, so the
+    mark-read found none of them - "Marked 0 items read" - and the verdict stood. pipe.clear naming them by key takes the verdict back and
+    marks each read, and says so."""
+    def test_rows_filed_as_not_ours_are_read_instead(self):
+        from taskuary import memorylines
+        s = store(); _, real, spam = world(s)
+        with mock.patch.object(server, '_teach_not_a_task', return_value=None):
+            call(s, 'pipe.remove', select={'keys': [f'm{m}' for m in spam]}, learn=True)
+        self.assertTrue(s.corrections(message_id=spam[0]), 'Not ours left evidence for triage')
+        with mock.patch.object(memorylines, 'untaught', wraps=memorylines.untaught) as untaught:
+            out = call(s, 'pipe.clear', select={'keys': [f'm{m}' for m in spam]})
+        self.assertEqual(out['cleared'], 3)
+        self.assertIn('3 items read', out['say']); self.assertIn('filed as not ours - that is taken back', out['say'])
+        for m in spam:
+            self.assertIn(f'(#msg={m})', out['say'])
+            self.assertEqual(s.get_message(m)['Status'], 'filed')
+            self.assertFalse(bulk.filed_not_ours(s, m), 'the ignore route ingest.veto reads is gone')
+            self.assertEqual(s.corrections(message_id=m), [], 'triage weighs no Not ours for it')
+        self.assertEqual(sorted(c.args[1] for c in untaught.call_args_list), sorted(f'msg{m}' for m in spam))
+        self.assertFalse({i.get('mid') for i in rail(s)} & set(spam), 'read - not back on the rail')
+        self.assertEqual({i.get('mid') for i in rail(s) if i.get('kind') == 'fyi'}, set(real), 'nothing else touched')
+
+    def test_a_row_never_filed_is_not_put_back(self):
+        s = store(); _, real, _ = world(s)
+        self.assertFalse(bulk.unfile(s, real[0]))
+        out = call(s, 'pipe.clear', select={'keys': [f'm{real[0]}']})
+        self.assertNotIn('not ours', out['say'])
+        self.assertEqual(out['cleared'], 1)
+
+
 class OnTheDemoWorld(unittest.TestCase):
     """The worst a judgement can name - every handle pipe.read printed - on the demo's whole rail: the to-dos, the drafts waiting for a Send,
     the agents and the goals all stay; only what a put-down may take goes, and each is listed."""

@@ -88,6 +88,37 @@ def act(store, verb: str, rows: list, actor: str = 'owner', learn: bool = False)
     return {'done': done, 'stuck': stuck, 'rules': rules}
 
 
+# NOT OURS, TAKEN BACK (the owner, 2026-11-02: 'it should be "read" not marked as "Not ours"'). Rows put away as not ours are off the rail,
+# so "mark them read" found nothing there and said "Marked 0 items read" - with the verdict still standing. A message the owner filed as not
+# ours is put back to what it was, its verdict's marks taken back (the ignore route ingest.veto reads, the line it taught, the correction
+# evidence triage weighs) - and pipe.clear then marks it read like any other row.
+FILED = ('filed_not_ours', 'not_mine')            # the audit actions that keep what a message was before it was filed as not ours
+
+
+def filed_not_ours(store, mid: int) -> bool:
+    "Is this message put away by the owner's Not ours (or Archive) - its ignore route standing?"
+    return bool(store._one("SELECT 1 x FROM route WHERE MessageId=? AND Decision='ignore' AND RoutedBy='owner' LIMIT 1", (int(mid),)))
+
+
+def unfile(store, mid: int, actor: str = 'owner') -> bool:
+    """Take back the owner's Not ours on one message: its status back, the ignore route, the taught line and the evidence withdrawn."""
+    import json
+    from . import memorylines
+    if not filed_not_ours(store, mid): return False
+    a = store._one(f"SELECT Detail FROM audit WHERE EntityType='message' AND EntityId=? AND Action IN ({','.join('?' * len(FILED))}) "
+                   "ORDER BY Id DESC LIMIT 1", (int(mid), *FILED)) or {}
+    try: was = (json.loads(a.get('Detail') or '{}') or {}).get('was')
+    except ValueError: was = None
+    store._exec("DELETE FROM route WHERE MessageId=? AND Decision='ignore' AND RoutedBy='owner'", (int(mid),))
+    store.set_message_status(mid, was if was and was != 'ignored' else 'filed')
+    for op in store.operations_for(message_ids=[int(mid)]):
+        if op['Kind'] in ('message.file', 'message.archive') and op.get('Evidence') == 'recorded':
+            store._exec('DELETE FROM correction WHERE OpId=?', (op['OpId'],)); store.update_operation(op['OpId'], {'Evidence': 'withdrawn'})
+    memorylines.untaught(store, f'msg{mid}')
+    store.audit('message', int(mid), 'not_ours_taken_back', actor, detail={'status': was or 'filed'})
+    return True
+
+
 SAID = {'remove': 'Filed as not ours', 'block': 'Blocked', 'mine': 'Put on your list'}
 AFTER = {'remove': 'Filed, not deleted - search still finds them; open one to put it back.',
          'block': f"Their mail no longer reaches triage - a rule each under {words.name('rules')}.",

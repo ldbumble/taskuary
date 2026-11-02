@@ -36,6 +36,7 @@ def install_processing_changes(app, store):
         '/api/fixture/browser/view',
         '/api/fixture/processing/arrive-during-next', '/api/fixture/processing/rerun',
         '/api/fixture/task/closed-elsewhere', '/api/fixture/task/live-agent',
+        '/api/fixture/task/agent-draft',
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
         '/api/fixture/intake/arrive',
@@ -685,6 +686,18 @@ def install_processing_changes(app, store):
         ws.record(store, tid, str(pane.sid), 'input_needed', text='Should I also file the receipt with the purchase order?', source='hook')
         funnel.invalidate()
         return {'taskId': tid, 'sid': pane.sid}
+
+    @app.post('/api/fixture/task/agent-draft')
+    def agent_draft(body: dict):
+        """The task's agent saved a message for the person who asked - `taskuary --reply` (wrapup.agent_reply): the pending draft marked as the
+        agent's, waiting on the owner's Send (agent-draft-popup). Invented words only."""
+        if set(body) != {'task_id', 'text', 'agent'} or type(body['task_id']) is not int or not all(isinstance(body[k], str) and 0 < len(body[k]) < 2000 for k in ('text', 'agent')):
+            raise HTTPException(422, 'exact task_id, text and agent are required')
+        from taskuary import funnel, wrapup
+        out = wrapup.agent_reply(store, body['task_id'], body['text'], body['agent'])
+        if not out.get('review_id'): raise HTTPException(409, f"the agent's draft was refused: {out.get('why') or out}")
+        funnel.invalidate()
+        return {'reviewId': out['review_id']}
 
     @app.post('/api/fixture/processing/ordering')
     def ordering_arrivals(body: dict):

@@ -410,7 +410,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
-  onEnded }) {
+  onEnded, approve = null }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -584,6 +584,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </Box>
           )}
           </ThreadPrimitive.If>
+          {/* THE AGENT'S DRAFT IS APPROVED WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's card for it (AgentDraftCard),
+              Close out's own Send - working or not, since the agent saves it mid-turn */}
+          {!dock && approve}
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
             {!!attachmentsRef.current.length && (
@@ -631,7 +634,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0 }) {
+  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, approve = null }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -831,7 +834,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={refresh} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
+        asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} />

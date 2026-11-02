@@ -36,11 +36,12 @@ export const isInstall = (b) => !!b && (/^\s*update to v\d/i.test(String(b.label
 // ── EXTRAS: what a page holds that is no box on it ──
 // root element, or an area's name for a page drawn inside a frame it does not own (Reports) ->
 //   () => {item, title, fields: [{key, label, value, set}], buttons: [{id, label, press, send}]}
+// ...or a function that finds the root once the page has drawn (a card inside a view it does not own: the agent's draft pop-up, rootOf)
 const extras = new Map();      // key -> Set of getters: the reports frame and the routine open in it each add their own
 export function useViewExtras(ref, spec) {
   const latest = useRef(spec); latest.current = spec;
   useEffect(() => {
-    const el = typeof ref === "string" ? ref : ref.current;
+    const el = typeof ref === "string" ? ref : typeof ref === "function" ? ref() : ref.current;
     if (!el) return undefined;
     const get = () => latest.current;
     if (!extras.has(el)) extras.set(el, new Set());
@@ -65,6 +66,8 @@ const areaOf = (root) => root.getAttribute("data-tq-browse") || (root.hasAttribu
 // ...and A DIALOG OVER THE PAGE IS THE PAGE (the owner, 2026-11-02): Search everything, the Hub's Write one, the bell's list sit in a portal
 // over a wider page beneath - the one opened last, on top, is what the owner is looking at
 const overPage = (el) => !!el.closest(".MuiModal-root");
+// ...the view an element stands in, as currentRoot names it: the outermost
+export const rootOf = (el) => { let r = el?.closest?.(ROOTS) || null; while (r?.parentElement?.closest(ROOTS)) r = r.parentElement.closest(ROOTS); return r; };
 export function currentRoot() {
   const all = [...document.querySelectorAll(ROOTS)].filter((el) => shown(el) && !el.closest(".tq-chat-pop, [data-tq-view-switch]") && !el.parentElement?.closest(ROOTS));
   const top = all.filter(overPage);

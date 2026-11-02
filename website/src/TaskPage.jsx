@@ -78,6 +78,8 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
+import { AgentDraftCard, AgentDraftPopup } from "./AgentDraftAsk.jsx";
+import { askWhere, useAgentAsks } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -1381,6 +1383,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pendingReview = pendingReplyReview(reviews);
   // ...and any other reply waiting, to someone else on the task - each drawn under it with its own To and Send (MoreDrafts)
   const moreDrafts = otherPendingReplies(reviews, pendingReview);
+  // ...and the agent's own draft is asked where the agent is too (AgentDraftAsk.jsx): a pop-up over its terminal, a card under its chat
+  const agentAsk = useAgentAsks(selected, reviews);
   const allProposals = pendingProposals(reviews);
   // the task's close-out beside its reply is ONE decision on the reply's card; alone, it is its own card below
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
@@ -2640,6 +2644,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     window.addEventListener("tq-agent-ask", on);
     return () => window.removeEventListener("tq-agent-ask", on);
   });
+  // ...the agent's draft asked where the agent is gets the card Close out draws, with Close out's own props: the same Send, the same rules
+  // (never the row's: Close out registers the draft's verbs there)
+  const askAt = askWhere(workspaceMode), draftDecision = { closeout: closeoutRv, onMarkDone: askFinish, onSent: sent, closeOnSend: true, liveWork,
+    onRemind: (e, a) => remindHere(steady(a || e?.currentTarget)), onEmailInstead: () => setEmailOpen(true), onChanged: () => { loadDetail(selected); loadTasks(); onChanged?.(); } };
   return (
     <>
       {/* ── detail ────────────────────────────────────────────────────── */}
@@ -3182,12 +3190,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
-                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
+                      // ...or holds the agent's draft waiting for your Send (AgentDraftAsk.jsx), asked where its questions are
+                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], [data-tq-agent-card], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
-                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere} />
+                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere}
+                        approve={askAt === "chat" && agentAsk.all.length ? <AgentDraftCard asks={agentAsk.all} agent={agentName(t)} decision={draftDecision} /> : null} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (
@@ -3228,6 +3238,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box ref={termBox} data-tq-term-box="" sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 }, position: "relative",
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
+                      {/* THE AGENT'S DRAFT, A POP-UP OVER THE TERMINAL'S CORNER (the owner, 2026-11-02): laid over it, so the terminal keeps its size */}
+                      {askAt === "popup" && <AgentDraftPopup asks={agentAsk.asks} later={agentAsk.later} agent={agentName(t)} decision={draftDecision} />}
                     </Box>
                     {/* pages the session published with Claude's Artifact tool, under the session that made them */}
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>

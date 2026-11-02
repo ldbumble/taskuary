@@ -503,7 +503,7 @@ The walk and sets of items, and filing mail.
 
 ### `pipe.clear`
 
-Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said - ALL in their words is every one waiting, never just the batch on the table. It only clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
+Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said - ALL in their words is every one waiting, never just the batch on the table. It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
 
 - `select` - below
 - `scope` (optional) - all (the default - every one waiting that `select` matches, the batch on the table and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: "mark these read", "these four")
@@ -738,7 +738,7 @@ Switch a connection back on.
 
 ### `app.repair`
 
-Run the simple repair app.health named for a part of Taskuary, then read it again.
+Run the simple repair app.health named for a part of Taskuary, then read it again - and a sync the owner asks for now ("sync my work mail now") is this with how: sync.
 
 - `name` - the connection
 - `how` - restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said

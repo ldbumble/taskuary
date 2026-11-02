@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.14 - 2026-11-01
+
+- The assistant stops reading names and labels with word lists
+- The Assistant can read its own help without an embedder, and keeps what it found
+- The phone's menu words stay: with no AI, a choice's own label typed is that choice (the owner: button words are fine)
+- Say the sign-in's age and two counts through timewords, as the release gate asks
+
 ## 0.3.10.13 - 2026-11-01
 
 - Take the mail words back off the mailbox card: which card a name means is the model's to read

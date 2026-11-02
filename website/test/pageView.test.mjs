@@ -24,7 +24,7 @@ test("what leaves the page is the view without its elements, and a secret as its
   assert.match(src, /secret: true, state: state \|\| "empty" \}/);
   assert.match(src, /buttons: v\.buttons\.map\(\(\{ id, label, enabled, send \}\)/, "no element and no handler goes");
   // ...and a press on a send is a light, checked again on the live page whatever the server said
-  assert.match(src, /if \(op\.op === "point" \|\| \(b && isSend\(b\)\)\)/);
+  assert.match(src, /if \(op\.op === "point" \|\| \(b && \(isSend\(b\) \|\| isInstall\(b\)\)\)\)/);
 });
 
 test("the chat sends the view only with a line the owner asked, and runs what came back as steps", () => {

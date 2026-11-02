@@ -675,15 +675,19 @@ def install_processing_changes(app, store):
     @app.post('/api/fixture/task/live-agent')
     def live_agent(body: dict):
         """An agent live on the task, at its prompt and waiting on the owner (send-live-agent-stays): a recorded pane in the sessions, its
-        run's own ask recorded, as a CLI's Stop hook leaves it - the shape a Send closed under (the owner, 2026-11-01)."""
-        if set(body) != {'task_id'} or type(body['task_id']) is not int: raise HTTPException(422, 'exact task_id is required')
+        run's own ask recorded, as a CLI's Stop hook leaves it - the shape a Send closed under (the owner, 2026-11-01). `working`: still mid-turn,
+        nothing asked (agent-draft-popup)."""
+        if set(body) - {'working'} != {'task_id'} or type(body['task_id']) is not int or type(body.get('working', False)) is not bool:
+            raise HTTPException(422, 'exact task_id is required; working is a boolean')
         from taskuary import funnel, terminal, workerstate as ws
         from taskuary import demo as _d
         tid = body['task_id']
         if not store.get_task(tid): raise HTTPException(404, 'no such task')
-        pane = _d.Replay(store, tid, 'Claude Code', lines=[('Checked the invoice against the purchase order: the totals match.', 0)])
+        # ...a working one is still typing: its next line is far off, so the recording stays mid-turn for the test's whole length
+        pane = _d.Replay(store, tid, 'Claude Code', lines=[('Checked the invoice against the purchase order: the totals match.', 0)]
+                         + ([('Filing the receipt with the purchase order...', 3600)] if body.get('working') else []))
         terminal.SESSIONS[pane.sid] = pane
-        ws.record(store, tid, str(pane.sid), 'input_needed', text='Should I also file the receipt with the purchase order?', source='hook')
+        if not body.get('working'): ws.record(store, tid, str(pane.sid), 'input_needed', text='Should I also file the receipt with the purchase order?', source='hook')
         funnel.invalidate()
         return {'taskId': tid, 'sid': pane.sid}
 

@@ -79,7 +79,7 @@ import SendIcon from "@mui/icons-material/Send";
 import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 import AgentDraftNotice from "./AgentDraftNotice.jsx";
-import { agentAsks, alreadyAnswered, answeredLine, askWhere } from "./agentDraftAsk.js";
+import { agentAsks, alreadyAnswered, answeredLine, askWhere, autoPair, draftKey } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
@@ -1736,11 +1736,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     when: (() => { const w = whenShort(outside.SentAt); return !w ? "" : asUtc(String(outside.SentAt)).toDateString() === new Date().toDateString() ? `at ${w}` : `on ${w}`; })() });
   // ...SIDE BY SIDE (PAIR_OF): on the canvas, a work area wide enough for two readable halves, and no live agent - narrower, or once an
   // agent starts, it is one pane again
-  const canPair = !!canvas && threeUp && !liveSession && bodyW >= PAIR_MIN, paired = canPair && !!section && pairPick.key === pickKey && pairPick.on;
+  // ...EXCEPT THE AGENT'S OWN DRAFT (the owner, 2026-11-02: "if the agent makes a reply, bring out the reply (Close out) tab side by side"):
+  // Agent | Close out beside a live agent too, and a pair opened for it stays as the owner left it once the draft is sent or dropped
+  const agentDraft = agentDrafts[0] || null, pairRoom = !!canvas && threeUp && bodyW >= PAIR_MIN;
+  const canPair = pairRoom && (!liveSession || !!agentDraft || (pairPick.key === pickKey && !!pairPick.draft)), paired = canPair && !!section && pairPick.key === pickKey && pairPick.on;
   const isOpen = (k) => section === k || (paired && PAIR_OF[section] === k);
   // ...a press that opens a section already open beside the other keeps the pair as it stands
   const openSection = (s) => { if (!(paired && isOpen(s))) setSecPick({ key: pickKey, sec: s }); };
-  const pairFlip = (k) => () => { setSecPick({ key: pickKey, sec: k }); setPairPick({ key: pickKey, on: !paired }); };
+  // ...and the pair the owner closes over the agent's draft stays closed for that draft (autoPair's `shut`)
+  const pairShut = useRef(new Set()), pairDone = useRef(new Set());
+  const pairFlip = (k) => () => { if (paired && agentDraft) pairShut.current.add(draftKey(agentDraft)); setSecPick({ key: pickKey, sec: k }); setPairPick({ key: pickKey, on: !paired, draft: pairPick.key === pickKey && pairPick.draft }); };
+  const seeDraft = () => requestAnimationFrame(() => requestAnimationFrame(() => closeOutRef.current?.querySelector("[data-tq-draft-box]")?.scrollIntoView({ block: "nearest", behavior: "smooth" })));
+  const pairDraft = (r) => { pairDone.current.add(`${draftKey(r)}|${pickKey}`); setSecPick({ key: pickKey, sec: "agent" }); setPairPick({ key: pickKey, on: true, draft: true }); seeDraft(); };
+  useEffect(() => { if (autoPair({ draft: agentDraft, working: agentState === AGENT.working, canPair: pairRoom, paired, shut: pairShut.current, done: pairDone.current, view: pickKey })) pairDraft(agentDraft); });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : tabW(bodyW));
@@ -2645,9 +2653,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     window.addEventListener("tq-agent-ask", on);
     return () => window.removeEventListener("tq-agent-ask", on);
   });
-  // ...the notice's press: Close out open, its draft in view - beside a live agent its slim tab opens, as the tab's own press does
-  const askAt = askWhere(workspaceMode);
-  const openDraft = () => {
+  // ...the notice's press: Close out beside the agent, its draft in view (a press, so a pair closed before opens again) - or where the work area
+  // holds one pane, Close out on its own: beside a live agent its slim tab opens, as the tab's own press does
+  // ...and no notice while Close out is open beside it, the draft in plain sight
+  const askAt = askWhere(workspaceMode), noticeOn = agentDrafts.length > 0 && !(threeUp && isOpen("close"));
+  const openDraft = (r) => {
+    if (pairRoom && r) { pairShut.current.delete(draftKey(r)); return pairDraft(r); }
     setOpenStage("reply"); if (threeUp) openSection("close"); else if (sessionView) setPeek(true);
     requestAnimationFrame(() => requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("[data-tq-draft-box]")?.scrollIntoView({ block: "center", behavior: "smooth" })));
   };
@@ -3204,7 +3215,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere}
-                        approve={askAt === "chat" && agentDrafts.length ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
+                        approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (
@@ -3246,7 +3257,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
                       {/* THE AGENT'S DRAFT, A NOTICE IN THE TERMINAL'S CORNER (the owner, 2026-11-02): laid over it, so the terminal keeps its size */}
-                      {askAt === "popup" && <AgentDraftNotice asks={agentDrafts} at="popup" agent={agentName(t)} onOpen={openDraft} />}
+                      {askAt === "popup" && noticeOn && <AgentDraftNotice asks={agentDrafts} at="popup" agent={agentName(t)} onOpen={openDraft} />}
                     </Box>
                     {/* pages the session published with Claude's Artifact tool, under the session that made them */}
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>

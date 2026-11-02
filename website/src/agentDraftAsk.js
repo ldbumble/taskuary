@@ -9,6 +9,8 @@ import { deliveryMeta, deliveryTo } from "./replyDelivery.js";
 const isReply = (r) => r?.Kind !== "action" && r?.Kind !== "slot";
 export const isAgentDraft = (r) => !!r && r.Status === "pending" && isReply(r) && !!String(r.DraftText || "").trim()
   && (String(r.DraftBy || "").startsWith("agent:") || r.Kind === "clarification");
+// ...one per draft as filed: the same review written again by the agent is a new draft
+export const draftKey = (r) => `${r.ReviewId}|${String(r.DraftText || "")}`;
 // the drafts the agent pane says, in the order the task holds them
 export const agentAsks = (reviews = []) => (reviews || []).filter(isAgentDraft);
 // where it is said: over a terminal (a CLI agent) in its corner, at the foot of a general agent's conversation - nowhere else
@@ -36,3 +38,10 @@ export function alreadyAnswered({ draft, sent = [], against = null, ms = (s) => 
   return { who: draftedTo(draft) || against?.FromName || "them", at: hit.at, words };
 }
 export const answeredLine = (a, when = (s) => s) => (a ? `You already answered ${a.who} at ${when(a.at)}: "${a.words}"` : "");
+
+// THE REPLY BESIDE THE AGENT (the owner, 2026-11-02: "if the agent makes a reply, bring out the reply (Close out) tab side by side"): the task
+// view pairs Agent | Close out on its own for the agent's draft - once the agent is not working (a working terminal is never squeezed: its
+// notice's press pairs them), where the work area holds two halves, and once per draft and view (`done`: `${draftKey}|${view}`); never again
+// for a draft whose pair the owner closed (`shut`: draftKeys)
+export const autoPair = ({ draft, working = false, canPair = false, paired = false, shut = new Set(), done = new Set(), view = "" } = {}) =>
+  !!draft && !working && canPair && !paired && !shut.has(draftKey(draft)) && !done.has(`${draftKey(draft)}|${view}`);

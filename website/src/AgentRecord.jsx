@@ -10,7 +10,7 @@ import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages, { FOLD } from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runHeads, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, heldLines, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runHeads, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
 import BriefLine from "./BriefLine.jsx";
@@ -201,12 +201,14 @@ export const ResultSummary = ({ taskId, stamp, pages = [], said = "", onRecord =
     return () => { live = false; };
   }, [taskId, stamp]);
   if (!rec) return <CircularProgress size={12} sx={{ mt: 1 }} />;
-  const { did, found, rest } = resultLine(rec.sessions?.[0], said), made = madeOnce(pages, outputs);
+  const { did, found, rest } = resultLine(rec.sessions?.[0], said), made = madeOnce(pages, outputs), held = heldLines(rec.held);
   return (
     <Box data-tq-result-summary="" sx={{ mt: 0.9, display: "flex", flexDirection: "column", gap: 0.9 }}>
+      {held.waiting.map((l, i) => <Typography key={i} data-tq-result-held="" sx={{ fontSize: 13, fontWeight: 600, color: INK }}>{l}</Typography>)}
       {did ? <Box data-tq-result-did="" sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={did} /></Box>
         : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result - open the Result for what it did.</Typography>}
       {rest && <Box data-tq-result-rest="" sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={rest} /></Box>}
+      {held.after.map((l, i) => <Typography key={i} data-tq-result-ran="" sx={{ fontSize: 12.5, color: DIM }}>{l}</Typography>)}
       {found && <Box data-tq-result-found=""><Typography sx={head}>What it found</Typography>
         <Box sx={{ fontSize: 13, lineHeight: 1.5, color: INK }}><Md text={found} /></Box></Box>}
       {!!made.length && <Box data-tq-result-made=""><Typography sx={head}>What it made</Typography><PublishedPages pages={made} verb="Open" deliver /></Box>}

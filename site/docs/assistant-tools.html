@@ -102,7 +102,7 @@
 <div class="entry">
       <a class="page" href="./whats-new">What's new</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show What's new's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./whats-new#0-3-10-16-2026-11-02">0.3.10.16 - 2026-11-02</a><a class="sec" href="./whats-new#0-3-10-15-2026-11-01">0.3.10.15 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-14-2026-11-01">0.3.10.14 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-13-2026-11-01">0.3.10.13 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-12-2026-11-01">0.3.10.12 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-10-2026-11-01">0.3.10.10 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-9-2026-11-01">0.3.10.9 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-8-2026-11-01">0.3.10.8 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-7-2026-11-01">0.3.10.7 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-6-2026-11-01">0.3.10.6 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-5-2026-11-01">0.3.10.5 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-4-2026-10-31">0.3.10.4 - 2026-10-31</a><a class="sec" href="./whats-new#0-3-10-3-2026-10-30">0.3.10.3 - 2026-10-30</a><a class="sec" href="./whats-new#0-3-10-2-2026-10-30">0.3.10.2 - 2026-10-30</a><a class="sec" href="./whats-new#0-3-10-1-2026-10-30">0.3.10.1 - 2026-10-30</a></div>
+      <div class="secs" hidden><a class="sec" href="./whats-new#0-3-10-17-2026-11-02">0.3.10.17 - 2026-11-02</a><a class="sec" href="./whats-new#0-3-10-16-2026-11-02">0.3.10.16 - 2026-11-02</a><a class="sec" href="./whats-new#0-3-10-15-2026-11-01">0.3.10.15 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-14-2026-11-01">0.3.10.14 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-13-2026-11-01">0.3.10.13 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-12-2026-11-01">0.3.10.12 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-10-2026-11-01">0.3.10.10 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-9-2026-11-01">0.3.10.9 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-8-2026-11-01">0.3.10.8 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-7-2026-11-01">0.3.10.7 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-6-2026-11-01">0.3.10.6 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-5-2026-11-01">0.3.10.5 - 2026-11-01</a><a class="sec" href="./whats-new#0-3-10-4-2026-10-31">0.3.10.4 - 2026-10-31</a><a class="sec" href="./whats-new#0-3-10-3-2026-10-30">0.3.10.3 - 2026-10-30</a><a class="sec" href="./whats-new#0-3-10-2-2026-10-30">0.3.10.2 - 2026-10-30</a><a class="sec" href="./whats-new#0-3-10-1-2026-10-30">0.3.10.1 - 2026-10-30</a></div>
     </div>
     </nav>
     <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
@@ -136,7 +136,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>agents</strong></td>
 <td>a task&#39;s agent; where work belongs</td>
-<td>dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text)</td>
+<td>dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.tell(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text)</td>
 </tr>
 <tr>
 <td><strong>new</strong></td>
@@ -151,12 +151,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>reports</strong></td>
 <td>reports and workflows</td>
-<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete</td>
+<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete</td>
 </tr>
 <tr>
 <td><strong>app</strong></td>
-<td>settings, connections, scripts, memory, rules, the Hub, the Board and Search</td>
-<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?)</td>
+<td>settings, connections, scripts, memory, rules, bell, Hub, Board, Search</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?), problems.dismiss</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
@@ -299,9 +299,9 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-watch"><code>task.watch</code><a class="anchor" href="#task-watch" aria-label="Link to this section">#</a></h3>
-<p>Watch it - a task that is someone else&#39;s to move but the owner wants kept open and followed (&quot;watch this&quot;, &quot;keep an eye on it until Paula answers&quot;): it leaves the walk for Watching and comes back when the thread moves or after 7 quiet days; nothing is sent.</p>
+<p>Watch it - a task that is someone else&#39;s to move but the owner wants kept open and followed (&quot;watch this&quot;, &quot;tell me when Paula answers&quot;): it moves under Watching, still walked after Tasks, and goes back to Tasks when the thread moves or after 7 quiet days; nothing is sent.</p>
 <ul>
-<li><code>what</code> (optional) - done | reply | any (the default) | off</li>
+<li><code>what</code> (optional) - off stops it</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-comment"><code>task.comment</code><a class="anchor" href="#task-comment" aria-label="Link to this section">#</a></h3>
@@ -385,12 +385,18 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>note</code> - when the owner said what to tell it as it picks up</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="agent-answer"><code>agent.answer</code><a class="anchor" href="#agent-answer" aria-label="Link to this section">#</a></h3>
-<p>Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is the owner&#39;s call, never this.</p>
+<p>Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so: agent.continue or dispatch.prepare starts one. An agent still WORKING, not asking, takes words as agent.tell.</p>
 <ul>
 <li><code>text</code></li>
 <li><code>ref</code> (optional) - its task when it is not the one on the table</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h3 id="agent-stop"><code>agent.stop</code><a class="anchor" href="#agent-stop" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="agent-tell"><code>agent.tell</code><a class="anchor" href="#agent-tell" aria-label="Link to this section">#</a></h3>
+<p>Tell the agent WORKING on a task something new, as the owner&#39;s next prompt (&quot;tell the agent to use the main branch&quot;, &quot;also check the March file&quot;). It goes in when the agent stops at its prompt - never mid-step. With no agent at work nobody hears it: say so.</p>
+<ul>
+<li><code>text</code> - the words, as the owner would type them</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h3 id="agent-stop"><code>agent.stop</code><a class="anchor" href="#agent-stop" aria-label="Link to this section">#</a></h3>
 <p>Save and end an agent&#39;s session - the one on the table, or the task <code>ref</code> names; never a guess at which. Several at once is agents.stop.</p>
 <ul>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
@@ -536,6 +542,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>line</code> - timeline | alert | send</li>
 <li><code>how</code> - always | ai | rule | never</li>
+<li><code>to</code> (optional) - send or alert: who gets it - an address, or a name as the owner said it; not sure who: ask them, never guess</li>
 <li><code>title</code></li>
 <li><code>when</code> - for ai: what to look for</li>
 <li><code>rule</code> - /<code>count</code>/<code>text</code> (for rule)</li>
@@ -552,7 +559,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>title</code> - kept 30 days under Recently deleted</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
-<p>Settings, connections, scripts, memory, rules, the Hub, the Board and Search.</p>
+<p>Settings, connections, scripts, memory, rules, bell, Hub, Board, Search.</p>
 <h3 id="setting-set"><code>setting.set</code><a class="anchor" href="#setting-set" aria-label="Link to this section">#</a></h3>
 <p>Change one setting; the schema says what it takes.</p>
 <ul>
@@ -635,9 +642,9 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>how</code> (optional) - edit (the default) | remove</li>
 </ul>
 <p class="runs">Brings up its page, at the thing, for you to press.</p><h3 id="deleted-restore"><code>deleted.restore</code><a class="anchor" href="#deleted-restore" aria-label="Link to this section">#</a></h3>
-<p>Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile. A Hub post taken off is not here: it is on the Hub&#39;s own removed shelf, restored there.</p>
+<p>Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule, profile or Hub post. A Hub post the vote took off is not here: it is on the Hub&#39;s own removed shelf, restored there.</p>
 <ul>
-<li><code>what</code> - its title as deleted.list says it</li>
+<li><code>what</code> - its title as deleted.list says it (or its kind, &quot;hub post&quot;, when it is the only one)</li>
 </ul>
 <p class="runs">Brings up its page, at the thing, for you to press.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
 <p>Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there - at the desk the Hub comes up at its Write one with your words, theirs to post - or, on a phone, when a turn clearly earns it.</p>
@@ -666,7 +673,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>page</code> - board (every agent and task at work, as columns) | search (the search over everything - tasks, mail, chats, PRs, settings)</li>
 <li><code>query</code> (optional) - the words to search for, with search</li>
 </ul>
-<p class="runs">Brings up its page, at the thing, for you to press.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its page, at the thing, for you to press.</p><h3 id="problems-dismiss"><code>problems.dismiss</code><a class="anchor" href="#problems-dismiss" aria-label="Link to this section">#</a></h3>
+<p>Put down what the bell shows, as its Dismiss or Got it does; none when the bell holds one. It comes back if it fails again after working.</p>
+<ul>
+<li><code>which</code> - words of the problem&#39;s title as errors.list prints it, or all</li>
+</ul>
+<p class="runs">Runs at once and says what it changed.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
 <p>Look-ups - they run at once and change nothing.</p>
 <h3 id="app-find"><code>app.find</code><a class="anchor" href="#app-find" aria-label="Link to this section">#</a></h3>
 <p>Bring ANYTHING in the app up by words - a setting, a connector card (the catalogue&#39;s and the owner&#39;s own, by name), a page, a report or workflow, a document: <code>query</code>, the words that name it (&quot;sound&quot;, &quot;signature&quot;, &quot;second outlook&quot;). It returns the best candidates with their links: link the one that fits, [its name](its link), and it opens.</p>
@@ -760,7 +772,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>ref</code> (optional) - one task</li>
 </ul>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="deleted-list"><code>deleted.list</code><a class="anchor" href="#deleted-list" aria-label="Link to this section">#</a></h3>
-<p>What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles (never a Hub post: the Hub keeps its own removed shelf)</p>
+<p>What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles and Hub posts the owner removed (one the vote took off waits on the Hub&#39;s own removed shelf)</p>
 <p class="runs">Runs at once and changes nothing.</p><h3 id="rules-list"><code>rules.list</code><a class="anchor" href="#rules-list" aria-label="Link to this section">#</a></h3>
 <p>The standing filters on the owner&#39;s mail - queue mutes set with a reason, and the policy rules (skip, ignore, escalate...) that decide before any model reads it. Use it for &quot;why did I never see X&quot;, &quot;what am I filtering&quot;</p>
 <ul>
@@ -820,7 +832,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.10.16 · updated 2026-11-02</p>
+    <p class="stamp">Documentation for Taskuary 0.3.10.17 · updated 2026-11-02</p>
   </main>
 </div>
 <script src="./docs.js"></script>

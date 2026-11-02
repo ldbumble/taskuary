@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.17 - 2026-11-02
+
+- Watch it stays on the walk, means one thing on desk and phone, and a phone's small changes act at once
+- The AI doors leave the chat's view; a report's builder runs and pauses itself; a route names who gets it
+- Advisor: honest agreement numbers, a held action lit, the Assistant's context, a finish check on the latest word
+- The Assistant reaches the bell, Search and the Hub's Write one; a removed Hub post is under Recently deleted
+- The Assistant starts an agent when told to, and tells one at work
+
 ## 0.3.10.16 - 2026-11-02
 
 - The task page's everyday asks join the audit, and three it refused or misled now land

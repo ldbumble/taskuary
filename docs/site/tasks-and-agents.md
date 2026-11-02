@@ -186,7 +186,7 @@ whether the job is general or coding - coding only with [Developer mode](#develo
 ### Developer mode
 
 Coding agents are for developers, so they come with **Developer mode** - a switch in setup ("Are you
-a developer?") and in Settings → Configuration → Developer. It is **off** on a new install: triage
+a developer?") and in Settings → Configuration → Agent permissions. It is **off** on a new install: triage
 never calls anything coding, nothing asks about repositories, and every job goes to a general agent,
 whatever AI or CLI is connected. Asking the Assistant for a coding agent hands the job to a general
 agent and says where the switch is.

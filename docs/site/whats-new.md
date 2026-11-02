@@ -2,6 +2,22 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.20 - 2026-11-02
+
+- Windows installer: TaskuarySetup.exe, built and signed with every release
+- The mic offers Windows voice typing only while its speech setting is on, and says plainly when it stops
+- Desktop Download saves into the Downloads folder and says so
+- Waiting room never types a note into the owner's half-typed line
+- Words typed to a general agent waiting on you reach it, and a send that fails stays on screen
+- Rows filed as Not ours can be marked read instead
+- The Assistant knows the agent job it started; a second press of it is one start
+- WhatsApp chats keep their names across a bridge restart, and a timed-out group roster is asked again
+- A conflict elsewhere in the store no longer refuses every mark-read
+- The WhatsApp card's switched-on chats show their last message under the name
+- Emails use the account's own signature when the owner has set none
+- Ship only the sent-mail signature: no Gmail settings permission yet
+- Regenerate the Assistant's tool reference for the Not ours wording
+
 ## 0.3.10.19 - 2026-11-02
 
 - A log file that cannot open in the data folder no longer stops the desktop app

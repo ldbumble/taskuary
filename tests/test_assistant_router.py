@@ -334,18 +334,16 @@ class DeskRoutes(unittest.TestCase):
         out, _ = say(s, 'turn off background sync', item['key'], 'CALL: {"kind": "setting.set", "params": {"setting": "poll_minutes", "value": "0"}}')
         self.assertNotIn('beside', out['say']); self.assertIn('Settings', out['say'])
 
-    def test_a_tool_with_no_button_goes_back_to_the_model_never_to_a_card(self):
+    def test_a_hub_post_is_the_hubs_write_one_never_a_card(self):
+        # the assistant audit, 2026-11-02: it was refused as a tool with no button, and the model said the Hub was not set up - the Hub
+        # has Write one: it comes up with the words, and the post is the owner's press
         s = store(); _, item = on_table(s)
-        said = []
-        def llm(system, user, **kw):
-            said.append(user)
-            return 'CALL: {"kind": "hub.publish", "params": {"title": "PO limit", "body": "Gail approves above 5k"}}' if len(said) == 1 \
-                else 'You can save that to the Hub from its own page.'
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = concierge.say(s, 'save that to the hub', key=item['key'], llm=llm)
-        self.assertNotIn('proposal', out)
-        self.assertIn('has no button the owner presses here', said[1])
-        self.assertEqual(out['say'], 'You can save that to the Hub from its own page.')
+            out = concierge.say(s, 'save that to the hub', key=item['key'],
+                                llm=lambda *a, **k: 'CALL: {"kind": "hub.publish", "params": {"title": "PO limit", "body": "Gail approves above 5k"}}')
+        self.assertNotIn('proposal', out); self.assertEqual(out['open'], '#hub')
+        self.assertEqual(out['say'], 'Opened the Hub - press Write one there and put down “PO limit”.')
+        self.assertEqual(s.lore_posts(), [])
 
     def test_a_set_up_is_its_own_page(self):
         s = store()

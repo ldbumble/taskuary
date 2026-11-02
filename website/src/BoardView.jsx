@@ -300,7 +300,9 @@ export default function BoardView({ onOpenTask, active = true }) {
 
   if (!tasks) return <CircularProgress size={22} sx={{ m: 4 }} />;
   return (
-    <Box>
+    // THE BOARD IS A VIEW THE ASSISTANT READS (pageView.js, the assistant audit 2026-11-02): unmarked, "switch to the wall" asked on it had
+    // no page under it, and a VIEW open of the Board waited on a root that never drew
+    <Box data-tq-browse="board" data-tq-view-label="Agent board">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {/* four things on one line is a laptop's worth of room; below that they wrap rather than
           push the page sideways */}

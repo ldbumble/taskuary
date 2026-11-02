@@ -1423,7 +1423,11 @@ def find_deleted(store, what: str) -> dict:
     hits = [r for r in rows if w and (w == str(r['id']) or w in str(r['title']).lower())]
     if len(hits) != 1:
         raise CallMiss(f"{'Several removed things match' if hits else 'Nothing under Recently deleted matches'} {what!r} - "
-                       + ('; '.join(f"{r['title']} ({r['kind']})" for r in (hits or rows)[:8]) or 'it is empty') + '. Nothing was changed.')
+                       + ('; '.join(f"{r['title']} ({r['kind']})" for r in (hits or rows)[:8]) or 'it is empty') + '. Nothing was changed.'
+                       # ...a Hub post taken off is never here (the assistant audit, 2026-11-02): "bring back the hub post I removed" read only
+                       # "it is empty", and the post waited on the Hub's own shelf
+                       + ('' if hits else " A Hub post taken off is not under Recently deleted: it waits on the Hub's own removed shelf - "
+                                          'the Hub, its removed button, then restore beside the post.'))
     return hits[0]
 
 
@@ -3471,6 +3475,14 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         # ...its words ride in: "Wrote it into New" over an empty box was the line saying what it had not done (the owner, 2026-10-29)
         return _new(store, tid, table, 'report', str(params.get('text') or text or '').strip()) if 'report' in str(params.get('name') or '') \
             else surface(store, None, None, actor)
+    # THE HUB'S WRITE ONE IS ITS BUTTON (the assistant audit, 2026-11-02): "put this on the hub: ..." was refused as a tool with no button,
+    # and the model told the owner the Hub was not set up - on a desk whose Hub had posts. Others read the Hub, so the post is the owner's
+    # press: the Hub comes up, and the line carries the words to put in Write one. A Hub switched off is its card, switched on there
+    if kind == 'hub.publish':
+        from . import handbook
+        if not handbook.enabled(store): return _page(store, tid, table, '#connector=handbook', 'Opened the Company Hub card under Connections - switch it on there first.')
+        t = _title_cut(' '.join(str(params.get('title') or '').split()), 140)
+        return _page(store, tid, table, '#hub', 'Opened the Hub - press Write one there' + (f' and put down “{t}”.' if t else '.'))
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",

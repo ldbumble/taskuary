@@ -404,8 +404,8 @@ POWERS = [
     Q('app', 'show me the board', None, c('page.open', page='board'), 'open', freq=2),
     Q('app', 'search everything for 88213', None, c('page.open', page='search', query='88213'), 'open', freq=2),
     Q('app', 'save to the hub: the bank feed lags a day at month end', None,
-      [c('hub.publish', title='The bank feed lags a day at month end', body='Reconcile on the 2nd, not the 1st.'),
-       'The Hub is not set up here - Hub under Connections joins one.'], 'words', freq=1, note='no Hub joined in the demo world: said'),
+      c('hub.publish', title='The bank feed lags a day at month end', body='Reconcile on the 2nd, not the 1st.'), 'open:#hub', freq=1,
+      note="the Hub's Write one is the press (2026-11-02) - it was refused, and the model said a Hub with posts was not set up"),
     # ── the rest of the catalogue an owner says in passing ──
     Q('row', 'decline it', 'invite', c('decline_invite'), 'light:decline_invite', freq=3),
     Q('row', 'can we do thursday instead', 'invite', c('propose_time', text='thursday'), 'light:propose_time', freq=3),
@@ -914,6 +914,83 @@ AREA_NEW = [
       sort={'kind': 'playbook'}, freq=2),
 ]
 CASES += AREA_NEW
+
+# THE HUB, THE BOARD, SEARCH AND THE OWNER'S PEOPLE (the audit of 2026-11-02: "it has the right tools ... to be able to help the user on
+# every page"): the page as HubView / BoardView send it (pageView.js reads it off the DOM - a topic chip is "importers · 2", a post's arrows
+# are their titles), and the tools that reach them from anywhere. The demo world's Hub: #1 the dry-run idea, #2 retries by elapsed time,
+# #3 the pyodbc gotcha, #4 the bank feed, #5 the census VPN, #6 finance closes on the first Wednesday
+HUB = {'area': 'hub', 'title': 'Hub',
+       'fields': [{'key': 'search_hub', 'label': 'Search Hub', 'value': ''},
+                  {'key': 'order', 'label': 'Order', 'kind': 'choice', 'value': 'top'}, {'key': 'tag', 'label': 'Tag', 'kind': 'choice', 'value': ''}],
+       'buttons': [{'id': 'everything_6', 'label': 'everything · 6'}, {'id': 'importers_2', 'label': 'importers · 2'},
+                   {'id': 'payroll_1', 'label': 'payroll · 1'}, {'id': 'removed', 'label': 'removed'}, {'id': 'write_one', 'label': 'Write one'}]}
+HUBPOST = {'area': 'hub', 'title': 'the Hub post "The AP importer needs pyodbc on the box before its tests mean anything" (importers)',
+           'fields': [{'key': 'search_hub', 'label': 'Search Hub', 'value': ''},
+                      {'key': 'correct_it_add_to_it_or_say_where_it_bit_you', 'label': 'correct it, add to it, or say where it bit you', 'value': ''}],
+           'buttons': [{'id': 'importers', 'label': 'importers'}, {'id': 'holds_up_agents_are_handed_this_sooner', 'label': 'holds up — agents are handed this sooner'},
+                       {'id': 'wrong_or_stale_below_zero_it_is_removed', 'label': 'wrong or stale — below zero it is removed'},
+                       {'id': 'remove', 'label': 'remove'}, {'id': 'post', 'label': 'Post', 'enabled': False}]}
+BOARD = {'area': 'board', 'title': 'Agent board', 'fields': [],
+         'buttons': [{'id': 'columns', 'label': 'Columns'}, {'id': 'wall', 'label': 'Wall'}, {'id': 'live_handoffs', 'label': 'Live handoffs'},
+                     {'id': 'feed_the_agent', 'label': '✎ Feed the agent'}, {'id': 'new_task', 'label': 'New task'}]}
+AREA_HUB_BOARD_SEARCH = [
+    # ── the Hub, on screen: its own box, its chips, its shelves - pressed as the owner would ──
+    Q('hub-board-search', 'search the hub for retries', None, ['Searched the Hub for retries.\n' + v(op='set', field='search_hub', value='retries')],
+      'view:set:search_hub', tools=('words',), view=HUB, freq=4),
+    Q('hub-board-search', 'serch the hub for census', None, [v(op='set', field='Search Hub', value='census')], 'view:set:search_hub', tools=('words',), view=HUB,
+      freq=2, note='a misspelling: the model reads it'),
+    Q('hub-board-search', 'show me just the importers posts', None, [v(op='press', button='importers')], 'view:press:importers_2', tools=('words',), view=HUB, freq=3),
+    Q('hub-board-search', 'sort by newest', None, [v(op='set', field='order', value='newest')], 'view:set:order', tools=('words',), view=HUB, freq=2,
+      note="the order and tag menus carry their names now (HubView.jsx, 2026-11-02) - unnamed, the page never sent them"),
+    Q('hub-board-search', 'only the gotchas', None, [v(op='set', field='Tag', value='gotcha')], 'view:set:tag', tools=('words',), view=HUB, freq=2),
+    Q('hub-board-search', 'what got voted off?', None, [v(op='press', button='removed')], 'view:press:removed', tools=('words',), view=HUB, freq=2),
+    Q('hub-board-search', 'open the pyodbc post', None, [v(op='open', area='hub', open='3')], 'view:open:hub', tools=('words',), view=HUB, freq=3,
+      note="a post opens by its number - pageview.take hands the Hub a number, as a click on its card does"),
+    # ...one post open: its arrows and remove are the owner's kind of press; its Post sends a comment others read, so it is lit
+    Q('hub-board-search', 'vote it up', None, [v(op='press', button='holds up')], 'view:press:holds_up_agents_are_handed_this_sooner', tools=('words',),
+      view=HUBPOST, freq=3),
+    Q('hub-board-search', 'take this off the hub', None, [v(op='press', button='remove')], 'view:press:remove', tools=('words',), view=HUBPOST, freq=2),
+    Q('hub-board-search', 'comment that the driver is in the build image now', None,
+      ['Wrote it in - Post is yours to press.\n' + v(op='set', field='correct it, add to it, or say where it bit you', value='The driver is in the build image now.')
+       + '\n' + v(op='press', button='Post')], 'view:point:post', tools=('words',), view=HUBPOST, freq=3,
+      note='a comment others read goes by the owner\'s press - Post is lit, never pressed'),
+    # ── the Hub from anywhere ──
+    Q('hub-board-search', 'what does the hub say about pyodbc?', None, [c('knowledge.search', query='pyodbc'), 'Install pyodbc before the importer tests (#3).'],
+      'read:knowledge.search', freq=3),
+    Q('hub-board-search', 'upvote the retries post', None, [c('knowledge.search', query='retries'), c('hub.vote', post='#2')], 'open:#hub=&post=2', freq=2),
+    Q('hub-board-search', "downvote #3, it's stale", None, c('hub.vote', post='#3', up=False), 'open:#hub=&post=3', freq=2),
+    Q('hub-board-search', 'comment on the dry-run idea: it worked for the May launch', None,
+      c('hub.comment', post='#1', text='It worked for the May launch.'), 'open:#hub=&post=1', freq=2),
+    Q('hub-board-search', 'put this on the hub: finance closes on the first Wednesday', None,
+      c('hub.publish', title='Finance closes on the first Wednesday', body='The bank feed has settled by then.', topic='payroll', kind='decision'),
+      'open:#hub', freq=2, note="the Hub comes up with the words for its Write one - others read it, so the post is the owner's press"),
+    Q('hub-board-search', 'bring back the hub post I removed', None,
+      [c('deleted.restore', what='hub post'), "A Hub post taken off is on the Hub's own removed shelf - press removed there, then restore beside it."], 'words', freq=1,
+      note="a Hub post is never under Recently deleted - the miss says where it is (concierge.find_deleted, 2026-11-02)"),
+    Q('hub-board-search', 'show me the hub', None, find('hub'), 'link:#hub', freq=3),
+    # ── the Board, on screen ──
+    Q('hub-board-search', 'switch to the wall', None, [v(op='press', button='Wall')], 'view:press:wall', tools=('words',), view=BOARD, freq=2),
+    Q('hub-board-search', 'what are the agents telling each other?', None, [v(op='press', button='Live handoffs')], 'view:press:live_handoffs', tools=('words',),
+      view=BOARD, freq=2),
+    Q('hub-board-search', 'which of these are running right now', None, [c('agents.now'), 'One, on TQ-0006.'], 'read:agents.now', view=BOARD, freq=3),
+    Q('hub-board-search', 'why is the census sync stuck?', None, [c('task.read', ref=T12), 'It is waiting on a repository.'], 'read:task.read', view=BOARD, freq=3),
+    Q('hub-board-search', 'put an agent on tidying the vendor list', None,
+      c('task.create_from_text', kind='general', text='tidy the vendor list', title='Tidy the vendor list'), 'new:agent:general', view=BOARD, freq=3),
+    Q('hub-board-search', 'take me to the board', None, c('page.open', page='board'), 'open:#board', freq=3),
+    # ── Search everything ──
+    Q('hub-board-search', 'find anything mentioning pyodbc', None, c('page.open', page='search', query='pyodbc'), 'open:#search=pyodbc', freq=3),
+    Q('hub-board-search', 'serach for invoice 88213', None, c('page.open', page='search', query='invoice 88213'), 'open:#search=invoice%2088213', freq=2),
+    Q('hub-board-search', "what's Gail's email address?", None, [c('sender.read', who='Gail Moreno'), 'gail@northwind.example.'], 'read:sender.read', freq=3),
+    # ── the owner's people (orgchart.py): said and kept; read back from the memory ──
+    Q('hub-board-search', 'Gail reports to me', None, c('people.relate', who='Gail Moreno', relation='report'), 'did:people.relate', freq=3),
+    Q('hub-board-search', "Ray doesn't own payroll anymore", None, c('people.relate', who='Ray Colton', drops='payroll'), 'did:people.relate', freq=2),
+    Q('hub-board-search', 'take Omar off my org chart', None, [c('people.relate', who='Omar Keller', forget=True), 'Omar is not on your org chart - nothing to take off.'],
+      'words', freq=1, note='nobody by that name on the chart: the miss is said, nothing changed'),
+    Q('hub-board-search', 'who is my manager?', None, [c('memory.list', about='manager'), 'Nobody is on your org chart as your manager yet.'], 'read:memory.list', freq=3),
+    # ── what was removed ──
+    Q('hub-board-search', 'did I delete a routine by mistake?', None, [c('deleted.list'), 'Nothing removed in the last 30 days.'], 'read:deleted.list', freq=1),
+]
+CASES += AREA_HUB_BOARD_SEARCH
 
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}

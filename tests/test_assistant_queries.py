@@ -26,7 +26,8 @@ class EverydayAsks(unittest.TestCase):
         # powers"): the page it is shown, Taskuary's own trouble, its tracker, its help, work that is an agent's, the newer row buttons
         self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
                                 'bring-up', 'connectors', 'phone', 'memory', 'page', 'troubleshoot', 'feedback', 'help', 'agentwork',
-                                'row', 'sets', 'new', 'people', 'app', 'task', 'rail', 'connections'})
+                                'row', 'sets', 'new', 'people', 'app', 'task', 'rail', 'connections',
+                                'hub-board-search'})
 
     def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
         self.assertEqual({v for v, d, p in Q.reach() if not d}, set())
@@ -137,6 +138,16 @@ class EverydayAsks(unittest.TestCase):
         # ...and the help it reads says a data card is a report's, and what the voice cards do
         self.assertIn('never puts work on your rail', told['will quickbooks put bills on my task list?'])
         self.assertIn('AI · voice', told['how do voice notes get transcribed?'])
+
+    def test_the_hub_board_and_search_are_worked_where_they_stand(self):
+        # the assistant audit, 2026-11-02: "put this on the hub" was refused as a tool with no button - the Hub's Write one is its press;
+        # a post opened on the page opens by its number, as a click writes it; a removed Hub post is said to be on the Hub's own shelf
+        r = {x['q'].text: x['ideal'] for x in self.rows if x['q'].cat in ('hub-board-search', 'app')}
+        self.assertIn('open:#hub', r['put this on the hub: finance closes on the first Wednesday']['got'])
+        self.assertIn('Write one', r['put this on the hub: finance closes on the first Wednesday']['say'])
+        self.assertIn('open:#hub', r['save to the hub: the bank feed lags a day at month end']['got'])
+        self.assertIn("the Hub's own removed shelf", r['bring back the hub post I removed']['told'])
+        self.assertEqual([g for g in r['comment that the driver is in the build image now']['got'] if g.startswith('view:point')], ['view:point:post'])
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')

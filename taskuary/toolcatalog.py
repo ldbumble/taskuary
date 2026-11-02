@@ -146,7 +146,9 @@ PURPOSE = {
     'hub.publish':              ('save to the company Hub - `title`: one durable claim, `body`: why it matters and what to do, `topic`, '
                                  '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. Only a '
                                  'reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, '
-                                 'a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it'),
+                                 'a task log or a routine answer. When the owner asks to save something there - at the desk the Hub comes up '
+                                 'at its Write one with your words, theirs to post - or, on a phone, when a turn clearly earns it'),
+    # ...at the desk it is the Hub's Write one (concierge._route, the assistant audit 2026-11-02): a page that opens is never unasked
     'pipe.clear':               ('clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all '
                                  'the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
                                  'and the count said. `scope`: all (the default - every one waiting that `select` matches, the batch on the table '
@@ -217,7 +219,8 @@ PURPOSE = {
                                  'says it (its sender, pattern or name); `how`: edit (the default) | remove. Adding a rule for a sender '
                                  'is preference.sender_rule'),
     'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile - '
-                                 '`what`: its title as deleted.list says it'),
+                                 "`what`: its title as deleted.list says it. A Hub post taken off is not here: it is on the Hub's own removed "
+                                 'shelf, restored there'),   # the assistant audit, 2026-11-02: the miss read "it is empty" over a removed post
     'hub.comment':              ("add a comment to a Hub post - `post`: its number (#12, as knowledge.search prints it), `text`: the "
                                  "comment in the owner's words. Others read the Hub: it goes only by the owner's press"),
     'hub.vote':                 'vote a Hub post up or down - `post`: its number; `up`: false for down',
@@ -610,7 +613,8 @@ READS = {
     'outputs.find':     ('the files agents made on tasks - workbooks, PDFs, documents, charts, pages - each once, its newest version, with '
                          'its task and the link that downloads it. `query`: words of the task or the file ("vendor pricing"); `kind` '
                          'optional: xlsx | pdf | doc | deck | csv | picture | page; `ref` optional: one task. Answer with the link'),
-    'deleted.list':     'what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles',
+    'deleted.list':     ('what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles '
+                         "(never a Hub post: the Hub keeps its own removed shelf)"),
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
                          'Use it for "why did I never see X", "what am I filtering"'),

@@ -16,7 +16,7 @@ def noun(nid: str) -> str: return NOUNS[nid]
 LOCAL = _J['local']
 # what the Advisor's strip says when it lights nothing, by advisor.status's reason - only no AI is said (the owner, 2026-10-23)
 ADVICE_NONE = {k: v for k, v in _J['advice_none'].items() if not k.startswith('_')}
-# the one rulebook: each state's line and the verbs it lights (rulebook.py)
+# where an item stands, as facts: each state's meaning and its fact sentence, for the Advisor's model (rulebook.py)
 ADVICE_RULE = {k: v for k, v in _J['advice_rule'].items() if not k.startswith('_')}
 # what the daily check says about an item that fell through, by why (sweep.py)
 LOOSE = {k: v for k, v in _J['loose_ends'].items() if not k.startswith('_')}

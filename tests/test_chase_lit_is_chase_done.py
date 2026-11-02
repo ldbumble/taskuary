@@ -23,8 +23,12 @@ def _waiting(s, days, theirs=False):
 
 def test_chase_is_offered_only_where_it_can_go_and_the_gate_agrees():
     s = MemoryStore()
+    # ...on every wait with somebody to write to (whether a day is too soon is the model's to read from the days waited - no threshold here)
     t, it = _waiting(s, 1)
-    assert rulebook.adds(s, it) == [] and concierge.cannot(it, 'chase', s), 'a day is not late: no Chase, and a typed one is refused'
+    assert rulebook.adds(s, it) == ['chase'] and concierge.cannot(it, 'chase', s) == '', 'a wait of a day: Chase is on the row'
+    nobody = Factory(s).task(title='Lease copy', kind='task', status='waiting')
+    gone = {'key': f'task:{nobody}', 'kind': 'todo', 'lane': 'theirs', 'tid': nobody}
+    assert rulebook.adds(s, gone) == [] and concierge.cannot(gone, 'chase', s), 'nobody to write to: no Chase, and a typed one is refused'
     t, it = _waiting(s, 7)
     assert rulebook.chase_thread(s, it) == {'tid': t, 'who': RAY, 'mid': None}, 'nothing of theirs to answer: a new message to them'
     assert rulebook.adds(s, it) == ['chase'] and concierge.cannot(it, 'chase', s) == ''

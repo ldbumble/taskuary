@@ -33,13 +33,12 @@ def test_it_is_kept_whole_as_needs_never_as_a_failure():
     assert not [o for o in s.operations_for(tid, []) if o.get('Status') == 'error']
 
 
-def test_the_rule_lights_send_to_agent_or_continue_and_says_nothing_the_card_shows():
+def test_the_facts_name_it_needs_an_agent_and_say_nothing_the_card_shows():
     s = MemoryStore(); tid, rid = reply_with_needs(s)
     item = {'tid': tid, 'rid': rid, 'kind': 'asked', 'key': f'task:{tid}'}
     verbs = [{'verb': v} for v in ('reply', 'regular_agent', 'mine', 'next')]
-    got = rulebook.decide(s, item, verbs)
-    assert (got['state'], got['verb'], got['line']) == ('needs_agent', 'regular_agent', '')
-    assert rulebook.decide(s, item, verbs + [{'verb': 'continue'}])['verb'] == 'continue'
+    assert rulebook.facts(s, item, verbs) == {'state': 'needs_agent', 'line': ''}, 'the reason is on the card; the move is the model\'s'
+    assert 'reply writer did not draft it' in rulebook.RULES['needs_agent']['is']
     assert 'new_task' not in {v['verb'] for v in advisor.offered(s, item)}
 
 

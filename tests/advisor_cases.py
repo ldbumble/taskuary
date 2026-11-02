@@ -173,9 +173,8 @@ def world():
 
 
 def judge(s, item, syn, llm=None):
-    """(verb or None, line, prompt) for one item: THE ONE DECISION every surface reads (advisor.decide, the design phase A) - the rule's
-    move from the item's facts, and where the state asks the model (rulebook `ask`), the scripted brain's read of it at item.shown,
-    tier 2, through the real advisor.judge. `prompt` is '' where the rule decided alone - no model was asked."""
+    """(verb or None, line, prompt) for one item: THE ONE DECISION every surface reads (advisor.decide) - the scripted brain's read of it
+    at item.shown, tier 2, through the real advisor.judge: every state is the model's (the owner, 2026-11-02), an agent at work too."""
     from taskuary import advisor, demo
     calls = []
     base = llm or demo.brain()
@@ -184,8 +183,7 @@ def judge(s, item, syn, llm=None):
     if not tgt: return None, 'no target', ''
     orig = advisor._item
     with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
-        if not advisor._at_work(s, *tgt):
-            advisor.judge(s, advisor.SHOWN, tgt[0], tgt[1], advisor.revision(s, *tgt), tier=2, llm=rec, key=item.get('key'))
+        advisor.judge(s, advisor.SHOWN, tgt[0], tgt[1], advisor.revision(s, *tgt), tier=2, llm=rec, key=item.get('key'))
         with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, item.get('key'), preread=False)
     return d.get('verb'), d.get('line') or d.get('state') or d.get('none') or '', calls[-1] if calls else ''
 

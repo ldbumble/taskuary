@@ -82,15 +82,18 @@ class FinishCheckTests(_Rail):
         d = self._decide(s, t)
         self.assertNotEqual(d['line'], miss); self.assertNotEqual((d.get('fix') or {}).get('label'), 'Redraft with this')
 
-    def test_an_answered_check_leaves_the_rules_mark_done_with_its_reason(self):
+    def test_an_answered_check_leaves_the_models_light_and_the_finish_fact_reaches_it(self):
         s = MemoryStore(); t = self._stopped(s)
         s._exec("UPDATE run SET Result='The export moved to the new share.', FinishedAt=? WHERE TaskId=?",
                 ((datetime.now() + timedelta(minutes=2)).strftime('%Y-%m-%d %H:%M:%S'), t)); funnel.invalidate()
         advisor.finish_check(s, t, wait=True, llm=brain_saying({'verdict': 'answered', 'line': '', 'evidence': []}))
+        self.assertIsNone(self._decide(s, t)['verb'], 'an answered check lights nothing of its own, nor does any rule')
+        llm = brain_saying({'verb': 'close', 'line': '', 'evidence': []})
+        advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
+        self.assertRegex(llm.calls[0][1], r'\): stopped_done - .*; the fact: Finished .*; nothing since\.')
         d = self._decide(s, t)
-        self.assertEqual((d['state'], d['verb'], d['by']), ('stopped_done', 'close', 'rule'), d)
-        self.assertTrue(d['line'].startswith('Finished ') and d['line'].endswith('; nothing since.'), d['line'])
-        # ...and mail after it: "nothing since" is no longer true, so Mark done is not lit
+        self.assertEqual((d['state'], d['verb'], d['by']), ('stopped_done', 'close', 'model'), d)
+        # ...and mail after it moves the revision: read again, nothing lit meanwhile
         s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'RE: Export job', 'FromEmail': 'gail@northwind.example', 'FromName': 'Gail Moreno',
                        'SentAt': (datetime.now() + timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': 'And the old one?', 'Status': 'routed', 'TaskId': t})
         funnel.invalidate()
@@ -194,7 +197,7 @@ class NoDefaultVerbTests(_Rail):
         self.assertEqual(n.call_args.kwargs.get('tier'), 2, 'and it is asked')
         advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'reply', 'line': '', 'evidence': []}))
         with mock.patch.object(capabilities, 'has_ai', return_value=True), mock.patch.object(advisor, 'notice'):
-            self.assertIsNone(advisor.decide(s, f'task:{t}', preread=False)['verb'], 'agreeing with no line: nothing')
+            self.assertEqual(advisor.decide(s, f'task:{t}', preread=False)['verb'], 'reply', "the model's light stands, line or not")
         s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
         advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True,
                        llm=brain_saying({'verb': 'reply', 'line': 'Erin asked twice since Monday.', 'evidence': [], 'kind': 'late'}))
@@ -202,23 +205,23 @@ class NoDefaultVerbTests(_Rail):
             d = advisor.decide(s, f'task:{t}', preread=False)
         self.assertEqual((d['verb'], d['line'], d['by']), ('reply', 'Erin asked twice since Monday.', 'model'))
 
-    def test_hand_to_an_agent_is_lit_only_past_a_capacity_wall(self):
+    def test_hand_to_an_agent_is_the_models_call_with_no_capacity_gate(self):
+        """The capacity wall was a code gate on one verb in one state; the measure behind it (marked done 4 of 4) is now in the prompt."""
         s = MemoryStore(); t = self._asked(s)
-        advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True,
-                       llm=brain_saying({'verb': 'regular_agent', 'line': 'An agent can pull the agenda together.', 'evidence': []}))
+        llm = brain_saying({'verb': 'regular_agent', 'line': 'An agent can pull the agenda together.', 'evidence': []})
+        advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
+        self.assertIn('4 times of 4', llm.calls[0][0])
         with mock.patch.object(advisor, 'notice'):
-            self.assertNotEqual(advisor.decide(s, f'task:{t}', preread=False)['verb'], 'regular_agent')
+            self.assertEqual(advisor.decide(s, f'task:{t}', preread=False)['verb'], 'regular_agent')
             with mock.patch.object(advisor, 'failure', return_value={'what': "the agent's run failed", 'why': 'usage limit reached; resets at 11:50'}):
                 self.assertTrue(advisor.capacity(s, {'tid': t}))
         self.assertFalse(advisor.capacity(s, {'tid': t}))
 
-    def test_the_rules_reasonless_lights_are_gone(self):
+    def test_no_state_lights_by_itself_and_mark_done_has_its_fact(self):
         from taskuary import rulebook, words
         R = words.ADVICE_RULE
-        self.assertEqual((R['stopped']['lit'], R['waiting']['lit']), ([], []), 'a plain stop, a wait nothing is late on')
-        for st in ('answered', 'agent_done', 'stopped_done', 'done_list'):
-            self.assertIn('close', R[st]['lit']); self.assertTrue(R[st]['line'], f'{st}: Mark done says its reason')
-        self.assertNotIn('continue', R['stopped_done']['lit'])
+        self.assertFalse(any('lit' in w or 'ask' in w for w in R.values()), 'no state carries a light of its own')
+        for st in ('answered', 'agent_done', 'stopped_done', 'done_list'): self.assertTrue(R[st]['line'], f'{st}: its fact is said to the model')
         self.assertEqual(rulebook.when('2026-10-28 10:02:00', datetime(2026, 10, 28, 15, 0)), 'at 10:02')
         self.assertEqual(rulebook.when('2026-10-27 10:02:00', datetime(2026, 10, 28, 15, 0)), 'yesterday')
 

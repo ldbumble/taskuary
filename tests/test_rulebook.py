@@ -1,8 +1,9 @@
-"""THE ONE RULEBOOK (the Advisor design, phase A; the owner's rulings, 2026-10-23): every state the design's table names, decided from
-facts the app keeps, read the same by every surface - the desk canvas (the rail's key), the Tasks tab (task:N), a phone chat
-(remote_assistant.primary and the card's line) - with a line only where the card does not show the fact, and Next lit where nothing
-needs the owner. The desk at phone width is the page's (website/test/rulebookMatrix.test.mjs). Invented Northwind people only."""
-import json
+"""WHERE AN ITEM STANDS, AS FACTS - AND THE MODEL'S ONE DECISION (the Advisor design, phase A, 2026-10-23; the owner, 2026-11-02: "never
+ever use hard coded rules, let the ai see everything"). rulebook.facts names each state from facts the app keeps and says its fact; the
+model reads that, every verb the row offers and the owner's record, and decides every light - read the same by every surface: the desk
+canvas (the rail's key), the Tasks tab (task:N), a phone chat (remote_assistant.primary and the card's line). The desk at phone width is the
+page's (website/test/rulebookMatrix.test.mjs). Invented Northwind people only."""
+import json, re
 from datetime import date, datetime, timedelta
 from unittest import mock
 import pytest
@@ -22,34 +23,48 @@ def world():
     # carries the world's two meetings ("clear the vendor report" cleared a Vendor review in test_triage_urgent)
     sessions, agenda = dict(terminal.SESSIONS), dict(assistant._AGENDA)
     with mock.patch.object(faults, 'scratch_home', lambda: True): s, by, syn = C.world()
+    s.set_setting('advisor_event_cap', '1000', 'test')          # every case is the model's now: the hour's cap is not the subject
     yield s, by, syn
     for sid in [k for k in terminal.SESSIONS if k not in sessions]: terminal.SESSIONS.pop(sid, None)
     assistant._AGENDA.clear(); assistant._AGENDA.update(agenda); funnel.invalidate()
 
 
-def _decide(s, syn, item, key=None):
+_FACT = re.compile(r"^THE STATE \([^)]*\): (\w+) - .*?(?:; the fact: (.*))?$", re.M)
+def model_saying(verb):
+    """A model that lights `verb` and says, as its line, the fact THE STATE handed it - so a line on the strip proves the fact reached it."""
+    calls = []
+    def llm(system, user, **kw):
+        calls.append(user); m = _FACT.search(user)
+        return json.dumps({'verb': verb, 'line': (m.group(2) or '') if m and verb else '', 'evidence': []})
+    llm.calls = calls
+    return llm
+
+
+def _decide(s, syn, item, key=None, verb='unset'):
+    """The decision as every surface reads it - after the model read the item (at item.shown, tier 2) and answered `verb`."""
     orig = advisor._item
-    with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))), \
-         mock.patch.object(advisor, 'notice'):
-        return advisor.decide(s, key or item['key'], preread=False)
+    with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
+        tgt = advisor.target_of(s, key or item['key'])
+        if verb != 'unset': advisor.notice(s, advisor.SHOWN, tgt[0], tgt[1], tier=2, wait=True, llm=model_saying(verb), key=key or item['key'])
+        with mock.patch.object(advisor, 'notice'): return advisor.decide(s, key or item['key'], preread=False)
 
 
-# (case, the state the rule reads, the verb lit with no model read, whether a line is said) - NO DEFAULT VERB (the owner, 2026-10-28):
-# an ask, a draft or an idea lights nothing until the model says a fact for it, a plain stop lights nothing, and Mark done says its reason
+# (case, the state the facts name, the verb the model answers - and so the verb lit, whether a line is said: the model's line is the fact
+# THE STATE handed it, so a line proves the fact reached the prompt). Every state is the model's; none lights anything by itself
 MATRIX = [
-    ('Badge access for the new AP clerk', 'asked', None, False),
+    ('Badge access for the new AP clerk', 'asked', 'reply', True),
     ('did the overnight import finish', 'unsendable', 'copy', False),
-    ('AP cutover - Thursday?', 'draft_ready', None, False),
+    ('AP cutover - Thursday?', 'draft_ready', 'approve', False),
     ('Lease renewal for the Elm Street office', 'failed_cause', 'new_task', True),
-    ('Spendly card limits', 'idea', None, False),
+    ('Spendly card limits', 'idea', 'mine', False),
     ('Q3 accruals file', 'agent_done', 'close', True),           # "Your reply went at 10:02; nothing since."
     ('Helpdesk tickets by day', 'report_ok', 'next', False),
     ('Vendor portal maintenance', 'fyi', 'next', False),
     ('Reconcile the August GL export', 'working', 'next', False),
-    ('agent asking (coding)', 'agent_asking', None, False),
+    ('agent asking (coding)', 'agent_asking', 'close', False),
     ('agent finished (general)', 'agent_done', 'close', True),
     ('agent failed (general)', 'failed_cause', 'continue', True),
-    ('agent stopped-saved (coding)', 'stopped', None, False),
+    ('agent stopped-saved (coding)', 'stopped', 'continue', False),
     ('Close the August books', 'done_list', 'close', True),
     ('Move payroll to Payworth', 'goal', 'next', False),
     ('Migrate the census export', 'goal_late', 'chase', True),
@@ -63,11 +78,11 @@ MATRIX = [
 def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, says):
     s, by, syn = world
     item = by[case]
-    d = _decide(s, syn, item)
+    d = _decide(s, syn, item, verb=verb)
     assert (d.get('state'), d.get('verb'), bool(d.get('line'))) == (state, verb, says), d
     assert len(d.get('line') or '') <= 64, 'a line is read whole on a phone'
     assert not words.jargon_in(d.get('line') or ''), d['line']
-    # THE ADVISOR PICKS ONLY FROM THE BUTTONS THE ROW DRAWS (offered: row_buttons, plus Chase where a wait ran past its day)
+    # THE ADVISOR PICKS ONLY FROM THE BUTTONS THE ROW DRAWS (offered: row_buttons, plus Chase on a wait, plus Next)
     if verb and verb != 'next': assert verb in [v['verb'] for v in advisor.offered(s, syn.get(item['key']) or item)]
     # THE PHONE READS THE SAME DECISION: its lead is the Advisor's verb wherever its chips carry it, and Next leads where Next is lit
     chips = concierge.chips_for(s, syn.get(item['key']) or item)
@@ -82,16 +97,14 @@ def test_the_tasks_tab_reads_the_same_decision_as_the_canvas(world):
     s, by, syn = world
     for case in ('Badge access for the new AP clerk', 'Close the August books', 'Ray: schema sign-off', 'Migrate the census export'):
         item = by[case]
-        desk, tab = _decide(s, syn, item), _decide(s, syn, item, key=f"task:{item['tid']}")
+        desk, tab = _decide(s, syn, item, verb='reply'), _decide(s, syn, item, key=f"task:{item['tid']}", verb='reply')
         assert (desk['verb'], desk['line']) == (tab['verb'], tab['line']), case
 
 
-def test_every_state_has_its_words_and_every_lit_verb_is_a_button():
-    from taskuary import buttons
+def test_every_state_has_its_meaning_and_fact_and_lights_nothing_of_its_own():
     for st, w in words.ADVICE_RULE.items():
-        assert set(w) <= {'line', 'lit', 'ask'}, st
-        for v in w['lit']: assert v == 'next' or buttons.label(v), (st, v)
-        assert not words.jargon_in(w['line']), (st, w['line'])
+        assert set(w) == {'line', 'is'}, f'{st}: a state is facts - no lit list, no ask flag'
+        assert w['is'] and not words.jargon_in(w['line']), (st, w['line'])
         for gone in ('No suggestion', 'Nothing to decide', 'Thinking', 'the choice is yours'): assert gone not in w['line']
     # the states the design's table names, each with a rule
     assert {'asked', 'draft_ready', 'unsendable', 'duplicate', 'working', 'agent_asking', 'unpushed', 'stopped', 'failed', 'agent_done',
@@ -99,15 +112,22 @@ def test_every_state_has_its_words_and_every_lit_verb_is_a_button():
             'goal_late', 'goal', 'idea', 'unsorted', 'closed', 'stranger'} <= set(words.ADVICE_RULE)
 
 
-def test_rule_answers_are_fast_and_spend_nothing_of_the_cap(world):
-    """Under 50 ms a state, and no model row - the hourly cap counts model calls only (the design, 1.1)."""
-    import time
+def test_every_state_reaches_the_model_and_none_is_left_to_a_rule(world):
+    """The 2026-11-02 audit: 62% of the rows said "left to the rule" and no model read them. Every case is read now, and its prompt carries
+    the state, its meaning and every verb the row offers - Next among them."""
     s, by, syn = world
-    before = (s._one('SELECT COUNT(*) AS n FROM advice WHERE Model IS NOT NULL') or {}).get('n')
-    t0 = time.perf_counter()
-    for case, *_ in MATRIX: _decide(s, syn, by[case])
-    assert (time.perf_counter() - t0) / len(MATRIX) < 0.05
-    assert (s._one('SELECT COUNT(*) AS n FROM advice WHERE Model IS NOT NULL') or {}).get('n') == before
+    for case, state, *_ in MATRIX:
+        item = by[case]
+        tgt = advisor.target_of(s, item['key'])
+        llm = model_saying(None)
+        orig = advisor._item
+        with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: syn.get(key) or (item if key == item.get('key') else orig(store, tk, ti, key))):
+            advisor.judge(s, 'reply.arrived', tgt[0], tgt[1], 'rev-' + case, tier=1, llm=llm, key=item['key'])
+        assert llm.calls, case
+        p = llm.calls[0]
+        assert 'THE STATE (' in p and f'): {state} - ' in p, case
+        assert re.search(r'^VERBS OFFERED: .*next \(Next\)', p, re.M), case
+    assert not s._one("SELECT 1 x FROM advice WHERE Dropped='left to the rule'")
 
 
 # ── the states the world lacks, each built from its facts ─────────────────────────────────────────────────────────────────────────
@@ -129,48 +149,44 @@ def _asked(s, title, who=ERIN, d=0, cid=None):
 def _verbs(*vs): return [{'verb': v, 'label': v} for v in vs]
 
 
-def test_someone_asked_says_how_long_only_from_a_day_on(s):
+def test_someone_asked_says_how_long(s):
     t, m, it = _asked(s, 'Badge access', d=3)
-    d = rulebook.decide(s, it, _verbs('reply', 'regular_agent', 'remove'))
-    assert (d['state'], d['verb'], d['line'], d['ask']) == ('asked', 'reply', 'Erin Blake asked 3 days ago.', True)
-    u, _m, it2 = _asked(s, 'Trainly seats', who=RAY)
-    assert rulebook.decide(s, it2, _verbs('reply'))['line'] == '', 'asked this morning: the card says the age already'
+    assert rulebook.facts(s, it, _verbs('reply', 'regular_agent', 'remove')) == {'state': 'asked', 'line': 'Erin Blake asked 3 days ago.'}
+    assert 'verb' not in rulebook.facts(s, it, _verbs('reply')), 'facts light nothing'
 
 
 def test_a_duplicate_needs_the_thread_never_the_same_sender_alone(s):
     a, _m, it = _asked(s, 'Payworth export', cid='email:payworth')
     b, _n, _ = _asked(s, 'Payworth export (again)', cid='email:payworth')
     c, _o, it3 = _asked(s, 'Lease renewal')                        # Erin again, another thread: another ask
-    d = rulebook.decide(s, {**it, 'tid': b, 'key': f'task:{b}'}, _verbs('reply', 'remove'))
-    assert (d['state'], d['verb'], d['line']) == ('duplicate', 'remove', 'Same ask as TQ-0001 - fold it into that one.')
-    # ...ONE SURVIVOR PER PAIR (the Advisor audit's judge, 2026-10-26): the one asked first keeps its own move, never folded into its twin
-    assert rulebook.decide(s, it, _verbs('reply', 'remove'))['state'] == 'asked'
-    assert rulebook.decide(s, {**it, 'tid': b, 'key': f'task:{b}'}, _verbs('reply', 'split', 'remove'))['verb'] == 'split', 'folded by merging, where the row can'
-    assert rulebook.decide(s, it3, _verbs('reply', 'remove'))['state'] == 'asked'
+    d = rulebook.facts(s, {**it, 'tid': b, 'key': f'task:{b}'}, _verbs('reply', 'remove'))
+    assert (d['state'], d['line']) == ('duplicate', 'Same ask as TQ-0001 - fold it into that one.')
+    # ...ONE SURVIVOR PER PAIR (the Advisor audit's judge, 2026-10-26): the one asked first is never the duplicate of its twin
+    assert rulebook.facts(s, it, _verbs('reply', 'remove'))['state'] == 'asked'
+    assert rulebook.facts(s, it3, _verbs('reply', 'remove'))['state'] == 'asked'
 
 
-def test_the_owners_reply_after_their_newest_mail_lights_mark_done_not_reply(s):
-    """A3: the owner already answered - by a reply sent from here or one typed in their own mail app - so Mark done, never Reply."""
+def test_the_owners_reply_after_their_newest_mail_is_the_answered_fact(s):
+    """A3: the owner already answered - by a reply sent from here or one typed in their own mail app - and the facts say so."""
     t, m, it = _asked(s, 'Badge access', d=3)
     s._exec("UPDATE review SET DeliveryState='sent', DecidedAt=? WHERE ReviewId=?", (at(d=2), Factory(s).review(t, m, status='approved', final='Done.')))
-    assert (d := rulebook.decide(s, it, _verbs('reply', 'close')))['state'] == 'answered' and d['verb'] == 'close'
-    assert d['line'] == 'Your reply went 2 days ago; nothing since.', 'Mark done says its reason (the owner, 2026-10-28)'
-    # ...they wrote again after it: Reply again
+    d = rulebook.facts(s, it, _verbs('reply', 'close'))
+    assert (d['state'], d['line'], d['section']) == ('answered', 'Your reply went 2 days ago; nothing since.', 'close')
+    # ...they wrote again after it: an ask again
     Factory(s).message(task_id=t, subject='RE: Badge access', body='and the second door?', from_name=ERIN[0], from_email=ERIN[1], sent_at=at(d=1), conversation_id='email:Badge access')
-    assert rulebook.decide(s, it, _verbs('reply', 'close'))['state'] == 'asked'
+    assert rulebook.facts(s, it, _verbs('reply', 'close'))['state'] == 'asked'
     # ...an outgoing message typed elsewhere counts as much as a sent review
     u, _m, it2 = _asked(s, 'Trainly seats', who=RAY, d=2)
     Factory(s).message(task_id=u, subject='RE: Trainly seats', body='Sorted.', direction='out', from_email='alex@northwind.example', sent_at=at(d=1), conversation_id='email:Trainly seats')
-    assert rulebook.decide(s, it2, _verbs('reply', 'close'))['verb'] == 'close'
+    assert rulebook.facts(s, it2, _verbs('reply', 'close'))['state'] == 'answered'
 
 
-def test_a_first_mail_from_an_unknown_address_is_reply_never_an_agent(s):
+def test_a_first_mail_from_an_unknown_address_is_named_a_stranger(s):
     from taskuary.ingest import HOLD_TAG
     t, m, it = _asked(s, 'Your quote', who=('Sam Ortiz', 'sam@vendor.example'))
     s.add_task_tag(t, HOLD_TAG) if hasattr(s, 'add_task_tag') else s._exec("UPDATE task SET Tags=? WHERE TaskId=?", (HOLD_TAG, t))
     with mock.patch.object(remote_assistant, 'stranger_held', return_value=True):
-        d = rulebook.decide(s, it, _verbs('reply', 'regular_agent'))
-    assert (d['state'], d['verb'], d['line']) == ('stranger', 'reply', 'First mail from vendor.example.')
+        assert rulebook.facts(s, it, _verbs('reply', 'regular_agent')) == {'state': 'stranger', 'line': 'First mail from vendor.example.'}
 
 
 def _invite(s, start, end):
@@ -181,95 +197,103 @@ def _invite(s, start, end):
     return {'key': f'task:{t}', 'kind': 'asked', 'lane': 'asked', 'tid': t, 'mid': m}
 
 
-def test_an_invite_is_accept_when_free_propose_when_it_clashes_and_next_with_no_calendar(s):
+def test_an_invite_says_whether_it_clashes_or_whether_no_calendar_can_say(s):
     day = date.today() + timedelta(days=1)
     while day.weekday() >= 5: day += timedelta(days=1)
     it = _invite(s, f'{day} 14:30', f'{day} 15:00')
     vs = _verbs('accept_invite', 'decline_invite', 'propose_time')
     busy = [{'start': f'{day} 14:00', 'end': f'{day} 15:00', 'subject': '1:1 with Omar', 'all_day': False}]
     with mock.patch.object(rulebook, 'calendar_on', return_value=True), mock.patch.object(calwrite, 'busy', return_value=busy):
-        d = rulebook.decide(s, it, vs)
-    assert (d['state'], d['verb']) == ('invite_clash', 'propose_time') and d['line'].startswith('Clashes with 1:1 with Omar')
+        d = rulebook.facts(s, it, vs)
+    assert d['state'] == 'invite_clash' and d['line'].startswith('Clashes with 1:1 with Omar')
     with mock.patch.object(rulebook, 'calendar_on', return_value=True), mock.patch.object(calwrite, 'busy', return_value=[]):
-        assert rulebook.decide(s, it, vs) | {'ask': 0} == {'state': 'invite_free', 'verb': 'accept_invite', 'line': 'Free then.', 'ask': 0}
-    # the owner, 2026-10-23 (ruling 4): no calendar connected - nothing to check, so nothing pushed: Next
+        assert rulebook.facts(s, it, vs) == {'state': 'invite_free', 'line': 'Free then.'}
     with mock.patch.object(rulebook, 'calendar_on', return_value=False):
-        assert (rulebook.decide(s, it, vs)['state'], rulebook.decide(s, it, vs)['verb']) == ('invite_no_cal', 'next')
+        assert rulebook.facts(s, it, vs)['state'] == 'invite_no_cal'
 
 
-def test_an_agent_with_work_not_pushed_is_review_changes(s):
+def test_an_agent_with_work_not_pushed_is_named_so(s):
     t = Factory(s).task(title='Fix the export', kind='coding')
     it = {'key': f'agent:{t}', 'kind': 'agentdone', 'lane': 'done', 'tid': t}
-    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['verb'] is None, 'nothing shows unpushed work, nor when it ended: nothing lit'
+    assert rulebook.facts(s, it, _verbs('close', 'review_changes')) == {'state': 'agent_done', 'line': ''}, 'nothing shows when it ended: no fact said'
     s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'coding', 'C:/x', 'ready', 'ready to push', ?)", (t, at()))
-    d = rulebook.decide(s, it, _verbs('close', 'review_changes'))
-    assert (d['state'], d['verb'], d['line']) == ('unpushed', 'review_changes', 'Changes ready - not pushed.')
+    assert rulebook.facts(s, it, _verbs('close', 'review_changes')) == {'state': 'unpushed', 'line': 'Changes ready - not pushed.'}
     s._exec("INSERT INTO boardnote (TaskId, Agent, Cwd, Kind, Body, CreatedAt) VALUES (?, 'coding', 'C:/x', 'done', 'pushed', ?)", (t, at()))
-    assert rulebook.decide(s, it, _verbs('close', 'review_changes'))['state'] == 'agent_done'
+    assert rulebook.facts(s, it, _verbs('close', 'review_changes'))['state'] == 'agent_done'
 
 
-def test_waiting_on_someone_is_chase_after_three_working_days(s):
+def test_waiting_on_someone_is_named_late_after_three_working_days_and_chase_is_always_on_its_row(s):
     f = Factory(s)
     t = f.task(title='Vendor W-9', kind='task', status='waiting'); s._exec("UPDATE task SET WaitingOn='ray.colton@northwind.example' WHERE TaskId=?", (t,))
     it = {'key': f'task:{t}', 'kind': 'todo', 'lane': 'theirs', 'tid': t}
     f.message(task_id=t, subject='W-9?', direction='out', sent_at=at(d=1))
-    assert rulebook.decide(s, it, _verbs('defer', 'chase'))['verb'] is None, 'not late: nothing lit (the owner, 2026-10-28)'
+    assert rulebook.facts(s, it, _verbs('defer', 'chase'))['state'] == 'waiting'
+    assert rulebook.adds(s, it) == ['chase'], 'Chase is offered on every wait with somebody to write to - when to chase is the model\'s'
     s._exec("UPDATE message SET SentAt=? WHERE TaskId=?", (at(d=7), t))
-    d = rulebook.decide(s, it, _verbs('defer', 'chase'))
-    assert (d['state'], d['verb']) == ('waiting_late', 'chase') and d['line'].startswith('Ray Colton: ') and d['line'].endswith('days, no answer.')
-    assert rulebook.adds(s, it) == ['chase'], 'Chase joins the row on a wait past its day'
+    d = rulebook.facts(s, it, _verbs('defer', 'chase'))
+    assert d['state'] == 'waiting_late' and d['line'].startswith('Ray Colton: ') and d['line'].endswith('days, no answer.')
     assert rulebook.working_days(datetime(2026, 10, 23), datetime(2026, 10, 26)) == 1, 'a Friday ask is one day old on Monday'
 
 
-def test_a_goal_step_past_its_day_is_chase_named_in_the_line(s):
+def test_a_goal_step_past_its_day_is_named_in_the_fact(s):
     g = s.create_task({'Title': 'Move payroll', 'Status': 'open', 'DoneWhen': 'payroll runs on the new system'}, 'owner')
     s.set_task_checklist(g, ['Export the pay rules', 'schema sign-off'], 'owner')
     k = s.create_task({'Title': 'schema sign-off', 'Status': 'waiting', 'Assignee': 'person:ray.colton@northwind.example', 'ParentId': g,
                        'DueAt': (date.today() - timedelta(days=2)).isoformat()}, 'owner')
     s.link_step(g, s.checklist_id('schema sign-off'), k, 'owner')
     it = {'key': f'task:{g}', 'kind': 'goal_slipped', 'lane': 'yours', 'tid': g}
-    d = rulebook.decide(s, it, _verbs('close', 'defer', 'chase'))
-    assert (d['state'], d['verb'], d['line']) == ('goal_late', 'chase', "Ray Colton's schema sign-off: 2 days late.")
+    assert rulebook.facts(s, it, _verbs('close', 'defer', 'chase')) == {'state': 'goal_late', 'line': "Ray Colton's schema sign-off: 2 days late."}
     s._exec("UPDATE task SET DueAt=? WHERE TaskId=?", ((date.today() + timedelta(days=2)).isoformat(), k))
-    assert rulebook.decide(s, it, _verbs('close', 'defer', 'chase'))['verb'] == 'next', 'on track: Next, silent'
+    assert rulebook.facts(s, it, _verbs('close', 'defer', 'chase')) == {'state': 'goal', 'line': ''}
 
 
-def test_a_phish_filed_fyi_lights_not_ours_never_send_to_agent(s):
-    """The owner, 2026-10-30: a phishing FYI's row lit Send to agent. Not ours is its move, at once, with no model read and no habit over it;
-    an FYI with no danger is read as before."""
+def test_a_phish_filed_fyi_is_named_so_and_the_model_decides(s):
+    """The owner, 2026-10-30: a phishing FYI's row lit Send to agent. The facts name it fyi_danger, said to the model; no code lights for it."""
     fyi = {'key': 'msg:7', 'kind': 'fyi', 'lane': 'fyi', 'mid': 7}
-    d = rulebook.decide(s, {**fyi, 'danger': 'Wants Alex to sign in on a look-alike page.'}, _verbs('mine', 'regular_agent', 'not_ours'))
-    assert (d['state'], d['verb'], d['line'], d['ask']) == ('fyi_danger', 'not_ours', '', False)
-    assert 'fyi_danger' in rulebook.SAFE
-    assert rulebook.decide(s, fyi, _verbs('mine', 'regular_agent', 'not_ours'))['state'] == 'fyi'
+    assert rulebook.facts(s, {**fyi, 'danger': 'Wants Alex to sign in on a look-alike page.'}, _verbs('mine', 'regular_agent', 'not_ours'))['state'] == 'fyi_danger'
+    assert not hasattr(rulebook, 'SAFE'), 'no state is decided by code, whatever its name'
+    assert rulebook.facts(s, fyi, _verbs('mine', 'regular_agent', 'not_ours'))['state'] == 'fyi'
 
 
 def test_unsorted_mail_a_batch_a_closed_task_and_a_failed_report(s):
-    assert rulebook.decide(s, {'kind': 'fyi', 'lane': 'unjudged', 'mid': 1}, _verbs('retriage'))['verb'] == 'retriage'
-    assert rulebook.decide(s, {'kind': 'fyis', 'lane': 'fyi'}, [])['verb'] == 'next'
+    assert rulebook.facts(s, {'kind': 'fyi', 'lane': 'unjudged', 'mid': 1}, _verbs('retriage'))['state'] == 'unsorted'
+    assert rulebook.facts(s, {'kind': 'fyis', 'lane': 'fyi'}, [])['state'] == 'fyi_batch'
     t = Factory(s).task(title='Done already', status='done')
-    assert rulebook.decide(s, {'kind': 'todo', 'lane': 'yours', 'tid': t}, _verbs('reopen'))['verb'] is None, "Reopen stays outlined"
-    d = rulebook.decide(s, {'kind': 'report', 'lane': 'broken', 'bad': True, 'why': 'mailbox signed out'}, _verbs('rerun'))
-    assert (d['state'], d['verb'], d['line']) == ('report_failed', 'rerun', 'Report failed: mailbox signed out')
+    assert rulebook.facts(s, {'kind': 'todo', 'lane': 'yours', 'tid': t}, _verbs('reopen'))['state'] == 'closed'
+    assert rulebook.facts(s, {'kind': 'report', 'lane': 'broken', 'bad': True, 'why': 'mailbox signed out'}, _verbs('rerun')) == \
+        {'state': 'report_failed', 'line': 'Report failed: mailbox signed out'}
 
 
-# ── the tiers: model over rule, never over a safety rule ─────────────────────────────────────────────────────────────────────────────
+# ── the model's light, and the checks on it ────────────────────────────────────────────────────────────────────────────────────────
 def _habit(s, text, key):
     """A press count where the 2026-10-23 doc kept it - an install the migration has not reached, or a model that wrote one anyway."""
     s.save_doc('learned', f"# Learned\n\n## How you sort mail\n\n## What you do next\n- {text} [s:5 | ev: pr1, pr2, pr3 | seen: 2026-10-20 | k: {key}]\n", 'test')
 
 
+def _said(s, t, it, verb, line='', kind=None):
+    advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=advisor.revision(s, 'task', t), tier=2,
+                   line=line, verb=verb, label=verb, model='m', kind=kind)
+
+
+def test_nothing_is_lit_before_the_model_reads_the_item(s, monkeypatch):
+    t, m, it = _asked(s, 'Weekly report', d=2)
+    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
+    asked = []
+    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: asked.append(k.get('tier')))
+    d = advisor.decide(s, it['key'], preread=False)
+    assert (d['state'], d['verb'], d['line']) == ('asked', None, '') and asked == [2], 'read now, at the bigger tier; nothing lit meanwhile'
+
+
 def test_a_press_count_lights_nothing(s, monkeypatch):
-    """The owner, 2026-10-25: stop learning from presses and remove the habit mark - a press count in the doc, wherever it sits, never
-    changes the lit button by itself; the rule (or the model, where intent must be read) decides."""
-    t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'), d=2)       # its age is the lit Reply's reason
+    """The owner, 2026-10-25: stop learning from presses and remove the habit mark - a press count in the doc never changes the lit button."""
+    t, m, it = _asked(s, 'Weekly report', who=('Vendor Desk', 'desk@vendor.example'), d=2)
     monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    before = advisor.decide(s, it['key'], preread=False)
-    assert before['verb'] == 'reply'
+    _said(s, t, it, 'reply')
+    assert advisor.decide(s, it['key'], preread=False)['verb'] == 'reply'
     _habit(s, 'On asks from vendor.example, {{owner_first}} presses Mark done (5 of 6)', 'move asked email vendor.example')
     d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['by']) == ('reply', 'rule') and 'says' not in d and d['pill'] == d['label'], 'no habit, no count, no mark'
+    assert (d['verb'], d['by']) == ('reply', 'model') and 'says' not in d and d['pill'] == d['label'], 'no habit, no count, no mark'
 
 
 def test_send_is_never_lit_on_a_draft_the_check_flagged(s, monkeypatch):
@@ -279,32 +303,35 @@ def test_send_is_never_lit_on_a_draft_the_check_flagged(s, monkeypatch):
     monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
     _habit(s, 'On drafts to vendor.example, {{owner_first}} presses Send (5 of 6)', 'move review email vendor.example')
-    rev = advisor.revision(s, 'task', t)
-    advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=rev, tier=2,
-                   line='Draft promises Friday - nothing here shows it.', verb='redraft', label='Redraft', model='m')
+    _said(s, t, it, 'redraft', 'Draft promises Friday - nothing here shows it.')
     d = advisor.decide(s, it['key'], preread=False)
     assert (d['verb'], d['by'], d['line']) == ('redraft', 'model', 'Draft promises Friday - nothing here shows it.')
 
 
-def test_the_model_agreeing_with_the_rule_says_nothing_more(s, monkeypatch):
-    """Ruling 1: the obvious button is not explained. The model's verb stands where it differs from the rule's, with its line; agreeing,
-    its sentence goes and the rule's own fact stands - and with none, nothing is lit (NO DEFAULT VERB, the owner, 2026-10-28)."""
+def test_the_models_light_is_what_is_lit_with_its_line(s, monkeypatch):
     t, m, it = _asked(s, 'Badge access')
     monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
-    rev = advisor.revision(s, 'task', t)
-    advisor._write(s, target_kind='task', target_id=t, key=it['key'], event=advisor.SHOWN, revision=rev, tier=2,
-                   line='Erin is waiting on you - answer her.', verb='reply', label='Reply', model='m')
+    _said(s, t, it, 'reply', 'Erin is waiting on you - answer her.')
     d = advisor.decide(s, it['key'], preread=False)
-    assert (d['verb'], d['line'], d['by']) == (None, '', 'rule')
+    assert (d['verb'], d['line'], d['by']) == ('reply', 'Erin is waiting on you - answer her.', 'model')
 
 
-def test_the_next_two_are_read_ahead_where_the_model_must_read_them(s, monkeypatch):
+def test_a_verb_the_row_does_not_carry_is_dropped(s, monkeypatch):
+    from tests.test_advisor import brain_saying
+    t, m, it = _asked(s, 'Badge access')
+    monkeypatch.setattr(advisor, '_item', lambda store, tk, ti, key=None: it)
+    monkeypatch.setattr(advisor, 'offered', lambda store, item: _verbs('reply', 'close'))
+    rid = advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'merge_pr', 'line': 'Merge it.', 'evidence': []}))
+    assert s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'] == 'verb not offered: merge_pr'
+    monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
+    assert advisor.decide(s, it['key'], preread=False)['verb'] is None
+
+
+def test_the_next_two_are_read_ahead_whatever_their_state(s, monkeypatch):
     items = [{'key': f'k{n}', 'kind': 'asked' if n % 2 else 'report', 'lane': 'asked', 'tid': n} for n in range(5)]
     monkeypatch.setattr(funnel, 'pile', lambda store, quiet=False: {'items': items})
     monkeypatch.setattr(advisor, 'target_of', lambda store, key: ('task', int(key[1:])))
-    monkeypatch.setattr(advisor, 'offered', lambda store, it: _verbs('reply'))
-    monkeypatch.setattr(rulebook, 'decide', lambda store, it, vs: {'ask': it['kind'] == 'asked'})
     got = []
     monkeypatch.setattr(advisor, 'notice', lambda store, ev, tk, ti, **kw: got.append((ti, kw.get('tier'), kw.get('key'))))
     class T:
@@ -313,7 +340,7 @@ def test_the_next_two_are_read_ahead_where_the_model_must_read_them(s, monkeypat
     monkeypatch.setattr(advisor.threading, 'Thread', T)
     monkeypatch.setattr(advisor, 'BACKGROUND', True)
     advisor._preread(s, 'k0')
-    assert got == [(1, 1, 'k1')], 'the next two: k1 is asked (read ahead), k2 is a report (the rule decides it)'
+    assert got == [(1, 1, 'k1'), (2, 1, 'k2')], 'the next two, a report as much as an ask'
 
 
 # ── one census for every count ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -333,10 +360,9 @@ def test_a_failure_line_says_what_failed_in_plain_words_never_our_refusal():
     assert rulebook._plain_why('needs a repository first', None) == 'it stopped without saying why'
 
 
-# ── a dashboard, and Share, as the rule reads them ──────────────────────────────────────────────────────────────────────────────────
-def test_a_dashboard_row_is_silent_with_next_lit_and_share_is_seen_but_never_lit(s):
-    """A dashboard's refresh lands under Reports like a report run, and Next walks past it (the owner, 2026-10-23): no line, Next lit.
-    Share is on a report's and a dashboard's row for the Advisor to see - and no rule lights it, whatever else the row carries."""
+# ── a dashboard, and Share ──────────────────────────────────────────────────────────────────────────────────────────────────────
+def test_a_dashboard_is_named_so_and_share_is_on_its_row_for_the_model_to_see(s):
+    """A dashboard's refresh lands under Reports like a report run. Share is on a report's and a dashboard's row for the Advisor to see."""
     m = Factory(s).message(subject='Open work - Open tasks 12', body='Open tasks: 12', from_name='Open work', from_email='')
     rep = {'key': f'msg:{m}', 'kind': 'report', 'lane': 'report', 'mid': m}
     dash = {**rep, 'dashboard': True}
@@ -344,49 +370,45 @@ def test_a_dashboard_row_is_silent_with_next_lit_and_share_is_seen_but_never_lit
     assert 'share_result' in have and 'share_result' in [b['verb'] for b in concierge.row_buttons(s, rep)]
     assert 'share_result' not in [b['verb'] for b in concierge.row_buttons(s, {**rep, 'bad': True})], 'a failed run has nothing to share'
     assert 'share_result' in [v['verb'] for v in advisor.offered(s, dash)], 'the Advisor sees the row has Share'
-    assert rulebook.decide(s, dash, _verbs(*have)) == {'state': 'dashboard', 'verb': 'next', 'line': '', 'ask': False}
-    assert rulebook.decide(s, rep, _verbs(*have))['verb'] == 'next'
-    assert not any('share_result' in w['lit'] or 'share' in w['lit'] for w in words.ADVICE_RULE.values()), 'no state lights Share'
+    assert rulebook.facts(s, dash, _verbs(*have)) == {'state': 'dashboard', 'line': ''}
+    assert rulebook.facts(s, rep, _verbs(*have))['state'] == 'report_ok'
     assert 'share_result' not in [c['verb'] for c in concierge.chips_for(s, dash)], "the phone's chips have no Share menu"
 
 
-def test_a_draft_says_what_leaves_with_it_beside_send_never_instead(s):
-    """WHAT LEAVES WITH A DRAFT (the design rev 2, data leaving): an address its thread never had and the files it carries are one line beside
-    the lit Send - no dialog, nothing held. A plain reply to the thread's own people says nothing. Addresses and files, never words."""
+def test_a_draft_says_what_leaves_with_it(s):
+    """WHAT LEAVES WITH A DRAFT (the design rev 2, data leaving): an address its thread never had and the files it carries are the fact
+    said - no dialog, nothing held. A plain reply to the thread's own people says nothing. Addresses and files, never words."""
     t, m, it = _asked(s, 'Q3 accruals')
     f, V = Factory(s), _verbs('approve', 'redraft')
     rv = f.review(t, m, draft='Here are the Q3 accruals.')
     set_env = lambda env: s._exec('UPDATE review SET Deliver=? WHERE ReviewId=?', (json.dumps(env), rv))
-    d = rulebook.decide(s, it, V)
-    assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'approve', ''), 'a reply to whom wrote: nothing to say'
+    assert rulebook.facts(s, it, V) == {'state': 'draft_ready', 'line': ''}, 'a reply to whom wrote: nothing to say'
     set_env({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']})
-    d = rulebook.decide(s, it, V)
-    assert (d['verb'], d['line'], d['evidence']) == ('approve', 'Goes to dana@vendor.example - new to this thread.', [f'rv{rv}']), d
+    d = rulebook.facts(s, it, V)
+    assert (d['line'], d['evidence']) == ('Goes to dana@vendor.example - new to this thread.', [f'rv{rv}']), d
     files = [{'name': 'q3.xlsx', 'path': 'x'}]
     set_env({'kind': 'reply', 'to': ['erin@northwind.example'], 'attachments': files})
-    assert rulebook.decide(s, it, V)['line'] == 'Sends the file q3.xlsx.'
+    assert rulebook.facts(s, it, V)['line'] == 'Sends the file q3.xlsx.'
     set_env({'kind': 'reply', 'to': ['erin@northwind.example', 'dana@vendor.example'], 'attachments': files + [{'name': 'notes.pdf'}]})
-    assert rulebook.decide(s, it, V)['line'] == 'Goes to dana@vendor.example, new to this thread, with 2 files.'
-    # ...new mail on the task to someone it never had - and the owner's own address is never "new"
+    assert rulebook.facts(s, it, V)['line'] == 'Goes to dana@vendor.example, new to this thread, with 2 files.'
     s.set_setting('owner_email', 'alex@northwind.example', 'test')
     set_env({'channel': 'email', 'to': ['paula@northwind.example'], 'cc': ['alex@northwind.example']})
-    assert rulebook.decide(s, it, V)['line'] == 'Goes to paula@northwind.example - new to this thread.'
+    assert rulebook.facts(s, it, V)['line'] == 'Goes to paula@northwind.example - new to this thread.'
 
 
 def test_a_task_left_sitting_lights_only_the_models_move_beside_what_is_owed(s):
-    """UNTOUCHED TOO LONG (the design rev 2): an open task of the owner's that nothing moved for UNTOUCHED_DAYS working days asks the model
-    what is still owed - nothing lit while it reads, then its verb only beside its line; nothing owed is silent."""
+    """UNTOUCHED TOO LONG (the design rev 2): an open task of the owner's that nothing moved for UNTOUCHED_DAYS working days is said to the
+    model, which reads what is still owed - nothing lit while it reads, then its verb; nothing owed is silent."""
     from tests.test_advisor import brain_saying
     t = Factory(s).task(title='Sign the Elm Street lease', kind='task')
     old = (datetime.now() - timedelta(days=12)).strftime('%Y-%m-%d %H:%M:%S')
     it = {'key': f'task:{t}', 'kind': 'own', 'lane': 'mine', 'tid': t, 'title': 'Sign the Elm Street lease'}
-    assert rulebook.state(s, it, [])[0] == 'own', 'fresh: the rule lights nothing of its own'
+    assert rulebook.state(s, it, [])[0] == 'own'
     rev = advisor.revision(s, 'task', t)
     s._exec('UPDATE task SET CreatedAt=?, UpdatedAt=? WHERE TaskId=?', (old, old, t))
     assert rulebook.untouched(s, s.get_task(t)) >= rulebook.UNTOUCHED_DAYS
     assert advisor.revision(s, 'task', t) != rev, 'crossing the line is read again'
-    d = rulebook.decide(s, it, _verbs('close', 'defer', 'reply'))
-    assert (d['state'], d['verb'], d['line'], d['ask']) == ('untouched', None, '', True)
+    assert rulebook.facts(s, it, _verbs('close', 'defer', 'reply')) == {'state': 'untouched', 'line': ''}
     orig = advisor._item
     def decide():
         with mock.patch.object(advisor, '_item', lambda store, tk, ti, key=None: it if ti == t else orig(store, tk, ti, key)), \
@@ -402,7 +424,7 @@ def test_a_task_left_sitting_lights_only_the_models_move_beside_what_is_owed(s):
     assert (d['state'], d['verb'], d['line'], d['by']) == ('untouched', 'reply', 'Erin still needs the signed lease', 'model'), d
 
 
-def test_what_leaves_stands_over_the_models_agreeing_send(s):
+def test_what_leaves_stands_beside_the_models_send(s):
     t, m, it = _asked(s, 'Q3 accruals')
     Factory(s).review(t, m, draft='Here are the Q3 accruals.', Deliver=json.dumps({'kind': 'reply', 'to': ['erin@northwind.example'], 'cc': ['dana@vendor.example']}))
     s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
@@ -422,23 +444,23 @@ def _held(s, cmd='git push origin main'):
     return t, {'key': f'agent:{t}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': t, 'title': 'Ship the ledger fix'}
 
 
-def test_a_held_action_is_read_before_an_agent_asking_and_lights_its_approve(s):
+def test_a_held_action_is_read_before_an_agent_asking(s):
     t, it = _held(s)
-    d = rulebook.decide(s, it, _verbs('approve', 'stop_agent'))
-    assert (d['state'], d['verb']) == ('action_held', 'approve'), d
-    assert 'action_held' in rulebook.SAFE, 'no habit lights anything else over a step waiting for a yes'
+    assert rulebook.facts(s, it, _verbs('approve', 'stop_agent'))['state'] == 'action_held'
     rv = s._one("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='action'", (t,))['ReviewId']
     s._exec("UPDATE review SET Status='dismissed' WHERE ReviewId=?", (rv,))
-    assert rulebook.decide(s, it, _verbs('approve', 'stop_agent'))['state'] == 'agent_asking', 'answered: the agent asking is read as before'
+    assert rulebook.facts(s, it, _verbs('approve', 'stop_agent'))['state'] == 'agent_asking', 'answered: the agent asking is read as before'
 
 
 def test_the_held_actions_approve_is_on_the_tasks_row_and_pressed_answers_that_proposal(s):
+    from tests.test_advisor import brain_saying
     t, _ = _held(s)
     funnel.invalidate()
     rv = s._one("SELECT ReviewId FROM review WHERE TaskId=? AND Kind='action'", (t,))['ReviewId']
     it = advisor._item(s, 'task', t)
     assert not it.get('rid') and concierge.cannot(it, 'approve', s) == ''
     assert {'verb': 'approve', 'label': 'Approve'} in concierge.row_buttons(s, it)
+    advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'approve', 'line': '', 'evidence': []}))
     with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}', preread=False)
     assert (d['state'], d['verb'], d['label']) == ('action_held', 'approve', 'Approve'), d
     prop = concierge.propose_direct(s, 'approve', f'task:{t}', press=True)

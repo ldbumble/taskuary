@@ -103,44 +103,19 @@ def test_the_tool_never_writes_to_the_home_it_measures(home):
     assert A.main(['--home', str(home.dir), '--since', DAY, '--line']) == 0
 
 
-# ── the replay of today's fixes ───────────────────────────────────────────────────────────────────────────────────────────────────────
-def test_replay_send_over_a_draft_unless_the_reason_is_a_caution_about_it(home):
+# ── the replay of today's code ───────────────────────────────────────────────────────────────────────────────────────────────────────
+def test_replay_keeps_the_models_verb_as_it_was_and_names_a_rules_as_the_models_now(home):
+    """Since 2026-11-02 today's code has no rule of its own (the owner: "never ever use hard coded rules"): a model's verb, silent or not,
+    stands; a rule's light ('left to the rule' - no model read the item) is the model's to read now, counted unchanged and named 'model'."""
     home.model(1, 'reply', line='Erin wants it today.', kind='late')
     home.press(1, 'reply', 'approve', '09:00:00', live=['reply'])
-    home.model(2, 'reply', line='The draft promises Friday.', kind='draft_caution')
-    home.press(2, 'reply', 'redraft', '09:00:00', live=['approve', 'reply'])
-    home.model(3, 'reply', line='', kind='draft_caution')                     # a silent caution is no reason shown
-    home.press(3, 'reply', 'approve', '09:00:00', live=['reply'])
-    cx = A.connect(home.dir); ds = {d['target'][1]: d for d in A.replay(cx, home.ds())}
-    # ...and a model's Reply with no reason said lights nothing now (NO DEFAULT VERB, the owner, 2026-10-28): silent, neither right nor wrong
-    assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('approve', 'draft'), 2: ('reply', ''), 3: ('', 'quiet')}
-    t = A.tally(list(ds.values()), 'today')
-    assert (t['right'], t['wrong'], t['silent']) == (1, 1, 1) and A.tally(list(ds.values()))['right'] == 0
-
-
-def test_replay_mark_done_on_a_stopped_agent_that_left_its_work_finished_by_then(home):
-    s = home.s
-    t1, t2, t3 = (s.create_task({'Title': f'Export job {i}', 'Status': 'in_progress', 'Kind': 'code'}, 'owner') for i in range(3))
-    s._exec("INSERT INTO boardnote (TaskId, Agent, Kind, Body, CreatedAt) VALUES (?,?,?,?,?)", (t1, 'coding', 'done', 'shipped', f'{DAY} 08:00:00'))
-    for tid, kind, text, at in ((t2, 'working', '', '07:00:00'), (t2, 'finished', 'The export moved.', '08:00:00'),
-                                (t3, 'finished', 'The export moved.', '08:00:00'), (t3, 'working', '', '08:30:00')):
-        s._exec('INSERT INTO worker_event (TaskId, Sid, Kind, Text, CreatedAt) VALUES (?,?,?,?,?)', (tid, 's1', kind, text, f'{DAY} {at}'))
-    s._exec("INSERT INTO boardnote (TaskId, Agent, Kind, Body, CreatedAt) VALUES (?,?,?,?,?)", (t3, 'coding', 'done', 'later', f'{DAY} 10:00:00'))
-    for tid in (t1, t2, t3): home.press(tid, 'continue', 'close', '09:00:00', live=['continue'])
+    home.model(2, 'reply', line='', kind='draft_caution')
+    home.press(2, 'reply', 'approve', '09:00:00', live=['reply'])
+    home.press(3, 'continue', 'close', '09:00:00', live=['continue', 'close'], state='stopped', by='rule')
+    home.press(4, 'chase', 'chase', '09:00:00', live=['chase'], state='waiting_late', by='rule')
     ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds())}
-    assert (ds[t1]['today'], ds[t2]['today']) == ('close', 'close'), 'a done note, a finished event no later prompt took up'
-    # ...picked up again after it finished, and the done note came after the press: a plain stop, which lights nothing now (NO DEFAULT VERB)
-    assert (ds[t3]['today'], ds[t3]['how']) == ('', 'quiet')
-
-
-def test_replay_a_silent_remind_me_leaves_the_rules_button(home):
-    home.model(1, 'defer', line='')
-    home.press(1, 'defer', 'reply', '09:00:00', live=['reply', 'close'])
-    home.model(2, 'defer', line='Erin is away until Monday.')
-    home.press(2, 'defer', 'defer', '09:00:00', live=['reply'])
-    ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds())}
-    assert (ds[1]['today'], ds[1]['how'], A.score(ds[1], 'today')) == ('reply', 'silent', 'right')
-    assert (ds[2]['today'], A.score(ds[2], 'today')) == ('defer', 'right'), 'said with its reason, the override stands'
+    assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('reply', ''), 2: ('reply', ''), 3: ('continue', 'model'), 4: ('chase', 'model')}
+    assert "left to a rule then, the model's to read now (not replayable without a model call): 2" in A.report(list(ds.values()), DAY, replayed=True)
 
 
 def test_an_unchanged_item_is_replayed_exactly_by_todays_decide(home, monkeypatch):
@@ -232,17 +207,6 @@ def test_the_release_line_carries_all_three(home, capsys):
     out = capsys.readouterr().out
     assert out.startswith('Advisor agreement: 100%') and 'precision 100% on 1 lit' in out and 'silent 50% of 2 decisions' in out
     assert '1 dropped-ball miss' in out
-
-
-def test_replay_the_reasonless_lights_go_dark(home):
-    home.press(1, 'continue', 'close', '09:00:00', live=['continue', 'close'], state='stopped', by='rule')
-    home.press(2, 'defer', 'close', '09:00:00', live=['defer', 'close'], state='waiting', by='rule')
-    home.press(3, 'regular_agent', 'close', '09:00:00', live=['regular_agent', 'close'], state='asked', by='model')
-    home.press(4, 'chase', 'chase', '09:00:00', live=['chase'], state='waiting_late', by='rule')
-    ds = {d['target'][1]: d for d in A.replay(A.connect(home.dir), home.ds())}
-    assert {t: (d['today'], d['how']) for t, d in ds.items()} == {1: ('', 'quiet'), 2: ('', 'quiet'), 3: ('', 'quiet'), 4: ('chase', '')}
-    t = A.tally(list(ds.values()), 'today')
-    assert (t['right'], t['wrong'], t['silent'], t['pct']) == (1, 0, 3, 100)
 
 
 # ── MEASURE HONESTLY (the 2026-11-01 design, S0) ─────────────────────────────────────────────────────────────────────────────────────────

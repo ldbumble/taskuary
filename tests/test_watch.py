@@ -147,8 +147,8 @@ class ComesBackTests(unittest.TestCase):
         self.assertEqual((task['Status'], task['WatchBack']), ('open', 'handled'), 'a watch is never closed for the owner')
         st, facts = rulebook.state(self.s, {'tid': self.t, 'kind': 'task', 'lane': 'yours', 'key': f'task:{self.t}'}, [{'verb': 'close'}])
         self.assertEqual(st, 'watch_handled'); self.assertEqual(facts['who'], 'Gail Moreno')
-        d = rulebook.decide(self.s, {'tid': self.t, 'kind': 'task', 'lane': 'yours', 'key': f'task:{self.t}'}, [{'verb': 'close'}, {'verb': 'next'}])
-        self.assertEqual(d['verb'], 'close'); self.assertTrue(d['line'])
+        d = rulebook.facts(self.s, {'tid': self.t, 'kind': 'task', 'lane': 'yours', 'key': f'task:{self.t}'}, [{'verb': 'close'}, {'verb': 'next'}])
+        self.assertEqual(d, {'state': 'watch_handled', 'line': 'Gail Moreno wrote; it looks handled.'}, 'the fact the model reads; it lights nothing')
 
     def test_the_owner_writing_on_it_leaves_the_watch_alone(self):
         before = self.s.get_task(self.t)['WatchedAt']
@@ -161,8 +161,8 @@ class QuietMovesTests(unittest.TestCase):
         s = store(); t = theirs(s); watch.watch(s, t); watch.due(s, datetime.now() + timedelta(days=8))
         it = {'tid': t, 'kind': 'task', 'lane': 'yours', 'key': f'task:{t}'}
         self.assertEqual(rulebook.adds(s, it), ['chase', 'let_go'])
-        d = rulebook.decide(s, it, [{'verb': 'chase'}, {'verb': 'let_go'}, {'verb': 'next'}])
-        self.assertEqual((d['state'], d['verb']), ('watch_quiet', 'chase'))
+        d = rulebook.facts(s, it, [{'verb': 'chase'}, {'verb': 'let_go'}, {'verb': 'next'}])
+        self.assertEqual(d, {'state': 'watch_quiet', 'line': 'A week watched; nothing on the thread.'})
         self.assertEqual(concierge.cannot(it, 'let_go', s), '')
 
 

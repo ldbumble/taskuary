@@ -187,9 +187,10 @@ def _fixed(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
 TIERS = ('light', 'standard', 'strong')
 GEAR_OF = {'light': 'light', 'standard': 'main', 'strong': 'strong'}
 DEFAULT_RULES = [
-    {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'advisor', 'summary']}, 'use': {'tier': 'light'}},
+    {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'summary']}, 'use': {'tier': 'light'}},
     {'id': 'hard-work', 'when': {'job': ['draft', 'general', 'coding'], 'difficulty': ['hard']}, 'use': {'tier': 'strong'}},
-    {'id': 'work', 'when': {'job': ['draft', 'general', 'coding', 'quick_work']}, 'use': {'tier': 'standard'}},
+    # ...and the Advisor, which decides every light since 2026-11-02 (the owner: no hard-coded rules) - on the standard model
+    {'id': 'work', 'when': {'job': ['draft', 'general', 'coding', 'quick_work', 'advisor']}, 'use': {'tier': 'standard'}},
     # an answer that could not be read, or one its model said it was unsure of, is asked once of a strong model - only for the jobs
     # that read and write; an agent that can act is never re-run by itself (it may have done half its work), it offers a press
     {'id': 'unsure', 'when': {'job': list(ESCALATES)}, 'use': {'escalate': True}},

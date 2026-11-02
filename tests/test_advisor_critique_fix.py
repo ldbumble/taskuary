@@ -55,7 +55,7 @@ def test_no_gap_or_no_line_carries_no_fix(w):
     for kind, line in (('late', 'Erin wrote two hours ago.'), ('draft_caution', ''), ('other', GAP)):
         assert advisor.fix_of(s, item, V('approve', 'redraft'), {'kind': kind, 'line': line}) is None, kind
     d, _ = judged(s, t, {'verb': 'reply', 'line': 'Erin prefers a call on agendas.', 'evidence': [], 'kind': 'other'})
-    assert 'fix' not in d and d['verb'] == 'approve', d
+    assert 'fix' not in d and d['verb'] == 'reply', 'no gap: the model\'s own Reply, no fix and no Send swapped in'
 
 
 def test_the_kind_is_one_the_model_may_name():

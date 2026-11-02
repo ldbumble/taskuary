@@ -79,7 +79,9 @@ def test_the_advisor_raises_no_idea_about_a_personal_item(s):
     assert [i['Key'] for i in said] == ['loose:q4']
 
 
-def test_the_advisor_lights_no_work_move_on_a_personal_ask(s, monkeypatch):
+def test_a_personal_ask_is_said_to_the_model_which_decides(s, monkeypatch):
+    """The owner, 2026-11-01: a personal ask is an FYI. Since 2026-11-02 that is a fact the model reads (PERSONAL: ...) - no code darkens its
+    light - so the work item's prompt has no such line, the personal one's has, and each model's light is what is lit."""
     from taskuary import advisor, funnel, terminal
     monkeypatch.setattr(terminal, 'live_sessions', lambda tail=0: []); monkeypatch.setattr(funnel, '_agenda', lambda _s, **kw: [])
     monkeypatch.setattr(advisor, 'notice', lambda *a, **k: None)
@@ -88,6 +90,12 @@ def test_the_advisor_lights_no_work_move_on_a_personal_ask(s, monkeypatch):
     # the same ask twice is a duplicate the rule folds with Remove - lit on work, nothing on a personal ask
     ask(s, 'Q4 variance', ('Erin Blake', ERIN), 7, cid='email:q4'); w, _ = ask(s, 'RE: Q4 variance', ('Erin Blake', ERIN), 2, cid='email:q4')
     ask(s, 'The car', ('Mom', MOM), 7, cid='email:car'); t, _ = ask(s, 'RE: The car', ('Mom', MOM), 2, cid='email:car')
+    import json
+    seen = {}
+    for x in (w, t):
+        def brain(system, user, x=x, **kw): seen[x] = user; return json.dumps({'verb': 'remove' if x == w else 'next', 'line': '', 'evidence': []})
+        advisor.judge(s, advisor.SHOWN, 'task', x, advisor.revision(s, 'task', x), tier=2, llm=brain, key=f'task:{x}')
+    assert 'PERSONAL:' in seen[t] and 'PERSONAL:' not in seen[w]
     work, home = (advisor.decide(s, f'task:{x}', preread=False) for x in (w, t))
-    assert (work['state'], bool(work['verb'])) == ('duplicate', True)
-    assert (home['state'], home['verb']) == ('duplicate', None)
+    assert (work['state'], work['verb']) == ('duplicate', 'remove')
+    assert (home['state'], home['verb']) == ('duplicate', 'next')

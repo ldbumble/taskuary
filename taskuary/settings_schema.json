@@ -222,14 +222,23 @@
       "group": "Advisor",
       "label": "Advise on the item that changed",
       "type": "switch",
-      "desc": "When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.",
+      "desc": "When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor's model reads the item - looking more up when it needs to - and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.",
       "help": "Never a row and never a change to the rail's order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule."
+    },
+    "advisor_model": {
+      "group": "Advisor",
+      "label": "Model the Advisor reads with",
+      "type": "select",
+      "options": ["standard", "light"],
+      "optionLabels": {"standard": "standard - the brain's own model", "light": "light - quicker and cheaper"},
+      "desc": "The Advisor's model decides every button it lights, reading the whole item. Standard by default; light saves money and reads less well.",
+      "help": "In Auto mode the rules under the AI cards pick the tier instead. The finish check, which reads an agent's finished work, runs on the same model."
     },
     "advisor_event_cap": {
       "group": "Advisor",
       "label": "Event judgements per hour, at most",
       "type": "number",
-      "desc": "The small prompt runs once per item per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 30 by default.",
+      "desc": "The Advisor's model reads an item once per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 60 by default.",
       "help": "The Advisor's notes on an item (the clock menu) say when a judgement was dropped for the cap."
     },
     "assistant_producers": {

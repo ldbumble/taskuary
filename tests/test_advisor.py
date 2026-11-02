@@ -130,16 +130,16 @@ class JudgeTests(_Rail):
         self.assertIsNone(advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=llm))
         self.assertEqual(len(llm.calls), 1)
 
-    def test_a_state_the_rule_decides_asks_the_model_nothing(self):
-        """THE RULE DECIDES FIRST (the design, phase A, 2026-10-23): an agent that stopped is decided from the facts - an event on it
-        spends nothing of the hourly cap - and a plain stop lights nothing (NO DEFAULT VERB, the owner, 2026-10-28): its Continue comes
-        only from the finish check, with what it dropped."""
+    def test_every_state_asks_the_model_a_stopped_agent_too(self):
+        """THE MODEL DECIDES EVERY LIGHT (the owner, 2026-11-02): a stopped agent was the rule's - "left to the rule", no model read, nothing
+        lit - and 7 of 9 dropped balls were such states. The model reads it now, and its light is what is lit."""
         s = MemoryStore(); t = self._stopped_task(s)
         llm = brain_saying({'verb': 'close', 'line': 'x', 'evidence': []})
         rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
-        self.assertEqual((s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], llm.calls), ('left to the rule', []))
+        self.assertEqual((s._one('SELECT Verb FROM advice WHERE Id=?', (rid,))['Verb'], len(llm.calls)), ('close', 1))
+        self.assertIn('THE STATE (', llm.calls[0][1]); self.assertIn('): stopped - ', llm.calls[0][1])
         with mock.patch.object(advisor, 'notice') as n: d = advisor.decide(s, f'task:{t}')
-        self.assertEqual((d['verb'], d['by'], d['state']), (None, 'rule', 'stopped')); n.assert_not_called()
+        self.assertEqual((d['verb'], d['by'], d['state']), ('close', 'model', 'stopped')); n.assert_not_called()
 
     def test_silence_is_a_row_with_no_verb_and_no_pill(self):
         s = MemoryStore(); t = self._asked_task(s)
@@ -150,7 +150,8 @@ class JudgeTests(_Rail):
         self.assertEqual(len(llm.calls), 1)                                          # silence is the answer, not a missing key
 
     def test_a_line_that_asks_the_agents_own_question_again_is_dropped(self):
-        # the owner, 2026-10-21: the Advisor must not repeat a question the agent is already asking - it is in the agent's pane
+        # the owner, 2026-10-21: the Advisor must not repeat a question the agent is already asking - it is in the agent's pane. The LINE
+        # goes; the verb is the model's call like any other (2026-11-02: an asking agent is no longer a state that lights nothing)
         from taskuary import workerstate as ws
         s = MemoryStore(); t = self._asked_task(s)
         st = {'state': 'input_needed', 'requests': [{'kind': 'input_needed', 'text': 'Should I push the fix to ray/census-fix or open a new branch?'}]}
@@ -158,7 +159,7 @@ class JudgeTests(_Rail):
             llm = brain_saying({'verb': 'regular_agent', 'line': 'Which branch should the fix land on?', 'evidence': [], 'repeats_agent_question': True})
             rid = advisor.notice(s, 'agent.asked', 'task', t, wait=True, llm=llm)
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
-        self.assertEqual((r['Verb'], r['Dropped']), (None, "repeats the agent's question"))
+        self.assertEqual((r['Verb'], r['Line'], r['Dropped']), ('regular_agent', '', None))
         with mock.patch.object(ws, 'status', return_value=st), mock.patch.object(advisor, 'notice'):
             self.assertEqual(advisor.for_key(s, f'task:{t}').get('line'), '', 'no line over the question')
 
@@ -215,10 +216,9 @@ class JudgeTests(_Rail):
         advisor.notice(s, 'reply.arrived', 'task', t, wait=True, llm=llm)
         rid = advisor.notice(s, 'reply.arrived', 'task', t2, wait=True, llm=llm)
         self.assertEqual(s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], 'cap'); self.assertEqual(len(llm.calls), 1)
-        # ...and over the cap nothing is coming, so the rule's own facts decide at once: an ask under a day old has no fact to say, and
-        # NO DEFAULT VERB lights nothing (the owner, 2026-10-28) - never "Thinking..."
+        # ...and over the cap nothing is coming: nothing is lit - no rule stands in for the model, and never "Thinking..."
         with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t2}')
-        self.assertEqual((d['verb'], d['line'], d['by']), (None, '', 'rule'))
+        self.assertEqual((d['verb'], d['line'], d['by']), (None, '', 'model'))
         s._exec("UPDATE advice SET CreatedAt=?", ((datetime.now() - timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S'),))
         t3 = self._asked_task(s); advisor.notice(s, 'reply.arrived', 'task', t3, wait=True, llm=llm)
         self.assertEqual(len(llm.calls), 2)
@@ -311,8 +311,9 @@ class ReadTests(_Rail):
     def test_advice_vanishes_when_the_item_moves(self):
         s, t, rid = self._advised()
         s.update_task(t, {'Status': 'waiting'}, 'owner')
-        with mock.patch.object(advisor, 'notice'): d = advisor.for_key(s, f'task:{t}')
-        self.assertEqual((d['by'], d['line']), ('rule', ''), 'the line judged before the move is gone; the rule lights the move now')
+        with mock.patch.object(advisor, 'notice') as n: d = advisor.for_key(s, f'task:{t}')
+        self.assertEqual((d['verb'], d['line']), (None, ''), 'the line judged before the move is gone; nothing lit until the model reads it again')
+        self.assertEqual(n.call_args.kwargs.get('tier'), 2)
 
     def test_the_item_on_the_table_is_judged_when_no_event_ever_was(self):
         """Never left guessing (the Advisor audit, 2026-10-15): only eight events judged an item, so a task that moved since its last
@@ -334,16 +335,17 @@ class ReadTests(_Rail):
         self.assertIn('THE AGENT IS ASKING: Send it now?', p)
         self.assertIn('reviews or sends it', advisor.SYSTEM)
 
-    def test_an_agent_at_work_has_no_line_until_it_stops_again(self):
-        # a continue writes nothing the revision sees until the prompt lands: the stop's line stood over a working coding agent
+    def test_an_agent_at_work_is_read_by_the_model_and_its_state_said(self):
+        # a continue writes nothing the revision sees until the prompt lands: the stop's line stood over a working coding agent. Working is
+        # a state the facts name and the model reads (Next among its verbs) - no code lights Next for it (2026-11-02)
         from taskuary import workerstate as ws
         s = MemoryStore(); t = self._stopped_task(s)
-        with mock.patch.object(advisor, 'notice'), mock.patch.object(ws, 'status', return_value={'state': 'working'}):
-            d = advisor.for_key(s, f'task:{t}')
-        self.assertEqual((d['verb'], d['line'], d['state']), ('next', '', 'working'), 'an agent at work: Next lit, nothing said')
-        for state in ('input_needed', 'approval_needed', 'unknown', 'disconnected'):
-            with mock.patch.object(advisor, 'notice'), mock.patch.object(ws, 'status', return_value={'state': state}):
-                self.assertEqual(advisor.for_key(s, f'task:{t}')['verb'], None, state)     # a plain stop: nothing lit
+        llm = brain_saying({'verb': 'next', 'line': '', 'evidence': []})
+        with mock.patch.object(ws, 'status', return_value={'state': 'working'}):
+            advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
+            with mock.patch.object(advisor, 'notice'): d = advisor.for_key(s, f'task:{t}')
+        self.assertEqual((d['verb'], d['line'], d['state'], d['by']), ('next', '', 'working', 'model'))
+        self.assertIn('): working - an agent is at work on it right now', llm.calls[0][1])
 
     def test_notes_say_what_was_decided_and_dropped(self):
         s, t, rid = self._advised()
@@ -368,9 +370,9 @@ class ApiTests(unittest.TestCase):
         s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'in_progress'}, 'owner')
         with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
             c = TestClient(server.app)
-            # one decision, at once: an own task with nothing asked lights Next and says nothing - never a spinner (the owner, 2026-10-23)
+            # one decision, at once: nothing lit until the model has read it, and never a spinner (the owner, 2026-10-23)
             got = c.get(f'/api/advice?key=task:{t}').json()
-            self.assertEqual((got['verb'], got['line'], 'pending' in got), ('next', '', False))
+            self.assertEqual((got['verb'], got['line'], 'pending' in got), (None, '', False))
             self.assertEqual(c.get(f'/api/advice/notes?key=task:{t}').json(), {'rows': []})
             self.assertEqual(c.get('/api/advice?key=conn:1').json(), {'none': 'nothing'})
 
@@ -512,16 +514,17 @@ class AuditFixTests(_Rail):
         llm = brain_saying({'verb': 'defer', 'line': 'Gail is away until Monday.', 'evidence': []})
         advisor.notice(s, 'reply.arrived', 'task', t, tier=2, wait=True, llm=llm); self.assertEqual(len(llm.calls), 1)
 
-    def test_unsorted_mail_and_a_report_that_ran_fine_get_no_advice(self):
-        # ...the rulebook's now (quiet() folded in, the design phase A): its own button lit at once, the model never asked
+    def test_unsorted_mail_and_a_report_that_ran_fine_are_the_models_too(self):
+        # ...the rule lit their button at once and never asked (the design phase A); the model reads them now, Next among its verbs
         from taskuary import rulebook
-        s = MemoryStore(); t = self._asked_task(s); llm = brain_saying({'verb': 'not_ours', 'line': 'x', 'evidence': []})
+        s = MemoryStore(); t = self._asked_task(s); llm = brain_saying({'verb': 'next', 'line': '', 'evidence': []})
         for it, state in (({'kind': 'fyi', 'lane': 'unjudged', 'mid': 1}, 'unsorted'), ({'kind': 'report', 'lane': 'report', 'mid': 1}, 'report_ok')):
             self.assertEqual(rulebook.state(s, it, [])[0], state)
-            s._exec('DELETE FROM advice')
+            s._exec('DELETE FROM advice'); llm.calls.clear()
             with mock.patch.object(advisor, '_item', return_value=it):
                 rid = advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
-            self.assertEqual((s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], llm.calls), ('left to the rule', []))
+            self.assertEqual((s._one('SELECT Verb FROM advice WHERE Id=?', (rid,))['Verb'], len(llm.calls)), ('next', 1))
+            self.assertIn(f'): {state} - ', llm.calls[0][1])
         self.assertEqual(rulebook.state(s, {'kind': 'report', 'lane': 'broken', 'bad': True, 'why': 'mailbox signed out'}, [])[0], 'report_failed')
 
     def test_an_agent_waiting_on_you_is_answered_in_its_pane_never_by_a_lit_answer_it(self):

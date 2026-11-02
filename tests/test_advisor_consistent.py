@@ -2,7 +2,8 @@
 both twins of a duplicate pair lit "Remove - not a task", each naming the other; a wait "2 days late" by its header lit Remind me; a late
 line counted from mail said "within the hour" while LEARNED.md said "the same day", and Wrong on that line changed nothing on the task; a
 draft caution stood beside a lit Send; a late line on a drafted task lit Reply over the draft's own Send; and a failed run lit a Try again
-nobody could press. Each is pinned here on its shape, with invented Northwind people (CLAUDE.md)."""
+nobody could press. Each is pinned here on its shape, with invented Northwind people (CLAUDE.md). Since 2026-11-02 the model decides every
+light (no hard-coded rules): the facts say the state and its line, and the check after the model refuses to nothing - it swaps in no verb."""
 import json
 from datetime import date, datetime, timedelta
 from unittest import mock
@@ -41,7 +42,8 @@ def test_a_duplicate_pair_has_one_survivor_and_only_the_other_is_folded_into_it(
     a, b = (advisor.decide(s, f'task:{t}', preread=False) for t in (first, second))
     assert [d['state'] for d in (a, b)].count('duplicate') == 1, (a, b)
     assert a['state'] != 'duplicate' and a['verb'] not in ('remove', 'split'), 'the one asked first keeps its own move'
-    assert b['state'] == 'duplicate' and b['line'] == 'Same ask as TQ-0001 - fold it into that one.', 'the other names the one that stays'
+    fb = rulebook.facts(s, {'key': f'task:{second}', 'tid': second, 'kind': 'asked', 'lane': 'asked'}, V('reply', 'remove'))
+    assert b['state'] == 'duplicate' and fb['line'] == 'Same ask as TQ-0001 - fold it into that one.', 'the other names the one that stays'
     # ...decided once for the pair and kept: a new message on the survivor does not flip it
     assert json.loads(s._one("SELECT Json FROM advice_decision WHERE Key=?", (f'pair:{first}:{second}',))['Json'])['survivor'] == first
     Factory(s).message(task_id=first, subject='RE: Spendly cards', body='And a third card?', from_name=MARCUS[0], from_email=MARCUS[1],
@@ -59,12 +61,12 @@ def test_a_model_folding_the_survivor_into_its_twin_is_refused(s):
     ask(s, 'RE: Spendly cards', MARCUS, 2, cid='email:spendly')
     it = {'key': f'task:{first}', 'tid': first, 'kind': 'asked', 'lane': 'asked'}
     d = advisor.checked(s, it, V('reply', 'remove'), {'key': it['key'], 'state': 'asked', 'verb': 'remove', 'line': 'Same ask as TQ-0002.', 'by': 'model',
-                        'evidence': [], 'kind': 'same_ask'}, {'verb': 'reply', 'line': '', 'evidence': []})
-    assert (d['verb'], d['by'], d['line']) == ('reply', 'rule', '') and 'survivor' in d['checked']
+                        'evidence': [], 'kind': 'same_ask'})
+    assert (d['verb'], d['line']) == (None, '') and 'survivor' in d['checked'], 'refused to nothing - no verb swapped in'
 
 
 # ── 2. late on a wait: one pick, one clock ────────────────────────────────────────────────────────────────────────────────────────────
-def test_a_wait_past_its_due_day_is_chase_counted_like_the_header_and_its_goal(s):
+def test_a_wait_past_its_due_day_is_named_late_counted_like_the_header_and_its_goal(s):
     g = s.create_task({'Title': 'Move payroll', 'Status': 'open', 'DoneWhen': 'payroll runs on the new system'}, 'owner')
     s.set_task_checklist(g, ['schema sign-off'], 'owner')
     k = s.create_task({'Title': 'Ray: schema sign-off', 'Status': 'waiting', 'Assignee': f'person:{RAY[1]}', 'ParentId': g,
@@ -72,12 +74,12 @@ def test_a_wait_past_its_due_day_is_chase_counted_like_the_header_and_its_goal(s
     s.link_step(g, s.checklist_id('schema sign-off'), k, 'owner')
     Factory(s).message(task_id=k, subject='Schema', body='Can you sign the schema off?', direction='out', sent_at=at(hours=20))
     Factory(s).message(task_id=k, subject='RE: Schema', body='Looking.', from_name=RAY[0], from_email=RAY[1], sent_at=at(hours=19))
-    step = rulebook.decide(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}, V('defer', 'chase'))
-    goal = rulebook.decide(s, {'key': f'task:{g}', 'tid': g, 'lane': 'yours', 'kind': 'goal_slipped'}, V('defer', 'chase'))
-    assert (step['state'], step['verb']) == ('waiting_overdue', 'chase'), 'not Remind me'
+    step = rulebook.facts(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}, V('defer', 'chase'))
+    goal = rulebook.facts(s, {'key': f'task:{g}', 'tid': g, 'lane': 'yours', 'kind': 'goal_slipped'}, V('defer', 'chase'))
+    assert step['state'] == 'waiting_overdue', 'late by its due day'
     assert step['line'].startswith('Ray') and step['line'].endswith(': 2 days late.'), 'the days past due, not since the ask'
-    assert goal['verb'] == 'chase' and goal['line'] == "Ray's schema sign-off: 2 days late.", 'the goal and its step say one count'
-    assert rulebook.adds(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}) == ['chase'], 'Chase is on the row it is lit on'
+    assert goal['state'] == 'goal_late' and goal['line'] == "Ray's schema sign-off: 2 days late.", 'the goal and its step say one count'
+    assert rulebook.adds(s, {'key': f'task:{k}', 'tid': k, 'lane': 'theirs', 'kind': 'task'}) == ['chase'], 'Chase is on the row for the model to light'
 
 
 # ── 3. the usual is ONE line, and the owner's hand on it reaches the task ─────────────────────────────────────────────────────────────
@@ -96,8 +98,13 @@ def test_the_late_line_reads_the_learned_line_and_wrong_on_it_takes_the_line_off
     s.save_doc('learned', learn.answer_lines(s, s.get_doc('learned') or ''), 'reflect')
     line = usual.answer_line(s, ERIN[1])
     assert line['text'] == 'You answer Erin Blake (erin@northwind.example) within the hour'
+    it = {'key': f'task:{t}', 'tid': t, 'kind': 'asked', 'lane': 'asked'}
+    assert rulebook.facts(s, it, V('reply'))['line'] == 'You usually answer Erin within the hour; this is 5h.', 'the fact the model reads'
+    # ...the model lights Reply on it, citing the line and saying what it says
+    said = {'verb': 'reply', 'line': 'You usually answer Erin within the hour; this is 5h.', 'evidence': [line['cite']], 'kind': 'late', 'memory_says': line['text']}
+    advisor.judge(s, advisor.SHOWN, 'task', t, advisor.revision(s, 'task', t), tier=2, llm=lambda system, user, **kw: json.dumps(said), key=f'task:{t}')
     d = advisor.status(s, f'task:{t}')
-    assert (d['state'], d['line']) == ('asked_late', 'You usually answer Erin within the hour; this is 5h.')
+    assert (d['state'], d['verb'], d['line']) == ('asked_late', 'reply', 'You usually answer Erin within the hour; this is 5h.')
     memory = [r for r in d['rests'] if r['kind'] == 'memory']
     assert memory == [{'id': line['cite'], 'kind': 'memory', 'key': line['key'], 'own': False, 'section': 'work', 'label': line['text']}], 'Why? quotes the one line'
     assert advisor.resting_on(s, [line['cite']]) == [f'task:{t}']
@@ -135,34 +142,32 @@ def _d(verb, kind, state='asked', line='x'):
 
 def test_a_caution_about_the_draft_never_lights_send(s):
     d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'redraft'), _d('approve', 'draft_caution', 'draft_ready',
-                        'The draft promises Friday; nothing backs it.'), {'verb': 'approve', 'line': '', 'evidence': []})
-    assert (d['verb'], d['line']) == ('redraft', 'The draft promises Friday; nothing backs it.'), 'Redraft, with the caution as its reason'
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve'), _d('approve', 'draft_caution', 'draft_ready'), {'verb': 'approve', 'line': '', 'evidence': []})
-    assert d['verb'] == 'next', 'never Send - nothing else to light, so Next'
+                        'The draft promises Friday; nothing backs it.'))
+    assert (d['verb'], d['line']) == (None, 'The draft promises Friday; nothing backs it.'), 'never Send; the caution kept - its fix (fix_of) lights Redraft'
+    d = advisor.checked(s, {'key': 'task:1'}, V('approve'), _d('approve', 'draft_caution', 'draft_ready'))
+    assert d['verb'] is None and d['checked'], 'never Send - and no verb swapped in'
 
 
-def test_late_on_a_drafted_task_lights_the_drafts_send(s):
-    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'reply', 'redraft'), _d('reply', 'late', 'asked_late', 'You usually answer Erin within the hour; this is 5h.'),
-                        {'verb': 'reply', 'line': '', 'evidence': []})
-    assert (d['verb'], d['line'], d['checked']) == ('approve', 'You usually answer Erin within the hour; this is 5h.', 'late on a drafted task: the draft is the answer')
-    # ...with no draft, Reply stands
-    assert advisor.checked(s, {'key': 'task:1'}, V('reply'), _d('reply', 'late'), {'verb': 'reply', 'line': '', 'evidence': []})['verb'] == 'reply'
+def test_late_on_a_drafted_task_the_models_reply_stands(s):
+    """The swap to the draft's Send went (2026-11-02): the model reads THE DRAFT and decides; code checks only what cannot be pressed."""
+    d = advisor.checked(s, {'key': 'task:1'}, V('approve', 'reply', 'redraft'), _d('reply', 'late', 'asked_late', 'You usually answer Erin within the hour; this is 5h.'))
+    assert (d['verb'], d['line'], d.get('checked')) == ('reply', 'You usually answer Erin within the hour; this is 5h.', None)
+    assert advisor.checked(s, {'key': 'task:1'}, V('reply'), _d('reply', 'late'))['verb'] == 'reply'
 
 
-def test_a_verb_the_page_greys_is_never_lit_and_the_next_sensible_one_is(s, monkeypatch):
+def test_a_verb_the_page_greys_is_never_lit(s, monkeypatch):
     advisor.AGENT_CHECK = True
     try:
         it = {'key': 'task:1', 'tid': 1}
-        rule = {'verb': 'continue', 'line': 'Failed: the run stopped', 'evidence': []}
-        d = advisor.checked(s, it, V('continue', 'new_task'), _d('continue', 'failure', 'failed_cause', 'Failed: the run stopped') | {'by': 'rule'}, rule)
-        assert d['verb'] == 'new_task' and d['line'] == 'Failed: the run stopped' and d['checked'].startswith('continue: no AI'), d
+        d = advisor.checked(s, it, V('continue', 'new_task'), _d('continue', 'failure', 'failed_cause', 'Failed: the run stopped'))
+        assert d['verb'] is None and d['checked'].startswith('continue: no AI'), 'refused to nothing - the model is asked again when the item moves'
         assert advisor.pressable(s, it, 'continue', V('continue')) == 'no AI is connected'
         assert advisor.pressable(s, it, 'chase', V('reply')) == 'not on the row'
         # ...an AI and a brain to run on: Try again is pressable, and stands
         from taskuary import capabilities, general
         monkeypatch.setattr(capabilities, 'has_ai', lambda st: True)
         monkeypatch.setattr(general, 'provider_options', lambda st: [{'type': 'anthropic', 'pick': 'connector:1'}])
-        assert advisor.checked(s, it, V('continue', 'new_task'), _d('continue', 'failure', 'failed_cause') | {'by': 'rule'}, rule)['verb'] == 'continue'
+        assert advisor.checked(s, it, V('continue', 'new_task'), _d('continue', 'failure', 'failed_cause'))['verb'] == 'continue'
     finally: advisor.AGENT_CHECK = False
 
 

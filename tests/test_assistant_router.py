@@ -605,8 +605,13 @@ class RunItAgain(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             item = next(i for i in funnel.build(s)['items'] if i.get('kind') == 'report')
         out, _ = say(s, 'run it again', item['key'], 'CALL: {"kind": "rerun", "params": {}}')
-        self.assertEqual(out['open'], f'#report={item["source_id"]}')
-        self.assertIn('Reports', out['say']); self.assertNotIn('light', out)
+        # a read-only agent is a report on the page's shelf (sourceShape.js): its Run now is on its row there, never in its builder (2026-11-02)
+        self.assertEqual(out['open'], '#report=reports')
+        self.assertIn('Run now', out['say']); self.assertNotIn('light', out)
+        # ...and a routine that writes opens at itself, where its own Run now is (WorkflowEditor)
+        s.save_source({'SourceId': sid, 'ConfigJson': json.dumps({'type': 'agent', 'access': 'write', 'title': 'AP ageing'})}, 'o')
+        out, _ = say(s, 'run it again', item['key'], 'CALL: {"kind": "rerun", "params": {}}')
+        self.assertEqual(out['open'], f'#report={sid}')
 
 
 class ClearingASet(unittest.TestCase):

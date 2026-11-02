@@ -146,6 +146,11 @@ catch-up off does not stop them.
 |---|---|
 | **Run due now** | Every report that is owed, and nothing else |
 | **Run now** on a row | That report, now. It does not use up "once a day" or move the next slot |
+| **The switch** on a row | Takes the report off its clock, and puts it back on. Off, it still runs when you press Run now; saving an edit never switches it back on |
+| **Remove report**, top of its builder | Removes it at once; **Recently deleted** on the shelf brings it back for 30 days |
+
+Run now and the switch live on the report's row on the shelf, not in its builder - a dashboard's
+row the same. A routine's own page carries its Run now and its switch.
 
 A scheduled run that fails is tried again at its next scheduled time, never in between. A report runs one at a time; a second
 Run now while it runs is told so.

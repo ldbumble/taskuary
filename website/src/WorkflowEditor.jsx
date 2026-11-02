@@ -217,7 +217,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
           {cur ? `${cur.Active ? "On" : "Off"} · runs ${runsWords(sched, cfg)}` : `Not saved yet · will run ${runsWords(sched, cfg)}`}
         </Typography>
         {cur && <Box sx={{ display: "flex", alignItems: "center" }}>
-          <Switch size="small" checked={!!cur.Active} onChange={toggle} />
+          {/* named, so the Assistant can find it (the everyday-asks audit, 2026-11-02): a switch with no label never reached its view */}
+          <Switch size="small" checked={!!cur.Active} onChange={toggle} inputProps={{ "aria-label": `${cfg.title || "Routine"} on its clock` }} />
           <Typography variant="caption" sx={{ color: DIM }}>{cur.Active ? "on" : "off"}</Typography>
         </Box>}
         <Button variant="outlined" size="small" disabled={!!busy} onClick={runNow}

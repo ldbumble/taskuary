@@ -135,3 +135,30 @@ def test_the_owner_s_first_line_after_theirs_is_the_one_that_counts():
     assert s.talked_with('whatsapp', 'erin blake') == 'answered'
     assert s.talked_with('whatsapp', 'ray colton') == 'answered'
     assert senders.known(s, {'channel': 'whatsapp', 'from_name': 'Ray Colton', 'conversation_id': 'grp'})[0]
+
+
+def test_a_long_trusted_group_the_walk_lands_on_draws_its_card_in_a_beat(tmp_path, monkeypatch):
+    """The owner, 2026-11-02: "Next after this took 15 seconds". Next landed on a long WhatsApp group whose card is GET /api/tasks/{id},
+    and the page reads it again on every live write while the task's agent works (10-20 times a minute): judged a line at a time, each
+    read was 5-9 s on a real home and the reads starved every other request, the walk's own answer included. Nobody on it is a stranger,
+    so no line stops the judging early: every line is read, and each person must still be asked once (SQLite, as a real home runs)."""
+    s = SQLiteStore(str(tmp_path / 'trusted.db')); s.set_setting('calendar_enabled', '0', 'fixture')
+    s.set_setting('owner_email', 'alex@northwind.example', 'fixture')
+    tid = s.create_task({'Title': 'Site ops: the walk-in cooler', 'Status': 'open', 'Kind': 'general', 'Source': 'whatsapp'}, 'fixture')
+    now = datetime.now()
+    for j in range(1000):
+        mine = j % 2         # each of them, then the owner answering them: everyone on the chat is someone the owner talks with
+        name, addr = ('Alex Doyle', 'alex@northwind.example') if mine else WHO[j // 2 % 3]
+        mid = s.add_message({'TaskId': tid, 'Status': 'context' if mine else 'routed', 'Channel': 'whatsapp', 'ExternalId': f'wa-trusted-{j}',
+                             'Subject': 'Site ops', 'FromName': name, 'FromEmail': addr, 'SourceName': 'alex@northwind.example', 'BodyText': f'line {j}',
+                             'SentAt': (now - timedelta(minutes=1000 - j)).strftime('%Y-%m-%d %H:%M:%S'), 'ConversationId': 'grp-trusted',
+                             'Direction': 'out' if mine else 'in'})
+        s.add_route(mid, tid, 'create' if j == 0 else 'attach', None, 'same chat', [], 'triage')
+    monkeypatch.setattr(server, 'store', s); monkeypatch.setattr(terminal, 'live_sessions', lambda **kw: [])
+    try:
+        n = _counted(s); c = TestClient(server.app)
+        for _ in range(3):                                   # ...read again and again while its agent works
+            took = time.perf_counter(); r = c.get(f'/api/tasks/{tid}'); took = time.perf_counter() - took
+            assert r.status_code == 200 and r.json()['origin']['origin'] == 'trusted' and took < OPEN, f'the card took {took:.1f}s'
+        assert n[0] < 3 * 1000 / 10, f'{n[0]} reads for three reads of 1,000 lines'
+    finally: s.close()

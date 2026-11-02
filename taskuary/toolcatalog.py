@@ -108,8 +108,9 @@ PURPOSE = {
     # A MEETING IS THE CALENDAR'S, NEVER AN AGENT'S JOB (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job): the one
     # scheduling move is a task's Find a time, drafted for Send (calwrite.draft) - concierge._meeting routes to it, or to New → Meeting
     'meeting.new':              ('set up a meeting or call ("a meeting with Gail about the budget friday") - `who` optional: the names or '
-                                 'addresses it is with, `about` optional: its subject, `when` optional: the day they said as YYYY-MM-DD, '
-                                 'or this_week / next_week, `minutes` optional: 15, 30, 45 or 60, `ref` '
+                                 'addresses it is with, `about` optional: its subject, `when` optional: the day they said as YYYY-MM-DD (a weekday '
+                                 'they name - "Thursday" - is its next date), or this_week / next_week, `minutes` optional: the '
+                                 'length they said - 15, 30, 45 or 60 ("an hour" is 60) - else 30, `ref` '
                                  "optional: the task it is about (TQ-0123) when it is not the one on the table. On a task whose thread asks "
                                  "for a time it lights that task's Find a time; with none it brings up New → Meeting filled in, whose "
                                  "Find times reads the calendars; with no calendar, the card that connects one. Nothing goes out "
@@ -348,7 +349,7 @@ def block(store=None) -> str:
     lines = [
         'HOW YOU ACT (code reads your last line)',
         # the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"
-        'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words at most',
+        'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words',
         '(under 12) - never what it shows: no sender, story or summary beside it. Longer words only answer a real question.',
         # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
         'A CALL that presses or lights a button - an action word for the item on the table, a put-down, a reminder - is the CALL line',
@@ -538,7 +539,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
-         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?'}
+         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?, minutes?'}
 
 
 def signature(kind: str) -> str:

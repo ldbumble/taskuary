@@ -33,7 +33,7 @@ def turn(s, item, **p):
 class TheRoadIsOffered(unittest.TestCase):
     def test_the_index_names_meeting_new_where_new_work_is_and_its_description_is_one_the_model_would_pick(self):
         b = toolcatalog.block()
-        self.assertIn('meeting.new(who?, about?, when?)', b)
+        self.assertIn('meeting.new(who?, about?, when?, minutes?)', b)
         self.assertIn('meeting.new', dict((n, ks) for n, _, ks in toolcatalog.BUCKETS)['new'])
         self.assertIn('a meeting meeting.new', b, 'WHICH ONE names it beside the to-do, so the model reaches it without a look-up')
         self.assertLess(len(b), 7950)

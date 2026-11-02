@@ -204,9 +204,22 @@ def message_revision(store, task_id: int) -> str:
     """The inbound message set of a task - which messages, in what state - and nothing else: a task's kind
     or status changing is not new context for a REPLY, a new inbound line is (PW-048/055); an FYI triage
     filed with nothing to do is not either (PW-240) - invalidation follows material change, never an arrival."""
-    rows = [(m['MessageId'], m.get('Status')) for m in store.list_messages(task_id)
+    return _revision(_material(store, task_id))
+
+
+def _material(store, task_id: int) -> list:
+    return [(m['MessageId'], m.get('Status')) for m in store.list_messages(task_id)
             if m.get('Status') not in ('context', 'history', 'skipped', 'filed') and str(m.get('Direction') or 'in') != 'out']
-    return hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()[:16]
+
+
+def _revision(rows) -> str: return hashlib.sha1(json.dumps(rows, default=str).encode()).hexdigest()[:16]
+
+
+def seen_upto(store, task_id: int, revision: str):
+    """The newest inbound line a pinned message_revision held - the task's lines re-hashed as they stood when it was taken - or None
+    when no earlier state of them fits (a line's state moved since). What a draft was written against, told apart from what came later."""
+    rows = _material(store, task_id)
+    return next((k for k in sorted({i for i, _ in rows}, reverse=True) + [0] if _revision([r for r in rows if r[0] <= k]) == revision), None)
 
 
 def _public(op: dict) -> dict:

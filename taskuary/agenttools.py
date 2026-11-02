@@ -57,8 +57,9 @@ TOOLS = {
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
-    'propose_reply': ('propose', "Write the reply to the person this task came from. It becomes the task's pending reply with a Send "
-                      "button for the owner - nothing is sent.", _S({'text': _STR}, ('text',)), ('POST', '/api/agent/reply')),
+    'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
+                      "mail. It becomes a pending reply with a Send button for the owner - nothing is sent.",
+                      _S({'text': _STR, 'to': _STR}, ('text',)), ('POST', '/api/agent/reply')),
     'propose_email': ('propose', "Draft one more email this task needs (to someone, with a subject). It waits with a Send button for "
                       "the owner - nothing is sent.", _S({'to': _STR, 'subject': _STR, 'text': _STR}, ('text',)),
                       ('POST', '/api/agent/draft')),
@@ -157,7 +158,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
-    if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or '')))
+    if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), *([str(a['to'])] if a.get('to') else [])))
     if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or '')))
     if name == 'propose': return _j(doors['propose'](tid, a))
     raise ValueError(f'no tool {name!r} - tools/list names them')

@@ -62,7 +62,9 @@ coding-specific ones on top. The task brief in your prompt is your context and y
   nothing you did not do.
 - When the work is over, say so plainly with `taskuary --done "<one sentence>"`: Taskuary saves the
   result, writes the report from the session and drafts any reply for {{owner_first}} to approve - unless you
-  wrote the reply yourself with `taskuary --reply "<text>"`, which is kept as you wrote it. A file it
+  wrote the reply yourself with `taskuary --reply "<text>" --to "<name or address>"`, which is kept as you wrote it, to the
+  person you name - the one you are answering or asking. A task can carry more than one person's mail; without `--to` the
+  reply answers whoever wrote last, so always say who it is to. A file it
   promises rides only if you add `--attach <path>`. When nobody should hear back - {{owner_first}} said not to answer, or there
   is nothing for the sender - add `--no-reply`: the task closes with no reply drafted.
 - When something is easier to show than to tell - a table to sort, a chart, a dashboard, a comparison - you

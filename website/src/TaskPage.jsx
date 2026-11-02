@@ -102,6 +102,8 @@ import { completionFact, completionLine, owedEmails, waitingEmails, wentOut,
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import EarlierRounds from "./CloseoutRounds.jsx";
+import MoreDrafts from "./MoreDrafts.jsx";
+import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
 import { closeoutRounds, roundReviews } from "./closeoutRounds.js";
 import { diffStat } from "./agentRecord.js";
 import AgentStory, { StoryChip } from "./AgentStory.jsx";
@@ -1377,6 +1379,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     closeouts: detail?.closeouts || [], open: !["done", "dropped"].includes(t?.Status), ms: tsMs });
   const round = rounds.at(-1), reviews = roundReviews(allReviews, rounds);
   const pendingReview = pendingReplyReview(reviews);
+  // ...and any other reply waiting, to someone else on the task - each drawn under it with its own To and Send (MoreDrafts)
+  const moreDrafts = otherPendingReplies(reviews, pendingReview);
   const allProposals = pendingProposals(reviews);
   // the task's close-out beside its reply is ONE decision on the reply's card; alone, it is its own card below
   const closeoutRv = allProposals.find((p) => closeoutOf(p)) || null;
@@ -1490,8 +1494,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const sourceFiles = filesByMessage(detail?.attachments);
   const fetchFor = inbound[0]?.Channel === "email" && mentionsPicture(inbound[0].BodyText) ? inbound[0].MessageId : null;
   // CLOSE OUT'S CONVERSATION is the one being answered - the reply source's - condensed, newest first; never a batch's four authors
+  // ...the one the pending draft itself answers, when it names one: the newest mail on the task is often someone else's (2026-11-02)
+  const closeSrc = draftAnswers(pendingReview, storedMessages) || sourceMessage;
   const closeGroup = detail?.batch || !(inbound.length || owed) ? null
-    : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
+    : sources.find((g) => g.msgs.some((m) => m.MessageId === closeSrc?.MessageId)) || sources[0] || null;
   // ...and what you sent outside Taskuary in this round says so under it, newest first - in another conversation, and in its own too, now
   // that Close out draws one "Answering" line of it and no rows (the owner, 2026-11-01: the reply typed in the mail client after the reopen
   // was on the page nowhere, and the reply of the round before stood as "What was sent")
@@ -1499,7 +1505,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and the one message in it the draft answers: the reply's source, else the conversation's newest from them
   const owedRow = owed && closeGroup?.msgs.find((m) => m.MessageId === owed.MessageId);
   const answering = !closeGroup ? null : owedRow ? { ...owedRow, who: owed.FromName }
-    : closeGroup.msgs.find((m) => m.MessageId === sourceMessage?.MessageId)
+    : closeGroup.msgs.find((m) => m.MessageId === closeSrc?.MessageId)
     || newestFirst(closeGroup.msgs.filter((m) => m.Status !== "context" && m.Direction !== "out" && !m.ReviewSent))[0] || null;
   // ...From is always open now (the redesign, 2026-10-21): the link opens the whole conversation there and brings it into view, and the
   // work column stays where it was - the reply you were reading does not fold under you
@@ -3373,11 +3379,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       )}
                       {/* THE DECISION ITSELF, on the task that owns it - the same component the review
                           queue mounts, so two surfaces cannot say different things about one draft. */}
-                      {pendingReview ? (
+                      {pendingReview ? (<>
                         <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} closeOnSend liveWork={liveWork} onRemind={(e, a) => remindHere(steady(a || e?.currentTarget))}
                           onEmailInstead={() => setEmailOpen(true)} why={threeUp ? warn?.line || "" : ""}
-                          onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
-                      ) : (
+                          onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   {/* the list's row moves too (T19) */}
+                        <MoreDrafts reviews={moreDrafts} messages={storedMessages} onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
+                      </>) : (
                         <>
                           {/* WHAT ALREADY WENT OUT, before any envelope: the item ending upstream (the agent's merge) and what was sent
                               from outside a draft here. With neither, a merged pull request's Close out was a bare "To <sender>" over

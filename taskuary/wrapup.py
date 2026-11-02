@@ -137,6 +137,46 @@ def reply_target(store, task_id: int):
     return own or (store.promised_in(store.get_task(task_id)) or {}).get('MessageId') or (rows[0]['MessageId'] if rows else None)
 
 
+# WHO A REPLY IS TO IS THE AGENT'S TO SAY (2026-11-02): a task that had joined a second person's thread took the session's follow-up
+# question to its first requester and filed it as a reply to the second person's "Perfect!" - reply_target answers the NEWEST mail,
+# whoever wrote it. `taskuary --reply --to <name or address>` names the person, and the reply answers that person's newest message.
+def _people(store, task_id: int) -> list:
+    "Everyone who wrote in on this task, newest first, one row each: (address, name, their newest message)."
+    seen, out = set(), []
+    for m in reversed(store.list_messages(task_id)):
+        if m.get('Status') in ('context', 'skipped') or str(m.get('Direction') or 'in') == 'out' or from_owner(store, m) or no_one_behind(m.get('Channel')): continue
+        k = str(m.get('FromEmail') or m.get('FromName') or '').strip().lower()
+        if k and k not in seen: seen.add(k); out.append((k, str(m.get('FromName') or '').strip(), m))
+    return out
+
+
+def _person(store, mid) -> str:
+    "Who wrote a message, as one key - their address, else their name."
+    m = store.get_message(mid) if mid else None
+    return str((m or {}).get('FromEmail') or (m or {}).get('FromName') or '').strip().lower()
+
+
+def people_named(store, task_id: int) -> list:
+    "The task's people as an agent would name them back: 'Name <address>'."
+    return [f'{n} <{a}>' if n and '@' in a else n or a for a, n, _ in _people(store, task_id)]
+
+
+def addressee(store, task_id: int, to: str):
+    """The message a reply to `to` answers - that person's newest on the task - as (message, None), or (None, why) when nobody on it
+    is that person, or the words fit more than one. An address names one sender; a name matches every word of it in theirs."""
+    to = str(to or '').strip()
+    addr = (re.search(r'<([^>]+)>', to) or re.search(r'(\S+@\S+)', to))
+    rows = _people(store, task_id)
+    if addr: hits = [r for r in rows if r[0] == addr.group(1).strip().lower()]
+    else:
+        words = re.findall(r'\w+', to.lower())
+        hits = [r for r in rows if words and set(words) <= set(re.findall(r'\w+', f'{r[1]} {r[0].split("@")[0]}'.lower()))]
+    if len(hits) == 1: return hits[0][2], None
+    names = ', '.join(people_named(store, task_id)) or 'nobody'
+    return None, (f'"{to}" fits more than one person on this task ({", ".join(r[1] or r[0] for r in hits)}) - give their address with --to' if hits
+                  else f'nobody called "{to}" wrote on this task - the people on it: {names}. To write to someone else, use --draft with --to')
+
+
 # ── the agent's own words ───────────────────────────────────────────────────────────────
 # The agent that did the work often writes the better answer: it knows what it found, and a second
 # model redrafting from its transcript loses the nuance (the owner, 2026-09-23: "sometimes the agent
@@ -210,7 +250,8 @@ def owner_asked_since(store, task_id: int, at: str) -> bool:
     return any(c.get('ActorType') == USER_TYPE and str(c.get('CreatedAt') or '') > str(at or '') for c in store.list_comments(task_id))
 
 
-def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False) -> dict:
+def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
+                to: str = '') -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
     the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
@@ -230,7 +271,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         return {'ok': False, 'already_sent': True, 'review_id': sent['ReviewId'],
                 'why': f'that reply already went out{_at(sent)} - nothing new was saved. Write a new one only if there is something new to say.'}
     held = store.held_review(task_id) or {}
-    mid = reply_target(store, task_id) or held.get('MessageId')
+    if str(to or '').strip():
+        hit, why = addressee(store, task_id, to)
+        if not hit: return {'ok': False, 'why': why}
+        mid = hit['MessageId']
+        if held and _person(store, held.get('MessageId')) != _person(store, mid): held = {}
+    else: mid = reply_target(store, task_id) or held.get('MessageId')
     # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's
     # answer IS the result, and filing it as a reply "waiting on your approval" addressed it to them (2026-09-23).
     # Refusing it outright threw the answer away - a whole review the owner asked for, gone (2026-10-06) - so keep it.
@@ -250,6 +296,8 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
                 'why': f'a reply to {to} already went at {at}, and nothing new has come from them since - nothing was saved. '
                        'Draft another only if the owner asked you to, and then say so: `taskuary --follow-up --reply "<text>"`.'}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
+    # ...and a reply pending to SOMEONE ELSE is theirs: rewriting it into this letter took the one to them off the table (2026-11-02)
+    if live and live.get('MessageId') and _person(store, live['MessageId']) != _person(store, mid): live = None
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:
         from .continuity import clock
@@ -260,12 +308,15 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         rid = live['ReviewId']; store.update_review_reason(rid, why, run_id)
     else:
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending', 'Reason': why})
+    # pinned to the message it answers AND the thread as it stood: with no revision, approval compared the newest material line to an
+    # FYI this answered - never equal - and Send threw the agent's words away for a fresh draft to whoever wrote last (2026-11-02)
+    from . import operations
+    store.pin_review_context(rid, mid, operations.message_revision(store, task_id))
     rv = store.get_review(rid) or {}
-    if rv.get('MessageId') != mid: store.update_review_message(rid, mid)
-    # ...and an answer to the owner's OWN mail (a promise task's, store.promised_in) is pinned to whom it went at once - its To and Cc -
-    # so the card never reads "sends this to" its author while it waits (outbound.reply_envelope, as Reply's own door pins it)
+    # ...and to whom it goes, at once - its To and Cc - so the card says the person the agent wrote to, and a line from somebody else
+    # later never moves it. An answer to the owner's OWN mail (a promise task's) goes to whom it went (outbound.reply_envelope)
     m = store.get_message(mid) or {}
-    if (m.get('Status') == 'context' or m.get('Direction') == 'out') and not store.review_envelope(rid):
+    if not store.review_envelope(rid):
         from .outbound import reply_envelope
         if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)
     from .signatures import agent_signed
@@ -275,7 +326,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     same = agent_drafted(rv) and ' '.join(str(rv.get('DraftText') or '').split()) == ' '.join(text.split())
     store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
     if not same: store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
-    return {'ok': True, 'review_id': rid, 'message_id': mid, **attach_files(store, rid, files, agent)}
+    # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
+    many = [] if str(to or '').strip() else people_named(store, task_id)
+    return {'ok': True, 'review_id': rid, 'message_id': mid, 'to': m.get('FromName') or m.get('FromEmail') or '',
+            **({'people': many} if len(many) > 1 else {}), **attach_files(store, rid, files, agent)}
 
 
 # ── the cheap ending ────────────────────────────────────────────────────────────────────

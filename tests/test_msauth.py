@@ -1,6 +1,6 @@
 """Sign in with Microsoft (msauth.py + the /ms endpoints): a regular user connects Outlook
 in the browser (or, as a fallback, a code) with their own account - no tenant id, no secret, no Azure portal."""
-import base64, hashlib, json, unittest
+import base64, hashlib, html, json, unittest
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
@@ -249,6 +249,37 @@ class BrowserSignInTests(unittest.TestCase):
             out = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()
         self.assertIn('admin', r.text); self.assertIn('adminconsent?client_id=app-1', out['admin_consent_url'])
         self.assertEqual(server.store.get_connector(cid)['Active'], 0, 'a failed sign-in changes nothing on the card')
+
+    # A CORPORATE TENANT'S REFUSAL that does come back (the owner, 2026-11-02): never Entra's raw prose on the card, but the one plain line -
+    # the IT admin approves Taskuary once - with the admin link; a company policy is not retried with fewer scopes
+    def test_tenant_refusals_come_back_as_the_admin_line_with_the_link(self):
+        for err, desc, retried in (('invalid_request', 'AADSTS900971: No reply address provided.', True),
+                                   ('consent_required', 'AADSTS65001: The user or administrator has not consented.', True),
+                                   ('access_denied', 'AADSTS50105: The signed in user is not assigned to a role for the application.', False),
+                                   ('access_denied', 'AADSTS53003: Access has been blocked by Conditional Access policies.', False)):
+            cid = self._card(); d, q = self._start(cid)
+            with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'), mock.patch('taskuary.msauth.requests.post') as p:
+                r = self._refuse(q, err, desc)
+                self.assertEqual(r.status_code == 302, retried, desc)
+                if retried: r = self._refuse(parse_qs(urlsplit(r.headers['location']).query), err, desc)
+                out = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()
+            p.assert_not_called()
+            self.assertEqual(out['status'], 'error'); self.assertIn('adminconsent?client_id=app-1', out['admin_consent_url'])
+            self.assertIn('your IT admin approves Taskuary once with the approval link below', out['detail'])
+            self.assertNotIn('AADSTS', out['detail'], 'the plain line, not the raw error')
+            self.assertIn("approval link on Taskuary's Outlook or Teams card", html.unescape(r.text), 'the tab points at the card, which has the link')
+
+    def test_a_plain_refusal_carries_no_admin_link(self):
+        cid = self._card(); d, q = self._start(cid)
+        self._refuse(q, 'invalid_request', 'AADSTS50126: Error validating credentials.')
+        out = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()
+        self.assertEqual(out['status'], 'error'); self.assertNotIn('admin_consent_url', out)
+
+    def test_device_code_policy_refusal_also_carries_the_link(self):
+        with mock.patch('requests.post', return_value=R(400, {'error': 'invalid_grant', 'error_description': 'AADSTS53003: blocked by Conditional Access'})):
+            with self.assertRaises(msauth.CompanyPolicy) as e: msauth.device_poll(CFG, 'D')
+        self.assertIn('approval link', str(e.exception))
+        self.assertIsInstance(msauth.callback_error('access_denied', 'AADSTS900971: No reply address provided.'), msauth.AdminConsent)
 
     # A TENANT THAT APPROVED THE BASE SCOPES ONLY (user consent off, device code blocked) refuses a sign-in asking for People.Read /
     # Contacts.Read: the round signs in again for the base scopes, in the same tab, and the card stops asking for the people ones.

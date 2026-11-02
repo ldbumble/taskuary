@@ -80,6 +80,14 @@ class LookupTests(unittest.TestCase):
             self.assertIn('your doc COUNSEL.md > Tone', read(s, 'docs.search', query='keep replies to two sentences'))
             self.assertIn('No passage carries', read(s, 'docs.search', query='what tone should replies take'))
 
+    def test_the_admin_approval_answer_is_in_the_help(self):
+        # the pop-up Assistant troubleshoots a stuck Outlook sign-in from the help page: the error the colleague saw is written there whole
+        if not lookups.SITE_DOCS.is_dir(): self.skipTest('no help pages beside this install')
+        from tests import fake_embed
+        with fake_embed.no_embedder():
+            out = read(world(), 'docs.search', query='AADSTS900971')
+        self.assertIn('help/connections', out); self.assertIn('Your IT admin', out); self.assertIn('approval link', out)
+
 
 class CutTests(unittest.TestCase):
     def test_below_600_collapses_whitespace_and_newlines(self):

@@ -7184,6 +7184,9 @@ def ms_poll(cid: int, body: dict):
             return {'status': 'pending', 'restart': {'mode': 'code', **d}}
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
+    except msauth.CompanyPolicy as e:
+        _MSFLOWS.pop(flow, None)
+        return {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
     except RuntimeError as e:
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e)}
@@ -7231,12 +7234,15 @@ def ms_callback(request: Request, code: str = None, state: str = '', error: str 
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse(b['url'], status_code=302)
         else: f['done'] = {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
+    # ...a company policy (AADSTS50105 / 53003) is the same IT admin's to lift: the same plain line and link, never a retry
+    except msauth.CompanyPolicy as e: f['done'] = {'status': 'error', 'detail': str(e), 'admin_consent_url': _ms_admin(f)}
     except (RuntimeError, requests.RequestException) as e: f['done'] = {'status': 'error', 'detail': str(e)[:300]}
     d = f['done']
     if d.get('status') == 'ok':
         return _oauth_tab(True, f"Signed in as {d.get('account') or 'your Microsoft account'}. Taskuary has it from here.",
                           head='Signed in - you can close this tab')
-    return _oauth_tab(False, d.get('detail') or 'the sign-in did not complete')
+    # the link is drawn on the card, not in this tab: "below" there, "on the card" here
+    return _oauth_tab(False, (d.get('detail') or 'the sign-in did not complete').replace('the approval link below',"the approval link on Taskuary's Outlook or Teams card"))
 
 def _ms_finish(cid, f, t) -> dict:
     """Tokens in hand, by either road: the card is connected as the account that signed in."""

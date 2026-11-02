@@ -4014,6 +4014,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   );
 };
 
+const STALL_MS = 90 * 1000;   // a browser sign-in this long without coming back: say what a tenant's admin approval looks like
 // shared with the first-run card on the canvas (FirstRun.jsx) - one Microsoft sign-in, wherever it is drawn
 export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   // {flow, mode: "browser", url} - the default, Microsoft's page in the browser coming back to this server - or {flow, mode: "code",
@@ -4023,6 +4024,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
   const [adminUrl, setAdminUrl] = useState("");   // the link IT clicks once; shown when Microsoft says "Need admin approval" or on request
+  const [stalled, setStalled] = useState(false);  // a browser sign-in not back in STALL_MS: the tenant likely stopped it on Microsoft's page
   const [files, setFiles] = useState(!!cfg.allow_files);   // Allow saving files: the next sign-in asks for Files.ReadWrite too (FileAccess.jsx)
   useEffect(() => { setFiles(!!cfg.allow_files); }, [cfg.allow_files]);
   // a stored token is not a sign-in: Microsoft lets one lapse, and this said "Signed in" over hours of unread mail
@@ -4088,6 +4090,15 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/ms/adminlink`); setAdminUrl(data.url); }
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not build the approval link"); }
   };
+  // A CORPORATE TENANT THAT WANTS AN ADMIN'S APPROVAL ends the round on Microsoft's own page ("Need admin approval" -> return
+  // without consent -> AADSTS900971 "No reply address provided"): nothing ever comes back here, so the card says it after STALL_MS
+  // and draws the approval link it already has (the owner, 2026-11-02)
+  useEffect(() => {
+    setStalled(false);
+    if (flow?.mode !== "browser") return undefined;
+    const id = setTimeout(() => { setStalled(true); if (!adminUrl) adminLink(); }, STALL_MS);
+    return () => clearTimeout(id);
+  }, [flow]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
@@ -4124,6 +4135,10 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           <Box component="span" data-tq-ms-redirect-hint="" sx={{ flexBasis: "100%" }}>
             Microsoft shows error AADSTS50011 instead? The Microsoft app this card uses does not list http://localhost/api/ms/callback yet - whoever
             manages that app adds it under Authentication → Mobile and desktop applications, then press Sign in again.</Box>
+          {stalled && <Box component="span" data-tq-ms-stalled="" sx={{ flexBasis: "100%", color: INK, fontWeight: 600 }}>
+            The sign-in didn't come back. If your company asked for an admin's approval - or Microsoft showed an error like AADSTS900971
+            ("No reply address provided") or "Need admin approval" - your IT admin approves Taskuary once with the link below; once they have,
+            Cancel and sign in again. Sign in with a code instead works too.</Box>}
         </Typography>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>

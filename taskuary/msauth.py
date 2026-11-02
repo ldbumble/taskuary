@@ -82,6 +82,11 @@ class AdminConsent(RuntimeError):
     """The tenant wants an admin to approve Taskuary before its people may sign in."""
 
 
+class CompanyPolicy(RuntimeError):
+    """The tenant's own rules stop this sign-in (an app only assigned people may use, a Conditional Access policy): no retry with
+    fewer scopes helps, but the same admin link is what IT acts on, so the server attaches it like AdminConsent's."""
+
+
 def admin_consent_url(cfg: dict, scope: str = SCOPES) -> str:
     """The link the user forwards to their Microsoft 365 admin. One click + Accept grants the
     delegated scopes for the whole organisation - a consent grant on OUR app id, so nobody on
@@ -123,15 +128,14 @@ def code_redeem(cfg: dict, code: str, verifier: str, redirect: str, scope: str) 
                       data={'client_id': _need_client(cfg), 'grant_type': 'authorization_code', 'code': code, 'redirect_uri': redirect,
                             'code_verifier': verifier, 'scope': scope})
     if r.status_code == 200: return _tokens(r.json())
-    desc = _err(r)
-    raise (AdminConsent if _needs_admin(desc) else RuntimeError)(_friendly(desc))
+    raise _refusal(_err(r))
 
 
 def callback_error(error: str, desc: str = '') -> Exception:
     """What Microsoft's redirect said instead of a code, as the exception device_poll would have raised for it."""
     d = f'{error}: {desc}' if desc else error
-    if error == 'access_denied' and not _needs_admin(d): return RuntimeError('you declined the sign-in')
-    return (AdminConsent if _needs_admin(d) else RuntimeError)(_friendly(d))
+    if error == 'access_denied' and not (_needs_admin(d) or _policy(d)): return RuntimeError('you declined the sign-in')
+    return _refusal(d)
 
 
 def device_start(cfg: dict, scope: str = SCOPES) -> dict:
@@ -155,8 +159,7 @@ def device_poll(cfg: dict, device_code: str) -> dict:
     if err in ('authorization_pending', 'slow_down'): return {'pending': True, 'slow': err == 'slow_down'}
     if err == 'expired_token': raise RuntimeError('the code expired before you finished - start the sign-in again')
     if err == 'authorization_declined': raise RuntimeError('you declined the sign-in')
-    desc = _err(r)
-    raise (AdminConsent if _needs_admin(desc) else RuntimeError)(_friendly(desc))
+    raise _refusal(_err(r))
 
 
 def refresh_scope(cfg: dict) -> str:
@@ -235,19 +238,33 @@ def _err(r) -> str:
 
 
 def _needs_admin(desc: str) -> bool:
+    # AADSTS900971 "No reply address provided": what a corporate account sees after "Need admin approval" -> return without consent
     d = desc or ''
-    return ('AADSTS65001' in d or 'AADSTS90094' in d or 'consent_required' in d.lower()
+    return ('AADSTS65001' in d or 'AADSTS90094' in d or 'AADSTS900971' in d or 'consent_required' in d.lower()
             or ('consent' in d.lower() and 'admin' in d.lower()))
+
+
+def _policy(desc: str) -> bool:
+    "AADSTS50105: the app is limited to people IT assigned; AADSTS53003: a Conditional Access policy blocked the sign-in."
+    d = desc or ''
+    return 'AADSTS50105' in d or 'AADSTS53003' in d or 'conditional access' in d.lower()
+
+
+def _refusal(d: str) -> Exception:
+    "Microsoft's refusal as the exception the card reads: the admin link rides on the first two, never on a plain error."
+    return (AdminConsent if _needs_admin(d) else CompanyPolicy if _policy(d) else RuntimeError)(_friendly(d))
 
 
 def _friendly(desc: str) -> str:
     """Entra's error prose, said the way the card should say it."""
     d = desc or ''
     if _needs_admin(d):
-        return ('your organisation requires an admin to approve Taskuary once ("Need admin approval") - '
-                'forward the approval link below to your Microsoft 365 admin, then sign in again')
+        return ('your company asked for an admin\'s approval ("Need admin approval") - your IT admin approves Taskuary once with the '
+                'approval link below, then sign in again')
     if 'AADSTS700016' in d or 'AADSTS90002' in d:
         return "Taskuary's Microsoft app is not visible to this account's tenant - check TASKUARY_MS_CLIENT_ID"
     if 'AADSTS50076' in d or 'AADSTS50079' in d: return 'your organisation needs multi-factor sign-in - complete it in the browser and try again'
-    if 'AADSTS53003' in d or 'conditional access' in d.lower(): return 'a Conditional Access policy in your organisation blocks this sign-in - your admin can allow Taskuary'
+    if _policy(d):
+        return ('your company\'s policy stops this sign-in until your IT admin allows Taskuary - your IT admin approves Taskuary once with the '
+                'approval link below (and, if it asks, gives you access to it), then sign in again')
     return d[:300]

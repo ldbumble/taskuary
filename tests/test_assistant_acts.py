@@ -109,10 +109,15 @@ class ActsTests(unittest.TestCase):
         self.assertNotIn('comes back here', concierge.receipt(self.s, done))
 
     def test_a_name_that_finds_nothing_proposes_nothing_and_lists_what_exists(self):
-        out = self._turn('report.run', title='payroll')
-        self.assertIsNone(out.get('proposal')); self.assertIn('Monthly AR Report', out['say'])
-        out = self._turn('connection.pause', name='warpdrive')
-        self.assertIsNone(out.get('proposal')); self.assertIn('No connection by that name', out['say'])
+        # ...the miss goes to the model, which says it in its own words (7683dad09): the reports that exist are in what it is handed
+        seen = []
+        def brain(system, user, max_tokens=None): seen.append(user); return call('report.run', title='payroll')(system, user)
+        with concierge.delivering(concierge.PHONE): out = concierge.say(self.s, 'do it', llm=brain)
+        self.assertIsNone(out.get('proposal')); self.assertTrue(any('Monthly AR Report' in u for u in seen[1:]), seen[1:])
+        seen.clear()
+        def brain(system, user, max_tokens=None): seen.append(user); return call('connection.pause', name='warpdrive')(system, user)
+        with concierge.delivering(concierge.PHONE): out = concierge.say(self.s, 'do it', llm=brain)
+        self.assertIsNone(out.get('proposal')); self.assertTrue(any('No connection by that name' in u for u in seen[1:]), seen[1:])
         # ...while a catalogue card that is OFF is still nameable: resuming it is the whole point
         self.assertEqual(self._turn('connection.resume', name='zoho invoice')['proposal']['kind'], 'connection.resume')
 

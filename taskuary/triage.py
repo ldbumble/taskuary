@@ -207,6 +207,13 @@ def note_id(line: str) -> str:
     return line[1:line.index('] ')] if line.startswith('[lrn') and '] ' in line else ''
 
 
+# THE GUIDE WITHOUT CODING (agents.coding_ready false): the `- **coding**` option of section 4 and `coding|` in the answer's shape.
+# An owner's own TRIAGE.md that words it differently keeps its words - the fact line below the guide still says there is no coding agent.
+def without_coding(guide: str) -> str:
+    keep = [l for l in str(guide or '').splitlines() if not l.lstrip().startswith('- **coding**')]
+    return '\n'.join(keep).replace('"kind": "coding|general|task"', '"kind": "general|task"')
+
+
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
                    earlier=False, thread_task=False, notes=False, workstreams=False, watched=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
@@ -754,6 +761,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     if llm:
         try:
             base = re.sub(r'<!--.*?-->', '', system or '', flags=re.S).strip() or INTENT_SYSTEM
+            # ...and with no coding agent here, the guide OFFERS no coding: its coding option and the word in its answer shape go
+            # (without_coding), so the choice is general or task by what the model is given, not by a verdict turned afterwards
+            if not coding: base = without_coding(base)
             # every signal in this payload the document says nothing about, explained in the shipped
             # words: a field handed over unexplained is a field the model guesses at, and the exchange
             # (the prior mail on the thread) reached this install's generated doc as an unnamed key
@@ -810,8 +820,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
             if profiles: system += '\n\nTHE WORKERS - the specialists for non-coding work, each with what it is for:\n' + str(profiles)[:2000]
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
-            if not coding: system += ('\n\nNO CODING TOOL IS CONNECTED on this install: there is no coding agent. Never choose kind '
-                                      'coding - work that would be coding is general.')
+            if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
+                                      'kind coding - work that would be coding is general.')
             same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
             goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             earlier_ids = {int(x) for l in (thread or {}).get('exchange') or [] for x in re.findall(r'^\[#(\d+)\]', str(l))}

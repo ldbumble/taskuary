@@ -36,14 +36,14 @@ class TriageTests(unittest.TestCase):
 
     def test_without_a_tool_triage_is_told_and_its_answer_cannot_say_coding(self):
         out, seen = self.verdict(coding=False)
-        self.assertIn('NO CODING TOOL', seen['system'])
+        self.assertIn('NO CODING AGENT', seen['system'])
         if seen['want']:
             self.assertNotIn('coding', json.dumps(seen['want']['schema']['properties']['kind']))
         self.assertEqual(out.get('kind'), 'general', 'a coding verdict that slips through is the general agent\'s')
 
     def test_with_a_tool_nothing_changes(self):
         out, seen = self.verdict(coding=True)
-        self.assertNotIn('NO CODING TOOL', seen['system'])
+        self.assertNotIn('NO CODING AGENT', seen['system'])
         self.assertEqual(out.get('kind'), 'coding')
 
 

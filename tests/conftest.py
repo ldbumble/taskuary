@@ -510,7 +510,12 @@ def no_connection_brains():
     # into general work (2026-10-16). A test about coding_ready patches it, or calls `agents.coding_ready.real`.
     can_code = lambda store: True
     can_code.real = agents.coding_ready
-    with mock.patch.object(agents, 'connection_brains', stub), mock.patch.object(agents, 'default_pick', no_pick),          mock.patch.object(agents, 'coding_ready', can_code): yield
+    # ...and THE SUITE RUNS IN DEVELOPER MODE (2026-11-02), as every test before the switch did: a fresh store seeds it off. A test of
+    # the switch patches it back, or calls `agents.developer_mode.real`.
+    dev = lambda store: True
+    dev.real = agents.developer_mode
+    with mock.patch.object(agents, 'connection_brains', stub), mock.patch.object(agents, 'default_pick', no_pick),          mock.patch.object(agents, 'coding_ready', can_code), \
+         mock.patch.object(agents, 'developer_mode', dev): yield
 
 
 @pytest.fixture(autouse=True)

@@ -781,6 +781,8 @@ def _coding(store) -> bool:
     return capabilities.can_code(store)
 
 
+DEV_MODE_OFF = 'A general agent takes it - coding agents need Developer mode, in Settings.'
+
 def handoff_verb(store, verb):
     """With no coding tool connected, a coding hand-off asked for anyway (a stale card, the model's word) IS Send to agent: the
     offer was ours, so it is never answered "there is no coding agent on this computer" (B3, 2026-10-17)."""
@@ -1161,6 +1163,13 @@ KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': '
 # ...who works it has no picker of its own (the owner, 2026-11-01): the Agent section's Send to agent decides it
 FIELD_BUTTON = {'priority': 'priority', 'assignee': 'regular_agent'}
 # what a phone runs at once, no yes-or-no (call_turn): each sends nothing and closes nothing (the owner, 2026-11-02); pipe.clear is its own road
+# ...and THE BUTTONS FOLLOW coding_ready like the index does (toolcatalog.CODING_ONLY): no coding agent here, no repository picker to light
+# - but on a task that is already coding, which keeps its coding work (the owner, 2026-11-02)
+def kind_button(store, kind: str, item: dict | None = None) -> str:
+    b = KIND_BUTTON.get(kind, '')
+    if b != 'pick_repo' or store is None or _coding(store): return b
+    t = (store.get_task(int(item['tid'])) or {}) if (item or {}).get('tid') else {}
+    return b if str(t.get('Kind') or (item or {}).get('kind') or '').lower() == 'coding' else ''
 PHONE_NOW = frozenset({'task.update', 'task.set_kind', 'task.set_repo', 'task.defer', 'task.watching'})
 PHONE_NEEDS = {'task.set_kind': 'kind', 'task.set_repo': 'repo', 'task.defer': 'until'}
 WAITS = 'Nothing happens until you say yes.'
@@ -3060,14 +3069,15 @@ def read_op(store, kind: str, params: dict) -> str:
                 + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store))
                 + (NEWLINE + 'profiles a hand-off can name in `as`:' + NEWLINE + roster if roster else ''))
     if kind == 'repos.list':
-        from . import terminal as term
+        from . import agents as _ag, terminal as term
+        if not _coding(store): return f'{_ag.no_coding_why(store)} - there is no coding agent here, so no repositories to name.'
         repos = term.repo_map(store)
         return ('repositories (name one in `as` on a coding_agent hand-off only when sure):' + NEWLINE
                 + NEWLINE.join(f'- {r}: {d}' for r, d in repos.items())) if repos else 'No repositories are set up.'
-    if kind == 'tools.list': return toolcatalog.bucket_list(str(p.get('bucket') or ''))
+    if kind == 'tools.list': return toolcatalog.bucket_list(str(p.get('bucket') or ''), store)
     if kind == 'tools.describe':
         why = f"That CALL did not run - {p['why']}. Here is the tool; CALL it again with what it needs.{NEWLINE}" if p.get('why') else ''
-        return why + toolcatalog.describe(str(p.get('kind') or '').strip())
+        return why + toolcatalog.describe(str(p.get('kind') or '').strip(), store)
     if kind == 'knowledge.search': return know(store, str(p.get('query') or ''))
     if kind == 'timeline.search':
         sel = {k: v for k, v in p.items() if k != 'limit'}
@@ -3712,8 +3722,9 @@ def _row_button(store, kind: str, target: int, params: dict, table: dict | None)
     elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
     # ...an assignee of the owner is "mine" (Put it on my list), an agent's is Send to agent - "assign it to me" never lit Send to agent
     b = (('mine' if str(params.get('assignee') or '') == 'owner' else next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '')) if kind == 'task.update'
-         else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
-         else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
+         else handoff_verb(store, {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine'))
+         if kind == 'task.create_from_message'
+         else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else kind_button(store, kind, on))
     return on, b
 
 
@@ -5726,7 +5737,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # else's message, "what's waiting on me" a certificate notice - 10 of 63 real asks (the 2026-09-24 debug). The
     # model pulls an item in itself when the owner names one: task.read, timeline.search, or DECIDE ... ON:.
     verb = (decision or {}).get('verb')
-    if decision and handoff_verb(store, verb) != verb: decision, verb = {**decision, 'verb': 'regular_agent'}, 'regular_agent'
+    if decision and handoff_verb(store, verb) != verb:
+        decision, verb = {**decision, 'verb': 'regular_agent'}, 'regular_agent'
+        # ...and with DEVELOPER MODE OFF the general agent takes it, said in one clause with where the switch is (the owner, 2026-11-02)
+        from . import agents as _ag
+        if not _ag.developer_mode(store): reply = f"{reply} {DEV_MODE_OFF}".strip() if DEV_MODE_OFF not in (reply or '') else reply
     # their yes to the card already waiting on it - the button, said in words (the only road a phone has)
     if verb in ('confirm', 'cancel'): return confirm_open(store, tid, item, verb == 'cancel', actor)
     # NOTHING ON THE TABLE, BUT THE WORDS NAME IT: "reply to Marcus: yes" came back as reply ON TQ-0004 and was answered

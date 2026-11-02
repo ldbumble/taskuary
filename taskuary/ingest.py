@@ -666,7 +666,8 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         if (ht := thread.get('thread_task')) and ht['status'] == 'closed':
             job = {w['tid']: w for w in taskcontext.open_same_job(store, msg, ht)}
             still = [job.pop(w['tid'], w) for w in still] + list(job.values())
-        if still: thread = {**thread, 'open_work': still}
+        # ...each with the agent working it and its open to-dos, as the thread's task is shown (with_agent, 2026-11-02)
+        if still: thread = {**thread, 'open_work': [with_agent(store, w) for w in still]}
         # ...and the open GOALS with their steps, so a mail on another thread can say which step it serves (spec 2026-10-12)
         goals = taskcontext.open_goals(store)
         if goals: thread = {**thread, 'open_goals': goals}
@@ -1652,10 +1653,48 @@ def thread_task(store, tid) -> dict | None:
     the `exchange` beside it."""
     t = store.get_task(tid) if tid else None
     if not t: return None
-    return {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(t.get('Summary') or '').split())[:300],
+    return with_agent(store, {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(t.get('Summary') or '').split())[:300],
             'status': 'closed' if t.get('Status') == 'done' else 'open',
             # ...and the owner WATCHING it for somebody else to handle (watch.py): triage says whether this message shows it handled
-            **({'watching': True} if watch.watching(t) else {})}
+            **({'watching': True} if watch.watching(t) else {})})
+
+
+# AN AGENT AT WORK IS SHOWN, NOT GUARDED (the owner, 2026-11-02: "if new tasks come in and it's not the exact same thing you are working
+# on, put another agent on it"). A budget task with a coding agent on it took in another person's question about a different line, and a
+# second thread, at the combine level's "close to its subject" - and the replies got mixed. Triage could not see that the task it joined
+# them to was an agent's work in progress, nor what that agent was put to; now every task it may join says so, and the guide says what a
+# follow-up is. Evidence only: whether it is the same ask stays the model's to judge (templates/triage.md, "An agent already on it").
+AGENT_BRIEF = 240        # how much of what an agent was put to rides beside a task triage may join
+OPEN_TODOS = 6           # ...and of the task's to-dos still open
+
+
+def agent_on(store, tid) -> dict | None:
+    """The agent on a task as triage is shown it (`agent_on_it`): {state: working | waiting for its next turn, kind: coding | general |
+    run, brief: what it was put to, doing: the task's latest line} - None when no agent is on it (live_agent)."""
+    try: live = live_agent(store, tid)
+    except Exception: return None
+    if not live: return None
+    from . import general, terminal
+    from .context import _latest
+    s = next((x for x in list(terminal.SESSIONS.values()) if x.task_id == tid and getattr(x, 'alive', False)), None)
+    try: waiting = bool(s and live != 'run' and s.waiting())
+    except Exception: waiting = False
+    t = store.get_task(tid) or {}
+    try: brief = next((m['content'][0]['text'] for m in general.history(store, tid) if m.get('brief')), '') if live == 'general' else ''
+    except Exception: brief = ''
+    brief = ' '.join(str(brief or t.get('Summary') or t.get('Title') or '').split())[:AGENT_BRIEF]
+    return {k: v for k, v in {'state': 'waiting for its next turn' if waiting else 'working', 'kind': live, 'brief': brief,
+                              'doing': _latest(store, tid)}.items() if v}
+
+
+def with_agent(store, w: dict) -> dict:
+    """A task triage may join `w` ({tid, ...}), with the agent on it (agent_on) and its open to-dos: what tells a follow-up to that
+    exact work from a different ask that gets its own task and agent. A brief that is the task's own ask is not said twice."""
+    tid = w.get('tid')
+    todos = [i['text'][:160] for i in store.task_checklist(tid) if not i.get('done')][:OPEN_TODOS] if tid else []
+    ag = agent_on(store, tid) if tid and w.get('status') != 'closed' else None
+    if ag and w.get('ask') and ag.get('brief') and w['ask'].startswith(ag['brief'][:120]): ag = {k: v for k, v in ag.items() if k != 'brief'}
+    return {**w, **({'agent_on_it': ag} if ag else {}), **({'open_todos': todos} if todos else {})}
 
 
 def _split_note(store, old, msg: dict, res: dict) -> dict:

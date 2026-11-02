@@ -316,7 +316,7 @@ def selector(store=None, live: bool = True) -> str:
     """SELECT's fields. `live`: with the pipe's own values for category, kind and lane; else pointing at select_values, which the
     turn carries (block)."""
     v = vocabularies(store) if live else {}           # the index's own (live=False) names no value - it builds nothing for them
-    lines = ['SELECT (pipe.clear, or wherever a set is meant) - fields optional, ANDed:']
+    lines = ['SELECT (any set of items) - fields optional, ANDed:']
     if live:
         lines.append('  category   one of these, exactly: ' + ', '.join(v['category']))
         if v['kind']: lines.append('  kind       ' + ' | '.join(v['kind']))

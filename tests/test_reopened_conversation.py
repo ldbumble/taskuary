@@ -94,7 +94,10 @@ class AdvisorReadsTheStoryTests(unittest.TestCase):
         p = advisor._prompt(s, 'message.attached', {'ref': 'TQ-0001', 'kind': 'agent', 'tid': tid},
                             [{'verb': 'continue', 'label': 'Keep going'}], 1, 'task', tid)
         self.assertIn("NEW SINCE THE AGENT'S LAST TURN (2026-10-13 15:04:16) - its saved conversation is from BEFORE these", p)
-        self.assertIn('Paula Vance', p); self.assertNotIn('Any news on the connector', p)
+        self.assertIn('Paula Vance', p)
+        # the mail from before the agent's turn is the thread's tail (the Assistant's context, 2026-11-02), never news since
+        new, _, before = p.partition('THE THREAD BEFORE THE AGENT')
+        self.assertNotIn('Any news on the connector', new); self.assertIn('Any news on the connector', before)
         self.assertIn('STILL TO DO ON THE TASK: Scope what building the connector would take', p)
         self.assertNotIn('Say where the request stands', p)
 

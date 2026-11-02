@@ -70,12 +70,13 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
         self.assertIn(f'No agent is on TQ-{tid:04d}', said); self.assertIn('dispatch.prepare', said)
         self.assertEqual(s._rows("SELECT * FROM operation WHERE Kind='agent.answer'"), [], 'no card nobody hears')
 
-    def test_an_answer_with_an_agent_on_the_named_task_is_a_card(self):
+    def test_an_answer_to_an_agent_at_work_on_the_named_task_is_told_it(self):
+        # the owner, 2026-11-02: words for a working agent go in as its next prompt (agent.tell), no card
         s, tid, mid, item = table()
         dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
-        with mock.patch.object(concierge, '_agent_running', return_value=True):
+        with mock.patch.object(concierge, '_agent_running', return_value=True),              mock.patch.object(concierge, '_tell_now', return_value={'say': 'told'}) as tell:
             out = concierge.call_turn(s, dock, {'kind': 'agent.answer', 'params': {'ref': f'TQ-{tid}', 'text': 'main'}}, None, 'tell it main')
-        self.assertEqual(out['proposal']['kind'], 'agent.answer')
+        self.assertEqual(out, {'say': 'told'}); self.assertEqual(tell.call_args.args[2:4], (tid, 'main'))
 
     def test_a_task_named_in_the_sentence_comes_with_its_facts(self):
         s, tid, mid, item = table()
@@ -128,7 +129,7 @@ class TheToolsSayWhatToPassTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'no calendar is connected'): remind.set_reminder(s, tid, remind.AFTER_MEETINGS)
 
     def test_an_answer_with_no_agent_waits_for_the_next_one_and_never_starts_one(self):
-        self.assertIn('never this', toolcatalog.PURPOSE['agent.answer'])
+        self.assertIn('nobody hears it', toolcatalog.PURPOSE['agent.answer']); self.assertIn('starts one', toolcatalog.PURPOSE['agent.answer'])
 
 
 class TheRailSaysADraftWaitsTests(unittest.TestCase):

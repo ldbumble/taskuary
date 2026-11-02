@@ -15,7 +15,7 @@ in-process: no key, no server, audio never leaves the box (pip install taskuary[
 The same function transcribes a clip from the browser's microphone: "put voice into prompts" is
 the prompt box plus a mic, and the text goes wherever the box goes.
 """
-import base64, io, json, os, re, subprocess, sys, tempfile, time, wave
+import base64, io, json, os, re, subprocess, sys, tempfile, threading, time, uuid, wave
 import requests
 from loguru import logger
 from . import words
@@ -184,14 +184,17 @@ _RECOGNISERS = r'SOFTWARE\Microsoft\Speech\Recognizers\Tokens'
 _HAS = {}
 
 def builtin():
-    """BUILTIN when this computer has a desktop recogniser System.Speech can open, else None. Read once: the registry, no child."""
+    """The computer's own recogniser, once per run: Windows voice typing (LIVE) when it will take dictation, else System.Speech
+    (BUILTIN, with how to turn the better one on) when the registry has a recogniser, else None - macOS and Linux included."""
     if 'v' not in _HAS:
         v = None
         if sys.platform == 'win32':
-            try:
-                import winreg
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _RECOGNISERS) as k: v = BUILTIN if winreg.QueryInfoKey(k)[0] else None
-            except OSError: v = None
+            if _live_ok(): v = LIVE
+            else:
+                try:
+                    import winreg
+                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _RECOGNISERS) as k: v = {**BUILTIN, 'hint': SPEECH_OFF} if winreg.QueryInfoKey(k)[0] else None
+                except OSError: v = None
         _HAS['v'] = v
     return _HAS['v']
 
@@ -222,6 +225,108 @@ def _windows(data: bytes) -> str:
     finally:
         try: os.unlink(path)
         except OSError: pass
+
+
+"""WINDOWS VOICE TYPING FIRST (the owner, 2026-11-02, after System.Speech wrote a dictation as "a predetermined trading land on my left
+arm": "do the changes to use desktop if the machine has it"). Windows 10 and 11 ship two recognisers. System.Speech (above) is the 2006
+one, untrained and offline. Windows.Media.SpeechRecognition is the one behind Win+H and Edge's tabs: Microsoft's online service, on when
+Settings > Privacy & security > Speech > Online speech recognition is. It hears the MICROPHONE, never a file, so it is a session the
+server holds: started by the mic's press, each phrase read as it settles, stopped by the next press. PowerShell 5.1 reaches it as a WinRT
+type - no Python package, nothing added to the exe. A phrase still being said at the stop gets up to 3.5s to settle (an operation it has
+started cannot be cancelled from PowerShell); a silence ends each listen after 3s and the next starts at once, so nothing falls between.
+It hears this computer's own microphone, so it serves only a page on this computer (server: loopback). macOS has no such door for an
+unbundled process - Apple's Speech framework kills a caller whose app carries no usage description - so a Mac uses its Dictation key."""
+LIVE = {'engine': 'windows_voice_typing', 'label': 'Windows voice typing (on this computer)', 'live': True}
+SPEECH_OFF = 'Windows voice typing is more accurate: turn on Online speech recognition in Settings > Privacy & security > Speech'
+# what the child's stop means to the owner, by the WinRT status it names
+_LIVE_WHY = {'MicrophoneUnavailable': 'no microphone Windows will lend - check Settings > Privacy & security > Microphone, "Let desktop apps access your microphone"',
+             'NetworkFailure': 'it needs the internet, and could not reach it', 'privacy': SPEECH_OFF,
+             'TopicLanguageNotSupported': "it does not take dictation in this computer's language"}
+_WINRT = r'''$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
+try {
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+[Windows.Media.SpeechRecognition.SpeechRecognizer,Windows.Media.SpeechRecognition,ContentType=WindowsRuntime] | Out-Null
+$r = New-Object Windows.Media.SpeechRecognition.SpeechRecognizer
+$c = $asTask.MakeGenericMethod([Windows.Media.SpeechRecognition.SpeechRecognitionCompilationResult]).Invoke($null, @($r.CompileConstraintsAsync()))
+$c.Wait(-1) | Out-Null; if ("$($c.Result.Status)" -ne 'Success') { throw "$($c.Result.Status)" }
+if ($env:TQ_PROBE) { [Console]::Out.Write('ok'); exit 0 }
+$r.Timeouts.InitialSilenceTimeout = [TimeSpan]::FromSeconds(3); $r.Timeouts.EndSilenceTimeout = [TimeSpan]::FromMilliseconds(600)
+[Console]::Out.WriteLine('.'); [Console]::Out.Flush()
+$res = [Windows.Media.SpeechRecognition.SpeechRecognitionResult]
+while (-not (Test-Path $env:TQ_STOP)) {
+  $t = $asTask.MakeGenericMethod($res).Invoke($null, @($r.RecognizeAsync()))
+  while (-not $t.Wait(200)) { if (Test-Path $env:TQ_STOP) { break } }
+  if (-not $t.IsCompleted -and -not $t.Wait(3500)) { break }
+  $x = $t.Result; $s = "$($x.Status)"
+  if ($x.Text) { [Console]::Out.WriteLine('+' + $x.Text); [Console]::Out.Flush() }
+  elseif ($s -in @('MicrophoneUnavailable', 'NetworkFailure', 'TopicLanguageNotSupported', 'GrammarCompilationFailure')) { throw $s }
+}
+} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }'''
+
+def _ps(script: str) -> list:
+    return ['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', base64.b64encode(script.encode('utf-16-le')).decode()]
+
+def _live_ok() -> bool:
+    """Will Windows voice typing take dictation here? A child compiles it and exits - a second or two, once per run."""
+    from . import spawn
+    try: r = spawn.run(_ps(_WINRT), capture_output=True, timeout=30, env={**os.environ, 'TQ_PROBE': '1'})
+    except Exception as e: logger.debug(f'voice: no Windows voice typing - {e}'); return False      # a probe never breaks the status
+    if r.returncode: logger.debug(f"voice: no Windows voice typing - {r.stderr.decode('utf-8', 'replace').strip()[:200]}")
+    return r.returncode == 0 and r.stdout.decode('utf-8', 'replace').strip() == 'ok'
+
+def _why(err: str) -> str:
+    k = next((k for k in _LIVE_WHY if k.lower() in err.lower()), None)
+    return f"{LIVE['label']} stopped: {_LIVE_WHY[k] if k else err[:200]}"
+
+_LISTEN, _LISTEN_LOCK = {}, threading.Lock()
+
+def _read(s):
+    p = s['proc']
+    for line in iter(p.stdout.readline, b''):
+        t = line.decode('utf-8', 'replace').rstrip('\r\n')
+        if t == '.': s['ready'] = True
+        elif t.startswith('+') and t[1:].strip(): s['said'].append(t[1:].strip())
+    if p.wait(): s['error'] = _why(p.stderr.read().decode('utf-8', 'replace').strip() or str(p.returncode))
+    s['done'] = True
+
+def listen_start() -> str:
+    """Start the one live session (an earlier one stops first) and return its id."""
+    if (builtin() or {}).get('engine') != LIVE['engine']: raise RuntimeError(f"{LIVE['label']} is not on this computer")
+    from . import spawn
+    with _LISTEN_LOCK:
+        _stop(_LISTEN.pop('cur', None))
+        sid = uuid.uuid4().hex[:12]
+        stop = os.path.join(tempfile.gettempdir(), f'taskuary-listen-{sid}.stop')
+        p = spawn.popen(_ps(_WINRT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={**os.environ, 'TQ_STOP': stop})
+        s = _LISTEN['cur'] = {'id': sid, 'proc': p, 'stop': stop, 'said': [], 'error': '', 'ready': False, 'done': False}
+        s['reader'] = threading.Thread(target=_read, args=(s,), daemon=True, name='voice-listen'); s['reader'].start()
+    return sid
+
+def _view(s, since=0) -> dict: return {'said': s['said'][max(0, since):], 'ready': s['ready'], 'done': s['done'], 'error': s['error']}
+
+def listen_poll(sid: str, since: int = 0):
+    """The phrases settled since `since`; None when `sid` is not the live session."""
+    s = _LISTEN.get('cur')
+    return _view(s, since) if s and s['id'] == sid else None
+
+def _stop(s):
+    if not s: return
+    try: open(s['stop'], 'w').close()
+    except OSError: pass
+    try: s['proc'].wait(timeout=6)
+    except subprocess.TimeoutExpired: s['proc'].kill()
+    s['reader'].join(timeout=3)
+    try: os.unlink(s['stop'])
+    except OSError: pass
+
+def listen_stop(sid: str, since: int = 0):
+    """Stop the session - a phrase still being said settles first - and return what came after `since`; None for an unknown id."""
+    with _LISTEN_LOCK:
+        s = _LISTEN.get('cur')
+        if not s or s['id'] != sid: return None
+        _stop(_LISTEN.pop('cur'))
+    return {**_view(s, since), 'done': True}
 
 
 def _gemini(cfg, key, data, mime, name, terms=()):

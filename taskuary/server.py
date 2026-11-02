@@ -6825,9 +6825,36 @@ def task_reason_ask(tid: int, payload: dict):
 
 # ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
 @app.get('/api/voice/status')
-def voice_status():
+def voice_status(request: Request):
     from . import voice
-    return voice.ready(store)
+    out = voice.ready(store)
+    # Windows voice typing hears THIS computer's microphone: a page on another device never gets it
+    if (out.get('builtin') or {}).get('live') and not _is_loopback(request.client.host if request.client else ''): out['builtin'] = None
+    return out
+
+def _live_voice(request: Request):
+    from . import voice
+    if not _is_loopback(request.client.host if request.client else ''): raise HTTPException(409, f"{voice.LIVE['label']} listens only on the computer Taskuary runs on")
+    return voice
+
+@app.post('/api/voice/listen')
+def voice_listen(request: Request):
+    """Windows voice typing (voice.py LIVE): the mic's press starts a session on this computer's microphone."""
+    voice = _live_voice(request)
+    try: return {'id': voice.listen_start()}
+    except (RuntimeError, OSError) as e: raise HTTPException(409, str(e))
+
+@app.get('/api/voice/listen/{sid}')
+def voice_listen_poll(sid: str, request: Request, since: int = 0):
+    out = _live_voice(request).listen_poll(sid, since)
+    if out is None: raise HTTPException(404, 'that listening session has ended')
+    return out
+
+@app.post('/api/voice/listen/{sid}/stop')
+def voice_listen_stop(sid: str, request: Request, since: int = 0):
+    out = _live_voice(request).listen_stop(sid, since)
+    if out is None: raise HTTPException(404, 'that listening session has ended')
+    return out
 
 @app.get('/api/voice/vocabulary')
 def voice_vocabulary():

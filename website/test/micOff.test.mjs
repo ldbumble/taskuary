@@ -34,3 +34,19 @@ test("the popup opens the voice section of Connections, and that link lands ther
   const r = canvasRequestFromHash(place("voice").href);
   assert.deepEqual([r.area, r.state], ["connections", { section: "AI — voice", open: null }]);
 });
+
+// Windows voice typing first (the owner, 2026-11-02: "do the changes to use desktop if the machine has it"): it hears the microphone
+// itself, so the mic holds a session on the server instead of recording a clip; a Mac's crossed-out mic points at its Dictation key.
+test("Windows voice typing is a session the server holds, from one press to the next", () => {
+  assert.match(mic, /const viaLive = !!\(viaBuiltin && builtin\.live\)/);
+  assert.match(mic, /if \(viaLive\) return listen\(\);/);
+  assert.match(mic, /api\.post\("\/api\/voice\/listen"\)/);
+  assert.match(mic, /api\.get\(`\/api\/voice\/listen\/\$\{id\}`, \{ params: \{ since: seen \} \}\)/, "each settled phrase, once");
+  assert.match(mic, /api\.post\(`\/api\/voice\/listen\/\$\{id\}\/stop`/, "the stop lets a phrase still being said land");
+  assert.match(mic, /if \(!viaBrowser && !viaLive\) setRec\(null\)/);
+});
+
+test("a Mac with no voice is pointed at its own Dictation key", () => {
+  assert.match(mic, /\/Mac\/\.test\(navigator\.platform/);
+  assert.match(mic, /Dictation key/);
+});

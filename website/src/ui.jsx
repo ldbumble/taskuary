@@ -507,6 +507,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   const SR = browserRecogniser(), builtin = voice && !voice.ready ? voice.builtin : null;
   const viaBrowser = !!(voice && !voice.ready && SR && !(srDown && builtin));
   const viaBuiltin = !!(builtin && !viaBrowser);
+  const viaLive = !!(viaBuiltin && builtin.live);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && !voice.ready && !viaBrowser && !viaBuiltin);
   const press = (e) => { if (!off) return start(); setAsk(e.currentTarget); voice.recheck(); };
   // set up in the meantime (the popup's own button, or another tab): the mic is live the moment the status says so
@@ -534,6 +535,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       } catch { flash("This browser cannot dictate here - set up a voice AI instead"); }
       return;
     }
+    if (viaLive) return listen();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
@@ -554,12 +556,40 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       mr.start(); setRec(mr);
     } catch (e) { flash(e?.name === "NotAllowedError" ? dictationError("not-allowed") : "No microphone this browser can use - plug one in or allow it in the address bar"); }
   };
-  const stop = () => { rec?.stop(); if (!viaBrowser) setRec(null); };   // the browser's dictation reports back through onEnd
+  // WINDOWS VOICE TYPING (voice.py LIVE; the owner, 2026-11-02: "use desktop if the machine has it"): the server listens on this
+  // computer's microphone from the press to the next one. Each phrase lands as it settles - one by one into the chat box (onInterim),
+  // all at the stop elsewhere, as the browser's dictation does - and the stop waits for a phrase still being said
+  const listen = async () => {
+    let id, seen = 0, all = "", timer = null, over = false;
+    const take = (said = []) => { seen += said.length; for (const t of said) { if (live.current.onInterim) live.current.onText?.(t); else all = all ? `${all} ${t}` : t; } };
+    const end = (error) => {
+      if (over) return; over = true; clearInterval(timer); setRec(null); setBusy(false); if (ctl) ctl.current = null;
+      if (all) live.current.onText?.(all);
+      if (error) flash(error);
+    };
+    try { id = (await api.post("/api/voice/listen")).data.id; }
+    catch (e) { flash(e?.response?.data?.detail || "Windows voice typing would not start"); return; }
+    timer = setInterval(async () => {
+      try { const { data } = await api.get(`/api/voice/listen/${id}`, { params: { since: seen } }); take(data.said); if (data.done) end(data.error); }
+      catch { end("Windows voice typing stopped"); }
+    }, 400);
+    const session = {
+      stop: async () => {
+        clearInterval(timer); setBusy(true);
+        try { const { data } = await api.post(`/api/voice/listen/${id}/stop`, null, { params: { since: seen } }); take(data.said); end(data.error); }
+        catch { end(""); }
+      },
+      cancel: () => { if (!over) { over = true; clearInterval(timer); api.post(`/api/voice/listen/${id}/stop`).catch(() => {}); } },
+    };
+    setRec(session); if (ctl) ctl.current = { cancel: session.cancel };
+  };
+  const stop = () => { rec?.stop(); if (!viaBrowser && !viaLive) setRec(null); };   // the browser's dictation and voice typing report back themselves
   const title = err || (!voice ? ""
     : rec ? "Stop and transcribe"
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
-    : viaBuiltin ? `Dictate — ${builtin.label}. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
+    : viaLive ? `Dictate — ${builtin.label}. A voice AI (${placeName("voice")}) also reads voice notes.`
+    : viaBuiltin ? `Dictate — ${builtin.label}. ${builtin.hint ? `${builtin.hint}. ` : ""}A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
     : "Voice is off — no voice AI is set up yet");
   return (<>
     <MuiTooltip title={ask ? "" : err ? <span data-tq-mic-err="">{err}</span> : title} open={!ask && (!!err || (hover && !!title))}
@@ -577,6 +607,10 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
         Pick a voice AI under {placeName("voice")}. Groq has a free tier; Local Whisper runs on this computer with no key.
       </Typography>
+      {/* a Mac's own voice typing takes any box with the cursor in it - this window cannot call it, the owner can (voice.py LIVE) */}
+      {/Mac/.test(navigator.platform || navigator.userAgent || "") && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>
+        Or use the Mac's own Dictation: click in the box and press the Dictation key (🎤), or Fn twice.
+      </Typography>}
       <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
         <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
           onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>Set up voice AI</Button>

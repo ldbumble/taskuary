@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { asPressed, levelOf, putDownLanded } from "../src/funnelPile.js";
+import { answersTo, asPressed, levelOf, putDownLanded, rowKeys, sameKey } from "../src/funnelPile.js";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 const rows = [
@@ -47,4 +47,15 @@ test("a put-down lands when its row leaves the pile or comes back For later, and
   assert.equal(putDownLanded(rows, 99), true, "closed: gone from the pile");
   assert.equal(putDownLanded([{ ...rows[1], deferred: true, back_at: "2026-10-23 09:00:00" }], 4), true, "reminded: For later");
   assert.match(read("AssistantView.jsx"), /putDownLanded\(pile\.items, leavingTid\)\) setLeavingTid\(null\)/);
+});
+
+// A REPORT THAT RE-RAN ON THE TABLE (the owner, 2026-11-02): its row has a new key and answers to the old one the card still holds. A press
+// takes off every row the keys name by key or alias - the ring's own matching - and the walk's row and the one put down are one row
+test("a press reads a re-run row by key or alias, and sameKey sees one row", () => {
+  const rr = [{ key: "processing:new", aliases: ["processing:old"] }, { key: "processing:other" }];
+  assert.ok(answersTo(rr[0], "processing:old") && !answersTo(rr[1], "processing:old"));
+  assert.ok(sameKey(rr, "processing:old", "processing:new") && !sameKey(rr, "processing:old", "processing:other"));
+  assert.ok(sameKey([], "processing:old", "processing:new", { key: "processing:new", aliases: ["processing:old"] }), "the card's own aliases join them");
+  assert.deepEqual(rowKeys(rr, ["processing:old"]).sort(), ["processing:new", "processing:old"]);
+  assert.deepEqual(asPressed(rr, { read: ["processing:old"] }).map((r) => r.key), ["processing:other"]);
 });

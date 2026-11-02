@@ -362,11 +362,13 @@ def next(store, from_key: str = None, actor: str = 'owner', press: str = None, r
             was_end = st.get('ended') and not frm
             st.update(ended=True, on=None, members=[], first=list(place[0]), last=list(place[1]), kind='none')
             _write(store, st)
-            return _remember(press, _answer(store, st, rows, _end(store, st, rows, actor, record=not was_end)))
+            return _remember(press, _answer(store, st, rows, {**_end(store, st, rows, actor, record=not was_end), 'read': gone}))
         item = as_item(store, _batch(store, ln, n, True))
         _put(st, item, rows)
         _write(store, st)
-        return _remember(press, _answer(store, st, rows, _present(store, item, actor, picked=False, llm=llm, rows=rows)))
+        # ...`read`: the rail rows this press read - the page took them off at the press, and puts back only what is not here (a read that
+        # failed), never on the strength of a rail built before it
+        return _remember(press, _answer(store, st, rows, {**_present(store, item, actor, picked=False, llm=llm, rows=rows), 'read': gone}))
 
 
 def back(store, from_key: str = None, actor: str = 'owner', press: str = None) -> dict:

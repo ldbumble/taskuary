@@ -20,6 +20,11 @@ export const appLink = (href) => {
   return req && req.kind === "browse" ? h : null;
 };
 
+// EVERY "#..." LINK IS THE APP'S OWN (TQ-1251: the Assistant's "Open the request" - #new-task - opened the system browser on the desktop app):
+// only pages counted as ours, so New, a message or any hash the canvas reads another way got a new tab, which the desktop window hands
+// to the browser. A hash never leaves the window: it is followed in place, and the canvas opens what it knows
+export const inApp = (href) => /^#\S/.test(String(href || "").trim());
+
 // the page a reply names, as written: [Open the Sage Intacct connection](#connector=intacct) - else the ONE task it points at
 // ([TQ-0123](#task=123)); a reply that mentions several tasks in passing opens none of them
 // ...and the same for pages (2026-10-19 UI walk): the model is asked for ONE link, and a reply with two opened the first. Setup is

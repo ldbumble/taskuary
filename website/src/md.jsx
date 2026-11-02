@@ -8,7 +8,7 @@ import { Box } from "@mui/material";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { linkRefs, looksMd, refParts } from "./mdText.js";
-import { appLink, openAppLink } from "./appLinks.js";
+import { appLink, inApp, openAppLink } from "./appLinks.js";
 import { plainCitations } from "./taskOutputs.js";
 import { attUrl, saveFile } from "./Attachments.jsx";
 export { looksMd };
@@ -18,7 +18,7 @@ const TASK_LINK = /#task=(\d+)/;
 const A = ({ href, children, onTask }) => {
   const m = TASK_LINK.exec(href || ""), bare = !!m && /^TQ-\d+$/.test(String(React.Children.toArray(children).join("")));
   // ...and a page of the app itself (appLinks.js): opened on the canvas here, never a new browser tab
-  const page = m ? null : appLink(href);
+  const page = m ? null : appLink(href) || (inApp(href) ? String(href).trim() : null);
   // ...and a file an agent made, as the Assistant links it (lookups.outputs_find): the Result's own Download - one tap saves it
   const file = !m && !page && /^\/api\/task-(?:outputs|artifacts)\/\d+/.test(href || "");
   // ...SAVED where it is (Attachments.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file

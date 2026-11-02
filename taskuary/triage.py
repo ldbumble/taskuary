@@ -120,10 +120,10 @@ _m = re.search(r'^\*\*How far to combine\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re.M | 
 FIELDS['combine'] = ("combine is the owner's setting for this message's connection - {connection, level}, level 1 (keep separate) to 5 (combine). "
                      + (_m.group(0) if _m else ''))
 # ...and an agent at work on a task this may join, in the guide's own words the same way (ingest.with_agent, 2026-11-02)
-_m = re.search(r'^\*\*An agent already on it\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re.M | re.S)
+_ma = re.search(r'^\*\*An agent already on it\*\*.*?(?=\n\s*\n|\Z)', SHIPPED, re.M | re.S)
 FIELDS['agent_on_it'] = ("agent_on_it, on a task in thread_task, room_tasks or open_work, is the agent on that task right now - {state: working or "
                          "waiting for its next turn, kind, brief: what it was put to, doing: the task's latest line}. "
-                         + (_m.group(0) if _m else ''))
+                         + (_ma.group(0) if _ma else ''))
 FIELDS['open_todos'] = "open_todos, on a task in thread_task, room_tasks or open_work, is that task's to-dos not yet done."
 ON_TASKS = ('agent_on_it', 'open_todos')      # the FIELDS that ride on a task in the payload rather than at its top
 

@@ -90,6 +90,7 @@ import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
+import { CLOSED, REOPEN_MARKED, takeReopen } from "./reopenFromSearch.js";
 import { CLOSE_BY_HAND, SECTIONS, advisorAt, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
@@ -966,6 +967,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     await Promise.race([loadDetail(id), new Promise((r) => setTimeout(r, REOPEN_ROW_MS))]).catch(() => {});
     setReopening((r) => (r === id ? null : r));
   };
+  // ...AND A CLOSED TASK OPENED FROM SEARCH IS REOPENED BY THAT OPEN (the owner, 2026-11-02): Search marked it (reopenFromSearch.js), the
+  // mark is taken once as its detail lands, and the press is Reopen task's own - a failure leaves it closed, the button and why on it
+  const landed = detail?.task?.TaskId === selected ? detail.task : null, [marked, setMarked] = useState(0);
+  useEffect(() => { const f = () => setMarked((n) => n + 1); window.addEventListener(REOPEN_MARKED, f); return () => window.removeEventListener(REOPEN_MARKED, f); }, []);
+  useEffect(() => { if (landed && takeReopen(selected) && CLOSED.includes(landed.Status)) reopen(); }, [landed?.TaskId, marked]);  // eslint-disable-line react-hooks/exhaustive-deps
   const queueNote = async () => {
     if (!waitText.trim() || !selected) return;
     try {

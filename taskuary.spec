@@ -1,6 +1,6 @@
 # PyInstaller spec: one-file Taskuary desktop exe with the web UI bundled.
 # Build: pip install .[desktop,build,bundle] && pyinstaller taskuary.spec
-# Output: dist/Taskuary.exe - double-click, native window, data in ~/.taskuary.
+# Output: dist/Taskuary.exe - double-click, native window, data in ~/.taskuary. TASKUARY_ONEDIR=1: dist/Taskuary/ for the installer.
 import os, sys
 
 from PyInstaller.utils.hooks import collect_all
@@ -62,5 +62,11 @@ pyz = PYZ(a.pure)
 # closes it the moment the window is up.
 # no text line: the bootloader writes every file it unpacks there (botocore/data/...json.gz), which read as noise
 splash = Splash('assets/splash.png', binaries=a.binaries, datas=a.datas, minify_script=True, always_on_top=False)
-exe = EXE(pyz, a.scripts, splash, splash.binaries, a.binaries, a.datas, name='Taskuary', console=False, upx=False,
-          icon='assets/taskuary.ico')
+# TASKUARY_ONEDIR=1: the folder TaskuarySetup.exe installs (installer/taskuary.iss) - nothing unpacked to %TEMP% on each start.
+# Without it: the one-file Taskuary.exe, which installs made before the installer still update from.
+if os.getenv('TASKUARY_ONEDIR'):
+    exe = EXE(pyz, a.scripts, splash, [], exclude_binaries=True, name='Taskuary', console=False, upx=False, icon='assets/taskuary.ico')
+    coll = COLLECT(exe, a.binaries, a.datas, splash.binaries, name='Taskuary', upx=False)
+else:
+    exe = EXE(pyz, a.scripts, splash, splash.binaries, a.binaries, a.datas, name='Taskuary', console=False, upx=False,
+              icon='assets/taskuary.ico')

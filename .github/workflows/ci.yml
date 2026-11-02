@@ -272,3 +272,16 @@ jobs:
       - run: pyinstaller taskuary.spec
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: Taskuary-windows-exe, path: dist/Taskuary.exe }
+      # the installer is built on every push too, so a release never finds it broken for the first time at its tag
+      - run: pyinstaller taskuary.spec --distpath dist/onedir --workpath build/onedir
+        env: { TASKUARY_ONEDIR: '1' }
+      - name: Build TaskuarySetup.exe
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc installer	askuary.iss
+          if ($LASTEXITCODE) { throw "the installer did not build" }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: Taskuary-windows-setup, path: dist/TaskuarySetup.exe }

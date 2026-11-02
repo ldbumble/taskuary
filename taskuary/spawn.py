@@ -44,6 +44,13 @@ def meipass() -> str:
     return os.path.realpath(m) if m else ''
 
 
+def onedir() -> bool:
+    """The installed build (TaskuarySetup.exe, taskuary.spec's one-folder mode): its bundle is the _internal folder beside
+    Taskuary.exe, never unpacked to %TEMP% - so there is no bootloader parent and no unpack folder to sweep."""
+    m = meipass()
+    return bool(m) and os.path.normcase(os.path.dirname(m)) == os.path.normcase(os.path.dirname(os.path.realpath(sys.executable)))
+
+
 def inside(path, root) -> bool:
     if not (path and root): return False
     a,b = os.path.normcase(os.path.realpath(path)),os.path.normcase(os.path.realpath(root))

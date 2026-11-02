@@ -43,7 +43,9 @@ def tasks_list(store, p: dict) -> str:
         near = alike(store, q, pool)
         rows = sorted((t for t in pool if t['TaskId'] in near), key=lambda t: -near[t['TaskId']])
     if not rows: return f'No {"" if status == "all" else status + " "}tasks match that.'
-    run = lambda t: f" - agent {t['RunAgent']} {t['RunStatus']}" if t.get('RunStatus') in ('running', 'queued') else ''
+    # ...and watched, said on its line (watch.said, the rail audit 2026-11-02): "what am I watching?" read this list and could not tell
+    from . import watch
+    run = lambda t: (f" - agent {t['RunAgent']} {t['RunStatus']}" if t.get('RunStatus') in ('running', 'queued') else '') + (' - watching (Watch it)' if watch.watching(t) else '')
     out = [f"{task_ref(t['TaskId'])} [{t.get('Status')}/{t.get('Kind')}] {_cut(t.get('Title'), 120)} - updated {_day(t.get('UpdatedAt') or t.get('CreatedAt'))}{run(t)}"
            for t in rows[:limit]]
     return NL.join(out + ([f'…and {len(rows) - limit} more - narrow it with contains.'] if len(rows) > limit else []))

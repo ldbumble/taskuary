@@ -19,6 +19,12 @@ CLOSED = ('done', 'dropped')
 def _stamp(at: datetime = None) -> str: return f"{at or datetime.now():%Y-%m-%d %H:%M:%S}"
 def watching(task) -> bool: return bool((task or {}).get('WatchedAt')) and (task or {}).get('Status') not in CLOSED
 def back(task) -> str: return str((task or {}).get('WatchBack') or '') if (task or {}).get('Status') not in CLOSED else ''
+# ...said to the Assistant wherever it reads a task (the rail audit, 2026-11-02): "what am I watching?" and "why is it not in my walk?" read
+# tasks.list and task.read, and neither said a task was watched - the model could not answer either
+def said(task) -> str:
+    if watching(task): return f"WATCHED since {str(task['WatchedAt'])[:10]} (Watch it) - off the walk, under Watching, until its thread moves or a quiet week"
+    return {'moved': 'back from Watching - its thread moved', 'handled': 'back from Watching - its thread looks handled',
+            'quiet': 'back from Watching after a quiet week'}.get(back(task), '')
 
 
 def watch(store, tid: int, actor: str = 'owner') -> dict:

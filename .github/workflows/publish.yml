@@ -51,6 +51,11 @@ jobs:
         run: npm ci && npm run build
         working-directory: website
 
+      # the help pages the Assistant searches about the app itself (lookups.SITE_DOCS) live outside the package; without this copy a
+      # pip-installed Assistant had no help and no What's new to read (2026-11-02)
+      - name: Carry the help pages into the package
+        run: mkdir -p taskuary/help && cp docs/site/*.md taskuary/help/
+
       - name: Build sdist and wheel
         run: pipx run build
 
@@ -67,7 +72,8 @@ jobs:
                   'js bundle': any('/web/assets/' in n and n.endswith('.js') for n in names),
                   'css bundle': any('/web/assets/' in n and n.endswith('.css') for n in names),
                   'operator templates': sum(n.startswith('taskuary/templates/') for n in names) >= 5,
-                  'whatsapp bridge': any(n.endswith('whatsapp/bridge.mjs') for n in names)}
+                  'whatsapp bridge': any(n.endswith('whatsapp/bridge.mjs') for n in names),
+                  'help pages': any(n == 'taskuary/help/whats-new.md' for n in names)}
           for k, ok in need.items(): print(f"{'OK  ' if ok else 'MISS'} {k}")
           sys.exit(0 if all(need.values()) else 1)
           PY

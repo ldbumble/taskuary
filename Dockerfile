@@ -7,6 +7,8 @@ WORKDIR /app
 
 COPY pyproject.toml README.md LICENSE ./
 COPY taskuary ./taskuary
+# the help pages the Assistant searches about the app itself (lookups.SITE_DOCS falls back to taskuary/help in an install, 2026-11-02)
+COPY docs/site/*.md ./taskuary/help/
 
 RUN pip install --no-cache-dir --root-user-action=ignore .
 RUN useradd --uid 1000 --create-home --home-dir /home/taskuary taskuary \

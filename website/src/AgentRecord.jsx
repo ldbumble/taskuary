@@ -13,6 +13,7 @@ import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { cardParts, hasMore, heldLines, lastWords, madeOnce, moreParts, plain, resultLine, recordFacts, recordHead, recordSteps, resultParts, runCost, runHeads, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 import { plural } from "./timeWords.js";
+import { outputRefs } from "./taskOutputs.js";
 import BriefLine from "./BriefLine.jsx";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
@@ -201,7 +202,10 @@ export const ResultSummary = ({ taskId, stamp, pages = [], said = "", onRecord =
     return () => { live = false; };
   }, [taskId, stamp]);
   if (!rec) return <CircularProgress size={12} sx={{ mt: 1 }} />;
-  const { did, found, rest } = resultLine(rec.sessions?.[0], said), made = madeOnce(pages, outputs), held = heldLines(rec.held);
+  const { did: did0, found: found0, rest: rest0 } = resultLine(rec.sessions?.[0], said), made = madeOnce(pages, outputs), held = heldLines(rec.held);
+  // a path into this task's outputs reads as the file's name - the file itself is under What it made: the stopped Result printed
+  // "C:\\Users\\<you>\\.taskuary\\scratch\\outputs\\TQ-n\\<file>" in bold where the chat said the name (stress test 2026-11-02)
+  const named = (x) => (x ? outputRefs(x, taskId, outputs).text : x), did = named(did0), found = named(found0), rest = named(rest0);
   return (
     <Box data-tq-result-summary="" sx={{ mt: 0.9, display: "flex", flexDirection: "column", gap: 0.9 }}>
       {held.waiting.map((l, i) => <Typography key={i} data-tq-result-held="" sx={{ fontSize: 13, fontWeight: 600, color: INK }}>{l}</Typography>)}

@@ -181,7 +181,21 @@ Both run on a **brain** - a CLI such as Claude Code or Codex, or an API connecti
 chosen on it - and follow a **profile** of instructions laid on that brain: `CODING.md` for code,
 `ASSISTANT.md` for general work by default (see [Profiles and playbooks](#profiles-and-playbooks)).
 You start one with **Send to agent** on a task, or from **+ New → Give an agent a job**, which asks
-whether the job is general or coding.
+whether the job is general or coding - coding only with [Developer mode](#developer-mode) on.
+
+### Developer mode
+
+Coding agents are for developers, so they come with **Developer mode** - a switch in setup ("Are you
+a developer?") and in Settings → Configuration → Developer. It is **off** on a new install: triage
+never calls anything coding, nothing asks about repositories, and every job goes to a general agent,
+whatever AI or CLI is connected. Asking the Assistant for a coding agent hands the job to a general
+agent and says where the switch is.
+
+Turn it **on** and work that changes code goes to a coding agent on your coding CLI (Claude Code,
+Codex and the like, connected under Connections). Setup then offers **Connect GitHub**, which is
+optional: with no repository connected the coding agent works in a scratch folder. A task that is
+already a coding task keeps its coding agent either way, and a home that used coding agents before
+the switch existed was turned on when it updated.
 
 General chats save their provider, model and native conversation id across restarts. Claude and
 Codex resume that exact conversation when it still exists and the provider configuration matches;

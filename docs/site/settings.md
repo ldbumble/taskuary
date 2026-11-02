@@ -23,6 +23,9 @@ Each setting shows what it does, and its shipped default. A few notes that apply
   plus the judge that decides where a report run goes — are set on the cards at the top of the
   Configuration page rather than as plain rows. They appear below with their fallback rows, which
   is what you see if those cards cannot load.
+- **Developer mode** decides whether coding agents exist at all. Off (the default), the **Coding
+  agent** group is not shown and every job goes to a general agent - see
+  [Developer mode](tasks-and-agents#developer-mode).
 
 <!-- generated: settings -->
 

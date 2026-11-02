@@ -4,7 +4,7 @@
 // Search reaches EVERYTHING (knobs, rules, help text, the section names themselves)
 // and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCapabilities } from "./capabilities.js";
+import { refreshCapabilities, useCapabilities } from "./capabilities.js";
 import { nothingMatches } from "./searchHits.js";
 import { placeName } from "./words.js";
 import { focusPlace, openAppLink, ownerHref } from "./appLinks.js";
@@ -517,6 +517,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const saveSetting = async (name, value, el) => {
     const { ok } = await run(() => api.patch("/api/settings", { name, value }));
     if (!ok && el) el.value = settings.find((s) => s.Name === name)?.Value ?? "";
+    if (ok && name === "developer_mode") refreshCapabilities();     // coding comes or goes on every screen, this one's Coding agent group too
     load();
   };
   const [jsonBad, setJsonBad] = useState({});           // a JSON knob's problem, said under its box until fixed

@@ -86,7 +86,9 @@ test("the job reads as a document, and Edit opens its text", () => {
 test("the first time About your work is saved, setup is complete: confetti and one big button into the day", () => {
   const fr = read("FirstRun.jsx"), done = read("SetupDone.jsx");
   // ...but only once the AI and the mail work too: saved from the rail over no AI, it went to Setup complete (2026-10-17)
-  assert.match(fr, /go\(!s \? "other" : !requiredDone\(s\) \? frontierOf\(s\) : first \? "done" : "other"\);/);
+  // ...by way of Developer mode, the optional step after it: its Next lands on Setup complete on that first pass (2026-11-02)
+  assert.match(fr, /go\(!s \? "other" : !requiredDone\(s\) \? frontierOf\(s\) : first \? "dev" : "other"\);/);
+  assert.match(fr, /go\(firstPass\.current && n === "other" \? "done" : n\)/);
   assert.match(fr, /\{q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\}\s+aiError=\{aiErr\} onChangeAi=\{\(\) => go\("ai"\)\} \/><\/Box>\}/);
   assert.match(fr, /const navShown = view === "done" \? \[\] :/);
   assert.match(done, />Setup complete</); assert.match(done, /size="large" onClick=\{onDay\}/); assert.match(done, />Go to my day</);

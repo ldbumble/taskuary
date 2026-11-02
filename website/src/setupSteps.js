@@ -18,12 +18,15 @@ export const stepsOf = (st, shown = "") => {
 
 // ONE STEP ON THE CANVAS, BACK AND NEXT ALWAYS (the owner, 2026-10-15: "always have next/back button if possible and move to next
 // step once one is complete"): the setup's steps in order, where to open, whether a step is done, and the row's moves for one.
-export const ORDER = ["ai", "mail", "about", "other"];
-export const nextOf = (v) => ORDER[Math.min(ORDER.indexOf(v) + 1, ORDER.length - 1)];
+// ...Developer mode and Connect GitHub between About your work and More connections, both optional - and GitHub only when the server's
+// rail draws it (Developer mode on): a step the rail leaves out is never landed on (the owner, 2026-11-02)
+export const ORDER = ["ai", "mail", "about", "dev", "github", "other"];
+const inRail = (st, v) => !st?.rail || v === "other" || !!rowOf(st, v);
+export const nextOf = (v, st = null) => ORDER.slice(ORDER.indexOf(v) + 1).find((k) => inRail(st, k)) || ORDER[ORDER.length - 1];
 // ...and BACK NEVER LANDS ON A LOCKED STEP (the 2026-10-19 UI walk): Back from More connections opened About your work while the
 // email was not in, and the Advisor talked about answers never given. With the server's state it steps over what is not open yet.
 export const prevOf = (v, st = null) => {
-  for (let i = ORDER.indexOf(v) - 1; i > 0; i--) if (reachable(st, ORDER[i])) return ORDER[i];
+  for (let i = ORDER.indexOf(v) - 1; i > 0; i--) if (inRail(st, ORDER[i]) && reachable(st, ORDER[i])) return ORDER[i];
   return ORDER[0];
 };
 // where a move to `v` lands: `v` when it is open, else the nearest open step before it - every road onto the canvas goes through it
@@ -32,8 +35,8 @@ export const frontierOf = (st) => st?.frontier || "ai";
 // REOPENED, it opens where the work is (the owner, 2026-10-16: the survey sat two Nexts past Your AI, unseen); with every step done,
 // on Your AI - reopening is how the AI or the mailbox gets changed
 export const openAt = (st, reopened = false) => { const f = frontierOf(st); return reopened && f === "other" ? "ai" : f; };
-// done enough to move on from: More connections is optional, so it always is
-export const doneOf = (st, v) => !!st && (v === "other" || (rowOf(st, v)?.done ?? true));
+// done enough to move on from: More connections is optional, so it always is - and so is every optional row (Developer mode, GitHub)
+export const doneOf = (st, v) => !!st && (v === "other" || !!rowOf(st, v)?.optional || (rowOf(st, v)?.done ?? true));
 // whether a step can be opened yet: the email after a working AI, About your work after the email; the AI and the optional
 // connections always
 export const reachable = (st, v) => rowOf(st, v)?.open ?? true;

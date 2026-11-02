@@ -90,7 +90,7 @@ import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -1669,14 +1669,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const co = closeOut({ hasSender: !!replyMessage, result: resultShown, writeup });
   // ...and the reply SENT from here is Close out's too (the owner, 2026-10-27: "I hit send on close out and instead of keeping that page
   // open it reopened the task page"): with the draft gone and only sentOutside counted, a sent reply read as "a reply owed, nothing written"
-  const replyHas = !!(pendingReview || sentReview || proposals.length || owesEmails || emailsWaiting || ended || sentOutside.length
-    || ["done", "dropped"].includes(t?.Status) || co.writeupAt === "closeout");
+  // ...and an email the checklist owes with nothing drafted yet is not Close out's own (taskLayout.closeHolds, the owner 2026-11-02): the
+  // page opened on a Close out holding only "<address> to draft"
+  // ...and a draft, a proposal or emails waiting for Send are the next move: Close out is white, the Result shaded above it (2026-10-27)
+  const { has: replyHas, waits: sendWaits } = closeHolds({ pending: !!pendingReview, sent: !!sentReview, proposals: proposals.length, checklist: detail?.checklist,
+    reviews: detail?.reviews, ended: !!ended, outside: sentOutside.length, closed: ["done", "dropped"].includes(t?.Status), writeup: co.writeupAt === "closeout" });
   // ...and NEITHER half on a task waiting on a person (the owner, 2026-10-25): nothing is yours until they answer, so Agent work and Close out
   // are a line each, one click to open - the Send to agent form stood open over a task nobody needed an agent for
   const paneRest = waitFor && !openStage ? "" : workPane({ stage, kind: t?.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage });
   const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
-  // ...and a draft, a proposal or emails waiting for Send are the next move: Close out is white, the Result shaded above it (2026-10-27)
-  const sendWaits = !!(pendingReview || proposals.length || emailsWaiting || owesEmails);
   // THE MAIN VIEW: a phone's narrow body stays one stacked page (a live session there the work, Came from its left drawer); on the desk the
   // three sections in a row (SECTIONS), opening on the one the task is up to - a live agent's too, Came from and Close out its slim tabs
   const narrow = bodyW > 0 && bodyW < STACK_BELOW;

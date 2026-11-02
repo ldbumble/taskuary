@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.16 - 2026-11-02
+
+- The task page's everyday asks join the audit, and three it refused or misled now land
+- The rail audit: 26 everyday asks about the work rail and its walk, and six it refused or misread now work
+- The everyday-asks audit covers the Connections page, and four things the Assistant got wrong there are fixed
+- A report's Run now and switch are on its row: the Assistant brings up the shelf, and reads each row by name
+- The Settings audit: 30 asks with Settings on screen, and four gaps closed
+- The Assistant on New: names the press each tab draws, sees every box, and fills a box a press draws
+- The Assistant works the Hub and the Board where they stand: Write one, a post by number, named menus
+- A phone asks yes or no only for what the row can do, and Watch it by phone is Watch it
+- A pip-installed or container Assistant reads the help pages and What's new too
+- The Assistant's self-knowledge audit: 24 asks, and the three gaps it found fixed
+- Regenerate the Assistant's tool page for the merged audits
+- What a real model wrote now lands: a task page's bare decision, a report by name, a CALL in tool markup
+- A report's miss still opens "No report by that name", and the exe check knows help is docs/site
+- A report act over the report on the table runs as it did: a row's handle is no report name
+
 ## 0.3.10.15 - 2026-11-01
 
 - The everyday-asks audit covers the Assistant's newer powers, and three asks it refused now work

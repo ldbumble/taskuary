@@ -407,6 +407,14 @@ run; **Local Whisper** runs on this computer with no key, and the audio never le
 (`pip install taskuary[voice]`). With no voice card a voice note still lands, filed with a line
 saying it was not transcribed and why, its audio attached so one click transcribes it later.
 
+With no voice card the microphone still works, using the computer's own voice typing. In a
+browser tab that is the browser's recogniser. In the Windows app it is **Windows voice typing**
+(the one behind Win+H), which needs **Online speech recognition** on under Settings > Privacy &
+security > Speech; with that off, the mic falls back to Windows' older offline recogniser, which is far
+less accurate, and its hover says how to turn the better one on. On a Mac, the app window cannot
+call Apple's recogniser: click in the box and press the Dictation key (or Fn twice). A voice card
+is still more accurate, and it is what transcribes voice notes.
+
 ## A system with no card
 
 Search the catalogue first. When nothing matches, **Request** under the empty grid drafts a feature

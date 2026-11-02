@@ -13,6 +13,7 @@ import hashlib, json, re
 from datetime import datetime, timedelta
 
 from . import bugreport
+from .timewords import plural
 
 DAYS, AFTER_DAYS, BEFORE_DAYS = 7, 14, 30   # the window counted; how long after an update a new failure is "since the update"; before it
 N_SAME, N_TASKS, N_SINCE, N_GAVE_UP = 3, 2, 2, 2
@@ -85,7 +86,7 @@ def agent_failures(store, now: datetime) -> list:
         err = max(recent, key=lambda r: str(r['At']))['LastError']
         who, when = f'{cli} agent' if cli else 'agent', f' since Taskuary updated to {__version__}' if new else ' this week'
         out.append(_idea(_key('agent', cli, shape), f"{who[0].upper()}{who[1:]} runs failed the same way {len(recent)} times{when} - {shape[:80]}.",
-                         f"{len(recent)} runs on {len(tasks)} task{'s' if len(tasks) != 1 else ''} ended with one error"
+                         f"{len(recent)} runs on {plural(len(tasks), 'task')} ended with one error"
                          + (', none before the update' if new else '') + ": the same failure on different work is Taskuary's, not the work's",
                          {'trying': f"run {'a ' + who if cli else 'an agent'} on a task", 'happened': f'the run failed the same way {len(recent)} times{when}',
                           'message': str(err)[:2000], 'route': f"agent {cli or 'run'}"}))

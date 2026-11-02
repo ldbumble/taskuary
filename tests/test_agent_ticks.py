@@ -58,6 +58,14 @@ class TickTests(unittest.TestCase):
         for i in self.ids.values(): self.s.tick_checklist_item(self.tid, i, True, 't')      # nothing left to tick: nothing said
         self.assertNotIn(terminal.TICK_HEAD, head(general._prompt(self.s, self.tid)[1]))
 
+    def test_two_open_todos_fan_out_to_subagents_only_where_the_cli_has_them(self):
+        # 2026-11-02: several independent to-dos for one repo were worked one by one in a CLI that could run them side by side
+        head = lambda cli: next(l for l in terminal.seed_text(self.s, self.tid, cli=cli).splitlines() if 'CHECKLIST' in l)
+        self.assertIn(terminal.SUBAGENT_HEAD, head('claude')); self.assertIn(terminal.SUBAGENT_HEAD, head('C:/x/claude.cmd'))
+        for cli in ('codex', 'gemini', ''): self.assertNotIn(terminal.SUBAGENT_HEAD, head(cli))
+        self.s.tick_checklist_item(self.tid, self.ids['Check the seat count'], True, 't')      # one open to-do: nothing to fan out
+        self.assertNotIn(terminal.SUBAGENT_HEAD, head('claude')); self.assertIn(terminal.TICK_HEAD, head('claude'))
+
     def test_the_one_road_refuses_what_the_door_refuses(self):
         self.assertEqual(agent_tick(self.s, self.tid, 'nope1234')[1][0], 404)
         self.assertEqual(agent_tick(self.s, self.tid, self.ids['Confirm the renewal with the vendor'])[1][0], 422)

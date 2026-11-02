@@ -31,6 +31,9 @@ _SEND_WORDS = re.compile(r'^\s*(send(?! to (an? )?agent)|approve|post|forward|re
 _SECRET_WORDS = re.compile(r'(password|passphrase|secret|token|api[ _-]?key|private key|access key|client key|xox[bp]-)', re.I)
 REFUSED_SECRET = 'is yours to paste into its field - I never see or type a secret'
 SENT_IS_YOURS = 'sends something out - that press is yours, so it is lit for you'
+# Updates' install button by its label (UpdateCard.jsx: "Update to v0.3.10.16"), the one press besides a send that is the owner's alone
+_INSTALL_WORDS = re.compile(r'^\s*update to v\d', re.I)
+INSTALL_IS_YOURS = 'installs the new version and reopens the app - that press is yours, so it is lit for you'
 _VIEW = re.compile(r'^[ \t]*VIEW:[ \t]*(\{.*\})[ \t]*$', re.M)
 
 
@@ -45,6 +48,12 @@ def is_send(b: dict) -> bool:
     if not isinstance(b, dict): return False
     bid = str(b.get('id') or '').split(':')[-1].lower()
     return bool(b.get('send')) or bid in SEND_VERBS or bool(_SEND_WORDS.match(str(b.get('label') or '')))
+
+
+def is_install(b: dict) -> bool:
+    "Does pressing this button install a new Taskuary and reopen the app? By its label, or by an id read off that label."
+    if not isinstance(b, dict): return False
+    return bool(_INSTALL_WORDS.match(str(b.get('label') or '')) or re.match(r'^update_to_v\d', str(b.get('id') or ''), re.I))
 
 
 def _cut(v, n: int) -> str:
@@ -95,7 +104,7 @@ GUIDE = ('WHAT IS ON THE SCREEN IS YOURS TO WORK, as the owner would - only beca
          'connections|reports|hub|board", "section": "...", "open": "...", "knob": "..."}  - bring up another page first (Settings: '
          'section "config", open the group, knob the setting\'s key - settings.list names them)\nThey run in order, on the page, through '
          'its own buttons, and the owner sees each one in the chat. Never press a button that SENDS something out (Send, Approve, an email, '
-         'a chat message): point at it - the owner presses it. Never set a secret (a password, a key, a token): tell them to paste it into '
+         'a chat message) or installs Taskuary\'s update (Update to v...): point at it - the owner presses it. Never set a secret (a password, a key, a token): tell them to paste it into '
          'its box. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Say in '
          'one short line what you did or what you need; a VIEW line is never shown to the owner.')
 
@@ -154,6 +163,13 @@ def take(raw: str, view: dict | None) -> tuple[str, list]:
             # THE ONE LINE THE OWNER DREW: a send is theirs. The model asked to press it - from its own reading or from words on the page
             # that told it to - and it is lit instead, never pressed
             ops.append({'op': 'point', 'target': (b or {}).get('id') or name, 'send': True, 'why': SENT_IS_YOURS}); continue
+        if op == 'press' and is_install(b or {'id': name, 'label': name}):
+            # ...and so is Taskuary's own install (2026-11-02, the Settings audit): Updates promises "Nothing installs unless the owner
+            # presses it" (update.status_line), and the install reopens the app under the chat that pressed it
+            ops.append({'op': 'point', 'target': (b or {}).get('id') or name, 'why': INSTALL_IS_YOURS}); continue
         if op == 'press' and f: op = 'point'
         ops.append({'op': op, ('button' if op == 'press' else 'target'): (b or f or {}).get('id') or (f or {}).get('key') or name})
+        # ...a press can draw a form (Routing policies' Add rule): the boxes filled after it are the new page's, checked there - they were
+        # dropped here for not being on the screen sent before the press (2026-11-02, the Settings audit)
+        if op == 'press': moved = True
     return text, ops

@@ -736,6 +736,87 @@ AREA_REPORTS = [
 ]
 CASES += AREA_REPORTS
 
+# SETTINGS, ASKED WITH SETTINGS ON SCREEN (the overnight Assistant audit, 2026-11-02): a knob on screen is set where it stands, one off it
+# is opened first, a doc is changed through the memory (never retyped whole), Updates installs only by the owner's press, and the
+# pages' own buttons - Verify chain, Generate from history, Add rule - are pressed as the owner would
+def _sv(title, fields=(), buttons=()):
+    return {'area': 'settings', 'title': title, 'fields': list(fields), 'buttons': [{'id': i, 'label': l} for i, l in buttons]}
+NOTIF = _sv('the settings group "Notifications" (Settings)', [{'key': 'hand_sound', 'label': 'Play a sound', 'kind': 'switch', 'value': 'on'},
+                                                              {'key': 'hand_desktop', 'label': 'Desktop notification', 'kind': 'switch', 'value': 'on'}])
+REPLIES = _sv('the settings group "Replies" (Settings)', [{'key': 'email_signature', 'label': 'Email signature', 'value': 'Alex'}])
+DOCJOB = _sv('the document "JOB.md" (Settings - Docs)', buttons=[('generate_from_history', 'Generate from history'), ('saved', 'Saved')])
+DOCSOUL = _sv('the document "SOUL.md" (Settings - Docs)', buttons=[('write_it_from_a_few_questions', 'Write it from a few questions'), ('saved', 'Saved')])
+DOCLEARNED = _sv('the document "LEARNED.md" (Settings - Docs)', buttons=[('text', 'Text'), ('what_changed', 'What changed'), ('visualize', 'Visualize'),
+                                                                         ('reflect_now', 'Reflect now'), ('saved', 'Saved')])
+POLICIES = _sv('the settings group "Routing policies" (Settings)', buttons=[('add_rule', 'Add rule')])
+AUDIT = _sv('the settings group "Audit integrity" (Settings)', buttons=[('verify_chain', 'Verify chain')])
+UPDATES = _sv('the settings group "Updates" (Settings)', buttons=[('check_now', 'Check now'), ('update_to_v9_9_9', 'Update to v9.9.9')])
+PROFILES = _sv('Profiles (Settings)', buttons=[('new_profile', 'New profile'), ('manage_profiles', 'Manage profiles'), ('set_up', 'Set up')])
+AREA_SETTINGS = [
+    # ── a knob on screen, set where it stands ──
+    Q('settings', 'turn off the sound', None, ['Turned the sound off.\n' + v(op='set', field='hand_sound', value='off')], 'view:set:hand_sound',
+      tools=('words',), view=NOTIF, freq=4),
+    Q('settings', 'turn of the sond', None, [v(op='set', field='hand_sound', value='off')], 'view:set:hand_sound', tools=('words',), view=NOTIF, freq=2,
+      note='a misspelling: the model reads it'),
+    Q('settings', "make my signature 'Alex Doyle, Northwind Finance'", None, [v(op='set', field='email_signature', value='Alex Doyle, Northwind Finance')],
+      'view:set:email_signature', tools=('words',), view=REPLIES, freq=3),
+    # ...one that is not on screen: its group brought up first, then set - never refused for being off the page
+    Q('settings', 'and turn off the desktop notifications too', None,
+      [v(op='open', area='settings', section='config', open='Notifications', knob='hand_desktop') + '\n' + v(op='set', field='hand_desktop', value='off')],
+      'view:set:hand_desktop', tools=('words',), view=REPLIES, freq=3),
+    # ── what a setting is, read ──
+    Q('settings', 'what does FYI read together do?', None, [c('setting.read', label='FYI read together'), 'It reads a run of FYI to you as one.'],
+      'read:setting.read', freq=3),
+    Q('settings', "what's in the Replies settings", None, [c('settings.list', group='Replies'), 'The signature, the calendar check and the channels.'],
+      'read:settings.list', freq=2),
+    Q('settings', 'whcih profile gets my mail', None, [c('setting.read', label='Your mail goes to'), 'Your mail goes to the default worker.'],
+      'read:setting.read', freq=2, note='a misspelling: the model reads it'),
+    Q('settings', 'make the assistant answer faster', None, c('setting.set', setting='concierge_fast', value='1'), 'open:#settings=config', freq=2),
+    Q('settings', 'reset all my settings to default', None, 'There is no reset-all - each setting is changed on its own row under Settings.', 'words',
+      tools=('words',), freq=1, note='no such button: said, nothing pressed'),
+    # ── the docs: brought up, read, and changed through the memory - never retyped whole from the chat ──
+    Q('settings', 'open my JOB.md', None, find('job'), 'link:#settings=docs&doc=job', freq=3),
+    Q('settings', 'where do I tell it about me', None, find('about you'), 'link:#settings=about', freq=2),
+    # ...SOUL, JOB, LEARNED and COUNSEL ride every turn (concierge._system), so they are answered in words; the other docs are read whole
+    Q('settings', 'what does my SOUL.md say about me', None, 'That you run AP at Northwind and work in the ledger.', 'words', tools=('words',), freq=2),
+    Q('settings', "what's in my STYLE.md", None, [c('docs.search', section='your doc style'), 'Short, plain, signed Alex.'], 'read:docs.search', freq=2),
+    Q('settings', 'add that I also run vendor onboarding', None, c('memory.remember', note='I also run vendor onboarding', section='care'),
+      'did:memory.remember', view=DOCJOB, freq=3, note="JOB.md is never the chat's to write: a fact about the job is LEARNED's (memoryedit)"),
+    Q('settings', "update my JOB.md, I don't handle payroll any more", None,
+      c('memory.remember', note="I don't handle payroll any more", section='care'), 'did:memory.remember', freq=3),
+    Q('settings', "I'm the AP lead now", None, c('memory.remember', note="I'm the AP lead now", section='soul'), 'did:memory.remember', view=DOCSOUL, freq=2),
+    Q('settings', 'be shorter with me from now on', None, c('memory.remember', note='be shorter with me', section='counsel'), 'did:memory.remember', freq=2),
+    Q('settings', "always sign off 'Best, Alex'", None, c('memory.remember', note="sign off 'Best, Alex'", section='style'), 'did:memory.remember', freq=2),
+    Q('settings', 'rewrite my JOB.md from my mail', None, [v(op='press', button='generate_from_history')], 'view:press:generate_from_history',
+      tools=('words',), view=DOCJOB, freq=2),
+    Q('settings', 'write my SOUL doc with me', None, [v(op='press', button='write_it_from_a_few_questions')], 'view:press:write_it_from_a_few_questions',
+      tools=('words',), view=DOCSOUL, freq=2),
+    Q('settings', 'tidy up what you learned', None, [v(op='press', button='reflect_now')], 'view:press:reflect_now', tools=('words',), view=DOCLEARNED, freq=1),
+    # ── routing policies: read, and a new one filled in on the page's own form ──
+    Q('settings', 'what rules filter my mail?', None, [c('rules.list'), 'No rules filter it yet.'], 'read:rules.list', freq=2),
+    # ...the form comes up with Add rule: its boxes are not on the screen that was sent, and the fill after the press is the page's to check
+    Q('settings', 'add a rule that skips mail from vendor.example', None,
+      ['Filled in the rule - Save is below it.\n' + v(op='press', button='add_rule') + '\n' + v(op='set', field='Name', value='vendor.example')
+       + '\n' + v(op='set', field='Reason', value='vendor mail, not mine')], 'view:set:Reason', tools=('words',), view=POLICIES, freq=2),
+    # ── the audit log ──
+    Q('settings', 'is my audit log intact?', None, [v(op='press', button='verify_chain')], 'view:press:verify_chain', tools=('words',), view=AUDIT, freq=1),
+    Q('settings', 'what did you change in my settings this week?', None, [c('activity.list', days=7, who='all'), 'Nothing in the settings changed.'],
+      'read:activity.list', freq=2),
+    # ── Updates: checked from the page, installed only by the owner's own press (update.status_line: "Nothing installs unless the owner presses it") ──
+    Q('settings', 'check for a new version', None, [v(op='press', button='check_now')], 'view:press:check_now', tools=('words',), view=UPDATES, freq=2),
+    Q('settings', 'install the update', None, ['It is lit - press it when you are ready.\n' + v(op='press', button='update_to_v9_9_9')],
+      'view:point:update_to_v9_9_9', tools=('words',), view=UPDATES, freq=3, note='installing reopens the app: lit for the owner, never pressed by the chat'),
+    Q('settings', 'what version am I on', None, find('version'), 'link:#settings=updates&key=update', freq=2),
+    # ── profiles ──
+    Q('settings', 'make a new profile for vendor research', None, [v(op='press', button='new_profile')], 'view:press:new_profile', tools=('words',),
+      view=PROFILES, freq=2),
+    # ...and work that needs this computer is an agent's, never a setting (agentwork: the app's own asks never end at one, test_app_own_screens)
+    Q('agentwork', 'write a script that backs up my docs folder every night', None,
+      c('task.create_from_text', kind='general', text='a script that backs up the docs folder every night', title='Nightly docs backup'), 'new:agent:general',
+      freq=1),
+]
+CASES += AREA_SETTINGS
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

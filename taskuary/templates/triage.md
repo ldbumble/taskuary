@@ -24,6 +24,7 @@ Work through four questions.
 - A cc that names the owner or asks them something is theirs; a To line that is really a team list may not be. Read the words, then the lines.
 - When the owner is only copied, "you" in the message is the person on the To line, not the owner: "can you fix these", "let me know if this looks right" ask THEM. Only the owner's name, or a line plainly turned to them ("Alex, can you..."), makes it the owner's - even when the system it is about is one the owner built or runs.
 - Being on the To line is not being asked either. A message that opens with another person's name, or puts its question to them by name ("Paula, let me know if you want to get on a call", "Vance - can you check these?"), asks THAT person, even with the owner on the To line beside them: their question, not the owner's - fyi, unless the owner is asked too. Match the name against `addressed_to`, `copied` and the `exchange`; a first name or a surname alone is enough. A question put to everyone on the mail ("let me know if any of you...", "does anyone...", "thoughts, all?") can be the owner's.
+- A nudge that is only a name - "Paula?", "Erin??", "@Ray" - asks THAT person to answer what is open on the thread, wherever they sit on the mail (Cc included). It never asks the owner to add, include or invite them, and it is theirs, not the owner's.
 - Read who a line is turned to from THIS message. The same sender writing to the owner by name earlier in the `exchange` does not make today's line to someone else the owner's, and neither does how much the sender matters - that weighs `priority`, never whose the question is.
 - Being named is not always being asked. "I've cc'd Alex in case you need access", "Alex can help if anything breaks" makes the owner a contact on standby: nothing is wanted from them until someone actually asks. The work in that mail belongs to the people it is addressed to.
 
@@ -31,6 +32,7 @@ Work through four questions.
 - Someone explaining their role ("I own the deployment system") wants it read - fyi. Someone asking the owner a yes/no they could answer after a look wants a reply; the same yes/no put to someone else is theirs to answer.
 - A reply on a thread whose ask is still open moves that ask on - a decision, an approval, a name with authority behind it ("Gail wants them back on"), a changed requirement, a nudge. The `exchange` shows whether the ask was ever delivered; if not, the thread is still work, however little the new line asks in its own words - work for whoever holds the ask: a follow-up to a colleague's open ask is the colleague's, not the owner's.
 - A line answering something the owner asked in the `exchange` is a round trip, usually fyi or reply_only.
+- When the owner has already answered - their own reply is the last "you" line in the `exchange` (`last_on_thread_is_you`) - read the new line against what they said. A follow-up that only waits on someone else's answer after that (chasing another person, "Paula?", "any update, Erin?") is not the owner's to answer: fyi, `asks_owner` false. It is theirs again only when it asks them something their reply did not already settle.
 
 **What happens if nobody acts?**
 - Something lapses, breaks, keeps breaking, or a person stays stuck waiting on the owner: work.
@@ -149,7 +151,7 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 Each is a sign to weigh; an absent field is not evidence either way.
 - `addressed_to_you` - "to", "cc" or "not named" (a group alias or shared mailbox); `recipients` - how many people the mail went to.
 - `addressed_to` - the To line by name, the owner as "you": who the mail is put to, the people its "you" means. `copied` - the Cc line the same way: who is only watching. A name the message opens with or puts its question to is one of these people.
-- `others_replied`, `last_on_thread` - people other than the owner and the sender who have SENT on this thread, and who spoke last.
+- `others_replied`, `last_on_thread` - people other than the owner and the sender who have SENT on this thread, and who spoke last before this message; `last_on_thread_is_you` - true when that was the owner's own reply (its words are their last "you" line in the `exchange`).
 - `exchange` - the recent back-and-forth, oldest first, the owner's lines marked "you", each led by its message id `[#n]`.
 - `open_work`, `recently_closed` - tasks this touches, open or closed lately, each with how it ended.
 - `connected_systems` - what this install can reach for the owner: its mailboxes, data sources and tools, by name and type. A system that is not in it cannot be read or changed from here.

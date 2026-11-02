@@ -97,3 +97,55 @@ def test_the_writer_sees_the_to_line_by_name_and_is_told_a_named_question_is_not
     with pytest.raises(responder.NoReply): responder.draft_reply(s, tid, llm=llm)
     assert 'To: you, Paula Vance\n' in got['user'] and 'Cc: Erin Blake\n' in got['user'] and 'You are: on the To line' in got['user']
     assert 'The same holds on the To line beside others' in got['system'] and 'is theirs to answer, not yours' in got['system']
+
+
+# ── a bare "<name>?" after the owner already answered (2026-11-02): the sender chased the colleague on Cc two minutes after the
+# owner had sent their times, and it came out a reply task with "Yes, let's include <name>" drafted. The owner's reply WAS in the
+# exchange, but the line being judged was already stored, so "last on the thread" was always its own sender.
+NUDGE = 'Paula?'
+
+
+def scheduling(s, tid=None):
+    say(s, PAULA, 'Paula Vance', 'Here are the questions.', '2026-10-05 08:00:00', to=(ME, GAIL))
+    say(s, GAIL, 'Gail Moreno', 'Alex, can we schedule a call today?', '2026-10-05 09:00:00', to=(ME,), cc=(PAULA,), tid=tid)
+    s.add_message({'TaskId': tid, 'ExternalId': 'graph:mine', 'ConversationId': 'docs', 'Channel': 'email', 'SourceName': ME, 'Subject': 'RE: Docs',
+                   'FromEmail': ME, 'FromName': 'You', 'BodyText': 'Gail, I can do today after 1pm. After 4 is better. What time works for you?',
+                   'SentAt': '2026-10-05 09:30:00', 'Status': 'context', 'Direction': 'out'})
+    return say(s, GAIL, 'Gail Moreno', NUDGE, '2026-10-05 09:32:00', to=(ME,), cc=(PAULA,), tid=tid)
+
+
+def judged(mid, to=(ME,), cc=(PAULA,), body=NUDGE):
+    return {**mail(to, cc, body=body), 'external_id': 'graph:Gail Moreno-2026-10-05 09:32:00', '_mid': mid, 'sent_at': '2026-10-05 09:32:00'}
+
+
+def test_a_name_nudge_tells_triage_the_owner_answered_last_and_who_the_name_is(s):
+    t = thread_of(s, judged(scheduling(s)))
+    assert t['last_on_thread_is_you'] is True and t['copied'] == ['Paula Vance'] and 'addressed_to' not in t
+    assert any('you' in l and 'After 4 is better' in l for l in t['exchange'])        # what the owner said, as their own line
+
+
+def test_the_owner_last_with_nobody_else_on_the_thread_is_said_too(s):
+    say(s, GAIL, 'Gail Moreno', 'Alex, can we talk today?', '2026-10-05 09:00:00', to=(ME,))
+    s.add_message({'ExternalId': 'graph:mine', 'ConversationId': 'docs', 'Channel': 'email', 'SourceName': ME, 'Subject': 'RE: Docs',
+                   'FromEmail': ME, 'FromName': 'You', 'BodyText': 'After 4 works.', 'SentAt': '2026-10-05 09:30:00', 'Direction': 'out'})
+    mid = say(s, GAIL, 'Gail Moreno', 'Great.', '2026-10-05 09:32:00', to=(ME,))
+    assert ingest.others_on_thread(s, judged(mid, cc=(), body='Great.'), mine={ME}) == {'last_on_thread': 'you', 'last_on_thread_is_you': True}
+
+
+def test_the_guide_says_a_name_nudge_is_that_persons_and_an_answered_follow_up_is_not_the_owners():
+    for doc in (triage.INTENT_SYSTEM, triage.SHIPPED):
+        assert 'A nudge that is only a name' in doc and 'It never asks the owner to add, include or invite them' in doc
+        assert 'When the owner has already answered' in doc and "is not the owner's to answer: fyi, `asks_owner` false" in doc
+        assert "`last_on_thread_is_you` - true when that was the owner's own reply" in doc
+    assert 'last_on_thread_is_you' in triage.FIELDS
+
+
+def test_the_writer_reads_the_owners_last_reply_and_the_name_nudge_rule(s):
+    tid = s.create_task({'Title': 'Call today', 'Kind': 'reply', 'Status': 'open', 'Source': 'email'}, 'router')
+    scheduling(s, tid)
+    got = {}
+    def llm(system, user, **k): got.update(system=system, user=user); return 'NO REPLY'
+    with pytest.raises(responder.NoReply): responder.draft_reply(s, tid, llm=llm)
+    assert 'After 4 is better' in got['user'] and 'Cc: Paula Vance\n' in got['user']
+    assert 'A nudge that is only a name ("Paula?") asks that person to answer' in got['system']
+    assert 'never asks you to add or include them' in got['system'] and 'Read your own last reply' in got['system']

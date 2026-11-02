@@ -618,15 +618,13 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(len(pile(s)), 4)
         words = "skip all the northwind financial reports, that is taken care of"
         # the model names the SET (2026-10-08: no word list sweeps the owner's sentence)
-        p = say(s, words, key=pile(s)[0]['key'], model='Ok.' + chr(10) + 'CALL: ' + json.dumps(
-            {'kind': 'pipe.clear', 'params': {'select': {'contains': 'Northwind Financial Report'}}}))['proposal']
-        self.assertEqual((p['kind'], p['params']['select'], p['label']), ('pipe.clear', {'contains': 'Northwind Financial Report'}, 'Mark 3 items read'))
-        self.assertEqual(len(pile(s)), 4)                              # nothing swept on the words
-        r = run(s, p)
-        self.assertEqual(r.json()['outcome']['cleared'], 3)
+        # ...marked read at once, on a phone too: it sends and closes nothing (the owner, 2026-11-02: small changes act without asking)
+        out = say(s, words, key=pile(s)[0]['key'], model='Ok.' + chr(10) + 'CALL: ' + json.dumps(
+            {'kind': 'pipe.clear', 'params': {'select': {'contains': 'Northwind Financial Report'}}}))
+        self.assertFalse(out.get('proposal')); self.assertEqual(out['cleared'], 3)
         self.assertEqual([i['who'] for i in pile(s)], ['Omar'])
         self.assertEqual(funnel.mutes(s), [])                          # a reason in the words writes no rule (R8)
-        self.assertIn('Marked 3 items read - ', r.json()['receipt'])
+        self.assertIn('3 items read', out['say'])
         self.assertTrue(keep['message_id'])
 
     def test_split_is_confirmed_then_breaks_one_arrival_into_two_jobs(self):
@@ -1072,7 +1070,8 @@ class WalkFromWordsTests(unittest.TestCase):
                       f'CALL: {{"kind": "task.watch", "params": {{"ref": "TQ-{tid:04d}", "what": "reply"}}}}'])
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'tell me when Erin replies', llm=lambda *a, **k: next(turns))
-        self.assertEqual((out['proposal']['kind'], out['proposal']['params']['what']), ('task.watch', 'reply'))
+        # ...and the fixed call is the row's Watch it, desk and phone alike (the owner, 2026-11-02: "both should mean same thing")
+        self.assertEqual((out['proposal']['kind'], out['proposal']['params']), ('task.watching', {}))
 
     def test_an_answer_it_looked_up_survives_a_stray_decision_on_the_end(self):
         """"What happened with TQ-0731" was read and answered, then "CALL: {\"kind\": \"reply\", \"params\": {}}" - and the owner got

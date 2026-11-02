@@ -3,12 +3,13 @@ import test from "node:test";
 import { boot, clickRow, doVerb, rail, sleep } from "./walkdriver.mjs";
 
 /* WATCH IT (watch.py, the owner, 2026-11-01): a task that is not the owner's, kept open while somebody else handles it. The press sends
-   nothing; the row leaves the walk and sits under Watching at the foot of Tasks, the walk going on to the row that was below it. Opened
-   again, the same button (Stop watching) ends the watch and the row is back under Tasks. */
+   nothing; the row moves under Watching at the foot of Tasks - still on the walk, which reaches it after Tasks (the owner, 2026-11-02) -
+   and the walk goes on to the row that was below it. Opened again, the same button (Stop watching) ends the watch and the row is back
+   under Tasks. */
 const until = (page, f, arg, timeout = 20000) => page.waitForFunction(f, { timeout, polling: 100 }, arg).catch(() => {});
 const under = (page, key) => page.evaluate((k) => document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"]`)?.closest("[data-tq-run]")?.getAttribute("data-tq-run") || null, key);
 
-test("Watch it moves the task under Watching, off the walk, and Stop watching brings it back to Tasks", { timeout: 180000 }, async (t) => {
+test("Watch it moves the task under Watching, the walk going on below it, and Stop watching brings it back to Tasks", { timeout: 180000 }, async (t) => {
   const { page, errors } = await boot(t);
   const tasks = await page.$$eval('[data-tq-run="task"] .tq-pile-row', (els) => els.map((e) => ({ key: e.getAttribute("data-tq-key"), text: e.innerText })));
   const pick = tasks.find((r) => /TQ-\d+/.test(r.text)) || tasks[0];

@@ -75,6 +75,10 @@ A drafted reply comes to the chat with its **Close out** choice - the same butto
 number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as
 approving on the page. The chat never pings you on its own: it speaks when you write to it or hand it the walk.
 
+What you type goes the same way: anything that sends or closes - a reply, a hand-off, **Mark done** - asks yes or no
+first. A small change that sends nothing and closes nothing is done at once and said: a priority, the kind of work, its
+repository, **Remind me** with a day, **Watch it**, or "mark the FYI read".
+
 ## The morning line
 
 Off unless you switch it on (Settings → Assistant on your phone). Once a day, the assistant can then open with a short line about the day ahead — what slipped, what is
@@ -112,8 +116,9 @@ bot API and has no such caveat.
 The morning line and the walk offer the rail's sections as choices - **Walk Tasks**, **Walk For later**, **Walk Reports**,
 **Walk FYI** - and you stay inside the one you picked until it is empty, whether you press **Next** or act on the item
 (Make a task, Send to agent, Remind me, Watch it). When the section runs out it says so, and the walk carries on. Rows under For
-later say when they come back ("back in 3h"). **Walk Watching** opens the tasks you keep an eye on for somebody else - press any
-move on one to stop watching it.
+later say when they come back ("back in 3h"). Tasks under **Watching** - the ones you keep an eye on for somebody else - are
+still walked, after Tasks, and **Walk Watching** opens them on their own; press any move on one to stop watching it. "Watch
+this" typed is the same **Watch it** as the button, on the phone and on the desktop.
 
 **Connections**, **Reports**, **Hub** and **Settings** are choices too - the desktop sidebar's four, as picks:
 

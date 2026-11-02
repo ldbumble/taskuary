@@ -38,12 +38,13 @@ _PRESSES = OrderedDict()                              # press id -> the Answer i
 # ── the line ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def line(items: list) -> list:
     """The rows the walk stands on, in the rail's own drawing order: everything the rail draws but For later (rows Remind me put away,
-    rule 5), Watching (tasks Watch it keeps open for somebody else, never walked - watch.py) and rows still being triaged. Nothing else
-    filters it - if the rail draws a row, the walk can stand on it."""
+    rule 5) and rows still being triaged. Nothing else filters it - if the rail draws a row, the walk can stand on it. Watching is walked
+    (the owner, 2026-11-02: Watch it "should keep it on the walk") - it sits below Tasks, so the walk reaches it after them (watch.py)."""
     return sorted((r for r in items or () if not r.get('settling') and lanes.level_of(r) not in AWAY), key=funnel.order_key)
 
 
-AWAY = ('later', 'watching')                          # the sections the walk never stands on: put away with a date, or watched
+AWAY = ('later',)                                     # the section the walk never stands on: put away with a date
+TASKS = ('task', 'watching')                          # a task's rows: Next leaves them on the rail, opening clears their +N
 
 
 def _rows(store) -> list:
@@ -92,12 +93,13 @@ def batchable(row: dict) -> bool:
 
 def kind_of(row: dict | None) -> str:
     """The effect Next has on a row, taken from its section WHEN IT WAS PUT ON SCREEN (3.5): `stays` under Tasks, `reads` under Reports,
-    Advisor ideas and FYI (an agent's finished task included), `none` for a For later or Watching row or a closed task opened by name."""
+    Advisor ideas and FYI (an agent's finished task included), `stays` under Watching too, `none` for a For later row or a closed task
+    opened by name."""
     if not row: return 'none'
     if row.get('kind') in ('agentdone', 'fyis'): return 'reads'
     level = lanes.level_of(row)
     if row.get('closed') and level == 'task': return 'none'
-    return 'stays' if level == 'task' else 'none' if level in AWAY else 'reads'
+    return 'stays' if level in TASKS else 'none' if level in AWAY else 'reads'
 
 
 def _arrival(store, item: dict):
@@ -400,7 +402,7 @@ def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at:
         if not item:
             from . import concierge
             return _remember(press, _answer(store, st, rows, concierge.missing_turn(store, key, actor)))
-        if row is not None and lanes.level_of(row) in ('task', *AWAY):
+        if row is not None and lanes.level_of(row) in (*TASKS, *AWAY):
             try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True)
             except Exception as e: logger.debug(f'railwalk: the +N on {key} was not cleared - {e}')
         place = place_of(store, at, st, rows) if at else place_of(store, item['key'], st, rows) if row is None else None

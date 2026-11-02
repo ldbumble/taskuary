@@ -1520,7 +1520,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import remind
         try: return remind.set_reminder(store, tid, p.get('until'), ACTOR)
         except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 422, str(e))
-    # Watch it (watch.py): kept open under Watching, off the walk - nothing is sent; `off` is the same button pressed on a watched task
+    # Watch it (watch.py): kept open under Watching, walked after Tasks - nothing is sent; `off` is the same button pressed on a watched task
     if kind == 'task.watching':
         from . import watch
         if p.get('off'): return {'taskId': tid, 'watching': False, 'stopped': watch.stop(store, tid, ACTOR)}

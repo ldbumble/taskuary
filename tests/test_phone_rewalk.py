@@ -306,9 +306,9 @@ class ClearFyiTests(PhoneCase):
     def test_with_some_it_says_how_many_it_marked(self):
         for s in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=s)
         _two_asks(self.f); self.ph.ready(); self.ph.walk()
-        self.assertIn('Mark 2 FYI read', text_of(self.ph.type('clear all the FYI')))
-        said = text_of(self.ph.tap('yes, go ahead'))
-        self.assertRegex(said, r'^(Taskuary:\s+)?Marked 2 FYI read - ')
+        # ...at once, no yes first: marking read sends and closes nothing (the owner, 2026-11-02)
+        said = text_of(self.ph.type('clear all the FYI'))
+        self.assertRegex(said, r'^(Taskuary:\s+)?Marked (all )?2 FYI read')
         # ...said once, in the owner's words: "Done - Clear a SET of items from the pipe at once." led it (the overnight walk, 2026-10-26)
         self.assertNotIn('SET', said); self.assertNotIn('pipe', said); self.assertNotIn('Done -', said)
 

@@ -95,25 +95,21 @@ class SelectorTests(unittest.TestCase):
         self.assertTrue(concierge.select_items(s, {'category': cat, 'sender': 'checks@ours.com'}))
         self.assertEqual(concierge.select_items(s, {'category': cat, 'sender': 'nobody@nowhere.com'}), [])
 
-    def test_the_card_counts_the_set_before_it_offers_it_and_the_owner_confirms(self):
+    def test_the_set_is_counted_and_marked_read_at_once(self):
+        # ...a phone too, no yes first: marking read sends and closes nothing (the owner, 2026-11-02: small changes act without asking)
         s = self._pile()
         dock, _ = concierge.general.dock_task(s, 'owner')
         cat, _ = self._class_of(s)
+        n = len(concierge.select_items(s, {'category': cat}))
         call = {'kind': 'pipe.clear', 'params': {'select': {'category': cat}}}
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.call_turn(s, dock['TaskId'], call, None, 'clear all the reports', 'owner')
-        p = out['proposal']
-        n = len(concierge.select_items(s, {'category': cat}))
-        self.assertIn(f"Mark {concierge._set_noun({'category': cat}, n)} read", p['say'])          # the NUMBER is said before the yes
-        self.assertNotIn(f'category: {cat}', p['say'])                   # in words, never the selector's field (F23)
-        self.assertEqual(len(funnel.build(s)['items']), len(funnel.build(s)['items']))   # nothing ran
-        print(f"  proposal says: {p['say'][:90]}")
-        r = T.run(s, p)
-        self.assertEqual(r.status_code, 200, r.text[:300])
-        self.assertEqual((r.json().get('outcome') or {}).get('cleared'), n)
+        self.assertFalse(out.get('proposal'))
+        self.assertEqual(out['cleared'], n)
+        self.assertIn(f"{concierge._set_noun({'category': cat}, n)} read", out['say'])          # the NUMBER is said
+        self.assertNotIn(f'category: {cat}', out['say'])                 # in words, never the selector's field (F23)
         left = [i for i in funnel.build(s)['items'] if i.get('category') == cat]
         self.assertEqual(left, [], 'every report must be gone from Unread, not just the word-matches')
-        print(f"  confirmed -> cleared {(r.json().get('outcome') or {}).get('cleared')}; reports left unread: {len(left)}")
 
     def test_the_sweep_clears_the_row_on_the_table_and_leaves_it_on_screen(self):
         """Clearing the reports cleared seven and kept the report the owner was holding (the owner, 2026-09-07): the sweep clears
@@ -456,9 +452,8 @@ class SweepReachesTheTableTests(unittest.TestCase):
         concierge.set_current(s, dock['TaskId'], held['key'], 'owner')
         call = {'kind': 'pipe.clear', 'params': {'select': {'category': cat}}}
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            p = concierge.call_turn(s, dock['TaskId'], call, None, 'mark all the report items as read', 'owner')['proposal']
-        self.assertEqual(p['key'], held['key'])
-        self.assertTrue(p['settles'])
+            out = concierge.call_turn(s, dock['TaskId'], call, None, 'mark all the report items as read', 'owner')
+        self.assertEqual(out['decision'], {'verb': 'next'}, 'the table went with the rest - the walk moves on')   # marked at once (2026-11-02)
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             other = concierge.call_turn(s, dock['TaskId'], {'kind': 'pipe.clear', 'params': {'select': {'sender': 'nobody@nowhere.com'}}},
                                         None, 'clear those', 'owner')

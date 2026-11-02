@@ -528,7 +528,7 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
     # ...said off the morning's note: remind.due clears the date as it files the note, so the date alone never said it (R13)
     due = any(c.get('Body') == remind.DUE_NOTE and str(c.get('CreatedAt') or '')[:10] == f'{now:%Y-%m-%d}' for c in view.get('comments') or [])
     if active and not read.get('deferred') and due: card['why'] = 'you asked to be reminded about this today'
-    # WATCHING (watch.py, the owner, 2026-11-01): kept open for somebody else to handle - under Watching, off the walk - unless its agent
+    # WATCHING (watch.py, the owner, 2026-11-01): kept open for somebody else to handle - under Watching, walked after Tasks - unless its agent
     # is asking, which gets through as it does through a reminder
     from . import watch
     card['watching'] = bool(active and watch.watching(task) and not asking_now and not read.get('deferred'))
@@ -609,7 +609,7 @@ def on_rail(card) -> bool:
     kept put-away rows that pile() then dropped (the final review)."""
     if card.get('folded'): return False
     if str(card.get('kind') or '').startswith('goal') and card.get('tid') and not card.get('closed'): return True
-    # ...and a task under Watching, open and off the walk until its thread moves (watch.py)
+    # ...and a task under Watching, open and walked after Tasks until its thread moves (watch.py)
     return bool(card.get('unread') or ((card.get('deferred') or card.get('watching')) and card.get('tid') and not card.get('closed')))
 
 

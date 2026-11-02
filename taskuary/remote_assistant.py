@@ -1217,6 +1217,8 @@ def _settled_the_table(prop: dict, item: dict | None) -> bool:
     # (F19): typed, it said "Away until ..." and sat on the card it had just put away
     p = prop.get('params') or {}
     if not item: return False
+    # ...and Watch it on the table's own task, as the desk's Watch it moves the walk on (railwalk.HOW); its Stop watching stays put
+    if prop.get('kind') == 'task.watching': return str(prop.get('target') or '') == str(item.get('tid') or '-') and not p.get('off')
     if prop.get('kind') == 'task.defer':
         return str(prop.get('target') or '') == str(item.get('tid') or '-') and str(p.get('until') or '').strip().lower() not in ('', 'none')
     return prop.get('kind') == 'item.settle' and str(p.get('verb') or '') in ('later', 'skip') and p.get('key') in (None, item.get('key'))

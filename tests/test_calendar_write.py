@@ -121,6 +121,8 @@ class TheOwnersMove(unittest.TestCase):
         verbs = [c['verb'] for c in concierge.chips_for(s, item)]
         self.assertEqual(verbs[:3], ['accept_invite', 'decline_invite', 'propose_time'])
         self.assertNotIn('reply', verbs)
+        # ...and Send to agent after them, to prepare for it (the owner, 2026-11-02) - its box asks what first, as on the task page
+        self.assertIn('regular_agent', verbs); self.assertIn('regular_agent', {b['verb'] for b in concierge.row_buttons(s, item)})
         # ...and once an answer is drafted all three stay, its Send first: another press REPLACES the drafted answer
         with mock.patch.object(calwrite, 'busy', return_value=BUSY): first = calwrite.draft(s, out['message_id'], 'accept')
         rv_item = {**item, 'kind': 'review', 'rid': first['reviewId'], 'draft': True}

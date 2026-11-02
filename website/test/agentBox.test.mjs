@@ -42,8 +42,14 @@ test("the canvas's Send to agent - a chip, the Advisor's pick - opens the box wh
   assert.ok(advice.indexOf("askAgent(currentRef.current, liveVerb(a.verb))") < advice.indexOf("proposeDirect(a.verb"), "the Advisor's pick too");
   // a task on the table opens ITS box, in its agent step; anything else gets the box under its card
   assert.match(v, /if \(item\?\.tid && showsTask\(item, cardFor\(item\)\)\) \{ window\.dispatchEvent\(new CustomEvent\("tq-agent-ask"/);
-  assert.match(v, /<AgentAsk inline coding=\{agentOn\.coding\}(?:[^\n]*\n){1,4}?\s+onClose=\{\(\) => setAgentOn\(null\)\} onStart=\{\(o\) => startOnItem\(agentOn\.item, o\)\} \/>/);
-  assert.match(v, /placeholder=\{agentOn\.item\.kind === "report" \? ASK_REPORT : undefined\}/, "a report is asked which part should change");
+  assert.match(v, /<AgentAsk inline coding=\{agentOn\.coding\}(?:[^\n]*\n){1,7}?\s+onClose=\{\(\) => setAgentOn\(null\)\} onStart=\{\(o\) => startOnItem\(agentOn\.item, o\)\} \/>/);
+  assert.match(v, /placeholder=\{agentOn\.item\.kind === "report" \? ASK_REPORT : agentOn\.item\.kind === "meeting" \? ASK_MEETING : undefined\}/,
+    "a report is asked which part should change, a meeting what to get ready");
+  // ...and while it is open the box is the page the pop-up Assistant reads (pageView.js): its words box and its Send to agent (2026-11-02)
+  assert.match(v, /view=\{\{ item: \{ kind: agentOn\.item\.kind \|\| "item", id: agentOn\.item\.key/);
+  const box = read("RunForm.jsx");
+  assert.match(box, /useViewExtras\(box, view \? \{ item: view\.item, title: view\.title \} : \{\}\);/);
+  assert.match(box, /data-tq-view=\{view \? "agent" : undefined\} data-tq-view-label=\{view\?\.title\}/);
   // ...and its Start is the hand-off's own proposal, carrying the words and the picks, run at once
   const start = v.slice(v.indexOf("const startOnItem = async"), v.indexOf("// ANSWER IT has nothing to send"));
   assert.match(start, /api\.post\("\/api\/concierge\/propose", \{ verb: o\.verb, key: item\.key, table: true, exact: true, text: o\.text \|\| null,/);

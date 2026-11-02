@@ -1753,8 +1753,8 @@ class InlineVerbTests(unittest.TestCase):
         verbs = [c['verb'] for c in out['chips']]
         self.assertEqual(out['item']['kind'], 'meeting')
         self.assertNotIn('approve', verbs)                                  # there is no draft on a meeting
-        # read and passed (2026-10-02), with Prepare beside Next since 2026-10-25 - the old Prep me stays gone
-        self.assertEqual(verbs, ['prepare', 'next'])
+        # read and passed (2026-10-02), with Prepare beside Next since 2026-10-25 and Send to agent since 2026-11-02 - the old Prep me stays gone
+        self.assertEqual(verbs, ['prepare', 'regular_agent', 'next'])
         self.assertNotIn('prep', verbs)
 
     def test_an_introduction_never_prints_a_decide_line_and_its_verb_becomes_the_first_chip(self):

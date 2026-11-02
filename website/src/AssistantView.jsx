@@ -69,7 +69,7 @@ import { RemindPicker } from "./RemindMe.jsx";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
-import { ASK_REPORT, AgentAsk } from "./RunForm.jsx";
+import { ASK_MEETING, ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
@@ -989,12 +989,12 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
     : pageOver && !m.card ? [{ verb: "next", label: btn("next") }]   // ...and under a page only the walk's way on (pageOver)
     : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis"
     ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: btn("next") }];
-  // A REPORT OR AN FYI ON THE TABLE is drawn in a task's three sections, at a task's height (ItemSections, the owner 2026-10-28)
+  // A REPORT, AN FYI OR A MEETING ON THE TABLE is drawn in a task's three sections, at a task's height (ItemSections, the owner 2026-10-28)
   const table = live && canvas && m.card && !foldsAs(canvas.folded, m.card.key) && !canvas.browsing ? wordsCap(canvas.height) : null;
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onSent={actions.sent} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
-    meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
+    meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} table={table} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} table={table} />,
     dashboard: <DashboardCard card={c} onOpenTask={actions.openTask} onDone={actions.done} table={table} />,
     idea: <IdeaCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} onDone={actions.done} table={table} />,
@@ -1279,7 +1279,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and Close with a note, the same card: what came of it, and the task view's own close behind the button
   const [noteOn, setNoteOn] = useState(null);           // { task, ref, close(note) }
   // ...and the task view's Run another agent closes them: one agent box open at a time
-  // SEND TO AGENT ON AN ITEM WITH NO TASK PAGE - an email, an fyi, a report run - opens the agent box under it (RunForm.AgentAsk):
+  // SEND TO AGENT ON AN ITEM WITH NO TASK PAGE - an email, an fyi, a report run, a meeting - opens the agent box under it (RunForm.AgentAsk):
   // { item, coding }. Nothing starts until its Start (the owner, 2026-10-23: "you need to write prompt what about the email ... is the issue")
   const [agentOn, setAgentOn] = useState(null);
   useEffect(() => {
@@ -3622,8 +3622,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {!old && agentOn && (
             <div className="tq-browse-line">
               <AgentAsk inline coding={agentOn.coding} title={`${btn(agentOn.coding ? "coding_agent" : "regular_agent")}${agentOn.item.ref ? ` · ${agentOn.item.ref}` : ""}`}
-                what={agentOn.item.kind === "report" ? "It gets this report and its rows." : agentOn.item.mid ? "It gets the message and its attachments." : "It gets this item."}
-                placeholder={agentOn.item.kind === "report" ? ASK_REPORT : undefined}
+                what={agentOn.item.kind === "report" ? "It gets this report and its rows." : agentOn.item.kind === "meeting" ? "It gets the meeting: when, who, where and what the invite says."
+                  : agentOn.item.mid ? "It gets the message and its attachments." : "It gets this item."}
+                placeholder={agentOn.item.kind === "report" ? ASK_REPORT : agentOn.item.kind === "meeting" ? ASK_MEETING : undefined}
+                view={{ item: { kind: agentOn.item.kind || "item", id: agentOn.item.key, ...(agentOn.item.ref ? { ref: agentOn.item.ref } : {}), title: agentOn.item.title || "" },
+                  title: `${btn(agentOn.coding ? "coding_agent" : "regular_agent")} - ${agentOn.item.kind === "meeting" ? "the meeting " : ""}${agentOn.item.title || agentOn.item.ref || "this item"}` }}
                 onClose={() => setAgentOn(null)} onStart={(o) => startOnItem(agentOn.item, o)} />
             </div>
           )}

@@ -129,7 +129,9 @@ CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'watch', 'not_ours', 
          # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
-         'agent': ('stop_agent', 'defer', 'watch', 'next'), 'meeting': ('prepare', 'next'),
+         # ...and Send to agent beside it (the owner, 2026-11-02: "buttons to send to agent so i can prep for it"): the agent box asks what
+         # to get ready, and the meeting rides along under those words (propose_for's create_from_text, the item's facts)
+         'agent': ('stop_agent', 'defer', 'watch', 'next'), 'meeting': ('prepare', 'regular_agent', 'next'),
          # ...and Pause this report, for the Advisor to light over a run whose findings the owner said they do not care about (the owner,
          # 2026-10-27: "the Advisor may suggest switching a report off"); the press is the owner's, the report stays under Reports
          'report': ('mine', 'regular_agent', 'report_off', 'next'), 'agentdone': ('close', 'reply', 'next'),
@@ -630,7 +632,8 @@ def facts(store, item: dict, whole: bool = False) -> str:
     if item['kind'] == 'meeting':
         e = item.get('event') or {}
         lines.append(f"meeting {e.get('start')} - {e.get('end') or ''}" + (f" with {', '.join(e.get('who') or [])}" if e.get('who') else '')
-                     + (f" | where: {e.get('where')}" if e.get('where') else '') + (f" | the invite says: {_cut(e.get('about'), 400)}" if e.get('about') else ''))
+                     + (f" | where: {e.get('where')}" if e.get('where') else '') + (f" | organizer: {e.get('organizer')}" if e.get('organizer') else '')
+                     + (f" | join: {e.get('join')}" if e.get('join') else '') + (f" | the invite says: {_cut(e.get('about'), 400)}" if e.get('about') else ''))
     # why it is BACK. The card says this itself; the spoken answer has to say the same thing, or "why
     # am I seeing this again?" gets two answers (the owner, 2026-09-15: "if they ask why explain it
     # should be closed").
@@ -1025,10 +1028,11 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if item.get('kind') == 'idea' and item.get('idea_kind') == 'habit': verbs = ['next']
     # AN INVITE WAITING ON YOUR ANSWER is answered here - Accept, Decline, Propose a new time, each drafted for your Send - and a
     # thread asking to meet offers Find a time beside Reply (calwrite.py, the owner, 2026-10-20). An email reply is not how an
-    # invite is answered, nor is it an agent's or a list's.
+    # invite is answered, nor is it a list's - but it may be handed to an agent to prepare, as its task page's own Send to agent does
+    # (the owner, 2026-11-02: "send to agent ... or calendar invite"), its box asking what first
     inv, meet = calendar_asks(store, item)
     if inv:
-        rest = [v for v in verbs if v not in ('reply', 'mine', 'regular_agent')]
+        rest = [v for v in verbs if v not in ('reply', 'mine')]
         lead = [v for v in rest if v == 'approve']               # a drafted answer's Send leads; the other answers replace it
         verbs = lead + ['accept_invite', 'decline_invite', 'propose_time'] + [v for v in rest if v not in lead]
     elif meet:
@@ -5795,8 +5799,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # owner's words, not the card's hand-off - it still comes back as a proposal for his yes (2026-10-02: the meeting lost
     # its Send to agent button, and the typed road must not go with it)
     # ...a TASK on the table is never one of those: its own Send to agent takes the words as what to do first (_start_agent, 2026-11-02)
+    # ...nor a MEETING, which has its Send to agent again (the owner, 2026-11-02: "send to agent so i can prep for it"): the words are what to
+    # get ready, the meeting rides under them
     own_job = verb in ('coding_agent', 'regular_agent') and str((decision or {}).get('text') or '').strip() and not (target_item or {}).get('mid') \
-        and not ((target_item or {}).get('tid') and routes())
+        and not (((target_item or {}).get('tid') or (target_item or {}).get('kind') == 'meeting') and routes())
     if decision and verb and target_item and not elsewhere and not own_job and not is_button(store, target_item, verb):
         if not reply: reply, options = _in_words(llm, system, table, text, verb)
         decision = verb = None

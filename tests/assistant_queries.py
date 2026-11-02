@@ -549,6 +549,14 @@ def idea_row(s):
     i = s.upsert_idea({'key': 'idea:weekly-ledger', 'kind': 'idea', 'sig': 'y', 'text': 'The ledger reconciliation repeats monthly - worth automating.',
                        'action': {}}, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     funnel.invalidate(); return f"idea:{i['IdeaId']}"
+def meeting_row(s):
+    "A meeting coming up in 40 minutes, on a calendar the demo world lacks (`agenda`, read by _guards) - invented people."
+    from datetime import datetime, timedelta
+    from taskuary import funnel
+    at = lambda m: (datetime.now() + timedelta(minutes=m)).strftime('%Y-%m-%dT%H:%M:%S')
+    s.agenda = [{'subject': 'Ledger cut-over plan', 'start': at(40), 'end': at(70), 'who': ['Gail Moreno', 'Paula Vance'], 'where': 'Teams',
+                 'about': 'Which entities move first', 'join': 'https://meet.northwind.example/cutover', 'all_day': False, 'id': 'ev-cutover'}]
+    funnel.invalidate(); return f"meeting:{at(40)[:16]}:Ledger cut-over plan"
 AREA_RAIL = [
     Q('rail', 'whats nxt', 'todo', c('next'), 'next', freq=4),
     Q('rail', 'go back to the one before', 'todo', c('button.light', button='back'), 'card', freq=4,
@@ -581,6 +589,10 @@ AREA_RAIL = [
       note='keep was no `how` - refused'),
     Q('rail', 'the sign-in one is not right', 'habit', c('memory.wrong', key='sso threads', how='wrong'), 'did:memory.wrong', freq=2, seed=habits_row),
     Q('rail', 'no to the fyi one', 'habit', c('memory.wrong', key='fwd fyi', how='wrong'), 'did:memory.wrong', freq=1, seed=habits_row),
+    # ── a meeting coming up: Prepare and Send to agent on its row, the agent box's words leading (the owner, 2026-11-02) ──
+    Q('rail', 'send this meeting to an agent to prep me - pull the open issues with these people', 'meeting',
+      c('regular_agent', text='Prep me for this meeting: pull the open issues with Gail Moreno and Paula Vance'), 'did:task.create_from_text', freq=4, seed=meeting_row,
+      note="the row's Send to agent, pressed with the owner's words; the meeting rides under them"),
     # ── about the rail itself ──
     Q('rail', 'why is this one at the top?', 'todo', [c('docs.search', query='work rail'), 'Rows sit in the order they arrived.'], 'read:docs.search', freq=2),
     Q('rail', 'what is the habits row', None, [c('docs.search', query='habits row'), 'One row for every habit the Advisor learned.'], 'read:docs.search', freq=1),
@@ -1256,9 +1268,14 @@ def _world():
     return s
 
 
-def _guards(stack, sort=None, live=None):
+def _guards(stack, sort=None, live=None, agenda=None):
     """No real model, ever: the CLI and API builders raise, and the set-up sorter answers from the case."""
-    from taskuary import concierge, ingest, llm as llm_mod, terminal
+    from taskuary import concierge, funnel, ingest, llm as llm_mod, terminal
+    # ...and a calendar where a case's seed laid one (meeting_row): the demo world has none
+    if agenda: stack.enter_context(mock.patch.object(funnel, '_agenda', lambda store, block=True: list(agenda)))
+    # ...nor a general hand-off's chat session: no first turn is sent to an AI (concierge.handoff_task)
+    from taskuary import general
+    stack.enter_context(mock.patch.object(general, 'start_session', return_value=mock.Mock()))
     def never(*a, **k): raise AssertionError('a real model was asked for')
     stack.enter_context(mock.patch.object(llm_mod, 'make_cli_llm', never))
     stack.enter_context(mock.patch.object(llm_mod, 'build_llm', never))
@@ -1327,7 +1344,7 @@ def ideal_turn(q: Q) -> dict:
     def read(store, item, call):
         found = real_read(store, item, call); reads.append(call['kind']); return found
     with ExitStack() as st:
-        _guards(st, q.sort, q.live)
+        _guards(st, q.sort, q.live, getattr(s, 'agenda', None))
         st.enter_context(mock.patch.object(server, 'store', s))          # a typed put-down runs its operation (concierge._put_down)
         st.enter_context(mock.patch.object(concierge, '_read', read))
         err = None
@@ -1366,7 +1383,7 @@ def demo_turn(q: Q) -> dict:
     s = _world()
     key = (q.seed(s) if q.seed else None) or TABLES[q.table]
     with ExitStack() as st:
-        _guards(st, q.sort, q.live)
+        _guards(st, q.sort, q.live, getattr(s, 'agenda', None))
         st.enter_context(mock.patch.object(server, 'store', s))
         try: out = concierge.say(s, q.text, key=key, llm=demo.brain(store=s))
         except Exception as e: out = {'say': f'RAISED {type(e).__name__}: {e}'}

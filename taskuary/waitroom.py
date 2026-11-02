@@ -138,7 +138,7 @@ def full_on_stranger(store, tid: int, t) -> bool:
 
 def deliver(store, tid: int) -> dict:
     """Hand this task's waiting notes over IF the agent has stopped. {'delivered': n, 'state': ...}
-    - 'held' states are the ones where nothing moved: working, asking, closed, full."""
+    - 'held' states are the ones where nothing moved: working, asking, closed, full, owner_typing."""
     from . import terminal as term
     from .ingest import has_room
     pending = store.waiting_notes(tid)
@@ -154,6 +154,10 @@ def deliver(store, tid: int) -> dict:
         last = next((c for c in reversed(store.list_comments(tid)) if c.get('Actor') == 'router'), None)
         if (last or {}).get('Body') != why: store.add_comment(tid, 'router', 'agent', why)
         return {'delivered': 0, 'state': 'held_stranger', 'why': why, 'left': len(pending)}
+    # NEVER INTO THE OWNER'S HALF-TYPED WORDS (2026-11-02): the owner typed in the box while the agent worked, it stopped, and the note
+    # went in mid-sentence - one garbled prompt, their words split around it. It keeps its place; the next tick looks again.
+    if st in ('asking', 'parked') and term.owner_drafting(t):
+        return {'delivered': 0, 'state': 'owner_typing', 'left': len(pending)}
     if st == 'asking':
         # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
         # ANSWER to it: bound to its open request where the worker reported one, typed in plainly

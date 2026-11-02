@@ -10262,7 +10262,9 @@ async def terminal_ws(ws: WebSocket, sid: str):
             while True:
                 try: chunks.append(input_q.get_nowait())
                 except asyncio.QueueEmpty: break
-            await asyncio.to_thread(t.write, ''.join(chunks))
+            keys = ''.join(chunks)
+            if hasattr(t, 'keyed'): t.keyed(keys)              # the owner's own draft: nothing is typed into it (terminal.owner_drafting)
+            await asyncio.to_thread(t.write, keys)
     input_pump = asyncio.create_task(to_pty())
     try:
         # RENDERED, not raw (terminal.replay_text): the raw bytes of a full-screen TUI replay as

@@ -335,11 +335,16 @@ is what you see if those cards cannot load.</li>
 <p>Someone whose auto-reply says they are away never slips. The day is read from the ledger, never from the mail.</p>
 <h3 id="advise-on-the-item-that-changed">Advise on the item that changed<a class="anchor" href="#advise-on-the-item-that-changed" aria-label="Link to this section">#</a></h3>
 <p><code>advisor_events</code> · type: switch</p>
-<p>When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.</p>
+<p>When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor&#39;s model reads the item - looking more up when it needs to - and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.</p>
 <p>Never a row and never a change to the rail&#39;s order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule.</p>
+<h3 id="model-the-advisor-reads-with">Model the Advisor reads with<a class="anchor" href="#model-the-advisor-reads-with" aria-label="Link to this section">#</a></h3>
+<p><code>advisor_model</code> · type: select</p>
+<p>The Advisor&#39;s model decides every button it lights, reading the whole item. Standard by default; light saves money and reads less well.</p>
+<p>Options: <code>standard</code>, <code>light</code></p>
+<p>In Auto mode the rules under the AI cards pick the tier instead. The finish check, which reads an agent&#39;s finished work, runs on the same model.</p>
 <h3 id="event-judgements-per-hour-at-most">Event judgements per hour, at most<a class="anchor" href="#event-judgements-per-hour-at-most" aria-label="Link to this section">#</a></h3>
 <p><code>advisor_event_cap</code> · type: number</p>
-<p>The small prompt runs once per item per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 30 by default.</p>
+<p>The Advisor&#39;s model reads an item once per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 60 by default.</p>
 <p>The Advisor&#39;s notes on an item (the clock menu) say when a judgement was dropped for the cap.</p>
 <h3 id="what-it-looks-for">What it looks for<a class="anchor" href="#what-it-looks-for" aria-label="Link to this section">#</a></h3>
 <p><code>assistant_producers</code> · type: channels · default: <code>followup,promise,prep,cold,idea</code></p>

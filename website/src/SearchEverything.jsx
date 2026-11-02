@@ -102,7 +102,9 @@ function Row({ hit, words, on, onPick, onTask, onHover, onMessage }) {
   const ref = useRef(null);
   useEffect(() => { if (on) ref.current?.scrollIntoView({ block: "nearest" }); }, [on]);
   return (
-    <Box ref={ref} role="option" aria-selected={on} data-tq-search-hit={hit.id} onClick={() => onPick(hit)} onMouseMove={onHover}
+    // ...named by its title and kind, and a press to the Assistant (pageView data-tq-view-press): "open the first hit" clicks it here
+    <Box ref={ref} role="option" aria-selected={on} data-tq-search-hit={hit.id} data-tq-view-press="" aria-label={`${hit.title || "untitled"} (${kindOf(hit).label})`}
+      onClick={() => onPick(hit)} onMouseMove={onHover}
       onMouseDown={(e) => e.preventDefault()}
       sx={{ position: "relative", display: "flex", gap: 1.25, alignItems: "flex-start", px: 1.5, py: 1, mx: 0.75, borderRadius: "9px",
         cursor: "pointer", bgcolor: on ? "#f0ebe3" : "transparent", transition: "background-color .08s" }}>
@@ -249,7 +251,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   return (
     // no disableRestoreFocus (verify, 2026-10-20): Esc left focus on the page, and words typed next went nowhere - a cancel gives it
     // back to where it was (the chat's composer); a pick moves it on from there, to what it opened (focusOpened)
-    <Dialog open={open} onClose={onClose} data-tq-search="true"
+    // ...a view of its own to the Assistant (pageView.js: a dialog over the page is the page): its box to type in, its hits to press
+    <Dialog open={open} onClose={onClose} data-tq-search="true" data-tq-view="search" data-tq-view-label={q.trim() ? `Search everything, for “${q.trim()}”` : "Search everything"}
       slotProps={{ backdrop: { sx: { bgcolor: "rgba(38,37,33,.28)", backdropFilter: "blur(2px)" } } }}
       sx={{ "& .MuiDialog-container": { alignItems: "flex-start" } }}
       PaperProps={{ sx: { mt: "9vh", width: 680, maxWidth: "calc(100vw - 32px)", borderRadius: "14px", bgcolor: PANEL,

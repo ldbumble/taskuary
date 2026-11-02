@@ -123,6 +123,27 @@ class TakeTests(unittest.TestCase):
             self.assertEqual(ops, [{'op': 'open', 'area': 'hub', 'section': 'importers', 'open': 3}])
         self.assertEqual(pageview.take(view_line(op='open', area='settings', open='3'), pageview.clean(TASK))[1][0]['open'], '3')
 
+    def test_search_opens_with_its_words_and_a_hit_is_pressed_by_its_title(self):
+        # the owner, 2026-11-02: Search everything is a view - its box typed, a hit opened. The hit is on no view the turn carried, so it
+        # is the opened dialog's to find (pageView.runOne), as after any open
+        _, ops = pageview.take(view_line(op='open', area='search', query='invoice 88213') + '\n' + view_line(op='press', button='Invoice 88213'),
+                               pageview.clean(TASK))
+        self.assertEqual(ops, [{'op': 'open', 'area': 'search', 'query': 'invoice 88213'}, {'op': 'press', 'button': 'Invoice 88213'}])
+
+    def test_the_hubs_write_one_is_filled_and_its_post_it_is_lit_never_pressed(self):
+        # the owner, 2026-11-02: the Write one dialog is a view; others read the Hub, so Post it is the owner's press (as hub.publish)
+        write = {'area': 'hub_write', 'title': 'Write one - a new Hub post',
+                 'fields': [{'key': 'title', 'label': 'Title - what is true', 'value': ''}, {'key': 'topic', 'label': 'Topic', 'value': ''},
+                            {'key': 'kind', 'label': 'Kind', 'kind': 'choice', 'value': 'new idea'},
+                            {'key': 'body', 'label': 'Body - why, and what to do about it', 'value': ''}],
+                 'buttons': [{'id': 'close_hub_entry', 'label': 'Close Hub entry'}, {'id': 'cancel', 'label': 'Cancel'},
+                             {'id': 'post_it', 'label': 'Post it', 'enabled': False, 'send': True}]}
+        _, ops = pageview.take('\n'.join([view_line(op='set', field='title', value='Finance closes on the first Wednesday'),
+                                          view_line(op='set', field='Topic', value='payroll'), view_line(op='press', button='Post it')]),
+                               pageview.clean(write))
+        self.assertEqual([o['op'] for o in ops], ['set', 'set', 'point'])
+        self.assertTrue(ops[-1].get('send'))
+
 
 class TurnTests(unittest.TestCase):
     def setUp(self): self.s = store()

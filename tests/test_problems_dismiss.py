@@ -85,5 +85,44 @@ class DismissTests(unittest.TestCase):
         self.assertFalse(guard.denied('GET', '/api/problems'))
 
 
+class AssistantDismissTests(unittest.TestCase):
+    """THE BELL'S DISMISS, SAID IN THE CHAT (the owner, 2026-11-02: "clear the error on the bell"): problems.dismiss does what the
+    bell's own Dismiss / Got it does, with the bell open or shut - kept and said, never a card to press."""
+    def test_the_tool_is_offered_and_runs_at_once(self):
+        from taskuary import operations, toolcatalog
+        self.assertIn('problems.dismiss', operations.KINDS)
+        self.assertIn('problems.dismiss', {k for _, _, ks in toolcatalog.BUCKETS for k in ks})
+        self.assertIn('runs at once, said', toolcatalog.describe('problems.dismiss'))
+        self.assertEqual(toolcatalog.valid('problems.dismiss', {}), '')
+
+    def test_the_only_problem_is_put_down_and_comes_back_if_it_fails_again(self):
+        from taskuary import concierge
+        s, key = _failing('the bridge is down')
+        out = concierge.call_turn(s, 0, {'kind': 'problems.dismiss', 'params': {}}, None, 'clear the error on the bell')
+        self.assertEqual(out['did'], 'problems.dismiss')
+        self.assertTrue(out['say'].startswith('Put down “') and 'comes back if it fails again' in out['say'], out['say'])
+        self.assertEqual(problems.collect(s), [])
+        self.assertIn(key, json.loads(s.get_settings()[problems.DISMISSED]))                # the bell's own record, as its button writes
+
+    def test_several_on_the_bell_name_one_or_all_and_a_miss_changes_nothing(self):
+        from taskuary import concierge
+        s, gh = _failing('the token expired')
+        cid = s.get_connector_by_type('outlook')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1, 'Name': 'Work mail'}, 'o')
+        s.touch_connector(cid, 'the mailbox did not answer'); s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', (_ago(60), cid))
+        self.assertEqual(len(problems.collect(s)), 2)
+        with self.assertRaisesRegex(concierge.CallMiss, 'several.*Nothing was changed'):
+            concierge.call_turn(s, 0, {'kind': 'problems.dismiss', 'params': {}}, None, 'clear the bell')
+        with self.assertRaisesRegex(concierge.CallMiss, 'Nothing on the bell matches'):
+            concierge.call_turn(s, 0, {'kind': 'problems.dismiss', 'params': {'which': 'payroll'}}, None, 'x')
+        self.assertEqual(len(problems.collect(s)), 2)
+        concierge.call_turn(s, 0, {'kind': 'problems.dismiss', 'params': {'which': 'work mail'}}, None, 'dismiss the work mail one')
+        self.assertEqual([p['key'] for p in problems.collect(s)], [gh])
+        concierge.call_turn(s, 0, {'kind': 'problems.dismiss', 'params': {'which': 'all'}}, None, 'clear them all')
+        self.assertEqual(problems.collect(s), [])
+        with self.assertRaisesRegex(concierge.CallMiss, 'Nothing is on the bell'):
+            concierge.call_turn(s, 0, {'kind': 'problems.dismiss', 'params': {}}, None, 'clear the bell')
+
+
 if __name__ == '__main__':
     unittest.main()

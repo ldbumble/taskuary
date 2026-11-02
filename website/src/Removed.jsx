@@ -71,7 +71,8 @@ export function RecentlyDeleted({ kinds, onRestored, sx }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ color: DIM, fontWeight: 600, fontSize: 13.5 }} noWrap>{d.title}</Typography>
             <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
-              {d.kind} · gone for good {d.days_left > 0 ? `in ${plural(d.days_left, "day")}` : "today"}
+              {/* ...a Hub post is never gone for good: past its days it leaves this list and stays on the Hub's removed shelf */}
+              {d.kind} · {d.kind === "hub post" ? "off this list" : "gone for good"} {d.days_left > 0 ? `in ${plural(d.days_left, "day")}` : "today"}
             </Typography>
           </Box>
           <Button size="small" variant="outlined" onClick={() => restore(d)}>Restore</Button>

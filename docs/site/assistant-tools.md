@@ -15,7 +15,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete |
-| **app** | settings, connections, scripts, memory, rules, the Hub, the Board and Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?) |
+| **app** | settings, connections, scripts, memory, rules, bell, Hub, Board, Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?), problems.dismiss |
 | **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -683,7 +683,7 @@ Remove a report or workflow.
 
 ## App
 
-Settings, connections, scripts, memory, rules, the Hub, the Board and Search.
+Settings, connections, scripts, memory, rules, bell, Hub, Board, Search.
 
 ### `setting.set`
 
@@ -807,9 +807,9 @@ Change or delete one routing rule (its page: rules). Adding a rule for a sender 
 
 ### `deleted.restore`
 
-Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile. A Hub post taken off is not here: it is on the Hub's own removed shelf, restored there.
+Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule, profile or Hub post. A Hub post the vote took off is not here: it is on the Hub's own removed shelf, restored there.
 
-- `what` - its title as deleted.list says it
+- `what` - its title as deleted.list says it (or its kind, "hub post", when it is the only one)
 
 <p class="runs">Brings up its page, at the thing, for you to press.</p>
 
@@ -851,6 +851,14 @@ Bring up a page app.find cannot link. Finding something to answer from is timeli
 - `query` (optional) - the words to search for, with search
 
 <p class="runs">Brings up its page, at the thing, for you to press.</p>
+
+### `problems.dismiss`
+
+Put down what the bell shows, as its Dismiss or Got it does; none when the bell holds one. It comes back if it fails again after working.
+
+- `which` - words of the problem's title as errors.list prints it, or all
+
+<p class="runs">Runs at once and says what it changed.</p>
 
 ## Look
 
@@ -1006,7 +1014,7 @@ The files agents made on tasks - workbooks, PDFs, documents, charts, pages - eac
 
 ### `deleted.list`
 
-What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles (never a Hub post: the Hub keeps its own removed shelf)
+What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles and Hub posts the owner removed (one the vote took off waits on the Hub's own removed shelf)
 
 <p class="runs">Runs at once and changes nothing.</p>
 

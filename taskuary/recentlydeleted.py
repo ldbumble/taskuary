@@ -14,7 +14,10 @@ import json, time
 from loguru import logger
 
 KEEP_DAYS, UNDO_SECONDS = 30, 600
-LISTED = ('report', 'workflow', 'dashboard', 'rule', 'profile')        # what Recently deleted lists; the rest is an Undo line's alone
+# ...and a Hub post the owner removed (the owner, 2026-11-02): listed here too, so "bring back the hub post I removed" has one shelf to
+# look on. The post itself never leaves the Hub's own removed shelf - this entry going after KEEP_DAYS forgets nothing
+HUB = 'hub post'
+LISTED = ('report', 'workflow', 'dashboard', 'rule', 'profile', HUB)   # what Recently deleted lists; the rest is an Undo line's alone
 SHORT = ('connection', 'signout', 'cli')                   # kept for the Undo line's minutes, then finished off
 
 
@@ -122,6 +125,19 @@ def remove_profile(store, cfg: dict, name: str) -> dict:
     return {'deleted': did, 'title': name, 'kind': 'profile'}
 
 
+def remove_hub(store, lid: int, actor: str = 'owner') -> dict:
+    "The Hub's remove: retired as it always was (it waits on the Hub's removed shelf), and listed here beside it."
+    p = store.lore_get(lid) or {}
+    store.lore_retire(lid, actor)
+    return {'deleted': keep(store, HUB, p.get('Title') or f'Hub post #{lid}', {'lid': lid}), 'title': p.get('Title') or '', 'kind': HUB}
+
+
+def forget_hub(store, lid: int) -> None:
+    "Put back from the Hub's own shelf: its line here goes too, so the two shelves never disagree."
+    for r in store.deleted_rows():
+        if r['Kind'] == HUB and json.loads(r['DataJson'] or '{}').get('lid') == int(lid): store.drop_deleted(r['DeletedId'])
+
+
 def remove_connection(store, cid: int, title: str) -> dict:
     """Remove connection: wiped at once, its sealed sign-in kept for the Undo line's minutes (purge forgets it after)."""
     row = store._one('SELECT ConfigJson, Secret, Active, Scope, LastSyncAt FROM connector WHERE ConnectorId=?', (cid,)) or {}
@@ -221,6 +237,9 @@ def restore(store, cfg: dict, did: int) -> dict:
             if n in cfg.get('agents', {}): cfg['agents'][n] = prof
         config.save(cfg)
         cli_connections.sync(cfg, store)
+    elif kind == HUB:
+        if not store.lore_get(d['lid']): raise Gone('that Hub post is no longer on the Hub')
+        store.lore_restore(d['lid'])
     elif kind == 'task': return {'kind': kind, 'title': r['Title'], 'task_id': _restore_task(store, d)}
     elif kind in SHORT:
         row = d.get('row') or {}

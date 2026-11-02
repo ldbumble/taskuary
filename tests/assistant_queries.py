@@ -936,12 +936,41 @@ HUB = {'area': 'hub', 'title': 'Hub',
                   {'key': 'order', 'label': 'Order', 'kind': 'choice', 'value': 'top'}, {'key': 'tag', 'label': 'Tag', 'kind': 'choice', 'value': ''}],
        'buttons': [{'id': 'everything_6', 'label': 'everything · 6'}, {'id': 'importers_2', 'label': 'importers · 2'},
                    {'id': 'payroll_1', 'label': 'payroll · 1'}, {'id': 'removed', 'label': 'removed'}, {'id': 'write_one', 'label': 'Write one'}]}
+# ...each post's buttons named by the post (HubView.jsx `named`, 2026-11-02): ten "remove"s on the list were one name to the Assistant
+def _named(t): return f"“{t[:48]}{'…' if len(t) > 48 else ''}”"
+def _btn(label): return {'id': _slug(label)[:60], 'label': label}
+PYODBC = _named('The AP importer needs pyodbc on the box before its tests mean anything')
 HUBPOST = {'area': 'hub', 'title': 'the Hub post "The AP importer needs pyodbc on the box before its tests mean anything" (importers)',
            'fields': [{'key': 'search_hub', 'label': 'Search Hub', 'value': ''},
                       {'key': 'correct_it_add_to_it_or_say_where_it_bit_you', 'label': 'correct it, add to it, or say where it bit you', 'value': ''}],
-           'buttons': [{'id': 'importers', 'label': 'importers'}, {'id': 'holds_up_agents_are_handed_this_sooner', 'label': 'holds up — agents are handed this sooner'},
-                       {'id': 'wrong_or_stale_below_zero_it_is_removed', 'label': 'wrong or stale — below zero it is removed'},
-                       {'id': 'remove', 'label': 'remove'}, {'id': 'post', 'label': 'Post', 'enabled': False}]}
+           'buttons': [{'id': 'importers', 'label': 'importers'}, _btn(f'Vote up {PYODBC}'), _btn(f'Vote down {PYODBC}'), _btn(f'1 comment on {PYODBC}'),
+                       _btn(f'Remove {PYODBC}'), {'id': 'post', 'label': 'Post', 'enabled': False}]}
+# THE DIALOGS OVER A PAGE (the owner, 2026-11-02): each is the page while it is open (pageView.currentRoot) - the Hub's Write one, Search
+# everything with its hits, and the bell's list with each button named by its problem
+HUBWRITE = {'area': 'hub_write', 'title': 'Write one - a new Hub post',
+            'fields': [{'key': 'title', 'label': 'Title - what is true', 'value': ''}, {'key': 'topic', 'label': 'Topic', 'value': ''},
+                       {'key': 'kind', 'label': 'Kind', 'kind': 'choice', 'value': '💡 new idea'},
+                       {'key': 'body', 'label': 'Body - why, and what to do about it', 'value': ''}],
+            'buttons': [{'id': 'close_hub_entry', 'label': 'Close Hub entry'}, {'id': 'cancel', 'label': 'Cancel'},
+                        {'id': 'post_it', 'label': 'Post it', 'enabled': False, 'send': True}]}
+SEARCHV = {'area': 'search', 'title': 'Search everything, for “invoice”', 'fields': [{'key': 'search_everything', 'label': 'Search everything', 'value': 'invoice'}],
+           'buttons': [_btn('Invoice 88213 from Payworth (Task)'), {'id': 'tq_0004', 'label': 'TQ-0004'}, _btn('Re: Invoice 88213 - remittance (Email)'),
+                       _btn('Vendor invoices over 30 days (Report)')]}
+BELL = {'area': 'bell', 'title': 'The bell - what is failing right now', 'fields': [],
+        'buttons': [_btn(f'{b}: {t}') for t in ('GitHub: the last poll failed', 'Work mail: the last poll failed')
+                    for b in ('Open the card', 'Ask the assistant', 'Dismiss')]}
+
+
+def _failing(s, typ, err):
+    from datetime import datetime, timedelta
+    cid = s.get_connector_by_type(typ)['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Active': 1}, 't'); s.touch_connector(cid, err)
+    s._exec('UPDATE connector SET LastErrorAt=? WHERE ConnectorId=?', ((datetime.now() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S'), cid))
+def bell_one(s): _failing(s, 'github', 'the token expired')
+def bell_two(s): _failing(s, 'github', 'the token expired'); _failing(s, 'outlook', 'the mailbox did not answer')
+def hub_removed(s):
+    from taskuary import recentlydeleted
+    recentlydeleted.remove_hub(s, 3, 'owner')              # the owner's remove on the pyodbc gotcha
 BOARD = {'area': 'board', 'title': 'Agent board', 'fields': [],
          'buttons': [{'id': 'columns', 'label': 'Columns'}, {'id': 'wall', 'label': 'Wall'}, {'id': 'live_handoffs', 'label': 'Live handoffs'},
                      {'id': 'feed_the_agent', 'label': '✎ Feed the agent'}, {'id': 'new_task', 'label': 'New task'}]}
@@ -959,9 +988,10 @@ AREA_HUB_BOARD_SEARCH = [
     Q('hub-board-search', 'open the pyodbc post', None, [v(op='open', area='hub', open='3')], 'view:open:hub', tools=('words',), view=HUB, freq=3,
       note="a post opens by its number - pageview.take hands the Hub a number, as a click on its card does"),
     # ...one post open: its arrows and remove are the owner's kind of press; its Post sends a comment others read, so it is lit
-    Q('hub-board-search', 'vote it up', None, [v(op='press', button='holds up')], 'view:press:holds_up_agents_are_handed_this_sooner', tools=('words',),
+    Q('hub-board-search', 'vote it up', None, [v(op='press', button='Vote up')], f"view:press:{_slug('Vote up ' + PYODBC)[:60]}", tools=('words',),
       view=HUBPOST, freq=3),
-    Q('hub-board-search', 'take this off the hub', None, [v(op='press', button='remove')], 'view:press:remove', tools=('words',), view=HUBPOST, freq=2),
+    Q('hub-board-search', 'take this off the hub', None, [v(op='press', button='Remove')], f"view:press:{_slug('Remove ' + PYODBC)[:60]}", tools=('words',),
+      view=HUBPOST, freq=2),
     Q('hub-board-search', 'comment that the driver is in the build image now', None,
       ['Wrote it in - Post is yours to press.\n' + v(op='set', field='correct it, add to it, or say where it bit you', value='The driver is in the build image now.')
        + '\n' + v(op='press', button='Post')], 'view:point:post', tools=('words',), view=HUBPOST, freq=3,
@@ -976,9 +1006,22 @@ AREA_HUB_BOARD_SEARCH = [
     Q('hub-board-search', 'put this on the hub: finance closes on the first Wednesday', None,
       c('hub.publish', title='Finance closes on the first Wednesday', body='The bank feed has settled by then.', topic='payroll', kind='decision'),
       'open:#hub', freq=2, note="the Hub comes up with the words for its Write one - others read it, so the post is the owner's press"),
-    Q('hub-board-search', 'bring back the hub post I removed', None,
-      [c('deleted.restore', what='hub post'), "A Hub post taken off is on the Hub's own removed shelf - press removed there, then restore beside it."], 'words', freq=1,
-      note="a Hub post is never under Recently deleted - the miss says where it is (concierge.find_deleted, 2026-11-02)"),
+    # ...and a Hub post the owner removed is under Recently deleted too (the owner, 2026-11-02): named by its kind, the Hub comes up with it
+    Q('hub-board-search', 'bring back the hub post I removed', None, c('deleted.restore', what='hub post'), 'open:#hub', freq=2, seed=hub_removed,
+      note='Recently deleted lists it by its kind - "hub post" names the one there'),
+    Q('hub-board-search', 'bring back the post the vote took off', None,
+      [c('deleted.restore', what='hub post'), "A post the vote took off is on the Hub's own removed shelf - press removed there, then restore beside it."], 'words',
+      freq=1, note="the vote's removal is the Hub's own shelf alone - the miss says where it is (concierge.find_deleted)"),
+    # ── the Hub's Write one, a dialog over the page: pressed, filled, and its Post it lit for the owner ──
+    Q('hub-board-search', 'write one: the bank feed lags a day at month end', None,
+      ['Wrote it in - Post it is yours to press.\n' + '\n'.join([v(op='press', button='Write one'), v(op='set', field='title', value='The bank feed lags a day at month end'),
+                                                                   v(op='set', field='body', value='Reconcile on day two.'), v(op='press', button='Post it')])],
+      'view:point:Post it', tools=('words',), view=HUB, freq=2, note="Write one's boxes are the dialog's to find; others read the Hub, so Post it is lit"),
+    Q('hub-board-search', 'title it finance closes on the first Wednesday, topic payroll', None,
+      [v(op='set', field='title', value='Finance closes on the first Wednesday') + '\n' + v(op='set', field='Topic', value='payroll')], 'view:set:title',
+      tools=('words',), view=HUBWRITE, freq=2),
+    Q('hub-board-search', 'post it', None, ['Post it is yours to press.\n' + v(op='press', button='Post it')], 'view:point:post_it', tools=('words',), view=HUBWRITE,
+      freq=2, note="a Hub post is read by others: the owner's press, lit"),
     Q('hub-board-search', 'show me the hub', None, find('hub'), 'link:#hub', freq=3),
     # ── the Board, on screen ──
     Q('hub-board-search', 'switch to the wall', None, [v(op='press', button='Wall')], 'view:press:wall', tools=('words',), view=BOARD, freq=2),
@@ -993,6 +1036,21 @@ AREA_HUB_BOARD_SEARCH = [
     Q('hub-board-search', 'find anything mentioning pyodbc', None, c('page.open', page='search', query='pyodbc'), 'open:#search=pyodbc', freq=3),
     Q('hub-board-search', 'serach for invoice 88213', None, c('page.open', page='search', query='invoice 88213'), 'open:#search=invoice%2088213', freq=2),
     Q('hub-board-search', "what's Gail's email address?", None, [c('sender.read', who='Gail Moreno'), 'gail@northwind.example.'], 'read:sender.read', freq=3),
+    # ...open, it is the page (pageView.currentRoot): its box typed, a hit opened by its title - and brought up with its words from any page
+    Q('hub-board-search', 'search everything for pyodbc and open the first hit', None,
+      [v(op='open', area='search', query='pyodbc') + '\n' + v(op='press', button='pyodbc')], 'view:open:search', tools=('words',), view=HUB, freq=3),
+    Q('hub-board-search', 'open the payworth one', None, [v(op='press', button='Invoice 88213 from Payworth')],
+      f"view:press:{_slug('Invoice 88213 from Payworth (Task)')}", tools=('words',), view=SEARCHV, freq=3),
+    Q('hub-board-search', 'serch for remittance instead', None, [v(op='set', field='Search everything', value='remittance')], 'view:set:search_everything',
+      tools=('words',), view=SEARCHV, freq=2),
+    # ── the bell: its Dismiss by the words in the chat, open or shut; open, each button named by its problem ──
+    Q('hub-board-search', 'clear the error on the bell', None, c('problems.dismiss'), 'did:problems.dismiss', freq=3, seed=bell_one),
+    Q('hub-board-search', 'dismiss the work mail error', None, c('problems.dismiss', which='work mail'), 'did:problems.dismiss', freq=3, seed=bell_two),
+    Q('hub-board-search', 'got it, clear them all', None, c('problems.dismiss', which='all'), 'did:problems.dismiss', freq=2, seed=bell_two, phone=True),
+    Q('hub-board-search', 'clear the bell', None, [c('problems.dismiss'), 'There are two on the bell - which one?'], 'words', freq=2, seed=bell_two,
+      note='several and none named: the miss lists them, nothing is put down'),
+    Q('hub-board-search', 'dismiss the github one', None, [v(op='press', button='Dismiss: GitHub')], f"view:press:{_slug('Dismiss: GitHub: the last poll failed')}",
+      tools=('words',), view=BELL, freq=2, note="the bell's list open is the page: each Dismiss named by its problem"),
     # ── the owner's people (orgchart.py): said and kept; read back from the memory ──
     Q('hub-board-search', 'Gail reports to me', None, c('people.relate', who='Gail Moreno', relation='report'), 'did:people.relate', freq=3),
     Q('hub-board-search', "Ray doesn't own payroll anymore", None, c('people.relate', who='Ray Colton', drops='payroll'), 'did:people.relate', freq=2),
@@ -1107,8 +1165,8 @@ AREA_SELF_KNOWLEDGE = [
       'read:errors.list', freq=3),
     Q('self-knowledge', 'is the outlook connection healthy', None, [c('app.health', name='outlook'), 'Work mail is on; nothing failing.'], 'read:app.health',
       view=IMAP, freq=2, note="the owner's Outlook card is named Work mail: the live card is read, never the catalogue's unused Outlook one"),
-    Q('self-knowledge', 'clear the error on the bell', None, ['Each problem on the bell has its own Got it - press it there; the bell is not something I can press from here.'], 'words',
-      tools=('words',), freq=2, note="the bell is no page the Assistant is shown (pageView ROOTS) and no tool dismisses one"),
+    Q('self-knowledge', 'dismiss whatever is on the bell', None, [c('problems.dismiss'), 'Nothing is failing - the bell is empty.'], 'words',
+      freq=2, note="problems.dismiss over an empty bell: the miss says so, nothing changed (the bell's own cases are under hub-board-search)"),
     # ── its tracker: drafted here, submitted by the owner ──
     Q('self-knowledge', 'taskaury keeps freezing when I press Next', None,
       [c('issue.draft', kind='bug', trying='press Next on the walk', happened='the app froze'), 'A bug report is drafted below for your Submit.'],

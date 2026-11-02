@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { isSecret, isSend } from "../src/pageView.js";
+import { currentRoot, isSecret, isSend } from "../src/pageView.js";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
@@ -37,4 +37,49 @@ test("the chat sends the view only with a line the owner asked, and runs what ca
   assert.match(view, /s\.auto >= 3\) return;/);
   // ...and its × asks before it ends the help
   assert.match(view, /if \(pageView\.sessionNow\(\)\?\.door\) setEnding\(true\); else \{ pageView\.endSession\(\); shutBox\(\); \}/);
+});
+
+// A DIALOG OVER THE PAGE IS THE PAGE (the owner, 2026-11-02): Search everything, the Hub's Write one and the bell's list sit in a portal
+// over a wider page - the widest root in sight was "the page", so the Assistant read the Hub beneath while the owner looked at the dialog
+test("a dialog open over the page is the view, the one opened last on top; with none, the root most in sight", () => {
+  const el = (name, size, modal = false) => ({ name, parentElement: { closest: () => null }, getClientRects: () => [1],
+    closest: (sel) => (modal && sel === ".MuiModal-root" ? {} : null), getBoundingClientRect: () => ({ top: 0, left: 0, bottom: size, right: size }) });
+  const was = { document: globalThis.document, window: globalThis.window, getComputedStyle: globalThis.getComputedStyle };
+  let roots = [];
+  Object.assign(globalThis, { document: { querySelectorAll: () => roots }, window: { innerHeight: 1000, innerWidth: 1000 },
+    getComputedStyle: () => ({ visibility: "visible" }) });
+  try {
+    const hub = el("hub", 900), write = el("hub_write", 400, true), search = el("search", 500, true);
+    roots = [hub]; assert.equal(currentRoot().name, "hub");
+    roots = [hub, write]; assert.equal(currentRoot().name, "hub_write", "the smaller dialog wins over the wider page beneath");
+    roots = [hub, write, search]; assert.equal(currentRoot().name, "search", "the dialog opened last is on top");
+  } finally { Object.assign(globalThis, was); }
+});
+
+test("Search, the Hub's Write one and the bell are views, each press named by what it is about", () => {
+  const search = read("SearchEverything.jsx"), hub = read("HubView.jsx"), bell = read("TaskHubPage.jsx"), src = read("pageView.js");
+  assert.match(search, /<Dialog open=\{open\} onClose=\{onClose\} data-tq-search="true" data-tq-view="search"/);
+  // ...its hits are no buttons, so each says it is a press, named by its title and kind
+  assert.match(search, /data-tq-view-press="" aria-label=\{`\$\{hit\.title \|\| "untitled"\} \(\$\{kindOf\(hit\)\.label\}\)`\}/);
+  assert.match(src, /root\.querySelectorAll\("button, \[role=button\], \[role=tab\], \[data-tq-view-press\]"\)/);
+  // ...brought up with its words in its box, and its hits waited for before one is pressed
+  assert.match(read("AssistantView.jsx"), /area === "search" \? openAppLink\(`#search=\$\{encodeURIComponent\(state\.query \|\| ""\)\}`\)/);
+  assert.match(src, /area === "search" && state\.query && i < 40 && !r\?\.querySelector\('\[data-tq-search-settled="true"\]'\)/);
+  // Write one: its boxes keyed, its Post it an outward press - others read the Hub - lit for the owner, never pressed
+  assert.match(hub, /<Dialog open=\{!!open\} onClose=\{onClose\} fullWidth maxWidth="sm" data-tq-view="hub_write"/);
+  for (const k of ["title", "topic", "kind", "body"]) assert.match(hub, new RegExp(`"data-tq-field": "${k}"`), k);
+  assert.match(hub, /disableElevation data-tq-send="" disabled=\{busy \|\| !title\.trim\(\)/);
+  // ...each post's vote, comments and remove named by its post, so ten "remove"s are ten
+  for (const b of ["`Vote up ${named}`", "`Vote down ${named}`", "`Remove ${named}`", "`Restore ${named}`", '`${plural(commentCount, "comment")} on ${named}`'])
+    assert.ok(hub.includes(`aria-label={${b}}`), b);
+  // the bell: a view while open, and each problem's buttons named by the problem
+  assert.match(bell, /<Popover open=\{!!el\} anchorEl=\{el\} onClose=\{\(\) => setEl\(null\)\} data-tq-view="bell"/);
+  for (const b of ["`Dismiss: ${p.title}`", "`Got it: ${p.title}`", "`Ask the assistant: ${p.title}`"]) assert.ok(bell.includes(`aria-label={${b}}`), b);
+});
+
+test("a Hub post removed is under Recently deleted on the Hub, read again after a press on a post", () => {
+  const hub = read("HubView.jsx");
+  assert.match(hub, /const shelf = <RecentlyDeleted key=\{bin\} kinds=\{\["hub post"\]\} onRestored=\{load\} \/>;/);
+  assert.match(hub, /const changed = \(\) => \{ load\(\); setBin\(\(n\) => n \+ 1\); \};/);
+  assert.match(read("Removed.jsx"), /d\.kind === "hub post" \? "off this list" : "gone for good"/);
 });

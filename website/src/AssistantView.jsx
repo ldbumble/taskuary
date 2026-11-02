@@ -2310,7 +2310,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (key) setLit({ ...lightOf({ verb: verbOfRow(rowId) || rowId, label, key }), landed: true });
   };
   useEffect(() => {
-    pageView.setOpener((area, state) => (area === "board" ? openAppLink(BOARD) : area !== "task" ? browseRef.current?.(area, state) : null));
+    // ...Search everything is a dialog over any view, opened by its link with the words in its box (appLinks #search=)
+    pageView.setOpener((area, state) => (area === "board" ? openAppLink(BOARD) : area === "search" ? openAppLink(`#search=${encodeURIComponent(state.query || "")}`)
+      : area !== "task" ? browseRef.current?.(area, state) : null));
     pageView.setLighter((rowId, label) => lightRef.current?.(rowId, label));
     return () => { pageView.setOpener(null); pageView.setLighter(null); };
   }, []);

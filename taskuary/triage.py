@@ -128,6 +128,9 @@ FIELDS['open_todos'] = "open_todos, on a task in thread_task, room_tasks or open
 ON_TASKS = ('agent_on_it', 'open_todos')      # the FIELDS that ride on a task in the payload rather than at its top
 
 
+# SOUL.md as triage and the reply writer read it - one number for both (doclimits; the Docs editor shows it). Triage took 2,500 while
+# drafts took 4,000, so the shipped document's own closing lines (2,590 characters) never reached triage (2026-11-02).
+SOUL_CHARS = 4000
 JOB_CHARS = 2500             # triage's cut of JOB.md - with workstreams their index and sections lead it (job_doc); the assistant and the chat read it whole (job_doc)
 _JOB_TEMPLATE = re.compile(r'^.*(not generated yet|Write it here).*$', re.M)
 
@@ -789,7 +792,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # fell back to the raw body (TQ-0665, three times in eight replays). A SHAPE cannot
             # argue with the owner's judgement, so nothing is lost by asking for it at the end.
             shape = 'checklist' not in base or '"summary"' not in base
-            system = base + (f"\n\nOperator's document:\n{soul[:2500]}" if soul else '')
+            system = base + (f"\n\nOperator's document:\n{soul[:SOUL_CHARS]}" if soul else '')
             # the job weighs importance - what this arrival means to what the owner is accountable for;
             # it defines no intent, and the document says so in its own first line
             if job: system += f"\n\nThe owner's job (their own document - what they are responsible for, who they serve, what to protect; weigh how much this matters with it):\n{job[:JOB_CHARS]}"

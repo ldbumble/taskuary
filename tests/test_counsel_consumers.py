@@ -41,7 +41,7 @@ class Consumers(unittest.TestCase):
         self.assertNotIn('I SURFACE', out)
 
     def test_over_budget_is_a_warning_and_an_audit_row_never_a_cut(self):
-        big = '- Long voice rule.\n' * 500                                     # > counsel.BUDGET; DOC itself is under it
+        big = '- Long voice rule.\n' * 600                                    # > counsel.BUDGET; DOC itself is under it
         text = counsel.check_budget(self.st, 'counsel', big)
         self.assertEqual(text, big)
         rows = [r for r in self.st.list_audit('doc', 0) if r['Action'] == 'over_budget']

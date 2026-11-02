@@ -21,7 +21,8 @@ import SoulInterview from "./SoulInterview.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import SkillImport from "./SkillImport.jsx";
 import RoleStart from "./RoleStart.jsx";
-import { FAINT, INK, ROLES, mono } from "./theme.jsx";
+import { ACCENT2, FAINT, INK, PALETTE, ROLES, mono } from "./theme.jsx";
+import { meter } from "./docMeter.js";
 import { TaskuaryMark } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
 import { plural } from "./timeWords.js";
@@ -107,6 +108,32 @@ function HowItWorks() {
   return (
     <Box sx={{ bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, p: { xs: 2, md: 3 }, maxWidth: 900 }}>
       <Md text={text} />
+    </Box>
+  );
+}
+
+// THE METER above the words (the owner, 2026-11-02: "the max amount of characters that go into the instructions, with a
+// bar/percentage showing if you are over. Make it cool, small"). One quiet line and a hairline bar: sage while there is room,
+// brass from 85%, oxblood past the limit with what really happens to the rest - the server's words (doclimits.py), not a guess.
+const TONE = { ok: ACCENT2, near: PALETTE.brass, over: PALETTE.oxblood };
+export function DocMeter({ text, limit }) {
+  const m = meter(text, limit);
+  if (!m) return null;
+  const c = TONE[m.tone], num = { fontVariantNumeric: "tabular-nums" };
+  return (
+    <Box data-tq-doc-meter={m.tone} sx={{ mb: 0.75, flexShrink: 0 }}>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, fontSize: 11.5, color: FAINT }}>
+        <Typography component="span" sx={{ fontSize: "inherit", flex: 1, minWidth: 0 }}>
+          <Box component="span" sx={{ ...num, color: m.tone === "ok" ? INK : c, fontWeight: 600 }}>{m.n.toLocaleString()}</Box>
+          <Box component="span" sx={num}> / {m.of.toLocaleString()}</Box> characters reach {limit.reader || "the agent"}
+          {m.over > 0 && <Box component="span" sx={{ color: c }}> · over by {m.over.toLocaleString()} - {limit.past || "the end is cut off"}</Box>}
+        </Typography>
+        <Typography component="span" sx={{ ...num, fontSize: "inherit", fontWeight: 600, color: m.tone === "ok" ? FAINT : c }}>{Math.round(m.pct)}%</Typography>
+      </Box>
+      <Box role="meter" aria-label="Characters that reach the agent" aria-valuemin={0} aria-valuemax={m.of} aria-valuenow={m.n}
+        sx={{ mt: 0.5, height: 3, borderRadius: 99, bgcolor: "#eee8e0", overflow: "hidden" }}>
+        <Box sx={{ height: "100%", width: `${Math.min(100, m.pct)}%`, bgcolor: c, borderRadius: 99, transition: "width .25s ease, background-color .25s ease" }} />
+      </Box>
     </Box>
   );
 }
@@ -247,6 +274,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   const [docs, setDocs] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [saved, setSaved] = useState(Object.fromEntries(NAMES.map((n) => [n, ""])));
   const [loaded, setLoaded] = useState(false);
+  const [limits, setLimits] = useState({});      // doc key -> the server's {chars, flat, reader, past}, or null: what the meter counts against
   const [err, setErr] = useState("");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState("");   // provenance line, or the plain reason it couldn't
@@ -289,6 +317,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       const res = await Promise.all(NAMES.map((n) => api.get(`/api/doc/${n}`)));
       const d = Object.fromEntries(NAMES.map((n, i) => [n, res[i].data.content || ""]));
       setDocs((cur) => ({ ...cur, ...d })); setSaved((cur) => ({ ...cur, ...d })); setLoaded(true);
+      setLimits((cur) => ({ ...cur, ...Object.fromEntries(NAMES.map((n, i) => [n, res[i].data.limit || null])) }));
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load documents"); }
   }, []);
   // ...not for the unseen catalogue (catalogOnly): it reports profiles, playbooks and people, never a document's words - and it read all
@@ -350,6 +379,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     try {
       const { data } = await api.get(`/api/doc/${name}`);
       setDocs((d) => ({ ...d, [key]: data.content || "" })); setSaved((d) => ({ ...d, [key]: data.content || "" }));
+      setLimits((l) => ({ ...l, [key]: data.limit || null }));
     } catch (e) { setErr(e?.response?.data?.detail || `could not open ${name}`); }
   }, []);
 
@@ -786,12 +816,15 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
            the field to the DOCUMENT, so SOUL.md pushed the footer - and the whole left column with
            it - past the bottom of the screen. minRows stays as the floor for the stacked phone
            layout, where the column has no height to divide up. */
+        <>
+        <DocMeter text={docs[docName]} limit={limits[docName]} />
         <TextField fullWidth multiline minRows={12} value={docs[docName] || ""}
           onChange={(e) => setDocs({ ...docs, [docName]: e.target.value })}
           sx={{ bgcolor: "#fff", flex: { md: 1 }, minHeight: 0,
                 "& .MuiInputBase-root": { md: { height: "100%" }, alignItems: "flex-start", overflow: "auto" },
                 "& .MuiInputBase-inputMultiline": { height: { md: "100% !important" }, overflow: "auto !important" } }}
           inputProps={{ style: { fontFamily: "'IBM Plex Mono', Consolas, monospace", fontSize: 12, lineHeight: 1.6, color: INK } }} />
+        </>
         )}
         <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 1.25, lineHeight: 1.6, flexShrink: 0 }}>
           {isPb(docName)

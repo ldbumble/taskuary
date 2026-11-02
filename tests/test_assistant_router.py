@@ -607,6 +607,10 @@ class RunItAgain(unittest.TestCase):
         # a read-only agent is a report on the page's shelf (sourceShape.js): its Run now is on its row there, never in its builder (2026-11-02)
         self.assertEqual(out['open'], '#report=reports')
         self.assertIn('Run now', out['say']); self.assertNotIn('light', out)
+        # ...and the row's own handle in `ref` or `on` is the row on the table, never a report's name (2026-11-02)
+        for k, h in (('ref', f'm-{m}'), ('on', f'm{m}'), ('ref', 'TQ-0001')):
+            out, _ = say(s, 'run it', item['key'], 'CALL: ' + json.dumps({'kind': 'report.run', 'params': {k: h}}))
+            self.assertEqual(out.get('open'), '#report=reports', (k, h, out.get('say')))
         # ...and a routine that writes opens at itself, where its own Run now is (WorkflowEditor)
         s.save_source({'SourceId': sid, 'ConfigJson': json.dumps({'type': 'agent', 'access': 'write', 'title': 'AP ageing'})}, 'o')
         out, _ = say(s, 'run it again', item['key'], 'CALL: {"kind": "rerun", "params": {}}')

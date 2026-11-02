@@ -3333,6 +3333,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             # ...and a report named in `name`, `ref` or `on`: the index shows report.run bare, and a live "run the end of day report" guessed
             # each of them with the exact name - every one missed, and the retry guessed again (2026-11-02). A number is its source_id
             al = next((str(params.pop(k)).strip() for k in ('name', 'ref', 'on') if str(params.get(k) or '').strip()), '')
+            # ...but a row's handle (TQ-0012, m-12) is the row on the table, as it was before `ref` and `on` were read here - never a name
+            if re.fullmatch(r'(TQ|m)-?\d+', al, re.I): al = ''
             if al and not title and not sid: title, sid = ('', int(al.lstrip('#'))) if al.lstrip('#').isdigit() else (al, None)
             if not title and not sid: sid = it.get('source_id')
             r = appfacts.find_report(store, title, sid)
@@ -3577,7 +3579,9 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
         if typ: return _page(store, tid, table, f'#connector={typ}', f"Opened {named or typ}'s card under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
     on, b = _row_button(store, kind, target, params, table)
-    if tk == 'source' and not on and target: return _page(store, tid, table, *report_page(store, target, kind, named))
+    # ...and over the report's own run on the table too, when its row has no button for the act: "run it" (report.run) there was refused
+    # as having no button, while Run now waited on the shelf a page away (2026-11-02)
+    if tk == 'source' and target and not (on and b): return _page(store, tid, table, *report_page(store, target, kind, named))
     if on and b:
         why = cannot(on, b, store)
         if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")

@@ -13,12 +13,11 @@ Chat (Teams, Slack, WhatsApp, Telegram...) never gets one, and an invite answere
 
 Neither provider puts the account's own signature on what Taskuary sends: Gmail's is added by its web and phone apps, not on SMTP,
 and Outlook's by the Outlook client, not on Graph's sendMail - so there is no auto-signature to detect, and the guard against a
-second copy is the text itself (`responder.with_signature` reads the tail). Graph has no signature in mailboxSettings; Gmail
-hands its over only to a Gmail card signed in with Google (`gmail`, sendAs). With none set by the owner, that one signs - else
-the ending the mailbox's own sent mail plainly shares (`confident`); a weaker ending is only offered in Settings (`suggest`).
+second copy is the text itself (`responder.with_signature` reads the tail). Graph has no signature in mailboxSettings, and
+Gmail's own signature setting is not read yet - so with none set by the owner, the ending the mailbox's own sent mail plainly
+shares signs (`account`, `confident`); a weaker ending is only offered in Settings (`suggest`).
 """
-import re, threading, time
-from html import unescape
+import threading, time
 from . import outbound
 
 ON = 'sign_replies'
@@ -101,9 +100,9 @@ def overview(store) -> dict:
     if len(boxes) > 1:
         for b in boxes: rows.append({'address': b['address'], 'card': b.get('card') or '', 'signature': outbound.card_signature(store, b['address'])})
     default = str(store.get_setting('email_signature') or '').strip()
-    # ...and what each account signs with by itself when nothing here is set (account), and the Gmail sign-ins that cannot say yet
+    # ...and what each account signs with by itself while nothing here is set (account)
     accounts = [{'address': b['address'], 'signature': s} for b in boxes if (s := account(store, b['address']))]
-    return {'on': on(store), 'default': default, 'mailboxes': rows, 'accounts': accounts, 'regrant': regrant(store),
+    return {'on': on(store), 'default': default, 'mailboxes': rows, 'accounts': accounts,
             'offer': not default and not accounts and not any(r['signature'] for r in rows) and store.get_setting(OFFERED, '') != '1'}
 
 
@@ -121,13 +120,12 @@ def save_mailbox(store, address: str, sig: str) -> dict:
 
 
 # THE ACCOUNT'S OWN SIGNATURE (a user, approved 2026-11-02: "when sending a message, I want taskuary to use the signature that exists
-# in the gmail (or whatever) account"): with no signature of the owner's own on the card or in Settings, the one the account already
-# has. Gmail over Google's sign-in hands it over (users.settings.sendAs); Graph has none to give (mailboxSettings carries no
-# signature), so Outlook, IMAP, Zoho... use the closing lines their sent mail plainly shares - plainly enough to use unasked
-# (CONFIDENT), else it stays the offer Settings makes. Held on the card a day (DAY) and asked again behind the draft, never per draft.
-ACCOUNT = 'account_signature'            # card config: {address: {signature, source: gmail | sent, at}}
-DAY, RETRY = 86400, 3600                 # asked again after a day; a failed ask again after an hour, the last good one kept meanwhile
-SEND_AS = 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs'
+# in the gmail (or whatever) account"): with no signature of the owner's own on the card or in Settings, the one the mailbox already
+# signs with - read off its sent mail, used unasked only when plainly a signature (CONFIDENT), else it stays the offer Settings makes.
+# Graph has no signature to give (mailboxSettings carries none), and Gmail's own signature setting is not read yet (the owner,
+# 2026-11-02: the sent-mail part ships first). Held on the card a day (DAY), read again behind the draft, never per draft.
+ACCOUNT = 'account_signature'            # card config: {address: {signature, source: sent, at}}
+DAY, RETRY = 86400, 3600                 # read again after a day; a failed read again after an hour, the last good one kept meanwhile
 CONFIDENT = (6, 0.6, 2)                  # mails read at least, share ending with it at least, lines at least
 _BUSY, _LOCK = set(), threading.Lock()
 
@@ -136,15 +134,13 @@ def _held(cfg, a): return cfg[ACCOUNT].get(a) if isinstance((cfg or {}).get(ACCO
 
 
 def account(store, mailbox) -> str:
-    """The account's own signature for this mailbox, as held on its card - '' when it has none. A card never asked asks Gmail at
-    once (one quick read); anything older than a day is asked again in the background, the held one used meanwhile."""
+    """The account's own signature for this mailbox, as held on its card - '' when it has none. Never read, or older than a day:
+    read again in the background (the sent-mail read is slow), the held one used meanwhile."""
     from . import demo
     from .channels import _cfg
     box = outbound._box(store, mailbox)
     if not box or demo.enabled(): return ''
-    c, a = store.get_connector(box['connector_id']), box['address'].lower()
-    held = _held(_cfg(c), a)
-    if held is None and c.get('Type') == 'gmail': held = refresh(store, box, sent=False)
+    held = _held(_cfg(store.get_connector(box['connector_id'])), box['address'].lower())
     if held is None or time.time() - float(held.get('at') or 0) > DAY: _later(store, box)
     return str((held or {}).get('signature') or '').strip()
 
@@ -162,50 +158,19 @@ def _later(store, box):
     threading.Thread(target=run, daemon=True, name='account-signature').start()
 
 
-def refresh(store, box, sent: bool = True) -> dict | None:
-    """Ask the account for its signature now and hold the answer on the card. `sent=False`: Gmail only, and None when Gmail gave
-    none - the slower sent-mail read then runs behind the draft instead of in front of it."""
+def refresh(store, box) -> dict:
+    """Read the mailbox's signature off its sent mail now and hold the answer on the card."""
     from .channels import _cfg
     a, ok = box['address'].lower(), True
-    try: sig, src = gmail(store, box), 'gmail'
-    except Exception: sig, src, ok = '', 'gmail', False
-    if not sig and not sent: return None
-    if not sig:
-        try: sig, src = confident(store, box['address']), 'sent'
-        except Exception: ok = False
+    try: sig = confident(store, box['address'])
+    except Exception: sig, ok = '', False
     with _LOCK:
         cfg = _cfg(store.get_connector(box['connector_id']) or {})
-        # a read that failed keeps the last good one and is asked again within the hour
-        row = {'signature': sig, 'source': src, 'at': time.time()} if sig or ok else {**(_held(cfg, a) or {}), 'at': time.time() - DAY + RETRY}
+        # a read that failed keeps the last good one and is read again within the hour
+        row = {'signature': sig, 'source': 'sent', 'at': time.time()} if ok else {**(_held(cfg, a) or {}), 'at': time.time() - DAY + RETRY}
         per = {**(cfg[ACCOUNT] if isinstance(cfg.get(ACCOUNT), dict) else {}), a: row}
         store.patch_connector_poll_state(box['connector_id'], config_set={ACCOUNT: per})
     return row
-
-
-def gmail(store, box) -> str:
-    """The Gmail account's own signature for this address, as plain text - '' off a Gmail card, without a sign-in that may read it,
-    or with none set in Gmail. Raises when Google could not be asked."""
-    from . import googlecal, net
-    from .channels import _cfg
-    c = store.get_connector(box['connector_id'], with_secret=True)
-    if not c or c.get('Type') != 'gmail' or not googlecal.has_settings(cfg := _cfg(c)): return ''
-    r = net.get(SEND_AS, timeout=15, headers={'Authorization': f'Bearer {googlecal.access_token(cfg)}'})
-    if r.status_code == 403: return ''       # a pasted token without the permission: nothing to read
-    if r.status_code != 200: raise RuntimeError(f'Gmail settings read failed ({r.status_code})')
-    a = box['address'].lower()
-    hit = next((x for x in (r.json() or {}).get('sendAs') or [] if str(x.get('sendAsEmail') or '').lower() == a), None)
-    return plain(hit.get('signature') or '') if hit else ''
-
-
-def plain(html: str) -> str:
-    """Gmail's signature HTML as the plain lines a Taskuary email carries: breaks and blocks end lines, a link is its text."""
-    t = re.sub(r'(?is)<(script|style)\b.*?</\1\s*>', '', str(html or ''))
-    t = re.sub(r'(?i)<br\s*/?>', '\n', t)
-    t = re.sub(r'(?i)</(div|p|tr|li|h[1-6]|table)\s*>', '\n', t)
-    out = []
-    for l in (' '.join(unescape(l).replace('\xa0', ' ').split()) for l in re.sub(r'(?s)<[^>]*>', '', t).splitlines()):
-        if l or (out and out[-1]): out.append(l)
-    return '\n'.join(out).strip()
 
 
 def confident(store, mailbox) -> str:
@@ -221,10 +186,3 @@ def confident(store, mailbox) -> str:
     if any(l.lower().startswith(('sent from my', 'get outlook for', 'sent via')) for l in lines): return ''
     return text
 
-
-def regrant(store) -> list:
-    """The Gmail addresses whose Google sign-in is from before Taskuary asked for the Gmail signature - signing in again lets it."""
-    from . import googlecal
-    from .channels import _cfg
-    return [b['address'] for b in outbound.mailboxes(store)
-            if b.get('kind') == 'gmail' and googlecal.lacks_settings(_cfg(store.get_connector(b['connector_id']) or {}))]

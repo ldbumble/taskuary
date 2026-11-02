@@ -1730,6 +1730,12 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
     chat read as a thread nobody had spoken on, and the one signal the classifier gets right
     every time (5/5 on the owner's own mail) never reached it for chats."""
     prior = store.thread_messages(msg.get('conversation_id'), msg.get('subject'))
+    # ...never the line being judged, nor any after it, as exchange_lines (2026-11-02): it is stored before triage reads it, so
+    # "last on the thread" was always its own sender - a one-word nudge two minutes after the owner had answered with their times
+    # went in as `last_on_thread_is_you: false`
+    xid, mid, at = msg.get('external_id'), msg.get('_mid'), msg.get('sent_at')
+    prior = [m for m in prior or [] if not (xid and m.get('ExternalId') == xid) and not (mid and m.get('MessageId') == mid)
+             and not (at and str(m.get('SentAt') or '') > str(at))]
     if not prior: return {}
     me = {(a or '').lower() for a in mine if a} | {(msg.get('source_name') or '').lower()} - {''}
     ident = lambda m: (m.get('FromEmail') or m.get('FromName') or '').strip().lower()
@@ -1740,8 +1746,9 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
     for m in prior:
         if not ident(m) or ident(m) in sender or is_me(m): continue
         if who(m) not in others: others.append(who(m))
-    if not others: return {}
     last = prior[-1]
+    # ...and the owner having spoken last is said with nobody else on it too: "I already answered" is the fact a follow-up is read against
+    if not others: return {'last_on_thread': 'you', 'last_on_thread_is_you': True} if is_me(last) else {}
     return {'others_replied': others[-3:], 'last_on_thread': who(last), 'last_on_thread_is_you': is_me(last)}
 
 

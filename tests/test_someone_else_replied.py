@@ -48,10 +48,10 @@ class WhoCountsTests(unittest.TestCase):
         self.assertEqual(ingest.others_on_thread(s, ARRIVING, mine=[OWNER]), {})
 
     def test_your_own_replies_are_not_somebody_else(self):
-        """The owner having answered already is a different fact, and not this one."""
+        """The owner having answered already is a different fact, and not this one - said as its own (2026-11-02)."""
         s = _thread((ASKER, 'Moshe Benjamin', '2026-08-26 10:00:00'),
                     (OWNER, 'Alex', '2026-08-26 10:20:00'))
-        self.assertEqual(ingest.others_on_thread(s, ARRIVING, mine=[OWNER]), {})
+        self.assertEqual(ingest.others_on_thread(s, ARRIVING, mine=[OWNER]), {'last_on_thread': 'you', 'last_on_thread_is_you': True})
 
     def test_being_cc_d_is_not_answering(self):
         """Only people who SENT something count - a seventeen-person thread where nobody has
@@ -152,7 +152,7 @@ class ChatIdentityTests(unittest.TestCase):
         out = ingest.others_on_thread(self._chat(('Lee Tan', '2026-08-21 14:00:00'), ('You', '2026-08-21 14:05:00')), self.ARRIVING, (OWNER,))
         self.assertEqual((out['others_replied'], out['last_on_thread_is_you']), (['Lee Tan'], True))
         alone = ingest.others_on_thread(self._chat(('You', '2026-08-21 14:05:00')), self.ARRIVING, (OWNER,))
-        self.assertEqual(alone, {})
+        self.assertEqual(alone, {'last_on_thread': 'you', 'last_on_thread_is_you': True})      # nobody else, but the owner spoke last
 
     def test_the_asker_by_name_is_still_the_asker(self):
         out = ingest.others_on_thread(self._chat(('Marcus Reed', '2026-08-21 13:00:00')), self.ARRIVING, (OWNER,))

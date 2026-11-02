@@ -29,6 +29,8 @@ FIELDS = {
     'addressed_to': "addressed_to is the To line by name, the owner as \"you\" - who the mail is put to; copied is the Cc line the "
                     "same way. A name the message opens with or puts its question to is matched against them.",
     'copied': "copied is the Cc line by name, the owner as \"you\" - who is only watching.",
+    'last_on_thread_is_you': "last_on_thread_is_you is true when the owner's own reply was the last thing said on the thread before "
+                             "this message - what they said is their \"you\" line in the exchange.",
     'others_replied': "others_replied names people other than the owner and the sender who have SENT a message on this thread; "
                       "last_on_thread is whoever spoke most recently.",
     'exchange': "exchange is the recent back-and-forth on this thread or chat room, oldest first, each message's own words once, "

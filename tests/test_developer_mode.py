@@ -98,14 +98,15 @@ class Migration(unittest.TestCase):
         self.assertEqual(s.get_setting('developer_mode'), '1')
 
     def test_each_kind_of_evidence_counts(self):
-        cases = [({'cli_connections': {'codex': {'cmd': 'codex'}}}, None, 'a coding CLI connected'),
+        cases = [({'cli_connections': {'codex': {'cmd': 'codex'}}}, None, ''),     # a CLI alone is how many people run their AI
                  ({}, lambda s: s.set_setting('default_brain', 'claude', 'owner'), 'a coding brain picked'),
                  ({'github': {'default_repo': 'northwind/ledger'}}, None, 'a repository map')]
         for cfg, prep, said in cases:
             s = MemoryStore()
             if prep: prep(s)
             self.assertEqual(devmode.evidence(s, cfg), said)
-        s = MemoryStore()
+        s = MemoryStore(); s.set_setting('default_brain', 'claude', 'migration')
+        self.assertEqual(devmode.evidence(s, {}), '', 'a brain saved for them is only a connected CLI')
         s.save_connector({'ConnectorId': s.get_connector_by_type('github')['ConnectorId'], 'Active': 1}, 'test')
         self.assertEqual(devmode.evidence(s, {}), 'a code-host card')
 
@@ -141,6 +142,12 @@ class Assistant(unittest.TestCase):
         self.assertEqual(concierge.kind_button(self.s, 'task.set_repo', {'tid': tid}), 'pick_repo', 'a task already coding keeps its picker')
         self.s.set_setting('developer_mode', '1', 'owner')
         self.assertEqual(concierge.kind_button(self.s, 'task.set_repo'), 'pick_repo')
+
+    def test_off_a_coding_agent_asked_for_says_the_general_agent_takes_it_and_where_the_switch_is(self):
+        tid = self.s.create_task({'Title': 'Fix the export script', 'Kind': 'coding'}, 'test')
+        said = concierge.cannot({'tid': tid}, 'coding_agent', self.s)
+        self.assertEqual(said, concierge.DEV_MODE_OFF); self.assertNotIn('coding tool', said)
+        self.assertIn('Developer mode', said); self.assertIn('general agent', said)
 
     def test_off_repos_list_says_why(self):
         self.assertIn('Developer mode', concierge.read_op(self.s, 'repos.list', {}))

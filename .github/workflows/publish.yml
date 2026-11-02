@@ -113,8 +113,8 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   exe:
-    # the one-file Windows build, so taskuary.com's Download button has a stable target:
-    # github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe
+    # The Windows downloads, at stable targets: .../releases/latest/download/TaskuarySetup.exe is taskuary.com's Download
+    # button (the installer, 2026-11-02); .../Taskuary.exe is the one-file build that installs made before it update from.
     runs-on: windows-latest
     needs: ci-green
     if: startsWith(github.ref, 'refs/tags/v')
@@ -129,6 +129,8 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install -e .[mssql,desktop,build,bundle]
       - run: pyinstaller taskuary.spec
+      - run: pyinstaller taskuary.spec --distpath dist/onedir --workpath build/onedir
+        env: { TASKUARY_ONEDIR: '1' }
       # SIGNED WITH AZURE ARTIFACT SIGNING (2026-10-21): an unsigned download meets SmartScreen's "Windows protected your PC".
       # Runs only once the repository variables below are set (Settings -> Secrets and variables -> Actions -> Variables), so a
       # release before then still ships, unsigned, exactly as today. None of these values is a secret.
@@ -139,14 +141,14 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
-      - name: Sign Taskuary.exe
+      - name: Sign Taskuary.exe (both builds)
         if: vars.AZURE_SIGNING_ACCOUNT != ''
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
-          files: ${{ github.workspace }}\dist\Taskuary.exe
+          files: ${{ github.workspace }}\dist\Taskuary.exe,${{ github.workspace }}\dist\onedir\Taskuary\Taskuary.exe
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
@@ -159,8 +161,41 @@ jobs:
           $s = Get-AuthenticodeSignature dist\Taskuary.exe
           "$($s.Status) - $($s.SignerCertificate.Subject)"
           if ($s.Status -ne 'Valid') { throw "Taskuary.exe is not validly signed: $($s.Status)" }
+      # the installer wraps the one-folder build signed above; Inno Setup is on the runner image, or comes from Chocolatey
+      - name: Build TaskuarySetup.exe
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=$("${{ github.ref_name }}".TrimStart('v'))" installer	askuary.iss
+          if ($LASTEXITCODE) { throw "the installer did not build" }
+      - name: Sign TaskuarySetup.exe
+        if: vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\dist\TaskuarySetup.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: Taskuary
+          description-url: https://taskuary.com
+      - name: Check the installer's signature
+        if: vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          $s = Get-AuthenticodeSignature dist\TaskuarySetup.exe
+          "$($s.Status) - $($s.SignerCertificate.Subject)"
+          if ($s.Status -ne 'Valid') { throw "TaskuarySetup.exe is not validly signed: $($s.Status)" }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with: { name: exe, path: dist/Taskuary.exe }
+        with:
+          name: exe
+          path: |
+            dist/Taskuary.exe
+            dist/TaskuarySetup.exe
 
   ghcr:
     # The image nobody has to build themselves: ghcr.io/ldbumble/taskuary:<version>.

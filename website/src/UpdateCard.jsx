@@ -9,6 +9,7 @@ import { updateWaiting, waitingNote } from "./appQuit.js";
 import { BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const HOW = {
+  setup: "the installed desktop app — the new installer is downloaded and runs quietly after this window closes; it reopens by itself. Windows asks for your OK only if Taskuary was installed for all users",
   exe: "the desktop app (Taskuary.exe) — the new build is downloaded beside the old one and swapped in after this window closes; it reopens by itself",
   pip: "a pip install — `pip install -U taskuary` runs, then the same command line is relaunched",
   source: "a source checkout — update it with `git pull` in the repository, then restart; nothing here can do that for you",

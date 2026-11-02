@@ -5,7 +5,10 @@ playbooks - lives under ~/.taskuary (config.home()), never beside the program. S
 only ever a program swap: nothing in the data folder is touched, and the new build opens the same
 database the old one closed. That is what makes "keep the connection and all the settings" free.
 
-Three ways Taskuary can be installed, three roads:
+Four ways Taskuary can be installed, four roads:
+  setup   installed by TaskuarySetup.exe (the website's download since 2026-11-02): one folder under Programs, Start menu,
+          an uninstall entry. The new installer is downloaded and run quietly after we exit; it replaces the folder and
+          asks Windows for admin rights only when the app was installed for all users. Then the app is started again.
   exe     Taskuary.exe (PyInstaller, taskuary.spec). A running exe cannot overwrite itself on
           Windows, so the new one is downloaded beside it as Taskuary.new.exe and a tiny batch
           script does the rest after we exit: wait for our PID to go, move the new file over
@@ -29,6 +32,8 @@ from . import __version__
 REPO = 'ldbumble/taskuary'
 LATEST_API = f'https://api.github.com/repos/{REPO}/releases/latest'
 EXE_URL = f'https://github.com/{REPO}/releases/latest/download/Taskuary.exe'
+SETUP = 'TaskuarySetup.exe'
+SETUP_URL = f'https://github.com/{REPO}/releases/latest/download/{SETUP}'
 TIMEOUT = 20
 # How long the helper waits for the old program to go before deciding it never will. Unbounded
 # was the bug (2026-09-15): Update left a console spinning on a PID that stayed, and no app.
@@ -38,8 +43,9 @@ CACHE_S = 600                   # GitHub allows 60 anonymous calls an hour; the 
 
 
 def how() -> str:
-    """'exe' | 'pip' | 'source' - which road an update takes on this install."""
-    if getattr(sys, 'frozen', False): return 'exe'
+    """'setup' | 'exe' | 'pip' | 'source' - which road an update takes on this install."""
+    from . import spawn
+    if getattr(sys, 'frozen', False): return 'setup' if spawn.onedir() else 'exe'
     if (Path(__file__).parent.parent / 'pyproject.toml').is_file(): return 'source'
     return 'pip'
 
@@ -67,9 +73,10 @@ def check(force: bool = False) -> dict:
         r.raise_for_status()
         j = r.json()
         tag = str(j.get('tag_name') or '').lstrip('v')
+        name, url = (SETUP, SETUP_URL) if out['how'] == 'setup' else ('Taskuary.exe', EXE_URL)
         out.update({'latest': tag or None, 'newer': newer(tag, __version__), 'notes': j.get('html_url'),
                     'url': next((a.get('browser_download_url') for a in j.get('assets') or []
-                                 if str(a.get('name') or '').lower() == 'taskuary.exe'), EXE_URL)})
+                                 if str(a.get('name') or '').lower() == name.lower()), url)})
     except Exception as e:
         # the reason is for the log; the card says what it means and what to do about it
         logger.warning(f'update check failed: {e}')
@@ -281,6 +288,57 @@ def _apply_exe(url: str, progress=None) -> dict:
     return {'how': 'exe', 'downloaded': size, 'restarting': True}
 
 
+# ── the setup road ──────────────────────────────────────────────────────────────────────
+def for_all_users(exe) -> bool:
+    """Installed for everyone (Program Files) - that install, and so its update, needs Windows' admin yes; a per-user one never does."""
+    from . import spawn
+    return any(r and spawn.inside(str(exe), r) for r in (os.environ.get(k) for k in ('ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432')))
+
+
+def setup_script(setup, exe, pid: int, args: list, all_users: bool = False) -> str:
+    """The batch that runs the new installer once this process has gone, then starts the app again. Quiet (/VERYSILENT): the
+    owner already pressed Update. /ALLUSERS keeps an all-users install where it is - Windows asks for the admin yes then, as for
+    any installer; /CURRENTUSER never asks. The app is started by this batch, not by the installer, so it never runs elevated."""
+    q = lambda s: '"' + str(s).replace('"', '""') + '"'
+    run = f'{q(exe)} ' + ' '.join(q(a) for a in args)
+    log, slog = Path(setup).with_name('taskuary-update.log'), Path(setup).with_name('taskuary-setup.log')
+    return '\r\n'.join([
+        '@echo off', 'setlocal',
+        'set "PYINSTALLER_RESET_ENVIRONMENT=1"',
+        f'set "update_log={log}"',
+        '> "%update_log%" echo update helper (installer) started %date% %time%',
+        'set /a waited=0',
+        *wait_lines([pid], 'stuck'),
+        '>> "%update_log%" echo old process exited; running the installer %date% %time%',
+        f'start "" /wait {q(setup)} /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS '
+        f'{"/ALLUSERS" if all_users else "/CURRENTUSER"} /LOG={q(slog)}',
+        'if errorlevel 1 >> "%update_log%" echo ERROR: the installer stopped with code %errorlevel% - starting the app as it is',
+        '>> "%update_log%" echo starting the app %date% %time%',
+        f'start "" /D {q(Path(exe).parent)} {run.rstrip()}',
+        'del "%~f0"', 'exit /b 0',
+        ':stuck',
+        '>> "%update_log%" echo ERROR: the old process never exited; nothing installed %date% %time%',
+        f'start "" /D {q(Path(exe).parent)} {run.rstrip()}',
+        'del "%~f0"', 'exit /b 3',
+    ]) + '\r\n'
+
+
+def _apply_setup(url: str, progress=None) -> dict:
+    exe, stage = Path(sys.executable).resolve(), staging()
+    new = stage / SETUP
+    new.unlink(missing_ok=True)          # a leftover from a run that never finished is not our copy
+    try:
+        size = _download(url, new, progress)
+        script = stage / 'taskuary-update.cmd'
+        script.write_text(setup_script(new, exe, os.getpid(), sys.argv[1:], for_all_users(exe)), encoding='utf-8')
+    except OSError as e:
+        if getattr(e, 'errno', None) != 13 and getattr(e, 'winerror', None) not in (5, 32): raise
+        raise RuntimeError('the new installer could not be saved. ' + _why_refused(new, exe, e) + f' (Windows said: {e})') from e
+    _launch_swap(script, stage)
+    logger.info(f'update: {size:,} bytes downloaded to {new.name}; {script.name} runs it when this process exits')
+    return {'how': 'setup', 'downloaded': size, 'restarting': True}
+
+
 # ── the pip road ────────────────────────────────────────────────────────────────────────
 def _apply_pip(progress=None) -> dict:
     from . import spawn
@@ -310,7 +368,9 @@ def ready() -> dict:
 def apply(progress=None, info: dict = None) -> dict:
     """Do it. Returns what happened; the caller ends the process (exit_soon) when 'restarting'."""
     info = info or ready()
-    return _apply_exe(info.get('url') or EXE_URL, progress) if how() == 'exe' else _apply_pip(progress)
+    h = how()
+    if h == 'setup': return _apply_setup(info.get('url') or SETUP_URL, progress)
+    return _apply_exe(info.get('url') or EXE_URL, progress) if h == 'exe' else _apply_pip(progress)
 
 
 # AN UPDATE WAITS FOR RUNNING WORK (the owner, 2026-10-25): the swap ends this process, and with it every agent and workflow run it

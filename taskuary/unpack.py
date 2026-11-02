@@ -63,7 +63,8 @@ def _image(pid: int) -> str:
 
 def bootloader() -> int:
     """The PID of the one-file bootloader that unpacked us - our parent, running the same Taskuary.exe - or 0."""
-    if not (spawn.meipass() and spawn.WINDOWS): return 0
+    # ...never in the installed one-folder build: a Taskuary.exe parent there is the main app that started a second view, not a bootloader
+    if not (spawn.meipass() and spawn.WINDOWS) or spawn.onedir(): return 0
     try:
         ppid = os.getppid()
         img = _image(ppid)
@@ -129,7 +130,7 @@ def sweep_stale(now: float = None) -> list:
     Off Windows nothing: a rename there succeeds under a running copy, so it is no test of use, and the bootloader
     removes a folder held open without a dialog."""
     m = spawn.meipass()
-    if not (m and spawn.WINDOWS): return []
+    if not (m and spawn.WINDOWS) or spawn.onedir(): return []
     now, gone = now or time.time(), []
     try: dirs = list(Path(m).parent.iterdir())
     except OSError: return []

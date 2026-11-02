@@ -2,6 +2,27 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.18 - 2026-11-02
+
+- A right-click on a misspelt word in the desktop window offers the fix again
+- A restarted WhatsApp bridge no longer loses what arrived before Taskuary's next poll
+- A message relayed to a working agent waits for it to stop instead of being typed into its turn
+- A memory line named by its own words is found, and a failed edit is told in plain words
+- A Codex agent mid-turn keeps its own queue for a relayed message; only a typed line waits in the waiting room
+- The Assistant's model says what went wrong after a failed look-up, never a sentence written in code
+- A task its agent closed stays in Tasks until it is read, not under Reports
+- A question put to someone else by name is theirs, even with the owner on the To line
+- Next takes a re-run report off the rail at the press, and no early rail puts it back
+- A one-name nudge after the owner answered is the named person's, and triage knows the owner spoke last
+- A task whose checklist owes an email nobody has drafted opens on the task, not an empty Close out
+- A closed task opened from Search opens reopened, without a press on Reopen task
+- Agents tick each to-do as they finish it, not all at the close
+- Close out's To is the owed email's own address, and the sender's line says it is the reply's
+- Back moves at its press, as Next does
+- An agent's reply goes to the person it names, and Send never rewrites it for someone else
+- Say --to in the agent's reply command itself, so the seed keeps its room for the message
+- An agent's draft is approved where the agent is: a pop-up over its terminal, a card under its chat
+
 ## 0.3.10.17 - 2026-11-02
 
 - Watch it stays on the walk, means one thing on desk and phone, and a phone's small changes act at once

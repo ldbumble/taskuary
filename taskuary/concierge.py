@@ -1490,7 +1490,8 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
         return _did(store, tid, (f"Took {q(r['text'])} out - it will not be learned again." if how == 'wrong'
                                  else f"Took {q(r['text'])} out for now - it comes back only if much more says it again."), kind)
     except LookupError as e: raise CallMiss(f"No line in the memory has the key {str(p.get('key') or p.get('replaces') or '')!r} ({str(e).strip(chr(39))}). Read memory.about for "
-                                            'the keys, or say so in plain words. Nothing was changed.')
+                                            'the keys, or say so in plain words. Nothing was changed.',
+                                            owner="I could not find that line in your memory, so nothing was changed")
     except ValueError as e: raise CallMiss(f'{e} Say so in plain words. Nothing was changed.')
 
 
@@ -3081,7 +3082,9 @@ def read_op(store, kind: str, params: dict) -> str:
 
 
 class CallMiss(Exception):
-    """A CALL whose target could not be found - "no report by that name". Written for the model, which gets it back."""
+    """A CALL whose target could not be found - "no report by that name". Written for the model, which gets it back. `owner`: what the
+    owner is told instead when the second try misses too, for a miss whose words are the model's alone (a tool's name, a key)."""
+    def __init__(self, msg: str = '', owner: str = ''): super().__init__(msg); self.owner = owner
 
 
 def task_contract(store, kind: str, tid: int, p: dict) -> dict:
@@ -5662,7 +5665,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # A MISS IS THE MODEL'S TO FIX, not the owner's to read. "No setting by that name - settings.list <group> names
         # them" is written for the model, and it reached the owner word for word (the 2026-09-24 audit). The model gets
         # it back, may look the name up, and calls again; only a second miss is said - once, in the owner's hearing.
-        miss = None
+        miss, told = None, ''
         for _ in range(LOOKUP_ROUNDS + 1):
             _strays(item, call)
             if toolcatalog.runs_now(call['kind']):
@@ -5678,8 +5681,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                     call = None; break
                 try: return call_turn(store, tid, call, item, text, actor)
                 except CallMiss as e:
-                    if miss: miss = str(e); break                    # the second miss: said, below - its OWN words, not the first's
-                    miss = str(e)
+                    if miss: miss, told = str(e), e.owner; break     # the second miss: said, below - its OWN words, not the first's
+                    miss, told = str(e), e.owner
                 except ValueError as e:
                     say_ = f"I could not put that in front of you - {e}."
                     rec('assistant', say_)
@@ -5699,7 +5702,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             # still stuck on a call it cannot make: say what is missing, never the filler it wrote around the call - the
             # filler is a promise ("I'm handing it to the analyst, confirm it on the card"), and with the call dropped there
             # was no card (2026-10-06). The last pass's own action is never dropped: the loop above runs it on its way out.
-            say_ = (f"I could not find what that points at ({miss.rstrip('.')}). Say it another way and I will try again."
+            # ...in the owner's words where the miss has them: a memory key and "Read memory.about" passed on read as gibberish (TQ-1251)
+            say_ = (f"{told.rstrip('.')}. Say it another way and I will try again." if miss and told
+                    else f"I could not find what that points at ({miss.rstrip('.')}). Say it another way and I will try again."
                     if miss else "I could not finish looking that up - ask me again, a little more narrowly.")
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}

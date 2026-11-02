@@ -11,9 +11,19 @@ test("New's card presses its own start, once, when the Assistant wrote an agent'
   const canvas = read("CanvasBrowse.jsx"), sheet = read("NewSheet.jsx");
   assert.match(canvas, /start=\{!!state\?\.start\}/);
   assert.match(sheet, /line = null, onSaid, start = false,/);
-  assert.match(sheet, /if \(!start \|\| autoPressed\.current \|\| kind !== "agent" \|\| !canGo \|\| !agentsRead \|\| busy\) return;\s*\n\s*autoPressed\.current = true; submit\(\);/);
+  assert.match(sheet, /if \(!start \|\| autoPressed\.current \|\| kind !== "agent" \|\| !canGo \|\| !agentsRead \|\| busy\) return;\s*\n\s*autoPressed\.current = true; if \(firstPressOf\(line\)\) submit\(\);/);
   // ...before the sheet's early return, so the hook runs on every draw
   assert.ok(sheet.indexOf("autoPressed.current = true") < sheet.indexOf("if (inline && !open) return null;"));
+});
+
+test("the Assistant's press is made once per line, however often its card is drawn again", async () => {
+  // a card drawn again pressed Send to agent again on a job already started (2026-11-02)
+  const { firstPressOf } = await import("../src/newTask.js");
+  assert.equal(firstPressOf(4711), true);
+  assert.equal(firstPressOf(4711), false);
+  assert.equal(firstPressOf("4711"), false);                  // the same line, however the id arrives
+  assert.equal(firstPressOf(4712), true);                     // another line is another press
+  assert.equal(firstPressOf(null), true); assert.equal(firstPressOf(null), true);   // no line: the card's own once is all there is
 });
 
 test("Send to agent and Send to coding agent are presses the page may make; a Send is not", async () => {

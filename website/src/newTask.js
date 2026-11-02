@@ -47,3 +47,13 @@ export const planTask = (pick, how, browser = false, stayOpen = false) => {
   return { repo, kind: chat ? "general" : "coding", chat, ask, browser, stayOpen: !!stayOpen,
     tags: tags.join(",") || null, start: how === "live" || how === "terminal" };
 };
+
+// THE ASSISTANT'S PRESS IS MADE ONCE PER LINE, not once per card drawn (NewSheet `start`): the card is drawn again - put down and brought
+// back, re-keyed - and a fresh card would press Send to agent again on a job already started (2026-11-02). `line` is the Assistant's line
+// that wrote the job (concierge._new); a card with none keeps only its own once.
+const pressedLines = new Set();
+export const firstPressOf = (line) => {
+  if (line == null || line === "") return true;
+  if (pressedLines.has(String(line))) return false;
+  pressedLines.add(String(line)); return true;
+};

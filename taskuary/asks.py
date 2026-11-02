@@ -49,10 +49,19 @@ def _rail(store) -> list:
     return funnel.full_items(store) or (funnel.cached_pile(store) or {}).get('items') or []
 
 
+def _live(tid: int) -> bool:
+    """Is an agent's session alive on this task right now - a coding terminal or a general agent's conversation."""
+    from . import terminal
+    return any(s.task_id == tid and s.alive for s in list(terminal.SESSIONS.values()))
+
+
 def agent_touched(store, tid: int) -> bool:
     """Has an agent worked this? A to-do the owner does themselves has nothing to report."""
     t = store.get_task(tid) or {}
     if str(t.get('Assignee') or '').startswith('agent:') or t.get('SourceRef') in AGENT_REFS: return True
+    # ...an agent started seconds ago has written nothing yet, and its ask was missing from YOUR OPEN ASKS: the Assistant, asked "where
+    # is it?" right after New's card had started it, said it was still waiting in New (2026-11-02)
+    if _live(tid): return True
     return bool(store._one('SELECT 1 x FROM run WHERE TaskId=? UNION SELECT 1 FROM transcript WHERE TaskId=? '
                            'UNION SELECT 1 FROM worker_event WHERE TaskId=? LIMIT 1', (tid, tid, tid)))
 
@@ -66,7 +75,8 @@ def state(store, tid: int, rail: list = None) -> tuple:
         found = funnel.agent_found(store, tid)
         return 'finished', ('done' + (f': {found}' if found else '') if t.get('Status') == 'done' else 'dropped')
     row = next((i for i in (rail if rail is not None else _rail(store)) if i.get('tid') == tid), None)
-    if not row: return 'quiet', ''
+    # ...and a task the turn's rail was built before is not quiet while its agent works: said in the rail's own words for that lane
+    if not row: return ('working', funnel.LANE_WORDS['working'][0]) if _live(tid) else ('quiet', '')
     lane, says = row.get('lane') or 'quiet', str(row.get('why') or '').strip()
     owed = slots.all_(store, tid)
     if owed and lane == 'approve':

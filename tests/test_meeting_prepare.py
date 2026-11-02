@@ -96,6 +96,18 @@ class SendToAgentTests(unittest.TestCase):
             self.assertIn(said, t['Summary'])
         self.assertEqual(t['Kind'], 'general'); self.assertEqual(self.session.call_args.args[1], t['TaskId'])           # ...and an agent is on it
 
+    def test_prepare_said_in_words_is_a_decision_and_presses_the_rows_prepare(self):
+        # "prepare me for this meeting" was answered "Ok.": the model's CALL prepare was no decision (concierge.VERBS lacked it)
+        self.assertEqual(concierge.parse_decision('CALL: {"kind": "prepare", "params": {}}')[1], {'verb': 'prepare', 'text': ''})
+        started = []
+        def fake(tid, body, background): started.append(tid); return {'dispatch': 'session', 'started': True, 'existing': False, 'taskId': tid}
+        with mock.patch.object(server, '_dispatch_task_to_its_agent', side_effect=fake), mock.patch('taskuary.funnel.item_for_key', return_value=MEETING):
+            out = concierge.say(server.store, 'prepare me for this meeting', key=MEETING['key'],
+                                llm=lambda *a, **k: 'CALL: {"kind": "prepare", "params": {"text": "mostly what Gail thinks"}}')
+        self.assertEqual(out.get('did'), 'calendar.prepare', out)
+        self.assertEqual(len(started), 1)
+        self.assertTrue(server.store.get_task(started[0])['Summary'].startswith('mostly what Gail thinks'))
+
     def test_an_empty_box_hands_over_the_meeting_alone(self):
         out = concierge.run_proposal(server.store, concierge.propose_direct(server.store, 'regular_agent', MEETING['key'], '', table=True, exact=True, press=True))
         self.assertIn('Ledger cut-over plan', server.store.get_task(out['outcome']['taskId'])['Summary'])

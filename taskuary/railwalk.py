@@ -524,4 +524,11 @@ def peek(store, actor: str = 'owner') -> dict:
             last = _tuple(st.get('last'))
             n = (0 if ln else None) if last is None else _below(ln, last, skip=st.get('members') or ())
         else: n = 0 if ln else None
-        return {**walk, 'below': as_key(store, ln, n) if n is not None else None}
+        if n is None: return {**walk, 'below': None, 'below_reads': False, 'then': None}
+        # ...and ONE STEP FURTHER: whether Next reads the row below and what comes after it - a Next pressed on the row a press drew, while
+        # that press is still out, puts it down and draws the next at once (the owner, 2026-11-02: "the one you are on ... does not disappear
+        # right away"). Rows Next reads are all above the row after, so the line needs no rebuilding for them
+        rows_b = _batch(store, ln, n, True)
+        m = _below(ln, funnel.order_key(rows_b[-1]), skip=[r['key'] for r in rows_b])
+        return {**walk, 'below': as_key(store, ln, n), 'below_reads': len(rows_b) > 1 or kind_of(rows_b[0]) == 'reads',
+                'then': as_key(store, ln, m) if m is not None else None}

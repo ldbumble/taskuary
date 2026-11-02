@@ -74,7 +74,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, heldStep, latestLine, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -1176,6 +1176,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // pressable, and a press then is held and runs once the pick lands - on the item the owner was looking at, as a press always does.
   // `flight`: the walk move under way - a pick or not, and the item it is leaving, whose verbs leave the row at once (actionRow.leaveRow)
   const [flight, setFlight] = useState(null), nextHeld = useRef(false), picking = !!flight?.pick;
+  // ...and what that held press already put down and drew (holdNext): { from, fromItem, ahead: {id, key} | null, gone, coming }
+  const heldRef = useRef(null), [held, setHeld] = useState(null);
   // a card was let go and the next one is on its way: the settle and the deferred pick run BEFORE
   // surface() raises busy, and that second drew nothing at all (the owner, 2026-09-25: "for a second
   // there is no ... loading the next"). Its own flag, because busy would make surface() refuse to run.
@@ -1957,6 +1959,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // move left it - and this is the one place it is drawn. ONE COPY PER ITEM (2026-10-19 UI walk): an item opened again - from search, the
   // Board, the rail - moves its line to the end (placeLine), never a second
   const belowRef = useRef(null);        // { id, key } of the row a walk press drew before its answer (surface, landed)
+  // A HELD NEXT TAKEN BACK (holdNext): the row it drew comes down, the rows it read go back on the rail - and with `back`, the row it put down
+  // is on the table again (the press under it failed, Back was pressed); without, the answer landing puts its own row there
+  const cancelHeld = useCallback((back = true) => {
+    const h = heldRef.current; heldRef.current = null; setHeld(null);
+    if (!h) return;
+    if (h.ahead) setMsgs((m) => m.filter((x) => x.id !== h.ahead.id));
+    if (back && h.ahead && currentRef.current?.key === h.ahead.key) putOnTable(h.fromItem);
+    setFoldedKey((k) => (k === h.from ? null : k)); if (leftKey.current === h.from) leftKey.current = null;
+    if (h.gone.length) setReadGone((g) => { const keys = (g?.keys || []).filter((k) => !h.gone.includes(k)); return keys.length ? { ...g, keys, coming: g.coming === h.coming ? null : g.coming } : null; });
+  }, [putOnTable]);
   const landed = useCallback((data) => {
     if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     // a task opened to start its agent or an act (the Board's, a workflow's) carries that start onto the row the server answered with
@@ -1968,6 +1980,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...the row a press drew ahead (surface) IS this line when it is the same row - its id kept, so the view in it stays mounted - and
     // comes down when the answer brought another
     const below = belowRef.current; belowRef.current = null;
+    // ...and A NEXT HELD OVER IT HAS ALREADY PASSED IT (holdNext): its line is filled where it stands, above the row on the table now, and
+    // the rail held - nothing goes back on the table. Another row than the one passed: the held draw comes down and the press runs from it
+    const h = heldRef.current;
+    if (h && card?.key === h.from) {
+      const line = { role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card };
+      setMsgs((m) => { if (below?.key === card.key && m.some((x) => x.id === below.id)) return m.map((x) => (x.id === below.id ? { ...x, ...line, ahead: false } : x));
+        const at = m.findIndex((x) => x.id === h.ahead?.id), add = { id: `a${Date.now()}`, ...line };
+        return at < 0 ? [...m, add] : [...m.slice(0, at), add, ...m.slice(at)]; });
+      if (data.pile) holdPile(data.pile); else loadPile(true);
+      return;
+    }
+    if (h) cancelHeld(false);
     const id = below && card?.key === below.key ? below.id : `a${Date.now()}`;
     setMsgs((m) => placeLine(below ? m.filter((x) => x.id !== below.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     // ...and its Advisor read, sent at the press, holds for the answer: the row comes back a revision on - the press's own write (shown, so
@@ -1991,7 +2015,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     // ...no rail rides along: read it, with the walk beside it
     else loadPile(true);
-  }, [holdPile, loadPile, putOnTable, say]);
+  }, [cancelHeld, holdPile, loadPile, putOnTable, say]);
 
   // a line of the assistant's own that needs no turn
   const noteLine = useCallback((text) => setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "assistant", text }]), []);
@@ -2003,7 +2027,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const surface = useCallback(async (key = null, asUser = null, leaving = null, blind = false, how = "next", left = null) => {
     if (busy || resetting || turnFlight.current) return BUSY;
     turnFlight.current = true;
-    setBusy(true); setErr(""); setFlight({ pick: !!key, from: key && key === currentRef.current?.key ? null : currentRef.current?.key || null });
+    // a Next held over the press before it (holdNext) runs from the row it put down, with the row it drew already on the table
+    const hold = !key && how === "next" && heldRef.current?.from === leaving ? heldRef.current : null;
+    if (hold) { heldRef.current = null; setHeld(null); }
+    setBusy(true); setErr(""); setFlight({ pick: !!key, from: hold ? hold.from : key && key === currentRef.current?.key ? null : currentRef.current?.key || null });
     pickedRef.current = !!key;
     if (!key) navHow.current = "replace";            // the walk's Next is a stream, not a stack: the address follows, Back does not
     const optimisticId = asUser ? `u${Date.now()}` : null;
@@ -2040,9 +2067,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // answer waited on the server's whole rail build, and a big task's row put nothing on the table for seconds (the owner, 2026-11-01)
       : key && how === "next" && key !== currentRef.current?.key && !key.startsWith("fyis:") ? key : null;
     const belowItem = below ? (pileRef.current?.items || []).find((i) => i.key === below && !i.settling) || null : null;
-    const was = currentRef.current;
+    const was = hold?.fromItem || currentRef.current;
     belowRef.current = null;
-    if (belowItem) {
+    // ...drawn already by a held press when it is the same row - kept, never drawn twice; another row, and that draw comes down
+    if (hold?.ahead && belowItem?.key === hold.ahead.key) { belowRef.current = hold.ahead; setFlight((f) => (f ? { ...f, drawn: true } : f)); }
+    else if (hold?.ahead) { setMsgs((m) => m.filter((x) => x.id !== hold.ahead.id)); if (!belowItem) putOnTable(hold.fromItem); }
+    if (belowItem && !belowRef.current) {
       const id = `a${Date.now()}`;
       belowRef.current = { id, key: belowItem.key };
       setMsgs((m) => [...m, { id, role: "assistant", text: "", options: [], chips: [], card: belowItem, ahead: true }]);
@@ -2065,7 +2095,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (how === "back" && !data.item && data.top) { if (data.pile) holdPile(data.pile); }
       else landed(data);
       // ...the rail the answer brought is the server's word on them; brought later (pileLater), held until that rail lands
-      if (reads) setReadGone((g) => (!g || data?.pile ? null : { ...g, after: pileRef.current }));
+      // ...but what a Next held over this one reads stays off: it is that press's to give back
+      const h = heldRef.current;
+      if (reads) setReadGone((g) => (h?.gone.length ? { keys: h.gone, coming: h.coming } : !g || data?.pile ? null : { ...g, after: pileRef.current }));
       if (how === "leave") onChanged?.();            // a draft may have gone out: the Review badge recounts
       // ...and A CLOSE KEPT OPEN (a Send with work still live on it, 2026-11-01) is back on the rail as well as the table: the row put down
       // at the press stayed hidden from the rail, its canvas drawn over nothing - the two say the same thing or the owner is lost
@@ -2078,6 +2110,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // ...and the row drawn ahead comes down, the table back on the row the press left
       const ahead = belowRef.current; belowRef.current = null;
       if (ahead) { setMsgs((m) => m.filter((x) => x.id !== ahead.id)); putOnTable(was); }
+      // ...and a Next held over it goes with it: it was pressed on a row this press never brought
+      if (heldRef.current) { nextHeld.current = false; cancelHeld(false); }
       if (epoch === chatEpoch.current) setErr(errText(e));
     }
     turnFlight.current = false;
@@ -2559,7 +2593,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c, anchor) => {
-    if (c?.verb === "next" && busy && flight?.drawn && !resetting) { nextHeld.current = true; return; }   // ...held, as actions.next holds it
+    if (c?.verb === "next" && busy && flight?.drawn && !resetting) { holdNext(); return; }   // ...held, as actions.next holds it
     if (busy || resetting || !c) return;
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
@@ -2585,7 +2619,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
-    if (c.verb === "next") { surface(null, null, key, !item); return; }
+    if (c.verb === "next") { surface(null, null, heldRef.current?.from || key, !item); return; }   // ...a held Next: from the row it put down
     // MARK DONE UNDER A SEND'S RECEIPT: the task it names, closed by the one close - the item it was may be gone already (its draft
     // went), so this never asks the table for it - then the walk goes on
     // ...through the walk when it is the task on the table (railwalk.leave); one off the table is closed and the walk left alone
@@ -2983,7 +3017,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const backHeld = useRef(false);
   const goBack = () => {
     if (resetting) return undefined;
-    if (busy || turnFlight.current) { backHeld.current = true; nextHeld.current = false; return undefined; }
+    if (busy || turnFlight.current) { backHeld.current = true; nextHeld.current = false; cancelHeld(); return undefined; }
     if (!walkOf(pileRef.current)?.above) return undefined;
     navHow.current = "replace";
     setRailOpen(false); if (old) setOld(null); browseDown();
@@ -3076,6 +3110,26 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // ...as a warning, not a success: "✓ That is after it is due" ticked a line saying the day picked may be wrong (the 2026-10-25 sweep)
       return out?.warn ? [...ms, { id: `r${Date.now()}`, role: "receipt", status: "warn", tid, ref, text: out.warn }] : ms; });
   };
+  // NEXT ON A ROW A PRESS DREW, WHILE THAT PRESS IS OUT (the owner, 2026-11-02: "when you hit next the one you are on, task or report, does
+  // not disappear right away"): held until the answer landed, the row sat on the table, ringed, for as long as the server took - seconds on
+  // a real home. Now the press puts it down at once - off the rail too when Next reads it - and draws the row after it, both the walk's word
+  // one step further (heldStep: walk.then, walk.below_reads); the press itself still goes once the one before is in (the effect below).
+  // A row the walk cannot see past (a pick off the line) only folds; the dots stand until its answer
+  const holdNext = () => {
+    nextHeld.current = true;
+    const from = currentRef.current?.key;
+    if (heldRef.current || !flight?.drawn || !from) return;
+    const step = heldStep(walkOf(pileRef.current), from);
+    const h = { from, fromItem: currentRef.current, ahead: null, gone: step.gone, coming: step.reads && step.then?.startsWith("fyis:") ? step.then : null };
+    heldRef.current = h; setHeld(h);
+    setExpanded(false); setFoldedKey(from); leftKey.current = from;
+    if (h.gone.length) setReadGone((g) => ({ keys: [...(g?.keys || []), ...h.gone], coming: h.coming || g?.coming || null }));
+    const item = step.then && !step.then.startsWith("fyis:") ? (pileRef.current?.items || []).find((i) => i.key === step.then && !i.settling) || null : null;
+    if (!item) return;
+    h.ahead = { id: `a${Date.now()}h`, key: item.key };
+    setMsgs((m) => [...m, { id: h.ahead.id, role: "assistant", text: "", options: [], chips: [], card: item, ahead: true }]);
+    putOnTable(item);
+  };
   // ...the Advisor's own move (a task to fix what failed, a proposal) pressed from a phone's row as from this one: the phone's strip had
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
   // SEND TO AGENT WITH NO AI IS GREYED, ITS REASON THE HOVER - on a report, an FYI or a mail as on a task (trust audit F3, 2026-10-28): the
@@ -3083,7 +3137,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     // ...Next on a row a press drew up while that press is still out is held, then runs from it (rule 7: the owner never presses twice)
-    next: () => { if ((picking || flight?.drawn) && busy) nextHeld.current = true; else runChip({ verb: "next" }); }, picking: picking && !resetting, leave, reload: () => loadPile(true), changed: onChanged,
+    next: () => { if ((picking || flight?.drawn) && busy) holdNext(); else runChip({ verb: "next" }); }, picking: picking && !resetting, leave, reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
     reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
@@ -3100,7 +3154,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       deferInChat(() => key ? surfaceRef.current?.(key) : loadPileRef.current?.(), 900);
     } };
   // ...the Next held over a pick runs the moment it lands (or is dropped with it, by a reset)
-  useEffect(() => { if (busy || !nextHeld.current) return; nextHeld.current = false; if (!resetting) runChip({ verb: "next" }); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...from the row it put down when it put one down (holdNext)
+  useEffect(() => { if (busy || !nextHeld.current) return; nextHeld.current = false;
+    if (resetting) cancelHeld(false); else runChip({ verb: "next" }); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...and Back the same: pressed while a move is landing it runs once that move is in, from the item it brought
   useEffect(() => { if (busy || !backHeld.current) return; backHeld.current = false; if (!resetting) goBack(); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   // THE DAY'S OPENER IS THE TOP OF THE CONVERSATION (the owner, 2026-11-01: "let's move the greeting all the way to the top always"):
@@ -3791,7 +3847,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // ...unless the press read them: then they are off the pile already (readGone), the ring would only put them back (onTable), and
         // the fyi batch below them takes the bracket at the press - the answer puts the same one on the table
         current={old ? null : readGone?.keys.includes(currentItem?.key) ? (readGone.coming ? { key: readGone.coming, kind: "fyis", members: readGone.coming.slice(5).split(",") } : null)
-          : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
+          : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) || (held && currentItem?.key === held.from) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} /></>}

@@ -178,72 +178,13 @@ def score(d: dict, lit: str = 'lit') -> str:
 
 # ── WHAT TODAY'S CODE WOULD HAVE LIT (replay) ─────────────────────────────────────────────────────────────────────────────────────────
 # No model is called. Where the item has not changed since (its revision now is the one pressed on), today's advisor.decide runs on a copy
-# of the store and reads the recorded model rows at that revision - an exact replay. Elsewhere the store has moved on, so each of today's
-# fixes is replayed from what was recorded at the time (the 2026-10-28 audit commit):
-#   draft   Reply lit while Send was on the row, its reason anything but a caution about the draft -> Send         (advisor.checked)
-#   done    Continue lit on a stopped agent that had left a result or a done note by then -> Mark done           (rulebook.stopped_done)
-#   silent  the model's Remind me, or its Reply over Send, with no line -> the rule's button, read off the row    (advisor.decide)
-# Not replayable without a model call: the memory budget (How you work read in full) and the hollow-line check change what the model
-# READS and which of its lines show; the verbs it would pick with them are unknown. Those decisions are counted unchanged.
-def left_result_at(cx, tid, at) -> bool:
-    """rulebook.left_result as it stood at `at`: a done note newer than any ready note, a finished event with words no later working event
-    took up, or a run that kept a result and was over."""
-    n = cx.execute("SELECT Kind FROM boardnote WHERE TaskId=? AND Kind IN ('ready','done') AND CreatedAt<=? ORDER BY NoteId DESC LIMIT 1", (tid, at)).fetchone()
-    if n and n['Kind'] == 'done': return True
-    def ev(k): return cx.execute("SELECT Id, Text FROM worker_event WHERE TaskId=? AND Kind=? AND CreatedAt<=? ORDER BY Id DESC LIMIT 1", (tid, k, at)).fetchone()
-    fin = ev('finished'); work = fin and ev('working')
-    if fin and str(fin['Text'] or '').strip() and (not work or work['Id'] < fin['Id']): return True
-    r = cx.execute("SELECT Result, Status FROM run WHERE TaskId=? AND IFNULL(StartedAt,'')<=? ORDER BY RunId DESC LIMIT 1", (tid, at)).fetchone()
-    return bool(r) and bool(str(r['Result'] or '').strip()) and r['Status'] not in ('failed', 'error', 'running')
-
-
-def failed_at(cx, tid, at) -> bool:
-    r = cx.execute("SELECT Kind FROM worker_event WHERE TaskId=? AND Kind IN ('failed','finished','stopped','working') AND CreatedAt<=? ORDER BY Id DESC LIMIT 1",
-                   (tid, at)).fetchone()
-    return bool(r) and r['Kind'] == 'failed'
-
-
-def _rule_verb(d) -> str:
-    """The rule's lit button under a model's override, read off the row it was on: Send over a draft, Take it on an idea, Reply to an ask."""
-    live = set(d['live'])
-    if 'approve' in live: return 'approve'
-    if d['kind'] == 'idea' and 'mine' in live: return 'mine'
-    if d['kind'] in ('fyi', 'report'): return 'next'
-    return 'reply' if 'reply' in live else 'next'
-
-
+# of the store and reads the recorded model rows at that revision - an exact replay. Elsewhere the store has moved on, and since 2026-11-02
+# today's code has no rule of its own to replay (the owner: "never ever use hard coded rules"): the model decides every light and code only
+# refuses a button the owner could not press. A model's verb stands as it was; a rule's ('left to the rule' - no model ever read the item) is
+# the model's to read today, which needs a model call - counted unchanged, named 'model' so the report says how many such decisions remain.
 def mirror(cx, d) -> tuple:
-    """(the verb today's code lights, the fix that moved it or '') from what was recorded at the decision."""
-    lit, (tk, ti), live, st = d['lit'], d['target'], set(d['live']), d['state'].lstrip('~')
-    m = model_row(cx, tk, ti, d['rev'], lit) if d['by'] == 'model' else None
-    silent = bool(m) and not str(m.get('Line') or '').strip()
-    # NO DEFAULT VERB (the owner, 2026-10-28): the model's Send or Reply with no fact said beside it - none, or one that only explains the
-    # button - lights nothing now
-    if lit in ('approve', 'reply') and m and (silent or (m.get('Kind') or 'other') == 'other'): return '', 'quiet'
-    if lit == 'reply' and 'approve' in live and (not m or m.get('Kind') != 'draft_caution' or silent): return 'approve', 'draft'
-    if lit == 'continue' and tk == 'task' and not failed_at(cx, ti, d['at']) and left_result_at(cx, ti, d['at']):
-        return ('close' if 'close' in live or not live else 'continue'), 'done'
-    if lit == 'defer' and silent: return _rule_verb(d), 'silent'
-    # ...and the rule's own reasonless lights: Continue on a plain stop, Remind me on a wait nothing is late on, and Hand to an agent but past
-    # a capacity wall (the finish check's Continue with this is not replayable: no model is called)
-    if lit == 'continue' and st == 'stopped' and d['by'] == 'rule': return '', 'quiet'
-    if lit == 'defer' and st == 'waiting' and d['by'] == 'rule': return '', 'quiet'
-    if lit == 'regular_agent' and not (tk == 'task' and failed_at(cx, ti, d['at'])): return '', 'quiet'
-    if d['by'] == 'rule' and not calibrated(cx, d): return '', 'calibrated'
-    return lit, ''
-
-
-def calibrated(cx, d) -> bool:
-    """taskuary.calibrate as it would have stood at the decision: the owner's answers in its state over the 30 days BEFORE it (never after -
-    the replay does not peek), its rule button trusted at 80% on five or more, or with less record."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from taskuary import calibrate
-    st = d['state'].lstrip('~') if not d['state'].startswith('~') else ''      # a state guessed off the button has no record to read
-    if not st: return True
-    rows = _rows(cx, 'SELECT Key, Revision, State, Pressed FROM advice_press WHERE State=? AND CreatedAt>=? AND CreatedAt<? ORDER BY Id',
-                 (st, _later(d['at'], -24 * calibrate.DAYS), d['at']))
-    sh, n = calibrate.share(calibrate.choices(rows).get(st, {}), d['lit'])
-    return n < calibrate.MIN or sh >= calibrate.BAR
+    """(the verb today's code lights, how) from what was recorded at the decision."""
+    return d['lit'], ('model' if d['by'] == 'rule' else '')
 
 
 def replay(cx, ds, store=None) -> list:
@@ -402,13 +343,13 @@ def report(ds, since, replayed=False, cx=None) -> str:
     out += [f"  {len(xs):>3}  {lit} ({st})   e.g. {_ids(xs)}" for (lit, st), xs in
             sorted(_group(grey, lambda d: (d['lit'], d['state'].lstrip('~'))).items(), key=lambda kv: -len(kv[1]))]
     if replayed:
-        moved = Counter(d['how'] for d in ds if d['how'] not in ('', 'exact') and d['today'] != d['lit'])
+        moved = Counter(d['how'] for d in ds if d['how'] not in ('', 'exact', 'model') and d['today'] != d['lit'])
         exact = [d for d in ds if d['how'] == 'exact']
         out += ['', line(tally(ds, 'today'), since, "With today's code (replayed)"),
                 f"  exact replays (item unchanged since, today's decide on a copy): {len(exact)}, {sum(d['today'] != d['lit'] for d in exact)} lit differently",
                 '  moved by a fix replayed from the record: ' + (', '.join(f'{k} {v}' for k, v in sorted(moved.items())) or 'none')
                 + f"; counted unchanged: {sum(1 for d in ds if not d['how'] or d['today'] == d['lit'] and d['how'] != 'exact')}",
-                '  not replayable: the memory budget and the hollow-line check (they change what the model reads; no model is called)',
+                f"  left to a rule then, the model's to read now (not replayable without a model call): {sum(d['how'] == 'model' for d in ds)}",
                 '', "misses left with today's code:"]
         out += [f"  {len(xs):>3}  {lit} ({who}, {st}) -> {act}   e.g. {_ids(xs)}" for (lit, who, st, act), xs in misses(ds, 'today')]
     return '\n'.join(out)

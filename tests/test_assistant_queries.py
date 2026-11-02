@@ -26,7 +26,7 @@ class EverydayAsks(unittest.TestCase):
         # powers"): the page it is shown, Taskuary's own trouble, its tracker, its help, work that is an agent's, the newer row buttons
         self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
                                 'bring-up', 'connectors', 'phone', 'memory', 'page', 'troubleshoot', 'feedback', 'help', 'agentwork',
-                                'row', 'sets', 'new', 'people', 'app', 'task', 'rail'})
+                                'row', 'sets', 'new', 'people', 'app', 'task', 'rail', 'connections'})
 
     def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
         self.assertEqual({v for v, d, p in Q.reach() if not d}, set())
@@ -109,6 +109,17 @@ class EverydayAsks(unittest.TestCase):
         s = Q._world(); Q.watched(s)
         line = next(l for l in concierge.read_op(s, 'tasks.list', {}).splitlines() if l.startswith(Q.T2))
         self.assertTrue(line.endswith('watching (Watch it)'), line)
+
+    def test_on_the_connections_page_the_model_is_told_what_it_needs(self):
+        # the Connections audit, 2026-11-02: a road that grades right can still tell the model too little to answer well
+        told = {r['q'].text: r['ideal']['told'] for r in self.rows if r['q'].cat == 'connections'}
+        # a system with no card: the miss names the feature request, and never asks it to name closest cards there are none of
+        self.assertIn('issue.draft', told['connect Frobnitz']); self.assertNotIn('naming those', told['connect Frobnitz'])
+        # a catalogue card never set up is not set up - not "switched off", as if the owner had turned it off
+        self.assertIn('Gmail / Google Workspace is not set up yet', told['gmial wont conect'])
+        # ...and the help it reads says a data card is a report's, and what the voice cards do
+        self.assertIn('never puts work on your rail', told['will quickbooks put bills on my task list?'])
+        self.assertIn('AI · voice', told['how do voice notes get transcribed?'])
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')

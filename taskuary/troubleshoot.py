@@ -36,7 +36,11 @@ def find(store, name: str = '', connector_id=None) -> dict | None:
     """The connection named - by its card's name, then by its type ("whatsapp" for a card the owner renamed)."""
     hit = appfacts.find_connection(store, name, connector_id)
     w = str(name or '').strip().lower()
-    return hit or next((c for c in sorted(appfacts.connections(store), key=lambda c: not c['active']) if w and c['type'] == w), None)
+    typed = next((c for c in sorted(appfacts.connections(store), key=lambda c: not c['active']) if w and c['type'] == w), None)
+    # ...but a LIVE card of that type beats a switched-off one whose name merely holds the word (2026-11-02): "is my outlook working?"
+    # matched the catalogue's unused "Outlook mail" card before the owner's own Outlook card, renamed "Work mail" - and was told it was off
+    if typed and typed['active'] and not (hit and hit['active']) and not str(connector_id or '').strip(): return typed
+    return hit or typed
 
 
 def _tail(path: Path, n=LOG_LINES) -> list:

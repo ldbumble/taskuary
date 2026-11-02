@@ -27,7 +27,14 @@ class EverydayAsks(unittest.TestCase):
         self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
                                 'bring-up', 'connectors', 'phone', 'memory', 'page', 'troubleshoot', 'feedback', 'help', 'agentwork',
                                 'row', 'sets', 'new', 'people', 'app', 'task', 'rail', 'connections',
-                                'hub-board-search'})
+                                'hub-board-search', 'self-knowledge'})
+
+    def test_a_connection_asked_after_by_its_type_is_the_owners_live_card(self):
+        # the owner's Outlook card is named "Work mail"; "outlook" matched the catalogue's unused "Outlook mail" card first and the owner
+        # was told their connected mail was switched off, with its Open button under the line (troubleshoot.find, 2026-11-02)
+        r = next(r for r in self.rows if r['q'].text == 'is the outlook connection healthy')
+        self.assertEqual(r['ideal']['got'], ['read:app.health'])
+        self.assertIn('Work mail', r['ideal']['told']); self.assertNotIn('switched off', r['ideal']['told'])
 
     def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
         self.assertEqual({v for v, d, p in Q.reach() if not d}, set())
@@ -152,6 +159,31 @@ class EverydayAsks(unittest.TestCase):
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):
         r = next(r for r in self.rows if r['q'].text == 'Clear all the FYI, please.')
         self.assertIn('cleared', r['ideal']['got']); self.assertRegex(r['ideal']['say'], r'^Marked (all )?\d+ (items?|FYI|reports?) read')
+
+
+class WhatItKnowsOnEveryPage(unittest.TestCase):
+    """The owner's documents reach the Assistant's instructions whatever page it is asked on (the owner, 2026-11-01: "it has the right
+    tools, memories, and jobs/soul.md to be able to help the user on every page"). SOUL, JOB, COUNSEL and the memory's lines in use ride
+    every turn, on the desk and on a phone; STYLE.md and AGENT.md are read on asking (docs.search names them) - nothing pinned this."""
+    def test_soul_job_counsel_and_the_memory_reach_it_on_every_page_and_style_and_agent_on_asking(self):
+        from contextlib import ExitStack
+        from unittest import mock
+        from taskuary import __version__, counsel as counsel_doc, memoryedit, server
+        s = Q._world()
+        memoryedit.remember(s, 'I put vendor renewals off to Friday', section='work')
+        soul, job, counsel = (next(l for l in str(d).splitlines() if len(l.strip()) > 30).strip()
+                              for d in (s.doc('soul'), s.doc('job'), counsel_doc.for_chat(s)))     # COUNSEL.md as read: its comments left out
+        for name, view, phone in [('no page', None, False), ('a task', Q.TASKPAGE, False), ('a connection', Q.IMAP, False),
+                                  ('settings', Q.SETTINGSPAGE, False), ('the memory', Q.LEARNEDDOC, False), ('a phone', None, True)]:
+            seen = []
+            with self.subTest(page=name), ExitStack() as st:
+                Q._guards(st); st.enter_context(mock.patch.object(server, 'store', s))
+                if phone: st.enter_context(concierge.delivering(concierge.PHONE))
+                concierge.say(s, 'what matters most today?', llm=lambda sy, u, **k: (seen.append(sy), 'The month-end close.')[1], view=view)
+                sy = seen[0]
+                for part in (soul, job, counsel, 'I put vendor renewals off to Friday', f'TASKUARY {__version__}'): self.assertIn(part, sy)
+                self.assertIn('STYLE.md (how they write', sy); self.assertIn('AGENT.md (the rules every agent works under)', sy)
+                self.assertIn('"your doc style"', sy)
 
 
 if __name__ == '__main__': unittest.main()

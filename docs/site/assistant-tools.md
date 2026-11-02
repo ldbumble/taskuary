@@ -105,9 +105,7 @@ The "Mark done" button: the task behind the item is finished.
 
 ### `next`
 
-The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or "clear ..." - those name a set: pipe.clear - "walk me through the reports" starts at that section's first row, as a click on its heading does.
-
-- `section` - a rail heading (Tasks, Watching, For later, Reports, Advisor, FYI)
+The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or "clear ..." - those name a set: pipe.clear.
 
 <p class="runs">At once.</p>
 
@@ -379,7 +377,7 @@ The owner's yes to what is drafted: sends the reply as it stands - and on a task
 
 ### `review.reject`
 
-Reject the draft waiting on a task - nothing is sent, the task stays open. A REPLY draft is never rejected: Redraft (redraft) writes it again, Mark done (close) closes the task with nothing sent.
+Reject the draft reply waiting on a task - nothing is sent, the task stays open.
 
 - `ref` (optional) - the task
 
@@ -695,7 +693,7 @@ Change one setting; the schema says what it takes.
 
 ### `connection.create`
 
-Bring up a connector card to connect it; a second one of a kind opens with its Add another. An email account is a mailbox: gmail, outlook, else imap (Zoho Mail, Yahoo, a domain address) - never another product of the same company. Never carrying a secret: the owner gives it on the card. A system the catalogue has no card for is a feature request: issue.draft.
+Bring up a connector card to connect it; a second one of a kind opens with its Add another. An email account is a mailbox: gmail, outlook, else imap (Zoho Mail, Yahoo, a domain address) - never another product of the same company. Never carrying a secret: the owner gives it on the card.
 
 - `type` - the catalogue type or title (linkedin, slack, "QuickBooks Online")
 - `name` (optional)
@@ -776,10 +774,10 @@ Keep a fact or rule the owner tells you, at once - those five are LEARNED.md, th
 
 ### `memory.wrong`
 
-Take a line Taskuary learned out of its memory. "forget that Ray does payroll", "that is wrong about Erin". On the habits row: Adopt is keep, No and Not right are wrong. A line the owner wrote themselves takes forget only.
+Take a line Taskuary learned out of its memory. "forget that Ray does payroll", "that is wrong about Erin". A line the owner wrote themselves takes forget only.
 
 - `key` - from memory.about or memory.list
-- `how` (optional) - wrong (it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it was true and stopped: kept as history) | keep (the memory page's Keep: a proposed line adopted as the owner's)
+- `how` (optional) - wrong (it was never true: never written back) | forget (not now: back only on much more evidence) | ended (it was true and stopped: kept as history)
 
 <p class="runs">Runs at once and says what it changed.</p>
 
@@ -806,7 +804,7 @@ Change or delete one routing rule (its page: rules). Adding a rule for a sender 
 
 ### `deleted.restore`
 
-Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile. A Hub post taken off is not here: it is on the Hub's own removed shelf, restored there.
+Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile.
 
 - `what` - its title as deleted.list says it
 
@@ -814,7 +812,7 @@ Bring back something removed in the last 30 days - a report, workflow, dashboard
 
 ### `hub.publish`
 
-Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there - at the desk the Hub comes up at its Write one with your words, theirs to post - or, on a phone, when a turn clearly earns it.
+Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.
 
 - `title` - one durable claim
 - `body` - why it matters and what to do
@@ -917,7 +915,7 @@ One person at a glance - how often they write, their recent messages, their open
 
 ### `docs.search`
 
-How Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, COUNSEL...) and what each release changed (help/whats-new) - one of the owner's docs whole is `your doc <name>` (your doc style, your doc triage). Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app.
+How Taskuary works and how to set it up (the help pages), and the owner's own docs - STYLE.md (how they write: greeting, sign-off, tone), AGENT.md (the rules every agent works under), TRIAGE.md, CODING.md, DIGEST.md (the morning brief), the profiles - each read whole as `section` "your doc <name>" (your doc style) - and what each release changed (help/whats-new). Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app.
 
 - `query` - the words
 - `section` - one section read whole, as its contents list names it
@@ -1005,7 +1003,7 @@ The files agents made on tasks - workbooks, PDFs, documents, charts, pages - eac
 
 ### `deleted.list`
 
-What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles (never a Hub post: the Hub keeps its own removed shelf)
+What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles.
 
 <p class="runs">Runs at once and changes nothing.</p>
 

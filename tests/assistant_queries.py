@@ -1044,6 +1044,70 @@ AREA_PHONE = [
 ]
 CASES += AREA_PHONE
 
+# WHAT IT KNOWS ABOUT ITSELF AND THE OWNER (the owner, 2026-11-01: "it has the right tools, memories, and jobs/soul.md to be able to help the
+# user on every page"): the memory and the owner's documents - kept, read and corrected - its help, its own trouble and its tracker. The
+# docs pages (Settings → Docs) send their buttons; their document's own box has no label and goes as no field - a VIEW `set` would put a
+# 200-character cut in place of the whole document, so a line is added with memory.remember, never typed into the box
+def _doc(name, *b): return {'area': 'settings', 'title': f'the document "{name}" (Settings - Docs)', 'fields': [],
+                            'buttons': [{'id': i, 'label': l} for i, l in b] + [{'id': 'saved', 'label': 'Saved', 'enabled': False}]}
+LEARNEDDOC = _doc('LEARNED.md', ('text', 'Text'), ('what_changed', 'What changed'), ('visualize', 'Visualize'), ('reflect_now', 'Reflect now'))
+STYLEDOC, SOULDOC = _doc('STYLE.md', ('generate_from_history', 'Generate from history')), _doc('SOUL.md', ('write_it_from_a_few_questions', 'Write it from a few questions'))
+from taskuary import __version__
+AREA_SELF_KNOWLEDGE = [
+    # ── the memory, on its own page and off it ──
+    Q('self-knowledge', 'what have you learned about how I work?', None, [c('memory.list'), 'Nothing kept yet - every section is still empty.'],
+      'read:memory.list', view=LEARNEDDOC, freq=3),
+    Q('self-knowledge', 'show me what changed in my memory this week', None, v(op='press', button='what_changed'), 'view:press:what_changed', tools=('words',),
+      view=LEARNEDDOC, freq=2),
+    Q('self-knowledge', 'reflect now', None, v(op='press', button='reflect_now'), 'view:press:reflect_now', tools=('words',), view=LEARNEDDOC, freq=1),
+    Q('self-knowledge', 'remember I never want the payroll vendor newsletters as tasks', None,
+      c('memory.remember', note='I never want the payroll vendor newsletters as tasks', section='care'), 'did:memory.remember', view=LEARNEDDOC, freq=3),
+    Q('self-knowledge', 'do you read my LEARNED.md?', None, 'Yes - the lines in use, with SOUL.md and JOB.md, on every page.', 'words', tools=('words',), freq=1),
+    # ── the owner's documents: each fact goes where its reader reads it (memory.remember's section), a document's own buttons pressed ──
+    Q('self-knowledge', "from now on sign my emails 'Best, Alex'", None, c('memory.remember', note="sign every email 'Best, Alex'", section='style'),
+      'did:memory.remember', view=STYLEDOC, freq=3),
+    Q('self-knowledge', 'regenerate my style from my sent mail', None, v(op='press', button='generate_from_history'), 'view:press:generate_from_history',
+      tools=('words',), view=STYLEDOC, freq=2),
+    Q('self-knowledge', 'be shorter with me', None, c('memory.remember', note='be shorter with me', section='counsel'), 'did:memory.remember', freq=3),
+    Q('self-knowledge', "add to this that I'm the AP lead now", None, c('memory.remember', note="I'm the AP lead now", section='soul'), 'did:memory.remember',
+      view=SOULDOC, freq=2, note="the document's box is no field: the line is kept by memory.remember, never typed over the document"),
+    Q('self-knowledge', 'what does my JOB.md say I am responsible for?', None,
+      'The finance and census systems: the GL export, the AP importers, the census database and the helpdesk.', 'words', tools=('words',), freq=2,
+      note="JOB.md rides the Assistant's own instructions, whole"),
+    Q('self-knowledge', 'how do I usually sign off my emails?', None, [c('docs.search', section='your doc style'), 'Your STYLE.md has no sign-off line yet.'],
+      'read:docs.search', freq=2),
+    Q('self-knowledge', 'what rules do the agents work under', None, [c('docs.search', section='your doc agent'), 'AGENT.md: nothing sends without you.'],
+      'read:docs.search', freq=1),
+    Q('self-knowledge', 'open my soul doc', None, 'Here: [SOUL.md](#settings=docs&doc=soul).', 'link:#settings=docs&doc=soul', tools=('pages',), freq=2),
+    # ── its help and what version this is ──
+    Q('self-knowledge', 'how does the memory work?', None, [c('docs.search', query='memory'), 'It learns from what you do, never a button press.'],
+      'read:docs.search', freq=2),
+    Q('self-knowledge', "what's the diffrence between SOUL and JOB", None, [c('docs.search', query='JOB.md'), 'SOUL is the rules; JOB is what you protect.'],
+      'read:docs.search', freq=2),
+    Q('self-knowledge', 'where are the logs kept', None, [c('docs.search', section='help/troubleshooting > Where the logs are'), 'In taskuary.log, in your home.'],
+      'read:docs.search', freq=2),
+    Q('self-knowledge', 'what version am I on?', None, f'This is Taskuary {__version__}.', 'words', tools=('words',), freq=2,
+      note='the version rides its instructions (concierge._system)'),
+    # ── its own trouble, looked into here ──
+    Q('self-knowledge', 'something is wrong with taskuary, it feels stuck', None, [c('app.health'), 'Nothing is failing right now.'], 'read:app.health', freq=3),
+    Q('self-knowledge', "why didn't my AP ageing report run this morning", None, [c('errors.list', days=1), 'No report run failed in the last day.'],
+      'read:errors.list', freq=3),
+    Q('self-knowledge', 'is the outlook connection healthy', None, [c('app.health', name='outlook'), 'Work mail is on; nothing failing.'], 'read:app.health',
+      view=IMAP, freq=2, note="the owner's Outlook card is named Work mail: the live card is read, never the catalogue's unused Outlook one"),
+    Q('self-knowledge', 'clear the error on the bell', None, ['Each problem on the bell has its own Got it - press it there; the bell is not something I can press from here.'], 'words',
+      tools=('words',), freq=2, note="the bell is no page the Assistant is shown (pageView ROOTS) and no tool dismisses one"),
+    # ── its tracker: drafted here, submitted by the owner ──
+    Q('self-knowledge', 'taskaury keeps freezing when I press Next', None,
+      [c('issue.draft', kind='bug', trying='press Next on the walk', happened='the app froze'), 'A bug report is drafted below for your Submit.'],
+      'read:issue.draft', freq=3),
+    Q('self-knowledge', 'file a bug: the chat pill covers the Save button on settings', None,
+      [c('issue.draft', kind='bug', trying='press Save on a settings page', happened='the chat pill covers the button'), 'Drafted below - Submit it on GitHub.'],
+      'read:issue.draft', view=SETTINGSPAGE, freq=2),
+    Q('self-knowledge', 'submit that bug report for me', None, 'Submit is yours to press on GitHub - nothing is filed from here.', 'words', tools=('words',), freq=1,
+      note='nothing is filed from the chat: the owner submits'),
+]
+CASES += AREA_SELF_KNOWLEDGE
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

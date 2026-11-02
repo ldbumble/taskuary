@@ -29,6 +29,6 @@ test("the workflow shelf has its own conversational AI builder", () => {
   const view = read("ReportsView.jsx");
   assert.match(view, /kind === "workflow" \? "\/api\/workflows\/compose"/);
   assert.match(view, /"Describe the routine you want"/);
-  assert.match(view, /useViewExtras\("reports", \{ fields: \[\{ key: "describe"/);
+  assert.match(view, /useViewExtras\("reports", \{ item: .*?, fields: \[\{ key: "describe"/);
   assert.match(view, /<SetupWithAi kind="workflow"/);
 });

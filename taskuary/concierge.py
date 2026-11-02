@@ -1379,6 +1379,24 @@ def _relate(store, tid: int, p: dict, actor: str) -> dict:
     return _did(store, tid, f"Org chart: {who} - {orgchart.words(r) or 'nothing now'}.", 'people.relate')
 
 
+def _bell(store, tid: int, p: dict, actor: str) -> dict:
+    "problems.dismiss, run: the bell's Dismiss (or a back-to-normal line's Got it) on each problem `which` names - all, or the only one."
+    from . import problems
+    rows = problems.collect(store) + problems.news(store)
+    w = re.sub(r'^(the|my) ', '', ' '.join(str(p.get('which') or p.get('what') or p.get('key') or '').split()).lower())
+    if not rows: raise CallMiss('Nothing is on the bell - nothing failing, nothing to put down. Say so in plain words. Nothing was changed.')
+    every = w in ('all', 'everything', 'them all', 'all of them') or (not w and len(rows) == 1)
+    hits = rows if every else [r for r in rows if w and (w == r['key'].lower() or w in f"{r['title']} {r.get('detail') or ''}".lower())]
+    if not hits:
+        raise CallMiss(f"{'Nothing on the bell matches ' + repr(w) if w else 'The bell holds several'} - "
+                       + '; '.join(r['title'] for r in rows[:8]) + '. CALL it again with `which`: words of one title, or all. Nothing was changed.')
+    for r in hits:
+        try: problems.dismiss(store, r['key'], actor)
+        except ValueError: pass                                     # it cleared itself in the meantime
+    said = f"“{hits[0]['title']}”" if len(hits) == 1 else f"{len(hits)} on the bell - " + '; '.join(r['title'] for r in hits[:5])
+    return _did(store, tid, f'Put down {said}. It comes back if it fails again after working.', 'problems.dismiss')
+
+
 def _memory(store, tid: int, kind: str, p: dict) -> dict:
     """memory.remember (a fact about how the owner works) and memory.wrong, run: the memory changed and said in one line, with the words
     of the line - or a miss the model fixes (no such line; Wrong on the owner's own line)."""
@@ -1439,7 +1457,7 @@ def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
 
 # WHERE A REMOVED THING IS RESTORED - Recently deleted sits on the shelf it came off (Removed.jsx)
 DELETED_AT = {'report': '#report=reports', 'workflow': '#report=workflows', 'dashboard': '#report=dashboards', 'rule': '#settings=policies',
-              'profile': '#profiles'}
+              'profile': '#profiles', 'hub post': '#hub'}
 
 
 def find_rule(store, about: str) -> dict:
@@ -1457,13 +1475,14 @@ def find_deleted(store, what: str) -> dict:
     """The one Recently deleted entry `what` names (its title or id). CallMiss with what is there otherwise."""
     from . import recentlydeleted
     w, rows = ' '.join(str(what or '').split()).lower(), recentlydeleted.listing(store)
-    hits = [r for r in rows if w and (w == str(r['id']) or w in str(r['title']).lower())]
+    w = re.sub(r'^(the|my|a) ', '', w)
+    # ...or by its kind alone, when one of that kind is there: "bring back the hub post I removed" names no title (2026-11-02)
+    hits = [r for r in rows if w and (w == str(r['id']) or w in str(r['title']).lower())] or [r for r in rows if w in (r['kind'], r['kind'] + 's')]
     if len(hits) != 1:
         raise CallMiss(f"{'Several removed things match' if hits else 'Nothing under Recently deleted matches'} {what!r} - "
                        + ('; '.join(f"{r['title']} ({r['kind']})" for r in (hits or rows)[:8]) or 'it is empty') + '. Nothing was changed.'
-                       # ...a Hub post taken off is never here (the assistant audit, 2026-11-02): "bring back the hub post I removed" read only
-                       # "it is empty", and the post waited on the Hub's own shelf
-                       + ('' if hits else " A Hub post taken off is not under Recently deleted: it waits on the Hub's own removed shelf - "
+                       # ...a Hub post the vote took off was never removed by anyone: it waits on the Hub's own shelf alone
+                       + ('' if hits else " A Hub post the vote took off is not here: it waits on the Hub's own removed shelf - "
                                           'the Hub, its removed button, then restore beside the post.'))
     return hits[0]
 
@@ -3086,6 +3105,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # WHO IS WHO, KEPT AND SAID (orgchart.py, 2026-10-22): the owner's word on a person - "Erin is my manager" - is a fact about their own
     # organisation, kept at once on the desk and the phone alike, like a note on a task: nothing leaves, and the chart has no page to bring up
     if kind == 'people.relate': return _relate(store, tid, params, actor)
+    # ...and THE BELL'S OWN DISMISS (the owner, 2026-11-02: "clear the error on the bell"): reading it changes nothing outside, so the words
+    # are the press, with the bell open or shut - and it comes back if the same thing fails again after working (problems.signature)
+    if kind == 'problems.dismiss': return _bell(store, tid, params, actor)
     # ...and HOW THE OWNER WORKS WITH THEM, said in the chat (slice 7, approved 2026-10-25: "Gail moved to Ops", "forget that Ray does
     # payroll"): kept at once, the same way - written where the memory's readers read it, the line it makes untrue closed as history
     # ...and EVERY fact, not only one naming a person or a section (the owner, 2026-10-27: "it should be anything I add to memory, like 'this

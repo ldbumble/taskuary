@@ -152,6 +152,23 @@ class RecentlyDeletedTests(unittest.TestCase):
         self.assertEqual(self.cfg['cli_connections']['claude'], {'cmd': 'claude', 'args': ['-p']})
         self.assertEqual(self.cfg['agents']['coding']['provider'], 'cli:claude')
 
+    def test_a_hub_post_removed_is_under_recently_deleted_too_and_either_shelf_brings_it_back(self):
+        """The owner, 2026-11-02: removing a Hub post puts it on the Recently deleted shelf. The Hub's own removed shelf keeps working,
+        and the two never disagree: put back from either, it is off both."""
+        from taskuary import handbook
+        lid = handbook.post(self.s, 'Finance closes on the first Wednesday', 'The bank feed has settled by then.', 'payroll', 'decision', 'owner')['LoreId']
+        out = self.c.post(f'/api/hub/{lid}/retire').json()
+        self.assertEqual((out['retired'], out['kind'], out['title']), (True, 'hub post', 'Finance closes on the first Wednesday'))
+        self.assertEqual(self.s.lore_get(lid)['Status'], 'retired')                         # ...on the Hub's own removed shelf, as ever
+        self.assertEqual([(d['kind'], d['title']) for d in self.c.get('/api/deleted').json()['data']],
+                         [('hub post', 'Finance closes on the first Wednesday')])
+        self.assertEqual(self.c.post(f"/api/deleted/{out['deleted']}/restore").status_code, 200)
+        self.assertEqual(self.s.lore_get(lid)['Status'], 'live')
+        again = self.c.post(f'/api/hub/{lid}/retire').json()                                # ...and from the Hub's own shelf:
+        self.c.post(f'/api/hub/{lid}/restore')
+        self.assertEqual((self.s.lore_get(lid)['Status'], self.c.get('/api/deleted').json()['data']), ('live', []))
+        self.assertEqual(self.c.post(f"/api/deleted/{again['deleted']}/restore").status_code, 404)
+
 
 if __name__ == '__main__':
     unittest.main()

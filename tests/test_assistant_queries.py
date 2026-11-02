@@ -153,7 +153,15 @@ class EverydayAsks(unittest.TestCase):
         self.assertIn('open:#hub', r['put this on the hub: finance closes on the first Wednesday']['got'])
         self.assertIn('Write one', r['put this on the hub: finance closes on the first Wednesday']['say'])
         self.assertIn('open:#hub', r['save to the hub: the bank feed lags a day at month end']['got'])
-        self.assertIn("the Hub's own removed shelf", r['bring back the hub post I removed']['told'])
+        # ...and since 2026-11-02 a post the owner removed is under Recently deleted, the Hub brought up with it; the vote's is said to be on
+        # the Hub's own shelf
+        self.assertIn('open:#hub', r['bring back the hub post I removed']['got'])
+        self.assertIn("the Hub's own removed shelf", r['bring back the post the vote took off']['told'])
+        # THE DIALOGS ARE VIEWS AND THE BELL A TOOL (the owner, 2026-11-02): Write one's Post it is lit, a Search hit pressed, the bell put down
+        self.assertIn('view:press:write_one', r['write one: the bank feed lags a day at month end']['got'])
+        self.assertIn('view:open:search', r['search everything for pyodbc and open the first hit']['got'])
+        self.assertTrue(r['clear the error on the bell']['say'].startswith('Put down “GitHub'), r['clear the error on the bell']['say'])
+        self.assertIn('Work mail', r['clear the bell']['told'])
         self.assertEqual([g for g in r['comment that the driver is in the build image now']['got'] if g.startswith('view:point')], ['view:point:post'])
 
     def test_clear_all_the_fyi_clears_them_and_says_how_many(self):

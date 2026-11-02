@@ -218,12 +218,15 @@ PURPOSE = {
     'rule.change':              ('change or delete one routing rule (its page: rules) - `about`: words naming it, as rules.list '
                                  'says it (its sender, pattern or name); `how`: edit (the default) | remove. Adding a rule for a sender '
                                  'is preference.sender_rule'),
-    'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile - '
-                                 "`what`: its title as deleted.list says it. A Hub post taken off is not here: it is on the Hub's own removed "
-                                 'shelf, restored there'),   # the assistant audit, 2026-11-02: the miss read "it is empty" over a removed post
+    'deleted.restore':          ('bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule, profile or '
+                                 "Hub post - `what`: its title as deleted.list says it (or its kind, \"hub post\", when it is the only one). "
+                                 "A Hub post the vote took off is not here: it is on the Hub's own removed shelf, restored there"),
     'hub.comment':              ("add a comment to a Hub post - `post`: its number (#12, as knowledge.search prints it), `text`: the "
                                  "comment in the owner's words. Others read the Hub: it goes only by the owner's press"),
     'hub.vote':                 'vote a Hub post up or down - `post`: its number; `up`: false for down',
+    # ...and the bell's own Dismiss / Got it (the owner, 2026-11-02: "clear the error on the bell" - with the bell shut, nothing reached it)
+    'problems.dismiss':         ("put down what the bell shows, as its Dismiss or Got it does - `which`: words of the problem's title as "
+                                 'errors.list prints it, or all; none when the bell holds one. It comes back if it fails again after working'),
     # ...and the two pages app.find has no link for: the Board, and Search with the words already in its box
     'page.open':                ('bring up a page app.find cannot link - `page`: board (every agent and task at work, as columns) | search '
                                  '(the search over everything - tasks, mail, chats, PRs, settings); `query`: the words to search for, '
@@ -234,7 +237,7 @@ PURPOSE = {
 # (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
 # ...and a fact about the owner's own world with no button and no page to bring up: kept at once and said (concierge._relate)
 # ...and how the owner works with them (slice 7, 2026-10-25): a line taken out of the memory is kept and said the same way (concierge._memory)
-KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember'})
+KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss'})
 # ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
 SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'agents.stop'})
 # ...and the acts whose button is a page's alone: the page comes up at the thing, the owner presses there
@@ -511,9 +514,9 @@ BUCKETS = (
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
-    ('app', 'settings, connections, scripts, memory, rules, the Hub, the Board and Search', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
+    ('app', 'settings, connections, scripts, memory, rules, bell, Hub, Board, Search', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'app.repair', 'issue.draft', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
-                                                             'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote', 'page.open')),
+                                                             'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote', 'page.open', 'problems.dismiss')),
 )
 
 
@@ -615,7 +618,7 @@ READS = {
                          'its task and the link that downloads it. `query`: words of the task or the file ("vendor pricing"); `kind` '
                          'optional: xlsx | pdf | doc | deck | csv | picture | page; `ref` optional: one task. Answer with the link'),
     'deleted.list':     ('what was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles '
-                         "(never a Hub post: the Hub keeps its own removed shelf)"),
+                         "and Hub posts the owner removed (one the vote took off waits on the Hub's own removed shelf)"),
     'rules.list':       ('the standing filters on the owner\'s mail - queue mutes set with a reason, and the policy rules '
                          '(skip, ignore, escalate...) that decide before any model reads it. `about`: words to narrow it. '
                          'Use it for "why did I never see X", "what am I filtering"'),

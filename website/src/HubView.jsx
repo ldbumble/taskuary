@@ -31,6 +31,7 @@ import { plainError } from "./apiError.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { TaskuaryMark } from "./ui.jsx";
 import { label as btnLabel } from "./buttons.js";
+import { RecentlyDeleted } from "./Removed.jsx";
 import {
   ACCENT, ACCENT2, ALERT_INK, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono,
 } from "./theme.jsx";
@@ -92,6 +93,8 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
   const score = p.Score || 0, mine = p.MyVote || 0;
   const commentCount = p.Comments || 0;
   const voteLabel = score === 1 ? "upvote" : score >= 0 ? "upvotes" : "score";
+  // each post's buttons named by the post (the owner, 2026-11-02): to the Assistant ten "remove"s were one, told apart only by a #2
+  const named = `“${String(p.Title || "this post").slice(0, 48)}${String(p.Title || "").length > 48 ? "…" : ""}”`;
   return (
     <Box sx={{ border: `1px solid ${BORDER}`, borderLeft: `2px solid ${removed ? BORDER : ROLES[k.role].solid}`,
       borderRadius: 2, bgcolor: PANEL, mb: 1.25, overflow: "hidden", opacity: removed ? 0.8 : 1 }}>
@@ -99,7 +102,7 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
         {/* the score column, forum-style: what the room found useful is what the next agent is
             handed first (the Hub ranks by it), and what it voted down is gone */}
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0 }}>
-          <IconButton size="small" onClick={() => vote(true)} title="holds up — agents are handed this sooner"
+          <IconButton size="small" onClick={() => vote(true)} title="holds up — agents are handed this sooner" aria-label={`Vote up ${named}`}
             sx={{ p: { xs: 0.9, md: 0.25 }, color: mine > 0 ? ACCENT : FAINT, "&:hover": { color: ACCENT } }}>
             <ArrowUpwardIcon sx={{ fontSize: { xs: 20, md: 16 } }} />
           </IconButton>
@@ -108,7 +111,7 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
           <Typography sx={{ ...mono, fontSize: 7.5, lineHeight: 1.2, color: FAINT, mt: 0.3 }}>
             {voteLabel}
           </Typography>
-          <IconButton size="small" onClick={() => vote(false)} title="wrong or stale — below zero it is removed"
+          <IconButton size="small" onClick={() => vote(false)} title="wrong or stale — below zero it is removed" aria-label={`Vote down ${named}`}
             sx={{ p: { xs: 0.9, md: 0.25 }, color: mine < 0 ? ALERT_INK : FAINT, "&:hover": { color: ALERT_INK } }}>
             <ArrowDownwardIcon sx={{ fontSize: { xs: 20, md: 16 } }} />
           </IconButton>
@@ -149,7 +152,7 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
             ) : (
               <Typography variant="caption" sx={{ color: FAINT }}>posted by hand</Typography>
             )}
-            <Button size="small" data-tq-post-open="" onClick={() => (onOpen ? onOpen() : setOpen((v) => !v))}
+            <Button size="small" data-tq-post-open="" aria-label={`${plural(commentCount, "comment")} on ${named}`} onClick={() => (onOpen ? onOpen() : setOpen((v) => !v))}
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
               sx={{ fontSize: 11.5, color: commentCount ? ACCENT2 : DIM, minWidth: 0,
                 fontWeight: commentCount ? 700 : 400 }}>
@@ -157,14 +160,14 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
             </Button>
             <Box sx={{ flex: 1 }} />
             {removed ? (
-              <Button size="small" onClick={restore} startIcon={<RestoreIcon sx={{ fontSize: 14 }} />}
+              <Button size="small" onClick={restore} aria-label={`Restore ${named}`} startIcon={<RestoreIcon sx={{ fontSize: 14 }} />}
                 sx={{ fontSize: 11, color: DIM, minWidth: 0 }}
                 title={p.Status === "downvoted" ? "the vote took it off; put it back on the Hub" : "put it back on the Hub"}>
                 {p.Status === "downvoted" ? "voted off — restore" : "removed — restore"}
               </Button>
             ) : (
-              <Button size="small" onClick={retire} sx={{ fontSize: 11, color: FAINT, minWidth: 0 }}
-                title="take it off the Hub now — kept under Removed, never deleted">
+              <Button size="small" onClick={retire} aria-label={`Remove ${named}`} sx={{ fontSize: 11, color: FAINT, minWidth: 0 }}
+                title="take it off the Hub now — kept under Removed and Recently deleted, never deleted">
                 remove
               </Button>
             )}
@@ -209,7 +212,9 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
     setBusy(false);
   };
   return (
-    <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="sm">
+    // ...a view of its own to the Assistant (pageView.js: a dialog over the page is the page): after Write one it fills the boxes;
+    // others read the Hub, so Post it is the owner's press - lit, never pressed (data-tq-send, as concierge's hub.publish says)
+    <Dialog open={!!open} onClose={onClose} fullWidth maxWidth="sm" data-tq-view="hub_write" data-tq-view-label="Write one - a new Hub post">
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
         <Box sx={{ flex: 1 }}>Write it down</Box>
         <IconButton aria-label="Close Hub entry" size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
@@ -217,7 +222,7 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 2 }}>
         <Box>
           <Label>What is true</Label>
-          <TextField fullWidth size="small" value={title} autoFocus onChange={(e) => setTitle(e.target.value)}
+          <TextField fullWidth size="small" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} inputProps={{ "data-tq-field": "title", "aria-label": "Title - what is true" }}
             placeholder="Adjustment rows take the first line's date, not the batch date"
             error={title.length > 140} helperText={title.length > 100 ? `${title.length}/140` : " "}
             sx={{ "& .MuiInputBase-root": { fontSize: 13.5 }, "& .MuiFormHelperText-root": { textAlign: "right", m: 0, mt: 0.25 } }} />
@@ -229,12 +234,12 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
         <Box sx={{ display: "flex", gap: 1.25 }}>
           <Box sx={{ flex: 1 }}>
             <Label>Topic</Label>
-            <TextField fullWidth size="small" value={topic} onChange={(e) => setTopic(e.target.value)}
+            <TextField fullWidth size="small" value={topic} onChange={(e) => setTopic(e.target.value)} inputProps={{ "data-tq-field": "topic", "aria-label": "Topic" }}
               placeholder={topics[0]?.Topic || "payroll"} sx={{ "& .MuiInputBase-root": { fontSize: 13 } }} />
           </Box>
           <Box sx={{ width: 180 }}>
             <Label>Kind</Label>
-            <Select size="small" fullWidth value={kind} onChange={(e) => setKind(e.target.value)} sx={{ fontSize: 13 }}>
+            <Select size="small" fullWidth value={kind} onChange={(e) => setKind(e.target.value)} SelectDisplayProps={{ "aria-label": "Kind", "data-tq-field": "kind" }} sx={{ fontSize: 13 }}>
               {Object.entries(KINDS).map(([k, v]) => (
                 <MenuItem key={k} value={k} sx={{ fontSize: 12.5 }}>{v.mark} {v.label}</MenuItem>
               ))}
@@ -243,7 +248,7 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
         </Box>
         <Box>
           <Label>Why, and what to do about it</Label>
-          <TextField fullWidth multiline minRows={3} value={body} onChange={(e) => setBody(e.target.value)}
+          <TextField fullWidth multiline minRows={3} value={body} onChange={(e) => setBody(e.target.value)} inputProps={{ "data-tq-field": "body", "aria-label": "Body - why, and what to do about it" }}
             placeholder="Two or three sentences. Name the file, the system, the id, the person."
             error={body.length > 700} helperText={body.length > 500 ? `${body.length}/700` : " "}
             sx={{ "& .MuiInputBase-root": { fontSize: 13 }, "& .MuiFormHelperText-root": { textAlign: "right", m: 0, mt: 0.25 } }} />
@@ -253,7 +258,7 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
         borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
         <Button size="small" onClick={onClose} sx={{ color: DIM }}>Cancel</Button>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !title.trim() || title.length > 140 || body.length > 700} onClick={save}
+        <Button size="small" variant="contained" disableElevation data-tq-send="" disabled={busy || !title.trim() || title.length > 140 || body.length > 700} onClick={save}
           sx={{ background: GRADIENT }}>Post it</Button>
       </Box>
     </Dialog>
@@ -285,7 +290,11 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
   }, [topic, q, kind, sort, removed]);
   const { say, note } = useSaveNote();
   // a receipt, never an Undo (the owner, 2026-10-19: "no take it back button"): Removed keeps it, and its own button puts it back
-  const onRemoved = (p) => say(`Removed “${p.Title}” — kept under Removed`);
+  // ...and under Recently deleted (the owner, 2026-11-02), whose list is read again after any press on a post (`bin`)
+  const onRemoved = (p) => say(`Removed “${p.Title}” — kept under Removed and Recently deleted`);
+  const [bin, setBin] = useState(0);
+  const changed = () => { load(); setBin((n) => n + 1); };
+  const shelf = <RecentlyDeleted key={bin} kinds={["hub post"]} onRestored={load} />;
   const failed = loadErr && (
     <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}
       action={<Button size="small" color="inherit" onClick={load}>{btnLabel("try_again")}</Button>}>{loadErr}</Alert>
@@ -311,9 +320,9 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
           InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 16, color: FAINT, mr: 0.75 }} /> }}
           sx={{ mt: 1.5, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: "#fff" } }} />
       ),
-      cards: posts.map((x) => ({ key: String(x.LoreId), node: <Post p={x} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved}
-        onOpen={() => onBrowseState?.({ ...browseState, open: x.LoreId })} /> })),
-      detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved} defaultOpen /> : null,
+      cards: [...posts.map((x) => ({ key: String(x.LoreId), node: <Post p={x} onChanged={changed} onOpenTask={onOpenTask} onRemoved={onRemoved}
+        onOpen={() => onBrowseState?.({ ...browseState, open: x.LoreId })} /> })), ...(posts.length ? [{ key: "recently-deleted", node: shelf }] : [])],
+      detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={changed} onOpenTask={onOpenTask} onRemoved={onRemoved} defaultOpen /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
       query: q, searched: "the Hub", empty: removed ? "Nothing has been voted off." : "Nothing posted yet.",
@@ -324,6 +333,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
         <Box sx={{ mt: 1.25, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           {note}
           {failed && <Box sx={{ flexBasis: "100%" }}>{failed}</Box>}
+          {!posts.length && <Box sx={{ flexBasis: "100%" }}>{shelf}</Box>}
           <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)} SelectDisplayProps={{ "aria-label": "Order" }} sx={{ fontSize: 12, bgcolor: PANEL, height: 32 }}>
             <MenuItem value="top" sx={{ fontSize: 12.5 }}>most valuable</MenuItem>
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
@@ -409,7 +419,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
 
         {failed}
         {!d ? (loadErr ? null : <CircularProgress size={22} sx={{ m: 4 }} />)
-          : posts.length ? posts.map((p) => <Post key={p.LoreId} p={p} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved} />)
+          : posts.length ? posts.map((p) => <Post key={p.LoreId} p={p} onChanged={changed} onOpenTask={onOpenTask} onRemoved={onRemoved} />)
           : (
             <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 2, p: 4, textAlign: "center" }}>
               <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM, mb: 0.75 }}>
@@ -422,6 +432,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
               </Typography>
             </Box>
           )}
+        {shelf}
       </Box>
 
       <NewEntry open={newOpen} onClose={() => setNewOpen(false)} onDone={load} topics={topics} />

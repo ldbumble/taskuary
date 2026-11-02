@@ -62,8 +62,13 @@ const areaOf = (root) => root.getAttribute("data-tq-browse") || (root.hasAttribu
 // the view the owner is looking at: of those on the canvas, the one most in sight - a task's view inside a browse card is the card's
 // ...never the top bar's Chat / Board / Game switch (the assistant audit, 2026-11-02): its tabs wear data-tq-view too, so with no card on the
 // chat the widest tab was "the page" - the Assistant was told the owner was on the Board, with nothing on it
+// ...and A DIALOG OVER THE PAGE IS THE PAGE (the owner, 2026-11-02): Search everything, the Hub's Write one, the bell's list sit in a portal
+// over a wider page beneath - the one opened last, on top, is what the owner is looking at
+const overPage = (el) => !!el.closest(".MuiModal-root");
 export function currentRoot() {
   const all = [...document.querySelectorAll(ROOTS)].filter((el) => shown(el) && !el.closest(".tq-chat-pop, [data-tq-view-switch]") && !el.parentElement?.closest(ROOTS));
+  const top = all.filter(overPage);
+  if (top.length) return top[top.length - 1];
   let best = null, area = -1;
   all.forEach((el) => { const a = inView(el); if (a >= area) { best = el; area = a; } });
   return best;
@@ -102,9 +107,10 @@ function domFields(root) {
   });
   return out;
 }
+// ...and a row pressed by a click that is no button (a Search hit, role=option) says so with data-tq-view-press
 function domButtons(root) {
   const out = [], seen = new Map();
-  root.querySelectorAll("button, [role=button], [role=tab]").forEach((el) => {
+  root.querySelectorAll("button, [role=button], [role=tab], [data-tq-view-press]").forEach((el) => {
     if (out.length >= MAX_BUTTONS || el.closest(SKIP) || !shown(el) || el.matches("[role=combobox], [aria-haspopup=listbox]")) return;
     const label = (el.getAttribute("aria-label") || words(el) || el.getAttribute("title") || "").slice(0, 80); if (!label) return;
     let id = el.getAttribute("data-tq-view-btn") || slug(label); const n = (seen.get(id) || 0) + 1; seen.set(id, n); if (n > 1) id = `${id}#${n}`;
@@ -271,6 +277,8 @@ async function runOne(op, n) {
     const { op: _o, area, ...state } = op;
     opener(area, state);
     const r = await waitRoot(area, state.knob);
+    // ...Search's hits land a beat after its words: what follows presses one, so wait for the answer to those words
+    for (let i = 0; area === "search" && state.query && i < 40 && !r?.querySelector('[data-tq-search-settled="true"]'); i++) await wait(100);
     await wait(150);                              // ...its frame names what is open once the card has drawn
     return step(n, `Opened ${(r && readView(r)?.title) || area}`, "done", "read");
   }

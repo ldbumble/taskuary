@@ -20,9 +20,10 @@ from . import redact
 
 MAX_FIELDS, MAX_BUTTONS, MAX_VALUE, MAX_DETAIL, MAX_OPS = 40, 40, 200, 400, 12
 OPS = ('open', 'set', 'press', 'point')
-AREAS = ('task', 'connections', 'reports', 'settings', 'hub', 'board', 'new')
+# ...and Search everything, a dialog over any page, opened with its words in its box (`query`): its hits are its buttons (2026-11-02)
+AREAS = ('task', 'connections', 'reports', 'settings', 'hub', 'board', 'new', 'search')
 # what an `open` may name of an area's browse state - the same keys a click on its cards writes (CanvasBrowse onBrowseState)
-OPEN_KEYS = ('section', 'open', 'knob', 'connector', 'step', 'tab')
+OPEN_KEYS = ('section', 'open', 'knob', 'connector', 'step', 'tab', 'query')
 # AN OUTWARD SEND, by its verb (buttons.json) or by its words: the row's Send is `approve`, an invite's answer sends one, a hand-off sends
 # the person a mail. The page marks its own (data-tq-send); this list is the server's check when it did not
 SEND_VERBS = frozenset({'approve', 'send', 'accept_invite', 'decline_invite', 'propose_time', 'share', 'forward', 'send-handoff', 'email'})
@@ -101,9 +102,10 @@ GUIDE = ('WHAT IS ON THE SCREEN IS YOURS TO WORK, as the owner would - only beca
          'line per act, each exactly:\nVIEW: {"op": "set", "field": "<key or label>", "value": "<text>"}  - fill a box (on/off for a '
          'switch)\nVIEW: {"op": "press", "button": "<id or label>"}  - press a button: Save, Test, Sync, Mark done, Remind me...\n'
          'VIEW: {"op": "point", "target": "<field or button>"}  - light it for the owner\nVIEW: {"op": "open", "area": "settings|'
-         'connections|reports|hub|board", "section": "...", "open": "...", "knob": "..."}  - bring up another page first (Settings: '
-         'section "config", open the group, knob the setting\'s key - settings.list names them; the Hub: section the topic, open the post\'s '
-         'number, as knowledge.search prints it; the Board: the area alone)\nThey run in order, on the page, through '
+         'connections|reports|hub|board|search", "section": "...", "open": "...", "knob": "...", "query": "..."}  - bring up another page '
+         'first (Settings: section "config", open the group, knob the setting\'s key - settings.list names them; the Hub: section the topic, '
+         'open the post\'s number, as knowledge.search prints it; the Board: the area alone; Search: query, its words - then press a hit by its '
+         'title)\nA dialog open over the page (Search, the Hub\'s Write one, the bell) is the page while it is open.\nThey run in order, on the page, through '
          'its own buttons, and the owner sees each one in the chat. Never press a button that SENDS something out (Send, Approve, an email, '
          'a chat message) or installs Taskuary\'s update (Update to v...): point at it - the owner presses it. Never set a secret (a password, a key, a token): tell them to paste it into '
          'its box. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Say in '

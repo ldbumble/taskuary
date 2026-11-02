@@ -56,6 +56,8 @@ KINDS = {
     'memory.wrong':             ('memory', ('key',), None),
     # ...and who is who to the owner (orgchart.py): "Erin is my manager", "Ray owns payroll" - the org chart triage and agents read
     'people.relate':            ('person', ('who',), None),
+    # ...and the bell's own Dismiss / Got it, by the words that name the problem (concierge._bell, the owner 2026-11-02)
+    'problems.dismiss':         ('problem', (), None),
     # ...and the routing memory, which the chat could not reach at all. Teaching only: it says how
     # work LIKE this should be judged next time, and never moves the task it was said about - the
     # owner saying "timesheet asks are never coding" about something already closed is still the

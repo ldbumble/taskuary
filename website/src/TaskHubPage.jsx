@@ -118,7 +118,9 @@ function Bell({ onGo, onAsk }) {
           )}
         </IconButton>
       </Tooltip>
-      <Popover open={!!el} anchorEl={el} onClose={() => setEl(null)}
+      {/* ...open, a view of its own to the Assistant (pageView.js: a dialog over the page is the page), each button named by its problem;
+          shut, "clear the error on the bell" is its tool (problems.dismiss) */}
+      <Popover open={!!el} anchorEl={el} onClose={() => setEl(null)} data-tq-view="bell" data-tq-view-label="The bell - what is failing right now"
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
         <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
@@ -132,18 +134,18 @@ function Bell({ onGo, onAsk }) {
               {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>{p.kind ? "since" : "failed"} {timeAgo(p.since)} · {fmtWhen(p.since)}</Typography>}
             </Box>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
-              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }} aria-label={`${p.fix || "Fix"}: ${p.title}`}
                 onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Fix"} →</Button>
               {/* "Restart bridge starts it" is said right here, so the button is here too (problems.collect `restart`) */}
               {p.restart && p.connector && <Button size="small" variant="outlined" data-tq-restart-bridge="" disabled={busy === `restart:${p.key}`}
                 sx={{ fontSize: 11, whiteSpace: "nowrap" }} onClick={() => restart(p)}>
                 {busy === `restart:${p.key}` ? "Restarting…" : "Restart bridge"}</Button>}
               {/* the chat looks into it: reads the app's own health, does the simple repair or says why (troubleshoot.py) */}
-              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }} aria-label={`Ask the assistant: ${p.title}`}
                 onClick={() => { setEl(null); onAsk(p); }}>Ask the assistant</Button>
               {/* Reading it, not fixing it. It holds until this failure ends, and comes back if it fails again after
                   working (problems.signature), so this quiets something you have decided to live with. */}
-              <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
+              <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }} aria-label={`Dismiss: ${p.title}`}
                 title="I have read this. It returns if it fails again after working."
                 onClick={() => put(p)}>{busy === p.key ? "…" : "Dismiss"}</Button>
               <Button size="small" sx={{ fontSize: 10.5, color: DIM, textTransform: "none", p: 0, minWidth: 0 }}
@@ -162,9 +164,9 @@ function Bell({ onGo, onAsk }) {
               {p.since && <Typography variant="caption" sx={{ color: FAINT }} title={p.since}>{timeAgo(p.since)}</Typography>}
             </Box>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
-              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
+              <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }} aria-label={`${p.fix || "Show me"}: ${p.title}`}
                 onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Show me"} →</Button>
-              <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
+              <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }} aria-label={`Got it: ${p.title}`}
                 onClick={() => put(p)}>{busy === p.key ? "…" : "Got it"}</Button>
             </Box>
           </Box>

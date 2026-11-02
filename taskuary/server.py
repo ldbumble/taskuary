@@ -4789,7 +4789,8 @@ def hub_restore(lid: int, request: Request):
     if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
     _require_hub_write(request)
     actor = _hub_actor(request)
-    store.lore_restore(lid); store.audit('hub', lid, 'restore', actor)
+    from . import recentlydeleted
+    store.lore_restore(lid); recentlydeleted.forget_hub(store, lid); store.audit('hub', lid, 'restore', actor)
     return dict(store.lore_get(lid))
 
 @app.post('/api/hub/{lid}/comment')
@@ -4823,9 +4824,12 @@ def hub_retire(lid: int, request: Request):
     if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
     _require_hub_write(request)
     actor = _hub_actor(request)
-    store.lore_retire(lid, actor)
+    # ...and listed under Recently deleted beside the Hub's own removed shelf (the owner, 2026-11-02): Restore there, or "bring back
+    # the hub post I removed", puts it back
+    from . import recentlydeleted
+    out = recentlydeleted.remove_hub(store, lid, actor)
     store.audit('hub', lid, 'retire', actor)
-    return {'retired': True}
+    return {'retired': True, **out}
 
 class OutboxBody(BaseModel):
     channel: str; to: str | list[str]; about: str; mode: str = 'draft'

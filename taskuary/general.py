@@ -758,7 +758,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
-    chk = f"CHECKLIST - what was asked for, as triage read it:\n{md}\n" if md else ''
+    from .terminal import TICK_HEAD, _tickable
+    chk = f"CHECKLIST - what was asked for, as triage read it{f' ({TICK_HEAD})' if _tickable(md) else ''}:\n{md}\n" if md else ''
     if stranger: sources.insert(0, f"TITLE: {task.get('Title') or ''}\nSUMMARY: {task.get('Summary') or ''}\n{chk}")
     # THE OWNER'S WORDS LEAD (the owner, 2026-10-23: "write prompt what about the email or attachment is the issue"): what they asked
     # on this turn heads the prompt, over the task and the item it is about - an email and its files, a report's rows - which follow
@@ -1125,6 +1126,8 @@ class GeneralSession:
             if hands:
                 from . import origin
                 hands = not origin.looks_only(self.store, self.task_id, _cli_of_pick(self.store, self.pick))
+            # ...and with no shell, its to-dos are ticked by a mark in the reply (selfclose.tick_markers), never a command it cannot run
+            if not hands and self.store.task_checklist(self.task_id): system = f'{system}\n\n{_sc.TICK_CHAT_LINE}'
             systems = ''
             if hands:
                 from . import docsync
@@ -1359,6 +1362,12 @@ class GeneralSession:
             for attrs, body in drafts:
                 out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
                 if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
+        reply, ticks = selfclose.tick_markers(reply)          # the to-dos it finished, on the road `taskuary --tick` takes
+        if ticks:
+            from .store import agent_tick
+            for i in ticks:
+                if (err := agent_tick(self.store, self.task_id, i)[1]): logger.info(f'assistant tick {i} on task {self.task_id} refused: {err[1]}')
+            reply = reply or 'Ticked what is done.'
         # TASKUARY-PROPOSE: a write it may not make by itself (a read-level connection) waits on the task for the owner,
         # the way a coding session's proposals do (wrapup.finish)
         from . import proposals

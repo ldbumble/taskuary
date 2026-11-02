@@ -38,7 +38,9 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
         const named = String(i.out.to || "");
         return (
           <Box key={i.id} sx={{ mb: 1 }}>
+            {/* ...each wears its OWN To, drafted or not (the owner, 2026-11-02): the sender's To under it read as this email's */}
             <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8 }}>
+              <Typography sx={{ ...label, flexShrink: 0 }} data-tq-slot-to={i.id}>To</Typography>
               <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, fontWeight: 600 }}>{(i.out.kind || "email") === "email"
                 ? <>{i.out.name ? `${i.out.name} · ` : ""}{named}{named.includes("@") ? "" : " ?"}</>
                 : `${i.out.name || named} · ${i.out.kind}`}</Typography>

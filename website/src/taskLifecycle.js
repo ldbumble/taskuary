@@ -185,6 +185,12 @@ export const waitingEmails = (checklist = [], reviews = []) => {
   const pending = new Set(slotReviews(reviews).filter((r) => r.Status === "pending").map((r) => r.ReviewId));
   return (checklist || []).filter((i) => i.out && !i.done && pending.has(i.rid)).length;
 };
+// ...and every email still owed, drafted or not: its own address - its To, never the sender the task came from (the owner, 2026-11-02)
+export const owedEmails = (checklist = [], reviews = []) => {
+  const byRid = Object.fromEntries(slotReviews(reviews).map((r) => [r.ReviewId, r]));
+  return (checklist || []).filter((i) => i.out && !i.done)
+    .map((i) => ({ id: i.id, to: String(i.out.to || ""), name: String(i.out.name || ""), state: slotState(i, byRid[i.rid]) }));
+};
 
 // SOMETHING WENT OUT on the task's close-out: a reply sent, a pull request merged or an issue closed (an approved action), an email
 // the task owed - each approved, edited or sent. focusStage keeps the page on Close out after any of them (the owner, 2026-10-19:

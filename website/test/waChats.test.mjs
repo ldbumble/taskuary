@@ -75,3 +75,14 @@ test("every WhatsApp picker draws the name over a small muted JID and filters th
   assert.match(src("SettingsView.jsx"), /filterOptions=\{\(o, st\) => recipientOptions\(o, st\.inputValue, o\.length\)\}/);
   assert.match(src("ReportsView.jsx"), /const chatFilter = \(opts, st\) => recipientOptions\(opts, st\.inputValue, 8\)/);
 });
+
+test("a switched-on chat's last message is one line under its name, an off one says nothing", async () => {
+  const { waSaid } = await import("../src/waChats.js");
+  const said = { from: "Gail Moreno", text: "standup moved", at: "2026-11-02 09:00:00" };
+  assert.equal(waSaid(said, true, "5m ago"), "Gail Moreno: standup moved · 5m ago");
+  assert.equal(waSaid({ ...said, from: "" }, true, ""), "standup moved");
+  assert.equal(waSaid(said, false, "5m ago"), "");
+  assert.equal(waSaid(undefined, true, "5m ago"), "");
+  // ...its age said by the one helper, never a hand-written "ago"
+  assert.match(src("ConnectorsView.jsx"), /waSaid\(r\.said, !!src\[r\.jid\]\?\.Active, timeAgo\(r\.said\?\.at\)\)/);
+});

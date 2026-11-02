@@ -53,7 +53,7 @@ import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
-import { waLabel, waMatches, waPhone } from "./waChats.js";
+import { waLabel, waMatches, waPhone, waSaid } from "./waChats.js";
 import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
 import { DESKTOP_HOW } from "./newTask.js";
@@ -3914,6 +3914,10 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
               {[waPhone(r.jid) !== waLabel(r.jid, r.name) ? waPhone(r.jid) : "", r.n ? `${r.n} msg` : "", r.last,
                 r.snippet ? `“${r.snippet}”` : ""].filter(Boolean).join(" · ")}
             </Typography>
+            {/* a switched-on chat's last saved message (wanames.said) - an off chat's messages are never taken in, so it has none */}
+            {waSaid(r.said, !!src[r.jid]?.Active, timeAgo(r.said?.at)) && (
+              <Typography variant="caption" data-tq-wa-said="" sx={{ color: FAINT, fontSize: 11, display: "block" }} noWrap>
+                {waSaid(r.said, !!src[r.jid]?.Active, timeAgo(r.said?.at))}</Typography>)}
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 9.5, display: "block", opacity: 0.8 }} noWrap>{r.jid}</Typography>
           </Box>
           {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ assistant chat</Typography>}

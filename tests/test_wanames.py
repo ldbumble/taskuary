@@ -122,6 +122,37 @@ class RosterTests(unittest.TestCase):
             cold = {r['jid']: r['name'] for r in messengers.wa_chats(self.c, self.s, kept=True)}
         self.assertEqual(cold, {OPS: 'Northwind ops', other['jid']: 'Payworth rollout', ERIN: 'Erin Blake'})
 
+    # The owner, 2026-11-02: the switched-on chats show their last message on the card's list - from the saved messages, one read
+    def test_a_switched_on_chat_shows_its_last_saved_line_and_an_off_chat_none(self):
+        def msg(conv, who, body, at, n, out=False):
+            return self.s.add_message({'Channel': 'whatsapp', 'BodyText': body, 'ConversationId': f'whatsapp:{conv}', 'FromName': who,
+                                       'FromEmail': 'whatsapp:15550100155', 'SentAt': at, 'Status': 'filed',
+                                       'Direction': 'out' if out else 'in', 'ExternalId': f'wa:s{n}'})
+        msg(OPS, 'Gail Moreno', 'old line', '2026-11-01 08:00:00', 1)
+        msg(OPS, 'Gail Moreno', 'standup   moved\nto ten ' + 'x' * 200, '2026-11-02 09:00:00', 2)
+        msg(ERIN, 'Erin Blake', 'see you there', '2026-11-02 08:00:00', 3, out=True)
+        msg(RAY, 'Ray Colton', 'not taken in', '2026-11-02 07:00:00', 4)
+        for a, on in ((OPS, 1), (ERIN, 1), (RAY, 0)): self.s.save_source({'Channel': 'whatsapp', 'Address': a, 'Active': on, 'ConnectorId': 1}, 't')
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: ROSTER):
+            rows = {r['jid']: r for r in messengers.wa_chats(self.c, self.s, kept=True)}
+            plain = messengers.wa_chats(self.c, self.s)
+        ops = rows[OPS]['said']
+        self.assertEqual((ops['from'], ops['at']), ('Gail Moreno', '2026-11-02 09:00:00'))
+        self.assertTrue(ops['text'].startswith('standup moved to ten x') and ops['text'].endswith('…') and len(ops['text']) == wanames.PREVIEW)
+        self.assertEqual(rows[ERIN]['said'], {'from': 'You', 'text': 'see you there', 'at': '2026-11-02 08:00:00'})
+        self.assertNotIn('said', rows[RAY], 'an off chat shows no text')
+        self.assertFalse(any('said' in r for r in plain), 'the pickers read the roster alone')
+
+    def test_a_preview_says_what_media_was(self):
+        from taskuary import voice
+        self.assertEqual(wanames.preview('(no text - see the attachment)', 'image/jpeg', 'a.jpg'), 'photo')
+        self.assertEqual(wanames.preview('look at this', 'image/jpeg'), 'photo: look at this')
+        self.assertEqual(wanames.preview(f'call me back after lunch\n\n({voice.MARK.lower()} (5s) from WhatsApp, transcribed by Groq)',
+                                         'audio/ogg'), 'voice note: call me back after lunch')
+        self.assertEqual(wanames.preview(f'{voice.MARK} (5s) from WhatsApp - not transcribed: no key. Add a connector', 'audio/ogg'), 'voice note')
+        self.assertEqual(wanames.preview('(no text - see the attachment)', 'application/pdf', 'rota.pdf'), 'file rota.pdf')
+        self.assertEqual(wanames.preview('plain words'), 'plain words')
+
     def test_send_targets_name_and_number_whatsapp_never_the_jid(self):
         with mock.patch.object(outbound, 'send_channels', return_value=['whatsapp']), \
              mock.patch.object(self.s, 'list_connectors', return_value=[self.c]), \

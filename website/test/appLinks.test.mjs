@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { appLink, firstAppLink } from "../src/appLinks.js";
+import { appLink, firstAppLink, inApp } from "../src/appLinks.js";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
@@ -81,4 +81,9 @@ test("#search= opens Search with its words; #board is the Board's own address", 
   assert.match(read("TaskHubPage.jsx"), /if \(h === BOARD\) \{ setTab\("Board"\)/);
   assert.match(read("FeedView.jsx"), /setSearchQ\(String\(e\?\.detail\?\.q \|\| ""\)\); setSearchOpen\(true\);/);
   assert.match(read("SearchEverything.jsx"), /if \(open && query\) \{ typed\.current = query; setQ\(query\); \}/);
+});
+
+test("every #hash a reply links is followed in the app window, never a new browser tab (TQ-1251: #new-task opened the browser)", () => {
+  for (const h of ["#new-task", "#new-task&kind=agent", "#msg=12", "#settings=docs"]) assert.equal(inApp(h), true, h);
+  for (const h of ["https://example.com", "/api/task-outputs/3/x.png", "#", "", null]) assert.equal(inApp(h), false, String(h));
 });

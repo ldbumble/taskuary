@@ -898,7 +898,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # no coding tool connected: there is no coding agent to offer at all - not even as an alternative (2026-10-16)
         if not _coding(store):
             # ...which only keeps it off the chips and the card's question: every road that runs it first turns it into Send to agent (handoff_verb)
-            return f"{buttons.label('regular_agent')} hands this to an agent."
+            # ...and with DEVELOPER MODE OFF it says so, with where the switch is - never "connect a coding tool" (the owner, 2026-11-02)
+            from . import agents as _ag
+            return DEV_MODE_OFF if not _ag.developer_mode(store) else f"{buttons.label('regular_agent')} hands this to an agent."
         gone = no_agent(store)
         if gone: return (f"There's no one to hand it to yet - {gone} isn't set up on this computer. "
                          f"Set it up under {places.name('ai_apps')}, then say it again. Nothing has changed.")

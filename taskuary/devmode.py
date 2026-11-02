@@ -2,8 +2,8 @@
 
 The switch (agents.developer_mode) ships off, which on a home that already works with coding agents would take them away overnight.
 So the first start that knows the switch decides it ONCE from what the home already holds: anything coding - a coding task, a coding
-agent's run, a connected coding CLI or a picked coding brain, a code-host card or a repository map - turns it on; a home with none
-stays off. The decision is written down (DECIDED: what tipped it, by 'migration') and never taken again, and a switch the owner set
+agent's run or a picked coding brain, a code-host card or a repository map - turns it on; a home with none stays off. A connected CLI
+alone is no evidence: a CLI is also how many people run their AI (2026-11-02). The decision is written down (DECIDED: what tipped it, by 'migration') and never taken again, and a switch the owner set
 themselves is never touched."""
 from loguru import logger
 
@@ -18,8 +18,8 @@ def evidence(store, cfg: dict = None) -> str:
     has = lambda sql: store.cx.execute(sql).fetchone() is not None
     if has("SELECT 1 FROM task WHERE lower(Kind)='coding' LIMIT 1"): return 'a coding task'
     if has("SELECT 1 FROM run r JOIN agent a ON a.Name=r.AgentName WHERE lower(a.Kind) IN ('coding','cli') LIMIT 1"): return 'a coding agent run'
-    if cfg.get('cli_connections'): return 'a coding CLI connected'
-    if str(store.get_setting('default_brain') or '').strip(): return 'a coding brain picked'
+    # ...picked by the owner: one an older start saved for them (adopt_brain_setting) only says a CLI was connected
+    if str(store.get_setting('default_brain') or '').strip() and store.setting_writer('default_brain') == 'owner': return 'a coding brain picked'
     if any(c.get('Active') and c.get('Type') in CODE_HOSTS for c in store.list_connectors()): return 'a code-host card'
     if (cfg.get('github') or {}).get('default_repo') or terminal.repo_map(store): return 'a repository map'
     return ''

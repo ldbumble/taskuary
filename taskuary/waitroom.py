@@ -28,9 +28,11 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0) -> str:
     `remaining` = notes still waiting behind these (the drip): the agent is told the next one
     comes when it stops again, so it does not go looking for it."""
     n = len(notes)
-    head = (f'The owner left {n} note{"s" if n > 1 else ""} for you after the last session ended. Take them in order:'
+    # ...a message relayed from someone else (terminal.say_to_task, CreatedBy 'router') is not the owner's note: it names its own sender
+    who = 'the owner' if all((x.get('CreatedBy') or 'owner') != 'router' for x in notes) else 'Taskuary'
+    head = (f'{who[0].upper() + who[1:]} left {n} note{"s" if n > 1 else ""} for you after the last session ended. Take them in order:'
             if after_restart else
-            f'While you were working, the owner queued {n} note{"s" if n > 1 else ""} for you. Take them in order, '
+            f'While you were working, {who} queued {n} note{"s" if n > 1 else ""} for you. Take them in order, '
             'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
     tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
             'finish this and stop, do not ask for it.)' if remaining else '')

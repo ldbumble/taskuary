@@ -2637,6 +2637,20 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     body = agent_words(msg, wrapper)
     if not body: return False
     ch = msg.get("Channel") or msg.get("channel") or "mail"
+    line = (f"{who} wrote again (by {ch}) with more work on this task - their words, not the owner's: {body}" if new
+            else f'{who} answered (by {ch}): {body}')[:4000]
+    # NOT INTO A TURN STILL RUNNING (TQ-1251, the owner, 2026-11-02: "the relay is not sending messages to him"). Typed while the agent
+    # worked, the line left the box - so it read as delivered - and never reached the agent: Claude's queue let it go while a tool call
+    # waited on the owner's yes. Mid-turn it waits in the waiting room instead, which types it in once the agent stops (waitroom.tick).
+    from . import waitroom
+    try: busy = waitroom.state(store, task_id)[0] == 'working'
+    except Exception as e: busy = False; logger.debug(f'relay: could not read whether the agent is working - {e}')
+    if busy:
+        waitroom.add(store, task_id, line, actor='router')
+        store.add_comment(task_id, actor, 'agent', f"{who}'s {'new message' if new else 'answer'} waits for the agent to finish what it "
+                          'is doing - it is typed in when the agent stops.')
+        store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who, 'held': True})
+        return True
     def landed(how):
         if how: store.add_comment(task_id, actor, 'agent', f"Passed {who}'s new message to the agent ({how} the live session)." if new
                                   else f"{who}'s answer was {how} the live session.")
@@ -2644,8 +2658,7 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
             store.add_comment(task_id, actor, 'agent', f"{who}'s {'new message' if new else 'answer'} was typed in but the agent never took it, "
                               'so it was cleared out of its box. It waits for you.')
             store.audit('task', task_id, 'answer_not_delivered', actor, detail={'from': who})
-    tell(t, (f"{who} wrote again (by {ch}) with more work on this task - their words, not the owner's: {body}" if new
-             else f'{who} answered (by {ch}): {body}')[:4000], done=landed)
+    tell(t, line, done=landed)
     store.audit('task', task_id, 'answer_forwarded', actor, detail={'from': who})
     return True
 

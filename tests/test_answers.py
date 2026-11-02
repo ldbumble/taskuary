@@ -107,8 +107,10 @@ class VerdictTests(unittest.TestCase):
 
 
 class FakeSession:
-    def __init__(self, task_id): self.task_id, self.alive, self.n, self.writes = task_id, True, 0, []
+    def __init__(self, task_id, parked=True): self.task_id, self.alive, self.n, self.writes, self.parked = task_id, True, 0, [], parked
     def write(self, x): self.writes.append(x); self.n += 1
+    def waiting(self): return self.parked
+    def tail(self, n=3): return ['> ']
 
 
 class SayToTaskTests(unittest.TestCase):
@@ -125,6 +127,24 @@ class SayToTaskTests(unittest.TestCase):
         typed = ''.join(w for w in fake.writes if w not in ('\r', '\n'))
         self.assertIn('Sarah answered', typed); self.assertIn('8/17 file', typed)
         self.assertTrue(any('typed into the live session' in c['Body'] for c in s.list_comments(tid)))
+
+    def test_mid_turn_the_message_waits_for_the_agent_to_stop_and_is_typed_then(self):
+        """TQ-1251: typed while the agent worked, Gabi's message left the box - read as delivered - and never reached it."""
+        from taskuary import waitroom
+        s = MemoryStore()
+        tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        fake = FakeSession(tid, parked=False)
+        with mock.patch.dict(terminal.SESSIONS, {'sid1': fake}, clear=True):
+            self.assertTrue(terminal.say_to_task(s, tid, {'FromName': 'Gabi', 'Channel': 'whatsapp', 'BodyText': 'use the Gmail signature'}, new=True))
+            self.assertEqual(fake.writes, [], 'nothing is typed into a turn still running')
+            self.assertEqual([n['Note'][:16] for n in s.waiting_notes(tid)], ['Gabi wrote again'])
+            self.assertTrue(any('waits for the agent' in c['Body'] for c in s.list_comments(tid)))
+            fake.parked = True
+            with mock.patch.object(terminal, 'tell', return_value='typed into') as tell:
+                self.assertEqual(waitroom.deliver(s, tid)['delivered'], 1)
+        said = tell.call_args[0][1]
+        self.assertIn('Taskuary queued 1 note', said); self.assertNotIn('the owner queued', said)
+        self.assertIn("their words, not the owner's: use the Gmail signature", said)
 
     def test_no_session_is_false(self):
         s = MemoryStore()

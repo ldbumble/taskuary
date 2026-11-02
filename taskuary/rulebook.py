@@ -20,7 +20,7 @@ RULES = words.ADVICE_RULE
 CHASE_DAYS = 3           # the owner, 2026-10-23: "Chase lights after 3 working days, then learned per person" (the per person is phase E)
 # states no habit may change (the owner, 2026-10-23: "a habit only lights a button ... never a safety rule"): what failed is fixed before
 # anything else, an agent asking is answered in its pane, a closed or working item has no move of the owner's
-SAFE = frozenset({'closed', 'working', 'agent_asking', 'failed', 'failed_cause', 'report_failed', 'unsendable',
+SAFE = frozenset({'closed', 'working', 'agent_asking', 'action_held', 'failed', 'failed_cause', 'report_failed', 'unsendable',
                   # ...nor a phish's put-down: no habit lights Send to agent over a scam (the owner, 2026-10-30)
                   'fyi_danger'})
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
@@ -218,6 +218,10 @@ def state(store, item: dict, verbs: list) -> tuple:
     kind, lane, tid = str(it.get('kind') or ''), str(it.get('lane') or ''), it.get('tid')
     t = (store.get_task(int(tid)) or {}) if tid else {}
     if t.get('Status') in ('done', 'dropped'): return 'closed', {}
+    # AN ACTION WAITS FOR THE OWNER'S YES (proposals.held_pending - a `git push` the shell gate held): read before an agent asking or at work,
+    # which lit nothing over the Approve it waited on (the 2026-11-02 audit) - its Approve is lit
+    from . import proposals
+    if tid and (h := proposals.held_pending(store, tid)): return 'action_held', {'what': h['what'], EV: [f"rv{h['rid']}"]}
     if lane == 'working' or (tid and advisor._at_work(store, 'task', tid)): return 'working', {}
     if kind == 'agent' and (it.get('asking') or lane == 'blocked'): return 'agent_asking', {}
     try: f = advisor.failure(store, it)

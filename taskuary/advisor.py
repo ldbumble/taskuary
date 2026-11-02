@@ -73,8 +73,10 @@ def revision(store, target_kind: str, target_id) -> str:
 
 def _acted(store, target_kind, target_id) -> str:
     """What the owner's acts left on the target: each draft - there or not, how it was decided, whether it went - and the newest
-    operation that ran on it, done, failed or declined (a proposal still waiting for its yes is no act yet). DeliveryState alone
-    skipped every NULL, so a reply sent with no delivery receipt (Status approved, DeliveryState NULL) changed nothing it saw."""
+    operation that ran on it, done, failed or declined (a chat's proposed operation still waiting for its yes is no act yet - but a step
+    held for the owner's Approve is a pending review, so it is in the reviews read here, and the revision moves when one lands: the
+    2026-11-02 audit). DeliveryState alone skipped every NULL, so a reply sent with no delivery receipt (Status approved, DeliveryState
+    NULL) changed nothing it saw."""
     col = 'TaskId' if target_kind == 'task' else 'MessageId'
     if target_kind == 'idea':                         # an idea carries no draft; its acts are its own operations
         op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind='idea' AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1", (int(target_id),)) or {}
@@ -290,7 +292,9 @@ def attached(store, target_kind, target_id) -> str:
 # THE PROMPT IS BOUNDED: every section has its own cap, and past PROMPT_CAP characters whole sections go from the end - the least
 # pointed first (the month's outcomes, the hub's dossier, the owner's documents) - never a cut through a line. The item, its verbs,
 # what failed and what was sent always stay.
-PROMPT_CAP = 11000      # ...with room for the memory's 4000 (learned_cut.BUDGET, 2026-10-28): at 9000 it went first, from the end
+PROMPT_CAP = 16000      # ...with room for the memory's 6000 (learned_cut.BUDGET), the task's page, the owner's own words and its source
+                        # (the 2026-11-02 audit: the pop-up Assistant read all of that, the Advisor a third of it; 11000 before)
+WHOLE_CHARS = 3500      # the task's page (concierge._task_whole), for the item on the table
 _KEEP = 4                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED
 
 
@@ -428,19 +432,84 @@ def known_owner_line(store) -> str:
             + (f"{'; ' if who else ''}their saved email signature: \"{_one(sig, 300)}\"" if sig else ''))
 
 
+def _said(m): return 'the owner' if str(m.get('Direction') or 'in') == 'out' else (m.get('FromName') or m.get('FromEmail') or 'someone')
+def _msg_line(m, n=300):
+    return f"- {_said(m)} ({str(m.get('SentAt') or m.get('CreatedAt') or '')[:16]}, {m.get('Channel') or 'email'}): {_one(m.get('Subject'), 80)} - {_one(m.get('BodyText'), n)}"
+
+
 def thread_line(store, item, target_kind, target_id, n: int = 3) -> str:
     """The last few messages on it, theirs and the owner's: the preview is one message's first 300 characters, and the ask two
     messages back - or the owner's own answer - was never seen."""
-    # ...but not on a task an agent has worked: what came before its last turn is in its own conversation, and what came after is
-    # NEW SINCE THE AGENT'S LAST TURN - said twice it was read as news (test_reopened_conversation)
+    # ...on a task an agent has worked, what came after its last turn is NEW SINCE THE AGENT'S LAST TURN - said twice it was read as news
+    # (test_reopened_conversation) - so its tail BEFORE that turn, shorter: with nothing at all the Advisor judged an agent's task blind
+    # to the ask it was working (the 2026-11-02 audit)
+    at = ''
     if target_kind == 'task':
         from . import continuity
-        if continuity.last_agent_turn(store, int(target_id)): return ''
-    ms = _msgs(store, item, target_kind, target_id)[-n:]
+        at = continuity.last_agent_turn(store, int(target_id))
+    ms = _msgs(store, item, target_kind, target_id)
+    if at:
+        ms = [m for m in ms if str(m.get('CreatedAt') or m.get('SentAt') or '') <= at][-n:]
+        return (f"THE THREAD BEFORE THE AGENT'S LAST TURN ({at[:16]}), its last {len(ms)}, oldest first:\n" + '\n'.join(_msg_line(m, 200) for m in ms)) if ms else ''
+    ms = ms[-n:]
     if len(ms) < 2: return ''
-    who = lambda m: 'the owner' if str(m.get('Direction') or 'in') == 'out' else (m.get('FromName') or m.get('FromEmail') or 'someone')
-    return f'THE LAST {len(ms)} MESSAGES ON IT, oldest first:\n' + '\n'.join(
-        f"- {who(m)} ({str(m.get('SentAt') or m.get('CreatedAt') or '')[:16]}, {m.get('Channel') or 'email'}): {_one(m.get('Subject'), 80)} - {_one(m.get('BodyText'), 300)}" for m in ms)
+    return f'THE LAST {len(ms)} MESSAGES ON IT, oldest first:\n' + '\n'.join(_msg_line(m) for m in ms)
+
+
+OWNER = ('owner', 'you')
+PANE_SCREEN = 'answered in the pane'        # workerstate's own word for an answer pressed at the CLI's prompt: no words of the owner's in it
+
+
+def owner_words(store, tid, n: int = 8) -> list:
+    """(at, where, words), oldest first, the newest `n`: what the owner said on the task in their own words - an answer typed into the
+    agent's pane, a Continue's instruction, their own outgoing message on it (a reply from here, a phone or chat line kept as context),
+    a note on the task. The Advisor read none of it, so it judged a task by the title it began with (the 2026-11-02 audit)."""
+    tid, out = int(tid), []
+    for e in store._rows("SELECT Text, CreatedAt FROM worker_event WHERE TaskId=? AND Kind='answered' AND IFNULL(Source,'')='owner'", (tid,)):
+        if (w := _one(e.get('Text'), 400)) and w != PANE_SCREEN: out.append((str(e['CreatedAt']), 'answered the agent in its pane', w))
+    for r in store._rows("SELECT NextMove, At FROM outcome WHERE TargetKind='task' AND TargetId=? AND Kind='agent.continued' AND Actor IN (?,?)", (tid, *OWNER)):
+        if (w := _one(r.get('NextMove'), 400)): out.append((str(r['At']), 'told the agent to continue', w))
+    for m in store._rows("SELECT * FROM message WHERE TaskId=? AND Direction='out' AND IFNULL(Status,'')<>'skipped'", (tid,)):
+        if (w := _one(m.get('BodyText'), 400)): out.append((str(m.get('SentAt') or m.get('CreatedAt') or ''), f"wrote ({m.get('Channel') or 'email'})", w))
+    for c in store.list_comments(tid):
+        if c.get('Actor') in OWNER and c.get('ActorType') == 'human' and (w := _one(c.get('Body'), 400)): out.append((str(c['CreatedAt']), 'noted on the task', w))
+    return sorted(out, key=lambda x: x[0].replace('T', ' '))[-n:]
+
+
+def owner_words_line(store, target_kind, target_id) -> str:
+    if target_kind != 'task': return ''
+    ws = owner_words(store, target_id)
+    return ("THE OWNER'S OWN WORDS ON IT, oldest first - the newest is their latest instruction and outranks the title it began with:\n"
+            + '\n'.join(f'- {at[:16]} {where}: "{w}"' for at, where, w in ws)) if ws else ''
+
+
+def whole_line(store, target_kind, target_id) -> str:
+    """The task as its page shows it - description, checklist, notes, the agent's report (concierge._task_whole, what the pop-up Assistant
+    reads), bounded for the Advisor."""
+    if target_kind != 'task': return ''
+    w = concierge._task_whole(store, int(target_id))
+    return f"THE TASK'S PAGE:\n{w[:WHOLE_CHARS]}" if w.strip() else ''
+
+
+def source_line(store, target_kind, target_id) -> str:
+    """WHAT THE TASK WAS MADE FROM when it is not on it (store.made_from): a task from the owner's own promise in an outgoing chat has no
+    message rows, so the Advisor never saw what was promised, or to whom (the 2026-11-02 audit)."""
+    if target_kind != 'task': return ''
+    t = store.get_task(int(target_id)) or {}
+    try: ms = store.made_from(t, before=2, after=2) if t else []
+    except Exception: ms = []
+    if not ms: return ''
+    own = str(t.get('SourceRef') or '').startswith('promise:')
+    return ("WHAT THIS TASK WAS MADE FROM" + (" - the owner's own message, where they promised it" if own else '') + ", with the lines round it:\n"
+            + '\n'.join(_msg_line(m) for m in ms))
+
+
+def held_line(store, target_kind, target_id) -> str:
+    """A step held for the owner's yes (proposals.held_pending): the Advisor read the agent's card as asking and never saw it waiting."""
+    if target_kind != 'task': return ''
+    from . import proposals
+    h = proposals.held_pending(store, target_id)
+    return f"AN ACTION WAITS FOR YOUR YES: {h['what']} - {buttons.label('approve', 'action')} runs it; nothing happens before" if h else ''
 
 
 def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
@@ -574,6 +643,10 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     if f: lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}"
                        + (' (nobody knows whether it went: check before sending again)' if f.get('unknown') else '')
                        + (f". The fix offered: {f['fix']['label']}" if f.get('fix') else ''))
+    # what waits for the owner's yes, what they themselves said on it, what it was made from - above the long material, so the bound drops it last
+    for f_ in (held_line, owner_words_line, source_line):
+        try: lines.append(f_(store, target_kind, target_id))
+        except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
     try: sent = sent_line(store, target_kind, target_id)
     except Exception as e: logger.debug(f'advisor: no sent reply read for {item.get("key")} - {e}'); sent = ''
     if sent: lines.append(sent)
@@ -625,6 +698,14 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     for f_ in (draft_line, thread_line, related_line, notes_line):
         try: lines.append(f_(store, item, target_kind, target_id))
         except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
+    # ...and for the item on the table, the task's whole page, as the pop-up Assistant reads it (concierge._task_whole)
+    if tier >= 2:
+        try: lines.append(whole_line(store, target_kind, target_id))
+        except Exception as e: logger.debug(f'advisor: no task page for {item.get("key")} - {e}')
+    # WHO THE OWNER IS before the memory, the ledger and the older material: the bound drops whole sections from the end, and the head
+    # of SOUL.md and JOB.md went first (the 2026-11-02 audit)
+    try: lines.append(owner_line(store, (target_kind, target_id)))
+    except Exception as e: logger.debug(f'advisor: no owner docs for {item.get("key")} - {e}')
     # THE OWNER'S OWN USUAL with this sender, counted from what they did (usual.py): how soon they answer, when they put this mail off
     # to, whom they hand it to - so a line can say "you usually answer Erin within the hour; this is 3h", and Hand it to a person can
     # rest on whom the owner hands this kind of ask to
@@ -635,8 +716,8 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
     led += [f"{v['label']}: {measured(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if measured(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
-    try: lines += [playbook_line(store, target_kind, target_id), owner_line(store, (target_kind, target_id))]
-    except Exception as e: logger.debug(f'advisor: no playbook or owner docs for {item.get("key")} - {e}')
+    try: lines.append(playbook_line(store, target_kind, target_id))
+    except Exception as e: logger.debug(f'advisor: no playbook for {item.get("key")} - {e}')
     if tier >= 2:                                         # the bigger read, only for the item on the table
         from .counsel import dossier
         m = store.get_message(item.get('mid')) if item.get('mid') else None
@@ -1319,6 +1400,12 @@ CHECK_SYSTEM = (
     "invents - the draft or the final words state a date, an amount, a name or \"attached\" that nothing in the ask, the steps or the "
     "attached list backs; "
     "nothing - you cannot tell, or nothing here is the agent's to finish. When unsure, nothing: a wrong flag is worse than none. "
+    # JUDGED AGAINST THE OWNER'S LATEST WORD (the 2026-11-02 audit: 0 of 5 live checks agreed - each judged the title the task began with,
+    # after the owner had narrowed or changed the job in the pane)
+    "THE OWNER'S LATEST INSTRUCTION, when there is one, is what was asked: what they said after the task began replaces the title and the "
+    "first mail wherever they differ - work that did it is answered, though the title asked more. "
+    "When THE DRAFT is written and ready to send, the work is at the owner's yes: never dropped for work round it - judge the draft "
+    "(draft_misses, invents) or say answered or nothing. "
     "For dropped, draft_misses and invents the line says WHAT, as the instruction that fixes it, in plain words for someone who never "
     "wrote code, at most 60 characters: \"Attach the March export it said it would\", \"Answer her start-date question\", \"Friday's payment date "
     "is not set anywhere\". Otherwise the line is empty. "
@@ -1395,8 +1482,13 @@ def check_prompt(store, tid, item: dict = None) -> str:
     ask = '\n'.join(f"- {m.get('FromName') or m.get('FromEmail') or 'someone'} ({str(m.get('SentAt') or m.get('CreatedAt') or '')[:16]}): "
                     f"{_one(m.get('Subject'), 100)} - {fence(scrub(_one(m.get('BodyText'), 700)))}" for m in ins[-3:])
     steps, said = _steps_line(store, tid)
+    # ...and what the owner said since it began - an answer in the agent's pane, a Continue's words, a note - the newest outranking the title
+    began = str(t.get('CreatedAt') or '').replace('T', ' ')[:19]
+    told = [(at, where, w) for at, where, w in owner_words(store, tid, n=40) if not where.startswith('wrote') and at.replace('T', ' ')[:19] >= began][-4:]
     lines = [f"WHAT WAS ASKED: the task \"{_one(t.get('Title'), 160)}\"" + (f" - {fence(scrub(_one(t.get('Summary'), 500)))}" if t.get('Summary') else '')
              + (f"; done when {_one(t.get('DoneWhen'), 200)}" if t.get('DoneWhen') else '') + (f"\nTHE MAIL ON IT, newest last:\n{ask}" if ask else ''),
+             ("THE OWNER'S LATEST INSTRUCTION (said after the task began, newest last - the last one is what was asked now):\n"
+              + '\n'.join(f"- {at[:16]} {where}: {fence(scrub(w))}" for at, where, w in told)) if told else '',
              f'THE AGENT\'S LAST {len(steps)} STEPS, oldest first:\n' + '\n'.join(fence(scrub(s)) for s in steps) if steps else 'THE AGENT LEFT NO STEPS.',
              f"ITS FINAL WORDS: {fence(scrub(_one(said, 1500)))}" if said.strip() else 'IT LEFT NO FINAL WORDS.']
     try: lines.append(draft_line(store, item or {}, 'task', int(tid)) or 'THE DRAFT: none was written.')
@@ -1473,7 +1565,9 @@ def _check(store, tid: int, rev: str, llm=None) -> int:
         # ...the draft is written again where the draft is what is wrong; the agent picks its work up where the work is short
         draft = _draft(store, {}, 'task', tid)
         verb = 'redraft' if v == 'draft_misses' or (v == 'invents' and draft) else 'continue'
-        rid = W(line=line, verb=verb, label=FIX_LABEL[verb], evidence=ev, model=model, kind='draft_caution' if verb == 'redraft' else 'work_gap')
+        # ...and never Continue over a draft ready to send: the work is at the owner's yes, and picking the agent up again buries it
+        if verb == 'continue' and draft: rid = W(dropped='continue over a ready draft', model=model, evidence=ev)
+        else: rid = W(line=line, verb=verb, label=FIX_LABEL[verb], evidence=ev, model=model, kind='draft_caution' if verb == 'redraft' else 'work_gap')
     _emit(key, 'task', tid); return rid
 
 

@@ -274,3 +274,47 @@ def test_the_report_says_who_decided_each_light_and_whether_memory_was_behind_it
     assert {d['target'][1]: A.cause(cx, d) for d in home.ds()} == {1: 'rule', 2: 'model+memory', 3: 'model'}
     out = A.report(home.ds(), DAY, cx=cx)
     assert 'by cause' in out and 'model+memory' in out
+
+
+# ── WHAT IS ONE DECISION (the 2026-11-02 audit of the live record) ───────────────────────────────────────────────────────────────────────
+def test_the_rows_pickers_are_no_answer_neither_right_nor_wrong(home):
+    for i, v in enumerate(('priority', 'change_kind', 'assign', 'pick_repo', 'split'), 1): home.press(1, 'close', v, f'09:0{i}:00', live=['close'])
+    home.press(1, 'close', 'close', '09:30:00', live=['close'])              # ...the answer comes after the pickers
+    ds = home.ds()
+    assert [(d['target'][1], d['action'], A.score(d)) for d in ds] == [(1, 'close', 'right')], 'a picker set a field; the decision stays open'
+
+
+def test_a_stop_then_mark_done_within_minutes_is_one_mark_done_never_a_dropped_ball(home):
+    home.press(1, '', 'stop_agent', '09:00:00', live=['stop_agent'])
+    home.press(1, '', 'close', '09:04:00', live=['close'])
+    home.press(2, '', 'stop_agent', '09:00:00', live=['stop_agent'])
+    home.press(2, '', 'close', '10:00:00', live=['close'])                   # an hour later: two decisions
+    cx = A.connect(home.dir); every = A.decisions(cx, DAY, silent=True)
+    assert [(d['target'][1], d['action']) for d in every] == [(1, 'close'), (2, 'stop_agent'), (2, 'close')]
+    assert [d['target'][1] for d in A.dropped_balls(cx, every)] == [2]
+
+
+def test_a_stop_after_the_task_closed_is_ignored(home):
+    home.outcome(1, 'task.closed', '08:59:00')
+    home.press(1, '', 'stop_agent', '09:00:00', live=['stop_agent'])
+    home.outcome(2, 'task.closed', '08:00:00')
+    home.press(2, '', 'reopen', '08:30:00', live=['reopen'])                 # reopened since: a live stop
+    home.press(2, '', 'stop_agent', '09:00:00', live=['stop_agent'])
+    cx = A.connect(home.dir); every = A.decisions(cx, DAY, silent=True)
+    assert [(d['target'][1], d['action']) for d in every] == [(2, 'stop_agent')]
+
+
+def test_the_same_act_pressed_again_within_minutes_is_one_decision(home):
+    home.press(1, 'continue', 'continue', '09:00:00', live=['continue'], rev='r1')
+    home.press(1, 'close', 'continue', '09:03:00', live=['continue'], rev='r2')   # the light moved, the owner pressed Continue again
+    home.press(1, 'continue', 'continue', '09:30:00', live=['continue'], rev='r3')
+    ds = home.ds()
+    assert [(d['lit'], d['ids']) for d in ds] == [('continue', [1, 2]), ('continue', [3])]
+
+
+def test_the_first_continue_after_the_owners_own_reopen_is_steering(home):
+    home.press(1, '', 'reopen', '09:00:00', live=['reopen'])
+    home.press(1, '', 'continue', '09:10:00', live=['continue'])
+    home.press(2, '', 'continue', '09:10:00', live=['continue'])             # nobody reopened it: a dropped ball
+    cx = A.connect(home.dir); every = A.decisions(cx, DAY, silent=True)
+    assert [d['target'][1] for d in A.dropped_balls(cx, every)] == [2] and [d['target'][1] for d in A.dropped_balls(cx, every, steer=True)] == [1]

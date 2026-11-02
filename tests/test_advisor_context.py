@@ -124,3 +124,58 @@ def test_a_chat_line_gets_the_same_context_as_a_mail(s):
     rid = f.review(tid, None, draft='Yes - I will take it.')
     p = prompt(s, tid, {'key': f'review:{rid}', 'kind': 'review', 'tid': tid, 'rid': rid, 'title': 'can you cover the call', 'channel': 'whatsapp'})
     assert 'THE LAST 2 MESSAGES' in p and 'whatsapp' in p and 'Yes - I will take it.' in p
+
+
+# ── WHAT THE POP-UP ASSISTANT READS, THE ADVISOR READS (the 2026-11-02 audit) ─────────────────────────────────────────────────────────
+def test_the_task_page_reaches_the_prompt_for_the_item_on_the_table(s):
+    tid, _ = asked(s, 'Lease renewal', 'is it signed?', Summary='Get the Elm Street lease signed before the 30th')
+    s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT: the lease is with the landlord for signature')
+    p = prompt(s, tid)
+    assert "THE TASK'S PAGE" in p and 'Get the Elm Street lease signed before the 30th' in p and 'with the landlord for signature' in p
+    tier1 = advisor._prompt(s, advisor.SHOWN, {'key': f'task:{tid}', 'kind': 'todo', 'tid': tid, 'title': 'x'}, [{'verb': 'reply', 'label': 'Reply'}], 1, 'task', tid)
+    assert "THE TASK'S PAGE" not in tier1, 'the bigger read is for the item on the table'
+
+
+def test_the_owners_own_words_reach_the_prompt_pane_answers_continues_and_outgoing_lines(s):
+    tid, _ = asked(s, 'Vendor W-9', 'can you get their W-9?')
+    s.add_worker_event({'TaskId': tid, 'Sid': 'run1', 'Kind': 'answered', 'RequestId': 'q1', 'Text': 'Use the 2025 form, not the old one', 'Source': 'owner'})
+    s._exec("INSERT INTO outcome (Kind,TargetKind,TargetId,Actor,At,NextMove,FactsJson) VALUES (?,?,?,?,?,?,?)",
+            ('agent.continued', 'task', tid, 'owner', ago(1), 'Ask Gail for the signed copy', '{}'))
+    Factory(s).message(task_id=tid, subject='W-9', body='On it - I will send it by Friday.', direction='out', status='context', channel='whatsapp',
+                       from_name='Alex Doyle', sent_at=ago(0.5), conversation_id='whatsapp:w9')
+    p = prompt(s, tid)
+    words = p.split("THE OWNER'S OWN WORDS ON IT", 1)[1].split('\n\n')[0]
+    assert 'Use the 2025 form' in words and 'Ask Gail for the signed copy' in words and 'I will send it by Friday' in words and 'whatsapp' in words
+    assert words.index('Ask Gail') < words.index('send it by Friday'), 'oldest first: the newest is the latest instruction'
+
+
+def test_an_agent_task_keeps_a_bounded_tail_of_its_thread(s):
+    tid, _ = asked(s, 'Lease renewal', 'the opening ask ' + 'q' * 600, h=5, cid='email:lease')
+    s.add_comment(tid, 'coding', 'assistant_agent', 'I drafted the renewal summary.')
+    p = prompt(s, tid)
+    assert "THE THREAD BEFORE THE AGENT'S LAST TURN" in p and 'the opening ask' in p and 'q' * 201 not in p
+    assert 'MESSAGES ON IT, oldest first' not in p, 'the tail, never the whole thread twice'
+
+
+def test_a_promise_task_shows_the_owners_message_it_was_made_from(s):
+    f = Factory(s)
+    f.message(subject='', body='are you bringing the budget sheet thursday?', from_name='Gail Moreno', from_email='@gail', channel='whatsapp',
+              conversation_id='whatsapp:gail', sent_at=ago(3))
+    mid = f.message(subject='', body='Yes - I will bring the Q4 budget sheet Thursday', direction='out', status='context', channel='whatsapp',
+                    from_name='Alex Doyle', conversation_id='whatsapp:gail', sent_at=ago(2))
+    tid = s.task_for_promise(mid, 'bring the Q4 budget sheet Thursday', None)
+    s._exec('UPDATE message SET TaskId=NULL WHERE MessageId=?', (mid,))       # its mail is on the thread's own task: none on the promise
+    assert not s.list_messages(tid)
+    p = prompt(s, tid)
+    src = p.split('WHAT THIS TASK WAS MADE FROM', 1)[1].split('\n\n')[0]
+    assert "the owner's own message" in src and 'I will bring the Q4 budget sheet Thursday' in src and 'are you bringing the budget sheet' in src
+
+
+def test_who_the_owner_is_comes_before_the_memory_and_the_ledger_so_the_bound_drops_it_last(s):
+    tid, _ = asked(s, 'x', 'y')
+    s.save_doc('job', '# JOB.md\n\nAlex runs facilities for Northwind.', 'owner')
+    s.save_doc('learned', '# LEARNED.md\n\n## Your people\n- Gail Moreno (gail@northwind.example) gets the headcount questions [s:5 | ev: out1 | seen: 2026-10-01]\n', 'owner')
+    p = prompt(s, tid)
+    assert p.index('WHO THE OWNER IS') < p.index('WHAT YOU KNOW ABOUT HOW THE OWNER WORKS')
+    from taskuary import learned_cut
+    assert learned_cut.BUDGET['advisor'] >= 6000 and advisor.PROMPT_CAP >= 16000

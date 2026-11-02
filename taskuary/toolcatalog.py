@@ -248,6 +248,11 @@ PURPOSE = {
 KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss', 'agent.tell'})
 # ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
 SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'agents.stop'})
+# ...and a tool whose press is not one thing: an agent's job written into New is started by the card's own Send to agent at once (concierge._new
+# `start`), and the model, told only "the owner presses its button", said the job was still waiting in New over an agent already at work (2026-11-02)
+RUNS = {'task.create_from_text': "kind general or coding STARTS at once - New's card presses its own Send to agent, the job runs on a task of "
+                                 "its own, and the conversation's line and YOUR OPEN ASKS name that task and where it stands; any other kind "
+                                 "waits in New for the owner's press"}
 # ...and the acts whose button is a page's alone: the page comes up at the thing, the owner presses there
 PAGED = frozenset({'rule.change', 'deleted.restore', 'hub.comment', 'hub.vote', 'page.open'})
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
@@ -350,8 +355,10 @@ def block(store=None) -> str:
         'alone, no words before it: the button is the whole answer.',
         'Answer in plain words. To look something up or to do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
-        'A look-up runs at once and answers you. Anything that changes something is the owner\'s to press: Taskuary',
-        'brings up the button that does it, lit, or the page that holds it - never say it is done. When two different',
+        # ...save the one press made for them: New's card presses its own Send to agent (concierge._new `start`), and "where is it?" was
+        # answered "waiting in New, not started" over an agent at work on its own task (2026-11-02)
+        'A look-up runs at once and answers you. A change is the owner\'s to press: Taskuary brings up its button, lit, or',
+        "its page - never say it is done. Only an agent's job in New starts at once (YOUR OPEN ASKS). When two different",
         'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
         'Never both, never a tool that is not listed. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
@@ -553,7 +560,7 @@ def describe(kind: str) -> str:
         target, required, _ = operations.KINDS[kind]
         asks = [r for r in required if r not in CONTEXT_FILLED]
         runs = ('runs at once, said' if kind in KEPT or kind in SETS else 'brings up its page for the owner' if kind in PAGED
-                else 'the owner presses its button')
+                else RUNS.get(kind) or 'the owner presses its button')
         also = _also(next((v for v, t in CHIP_TOOL.items() if t == kind), ''))
         return f"{kind} (on a {target}; {runs}){' - needs ' + ', '.join(asks) if asks else ''} - {PURPOSE[kind]}{'.' + also if also else ''}"
     return f'There is no tool {kind!r}. The buckets: ' + ', '.join(n for n, _, _ in BUCKETS) + ', look.'

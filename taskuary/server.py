@@ -2785,9 +2785,19 @@ def _start_went(task_id: int):
         store.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'dispatch.prepare', 'TargetKind': 'task', 'TargetId': int(task_id), 'ParamsJson': '{}',
                              'Version': 1, 'Status': 'done', 'OutcomeJson': json.dumps({'what': 'the agent started'})})
 
+# THE SAME PRESS TWICE IS ONE START: the Assistant's line (DispatchBody.said) -> the task its card's Send to agent started. New's card keeps the
+# task it filed when the answer did not come back, and pressed again it reached the agent that press had started - a red "already working on
+# this task" over work going fine (2026-11-02). Only that line on that task, while its agent is live; any other press is refused as ever.
+_SAID_STARTED: dict = {}
+
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
-    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    task = store.get_task(task_id)
+    if not task: raise HTTPException(404, 'task not found')
+    if body.said and _SAID_STARTED.get(int(body.said)) == task_id and (live := hub_term.session_for(task_id)) and live.alive:
+        from . import general
+        return {'dispatch': 'assistant' if general.handles(task) else 'session', 'started': False, 'existing': True, 'taskId': task_id,
+                'ref': task_ref(task_id)}
     from . import asks
     asks.mark(store, task_id)          # the owner started it - the button or the assistant: it reports back like an ask
     try:
@@ -2796,7 +2806,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         if isinstance(out, dict) and body.said:
             from . import concierge
             said = concierge.said_started(store, body.said, out)
-            if said: out = {**out, 'said': said}
+            if said: out, _SAID_STARTED[int(body.said)] = {**out, 'said': said}, task_id
         return out
     except HTTPException as e:
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
@@ -4019,9 +4029,11 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     _after_writeup(tid)
     live = hub_term.session_for(tid)
     if live and live.alive:
-        who = getattr(live, 'agent', None) or getattr(live, 'label', None) or 'An agent'
-        raise HTTPException(409, f'{who} is already working on this task - Continue that session instead of sending it to another agent'
-                                 + ('' if not requested or requested == task_kind else ', or stop it before changing agent type'))
+        # ...in the owner's words: "assistant is already working on this task - ... or stop it before changing agent type" named the profile
+        # and the machinery (2026-11-02). An agent is named as the owner meets it (kinds.json `shown_`), and the way on is a button they have
+        raise HTTPException(409, f'{task_kinds.SHOWN} is already working on this task - press {buttons.label("continue")} to give it more to do'
+                                 + ('' if not requested or requested == task_kind else
+                                    f', or {buttons.label("stop_agent")} first to hand the task to a different agent'))
     if requested and requested != task_kind:
         was_kind, was_route = operations.verdict_of_task(store, tid)
         store.update_task(tid, {'Kind': requested}, ACTOR)

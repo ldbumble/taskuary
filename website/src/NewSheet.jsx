@@ -20,7 +20,7 @@ import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLE
 import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
-import { NO_REPO, planTask, withDesktop } from "./newTask.js";
+import { NO_REPO, firstPressOf, planTask, withDesktop } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
@@ -377,8 +377,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const autoPressed = useRef(false);
   useEffect(() => {
     if (!start || autoPressed.current || kind !== "agent" || !canGo || !agentsRead || busy) return;
-    autoPressed.current = true; submit();
-  }, [start, kind, canGo, agentsRead, busy, submit]);
+    autoPressed.current = true; if (firstPressOf(line)) submit();
+  }, [start, kind, canGo, agentsRead, busy, submit, line]);
 
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")

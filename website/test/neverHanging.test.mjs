@@ -30,5 +30,5 @@ test("the floor's Next waits while the next one is coming: All read, next shows 
   assert.match(view, /deferredChat\.current\.delete\(timer\);[\s\S]{0,400}?try \{ if \(epoch === chatEpoch\.current && !resettingRef\.current\) await fn\(\); \} finally \{ if \(!turnFlight\.current\) setNextComing\(false\); \}/);
   // ...and a settle that fails lets go of it, its receipt offering Next
   assert.match(view, /setBusy\(false\); setFlight\(null\); setNextComing\(false\);/);
-  assert.match(view, /if \(error\) setMsgs\(\(m\) => \[[^\n]*\n[^\n]*Not done - [^\n]*chips: \[\{ verb: "next"/);
+  assert.match(view, /if \(error\) setMsgs\(\(m\) => \[[^\n]*\n[^\n]*chips: \[\{ verb: "next"[^\n]*\n[^\n]*Not done - /);
 });

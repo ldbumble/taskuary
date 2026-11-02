@@ -36,7 +36,8 @@ def test_one_state_drives_both_endpoints_the_same(s):
     # /api/setup is the first run's state with the walk's checklist on it: every field the canvas reads, the same value
     assert {k: page[k] for k in first} == first
     assert (first['step'], first['todo'], first['left']) == ('reading', 'about your work', 1)
-    assert [r['key'] for r in first['rail']] == ['ai', 'mail', 'about', 'other', 'finish']
+    # ...Developer mode and, with it on (the suite runs in developer mode, conftest), Connect GitHub - both optional
+    assert [r['key'] for r in first['rail']] == ['ai', 'mail', 'about', 'dev', 'github', 'other', 'finish']
     # ...and the checklist's rows tick by the same rows the rail does
     rows = {r['key']: r['done'] for r in page['steps']}
     rail = {r['key']: r['done'] for r in first['rail']}

@@ -9,7 +9,7 @@
 // catalogue's, logos and status included, and a clicked card opens the card's own setup (ChannelDetail). The question is the
 // Advisor's line on top, and it is the server's (firstrun.state) - never guessed here.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Button, CircularProgress, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, FormControlLabel, Switch, Typography } from "@mui/material";
 import api from "./api";
 import { readFirstRun } from "./firstRunState.js";
 import { DIM, FAINT, INK } from "./theme.jsx";
@@ -192,12 +192,23 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
     window.dispatchEvent(new Event("tq-setup-changed")); go?.();
   };
   const reopened = revisit || !!st?.dismissed;
+  const firstPass = useRef(false);            // About your work just saved the first time: Developer mode, then Setup complete
+  useEffect(() => { if (view === "done") firstPass.current = false; }, [view]);
+  // DEVELOPER MODE (the owner, 2026-11-02): off, every job goes to a general agent; on, a coding agent - and Connect GitHub joins the steps
+  const [devBusy, setDevBusy] = useState(false);
+  const setDev = async (on) => {
+    setDevBusy(true); setErr("");
+    try { await api.patch("/api/settings", { name: "developer_mode", value: on ? "1" : "0" }); window.dispatchEvent(new Event("tq-setup-changed")); }
+    catch (e) { setErr(errText(e)); }
+    await reload(); setDevBusy(false);
+  };
   const fix = st?.fix;
   const fixed = fix && (st.ais.find((a) => a.name === fix.name) || { name: fix.name, title: fix.title, installed: true });
   const nav = navMoves(st, view, reopened);
   const VERB = {
     back: { label: "Back", tone: "s", run: () => go(prevOf(view, st)), title: "The step before" },
-    next: { label: "Next", tone: "p", run: () => go(nextOf(view)), title: "The next step" },
+    // ...past the optional steps, a first run lands on Setup complete before More connections (afterAbout)
+    next: { label: "Next", tone: "p", run: () => { const n = nextOf(view, st); go(firstPass.current && n === "other" ? "done" : n); }, title: "The next step" },
     walk: { label: btnLabel("walk"), tone: "p", run: finishThen(onWalk), title: "Everything waiting, most important first" },
     finish: { label: reopened ? "Back to my day" : "Finish setup", tone: "p", run: finishThen(onFinish),
       title: "Setup is done - the canvas shows your day. Setup on the top bar opens this again." },
@@ -569,6 +580,10 @@ ${fix.detail || ""}`, screen: "Setup",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
       : "Nothing else is needed - connect more here any time, from Connections."))
       : "Looking at what you told me about your work to suggest what to connect…",
+    dev: st.developer_mode ? "Developer mode is on: work that changes code goes to a coding agent, and you can connect GitHub next."
+      : "Are you a developer? Most people leave this off - every job then goes to a general agent.",
+    github: st.github ? "GitHub is connected - coding agents can work in your repositories."
+      : "Connect GitHub if your code is there. It is optional: a coding agent also works without it, in a scratch folder.",
   }[q];
   const named = canvas ? shown.label : litCard ? litCard.title : [...fixRow, ...navShown.map((m) => ({ id: `setup:${m.id}`, ...VERB[m.id] }))].find((v) => v.id === litId)?.label;
   // an open setup says what to do on it; any line that does not name the lit control yet ends by naming it
@@ -586,13 +601,23 @@ ${fix.detail || ""}`, screen: "Setup",
   // About your work saved: Setup complete only once the AI and the mail work too - else the first step still undone
   const afterAbout = async () => {
     const first = !reopened && !st.about_done, s = await reload();
-    go(!s ? "other" : !requiredDone(s) ? frontierOf(s) : first ? "done" : "other");
+    firstPass.current = !!s && requiredDone(s) && first;
+    go(!s ? "other" : !requiredDone(s) ? frontierOf(s) : first ? "dev" : "other");
   };
   return (
     <Box ref={rootRef} data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
       <Light root={rootRef} card={litCard?.key || ""} canvas={canvas} onShown={onShown} />
       {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
       {shelf("mail", mail, "More chat and task")}
+      {q === "dev" && <Box data-tq-setup-dev="" sx={{ display: "flex", flexDirection: "column", gap: 1, maxWidth: 680 }}>
+        <Typography sx={{ fontSize: 16, fontWeight: 600, color: INK }}>Are you a developer?</Typography>
+        <Typography sx={{ fontSize: 13.5, color: DIM }}>Turn this on only if you write code and use a coding tool such as Claude Code or
+          Codex. Then work that changes code goes to a coding agent in your code. Off, every job goes to a general agent - most people
+          leave it off. You can change it any time in Settings.</Typography>
+        <FormControlLabel control={<Switch checked={!!st.developer_mode} disabled={devBusy} onChange={(e) => setDev(e.target.checked)} />}
+          label="Developer mode" />
+      </Box>}
+      {shelf("github", byType(["github"]).map((c) => card(c, false)), "More")}
       {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout} hidden={hidden}
         onStep={onAboutStep} mailboxes={st.sources || []} mailShelf={mailAbout && <Shelf cards={mail} more="More chat and task"
           opened={open ? `c${open.id}` : null} detail={<Box data-tq-setup-scope="">{detail}</Box>} onAll={() => setOpen(null)} />} />}

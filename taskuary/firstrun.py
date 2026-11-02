@@ -208,14 +208,25 @@ def state(store) -> dict:
            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'first_items': items,
            'empty': empty, 'next': nxt, 'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': done_about,
            'more_connected': more_connected(store), 'dismissed': dismissed(store), 'mailboxes': _mailboxes(store),
-           'sources': sources(store), 'source_types': source_types()}
+           'sources': sources(store), 'source_types': source_types(), **developer(store)}
     return {**out, **rail(out)}
+
+
+def developer(store) -> dict:
+    "{developer_mode, dev_chosen, github}: the switch, whether the owner set it, and whether a GitHub card is on - the two optional steps' state."
+    from . import agents
+    return {'developer_mode': agents.developer_mode(store), 'dev_chosen': store.setting_writer(agents.DEV_MODE) == 'owner',
+            'github': any(c.get('Active') and c.get('Type') == 'github' for c in store.list_connectors())}
 
 
 # THE SETUP RAIL, said here once: which steps are done, which can be opened yet, and what a waiting one waits for. setupSteps.js
 # re-derived all of it from `step` on the page (2026-10-18); it now only marks the row on the canvas.
 RAIL = (('ai', 'Your AI', 'pick an AI that works first'), ('mail', 'Your main source', 'connect your main source first'),
-        ('about', 'About your work', 'save or skip the answers first'), ('other', 'More connections', ''), ('finish', 'Finish', ''))
+        ('about', 'About your work', 'save or skip the answers first'), ('dev', 'Developer mode', ''), ('github', 'Connect GitHub', ''),
+        ('other', 'More connections', ''), ('finish', 'Finish', ''))
+# OPTIONAL, like More connections: Developer mode is asked of everyone, and Connect GitHub only once it is on - a coding CLI runs with no
+# repository too, in a scratch folder (the owner, 2026-11-02: "if they have no repos connected you should still be able to run the coding CLI")
+OPTIONAL = ('dev', 'github', 'other')
 PREV = {'mail': 'ai', 'about': 'mail'}
 
 
@@ -229,15 +240,18 @@ def rail(st: dict) -> dict:
     step, about_done, put_away, more = st.get('step'), bool(st.get('about_done')), bool(st.get('dismissed')), st.get('more_connected') or 0
     ai, mail = step != 'ai', step in ('reading', 'done')
     ready = mail and about_done
-    done = {'ai': ai, 'mail': mail, 'about': about_done, 'other': more > 0, 'finish': put_away and ready}
+    dev, gh = bool(st.get('developer_mode')), bool(st.get('github'))
+    done = {'ai': ai, 'mail': mail, 'about': about_done, 'dev': dev or bool(st.get('dev_chosen')), 'github': gh, 'other': more > 0,
+            'finish': put_away and ready}
     opens = {**{k: k not in PREV or done[PREV[k]] for k in done}, 'finish': ready or put_away}
     sub = {'ai': (st.get('brain') or {}).get('name') or '' if ai else '',
            'mail': ('connected - nothing new yet' if st.get('empty') else 'connected - sorting what came in') if step == 'reading' else 'connected' if mail else '',
-           'about': 'saved' if about_done else '', 'other': f'{more} connected' if more else 'optional',
+           'about': 'saved' if about_done else '', 'dev': 'on' if dev else 'off - every job goes to a general agent',
+           'github': 'connected' if gh else 'optional - a coding agent runs without it', 'other': f'{more} connected' if more else 'optional',
            'finish': 'ready - Finish setup is below' if ready else 'after AI, your main source and About your work'}
     need = {k: n for k, _l, n in RAIL}
-    rows = [{'key': k, 'label': l, 'done': done[k], 'open': opens[k], 'optional': k == 'other', 'need': n,
-             'sub': sub[k] if opens[k] or done[k] or k == 'finish' else f'waits - {need[PREV[k]]}'} for k, l, n in RAIL]
+    rows = [{'key': k, 'label': l, 'done': done[k], 'open': opens[k], 'optional': k in OPTIONAL, 'need': n,
+             'sub': sub[k] if opens[k] or done[k] or k == 'finish' else f'waits - {need[PREV[k]]}'} for k, l, n in RAIL if k != 'github' or dev]
     # where setup opens: the first step not done, More connections once the three are
     frontier = 'ai' if not ai else 'mail' if not mail else 'about' if not about_done else 'other'
     return {'rail': rows, 'ready': ready, 'frontier': frontier, 'left': {'ai': 2, 'email': 1}.get(step, 0) + (not about_done)}

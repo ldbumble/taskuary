@@ -25,9 +25,10 @@ class DeskTests(unittest.TestCase):
     def _turn(self, kind, **params): return concierge.say(self.s, 'do it', llm=call(kind, **params))
 
     def test_a_report_act_opens_the_report(self):
-        for kind in ('report.run', 'report.pause', 'report.delete'):
+        # ...Run now and the switch at its row on the shelf, Remove in its builder: a report's builder has neither (2026-11-02)
+        for kind, at in (('report.run', '#report=reports'), ('report.pause', '#report=reports'), ('report.delete', f'#report={self.sid}')):
             out = self._turn(kind, title='ar report')
-            self.assertNotIn('proposal', out); self.assertEqual(out['open'], f'#report={self.sid}', kind)
+            self.assertNotIn('proposal', out); self.assertEqual(out['open'], at, kind)
             self.assertIn('Monthly AR Report', out['say'])
         self.assertTrue(self.s.get_source(self.sid)['Active'])                         # paused by nobody
 

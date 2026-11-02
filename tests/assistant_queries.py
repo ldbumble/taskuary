@@ -657,6 +657,85 @@ AREA_CONNECTIONS = [
 ]
 CASES += AREA_CONNECTIONS
 
+# REPORTS, DASHBOARDS AND ROUTINES, ON THEIR OWN PAGES (the everyday-asks audit, 2026-11-02): the shelf's rows wear Run now, Edit and a
+# switch, each named for its report (ReportsView row); a report's editor has no Run now and no switch - those stay on its row - while a
+# routine's page and a dashboard's carry their own Run now
+AP, HC, EOD = 'AP ageing over 30 days, weekly', 'Headcount by site, nightly', 'End of day checkup'
+def _slug(t): return re.sub(r'[^a-z0-9]+', '_', t.lower()).strip('_')          # the page's own ids for what has no id (pageView.js slug)
+def _row(t): return [{'id': f'run_now_{_slug(t)}', 'label': f'Run now: {t}'}, {'id': f'edit_{_slug(t)}', 'label': f'Edit: {t}'}]
+REPORTSHELF = {'area': 'reports', 'title': 'Reports', 'fields': [{'key': 'describe', 'label': 'Describe the report you want', 'value': ''}]
+               + [{'key': _slug(f'{t} on its clock'), 'label': f'{t} on its clock', 'kind': 'switch', 'value': 'on'} for t in (AP, HC, EOD)],
+               'buttons': [{'id': 'run_due_now', 'label': 'Run due now'}, {'id': 'new_report', 'label': '+ New report'}] + _row(AP) + _row(HC) + _row(EOD)}
+REPORTPAGE = {'area': 'reports', 'title': f'the report "{AP}" (Reports), its editor open', 'item': {'kind': 'report', 'id': 5},
+              'fields': [{'key': 'title_the_headline_each_run_shows', 'label': 'title — the headline each run shows', 'value': AP},
+                         {'key': 'describe', 'label': 'Describe the report you want', 'value': ''}],
+              'buttons': [{'id': 'remove_report', 'label': 'Remove report'}, {'id': 'pipeline', 'label': 'Pipeline'},
+                          {'id': 'test_preview', 'label': 'Test & preview'}, {'id': 'test_source', 'label': 'Test source'},
+                          {'id': 'preview_pipeline', 'label': 'Preview pipeline'}, {'id': 'continue', 'label': 'Continue'},
+                          {'id': 'schedule_save', 'label': 'Schedule & save'}],
+              'last': {'action': 'test', 'ok': False, 'detail': 'Login failed for user report_reader'}}
+DASHPAGE = {'area': 'reports', 'title': 'the dashboard "Northwind desk" (Reports - Dashboards), drawn with its buttons',
+            'fields': [{'key': 'describe', 'label': 'Describe the dashboard you want', 'value': ''}],
+            'buttons': [{'id': 'save_dashboard', 'label': 'Save dashboard'}, {'id': 'run_now', 'label': 'Run now'}, {'id': 'remove', 'label': 'Remove'}]}
+ROUTINEPAGE = {'area': 'reports', 'title': 'the routine "Month-end tie-out" (Routines), its steps open',
+               'fields': [{'key': 'month_end_tie_out_on_its_clock', 'label': 'Month-end tie-out on its clock', 'kind': 'switch', 'value': 'on'}],
+               'buttons': [{'id': 'run_now', 'label': 'Run now'}, {'id': 'save', 'label': 'Save'}, {'id': 'repair', 'label': 'Repair the failed step'}]}
+AREA_REPORTS = [
+    # ── the shelf: a row's own buttons, by its report's name ──
+    Q('reports', 'run the AP ageing', None, [v(op='press', button=f'Run now: {AP}')], f'view:press:run_now_{_slug(AP)}', tools=('words',), view=REPORTSHELF, freq=4),
+    Q('reports', 'switch off the headcount one', None, [v(op='set', field=f'{HC} on its clock', value='off')], f'view:set:{_slug(HC)}_on_its_clock',
+      tools=('words',), view=REPORTSHELF, freq=3),
+    Q('reports', "run whatever's due", None, [v(op='press', button='Run due now')], 'view:press:run_due_now', tools=('words',), view=REPORTSHELF, freq=2),
+    Q('reports', 'a report of open helpdesk tickets by agent, every morning', None,
+      ['Asked the builder for it.\n' + v(op='set', field='describe', value='open helpdesk tickets by agent, every morning at 8')], 'view:set:describe',
+      tools=('words',), view=REPORTSHELF, freq=3, note="the describe-it is the composer's field: its draft lands in the builder, nothing saved"),
+    Q('reports', 'which of my reports failed?', None, [c('reports.list'), 'None failed; three have never run.'], 'read:reports.list', view=REPORTSHELF, freq=3),
+    Q('reports', 'edit the end of day one', None, [v(op='press', button=f'Edit: {EOD}')], f'view:press:edit_{_slug(EOD)}', tools=('words',), view=REPORTSHELF, freq=2),
+    # ── one report's editor open: no Run now and no switch here - the road brings up its row on the shelf, never this same page ──
+    Q('reports', 'run it', None, c('report.run', source_id=5), 'open:#report=reports', view=REPORTPAGE, freq=4,
+      note="a report's editor has no Run now: the shelf, where its row has one"),
+    Q('reports', 'pasue this reprot', None, c('report.pause', title='AP ageing'), 'open:#report=reports', view=REPORTPAGE, freq=2, note='typos; the switch is on its row'),
+    Q('reports', 'run the headcount report now', None, c('report.run', title='Headcount'), 'open:#report=reports', freq=3),
+    Q('reports', 'test the source', None, [v(op='press', button='Test source')], 'view:press:test_source', tools=('words',), view=REPORTPAGE, freq=3),
+    Q('reports', 'preview it', None, [v(op='press', button='Preview pipeline')], 'view:press:preview_pipeline', tools=('words',), view=REPORTPAGE, freq=3),
+    Q('reports', 'why did the test fail?', None, ['The source refused the sign-in: report_reader cannot log in - its card under Connections holds the login.'],
+      'words', tools=('words',), view=REPORTPAGE, freq=3, note="the page's own last Test answer rides in the view"),
+    Q('reports', 'rename it AP over 30 days', None, [v(op='set', field='title — the headline each run shows', value='AP over 30 days')],
+      'view:set:title_the_headline_each_run_shows', tools=('words',), view=REPORTPAGE, freq=2),
+    Q('reports', 'remove this report', None, [v(op='press', button='Remove report')], 'view:press:remove_report', tools=('words',), view=REPORTPAGE, freq=2,
+      note='kept 30 days under Recently deleted'),
+    Q('reports', 'make it run every monday at 8', None, c('report.edit', title='AP ageing', config={'cron': '0 8 * * 1'}), 'open:#report=5', view=REPORTPAGE,
+      freq=3, note='its schedule is step 3 of this page'),
+    Q('reports', 'email it to gail@northwind.example every time it runs', None, c('report.route', title='AP ageing', line='send', how='always'),
+      'open:#report=5', view=REPORTPAGE, freq=2, note="its route card is on this page; a send is never set up from the chat"),
+    Q('reports', 'what did it find last time?', None, [c('report.read', title='AP ageing'), 'It has never run.'], 'read:report.read', view=REPORTPAGE, freq=3),
+    Q('reports', 'show me every run of the end of day checkup', None, [c('report.read', title='End of day'), 'It has not run yet.'], 'read:report.read', freq=2),
+    # ── dashboards ──
+    Q('reports', 'refresh this dashboard', None, [v(op='press', button='Run now')], 'view:press:run_now', tools=('words',), view=DASHPAGE, freq=3),
+    Q('reports', 'what does the Northwind desk dashboard show', None, [c('report.read', title='Northwind desk'), 'Open tasks, mail in, who wrote most.'],
+      'read:report.read', freq=2),
+    Q('reports', 'put the dashboard back on its schedule', None, c('report.resume', title='Northwind desk'), 'open:#report=dashboards', freq=1,
+      note="a dashboard's switch is on its row on the shelf"),
+    # ── routines: their page carries Run now and a switch of its own ──
+    Q('reports', 'run this routine', None, [v(op='press', button='Run now')], 'view:press:run_now', tools=('words',), view=ROUTINEPAGE, freq=3),
+    Q('reports', 'turn this routine off', None, [v(op='set', field='Month-end tie-out on its clock', value='off')], 'view:set:month_end_tie_out_on_its_clock',
+      tools=('words',), view=ROUTINEPAGE, freq=2),
+    Q('reports', 'fix the failed step', None, [v(op='press', button='Repair the failed step')], 'view:press:repair', tools=('words',), view=ROUTINEPAGE, freq=2),
+    Q('reports', 'every weekday at 9 run the month-end skill', None,
+      c('task.create_from_text', kind='general', text='run the month-end skill', title='Month-end skill',
+        recurs={'schedule': 'every weekday at 9', 'objective': 'run the month-end skill', 'repo': None, 'skill': 'month-end'}), 'new:workflow', freq=3,
+      note='a job on a clock is a routine: New → Routine, filled in for its Save'),
+    Q('reports', 'where is the file the routine made?', None, [c('outputs.find', query='routine'), 'No agent has made a file yet.'], 'read:outputs.find', freq=2),
+    # ── the rest: what was removed, a report's trouble, and work that is an agent's ──
+    Q('reports', 'bring back the report I deleted', None, [c('deleted.list'), 'Nothing was removed in the last 30 days.'], 'read:deleted.list', freq=2),
+    Q('reports', 'the AP ageing keeps failing, whats wrong', None, [c('report.read', title='AP ageing'), 'It has never run, so nothing has failed yet.'],
+      'read:report.read', freq=3),
+    Q('reports', 'go through the last three AP ageing runs and write up the trend', None,
+      c('task.create_from_text', kind='general', text='read the last three AP ageing runs and write up the trend', title='AP ageing trend'),
+      'new:agent:general', freq=2, note="reading across runs and writing it up is an agent's job"),
+]
+CASES += AREA_REPORTS
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

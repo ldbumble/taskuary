@@ -3363,6 +3363,21 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
 # where a report's or a connection's act is pressed, on its own page
 REPORT_SAYS = {'report.run': 'run it', 'report.rerun': 'run it again', 'report.pause': 'pause it', 'report.resume': 'switch it back on',
                'report.route': 'change where it goes', 'report.edit': 'change it', 'report.delete': 'remove it'}
+# ...except Run now and the clock's switch on a report or a dashboard (the everyday-asks audit, 2026-11-02): those sit on its ROW on the
+# shelf - its editor has neither, and "run it" over the AP ageing's editor opened that same editor, "run it there" with nothing to press.
+# A routine's own page carries both (WorkflowEditor), so a routine still opens at itself
+ON_ITS_ROW = {'report.run': 'press Run now on its row', 'report.rerun': 'press Run now on its row', 'report.pause': 'its row has the switch that turns it off',
+              'report.resume': 'its row has the switch that puts it back on'}
+def report_page(store, sid: int, kind: str, named: str) -> tuple:
+    "Where a report act is pressed, and the line that says so: (href, said)."
+    try: cfg = json.loads((store.get_source(int(sid)) or {}).get('ConfigJson') or '{}')
+    except (TypeError, ValueError): cfg = {}
+    named, t = named or str(cfg.get('title') or 'the report'), str(cfg.get('type') or '')
+    # ...the page's own shelf rule (website/src/sourceShape.js isWorkflowConfig): only an agent with write access opens on WorkflowEditor
+    if kind in ON_ITS_ROW and not (t == 'agent' and cfg.get('access') == 'write'):
+        shelf = 'dashboards' if t == 'dashboard' else 'workflows' if t == 'zoho_monthly_invoices' else 'reports'
+        return f'#report={shelf}', f"Opened {places.name(shelf) if shelf != 'reports' else 'Reports'} at {named} - {ON_ITS_ROW[kind]}."
+    return f'#report={int(sid)}', f"Opened {named} under Reports - {REPORT_SAYS.get(kind, 'change it')} there."
 CONN_SAYS = {'connection.pause': 'switch it off', 'connection.resume': 'switch it on', 'connection.test': f"press {buttons.label('test_connection')}",
              'connection.create': 'fill it in and test it'}
 # a task's own part that has no button of its own - the task is brought up and the line says where on it
@@ -3456,8 +3471,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         t = target if tk == 'task' else int((store.get_review(target) or {}).get('TaskId') or 0)
         on = table if table and int(table.get('tid') or 0) == t else funnel.item_for_key(store, f'task:{t}') if t else None
     elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
-    if tk == 'source' and not on and target:
-        return _page(store, tid, table, f'#report={target}', f"Opened {named or 'the report'} under Reports - {REPORT_SAYS.get(kind, 'change it')} there.")
+    if tk == 'source' and not on and target: return _page(store, tid, table, *report_page(store, target, kind, named))
     # ...an assignee of the owner is "mine" (Put it on my list), an agent's is Send to agent - "assign it to me" never lit Send to agent
     b = (('mine' if str(params.get('assignee') or '') == 'owner' else next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '')) if kind == 'task.update'
          else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
@@ -5565,11 +5579,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             try: return (_lit(store, tid, item, target_item, verb) if elsewhere and verb in PUT_DOWN else
                          _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor))
             except CallMiss:                                           # no such button on its row: the model says so in words
-                # ...except a report asked to run again: Run it again is drawn only on a failed run, and the report's own page has Run now -
-                # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)
+                # ...except a report asked to run again: Run it again is drawn only on a failed run, and Run now is a page's - its row on
+                # the shelf, or a routine's own page (report_page) - "run the AP ageing again" over a good run was answered in words with
+                # the page one link away (the 2026-10-20 query walk)
                 if verb == 'rerun' and target_item.get('source_id'):
-                    return _page(store, tid, item, f"#report={int(target_item['source_id'])}",
-                                 f"Opened {target_item.get('title') or 'the report'} under Reports - {REPORT_SAYS['report.run']} there.")
+                    return _page(store, tid, item, *report_page(store, target_item['source_id'], 'report.run', target_item.get('title') or ''))
                 reply, options = _in_words(llm, system, table, text, verb)
                 rec('assistant', reply)
                 return {'say': reply, 'options': options, 'chips': chips_for(store, item), 'decision': None}

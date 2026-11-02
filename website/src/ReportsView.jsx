@@ -449,7 +449,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       viewResult({ action: "compose", ok: true, detail: `${data.explain || "Drafted"} - in the builder now, not saved` });
     } else viewResult({ action: "compose", ok: false, detail: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "It could not draft that." });
   };
-  useViewExtras("reports", { fields: [{ key: "describe", label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
+  // ...and the one open, by its id (the everyday-asks audit, 2026-11-02): "run it" over a report's builder named it by its title alone, so
+  // the Assistant's report.run guessed among titles; source_id is what its report tools take
+  const openNow = browse ? browseState.open : bucket;
+  useViewExtras("reports", { item: typeof openNow === "number" ? { kind: "report", id: openNow } : null, fields: [{ key: "describe", label: composeKind === "workflow" ? "Describe the routine you want" : composeKind === "dashboard" ? DASH.describe : "Describe the report you want",
     value: "", set: compose, said: (v) => `Asked the builder for: ${String(v).length > 70 ? `${String(v).slice(0, 69)}…` : v}` }] });
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
@@ -529,11 +532,13 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
               <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
               <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10 }}>AI summary</Typography>
             </Box>}
-            <Button size="small" disabled={running === s.SourceId}
+            {/* each named for its report (the everyday-asks audit, 2026-11-02): the Assistant reads the shelf by these names, and five
+                rows of "Run now" and a switch with no name at all left it nothing to tell the AP ageing's from the headcount's */}
+            <Button size="small" disabled={running === s.SourceId} aria-label={`Run now: ${c.title || s.Address}`}
               startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
               onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
-            <Button size="small" onClick={() => openOne(s.SourceId)}>Edit</Button>
-            <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
+            <Button size="small" aria-label={`Edit: ${c.title || s.Address}`} onClick={() => openOne(s.SourceId)}>Edit</Button>
+            <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()} inputProps={{ "aria-label": `${c.title || s.Address} on its clock` }}
               onChange={async () => {
                 try { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); }
                 catch (e) { setNote({ ok: false, detail: `${titleOf(s)} could not be switched ${s.Active ? "off" : "on"} — ${e?.response?.data?.detail || "the app did not answer"}. Try again.` }); }

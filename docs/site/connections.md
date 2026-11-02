@@ -125,6 +125,23 @@ only has an App Password has no Google sign-in, so its contacts are not searched
 exchanged is still searched. Search answers are kept for ten minutes, and the people they found
 are remembered so they can still be found offline.
 
+### The signature under your emails
+
+Every email Taskuary writes for you ends with one signature, taken from the first of these that has one:
+
+1. the signature on the mailbox's own card (Connections, the card that sends as it)
+2. **Settings → Replies → Email signature**
+3. the account's own signature: on a Gmail card signed in with Google, the one set in Gmail
+   (read with `gmail.settings.basic`); on any other mailbox, the closing lines your sent mail
+   plainly shares — most of at least six recent mails, more than one line, with your name in it
+4. the sign-off line in STYLE.md
+5. your name
+
+Microsoft offers no way to read an Outlook signature, so an Outlook mailbox uses its sent mail.
+The account's signature is read once a day and kept on the card. A Gmail card signed in with
+Google before Taskuary asked for the signature says so on the card; signing in with Google again
+adds it.
+
 ## Chat
 
 | System | Notes |

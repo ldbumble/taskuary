@@ -31,8 +31,8 @@ class RefusedTests(_Rail):
 
     def test_a_send_the_demo_refused_is_an_act_and_the_line_moves_off_send(self):
         s = self._world(); key, r = self._draft(s)
-        # a draft waiting: the scripted line agrees with Send and says no fact, so nothing is lit (NO DEFAULT VERB, the owner, 2026-10-28)
-        self.assertIsNone(self._advise(s, key).get('verb'), 'a draft waiting with no reason said: nothing lit')
+        # a draft waiting: the scripted model lights Send, and the model's light is what is lit (the owner, 2026-11-02)
+        self.assertEqual(self._advise(s, key).get('verb'), 'approve', 'a draft waiting: Send')
         before = advisor.revision(s, 'task', r['TaskId'])
         self.assertTrue(demo.refused(s, f"/api/reviews/{r['ReviewId']}/decide", demo.SENDS), 'the refusal is left on the item')
         self.assertNotEqual(before, advisor.revision(s, 'task', r['TaskId']), 'a refused press moves the revision')
@@ -63,7 +63,8 @@ class RefusedTests(_Rail):
         title = next(i['title'] for i in funnel.pile(s)['items'] if i['key'] == key)
         with mock.patch.dict(demo.VERDICTS, {title: demo.VERDICTS['Lease renewal for the Elm Street office']}): got = self._advise(s, key)
         self.assertIn(got.get('verb'), ('fix', 'new_task'), got)
-        self.assertIn('erin.blake@northwind.example', got.get('line', ''), 'the line is the fact: which address was refused')
+        # ...the line is the model's own (cut at a word, 64 characters), said as the fact: the address was refused
+        self.assertTrue(got.get('line', '').startswith('The address was refused'), got)
 
     def test_a_send_refused_for_another_reason_is_still_redrafted_not_sent_again(self):
         s = self._world(); key, r = self._draft(s)

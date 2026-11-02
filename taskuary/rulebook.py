@@ -1,42 +1,28 @@
-"""THE ONE RULEBOOK (the Advisor design, phase A; the owner's rulings 2026-10-23).
+"""THE FACTS THE APP KEEPS ABOUT AN ITEM (the Advisor design, phase A, 2026-10-23; a decider no more since 2026-11-02).
 
-Four pieces of code chose the item's move - the Advisor's model, the row's own fallbacks, the Tasks tab's always-dark Mark done and the
-phone's primary() - and they disagreed on 6 of 21 states; on the phone Send led on a draft the desk said not to send. Here each state is
-decided once, from FACTS THE APP KEEPS - a draft and whether it can send from here, the agent's state, a failure, the calendar, the days
-waited, the lane - never the words of a mail (the owner: no hardcoded keyword lists; the model reads intent). A rule answers at once, with
-no "Thinking...", and costs nothing against the hourly model cap. Where intent must be read (an ask that is really work or someone else's,
-a draft promising what nothing shows, a duplicate by subject, a buried ask, an idea) the state says `ask`: nothing is lit while the model
-reads it, and then its move or the rule's - each only beside its fact (advisor.decide; NO DEFAULT VERB, the owner, 2026-10-28).
+This was THE ONE RULEBOOK: each state lit its own button from a table, and 62% of the Advisor's rows said "left to the rule" - the model
+never read the item, and an agent that finished and asked to go further lit nothing (7 of the owner's 9 dropped balls). The owner,
+2026-11-02, for the hundredth time: "never ever use hard coded rules, let the ai see everything and all tools in progressive fashion and it
+should work". So what is left here is FACTS: the item's state named from what the app keeps - a draft and whether it can send from here, the
+agent's state, a failure, the calendar, the days waited, the lane - never the words of a mail, with the fact sentence for it (words.json
+`advice_rule`: an age, a clash, a failure, a promise nothing backs). advisor._prompt hands the state, its sentence, every verb the row
+offers and what the owner chose before in that state (calibrate.evidence) to the model, which decides every light (advisor.decide).
 
-What each state says and lights is words.json `advice_rule` - the same on every surface. "Obvious move -> the strip is EMPTY and one
-button is lit" (the owner, 2026-10-23): a line is only a checkable fact the card does not show - an age, a clash, a failure, a promise
-nothing backs - and never a sentence explaining the button ("buttons do the talking", "I hate free text")."""
+A sentence is only a checkable fact the card does not show, never one explaining a button ("buttons do the talking", the owner)."""
 import json, re
 from datetime import date, datetime, timedelta
 from loguru import logger
 from . import words
 
 RULES = words.ADVICE_RULE
-CHASE_DAYS = 3           # the owner, 2026-10-23: "Chase lights after 3 working days, then learned per person" (the per person is phase E)
-# states no habit may change (the owner, 2026-10-23: "a habit only lights a button ... never a safety rule"): what failed is fixed before
-# anything else, an agent asking is answered in its pane, a closed or working item has no move of the owner's
-SAFE = frozenset({'closed', 'working', 'agent_asking', 'action_held', 'failed', 'failed_cause', 'report_failed', 'unsendable',
-                  # ...nor a phish's put-down: no habit lights Send to agent over a scam (the owner, 2026-10-30)
-                  'fyi_danger'})
+CHASE_DAYS = 3           # a wait past 3 working days is NAMED late (waiting_late) - a fact the model weighs, never a button lit by itself
+# a failure is the fact whatever is lit: its sentence stands on the strip where the model's own line is empty (advisor._out)
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
-# where the lit move needs an AI to work: with none connected the strip asks for one there, and only there
-NEEDS_AI = frozenset({'asked', 'asked_late', 'stranger'})
-# THE KIND OF FACT a state's line is - what the check after the Advisor decides reads (advisor.checked), the same field the model states
-KIND = {'asked_late': 'late', 'untouched': 'late','waiting_late': 'late', 'waiting_late_usual': 'late', 'waiting_overdue': 'late', 'goal_late': 'late',
-        'duplicate': 'same_ask', 'failed': 'failure', 'failed_cause': 'failure', 'report_failed': 'failure'}
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
 # ...and WHERE ITS MOVE IS, of the task's three sections (stages.json `section`): a reply that already went is Close out's to settle, so the
 # page opens there with the Advisor's line beside it (the owner, 2026-10-29: the owner answered in Teams, and the page opened on Came from
 # with "Mark done is next" under the Agent nobody started). Carried as a fact beside the line's, handed on as the decision's `section`
 SEC = '_section'
-
-
-def asks(state: str) -> bool: return bool((RULES.get(state) or {}).get('ask'))
 
 
 def _dt(s):
@@ -204,15 +190,9 @@ def late_step(store, t: dict) -> tuple | None:
     return best
 
 
-def _lit(state: str, offered: set) -> str | None:
-    """The first of the state's verbs the row draws; Next when none is; None where the state lights nothing."""
-    want = (RULES.get(state) or {}).get('lit') or []
-    if not want: return None
-    return next((v for v in want if v in offered or v == 'next'), 'next')
-
-
 def state(store, item: dict, verbs: list) -> tuple:
-    """(state, facts for its line) - the first rule that holds, in the order a careful assistant would read the item."""
+    """(state, facts for its sentence) - the first that holds, in the order a careful assistant would read the item. A name for where the
+    item stands, never a move: the model reads it beside everything else and decides."""
     from . import advisor, concierge
     it, offered = item or {}, {v['verb'] for v in verbs or []}
     kind, lane, tid = str(it.get('kind') or ''), str(it.get('lane') or ''), it.get('tid')
@@ -227,8 +207,8 @@ def state(store, item: dict, verbs: list) -> tuple:
     try: f = advisor.failure(store, it)
     except Exception: f = None
     if kind == 'report' and (it.get('bad') or f): return 'report_failed', {'why': _plain_why((f or {}).get('why'), it.get('why'), default='it did not run')}
-    # ...the fix named after its place is the way past it, at once; with none named, the model reads the cause (a mail too large is
-    # redrafted, a dead address is fixed, a run that hit a wall is tried again) while the rule's Try again / New task stands lit
+    # ...a fix named after its place, or none named and the cause for the model to read (a mail too large is redrafted, a dead address
+    # is fixed, a run that hit a wall is tried again)
     if f: return ('failed' if f.get('fix') else 'failed_cause'), {'why': _plain_why(f.get('why'), f.get('what'))}
     # A WATCH THAT CAME BACK (watch.py, the owner, 2026-11-01): Mark done only where triage read the new message as handled by somebody
     # else - never closed for the owner - and a quiet week lights Chase them / Let it go; a thread that merely moved is read as any task
@@ -336,8 +316,8 @@ def state(store, item: dict, verbs: list) -> tuple:
 
 # UNTOUCHED TOO LONG (the design rev 2: "an ask with no answer, a promise past its day" - the owner, 2026-10-28: "there to hold your hand
 # when something was dropped"): an open task of the owner's own that nothing has moved for UNTOUCHED_DAYS working days. That it sat is a
-# fact the app keeps; WHAT is still owed on it, to whom, and the move that gets it going are the model's to read (advice_rule `untouched`
-# asks it, and lights only its verb beside its line) - never a word list. Nothing owed: nothing lit.
+# fact the app keeps; WHAT is still owed on it, to whom, and the move that gets it going are the model's to read (the UNTOUCHED line
+# in its prompt) - never a word list.
 UNTOUCHED_DAYS = 5
 
 
@@ -428,56 +408,16 @@ def slipped(store, item: dict, t: dict) -> tuple:
     return who or 'They', working_days(due) if due else int(item.get('late_days') or 0)
 
 
-def decide(store, item: dict, verbs: list) -> dict:
-    """{state, verb, line, ask} - the rule's move for the item: the verb lit, the line the strip says ('' is silent) and whether the
-    model may change it. Never raises: a rule that cannot read its facts lights Next and says nothing."""
-    try: st, facts = state(store, item, verbs)
+def facts(store, item: dict, verbs: list) -> dict:
+    """{state, line, evidence?, section?} - where the item stands and the checkable fact said for it ('' when a fact it needs is not known),
+    with the ids it rests on and the section of the task page it is about. Read by the Advisor's prompt; nothing here lights a button.
+    Never raises: facts that cannot be read are the plain 'own'."""
+    try: st, f = state(store, item, verbs)
     except Exception as e:
-        logger.warning(f"rulebook: {(item or {}).get('key')} not decided - {e}"); st, facts = 'own', {}
-    offered = {v['verb'] for v in verbs or []}
-    ev, sec = facts.pop(EV, None) or [], facts.pop(SEC, None)
-    verb = _lit(st, offered)
-    # a line only over the move it is the fact for: "Erin Blake asked yesterday" over a lit Next would be a reason for another button
-    # ...save what failed: the failure is the fact whatever is lit - the demo's refused Send leaves only Next, and "Failed: ..." over it
-    line = _say(st, **facts) if verb and (verb != 'next' or st in FAILED) else ''
-    # ...and an age under a day is on the card already ("2h"): the line speaks from yesterday on
-    if st == 'asked' and not re.search(r'yesterday|days ago', line): line = ''
-    # ...and MARK DONE IS NEVER A FALLBACK (the owner, 2026-10-28): lit only with its reason said - a reply that went, a finish nothing
-    # came after, every to-do ticked - else nothing is lit
-    if verb == 'close' and not line: verb = None
-    ask, mem = asks(st), []
-    if not ask and st in MEMORY_ASKS:
-        try: mem = cares_on(store) if st == 'report_ok' and 'report_off' in offered else [] if st == 'report_ok' else memory_on(store, item)
-        except Exception as e: logger.debug(f"rulebook: no memory read for {(item or {}).get('key')} - {e}")
-    return {'state': st, 'verb': verb, 'line': _cut(line, 64), 'ask': ask or bool(mem), **({'evidence': ev} if ev and line else {}),
-            **({'memory': mem} if mem else {}), **({'section': sec} if sec and verb else {})}
-
-
-# A STATE THE RULE DECIDES ALONE NEVER READ THE MEMORY (the memory audit, 2026-10-26): a promise to the person a wait is on, or a line about
-# who holds a late goal step, could not inform Chase, Continue or Remind me - the model, which reads LEARNED.md, was never asked there.
-# These states ask it only where a Your people or Promises line NAMES someone on the item (people_on: addresses and full names - facts,
-# never the words of a mail); every other item stays the rule's alone, with no model call. Safety states never (SAFE).
-# ...and a REPORT RUN asks it only where What you care about has a line: whether the run's findings are about something the owner said they do
-# not care about is the model's to read (no word lists), and its Pause this report stands only on an answer citing such a line (the owner,
-# 2026-10-27: "the Advisor may suggest switching a report off")
-MEMORY_ASKS = frozenset({'report_ok', 'waiting', 'waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal', 'goal_late', 'stopped', 'stopped_done', 'agent_done', 'done_list', 'own'})
-
-
-def memory_on(store, item: dict) -> list:
-    """The keys of the people and promise lines the Advisor reads that name someone on the item - [] when none does."""
-    from . import advisor, learned_cut as lc
-    doc = store.doc('learned') or ''
-    ls = [(raw, k) for s in ('people', 'promises') if s in lc.READS['advisor'] for raw, k in lc.lines(doc, lc.SECTIONS[s])]
-    if not ls: return []
-    on = advisor.people_on(store, item)
-    return [k for raw, k in ls if lc.names(raw) & on or any(' ' in p and p in raw.lower() for p in on)] if on else []
-
-
-def cares_on(store) -> list:
-    """The keys of the What you care about lines the Advisor reads - what a report run's findings are held against."""
-    from . import learned_cut as lc
-    if 'care' not in lc.READS['advisor']: return []
-    return [k for raw, k in lc.lines(store.doc('learned') or '', lc.SECTIONS['care'])]
+        logger.warning(f"rulebook: no facts read for {(item or {}).get('key')} - {e}"); st, f = 'own', {}
+    ev, sec = f.pop(EV, None) or [], f.pop(SEC, None)
+    line = _cut(_say(st, **f), 64)
+    return {'state': st, 'line': line, **({'evidence': ev} if ev and line else {}), **({'section': sec} if sec else {})}
 
 
 def chase_thread(store, item: dict) -> dict | None:
@@ -529,16 +469,13 @@ def quiet_watch(store, item: dict) -> bool:
 
 
 def adds(store, item: dict) -> list:
-    """The verbs a state lights that the row draws only when the Advisor names them: Chase on a waiting item past its day and on a late
-    goal step - the design's "Chase (offered on every waiting lane)" and "(added to goals)". The row draws the advised move in its type
+    """The verbs the row draws only when the Advisor names them: Chase on every waiting lane and goal with somebody to write to (the
+    design's "Chase (offered on every waiting lane)" and "(added to goals)") - whether it is time to chase is the model's to read from the
+    days waited, never a threshold here; Let it go on a watch back after a quiet week. The row draws the advised move in its type
     (ActionRow.AdvisorNext); the phone already carries it on the slipped lane."""
     it = item or {}
     lane, kind = it.get('lane'), str(it.get('kind') or '')
-    # ...and a watch back after a quiet week (watch.py): Chase them where there is somebody to write to, Let it go always
     if it.get('tid') and quiet_watch(store, it): return (['chase'] if chase_thread(store, it) else []) + ['let_go']
     if lane not in ('theirs', 'forgotten') and not kind.startswith('goal'): return []
-    try: st, _f = state(store, it, [{'verb': 'chase'}])
+    try: return ['chase'] if lane == 'forgotten' or chase_thread(store, it) else []
     except Exception: return []
-    # ...every late wait: past three days, past the person's own day, past its due day - the line said late and Chase was not on the row
-    if st not in ('waiting_late', 'waiting_late_usual', 'waiting_overdue', 'goal_late'): return []
-    return ['chase'] if lane == 'forgotten' or chase_thread(store, it) else []

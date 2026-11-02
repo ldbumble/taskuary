@@ -69,7 +69,12 @@ def test_an_issue_with_a_traceback_goes_to_an_agent_and_a_slipped_person_is_chas
     issue = {'title': 'northwind/importers#214 - census sync fails when a site has no manager', 'channel': 'github'}
     assert ask('reply (Reply), regular_agent (Send to agent), not_ours (Not ours)', 'PREVIEW: anything', item=issue)['verb'] == 'regular_agent'
     assert ask('reply (Reply), regular_agent (Send to agent)', 'PREVIEW: Traceback: manager_id is null')['verb'] == 'reply'
-    assert ask('chase (Chase them), let_go (Let it go), defer (Remind me)', 'PREVIEW: ')['verb'] == 'chase'
+    # ...Chase is on every wait's row now (rulebook.adds): the scripted model chases where THE STATE says the wait is late, and not before
+    late = "THE STATE (the app's own facts - where it stands, never a move): waiting_late - it waits on someone else; the fact: Ray Colton: 4 days, no answer."
+    got = ask('chase (Chase them), let_go (Let it go), defer (Remind me), next (Next)', 'PREVIEW: ', late)
+    assert got['verb'] == 'chase'
+    on_time = late.replace('waiting_late', 'waiting').split('; the fact')[0]
+    assert ask('chase (Chase them), defer (Remind me), next (Next)', 'PREVIEW: ', on_time)['verb'] is None, 'nothing late: nothing lit'
 
 
 def test_an_idea_is_a_target_of_its_own_and_its_prompt_says_what_it_is():

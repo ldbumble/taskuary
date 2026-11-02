@@ -252,6 +252,17 @@ DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The wo
 AGENT_RAN = {'fix': "{what}: {why}.", 'new_task': "{what}: {why}.", 'continue': "{what}: {why}."}
 CHASED = {'chase': 'They are quiet past their day.'}
 IDEA = {'mine': '', 'defer': ''}
+# ...and like the real one it reads THE STATE line (advisor.state_line - every state is the model's since 2026-11-02, so the demo's script
+# answers for all of them): where nothing needs reading, the state's plain move, its fact said beside it. A script is the demo's stand-in for
+# a model, so this table is ITS reading, never the app's - [] lights nothing
+PLAY = {'working': ['next'], 'report_ok': ['next'], 'dashboard': ['next'], 'fyi_batch': ['next'], 'meeting': ['next'], 'invite_no_cal': ['next'],
+        'goal': ['next'], 'fyi': ['next'], 'own': ['next'], 'connection': ['test_connection'], 'unsorted': ['retriage'],
+        'invite_free': ['accept_invite'], 'invite_clash': ['propose_time'], 'unpushed': ['review_changes'], 'fyi_danger': ['not_ours'],
+        'action_held': ['approve'], 'needs_agent': ['continue', 'regular_agent'], 'unsendable': ['copy', 'close'], 'duplicate': ['split', 'remove'],
+        'watch_quiet': ['chase', 'let_go'], 'stopped_done': ['close'], 'done_list': ['close'], 'watch_handled': ['close'],
+        'agent_asking': ['answer_agent'], 'waiting': [], 'stopped': [], 'closed': []}
+LATE = ('waiting_late', 'waiting_overdue', 'waiting_late_usual', 'goal_late', 'watch_quiet')
+_STATE = re.compile(r"^THE STATE \([^)]*\): (\w+) - .*?(?:; the fact: (.*))?$", re.M)
 DEMO_SAYS = 'This is the demo - '                     # every refusal sentence above starts so (SENDS, STARTS, OFF, REFUSALS)
 
 
@@ -283,13 +294,18 @@ def _advice(text: str) -> str:
     # the fixture's own verdict, at the state it was written for: a failure's (on='failed') only over a failure, the rest only without one
     v = VERDICTS.get(str(item.get('title') or ''))
     stored = {k: v['line'] for k in v['verbs']} if v and bool(failed) == (v.get('on') == 'failed') else None
+    st = _STATE.search(text)
+    state, fact = (st.group(1), (st.group(2) or '').strip()) if st else ('', '')
     said = (None if DEMO_SAYS in failed
             else AGENT_RAN if failed.startswith("the agent's run failed")
             else stored if stored
             else None if failed
-            else CHASED if 'chase' in offered
+            else CHASED if 'chase' in offered and state in LATE
             else IDEA if 'THE IDEA' in text
             else None)
+    if said is None and not failed and state in PLAY:
+        verb = next((v for v in PLAY[state] if v in offered), None)
+        return json.dumps({'verb': verb, 'line': fact if verb else '', 'evidence': []})
     if said:
         verb = next((v for v in said if v in offered), None)
         return json.dumps({'verb': verb, 'line': say(said, verb), 'evidence': []})
@@ -304,7 +320,8 @@ def _advice(text: str) -> str:
     redo = not failed or failed.startswith('the reply')
     fits = lambda v: v in offered and (redo or v != 'redraft') and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
     verb = next((v for v in said if fits(v)), None)
-    line = say(said, verb)
+    # ...and where THE STATE handed it a fact (an age past the owner's usual), that is its line, as the real one is told to say it
+    line = fact if fact and verb and said is ADVICE else say(said, verb)
     # ...and like the real one it reads the tasks that may already cover the ask: an agent already on one is said, never a second answer blind
     # ...and the button agrees with the line (advisor.SYSTEM): never Reply over "it may already be covered" - Remind me, to look again once
     # that agent is done, else nothing (the UI audit's C2, 2026-10-21)

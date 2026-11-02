@@ -1,8 +1,8 @@
 """DOES THE ADVISOR USE THE MEMORY, AND IS IT BETTER FOR IT (the memory redesign's question, 2026-10-26).
 
-LEARNED.md reaches the Advisor's model through advisor._learned -> learned_cut.for_reader(store, 'advisor', ...) - but only where the
-rulebook hands the item to the model (rulebook `ask`); a state the rule decides alone reads it only where a people or promise line
-names someone on it (rulebook.memory_on, 2026-10-26). This file measures that on the
+LEARNED.md reaches the Advisor's model through advisor._learned -> learned_cut.for_reader(store, 'advisor', ...) - on every item since
+2026-11-02, when every state became the model's (it was only where the rulebook asked it, or a memory line named someone on it). This file
+measures that on the
 advisor_cases world, twice: memory EMPTY (every subject section stripped) and memory FILLED with Northwind lines planted to change the
 right answer for named cases - a person who handles a kind of ask (Hand it to a person), a promise a draft breaks (Redraft), a sender
 whose mail is put off to a day (Remind me) - plus three lines that must never reach the model: one CLOSED by a later correction
@@ -138,7 +138,7 @@ class Script:
 
 
 def coverage(s, syn) -> dict:
-    """{items, asked, rule}: of every item on the table, how many the rulebook hands to the model - where memory can matter at all."""
+    """{items, asked, rule}: of every item on the table, how many go to the model - every one now (the owner, 2026-11-02): rule is 0."""
     from taskuary import advisor, funnel, rulebook
     funnel.invalidate()
     seen, items = set(), []
@@ -148,11 +148,12 @@ def coverage(s, syn) -> dict:
     st, asked = Counter(), 0
     for i in items:
         tgt = advisor.target_of(s, i.get('key'))
-        if tgt and advisor._at_work(s, *tgt): st['working'] += 1; continue
-        try: r = rulebook.decide(s, i, advisor.offered(s, i))
-        except Exception: r = {'state': 'error', 'ask': False}
-        st[r['state']] += 1; asked += bool(r['ask'])
-    return {'items': len(items), 'asked': asked, 'rule': len(items) - asked, 'states': dict(st)}
+        if not tgt: continue
+        try: r = rulebook.facts(s, i, advisor.offered(s, i))
+        except Exception: r = {'state': 'error'}
+        # ...a target is what the model reads (judge has no gate left on the state): every item with one is asked
+        st[r['state']] += 1; asked += 1
+    return {'items': sum(st.values()), 'asked': asked, 'rule': sum(st.values()) - asked, 'states': dict(st)}
 
 
 def receipts(s) -> list:
@@ -224,7 +225,8 @@ def test_a_memory_borne_move_reaches_the_strip(filled):
 def test_coverage_is_counted(filled):
     s, by, syn, *_ = filled
     c = coverage(s, syn)
-    assert c['items'] > c['asked'] > 0 and c['rule'] > 0, c
+    assert c['items'] == c['asked'] > 0 and c['rule'] == 0, c
+    assert not s._one("SELECT 1 x FROM advice WHERE Dropped='left to the rule'"), 'no row is left to a rule'
 
 
 # ---------------------------------------------------------------- the live A/B (opt-in, a script)

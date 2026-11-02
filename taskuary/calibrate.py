@@ -1,8 +1,8 @@
-"""QUIET UNLESS SURE (the owner, 2026-11-01: "yes - quiet unless sure"; the design, S1). A rule lights its button only where the owner's
-own record says that button is what they do in that state. The record is the press log (advice_press): every press keeps the state the
-item was in, so for each state there is a count of what the owner chose there - lit or not. A rule's button whose share of the owner's
-choices in its state is under BAR, on at least MIN decisions, goes dark; with fewer, the rule stands as it always did (a new home has
-no record, and nothing is learned from a light nobody sees).
+"""WHAT THE OWNER DID IN THIS STATE (the owner, 2026-11-01: "yes - quiet unless sure"; 2026-11-02: "never ever use hard coded rules,
+let the ai see everything"). The record is the press log (advice_press): every press keeps the state the item was in, so for each state
+there is a count of what the owner chose there - lit or not. It was an on/off switch on a rule's button (under BAR of the owner's choices,
+on MIN or more, the button went dark); now it is EVIDENCE the Advisor's model reads beside the item ("in this state the owner pressed Mark
+done 12 of 19 times") and weighs against the item's own facts. Nothing here lights or darkens a button.
 
 This counts presses, never words (no hardcoded words: the model reads intent) and never reaches triage (press habits never do)."""
 import time
@@ -51,14 +51,17 @@ def record(store, workstream: str = None) -> dict:
     return c
 
 
-def trusted(store, state: str, verb: str, workstream: str = None) -> bool:
-    """Whether a rule may light `verb` in `state`: the owner chose it at least BAR of the time there, or there is too little record to say.
-    With a workstream, its own record decides once it has MIN decisions, else the whole home's."""
-    if not state or not verb: return True
+def evidence(store, state: str, workstream: str = None, label=None) -> str:
+    """The owner's answers in `state` over the last DAYS days, as the sentence the Advisor's prompt carries - the workstream's own record
+    once it has MIN decisions, else the whole home's; '' with none. `label` names a verb by its button (buttons.label)."""
+    if not state: return ''
     for ws in ([workstream] if workstream else []) + [None]:
-        s, n = share(record(store, ws).get(state, {}), verb)
-        if n >= MIN: return s >= BAR
-    return True
+        c = record(store, ws).get(state) or {}
+        n = sum(c.values())
+        if not n or (ws and n < MIN): continue
+        said = ', '.join(f"{(label or str)(v)} {k} of {n}" for v, k in sorted(c.items(), key=lambda x: -x[1]))
+        return f"in this state ({state}) over the last {DAYS} days{' in this workstream' if ws else ''}, the owner chose: {said}"
+    return ''
 
 
 def clear(): _cache.clear()

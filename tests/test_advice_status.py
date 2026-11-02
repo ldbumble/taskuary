@@ -33,12 +33,13 @@ class StatusTests(_Rail):
             with mock.patch.object(advisor, 'notice'): got = advisor.status(s, f'task:{t}')
             self.assertEqual((got['verb'], 'none' in got), (None, False), dropped)      # a plain stop lights nothing
 
-    def test_an_agent_at_work_is_next_and_a_switched_off_advisor_lights_nothing(self):
+    def test_an_agent_at_work_is_the_models_and_a_switched_off_advisor_lights_nothing(self):
         from taskuary import workerstate as ws
         s = MemoryStore(); t = self._stopped_task(s)
-        with mock.patch.object(advisor, 'notice'), mock.patch.object(ws, 'status', return_value={'state': 'working'}):
+        with mock.patch.object(advisor, 'notice') as n, mock.patch.object(ws, 'status', return_value={'state': 'working'}):
             got = advisor.status(s, f'task:{t}')
-        self.assertEqual((got['verb'], got['line'], got['state']), ('next', '', 'working'))
+        self.assertEqual((got['verb'], got['line'], got['state']), (None, '', 'working'), 'no code lights Next for it: the model reads it')
+        self.assertEqual(n.call_args.kwargs.get('tier'), 2)
         s.set_setting(advisor.ON_KEY, '0', 'test')
         with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.status(s, f'task:{t}')['none'], 'off')
 
@@ -57,4 +58,4 @@ class StatusTests(_Rail):
         s = MemoryStore(); t = self._asked_task(s)
         with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
             got = TestClient(server.app).get('/api/advice', params={'key': f'task:{t}'}).json()
-        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), (None, '', '', 'asked', 'rule'))
+        self.assertEqual((got['verb'], got['label'], got['line'], got['state'], got['by']), (None, '', '', 'asked', 'model'))

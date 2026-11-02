@@ -35,11 +35,17 @@ def test_erin_at_three_hours_gets_her_lateness_beside_the_lit_reply(w):
     assert advisor.decide(s, f'task:{t}', preread=False)['state'] == 'asked', 'counted, but no line says her usual yet'
     reflected(s)                                     # ...the reflection writes it, in the count's words, where the owner can correct it
     d = advisor.decide(s, f'task:{t}', preread=False)
-    assert (d['state'], d['verb']) == ('asked_late', 'reply')
-    assert d['line'] == 'You usually answer Erin within the hour; this is 3h.'
-    assert len(d['line']) <= 60, 'one line on the strip, read whole on a phone'
-    assert d['evidence'][0] == lc.cite_of(usual.answer_key(C.P['erin'][1])), 'it rests on the one line LEARNED.md says it in'
-    assert set(d['evidence'][1:]) <= {f'msg{m}' for m in facts['erin_fast']}, '...and cites the answers that line was counted from'
+    assert (d['state'], d['verb']) == ('asked_late', None), 'named late - nothing lit until the model reads it (2026-11-02)'
+    r = rulebook.facts(s, advisor._item(s, 'task', t, f'task:{t}'), advisor.offered(s, advisor._item(s, 'task', t, f'task:{t}')))
+    assert r['line'] == 'You usually answer Erin within the hour; this is 3h.'
+    assert len(r['line']) <= 60, 'one line on the strip, read whole on a phone'
+    assert r['evidence'][0] == lc.cite_of(usual.answer_key(C.P['erin'][1])), 'it rests on the one line LEARNED.md says it in'
+    assert set(r['evidence'][1:]) <= {f'msg{m}' for m in facts['erin_fast']}, '...and cites the answers that line was counted from'
+    # ...the model reads that fact and lights Reply, saying it and citing what it rests on
+    said = {'verb': 'reply', 'line': r['line'], 'evidence': r['evidence'], 'kind': 'late', 'memory_says': 'You answer Erin within the hour'}
+    advisor.judge(s, advisor.SHOWN, 'task', t, advisor.revision(s, 'task', t), tier=2, llm=lambda system, user, **kw: json.dumps(said), key=f'task:{t}')
+    d = advisor.decide(s, f'task:{t}', preread=False)
+    assert (d['state'], d['verb'], d['line'], d['evidence']) == ('asked_late', 'reply', r['line'], r['evidence'])
 
 
 def test_no_line_when_nothing_is_checkable(w):

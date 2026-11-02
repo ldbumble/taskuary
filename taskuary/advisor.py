@@ -1,12 +1,14 @@
 """The Advisor on the event (spec 2026-10-12, build step 3).
 
 The clock pass (assistant.py) finds what only a window shows and files rows. This is the other entry point into the same
-brain: when ONE item changes, one small prompt on the light gear says what to do about it - a verb the item already
-carries, one line, the evidence ids - or nothing. The answer lands as an `advice` row stamped with the item's revision;
-the prompt box reads it as ghost text and a pill that presses the card's own button; the rail never reads it.
+brain: when ONE item changes, the model reads it - everything the app knows about it, the facts its state names (rulebook.facts),
+what the owner chose before in that state (calibrate.evidence), every verb its row offers - may look up more with the pop-up
+Assistant's own read-only look-ups (concierge.look_rounds, at most LOOKS), and says what to light: a verb the item carries, one line,
+the evidence ids - or nothing. The MODEL decides every light (the owner, 2026-11-02: "never ever use hard coded rules, let the ai see
+everything and all tools in progressive fashion"); code only checks what it proposes (checked) - the Advisor lights, it never presses.
 
 Gates are on WHEN the model runs, never on whether: only on a state change (the revision), once per item per revision,
-a per-hour cap, the light gear, a small prompt, the bigger read only for the item on the table, silence when nothing.
+a per-hour cap, the standard model (advisor_model: light to save), the bigger read only for the item on the table.
 """
 import hashlib, json, re, threading
 from datetime import datetime, timedelta
@@ -15,7 +17,11 @@ from . import buttons, calibrate, concierge, words
 from .llm import build_llm, ask_json
 L = buttons.label        # the prompt names a button by its one label (buttons.json)
 
-ON_KEY, CAP_KEY, CAP_DEFAULT = 'advisor_events', 'advisor_event_cap', 30
+ON_KEY, CAP_KEY, CAP_DEFAULT = 'advisor_events', 'advisor_event_cap', 60       # every item is the model's now: 62% were the rule's
+# THE STANDARD MODEL for the item (the owner, 2026-11-02): the light one read a third of what the Assistant read and decided worse; a home
+# that wants it cheaper sets advisor_model to light (in Auto mode the rules' tier stands - brainroute 'work')
+MODEL_KEY = 'advisor_model'
+def _gear(store) -> str: return 'light' if str(store.get_setting(MODEL_KEY) or '').strip().lower() == 'light' else 'main'
 BACKGROUND = True        # the suite turns this off (tests/conftest.py): a judgement runs only when a test asks for it inline
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -169,16 +175,23 @@ SYSTEM = (
     "line says what, as the instruction to fix it: \"Answer her question about the start date\"), other - "
     "\"other\" with an empty line. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
-    f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something is answered in its own pane, "
-    "not by a verb - pick what else its facts make right, or nothing; nothing "
+    f"item's own facts make right (a person waiting on them: {L('reply')}; nothing "
     f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; an agent that stopped after "
     f"finishing (its run ended with a result or a done note): {L('close')} - {L('continue')} only for one that stopped mid-work; a draft waiting: "
     f"{L('approve')} - {L('reply')} over it only for a caution about the draft itself, said in the line; "
     f"a reply already sent (an A REPLY WAS ALREADY SENT line) - sending never closes the task - and nothing left to do: {L('close')}, "
     "never an answer the sent reply already gave - someone is waiting only when they wrote again after it; a reply that failed to "
     "send: the fix offered with it) - whichever of those is "
-    "OFFERED - the line only for a fact the card does not show. NO DEFAULT VERB: a verb is lit only beside its fact, so a verb with an "
-    "empty line lights nothing - when no fact makes one verb right, or you are unsure, say nothing (null). "
+    "OFFERED - the line only for a fact the card does not show, empty when the facts you were handed make the move plain. When no fact "
+    "makes one verb right, or you are unsure, say nothing (null). "
+    # THE ASKING AGENT IS THE MODEL'S CALL (the 2026-11-02 audit: an asking agent lit nothing, by rule, and 7 of 9 dropped balls were there -
+    # the agent had finished and asked to go further; the owner pressed Stop, then Mark done)
+    f"AN AGENT THAT STOPPED TO ASK THE OWNER (a THE AGENT IS ASKING line) is your call like any other. Its question is on the owner's "
+    f"screen in its pane, so never repeat it in the line. When the question really blocks work the owner wants - a choice only they can "
+    f"make, a credential, a missing file - it is answered in its own pane: light the agent's answer when the row offers one, else "
+    f"nothing (null). When the agent has delivered what was asked and only "
+    f"offers to go further (\"want me to also...?\", \"shall I carry on with...?\"), the work is done: {L('close')} when nothing more is "
+    f"owed, or {L('stop_agent')} to end the session - read the task, the owner's own words and their record in this state. "
     "WHEN SOMETHING FAILED (a WHAT FAILED line below), the owner is owed the way past it, at any event: say in plain words what went "
     "wrong, and pick the move that fixes it - the fix offered when there is one (it opens the place that fixes it); else a verb offered "
     "that gets round it; else, when nothing here can fix it, the one that makes a task to fix it. Never advise the act that failed again "
@@ -192,9 +205,10 @@ SYSTEM = (
     "it now\" with nothing attached - is not ready: say what it promises, and pick Redraft (or Reply to write it again) - never "
     "Send. "
     # ...but HANDED TO AN AGENT only past a capacity wall (the owner, 2026-10-28: lit on work the owner marked done 4 times of 4)
-    f"WORK AN AGENT CAN DO - an issue or bug report with a traceback or steps to reproduce, a reconciliation, a lookup - is the owner's "
-    f"to hand over, never yours to suggest: {L('regular_agent')} only when an agent's run on it stopped at a usage limit, a quota or a "
-    f"busy provider (a WHAT FAILED line says so); an answer the person waits on is still {L('reply')}. "
+    f"WORK AN AGENT CAN DO - an issue or bug report with a traceback or steps to reproduce, a reconciliation, a lookup - the owner "
+    f"usually hands over themselves (offered {L('regular_agent')} on such work, they marked it done 4 times of 4): light it when the facts "
+    f"show they would want an agent on it now - an agent's run on it that stopped at a usage limit, a quota or a busy provider (a WHAT "
+    f"FAILED line); an answer the person waits on is still {L('reply')}. "
     f"SOMEONE THE OWNER WAITS ON IS QUIET PAST THEIR DAY (the item says how long, and {L('chase')} is offered): {L('chase')} - a short "
     f"nudge for the owner's yes - unless the item says they answered or are away. "
     # ...AND THE VERB AGREES WITH IT (the UI audit's C2, 2026-10-21): "TQ-0006 may already cover it, and an agent is on that" stood over a
@@ -209,14 +223,48 @@ SYSTEM = (
     "that gets it going, the line saying what is owed as the instruction (\"Erin still needs the signed lease\") - or nothing when nothing "
     f"is owed any more or you are unsure; never {L('close')} on a guess. "
     f"AN IDEA (a THE IDEA line, the assistant's own suggestion): {L('mine')} when it names work worth doing now, "
-    f"{L('defer')} when it is for later, {L('not_ours')} when it is nothing for the owner.")
+    f"{L('defer')} when it is for later, {L('not_ours')} when it is nothing for the owner. "
+    # THE FACTS ARE EVIDENCE, NOT RULES (the owner, 2026-11-02): the state and the owner's record are handed over, and the model weighs them
+    "THE STATE line names where the item stands from the app's own facts, and WHAT THE OWNER CHOSE BEFORE IN THIS STATE is their own "
+    "record: both are evidence to weigh against this item, never a rule - the record says what they usually do, the item says whether this "
+    f"time is the usual one. {L('next')} is offered too: light it when there is nothing for the owner to do here but move on - an agent at "
+    "work, a report that landed fine, a notice. "
+    # PROGRESSIVE TOOLS: the index rides the instructions (LOOK-UPS), the details come on demand (tools.describe)
+    "LOOK BEFORE YOU DECIDE when the item leaves you unsure: answer {\"verb\": null, \"line\": \"\", \"evidence\": [], \"look\": "
+    "{\"kind\": \"<a look-up>\", \"params\": {...}}} and what it says comes back to you; at most 3 look-ups, then decide. The look-ups "
+    "(LOOK-UPS below) only read: you never press anything - you light one button, and the owner presses it.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
     speaks by the same rules - it never had them, and said "lane" and "session" to a finance user (2026-10-17 audit)."""
     from . import counsel
     try: voice = counsel.sections(counsel.load(store)).get(counsel.VOICE_HEAD, '').strip()
     except Exception: voice = ''
-    return f"{SYSTEM}\n\nHOW THE LINE SPEAKS (the owner's own rules):\n{voice}" if voice else SYSTEM
+    return f"{SYSTEM}\n\n{look_index()}" + (f"\n\nHOW THE LINE SPEAKS (the owner's own rules):\n{voice}" if voice else '')
+
+
+# THE ADVISOR'S LOOK-UPS - the pop-up Assistant's own reads (toolcatalog.READS, run by concierge.read_op), the ones about the item's world.
+# Read-only, all of them: the Advisor lights, it never presses (the owner's router ruling, 2026-10-19)
+READS = ('task.read', 'message.read', 'sender.read', 'timeline.search', 'calendar.read', 'memory.about', 'memory.list', 'outputs.find',
+         'knowledge.search', 'docs.search', 'tasks.list', 'approvals.list', 'agents.now', 'errors.list', 'report.read', 'tools.describe')
+LOOKS, LOOK_CHARS = 3, 3000
+def look_index() -> str:
+    """LOOK-UPS: each read by name and what it is for, one line - the index; tools.describe has one in full."""
+    from . import toolcatalog
+    said = lambda k: _one(re.split(r' - |\. |; ', toolcatalog.READS[k], 1)[0], 110)
+    ps = lambda k: ', '.join(dict.fromkeys(re.findall(r'`(\w+)`', toolcatalog.READS[k])))          # the params its own sentence names
+    return ('LOOK-UPS (answer with "look" to run one; tools.describe {"kind": "<name>"} says one in full):\n'
+            + '\n'.join(f'  {k}({ps(k)}) - {said(k)}' for k in READS))
+
+
+def _look(ans) -> dict | None:
+    """The look-up an answer asks for - {kind, params} - only while it lights nothing, only one of READS, and only a call the registry runs."""
+    from . import toolcatalog
+    d = ans.data if isinstance(getattr(ans, 'data', None), dict) else {}
+    l = d.get('look')
+    if d.get('verb') or not isinstance(l, dict): return None
+    k, p = str(l.get('kind') or '').strip(), l.get('params') if isinstance(l.get('params'), dict) else {}
+    if k not in READS or toolcatalog.valid(k, p): return None
+    return {'kind': k, 'params': p}
 # the event every item on the table gets, when no other event judged it at its current revision (Advisor audit, 2026-10-15)
 SHOWN = 'item.shown'
 KINDS = ('late', 'same_ask', 'draft_caution', 'handoff', 'failure', 'memory', 'work_gap', 'other')
@@ -224,6 +272,7 @@ WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, '
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}, 'kind': {'type': 'string', 'enum': list(KINDS)},
                                          'memory_says': {'type': 'string'}, 'repeats_agent_question': {'type': 'boolean'}},
         'required': ['verb', 'line', 'evidence']}
+WANT['properties']['look'] = {'type': ['object', 'null'], 'properties': {'kind': {'type': 'string'}, 'params': {'type': 'object'}}}
 _EV = re.compile(r'^(out|mem|rv|task|msg|fs|sv|idea|lrn)\d+$')   # ...and the owner's own acts the usual is counted from (usual.py), and a memory line
 
 
@@ -295,7 +344,7 @@ def attached(store, target_kind, target_id) -> str:
 PROMPT_CAP = 16000      # ...with room for the memory's 6000 (learned_cut.BUDGET), the task's page, the owner's own words and its source
                         # (the 2026-11-02 audit: the pop-up Assistant read all of that, the Advisor a third of it; 11000 before)
 WHOLE_CHARS = 3500      # the task's page (concierge._task_whole), for the item on the table
-_KEEP = 4                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED
+_KEEP = 5                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED, THE STATE
 
 
 def _one(s, n: int) -> str: return ' '.join(str(s or '').split())[:n]
@@ -322,7 +371,7 @@ def _learned(store, item: dict = None) -> str:
 def people_on(store, item: dict) -> set:
     """Everyone on the item as the app knows them, lowercased, never the owner: each address on its mail (from, To, Cc - the owner's own
     mail to them too) and each sender's full name, whom it waits on, and who holds an open step of its goal. Facts the app keeps, never
-    the words of the mail - what a memory line is matched against (rulebook.memory_on) and ranked by (_learned)."""
+    the words of the mail - what a memory line is ranked by (_learned)."""
     from . import learned_cut
     from .processing_unread import holder_name
     it = item or {}
@@ -623,7 +672,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         from .processing_order import level
         facts['priority'] = level(facts['priority'])          # regular, important or urgent - the three words (2026-10-25)
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
-             'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
+             'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs), state_line(store, item, verbs, target_kind, target_id)]
     # AN IDEA AND A GOAL ARE ADVISED TOO (the deep dive, 2026-10-20): an idea had no target at all, and a goal's card said "0 of 2" with
     # nothing of which step was late or when anything last moved. An idea's context is the task or mail it is about.
     if target_kind == 'idea':
@@ -727,6 +776,23 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         more = outcomes.evidence(store, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'), limit=15)
         if more: lines.append('RECENT OUTCOMES:\n' + '\n'.join(more))
     return _bounded(lines)
+
+
+def state_line(store, item, verbs, target_kind, target_id) -> str:
+    """THE STATE: where the item stands as the app's own facts name it (rulebook.facts) and the fact said for it, what the owner chose before
+    in that state (calibrate.evidence) and whether it is personal - evidence the model weighs, never a light of its own (2026-11-02)."""
+    from . import rulebook
+    try: r = rulebook.facts(store, item, verbs)
+    except Exception as e: logger.debug(f'advisor: no state read for {item.get("key")} - {e}'); return ''
+    st, tgt = r['state'], (target_kind, target_id)
+    out = [f"THE STATE (the app's own facts - where it stands, never a move): {st} - {(rulebook.RULES.get(st) or {}).get('is') or st}"
+           + (f"; the fact: {r['line']}" if r.get('line') else '')]
+    try: ev = calibrate.evidence(store, st, _workstream(store, tgt), label=lambda v: L(v) or v)
+    except Exception as e: logger.debug(f'advisor: no record read for {item.get("key")} - {e}'); ev = ''
+    if ev: out.append(f'WHAT THE OWNER CHOSE BEFORE IN THIS STATE (their record - weigh it, it is no rule): {ev}')
+    # A PERSONAL ASK (the owner, 2026-11-01: "a personal ask is an FYI") - said, for the model to weigh; it lit nothing by code before
+    if target_kind == 'task' and _personal(store, tgt): out.append('PERSONAL: it is under a personal workstream - the owner answers personal asks in their own time, and the walk passes it')
+    return '\n'.join(out)
 
 
 def is_goal(t) -> bool:
@@ -842,20 +908,28 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     if not item: return W(dropped='no item')
     verbs = offered(store, item)
     if not verbs: return W(dropped='no actions')
+    verbs = verbs + [buttons.chip('next')]                                    # ...and moving on, the model's to light like any other
     have = row(store, target_kind, target_id, rev, own)                      # two events in one poll: the second finds the first's row
     if judged(have, tier): return have['Id']
-    # THE RULE DECIDES FIRST (the design, phase A): the model reads only where intent must be read - every other state is the
-    # rulebook's, at once and outside the hourly cap, so an event on it asks nothing of the model
-    from . import rulebook
-    if not rulebook.decide(store, item, verbs)['ask']: return W(dropped='left to the rule')
-    brain = llm or build_llm(store, job='advisor')
+    # EVERY STATE IS THE MODEL'S (the owner, 2026-11-02): "left to the rule" was 62% of the rows, and no rule ever read the item
+    brain = llm or build_llm(store, job='advisor', gear=_gear(store))
     if not brain:
         # once per revision, and said: the strip asks for an AI (for_key's {"none": "no_ai"}) - a repeat would loop the re-read
         last = next(iter(_at(store, target_kind, target_id, rev, own)), None)
         if last and last.get('Dropped') == 'no brain': return last['Id']
         rid = W(dropped='no brain'); _emit(key, target_kind, target_id); return rid
     model = getattr(brain, 'last_pick', None) or getattr(brain, 'model', None) or 'light'
-    ans = ask_json(brain, _system(store), _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, max_tokens=300)
+    system, asked = _system(store), _prompt(store, event, item, verbs, tier, target_kind, target_id)
+    ans = ask_json(brain, system, asked, want=WANT, max_tokens=400)
+    # LOOK BEFORE DECIDING (progressive tools): the Assistant's own look-up round, read-only, at most LOOKS - then it decides
+    def again(call, found, last):
+        nonlocal asked
+        asked += (f"\n\nYOU LOOKED UP {call['kind']} {json.dumps(call['params'], default=str)[:200]} AND IT SAYS:\n{str(found)[:LOOK_CHARS]}\n"
+                  + ('That was your last look-up - decide now with what you have.' if last else 'Decide now, or look up one more thing.'))
+        a = ask_json(brain, system, asked, want=WANT, max_tokens=400)
+        return a, _look(a)
+    got, _more, reads = concierge.look_rounds(store, item, _look(ans), again, rounds=LOOKS, may=lambda k: k in READS)
+    if reads: ans = got; logger.info(f"advisor: {key} looked up {', '.join(c['kind'] for c, _ in reads)} before deciding")
     d = ans.data if isinstance(ans.data, dict) else {}
     # a line that landed while this one was thinking stands: a tier-2 answer, drop or not, never replaces a line the owner may
     # already be reaching for (B5 - the filled button moved under the cursor seconds after the item opened)
@@ -872,8 +946,7 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     line = plain(line, verb, hit['label'])
     # the agent's own question is already on the owner's screen, in its pane: a line that asks it again is noise (the owner, 2026-10-21).
     # Whether it does is the model's own answer (repeats_agent_question) - read only while the agent is asking something
-    if target_kind == 'task' and d.get('repeats_agent_question') is True and _asking(store, target_id):
-        return W(dropped="repeats the agent's question", model=model, line=line, evidence=ev)
+    if target_kind == 'task' and d.get('repeats_agent_question') is True and _asking(store, target_id): line = ''        # ...the verb stands
     # A HAND-OFF IS THE REASON FOR HAND IT TO A PERSON, NOTHING ELSE (the live memory A/B, 2026-10-26): "Ray handles overtime-rate
     # questions for you" stood over an agent's button, citing the very hand-offs it was counted from - the line said one move, the button
     # another. The rule's move stands instead
@@ -1007,7 +1080,7 @@ def offered(store, item: dict) -> list:
     THE BUTTONS THE ROW ACTUALLY DRAWS (the design, phase A, 2026-10-23): the verbs came from chips_for while the row drew row_buttons -
     why Review changes, Chase and Accept could never be lit, and why "Not ours" was picked on a task whose row has no Not ours. Only
     the row's moves count: its pickers (who does it, priority, assignee, the code's place), Attach and Close with a note set a field or
-    add to a move, and are never the move. Chase joins where the rulebook says a wait has run past its day (rulebook.adds)."""
+    add to a move, and are never the move. Chase joins on a wait with somebody to write to (rulebook.adds); Next is added by the callers."""
     from . import rulebook
     verbs = [buttons.chip(b['verb']) | {'label': b['label']} for b in concierge.row_buttons(store, item) if b['verb'] not in NOT_MOVES]
     # ...in the item's own order (its vocabulary, chips_for - a draft's Send first), the row's other moves after it
@@ -1111,12 +1184,10 @@ def for_key(store, key: str) -> dict: return decide(store, key)
 
 # ── ONE DECISION (the design, phase A; the owner's rulings, 2026-10-23) ──────────────────────────────────────────────────────────────
 # Every surface - the desk canvas, the Tasks tab, a phone chat, the desk at phone width - reads THIS: the button lit and the line said,
-# picked only from the buttons the row draws (offered). Two tiers, the higher outranking the lower but never a safety rule (the press
-# habit that lit a button by itself, with its mark, went with the press learning - the owner, 2026-10-25):
-#   model  where intent must be read (rulebook `ask`): its verb stands where it differs from the rule's, with its line - and what the
-#          memory knows about how the owner works is in what it read
-#   rule   rulebook.py - every other state, at once, from facts the app keeps, with no "Thinking..." and outside the hourly cap
-# A line is said only for a fact the card does not show; the obvious move is an empty strip and its button lit (ruling 1). The item on
+# picked only from the buttons the row draws (offered) and Next. ONE decider, the model (the owner, 2026-11-02: "never ever use hard coded
+# rules"): it read the item, the facts its state names, the owner's record in that state and anything it looked up, and its verb is lit -
+# unless the check after it (checked) finds a button the owner cannot press or one its own reason contradicts; then nothing is.
+# The finish check's dropped ball leads where it found one (also a model). A line is said only for a fact the card does not show; the obvious move is an empty strip and its button lit (ruling 1). The item on
 # the table earns the model's bigger read, once (B5); the next two on the walk are read ahead, so their lines are there when Next is.
 PREREAD = 2
 
@@ -1134,28 +1205,19 @@ def _label(verbs: list, verb: str, item: dict) -> str:
 
 
 def decide(store, key: str, preread: bool = True) -> dict:
-    """The Advisor's one decision for the item keyed `key`: {key, state, verb, label, line, by, revision, ...} - `verb` None lights
-    nothing (an agent asking is answered in its pane, a closed task's Reopen stays outlined), `line` '' says nothing. {} for a key with
-    nothing to decide on; {"none": "no_ai"} where the move needs an AI and none is connected; {"none": "off"} with the Advisor off."""
+    """The Advisor's one decision for the item keyed `key`: {key, state, verb, label, line, by, revision, ...} - the model's light at this
+    revision, checked; `verb` None lights nothing (not read yet, said nothing, or refused by the check), `line` '' says nothing. {} for a key
+    with nothing to decide on; {"none": "no_ai"} with no AI to read it; {"none": "off"} with the Advisor off. `state` is the facts' name
+    for where it stands (rulebook.facts) - what the model read and what a press is kept under, never a light of its own."""
     from . import rulebook
     tgt = target_of(store, key)
     if not tgt: return {}
     if str(store.get_setting(ON_KEY, '1') or '1') != '1': return {'key': key, 'none': 'off'}
     rev = revision(store, *tgt)
-    # an agent at work is nothing for the owner to do, whatever the card was judged as (the owner, 2026-10-13)
-    if _at_work(store, *tgt):
-        # ...kept, so a press on it records 'working' (calibrate counts what the owner does while an agent works: Next, or Stop)
-        nx = 'next' if calibrate.trusted(store, 'working', 'next') else None
-        d = {'key': key, 'state': 'working', 'verb': nx, 'label': buttons.label('next') if nx else '', 'line': '', 'by': 'rule',
-             'revision': rev, 'pill': '', 'evidence': [], 'ask': False, 'needs_ai': False}
-        kept(store, d)
-        return d
     item = _item(store, *tgt, key=key)
     if not item: return {}
-    verbs = offered(store, item)
-    r = rulebook.decide(store, item, verbs)
-    verb, line, by, ev = r['verb'], r['line'], 'rule', list(r.get('evidence') or [])
-    kind = rulebook.KIND.get(r['state'], 'rule')
+    verbs = offered(store, item) + [buttons.chip('next')]
+    r = rulebook.facts(store, item, verbs)
     every = _at(store, tgt[0], tgt[1], rev)
     # the finish check's rows are about the task's agent work, whichever card of it is asked about; the judge's are the item's own
     chk = next((x for x in every if x.get('Event') == CHECK), None) if tgt[0] == 'task' and r['state'] in CHECKED else None
@@ -1167,7 +1229,6 @@ def decide(store, key: str, preread: bool = True) -> dict:
     cv = concierge.canon_verb(chk['Verb']) if chk and chk.get('Verb') and str(chk.get('Line') or '').strip() else None
     pending = (not chk and tgt[0] == 'task' and r['state'] in CHECKED and check_due(store, item, r['state'])
                and finish_check(store, tgt[1], rev) is True)
-    thinking = False
     if cv:
         d = {'key': key, 'state': r['state'], 'verb': cv, 'line': _whole_words(plain(chk['Line'], cv, FIX_LABEL.get(cv, cv)), 64), 'by': 'check',
              'evidence': json.loads(chk.get('EvidenceJson') or '[]'), 'kind': chk.get('Kind') or 'work_gap'}
@@ -1175,73 +1236,40 @@ def decide(store, key: str, preread: bool = True) -> dict:
         # ...a reply owed that no agent can write from here: the row's own Reply, the line its reason
         if not fix and cv == 'reply' and not pressable(store, item, 'reply', verbs): return _out(store, key, item, verbs, r, rev, {**d, 'verb': 'reply'}, None)
         return _out(store, key, item, verbs, r, rev, d, fix, check=True)
-    if pending: verb, line, ev = None, '', []
-    elif r['ask']:
-        mv = concierge.canon_verb(m['Verb']) if m and m.get('Verb') else None
+    verb, line, by, ev, kind = None, '', 'model', [], 'other'
+    # THE MODEL'S LIGHT, as it answered at this revision - while the finish check reads, nothing is lit (no button swapped under the hand)
+    if not pending and m and m.get('Verb'):
+        mv = concierge.canon_verb(m['Verb'])
         hit = next((v for v in verbs if v['verb'] == mv), None) if mv else None
-        # ...A STATE ASKED ONLY FOR ITS MEMORY (rulebook.memory_on) is changed only by an answer resting on that memory: asked about a late
-        # step because a line named its holder, the model swapped Chase's Remind me for "Ask the sender" on the age alone (live A/B, 2026-10-26)
-        if hit and r.get('memory') and not set(json.loads(m.get('EvidenceJson') or '[]')) & memory_ids(store, item, *tgt): hit = None
-        # ...AND AN ANSWER RESTING ON A MEMORY LINE THE OWNER PUT DOWN rests on nothing (the Advisor audit's judge, 2026-10-26): Wrong on
-        # a line left the task saying it - the rule's move stands until the item changes and the model reads it again
-        if hit and withdrawn(store, json.loads(m.get('EvidenceJson') or '[]')): hit = None
-        # ...A LINE THAT CITES A MEMORY WITHOUT SAYING IT is not shown (the Advisor audit, 2026-10-28): "GitHub notice; no ask here" cited
-        # a memory line and said only what the card shows - the strip says nothing in its place
-        said = plain(m.get('Line') or '', m['Verb'], hit['label']) if hit and m.get('Line') else ''
-        if said and hollow(store, item, tgt, m.get('MemorySays'), json.loads(m.get('EvidenceJson') or '[]')): said = ''
-        # ...AND NO SILENT OVERRIDE (the same audit; NO DEFAULT VERB, the owner, 2026-10-28): the model's verb stands where it differs
-        # from the rule's only with its reason said - without one, the rule's button and its own fact decide. An idea's own words are its
-        # reason (its line is never said)
-        if hit and mv != verb and not said and r['state'] != 'idea': hit = None
-        # ...and HAND TO AN AGENT only where an agent's run on it hit a capacity wall (the measure, 2026-10-28: lit on work the owner
-        # marked done 4 times of 4)
-        if hit and mv == 'regular_agent' and mv != verb and not capacity(store, item): hit = None
-        # the model's verb stands where it differs from the rule's - with its line, the reason the lit button is not the one you would
-        # guess; agreeing, the rule's fact stands and the model's sentence goes (ruling 1: no explanation of the obvious button)
-        if hit and mv != verb:
-            verb, by, ev, kind = mv, 'model', json.loads(m.get('EvidenceJson') or '[]'), m.get('Kind') or 'other'
-            # ...cut at a word, as the agreeing memory line is: "...is waiting on y" read as a slip (the Advisor sweep, 2026-10-27)
-            line = '' if r['state'] == 'idea' else _whole_words(said, 64)
-        # ...AND AGREEING, A MEMORY REASON IS SAID (the live memory A/B, 2026-10-26): "You answer Erin the same day" and "Paula takes
-        # W-9s now" were read, used, and dropped for agreeing with the lit button - the memory never reached the strip. A line that cites
-        # a memory line or a counted usual (memory_ids) is a fact the card does not show; it stands in the rule's place, one line - unless
-        # the rule's own line is already a counted usual (asked_late: it carries its evidence)
-        # ...AND A GAP IN THE WORK IS SAID AGREEING TOO: "the draft leaves her question unanswered" is never the obvious button explained
-        elif hit and said and (m.get('Kind') or '') in GAPS:
-            by, ev, line, kind = 'model', json.loads(m.get('EvidenceJson') or '[]'), _whole_words(said, 64), m['Kind']
-        elif hit and r['state'] != 'idea' and said and not (line and r.get('evidence')):
-            mev = json.loads(m.get('EvidenceJson') or '[]')
-            if set(mev) & memory_ids(store, item, *tgt):
-                by, ev, line, kind = 'model', mev, _whole_words(said, 60), m.get('Kind') or 'memory'
-            # ...and an agreeing FACT the rule had no line for is the lit button's reason (NO DEFAULT VERB): "Erin asked twice" over Reply
-            elif not line and (m.get('Kind') or 'other') != 'other':
-                by, ev, line, kind = 'model', mev, _whole_words(said, 64), m['Kind']
-        # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - and NOTHING IS LIT WHILE
-        # IT READS (the owner, 2026-10-28: no "Thinking...", no button swapped under the hand): the answer arrives by the `advice` live event
-        if not mv and not judged(m, 2): notice(store, m['Event'] if m else SHOWN, tgt[0], tgt[1], tier=2, key=key)
-        if not mv and r['state'] in rulebook.NEEDS_AI and rs and rs[0].get('Dropped') == 'no brain':
-            return {'key': key, 'none': 'no_ai', 'state': r['state'], 'revision': rev, 'line': ''}
-        thinking = m is None and r['state'] not in rulebook.FAILED and _can_read(store)
-        # ...and once it has read, the rule's button stands only with a fact said beside it: the model's agreeing Send or Reply with no line
-        # was right 4 times of 14 and 4 of 16 (the measure, 2026-10-28). Next and a failure's fix are facts of their own; an idea is its words
-        if by == 'rule' and (thinking or (rulebook.asks(r['state']) and not line and verb != 'next' and r['state'] not in rulebook.FAILED
-                                          and not (r['state'] == 'idea' and mv == verb))):
-            verb, line, ev = None, '', []
-    if pending and r['ask'] and not m: notice(store, SHOWN, tgt[0], tgt[1], tier=2, key=key)
-    # QUIET UNLESS SURE (the owner, 2026-11-01): a rule's button the owner picks under 80% of the time in this state goes dark (calibrate)
-    if by == 'rule' and verb and not calibrate.trusted(store, r['state'], verb, _workstream(store, tgt)): verb, line, ev = None, '', []
-    # ...and A PERSONAL ASK IS AN FYI (the owner, 2026-11-01): an item under a personal workstream lights no move of the work's - the walk
-    # passes it, the owner answers it in their own time
-    if verb and verb != 'next' and tgt[0] == 'task' and _personal(store, tgt): verb, line, ev = None, '', []
+        mev = json.loads(m.get('EvidenceJson') or '[]')
+        # ...AN ANSWER RESTING ON A MEMORY LINE THE OWNER PUT DOWN rests on nothing (the Advisor audit's judge, 2026-10-26): Wrong on a line
+        # left the task saying it - nothing is lit until the item changes and the model reads it again
+        if hit and withdrawn(store, mev): hit = None
+        if hit:
+            # ...A LINE THAT CITES A MEMORY WITHOUT SAYING IT is not shown (the Advisor audit, 2026-10-28) - its button stands; an idea's own
+            # words are its reason (its line is never said)
+            said = plain(m.get('Line') or '', m['Verb'], hit['label']) if m.get('Line') and r['state'] != 'idea' else ''
+            if said and hollow(store, item, tgt, m.get('MemorySays'), mev): said = ''
+            verb, ev, kind, line = mv, mev, m.get('Kind') or 'other', _whole_words(said, 64)
+    # NEVER LEFT GUESSING (the owner, 2026-10-15): the item on the table is read now, at this revision, once - and NOTHING IS LIT WHILE IT
+    # READS (the owner, 2026-10-28: no "Thinking...", no button swapped under the hand): the answer arrives by the `advice` live event
+    if not (m and m.get('Verb')) and not judged(m, 2): notice(store, m['Event'] if m else SHOWN, tgt[0], tgt[1], tier=2, key=key)
+    if not verb and rs and rs[0].get('Dropped') == 'no brain':
+        return {'key': key, 'none': 'no_ai', 'state': r['state'], 'revision': rev, 'line': ''}
     if preread: _preread(store, key)
-    d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind},
-                {'verb': r['verb'], 'line': r['line'], 'evidence': list(r.get('evidence') or [])}) if verb else \
+    d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind}) if verb else \
         {'key': key, 'state': r['state'], 'verb': None, 'line': '', 'by': by, 'evidence': [], 'kind': kind}
-    return _out(store, key, item, verbs, r, rev, d, fix_of(store, item, verbs, d))
+    # ...two facts stand on the strip where the model's own line is empty: what failed, whatever is lit, and what leaves with a draft beside
+    # its Send (the design rev 2: "a line on top", never a dialog) - facts said, never a light chosen
+    if d['verb'] and not d['line'] and r.get('line') and (r['state'] in rulebook.FAILED or (r['state'] == 'draft_ready' and d['verb'] == 'approve')):
+        d = {**d, 'line': r['line'], 'evidence': d['evidence'] or list(r.get('evidence') or [])}
+    fix = fix_of(store, item, verbs, d)
+    if not d['verb'] and not fix: d = {**d, 'line': '', 'evidence': []}       # a caution refused with no press that fixes it says nothing
+    return _out(store, key, item, verbs, r, rev, d, fix)
 
 
 def _workstream(store, tgt) -> str:
-    """The workstream of the item's task ('' off a task or unplaced) - its own record of presses decides once it has enough."""
+    """The workstream of the item's task ('' off a task or unplaced) - its own record of presses is the evidence once it has enough."""
     if tgt[0] != 'task': return ''
     try:
         from . import workstreams
@@ -1274,7 +1302,6 @@ def capacity(store, item: dict) -> bool:
 
 def _out(store, key, item, verbs, r, rev, d, fix, check=False) -> dict:
     """The decision as every surface reads it, kept: `d` checked, `fix` the press that puts a gap right."""
-    from . import rulebook
     # ...lit on the row where the row has it; a general agent's Continue is the strip's alone, and the row lights the draft's Redraft. A
     # check's line with no press that fixes it is no line at all: every line carries its action (the owner, 2026-10-28)
     if fix: d = {**d, 'verb': next((v for v in (fix['verb'], 'redraft') if not pressable(store, item, v, verbs)), None if check else d['verb'])}
@@ -1282,9 +1309,10 @@ def _out(store, key, item, verbs, r, rev, d, fix, check=False) -> dict:
     verb, line, by, ev = d['verb'], d['line'], d['by'], d['evidence']
     lbl = _label(verbs, verb, item) if verb else ''
     out = {'key': key, **({'fix': fix} if fix else {}), 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
-           'ask': r['ask'], 'needs_ai': r['state'] in rulebook.NEEDS_AI, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {}),
-           # ...and the section the rule's move is in (rulebook.SEC): the page opens there, its line beside it - only while that move is the lit one
-           **({'section': r['section']} if r.get('section') and verb and verb == r['verb'] else {})}
+           'ask': True, 'needs_ai': True, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {}),
+           # ...and the section the facts put its settling in (rulebook.SEC - a reply that went is Close out's): the page opens there while
+           # Mark done is the lit move
+           **({'section': r['section']} if r.get('section') and verb == 'close' else {})}
     # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
     # no draft on the table) - read live, so a fix already made carries no stale link
     if verb == 'fix':
@@ -1329,32 +1357,19 @@ def pressable(store, item: dict, verb: str, verbs: list) -> str:
     return _agent_ready(store, item) if verb in AGENT_VERBS else ''
 
 
-def checked(store, item: dict, verbs: list, d: dict, rule: dict) -> dict:
-    """`d` ({verb, line, by, evidence, kind, state}) as the owner may be shown it: unchanged, or its verb refused (`checked` says why) and the
-    next sensible pressable move lit - the line kept where it is still the reason for that move, else the rule's own line."""
-    from . import rulebook
-    verb, kind, why, instead = d['verb'], d.get('kind') or 'other', '', []
-    drafted = 'approve' in {v['verb'] for v in verbs}
+def checked(store, item: dict, verbs: list, d: dict) -> dict:
+    """`d` ({verb, line, by, evidence, kind, state}) as the owner may be shown it: the model's verb, or nothing lit where it is a button the
+    owner could not press or one that contradicts its own reason (`checked` says why). A CHECK on what the model proposes - it never swaps
+    in a verb of its own (the owner, 2026-11-02: no hard-coded rules). A caution about the draft keeps its line: its fix (fix_of) lights."""
+    verb, kind, why = d['verb'], d.get('kind') or 'other', ''
     if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
-    elif kind in GAPS and verb == 'approve': why, instead = 'a caution about the draft over its Send', ['redraft']
-    # ...ANY reason but a caution about the draft (the Advisor audit, 2026-10-28): Reply was lit over a waiting draft 4 times of 4, and the
-    # owner sent the draft every time - lateness was only the first reason found doing it
-    elif verb == 'reply' and drafted and kind not in GAPS: why, instead = f'{kind} on a drafted task: the draft is the answer', ['approve']
-    # ...AND THE OWNER ALREADY ANSWERED (the owner, 2026-10-28: "after reply is sent why is the sent email have Reply on it, it should have Mark
-    # done"): their reply went after the sender's newest mail, so the model's Reply there says twice what was said - Mark done stands
-    elif verb == 'reply' and d.get('state') == 'answered': why = 'the owner already answered the newest mail'
+    # ...nothing sends on a reason that says the draft is not ready to send (the Advisor audit's judge, 2026-10-26)
+    elif kind in GAPS and verb == 'approve': why = 'a caution about the draft over its Send'
+    # ...and the one that stays of a duplicate pair is never folded into its own twin: following it would drop the ask
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     if not why: return {**d, 'kind': kind}
-    lit = (rulebook.RULES.get(d.get('state')) or {}).get('lit') or []
-    pick = next((v for v in [*instead, rule['verb'], *lit] if v and v != verb and not pressable(store, item, v, verbs)
-                 and not (kind in GAPS and v == 'approve')), 'next')
-    keep = pick in instead                       # the line is still this move's reason
-    logger.info(f"advisor: {d['key']} {verb} refused ({why}) - {pick} lit instead")
-    if keep: return {**d, 'verb': pick, 'kind': kind, 'checked': why}
-    same = pick == rule['verb']
-    return {**d, 'verb': pick, 'by': 'rule', 'kind': rulebook.KIND.get(d.get('state'), 'rule'), 'checked': why,
-            # ...a failure is the fact whatever is lit (rulebook.decide), so its line stays over the move that gets past it
-            'line': rule['line'] if (same and pick != 'next') or d.get('state') in rulebook.FAILED else '', 'evidence': rule['evidence'] if same else []}
+    logger.info(f"advisor: {d['key']} {verb} refused ({why}) - nothing lit instead")
+    return {**d, 'verb': None, 'kind': kind, 'checked': why, **({} if kind in GAPS else {'line': '', 'evidence': []})}
 
 
 # A CRITIQUE CARRIES ITS FIX (the owner, 2026-10-28: "if the advisor is saying the agent did not do its job then it should tell you to continue
@@ -1547,7 +1562,7 @@ def _check_stopped(store, tid):
 def _check(store, tid: int, rev: str, llm=None) -> int:
     key = key_of('task', tid)
     def W(**kw): return _write(store, target_kind='task', target_id=tid, key=key, event=CHECK, revision=rev, **kw)
-    brain = llm or build_llm(store, job='advisor')
+    brain = llm or build_llm(store, job='advisor', gear=_gear(store))
     if not brain: return W(dropped='no brain')
     model = getattr(brain, 'last_pick', None) or getattr(brain, 'model', None) or 'light'
     ans = ask_json(brain, CHECK_SYSTEM, check_prompt(store, tid), want=CHECK_WANT, max_tokens=200)
@@ -1635,17 +1650,17 @@ def rests(store, d: dict) -> list:
 
 
 def _preread(store, key: str):
-    """THE NEXT TWO, READ AHEAD (the design, 1.1): where their state asks the model, it is asked now, in the background, so the line is
+    """THE NEXT TWO, READ AHEAD (the design, 1.1): the model is asked about them now, in the background, so the line is
     there when Next brings them - never a button that changes under the owner's hand a moment after the item opens."""
     if not BACKGROUND: return
     def go():
         try:
-            from . import funnel, rulebook
+            from . import funnel
             items = funnel.pile(store, quiet=True).get('items') or []
             at = next((n for n, i in enumerate(items) if key in keys_of(i)), None)
             for it in (items[at + 1:at + 1 + PREREAD] if at is not None else []):
                 tgt = target_of(store, it.get('key'))
-                if tgt and rulebook.decide(store, it, offered(store, it))['ask']: notice(store, SHOWN, tgt[0], tgt[1], tier=1, key=it['key'])
+                if tgt: notice(store, SHOWN, tgt[0], tgt[1], tier=1, key=it['key'])
         except Exception as e: logger.debug(f'advisor: no read ahead of {key} - {e}')
     threading.Thread(target=go, daemon=True, name='advise-ahead').start()
 

@@ -1,7 +1,7 @@
 """Typed words in the Assistant, after the owner's rulings on the 2026-10-01 press audit:
 
-1. typed words never start an agent without the owner's press - the assistant lights the button, or writes the job up in New,
-   and he presses it (the owner, 2026-10-19: "for hand this to coding agent match buttons");
+1. typed words that ask for an agent START it (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that. it
+   itself should not be the agent" - superseding 2026-10-01's "never"): a new job is written up in New and its Send to agent pressed;
 2. the assistant only offers or runs actions that are real buttons for the item on the table - "what is this about?"
    over a report came back as a "File it" card, and File it is not a button a report has;
 3. a typed question reads the item on the table first, another task when the words name one, and a search when they
@@ -35,18 +35,36 @@ def a_report(s):
 def tasks(s): return len(s.list_tasks())
 
 
-class TypedWordsNeverStartAnAgent(unittest.TestCase):
-    def test_an_agent_asked_for_over_an_idea_is_new_work_the_owner_starts(self):
+class TypedWordsStartAnAgent(unittest.TestCase):
+    def test_an_agent_asked_for_over_an_idea_is_new_work_pressed_for_the_owner(self):
         s = T.store()
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
         item, before = an_idea(s), tasks(s)
         llm, _ = scripted('I would have it researched.\n' + call('regular_agent', text='review the Payworth seat count', **{'as': 'researcher'}))
         out = ask(s, 'what should I do next?', item['key'], llm)
         self.assertNotIn('proposal', out)
-        self.assertEqual((out['new']['kind'], out['new']['how']), ('agent', 'general'))      # New, written up: its Send to agent starts it
-        self.assertEqual(tasks(s), before)
+        self.assertEqual((out['new']['kind'], out['new']['how'], out['new']['start']), ('agent', 'general', True))   # New, written up and pressed
+        self.assertTrue(out['say'].startswith('Wrote it into New and pressed Send to agent.'), out['say'])
+        self.assertEqual(tasks(s), before)                                                    # the card's own press makes the task, not the words
 
-    def test_a_new_hand_off_with_a_named_checkout_still_waits_for_the_press(self):
+    def test_on_a_phone_a_typed_hand_off_starts_at_once_and_an_unclear_checkout_waits_for_the_pick(self):
+        s = T.store()
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
+        token = concierge.DELIVERY.set(concierge.PHONE)
+        try:
+            with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+                llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'general', 'text': 'find what the CLI Anything project does'}}))
+                out = concierge.say(s, 'have an agent find out what CLI Anything does', llm=llm)
+                self.assertTrue(out['proposal'].get('auto'), out['proposal'])
+                self.assertNotIn(concierge.WAITS, out['say'])
+                s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/l', 'northwind/portal': 'C:/x/p'}}))
+                llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': 'fix the login crash'}}))
+                with mock.patch.object(concierge, '_coding', return_value=True):
+                    out = concierge.say(s, 'have a coding agent fix the login crash', llm=llm)
+                self.assertFalse(out['proposal'].get('auto'), 'which checkout is still to pick')
+        finally: concierge.DELIVERY.reset(token)
+
+    def test_a_new_hand_off_with_a_named_checkout_is_pressed_on_new(self):
         s = T.store()
         s.save_doc('soul', '# SOUL.md\n## Repository map\n- **northwind/ledger**: the ledger app\n', 'owner')
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
@@ -54,7 +72,7 @@ class TypedWordsNeverStartAnAgent(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm)
         self.assertNotIn('proposal', out)
-        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')}, {'kind': 'agent', 'how': 'terminal', 'text': 'fix the login crash'})
+        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text', 'start')}, {'kind': 'agent', 'how': 'terminal', 'text': 'fix the login crash', 'start': True})
         self.assertNotIn('Starting', out['say'])
 
     def test_continue_session_in_words_is_a_card_but_the_button_still_runs_at_once(self):

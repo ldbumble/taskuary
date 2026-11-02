@@ -49,6 +49,7 @@ KINDS = {
     'idea.act':                 ('idea', ('verb',), None),        # an Advisor idea's own words (assistant.act)
     'review.approve':           ('review', (), None),
     'agent.answer':             ('task', ('text',), None),
+    'agent.tell':               ('task', ('text',), None),   # the owner's next prompt to an agent at work - Tell the agent (waitroom.add)
     'agent.stop':               ('task', (), None),
     'report.rerun':             ('source', (), None),
     'memory.remember':          ('memory', ('note',), None),

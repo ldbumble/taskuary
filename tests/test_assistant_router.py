@@ -221,20 +221,82 @@ class DeskRoutes(unittest.TestCase):
         self.assertIn('Background sync', out['say'])
         self.assertEqual(s.get_setting('poll_minutes'), '5')                         # changed by the knob, not the words
 
-    def test_hand_it_to_a_coding_agent_lights_the_rows_agent_button_and_starts_nothing(self):
-        s = store(); tid, item = on_table(s)
-        out, spawn = say(s, 'hand this to a coding agent', item['key'], 'CALL: {"kind": "coding_agent", "params": {}}')
-        self.assertEqual(out['light']['verb'], 'regular_agent')                     # the row's one Send to agent; its card asks which agent
-        spawn.assert_not_called()
-        self.assertEqual(s.get_task(tid)['Status'], 'open')
+    # THE ASSISTANT MAY START AN AGENT (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that. it itself should not
+    # be the agent"): the words press the row's own Send to agent - the task page's start, through its dispatch door - and say what they did
+    def test_hand_it_to_a_coding_agent_presses_the_rows_agent_button(self):
+        for model, words in (('CALL: {"kind": "coding_agent", "params": {}}', None),
+                             ('CALL: {"kind": "regular_agent", "params": {"text": "use the main branch"}}', 'use the main branch')):
+            s = store(); tid, item = on_table(s)
+            started = {'dispatch': 'assistant', 'agent': 'Codex', 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
+            with mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=started) as go:
+                out, _ = say(s, 'start it', item['key'], model)
+            go.assert_called_once()
+            self.assertEqual((go.call_args[0][0], go.call_args[0][1].instruction), (tid, words))
+            self.assertNotIn('light', out); self.assertNotIn('proposal', out)
+            self.assertEqual(out['say'], f"Pressed {buttons.label('regular_agent')} on TQ-{tid:04d} - an agent is on it now.")
+            self.assertEqual(out['did'], 'dispatch.prepare')
 
-    def test_a_new_job_is_written_into_new_and_starts_nothing(self):
+    def test_the_task_tool_road_starts_it_too_and_a_start_refused_says_why(self):
+        s = store(); tid, item = on_table(s)
+        started = {'dispatch': 'session', 'agent': 'coding', 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
+        with mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=started) as go:
+            out, _ = say(s, 'go ahead and start an agent on it', item['key'], f'CALL: {{"kind": "dispatch.prepare", "params": {{"ref": "TQ-{tid:04d}", "kind": "general"}}}}')
+        go.assert_called_once(); self.assertIn('an agent is on it now', out['say'])
+        # ...a start the dispatch refused is said as not started, never "an agent is on it"
+        s = store(); tid, item = on_table(s)
+        with mock.patch('taskuary.server._dispatch_task_to_its_agent', side_effect=RuntimeError('no coding tool on this computer')):
+            out, _ = say(s, 'start it', item['key'], 'CALL: {"kind": "regular_agent", "params": {}}')
+        self.assertTrue(out['say'].startswith('Not done'), out['say']); self.assertNotIn('on it now', out['say'])
+
+    def test_a_note_for_a_working_agent_reaches_its_session(self):
+        """The owner, 2026-11-02: "it should be able to, like send a new prompt into the general/coding agent". With an agent WORKING (not
+        asking) on the task, "tell the agent to use the main branch" is the page's Tell the agent (waitroom.add): held while it works,
+        typed in when it stops at its prompt - by whichever road the model takes to it."""
+        from taskuary import waitroom
+        for model in ('CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}',
+                      'CALL: {"kind": "agent.answer", "params": {"text": "use the main branch"}}',
+                      'CALL: {"kind": "answer_agent", "params": {"text": "use the main branch"}}'):
+            s = store(); tid, item = on_table(s)
+            with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)):
+                out, _ = say(s, 'tell the agent to use the main branch', item['key'], model)
+            self.assertEqual(out['say'], f'Told the agent on TQ-{tid:04d}: “use the main branch” - they go in when it stops at its prompt.', model)
+            self.assertEqual([n['Note'] for n in s.waiting_notes(tid)], ['use the main branch'])
+            self.assertNotIn('nothing on it is waiting', out['say'])
+        # ...and parked at its prompt it has them at once, typed into the live session (one under the reviewer: the task's sender is outside -
+        # a full-tools session there holds them for the owner's Continue, waitroom.full_on_stranger)
+        from types import SimpleNamespace
+        s = store(); tid, item = on_table(s); typed = []
+        with mock.patch.object(concierge, '_agent_running', return_value=True), \
+             mock.patch.object(waitroom, 'state', return_value=('parked', SimpleNamespace(mode='auto'))), \
+             mock.patch.object(terminal, 'tell', side_effect=lambda t, text: (typed.append(text), 'typed into')[1]):
+            out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
+        self.assertIn('it has them now', out['say']); self.assertIn('use the main branch', typed[0])
+        # ...and with no agent at work nobody would hear it: said, nothing queued
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'tell the agent to use the main branch', item['key'], 'CALL: {"kind": "agent.tell", "params": {"text": "use the main branch"}}')
+        self.assertEqual(s.waiting_notes(tid), []); self.assertNotIn('Told the agent', out['say'])
+
+    def test_an_outward_send_in_words_still_only_lights(self):
+        # ...the line the owner kept: what leaves the app is theirs to press (pageview.is_send) - "send it" over a draft lights Send
+        s = store(); tid, item = on_table(s)
+        mid = s.get_task(tid).get('MessageId') or item.get('mid')
+        rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'DraftText': 'The May numbers are attached.', 'Status': 'pending'})
+        funnel.invalidate()
+        item = funnel.item_for_key(s, f'task:{tid}')
+        with mock.patch('taskuary.server._dispatch_task_to_its_agent') as go:
+            out, _ = say(s, 'send it', item['key'], 'CALL: {"kind": "approve", "params": {}}')
+        go.assert_not_called()
+        self.assertEqual(out['light']['verb'], 'approve'); self.assertNotIn('pressed', out)
+        self.assertEqual((s.get_review(rid) or {}).get('Status'), 'pending')
+
+    def test_a_new_job_is_written_into_new_and_its_send_to_agent_pressed_there(self):
+        # the card's own press makes the task and starts it (NewSheet `start`, the owner 2026-11-02) - the words themselves make nothing
         s = store()
         out, spawn = say(s, 'research which payroll vendors integrate with Payworth', None,
                          'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
-        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')},
-                         {'kind': 'agent', 'how': 'general', 'text': 'which payroll vendors integrate with Payworth'})
-        self.assertIn(buttons.label('regular_agent'), out['say']); self.assertNotIn('below', out['say'])
+        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text', 'start')},
+                         {'kind': 'agent', 'how': 'general', 'text': 'which payroll vendors integrate with Payworth', 'start': True})
+        self.assertEqual(out['say'], f"Wrote it into New and pressed {buttons.label('regular_agent')}.")
         spawn.assert_not_called()
         self.assertEqual([t for t in s.list_tasks() if 'Payworth' in str(t.get('Title'))], [])
 

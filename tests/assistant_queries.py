@@ -85,9 +85,13 @@ CASES = [
     Q('item', 'reply and loop Priya in', 'todo', c('reply', cc=['Priya Shah']), 'draft:reply', freq=3),
     Q('item', 'send it', 'review', c('approve'), 'light:approve', freq=5),
     Q('item', 'redraft it shorter', 'review', c('redraft', text='shorter'), 'draft:redraft', freq=4),
-    Q('item', 'send this to an agent', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'light:regular_agent', freq=4),
-    Q('item', 'hand this to a coding agent', 'coding', c('coding_agent', text='fix the census sync'), 'light:regular_agent', freq=4,
+    # THE ASSISTANT MAY START AN AGENT (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that. it itself should not be
+    # the agent"): the words press the row's own Send to agent - the task page's start, dispatch.prepare's road
+    Q('item', 'send this to an agent', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'did:dispatch.prepare', freq=4),
+    Q('item', 'hand this to a coding agent', 'coding', c('coding_agent', text='fix the census sync'), 'did:dispatch.prepare', freq=4,
       note='the demo world has no coding CLI, so a coding hand-off is the one Send to agent (coding needs a CLI)'),
+    Q('item', 'start it', 'todo', c('regular_agent'), 'did:dispatch.prepare', freq=4),
+    Q('item', 'go ahead and have an agent work on it', 'todo', c('dispatch.prepare', ref=T1, kind='general'), 'did:dispatch.prepare', freq=3),
     Q('item', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'light:defer', freq=5),
     Q('item', 'remind me about this on friday at 2pm', 'todo', c('task.defer', until='friday 2pm'), 'light:defer', freq=4),
     Q('item', 'not ours', 'fyi', c('not_ours'), 'pressed:not_ours', freq=4),
@@ -173,7 +177,17 @@ CASES = [
     Q('agents', 'what is the agent doing?', 'agent', [c('agents.now'), 'It is reconciling the August export.'], 'read:agents.now', freq=4),
     Q('agents', 'which agents are running', None, [c('agents.now'), 'One, on TQ-0006.'], 'read:agents.now', freq=3),
     Q('agents', 'tell the agent to skip the inter-company rows', 'agent', c('answer_agent', text='skip the inter-company rows'), 'words', tools=('answer_agent', 'agent.answer'), freq=3),
-    Q('agents', f'start an agent on {T12}', None, c('dispatch.prepare', ref=T12, kind='coding'), 'light:regular_agent', freq=3),
+    Q('agents', f'start an agent on {T12}', None, c('dispatch.prepare', ref=T12, kind='coding'), 'light:regular_agent', freq=3,
+      note='a task not in front of the owner comes up with its Send to agent lit, as a put-down off the table does'),
+    # A NEW PROMPT FOR THE AGENT AT WORK (the owner, 2026-11-02: "send a new prompt into the general/coding agent"): Tell the agent's road
+    Q('agents', 'tell the agent to use the main branch', 'todo', c('agent.tell', text='use the main branch'), 'did:agent.tell', freq=4, live=1),
+    Q('agents', 'also have it check the March file', 'todo', c('agent.answer', text='also check the March file'), 'did:agent.tell', freq=3, live=1,
+      note='an answer to an agent that asked nothing is its next prompt, never "nothing on it is waiting for an answer"'),
+    Q('agents', 'tell the agent to skip the empty rows', 'todo', c('answer_agent', text='skip the empty rows'), 'did:agent.tell', freq=3, live=1),
+    Q('agents', 'tell the agent to use the main branch', 'todo', [c('agent.tell', text='use the main branch'),
+      'No agent is working on TQ-0001 - Send to agent starts one.'], 'words', freq=2, note='nobody at work: said, nothing queued'),
+    Q('agents', 'start a researcher on what Payworth charges per seat', None,
+      c('task.create_from_text', kind='general', text='what Payworth charges per seat', title='Payworth seat price'), 'press:new', freq=3),
     Q('agents', 'research what Payworth charges per seat', None, c('task.create_from_text', kind='general', text='research what Payworth charges per seat', title='Payworth seat price'), 'new:agent:general', freq=3),
     Q('agents', 'have a coding agent fix the census sync timeout', None, c('task.create_from_text', kind='coding', text='fix the census sync timeout', title='Census sync timeout'), 'new:agent', freq=3, note='no coding CLI in the demo world: written into New as an agent job'),
     Q('agents', 'kill all the agents', None, c('agents.stop', all=True), 'words', freq=1, note='none running in the demo world: said, nothing pressed'),
@@ -290,6 +304,10 @@ PHONE = [
     Q('phone', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'now:task.defer', freq=4, phone=True),
     Q('phone', 'send it', 'review', c('approve'), 'proposal:review.approve', freq=4, phone=True),
     Q('phone', 'reply to this', 'todo', c('reply'), 'draft:reply', freq=4, phone=True),
+    Q('phone', 'tell the agent to use the main branch', 'todo', c('agent.tell', text='use the main branch'), 'did:agent.tell', freq=3, phone=True, live=1),
+    Q('phone', 'have an agent find what Payworth charges per seat', None,
+      c('task.create_from_text', kind='general', text='what Payworth charges per seat', title='Payworth seat price'), 'proposal:task.create_from_text',
+      freq=3, phone=True, note='runs at once on the words (auto) - only a coding job with its checkout still to pick waits'),
     Q('phone', 'approve all the drafts', 'review', c('review.each'), 'card', freq=2, phone=True),
     # THE APP'S OWN ACTS FROM A PHONE (2026-10-23): one with a tool is its yes or no; Updates has none, so it is named at the desk in words -
     # no link a phone cannot open, and never an agent
@@ -462,19 +480,18 @@ AREA_TASK = [
     Q('task', 'hand this to Paula', 'todo', c('task.handoff', who='Paula Vance'), 'light:forward', view=TASK1V, freq=3),
     Q('task', 'share this with erin@northwind.example', 'todo', c('task.share', who='erin@northwind.example'), 'light:share_result', view=TASK1V, freq=2),
     Q('task', 'reply to marcus saying we are looking into it', 'todo', c('reply', text='we are looking into it'), 'draft:reply', view=TASK1V, freq=4),
-    # ── the Agent section: Send to agent with the job in its box; a live one stopped ──
-    Q('task', 'get an agent to find the 4,180', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'light:regular_agent', view=TASK1V, freq=4),
+    # ── the Agent section: Send to agent with the job in its box, pressed for the owner (2026-11-02); a live one stopped ──
+    Q('task', 'get an agent to find the 4,180', 'todo', c('regular_agent', text='find the 4,180 gap in the month-end close'), 'did:dispatch.prepare', view=TASK1V, freq=4),
     Q('task', 'put "reconcile against the bank statement" in the agent box and start it', 'todo',
       [v(op='set', field='what_should_the_agent_do', value='reconcile against the bank statement') + '\n' + v(op='press', button='row:regular_agent')],
       'view:press:row:regular_agent', tools=('words',), view=TASK1V, freq=2, note='Send to agent starts work here and sends nothing out: pressed, not pointed'),
     Q('task', 'stop the agent', 'agent', c('agent.stop'), 'light:stop_agent', view=TASK6V, freq=3, live=6),
-    Q('task', 'send this to the coding agent', 'coding', c('coding_agent', text='fix the census sync when a site has no manager'), 'light:regular_agent',
+    Q('task', 'send this to the coding agent', 'coding', c('coding_agent', text='fix the census sync when a site has no manager'), 'did:dispatch.prepare',
       freq=3, note="the Agent section's one Send to agent starts either kind"),
     Q('task', 'continue the agent', 'agent', [c('agent.continue'), 'There is no saved session on TQ-0006 to pick up - Send to agent starts a new one.'], 'words',
       view=TASK6V, freq=3, note='no saved session: said, and what starts one - never "name the task" over the task on screen'),
-    Q('task', 'tell the agent to use the main branch', 'agent', [c('agent.answer', text='use the main branch'),
-      'The agent is working, not asking - type it into its session on the page, or Stop and save and Continue with it.'], 'words', view=TASK6V, live=6, freq=2,
-      note='an agent at work is not waiting on an answer: said in words'),
+    Q('task', 'tell the agent to use the main branch', 'agent', c('agent.answer', text='use the main branch'), 'did:agent.tell', view=TASK6V, live=6, freq=2,
+      note='an agent at work is not waiting on an answer: the words are its next prompt, Tell the agent\'s road (the owner, 2026-11-02)'),
     Q('task', 'change who does this to me', 'todo', c('task.set_kind', kind='task'), 'light:change_kind', view=TASK1V, freq=2),
     Q('task', 'expand this', 'todo', [v(op='press', button='expand_to_the_whole_canvas')], 'view:press:expand_to_the_whole_canvas', tools=('words',), view=TASK1V, freq=2),
     # ── the to-dos and the notes: the task page's own writes, run and said ──
@@ -831,7 +848,7 @@ CASES += AREA_SETTINGS
 
 # NEW, ASKED ABOUT WITH IT UP (the audit of every page, 2026-11-02): the card the sidebar's New posts (CanvasBrowse area "new", NewSheet.jsx),
 # as pageView.js reads it - its tabs, its forks, the about box under the label it wears, the brain and model pickers, its own press. The
-# Assistant fills it and presses its tabs; a job asked for in words is written into New on its tab, never started by the Assistant
+# Assistant fills it and presses its tabs; a job asked for in words is written into New on its tab - an agent's pressed for the owner (2026-11-02)
 TABS = [{'id': i, 'label': l} for i, l in (('send_something', '✉️Send something'), ('give_an_agent_a_job', 'Give an agent a job'),
         ('note_to_self', '💡Note to self'), ('meeting', '📅Meeting'), ('set_a_goal', '🎯Set a goal'), ('report', '📊Report'),
         ('dashboard', '📈Dashboard'), ('routine', '🔁Routine'), ('playbook', '📖Playbook'), ('close_new_task', 'Close new task'))]
@@ -851,6 +868,11 @@ NEWCODING = {**NEWAGENT, 'fields': [{'key': 'about', 'label': 'What should it do
              'text': 'Give an agent a job A live session No coding tool is connected - Connect one',
              'buttons': [b for b in NEWAGENT['buttons'] if b['id'] != 'send_to_agent']
                         + [{'id': 'connect_one', 'label': 'Connect one'}, {'id': 'send_to_coding_agent', 'label': 'Send to coding agent', 'enabled': False}]}
+NEWFILLED = {**NEWAGENT, 'fields': [{**NEWAGENT['fields'][0], 'value': 'find out why invoice 88213 is past due'}, *NEWAGENT['fields'][1:]],
+             'buttons': [b for b in NEWAGENT['buttons'] if b['id'] != 'send_to_agent'] + [{'id': 'send_to_agent', 'label': 'Send to agent'}]}
+NEWCODEREADY = {**NEWCODING, 'text': 'Give an agent a job A live session',
+                'buttons': [b for b in NEWCODING['buttons'] if b['id'] not in ('connect_one', 'send_to_coding_agent')]
+                           + [{'id': 'send_to_coding_agent', 'label': 'Send to coding agent'}]}
 NEWMEET = {'area': 'new', 'title': '', 'text': 'What are we starting? Meeting WITH ABOUT HOW LONG WHEN',
            'fields': [{'key': 'with', 'label': 'With', 'kind': 'text', 'value': ''}, {'key': 'about', 'label': 'About', 'kind': 'text', 'value': 'the budget'},
                       {'key': 'note', 'label': 'Note or agenda', 'kind': 'text', 'value': ''}],
@@ -908,7 +930,11 @@ AREA_NEW = [
     Q('new', 'open the new dashboard builder', None, ['Here: [New dashboard](#report=new-dashboard).'], 'link:#report=new-dashboard', tools=('pages',), freq=2,
       note='APP PAGES named a new report and a new routine but not a new dashboard (2026-11-02)'),
     Q('new', 'new routine', None, ['Here: [New routine](#report=new-agent).'], 'link:#report=new-agent', tools=('pages',), freq=2),
-    # ── a job in words: written into New on its tab, the owner's press starts it ──
+    # ── "start it" over a filled card: its own Send to agent / Send to coding agent pressed - never read as an outward send (2026-11-02) ──
+    Q('new', 'start it', None, [v(op='press', button='Send to agent')], 'view:press:send_to_agent', tools=('words',), view=NEWFILLED, freq=4),
+    Q('new', 'go ahead', None, [v(op='press', button='Send to coding agent')], 'view:press:send_to_coding_agent', tools=('words',), view=NEWCODEREADY,
+      freq=3, note='"Send to coding agent" read as an outward send, and only lit'),
+    # ── a job in words: written into New on its tab - an agent's Send to agent pressed for the owner (2026-11-02), every other tab's theirs ──
     Q('new', 'have an agent look into why the census moved in july', None,
       c('task.create_from_text', kind='general', text='why did the census move in July', title='Census move in July'), 'new:agent:general', freq=4),
     Q('new', 'get a coding agent to fix the nightly export', None,
@@ -1240,6 +1266,12 @@ def _guards(stack, sort=None, live=None):
     # a running session on one task, where the case says so - what Stop and save is drawn by (concierge._agent_running)
     stack.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live and int(tid) == int(live) else None))
     stack.enter_context(mock.patch.object(ingest, '_spawn'))
+    # ...and no agent starts, nothing is typed into a session: the dispatch door answers as a start would (concierge._start_agent, 2026-11-02),
+    # and the waiting room holds every note as for an agent at work (concierge._tell_now)
+    from taskuary import server, waitroom
+    stack.enter_context(mock.patch.object(server, '_dispatch_task_to_its_agent', lambda tid, body, bg: {'dispatch': 'session', 'started': True, 'existing': False,
+                                                                                                        'taskId': tid, 'ref': f'TQ-{int(tid):04d}'}))
+    stack.enter_context(mock.patch.object(waitroom, 'state', lambda store, tid: ('working', None)))
     sorted_ = json.dumps(sort or {'kind': 'report', 'why': 'scripted'})
     stack.enter_context(mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: sorted_))
 
@@ -1248,7 +1280,7 @@ def _guards(stack, sort=None, live=None):
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
 ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
         'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ', 'Filed ', 'Put on ', 'Blocked', 'Stopped ', 'Triage already ', 'Org chart: ',
-        'Nothing went', 'Saved ', 'Adopted ', 'Kept ')
+        'Nothing went', 'Saved ', 'Adopted ', 'Kept ', 'Told ', 'Pressed ')
 def said_what(say: str, got: list, q) -> bool:
     acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)
@@ -1266,6 +1298,7 @@ def outcomes(out: dict, reads: list) -> list:
     if (p := out.get('pressed')) is not None: o.append(f"pressed:{p.get('verb') or ''}")
     if out.get('open'): o.append(f"open:{out['open']}")
     if out.get('new'): o.append(f"new:{out['new'].get('kind')}" + (f":{out['new'].get('how')}" if out['new'].get('how') else ''))
+    if (out.get('new') or {}).get('start'): o.append('press:new')               # ...and its own Send to agent pressed by the page (NewSheet `start`)
     d = (out.get('decision') or {}).get('verb')
     if d == 'next': o.append('next')
     elif d in ('reply', 'redraft'): o.append(f'draft:{d}')

@@ -97,7 +97,22 @@ class EverydayAsks(unittest.TestCase):
                  **{k: 'Set up with AI' for k in ('report', 'dashboard', 'workflow', 'playbook')}}
         for r in (r for r in self.rows if r['q'].cat == 'new' and r['q'].expect.startswith('new:')):
             with self.subTest(ask=r['q'].text):
-                self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
+                # ...an agent's job is pressed for the owner (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that")
+                if r['q'].expect.startswith('new:agent'):
+                    self.assertEqual(r['ideal']['say'], f"Wrote it into New and pressed {drawn[r['q'].expect[4:]]}.")
+                    self.assertIn('press:new', r['ideal']['got'])
+                else: self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
+
+    def test_the_assistant_starts_an_agent_and_tells_one_at_work_but_never_sends(self):
+        # the owner, 2026-11-02: "it itself should not be the agent" - "start it" presses Send to agent, "tell the agent ..." reaches the
+        # session as its next prompt, and a send in words still only lights (the page's Send, the row's Send)
+        rows = {(r['q'].text, r['q'].table, r['q'].view is not None, r['q'].phone, r['q'].live): r['ideal']['got'] for r in self.rows}
+        self.assertIn('did:dispatch.prepare', rows[('start it', 'todo', False, False, None)])
+        self.assertIn('view:press:send_to_coding_agent', rows[('go ahead', None, True, False, None)])
+        self.assertIn('did:agent.tell', rows[('tell the agent to use the main branch', 'todo', False, False, 1)])
+        self.assertIn('did:agent.tell', rows[('tell the agent to use the main branch', 'todo', False, True, 1)])           # by phone too
+        self.assertEqual(rows[('tell the agent to use the main branch', 'todo', False, False, None)], ['words'])     # nobody at work
+        self.assertIn('light:approve', rows[('send it', 'review', False, False, None)])          # ...and on the page, a point (the test above)
 
     def test_every_address_an_ask_about_new_is_answered_with_is_one_the_prompt_names(self):
         # "I want to start something new" and "open the new dashboard builder" had no address in APP PAGES (2026-11-02)

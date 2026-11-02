@@ -318,11 +318,12 @@ class ReadsTests(unittest.TestCase):
             out = concierge.say(s, 'can you do this for me', llm=lambda system, user, **kw: answer)
         return s, out, out.get('proposal') or {}
 
-    def test_an_ask_for_a_worker_that_fits_picks_it_and_waits_for_the_press(self):
+    def test_an_ask_for_a_worker_that_fits_picks_it_and_starts_it(self):
         """The owner, 2026-09-24: "if we have profile for it it should start a general agent" - the worker is chosen; and
-        2026-10-01: typed words never start an agent without his yes, so the card waits for the press."""
+        2026-11-02 (superseding 2026-10-01's "never"): "why can't assistant start an agent. i'm okay with that" - the words start it."""
         s, out, prop = self._handoff('Research job.' + chr(10) + 'CALL: {"kind": "regular_agent", "params": {"text": "find out what the CLI Anything project does", "as": "researcher"}}')
-        self.assertFalse(prop.get('auto'), prop)
+        self.assertTrue(prop.get('auto'), prop)
+        self.assertNotIn(concierge.WAITS, out['say'])
         self.assertTrue(prop.get('clear'), prop)
         self.assertEqual(prop['params']['profile'], 'researcher')
         self.assertIn('researcher', out['say'])
@@ -331,19 +332,19 @@ class ReadsTests(unittest.TestCase):
         self.assertEqual(s.get_task(t['taskId'])['Assignee'], 'agent:researcher')
 
     def test_a_worker_nobody_named_is_asked_about_not_guessed(self):
+        # ...it starts on the default worker (2026-11-02), never on one guessed from the words
         _s, _out, prop = self._handoff('CALL: {"kind": "regular_agent", "params": {"text": "find out what the CLI Anything project does"}}')
-        self.assertFalse(prop.get('auto'))
         self.assertIsNone((prop.get('params') or {}).get('profile'))
         _s, _out, prop = self._handoff('CALL: {"kind": "regular_agent", "params": {"text": "find out what it does", "as": "astrologer"}}')    # not on the roster
-        self.assertFalse(prop.get('auto'))
+        self.assertIsNone((prop.get('params') or {}).get('profile'))
 
     def test_a_coding_ask_names_its_checkout_when_clear_and_offers_the_pick_when_not(self):
         soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
                 + '- **northwind/portal**: the expense portal' + chr(10))
-        # NAMED - by the model off the map, or in the owner's own words - the card is set for that checkout, and waits for
-        # the press like every hand-off typed in words (the owner, 2026-10-01)
+        # NAMED - by the model off the map, or in the owner's own words - the card is set for that checkout and starts on the words
+        # (the owner, 2026-11-02); one still to pick waits for the pick
         _s, out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "fix the login crash in the fan mobile app", "as": "ledger"}}', soul=soul)
-        self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params']['repo']), (None, True, 'northwind/ledger'))
+        self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params']['repo']), (True, True, 'northwind/ledger'))
         # NOT named by the model: the picker, nothing guessed onto it from the words - "ledger" in the brief is the model's to read
         # off the list it is shown, never a regex's (2026-10-08)
         _s, out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "fix the login crash in the ledger app"}}', soul=soul)
@@ -386,7 +387,7 @@ class ReadsTests(unittest.TestCase):
             out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload', llm=model)
         self.assertIn('REPOSITORIES a coding job can open in', seen[0]); self.assertIn('northwind/portal', seen[0])
         prop = out.get('proposal') or {}
-        self.assertFalse(prop.get('auto'), prop)
+        self.assertTrue(prop.get('auto'), prop)                     # explicitly named: it starts right away (the owner, 2026-11-02)
         self.assertTrue(prop.get('clear'), prop)
         self.assertEqual(prop['params']['repo'], 'northwind/portal')
         # ...and naming none is the picker, nothing guessed onto it from the words

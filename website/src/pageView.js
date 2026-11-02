@@ -20,8 +20,8 @@ const SKIP = ".tq-chat-pop, .tq-dock, [data-tq-view-skip]";
 const MAX_FIELDS = 40, MAX_BUTTONS = 40;
 // the same words the server checks again (pageview.py): a send by its verb or its label, a secret by its key or the words on its box
 export const SEND_VERBS = new Set(["approve", "send", "accept_invite", "decline_invite", "propose_time", "share", "forward", "send-handoff", "email"]);
-// ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done
-const SEND_WORDS = /^\s*(send(?! to (an? )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b/i;
+// ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done - "Send to coding agent" too
+const SEND_WORDS = /^\s*(send(?! to (an? )?((coding|general) )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b/i;
 const SECRET_WORDS = /(password|passphrase|secret|token|api[ _-]?key|private key|access key|client key|xox[bp]-)/i;
 export const isSecret = (key = "", label = "") => {
   const k = String(key || "").toLowerCase();

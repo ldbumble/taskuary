@@ -85,8 +85,10 @@ with **Mark done** lit when triage reads the new message as handled - or after a
 Anything you can do on a task's page, you can ask the Assistant for — about the task in front of you, or any
 task you name (TQ-0123). It brings that task up with the button for it lit, and says to press it: nothing changes
 on your words alone, and there is no card to confirm and nothing to take back - a wrong Mark done is put right with
-**Reopen task**. Work - research, writing, code - goes to an agent: the Assistant lights **Send to agent**, or writes
-the job up in **New** for you to start. It never guesses which task you mean.
+**Reopen task**. Work - research, writing, code - goes to an agent, never into the chat: "start it", "send this to an
+agent" or "have a coding agent fix this" presses **Send to agent** on the task in front of you, and a new job is written
+up in **New** with its **Send to agent** pressed there. Anything that leaves the app - a reply, a Share - is still yours
+to press. It never guesses which task you mean.
 
 ![What you can ask about a task, and what each does](img/assistant-task-tools.svg "One tool per action on the task page.")
 
@@ -117,6 +119,7 @@ These have no button. Say them, in the app or on your phone.
 | "reply and tell them…" | A draft with that gist in the item's reply box, and **Send** lit | at once - nothing is sent |
 | "redraft it shorter" | The draft written again with the change | at once - nothing is sent |
 | "yes, go ahead" to a waiting agent | Your answer goes to the agent | at once |
+| "tell the agent to use the main branch" to an agent at work | Your next prompt, as **Tell the agent** takes it: typed in when it stops at its prompt, never mid-step | at once |
 | "run it again" on a report | **Run it again** lit on the report | you press it |
 | "remember that…", "I don't care about X any more" | Kept at once as a line in your memory (LEARNED.md), where triage, reports, the Advisor and agents read it | at once |
 | "set up a report that…" | **New** opens on Report with your words in it | you press **Set up with AI** |

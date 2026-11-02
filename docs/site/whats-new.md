@@ -2,6 +2,11 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.19 - 2026-11-02
+
+- A log file that cannot open in the data folder no longer stops the desktop app
+- A link in the Assistant's reply to the app's own New or a message stays in the desktop window
+
 ## 0.3.10.18 - 2026-11-02
 
 - A right-click on a misspelt word in the desktop window offers the fix again

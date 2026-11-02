@@ -859,7 +859,8 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         return f"{what} is not one of the assistant's ideas" + (f" - say {buttons.label('not_ours')}." if own else '.')
     if verb == 'report_off' and not _report_on(store, item):
         return f"There's no report on {what} running on its clock to switch off."
-    if verb == 'answer_agent' and item.get('kind') != 'agent':
+    # ...an agent still WORKING on it takes the words as its next prompt (agent.tell, the owner 2026-11-02)
+    if verb == 'answer_agent' and item.get('kind') != 'agent' and not (item.get('tid') and _agent_running(item['tid'])):
         return f"There's nothing to answer on {what} - nothing on it is waiting for an answer."
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
@@ -1273,6 +1274,43 @@ def _press_or_light(store, tid: int, table: dict | None, it: dict, verb: str, no
     return _lit(store, tid, table, it, verb, note=note if verb == 'continue' else '')
 
 
+# THE ASSISTANT MAY START AN AGENT (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that. it itself should not be
+# the agent"): "start it", "send this to an agent", "have a coding agent fix this" over the item in front of the owner press its own Send to
+# agent - on a task the task page's start (dispatch.prepare, through its dispatch door), on a mail the chip's hand-off. It supersedes "typed
+# words never start an agent" (2026-10-01). Anything that leaves the app - a reply, a Share - still only lights.
+AGENT_PRESS = ('coding_agent', 'regular_agent')
+
+
+def _starts_now(prop: dict, where: str = '') -> dict:
+    "A phone's hand-off proposal run at once on the words (AGENT_PRESS): said as what it does, never \"Nothing happens until you say yes\"."
+    return {**prop, 'auto': True, 'say_card': prop.get('note') or '',
+            'say': f"{prop['label']} - {where or prop.get('summary') or ''}.".replace(' - .', '.') + (f" {prop['note']}" if prop.get('note') else '')}
+
+
+def _start_agent(store, tid: int, table: dict | None, it: dict, verb: str, words: str = '', actor: str = 'owner') -> dict:
+    """The row's Send to agent, pressed with the owner's words as what to do first. A start that did not happen is said with its way on."""
+    verb = handoff_verb(store, verb)
+    label = _label_on(store, it, BUTTON_OF.get(verb, verb))          # a row that draws no Send to agent: the model says so (CallMiss)
+    words = str(words or '').strip()[:4000]
+    if it.get('tid'):
+        t = int(it['tid'])
+        # ...where the row's own button would send it when nothing was said of which; a coding agent asked for on general work is the regular one
+        v = triage_agent(store, it) if verb == 'regular_agent' and not words else \
+            'regular_agent' if (store.get_task(t) or {}).get('Kind') == 'general' else verb
+        op = operations.propose(store, 'dispatch.prepare', t, {'kind': 'coding' if v == 'coding_agent' else 'general',
+                                                                 **({'instructions': words} if words else {})}, actor)
+    else:
+        op = propose_direct(store, verb, it.get('key') or '', words, actor, table=True, press=True)
+        if op.get('failed'): raise CallMiss(f"{op.get('say') or 'It cannot be handed off.'} Say so in plain words. Nothing was started.")
+    done = run_proposal(store, op, actor)
+    o = done.get('outcome') or {}
+    if done.get('status') != 'done' or str(o.get('start_error') or '').strip() or not (o.get('started') or o.get('existing') or o.get('ref') or o.get('taskId')):
+        r = receipt_turn(store, done, actor, table=True)
+        return {'say': r['say'], 'options': [], 'chips': r['chips'], 'decision': {'verb': 'setting'}, 'did': op['kind']}
+    ref = o.get('ref') or it.get('ref') or (task_ref(o['taskId']) if o.get('taskId') else 'it')
+    return _did(store, tid, f"Pressed {label} on {ref} - {'its agent was already on it' if o.get('existing') else 'an agent is on it now'}.", op['kind'])
+
+
 def _put_down(store, tid: int, table: dict | None, it: dict, b: str, note: str = '', actor: str = 'owner') -> dict:
     label, kind = _label_on(store, it, b), PUT_DOWN[b]
     target = it.get('mid') if kind == 'message.file' else it.get('tid')
@@ -1533,7 +1571,7 @@ def _paged(store, tid: int, item: dict | None, kind: str, p: dict, text: str, ac
 
 
 # a new job's words go into New, on the tab that starts it, its own filled button the one to press: an agent for work, a note to self for
-# a to-do (the owner, 2026-10-19: "for hand this to coding agent match buttons" - typed words never start an agent)
+# a to-do (the owner, 2026-10-19: "for hand this to coding agent match buttons") - and an agent's, since 2026-11-02, pressed for them (_new)
 NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent', 'terminal', 'coding_agent'), 'task': ('note', '', ''),
            'report': ('report', '', ''), 'workflow': ('workflow', '', ''), 'routine': ('workflow', '', ''), 'playbook': ('playbook', '', ''),
            # ...and New's other tabs (the whole-app design, 2026-10-28): a message the owner starts, drafted for their Send; a goal; a dashboard
@@ -1577,12 +1615,15 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     # ...and what it did LEADS, what it found after: the receipt at the end of a paragraph read as a turn that did nothing (said_what; the
     # live audit, 2026-11-02)
-    said = f"Wrote it into New - {press} there starts it.{' ' + lead if lead else ''}"
+    # ...AND AN AGENT'S JOB IS PRESSED (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"): its Send to agent is
+    # the card's own press, made by the page once the card is filled (`start`, NewSheet) - every other tab still waits for the owner's
+    start = kind == 'agent' and bool(str(text or '').strip())
+    said = (f"Wrote it into New and pressed {press}." if start else f"Wrote it into New - {press} there starts it.") + (f' {lead}' if lead else '')
     # `line`: this line's id, which the card's press says again as what it started (said_started)
     line = record(store, tid, 'assistant', said)
     # ...and Send something's recipient, as its own field takes it (NewSheet initialTo) - nothing goes before its Send
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line,
+            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line, **({'start': True} if start else {}),
                     **({'routine': runs} if recurs else {}),
                     **({'to': str(to).strip()[:300]} if kind == 'send' and str(to or '').strip() else {})}}
 
@@ -1661,6 +1702,20 @@ def _answer_now(store, tid: int, table: dict | None, target: int, said: str, act
     op = operations.propose(store, 'agent.answer', int(target), {'text': said}, actor)
     turn = receipt_turn(store, run_proposal(store, op, actor), actor, table=True)
     return {'say': turn['say'], 'options': [], 'chips': turn['chips'] or chips_for(store, table), 'decision': None}
+
+
+def _tell_now(store, tid: int, target: int, said: str, actor: str) -> dict:
+    """Words for the agent WORKING on a task, as the owner's next prompt (the owner, 2026-11-02: "send a new prompt into the general/coding
+    agent"): the page's own Tell the agent (waitroom.add) - typed in now when the agent is parked at its prompt, else held and typed at
+    its next stop, never into the middle of a step. Said in the past, with where the words are."""
+    said = ' '.join(str(said or '').split())
+    if not said: raise CallMiss('agent.tell needs `text` - the words for the agent. Nothing was sent.')
+    r = run_proposal(store, operations.propose(store, 'agent.tell', int(target), {'text': said}, actor), actor)
+    if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not go in'} - say so in plain words. Nothing was sent.")
+    o = r.get('outcome') or {}
+    when = ('it has them now' if o.get('delivered') else
+            f"they wait for your {buttons.label('continue')}" if o.get('state') == 'held_stranger' else 'they go in when it stops at its prompt')
+    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(said, 120)}” - {when}.", 'agent.tell')
 
 
 def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, list]:
@@ -3132,8 +3187,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
                'as': str(params.get('profile') or params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
-        # TYPED WORDS NEVER START AN AGENT (the owner, 2026-10-01): a hand-off in words is a card he presses, however clear
+        # TYPED WORDS START IT (the owner, 2026-11-02, superseding 2026-10-01's "never"): on a phone the yes is the words - only a coding job
+        # whose checkout is still to pick waits for that pick
         prop = propose_for(store, tid, dec, None, text, actor)
+        if prop.get('clear') or verb == 'regular_agent': prop = _starts_now(prop)
         record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'],
                                                                     'op': prop['id'], 'tid': prop.get('tid'), 'ref': prop.get('ref')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
@@ -3309,7 +3366,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # retry then missed again. The fact goes back: nothing to pick up, and Send to agent is what starts one (the task-page audit, 2026-11-02)
         if kind == 'agent.continue' and not ref and it.get('tid') and not resumes:
             raise CallMiss(f"{task_ref(it['tid'])} has no saved agent session to pick up - {buttons.label('regular_agent')} (dispatch.prepare) starts "
-                           "a new one, the owner's press. Say so in plain words. Nothing was started.")
+                           "a new one - CALL it if that is what they asked for, else say so in plain words. Nothing was started.")
         if kind in toolcatalog.ATTACH_AGENT and not ref and not resumes:
             raise CallMiss(f"{kind} puts an agent on a task that already exists - name it (its TQ ref, the one on the table "
                            "included). A new job is task.create_from_text. Nothing was started.")
@@ -3342,11 +3399,15 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # ...and an ANSWER with nobody to hear it (real-AI walk, 2026-10-18): "tell the agent on TQ-n ..." with no session on TQ-n
         # came back as a card, and on the next try as a coding agent nobody asked for. The fact goes back, with the real roads
         # (an agent's own card on the table was built from its live session: it is the run that asked)
-        if (kind == 'agent.answer' and not (it.get('kind') == 'agent' and int(it.get('tid') or 0) == int(t)) and not _agent_running(t)
-                and (store.get_task(t) or {}).get('RunStatus') != 'running'):
+        live = kind in ('agent.answer', 'agent.tell') and (_agent_running(t) or (store.get_task(t) or {}).get('RunStatus') == 'running')
+        if (kind in ('agent.answer', 'agent.tell') and not live
+                and not (kind == 'agent.answer' and it.get('kind') == 'agent' and int(it.get('tid') or 0) == int(t))):
             again = f"{buttons.label('continue')} (agent.continue) reopens its last session, or " if store.resumable_session(t) else ''
             raise CallMiss(f"No agent is on {named} - nothing would hear that. Say so in plain words and offer what is real: {again}"
-                           "starting an agent on it (dispatch.prepare), which is the owner's call. Nothing was sent.")
+                           "starting an agent on it (dispatch.prepare) - CALL that only if they asked for one. Nothing was sent.")
+        # ...and words for an agent still WORKING are its next prompt (agent.tell), never an answer to a question it did not ask: "tell the
+        # agent to use the main branch" was refused "nothing on it is waiting for an answer" over a live session (the owner, 2026-11-02)
+        if kind == 'agent.answer' and live and not (it.get('asking') and int(it.get('tid') or 0) == int(t)): kind = 'agent.tell'
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
         def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
@@ -3551,6 +3612,9 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         if not note: raise CallMiss('task.comment needs `text` - the note itself. Nothing was written.')
         store.add_comment(target, actor, 'human', note)
         return _did(store, tid, f"Added a note to {named}: \u201c{_title_cut(note, 120)}\u201d.", 'task.comment')
+    # ...and THE OWNER'S NEXT PROMPT TO THE AGENT AT WORK, delivered and said (the owner, 2026-11-02) - the page's Tell the agent, typed by
+    # nobody else: it reaches no one outside, so the phone runs it at once as well
+    if kind == 'agent.tell' and target: return _tell_now(store, tid, target, str(params.get('text') or ''), actor)
     # ...and WHERE WORK LIKE THIS GOES, taught and said (2026-11-01): a lesson for triage that moves nothing - "bugs like this go to
     # northwind/importers" was refused as having no button, on the desk where the owner said it
     if kind == 'routing.remember' and target:
@@ -3666,6 +3730,10 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         # and only on the item in front of the owner: one named off the table comes up with its button lit (2026-10-26, as in turn())
         if kind in ('task.complete', 'item.settle', 'task.not_a_task', 'message.file', 'message.archive') and on is table:
             return _press_or_light(store, tid, table, on, b, note, actor)
+        # ...and so is an agent start on it (AGENT_PRESS, the owner 2026-11-02): dispatch.prepare is the task page's Send to agent
+        if kind in ('dispatch.prepare', 'task.create_from_message') and b in AGENT_PRESS and on is table:
+            v = b if kind != 'dispatch.prepare' else 'coding_agent' if str(params.get('kind')) == 'coding' else 'regular_agent'
+            return _start_agent(store, tid, table, on, v, str(params.get('instructions') or params.get('text') or '').strip(), actor)
         return _lit(store, tid, table, on, b, note=note, day=said_day(params.get('until')) if b == 'defer' else None)
     if on and kind in ON_TASK:
         said = f"Brought up {_where(on) or 'it'} - {ON_TASK[kind]}."
@@ -4171,7 +4239,8 @@ AUTO = ('close', 'stop_agent', 'continue',                              # settle
         'answer_agent',
         'watch',                                                        # ...and Watch it, which sends nothing and closes nothing (watch.py)
         'prepare')                                                      # ...and Prepare's press: a researcher that writes to nobody
-# the verbs that start or resume an agent: a press of their button runs them, typed words only ever PROPOSE them
+# the verbs that start or resume an agent: a press of their button runs them; typed words PROPOSE them - save a hand-off (AGENT_PRESS), which
+# the words press since 2026-11-02
 AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue', 'prepare')
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
@@ -5725,7 +5794,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # ...but "create an agent to research X" over a card with no message behind it (a meeting, an idea) is a NEW job in the
     # owner's words, not the card's hand-off - it still comes back as a proposal for his yes (2026-10-02: the meeting lost
     # its Send to agent button, and the typed road must not go with it)
-    own_job = verb in ('coding_agent', 'regular_agent') and str((decision or {}).get('text') or '').strip() and not (target_item or {}).get('mid')
+    # ...a TASK on the table is never one of those: its own Send to agent takes the words as what to do first (_start_agent, 2026-11-02)
+    own_job = verb in ('coding_agent', 'regular_agent') and str((decision or {}).get('text') or '').strip() and not (target_item or {}).get('mid') \
+        and not ((target_item or {}).get('tid') and routes())
     if decision and verb and target_item and not elsewhere and not own_job and not is_button(store, target_item, verb):
         if not reply: reply, options = _in_words(llm, system, table, text, verb)
         decision = verb = None
@@ -5761,6 +5832,13 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # keep goes into the memory, LEARNED.md (memory.remember)
     if decision and verb in PROPOSALS and routes():
         if verb == 'answer_agent' and target_item and target_item.get('tid'):
+            # ...and to an agent at work on a task, not one that asked, they are its next prompt (_tell_now)
+            if target_item.get('kind') != 'agent':
+                try: return _tell_now(store, tid, int(target_item['tid']), decision.get('text') or text, actor)
+                except CallMiss as e:
+                    say_ = f"That did not reach the agent on {task_ref(int(target_item['tid']))} - {str(e).split(' - say so')[0].rstrip('.')}."
+                    rec('assistant', say_)
+                    return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
             return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor)
         if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
@@ -5771,7 +5849,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             # ...a put-down (Mark done, Not ours just this once) is pressed, not lit (_press_or_light) - on the item IN FRONT of the owner only.
             # One named off the table is brought up with its button lit: "walk me through my tasks" was narrated in words with no card,
             # and the next "mark this done" closed TQ-1141, a task never on screen, because the model had named it (2026-10-26)
-            try: return (_lit(store, tid, item, target_item, verb) if elsewhere and verb in PUT_DOWN else
+            # ...and an agent start is pressed too, on the item in front of the owner (AGENT_PRESS, the owner 2026-11-02); one named off the
+            # table comes up with its Send to agent lit, as a put-down does
+            try: return (_lit(store, tid, item, target_item, verb) if elsewhere and (verb in PUT_DOWN or verb in AGENT_PRESS) else
+                         _start_agent(store, tid, item, target_item, verb, str(decision.get('text') or '').strip(), actor) if verb in AGENT_PRESS else
                          _press_or_light(store, tid, item, target_item, verb, str(decision.get('text') or '').strip() if verb == 'continue' else '', actor))
             except CallMiss:                                           # no such button on its row: the model says so in words
                 # ...except a report asked to run again: Run it again is drawn only on a failed run, and Run now is a page's - its row on
@@ -5796,7 +5877,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # send, a rule or a verb aimed elsewhere still waits for the button.
         # ...but never an agent: typed words that would start or resume one wait for the owner's press (the owner, 2026-10-01 -
         # "what should I do next?" over an Advisor idea started a researcher; it had earlier asked for a clear ask to start at once)
-        if verb in AUTO and verb not in AGENT_STARTS and not elsewhere:
+        # ...save a hand-off since 2026-11-02 ("why can't assistant start an agent. i'm okay with that"): the words are the press, unless a
+        # coding job's checkout is still to pick, which waits for the pick
+        if verb in AGENT_PRESS and not elsewhere and (prop.get('clear') or verb == 'regular_agent' or prop.get('kind') != 'task.create_from_text'):
+            prop = _starts_now(prop, _where(target_item or {}))
+        elif verb in AUTO and verb not in AGENT_STARTS and not elsewhere:
             # ...and a run at once still says what it could not do ("nothing to wrap")
             prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(target_item or {})}." + (f" {prop['note']}" if prop.get('note') else ''))
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],

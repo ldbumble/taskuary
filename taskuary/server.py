@@ -1680,6 +1680,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
         if out['state'] == 'no_request': return waitroom_add(tid, {'text': said})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
         return out
+    # THE OWNER'S NEXT PROMPT TO AN AGENT AT WORK (the owner, 2026-11-02: "send a new prompt into the general/coding agent"): the page's
+    # Tell the agent - typed in now when it is parked at its prompt, else held in the waiting room and typed at its next stop
+    if kind == 'agent.tell':
+        said = ' '.join(str(p.get('text') or '').split())
+        if not said: raise ValueError('say what to tell the agent')
+        return waitroom_add(tid, {'text': said})
     # the page's "Stop and save" (TasksView.wrapUp posts close=False): the agent ends, the task stays
     if kind == 'agent.stop': return _wrap_task(tid, False) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun':

@@ -11,7 +11,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 |---|---|---|
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
-| **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
+| **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.tell(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete |
@@ -410,12 +410,21 @@ Pick up the agent's own last session on a task where it left off, coding or not.
 
 ### `agent.answer`
 
-Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is the owner's call, never this.
+Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so: agent.continue or dispatch.prepare starts one. An agent still WORKING, not asking, takes words as agent.tell.
 
 - `text`
 - `ref` (optional) - its task when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>
+
+### `agent.tell`
+
+Tell the agent WORKING on a task something new, as the owner's next prompt ("tell the agent to use the main branch", "also check the March file"). It goes in when the agent stops at its prompt - never mid-step. With no agent at work nobody hears it: say so.
+
+- `text` - the words, as the owner would type them
+- `ref` (optional) - the task (TQ-0123), when it is not the one on the table
+
+<p class="runs">Runs at once and says what it changed.</p>
 
 ### `agent.stop`
 

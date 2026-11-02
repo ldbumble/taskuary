@@ -56,8 +56,14 @@ PURPOSE = {
                                  "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
                                  "task.complete (Mark done) is the close"),
     'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
-                                 'agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is '
-                                 'the owner\'s call, never this'),
+                                 'agent on the task (TASK NOW says so) nobody hears it - say so: agent.continue or dispatch.prepare starts '
+                                 'one. An agent still WORKING, not asking, takes words as agent.tell'),
+    # A NEW PROMPT FOR THE AGENT AT WORK (the owner, 2026-11-02: "it should be able to, like send a new prompt into the general/coding
+    # agent"): the page's Tell the agent (waitroom.add) - typed in at once when it is parked at its prompt, else at its next stop
+    'agent.tell':               ('tell the agent WORKING on a task something new, as the owner\'s next prompt ("tell the agent to use the '
+                                 'main branch", "also check the March file") - `text`: the words, as the owner would type them; `ref` when '
+                                 'it is not the one on the table. It goes in when the agent stops at its prompt - never mid-step. With no '
+                                 'agent at work nobody hears it: say so'),
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which. Several at once is agents.stop",
     'report.rerun':             'run that report again',
     # THE ASSISTANT EDITS THE MEMORY (slice 7, approved by the owner 2026-10-25): "Gail moved to Ops" is a fact about how the owner works,
@@ -237,7 +243,7 @@ PURPOSE = {
 # (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
 # ...and a fact about the owner's own world with no button and no page to bring up: kept at once and said (concierge._relate)
 # ...and how the owner works with them (slice 7, 2026-10-25): a line taken out of the memory is kept and said the same way (concierge._memory)
-KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss'})
+KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss', 'agent.tell'})
 # ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
 SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'agents.stop'})
 # ...and the acts whose button is a page's alone: the page comes up at the thing, the owner presses there
@@ -349,7 +355,7 @@ def block(store=None) -> str:
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
-        'WHERE THINGS ARE - look before you guess (the tool, and its params):',
+        'WHERE THINGS ARE - look before you guess (tool, params):',
     ]
     # ...as the tool and its params, not a whole CALL line apiece: the same wrapper seventeen times was 500 characters of the index (2026-10-28)
     for said, kind, params in WHERE:
@@ -508,7 +514,7 @@ BUCKETS = (
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
     ('agents', "a task's agent; where work belongs",
-     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'agents.stop', 'routing.remember', 'task.ask_agent')),
+     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.tell', 'agent.stop', 'agents.stop', 'routing.remember', 'task.ask_agent')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'meeting.new', 'task.setup')),
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),

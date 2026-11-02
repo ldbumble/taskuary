@@ -60,7 +60,10 @@ class CleanTests(unittest.TestCase):
                   {'id': 'x', 'label': 'Anything', 'send': True}, {'id': 'accept_invite', 'label': 'Accept'}):
             self.assertTrue(pageview.is_send(b), b)
         for b in ({'id': 'test', 'label': 'Test'}, {'id': 'row:done', 'label': 'Mark done'}, {'id': 'save', 'label': 'Save'},
-                  {'id': 'sync', 'label': 'Sync'}, {'id': 'row:remind', 'label': 'Remind me'}):
+                  {'id': 'sync', 'label': 'Sync'}, {'id': 'row:remind', 'label': 'Remind me'},
+                  # ...and the agent starts, which the Assistant presses when told to (the owner, 2026-11-02) - "Send to coding agent" was
+                  # read as an outward send and only lit
+                  {'id': 'new:start', 'label': 'Send to agent'}, {'id': 'new:start', 'label': 'Send to coding agent'}):
             self.assertFalse(pageview.is_send(b), b)
 
 
@@ -74,6 +77,15 @@ class TakeTests(unittest.TestCase):
         self.assertEqual(ops[0], {'op': 'set', 'field': 'title', 'value': 'Quote sent'})
         self.assertEqual(ops[1], {'op': 'press', 'button': 'row:done'})
         self.assertEqual(ops[2]['op'], 'point'); self.assertTrue(ops[2]['send']); self.assertEqual(ops[2]['target'], 'row:approve')
+
+    def test_start_it_on_a_filled_new_card_presses_its_agent_button_and_a_send_still_points(self):
+        # the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that" - New's own start is pressed; an email's Send is not
+        for start in ('Send to agent', 'Send to coding agent'):
+            v = pageview.clean({'area': 'new', 'fields': [{'key': 'about', 'label': 'What should it do?', 'value': 'fix the login crash'}],
+                                'buttons': [{'id': 'new:start', 'label': start}, {'id': 'new:send', 'label': 'Send'}]})
+            _, ops = pageview.take('\n'.join([view_line(op='press', button=start), view_line(op='press', button='Send')]), v)
+            self.assertEqual(ops[0], {'op': 'press', 'button': 'new:start'}, start)
+            self.assertEqual((ops[1]['op'], ops[1]['target']), ('point', 'new:send'))
 
     def test_a_secret_is_never_set(self):
         _, ops = pageview.take(view_line(op='set', field='bot token (xoxb-…)', value='xoxb-1'), pageview.clean(SLACK))

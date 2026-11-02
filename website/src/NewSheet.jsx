@@ -195,7 +195,8 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
 // `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid,
+// `start`: the Assistant pressed the agent's Send to agent for the owner - the card presses it once it can go (concierge._new)
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid, start = false,
   initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
@@ -371,6 +372,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
     : kind === "playbook" ? "Set up with AI" : "Note it";
+  // THE ASSISTANT PRESSED IT (`start`, concierge._new - the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"):
+  // an agent's job it wrote here is started by this card's own button, once, the moment the card can go - the same press the owner's is
+  const autoPressed = useRef(false);
+  useEffect(() => {
+    if (!start || autoPressed.current || kind !== "agent" || !canGo || !agentsRead || busy) return;
+    autoPressed.current = true; submit();
+  }, [start, kind, canGo, agentsRead, busy, submit]);
 
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")

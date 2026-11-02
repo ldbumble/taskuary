@@ -27,8 +27,10 @@ OPEN_KEYS = ('section', 'open', 'knob', 'connector', 'step', 'tab', 'query')
 # AN OUTWARD SEND, by its verb (buttons.json) or by its words: the row's Send is `approve`, an invite's answer sends one, a hand-off sends
 # the person a mail. The page marks its own (data-tq-send); this list is the server's check when it did not
 SEND_VERBS = frozenset({'approve', 'send', 'accept_invite', 'decline_invite', 'propose_time', 'share', 'forward', 'send-handoff', 'email'})
-# ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done
-_SEND_WORDS = re.compile(r'^\s*(send(?! to (an? )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b', re.I)
+# ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done - and the Assistant's
+# to press when the owner says so (the owner, 2026-11-02: "why can't assistant start an agent"). "Send to coding agent" too: it was
+# read as a send, so "have a coding agent fix this" on New only lit it
+_SEND_WORDS = re.compile(r'^\s*(send(?! to (an? )?((coding|general) )?agent)|approve|post|forward|reply all|email (it|them|him|her)|share by email)\b', re.I)
 _SECRET_WORDS = re.compile(r'(password|passphrase|secret|token|api[ _-]?key|private key|access key|client key|xox[bp]-)', re.I)
 REFUSED_SECRET = 'is yours to paste into its field - I never see or type a secret'
 SENT_IS_YOURS = 'sends something out - that press is yours, so it is lit for you'
@@ -100,7 +102,7 @@ def clean(view) -> dict | None:
 
 GUIDE = ('WHAT IS ON THE SCREEN IS YOURS TO WORK, as the owner would - only because they asked you. To act on it, end your answer with one '
          'line per act, each exactly:\nVIEW: {"op": "set", "field": "<key or label>", "value": "<text>"}  - fill a box (on/off for a '
-         'switch)\nVIEW: {"op": "press", "button": "<id or label>"}  - press a button: Save, Test, Sync, Mark done, Remind me...\n'
+         'switch)\nVIEW: {"op": "press", "button": "<id or label>"}  - press a button: Save, Test, Sync, Mark done, Remind me, Send to agent when they say start it...\n'
          'VIEW: {"op": "point", "target": "<field or button>"}  - light it for the owner\nVIEW: {"op": "open", "area": "settings|'
          'connections|reports|hub|board|search", "section": "...", "open": "...", "knob": "...", "query": "..."}  - bring up another page '
          'first (Settings: section "config", open the group, knob the setting\'s key - settings.list names them; the Hub: section the topic, '

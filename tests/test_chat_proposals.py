@@ -77,9 +77,10 @@ class ProposalTests(unittest.TestCase):
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['status']), ('task.create_from_message', mid, 'coding', 'proposed'))
         self.assertEqual(p['label'], buttons.label('coding_agent')); self.assertIn(f'TQ-{tid:04d}', p['summary'])
-        spawn.assert_not_called()                                                   # nothing ran on the words
+        spawn.assert_not_called()                                                   # nothing ran inside the turn itself
         self.assertEqual(s.get_task(tid)['Status'], 'open')
-        self.assertIn('nothing happens until you say yes', out['say'].lower())
+        # ...a hand-off the phone runs on the words, its own yes (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that")
+        self.assertTrue(p.get('auto')); self.assertNotIn('nothing happens until you say yes', out['say'].lower())
         self.assertFalse(hasattr(concierge, 'decide_words'))                        # the phrase table is gone
 
     def test_confirming_runs_it_once_and_a_second_click_is_the_same_receipt(self):

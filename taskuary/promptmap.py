@@ -19,7 +19,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     """(label, source, text) for every part of the triage prompt, in prompt order."""
     from .ingest import owner_addresses, relevant_notes
     from . import learned_cut
-    from .triage import INTENT_SYSTEM, addressed_to_you, sender_body
+    from .triage import INTENT_SYSTEM, SOUL_CHARS, addressed_to_you, sender_body
     m = {'from_email': msg.get('FromEmail'), 'subject': msg.get('Subject'), 'body': msg.get('BodyText'), 'own_text': msg.get('OwnText'),
          'source_name': msg.get('SourceName'), 'channel': msg.get('Channel')}
     doc = store.doc('triage') or ''
@@ -31,7 +31,7 @@ def _blocks_triage(store, msg: dict, mid: int) -> list:
     mine = owner_addresses(store)
     how = addressed_to_you(m, mine)
     out = [('the classifier instructions', 'TRIAGE.md' if doc.strip() else 'triage.INTENT_SYSTEM (the doc is blank)', base)]
-    if soul: out.append(("the operator's document", 'SOUL.md', soul[:2500]))
+    if soul: out.append(("the operator's document", 'SOUL.md', soul[:SOUL_CHARS]))
     if learned: out.append(('the learned profile', 'LEARNED.md "What you care about" and the people on this mail (in-use lines, closest to this sender first, within budget)', learned))
     if notes:
         out.append(('standing notes that apply to THIS message', f'LEARNED.md lines about it - {len(notes)} of '

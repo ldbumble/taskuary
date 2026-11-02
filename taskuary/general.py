@@ -619,8 +619,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # SOUL.md stays with triage (PW-184); the worker reads AGENT.md - the rules both kinds share, with the
     # approval boundaries SOUL.md used to carry - and, because this work is writing, the assistant's voice
     from . import brief as _brief
-    from .terminal import with_fence_rule
-    agent_rules = with_fence_rule(_cut(_brief.rules(store, 'agent', 4_000), 4_000))      # ...and the standing rules an older copy lacks
+    from .terminal import AGENT_CHARS, DOC_CHARS, with_fence_rule
+    # AGENT_CHARS as on the coding road: at 4,000 here AGENT.md's last ~1,300 characters never reached a general worker (2026-11-02)
+    agent_rules = with_fence_rule(_cut(_brief.rules(store, 'agent', 10**9), AGENT_CHARS))      # ...and the standing rules an older copy lacks
     from . import counsel as _counsel
     counsel = _counsel.check_budget(store, 'counsel', _counsel.for_worker(store))   # the voice, whole (PW-258)
     # What is CERTIFIED about the company's own systems. Without it the assistant writes a
@@ -665,7 +666,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if role:
         from .agents import ensure_profile_document
         doc = ensure_profile_document(store, role)
-        profile_rules = _brief.rules(store, doc, 4_000)
+        profile_rules = _cut(_brief.rules(store, doc, 10**9), DOC_CHARS)      # THE profile number (doclimits), cut out loud
         if profile_rules: system += f'\n\nPROFILE RULES ({doc.upper()}.md)\n{profile_rules}'
     # the procedure triage selected for this job rides here exactly as it rides in a coding brief
     # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)

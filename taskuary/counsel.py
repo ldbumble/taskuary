@@ -204,7 +204,9 @@ def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 def for_worker(store) -> str: return pick(store, VOICE_HEAD)
 
-BUDGET = 8_000     # a document past this is still read whole - but the owner is told, in the audit log and the server log
+# ...and the Docs editor's meter shows it (doclimits). 10,000 since 2026-11-02: the shipped document measured 7,994 of 8,000, so the
+# meter would have stood amber on a fresh install for a document nobody had touched.
+BUDGET = 10_000    # a document past this is still read whole - but the owner is told, in the audit log and the server log
 
 def check_budget(store, name: str, text: str) -> str:
     """Explicit size handling (PW-258): warn and audit, never slice - a silent cut dropped the last 727

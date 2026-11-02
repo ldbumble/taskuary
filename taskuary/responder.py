@@ -14,6 +14,9 @@ written here either way, so the sender always hears one voice.
 """
 import re
 from loguru import logger
+from .triage import SOUL_CHARS
+
+STYLE_CHARS = 2500      # STYLE.md as a draft reads it (style_doc); the Docs editor shows this number (doclimits)
 
 
 def owner_of(store, soul: str = None) -> str:
@@ -505,9 +508,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
               # model does not read its own biography as notes about somebody else.
               + (f"\n\nYOUR OWN document - your voice, your rules, your responsibilities. Where it "
                  f"says you work for {owner}, it is addressing an agent on other tasks; on this "
-                 f"one it is describing you:\n{soul[:4000]}" if soul else '')
+                 f"one it is describing you:\n{soul[:SOUL_CHARS]}" if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
-                 f'this:\n{sty[:2500]}' if sty else ''))
+                 f'this:\n{sty[:STYLE_CHARS]}' if sty else ''))
     if pressed and not nudge: system += ASKED
     # LEARNED.md is triage's document (PW-058): what deserves a task is not how to write a reply
     system += voice_line(store, [last.get('FromEmail')])
@@ -681,9 +684,9 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
               # model does not read its own biography as notes about somebody else.
               + (f"\n\nYOUR OWN document - your voice, your rules, your responsibilities. Where it "
                  f"says you work for {owner}, it is addressing an agent on other tasks; on this "
-                 f"one it is describing you:\n{soul[:4000]}" if soul else '')
+                 f"one it is describing you:\n{soul[:SOUL_CHARS]}" if soul else '')
               + (f'\n\nYour own style, distilled from mail you have actually sent - write like '
-                 f'this:\n{sty[:2500]}' if sty else ''))
+                 f'this:\n{sty[:STYLE_CHARS]}' if sty else ''))
     system += voice_line(store, [m.get('FromEmail')])                # explicit writing instructions are STYLE.md's Owner notes (PW-060)
     user = (f"Subject: {m.get('Subject') or ''}\nFrom: {m.get('FromName')} <{m.get('FromEmail')}>\n\n"
             f"{sender_body(str(m.get('BodyText') or ''), m.get('OwnText'), budget=EXCHANGE_BUDGET)[0]}")

@@ -8790,8 +8790,10 @@ def get_doc(name: str):
     name = hub_agents.profile_document(store, name)
     content = _heal_blank_doc(name)
     if (who := _named_owner(name)): content = render_doc(content, who)
+    # ...and how much of it reaches the model that reads it: the editor's meter counts what is typed against the prompt's own number
+    from . import doclimits
     return {'name': name, 'content': content, 'rendered': store.doc(name) or '',
-            'owner': store.owner()}
+            'owner': store.owner(), 'limit': doclimits.limit(store, name)}
 
 
 # LEARNED.md IS EDITED WITH THE NAME IN IT (the setup sweep, 2026-10-28): its passes write {{owner_first}} where the name goes, and the

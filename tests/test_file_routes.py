@@ -182,6 +182,36 @@ class FileRoutesTests(unittest.TestCase):
         self.assertTrue(fake.settings['ALLOW_DOWNLOADS'])
         self.assertFalse(desktop.allow_downloads(type('old', (), {})))       # an old pywebview has no switch, and downloads already
 
+    def test_a_desktop_download_lands_in_downloads_under_a_free_name(self):
+        "Download in the window saves into the Downloads folder and says the name; a second copy is ' (1)', a name never picks the folder."
+        import http.server, json as _json, tempfile, threading
+        from taskuary import desktop
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_GET(self):
+                if self.path.startswith('/api/task-outputs/7/chart.png'):
+                    self.send_response(200); self.send_header('Content-Disposition', 'attachment; filename="../chart.png"'); self.end_headers()
+                    self.wfile.write(b'png-bytes')
+                else:
+                    body = _json.dumps({'detail': 'That file is not in this task any more.'}).encode()
+                    self.send_response(404); self.send_header('Content-Type', 'application/json'); self.end_headers(); self.wfile.write(body)
+        srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        base = f'http://127.0.0.1:{srv.server_address[1]}'
+        with tempfile.TemporaryDirectory() as d:
+            dl = Path(d) / 'Downloads'
+            got = desktop.save_download(f'{base}/api/task-outputs/7/chart.png?download=true&token=t', folder=dl)
+            self.assertEqual((got['name'], got['folder']), ('chart.png', 'Downloads'))
+            self.assertEqual((dl / 'chart.png').read_bytes(), b'png-bytes')
+            self.assertEqual(desktop.save_download(f'{base}/api/task-outputs/7/chart.png', folder=dl)['name'], 'chart (1).png')
+            self.assertEqual(sorted(p.name for p in Path(d).rglob('*') if p.is_file()), ['chart (1).png', 'chart.png'])
+            self.assertEqual(desktop.save_download(f'{base}/api/task-outputs/7/gone.png', folder=dl), {'error': 'That file is not in this task any more.'})
+            self.assertIn('error', desktop.save_download('https://files.example/chart.png', folder=dl))      # only this machine's server
+            self.assertIn('error', desktop.save_download('file:///etc/passwd', folder=dl))
+        self.assertEqual(desktop.safe_name('..\\..\\x:y.txt'), 'x_y.txt')
+        self.assertEqual((desktop.safe_name('..'), desktop.safe_name('')), ('download', 'download'))
+
 
 if __name__ == '__main__':
     unittest.main()

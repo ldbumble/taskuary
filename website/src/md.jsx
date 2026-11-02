@@ -23,7 +23,7 @@ const A = ({ href, children, onTask }) => {
   const file = !m && !page && /^\/api\/task-(?:outputs|artifacts)\/\d+/.test(href || "");
   // ...SAVED where it is (Attachments.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file
   // moved or deleted since the link was written opened a raw 404 there - now it is a line beside the link
-  const [err, setErr] = React.useState(""), raw = href;
+  const [err, setErr] = React.useState(""), [saved, setSaved] = React.useState(""), raw = href;
   if (file) href = attUrl({ url: href }, true);
   return (<>
     <a href={href} target={m || page || file ? undefined : "_blank"} data-tq-file-link={file ? "" : undefined} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
@@ -31,11 +31,12 @@ const A = ({ href, children, onTask }) => {
       onClick={(e) => {
         if (m) { e.preventDefault(); if (onTask) onTask(Number(m[1])); else openAppLink(`task=${m[1]}`); }
         else if (page) { e.preventDefault(); openAppLink(page); }
-        else if (file) { e.preventDefault(); setErr(""); saveFile({ url: raw }).catch((x) => setErr(x.message)); }
+        else if (file) { e.preventDefault(); setErr(""); setSaved(""); saveFile({ url: raw }).then(setSaved, (x) => setErr(x.message)); }
       }}>
       {m && !bare ? `open TQ-${String(m[1]).padStart(4, "0")} →` : children}
     </a>
     {err && <span data-tq-file-error="" style={{ color: DIM, fontWeight: 400 }}> — {err}</span>}
+    {saved && <span data-tq-file-saved="" style={{ color: DIM, fontWeight: 400 }}> — {saved}</span>}
   </>);
 };
 

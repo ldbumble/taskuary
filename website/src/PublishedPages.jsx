@@ -131,7 +131,7 @@ function Preview({ page }) {
 // a file the agent made: its name and kind, Preview where it has one, and Download - or, gone from the folder, says so
 const sizeOf = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 function OutputFile({ file: p, open, onToggle, verb = "" }) {
-  const can = !!p.preview && !p.missing, [err, save] = useSave();
+  const can = !!p.preview && !p.missing, [err, save, saved] = useSave();
   return (
     <div className="tq-published-page" data-tq-output={p.path}>
       <div className="tq-published-row">
@@ -146,6 +146,7 @@ function OutputFile({ file: p, open, onToggle, verb = "" }) {
       </div>
       {p.note && !p.missing && <div className="tq-published-note">{p.note}</div>}
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
+      {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
       {open && can && <Preview page={p} />}
     </div>
   );
@@ -198,7 +199,7 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
 
 // a page the agent published or showed: its name, its Open where a copy was kept, Download, and its claude.ai link
 function PageRow({ p, open, onToggle, verb }) {
-  const [err, save] = useSave();
+  const [err, save, saved] = useSave();
   return (
     <div className="tq-published-page">
       <div className="tq-published-row">
@@ -218,6 +219,7 @@ function PageRow({ p, open, onToggle, verb }) {
         )}
       </div>
       {err && <div className="tq-published-note" data-tq-file-error="">{err}</div>}
+      {saved && <div className="tq-published-note" data-tq-file-saved="">{saved}</div>}
       {open && p.url && <Preview page={p} />}
     </div>
   );

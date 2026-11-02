@@ -27,8 +27,17 @@ export const fileError = async (e, fallback) => {
 // SAVE A FILE, never navigate to it. A Download that was a plain link took the window to the file's address: a file moved or deleted
 // left the owner on a raw JSON 404 - and the desktop window has no Back. The server is asked first (HEAD); a file that is there is
 // saved by a link with `download`, so the page stays where it is; one that is not throws the server's own reason for the page to say.
-export const saveFile = async (a) => {
-  const href = attUrl(a, true);
+// ...and in the desktop window it lands in the computer's Downloads folder, said in words (desktop.save_download): WebView2's own
+// download opened a Save As box wherever it liked (the owner, 2026-11-02: "the download should go to the local computer download").
+// Resolves to the line to show once saved there, or "" when the browser's own download took it.
+export const savedLine = (r) => r?.name ? `Saved to ${r.folder || "Downloads"} as ${r.name}` : "";
+export const saveFile = async (a, w = typeof window === "undefined" ? null : window) => {
+  const href = attUrl(a, true), bridge = w?.pywebview?.api;
+  if (typeof bridge?.save_download === "function" && !href.startsWith("data:")) {
+    const r = await bridge.save_download(new URL(href, w.location.href).href);
+    if (!r?.name) throw new Error(r?.error || "This file could not be saved - try again.");
+    return savedLine(r);
+  }
   if (!href.startsWith("data:") && typeof api.head === "function") {
     // no-cache: the browser answered a HEAD from the copy a preview had fetched, so a file deleted since was still "there"
     try { await api.head(a.url, { headers: { "Cache-Control": "no-cache" } }); }
@@ -44,12 +53,14 @@ export const saveFile = async (a) => {
   // `download` empty: the server's Content-Disposition names it (a published page gets its .html there)
   el.href = href; el.download = ""; el.rel = "noopener"; el.style.display = "none";
   document.body.appendChild(el); el.click(); el.remove();
+  return "";
 };
 
-// [error, save]: a Download's press, and the line it leaves when the file is not there (cleared by the next press)
+// [error, save, saved]: a Download's press, the line it leaves when the file is not there, and where the desktop put it (both cleared
+// by the next press)
 export const useSave = () => {
-  const [err, setErr] = useState("");
-  return [err, (a) => { setErr(""); saveFile(a).catch((e) => setErr(e.message)); }];
+  const [err, setErr] = useState(""), [saved, setSaved] = useState("");
+  return [err, (a) => { setErr(""); setSaved(""); saveFile(a).then(setSaved, (e) => setErr(e.message)); }, saved];
 };
 
 const LOGO = 48 * 1024;   // a company logo in a signature runs 20-40 KB (24 KB let a 24.4 KB one draw as a picture)
@@ -97,7 +108,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
   const [big, setBig] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [saveErr, save] = useSave();
+  const [saveErr, save, saved] = useSave();
   const load = () => api.get(`/api/messages/${messageId}/attachments`)
     .then(({ data }) => setItems(data.data || [])).catch(() => setItems([]));
   useEffect(() => { setItems(null); setBig(null); setErr(""); load(); }, [messageId]);
@@ -194,6 +205,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
           ))}
         </Box>
         {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saveErr}</Typography>}
+        {saved && <Typography variant="caption" data-tq-file-saved="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saved}</Typography>}
         </Box>
       )}
       {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline */}

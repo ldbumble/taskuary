@@ -26,8 +26,9 @@ from .workstreams import from_menu
 # (The judgement that used to live here - "prefer fyi", "this is fyi" - moved to the document 2026-10-09: the owner
 # asked why triage still had rules in code, and the answer was that nobody had moved them.)
 FIELDS = {
-    'addressed_to': "addressed_to names who the mail is put to when it is not the owner - the To line, by name: the people its "
-                    "\"you\" means.",
+    'addressed_to': "addressed_to is the To line by name, the owner as \"you\" - who the mail is put to; copied is the Cc line the "
+                    "same way. A name the message opens with or puts its question to is matched against them.",
+    'copied': "copied is the Cc line by name, the owner as \"you\" - who is only watching.",
     'others_replied': "others_replied names people other than the owner and the sender who have SENT a message on this thread; "
                       "last_on_thread is whoever spoke most recently.",
     'exchange': "exchange is the recent back-and-forth on this thread or chat room, oldest first, each message's own words once, "

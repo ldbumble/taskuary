@@ -617,6 +617,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     except Exception as e: logger.debug(f'correction evidence skipped: {e}')
     thread = others_on_thread(store, msg, mine)
     if (put_to := addressed_to(store, msg, me)): thread = {**thread, 'addressed_to': put_to}
+    if (cc := copied(store, msg, me)): thread = {**thread, 'copied': cc}
     # ...and who the sender IS to the owner - their manager, someone reporting to them, the person who owns payroll (orgchart.py): a
     # request from the owner's own manager read exactly like anybody's on the To line (the org-chart gap, 2026-10-22)
     try:
@@ -1747,11 +1748,24 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
 def addressed_to(store, msg: dict, me=()) -> list:
     """WHO the mail is put to, by name, when it is not the owner (2026-10-22): told only "you are copied", the model read the body's
     "can you fix these" as the owner's and opened a task on a question put to the colleague on the To line. Names as this thread
-    or the people list know them, never an address - an unknown one is "someone at <their organisation's domain>"."""
-    to = [str(a).strip().lower() for a in msg.get('to') or [] if a]
-    mine = {str(a).lower() for a in me if a}
-    if not to or set(to) & mine: return []
-    return names_on_thread(store, msg, to)[:5]
+    or the people list know them, never an address - an unknown one is "someone at <their organisation's domain>".
+    ...and the WHOLE To line, the owner as "you", whenever anyone else is on it (2026-11-02): with the owner on To beside two
+    colleagues it said nothing at all, so a mail opening "<colleague's surname>, let me know if you want a call" was read
+    against only `addressed_to_you: "to"` and became a reply task for the owner - nothing tied that name to a person on the mail."""
+    return lines_by_name(store, msg, msg.get('to'), me)[:6]
+
+
+def copied(store, msg: dict, me=()) -> list:
+    """The Cc line the same way - who is only watching, the owner as "you" - when anyone but the owner is on it."""
+    return lines_by_name(store, msg, msg.get('cc'), me)[:6]
+
+
+def lines_by_name(store, msg: dict, addrs, me=()) -> list:
+    """One recipient line by name, the owner "you" first; [] when nobody but the owner is on it (addressed_to_you says that)."""
+    xs, mine = [str(a).strip().lower() for a in addrs or [] if a], {str(a).lower() for a in me if a}
+    if not set(xs) - mine: return []
+    rest = [x for x in xs if x not in mine]
+    return (['you'] if len(rest) < len(xs) else []) + names_on_thread(store, msg, rest)
 
 
 def names_on_thread(store, msg: dict, addrs) -> list:

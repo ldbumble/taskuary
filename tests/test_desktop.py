@@ -132,3 +132,27 @@ class BrowserWaitsForThePortTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_a_right_click_on_a_typo_reaches_the_web_views_own_menu_again():
+    """TQ-1251: "catching the typos, but not allowing me to edit them". pywebview keeps the menu with the suggestions off outside
+    debug; on Windows the ready handler now turns it on after pywebview's own settings, on a Mac WebKit's menu is no longer emptied."""
+    import types
+    from unittest import mock
+    settings = types.SimpleNamespace(AreDefaultContextMenusEnabled=False)
+    class EdgeChrome:
+        def on_webview_ready(self, sender, args): settings.AreDefaultContextMenusEnabled = False      # what pywebview does
+    ec = types.SimpleNamespace(EdgeChrome=EdgeChrome)
+    with mock.patch.object(desktop.sys, 'platform', 'win32'), mock.patch.dict('sys.modules', {'webview.platforms.edgechromium': ec,
+                                                                                             'webview.platforms': types.SimpleNamespace(edgechromium=ec)}):
+        assert desktop.allow_text_menus() == 'windows' and desktop.allow_text_menus() == 'windows'
+    EdgeChrome().on_webview_ready(types.SimpleNamespace(CoreWebView2=types.SimpleNamespace(Settings=settings)), None)
+    assert settings.AreDefaultContextMenusEnabled is True
+    class Host:
+        def willOpenMenu_withEvent_(self, menu, event): menu.removeAllItems()
+    cocoa = types.SimpleNamespace(BrowserView=types.SimpleNamespace(WebKitHost=Host))
+    with mock.patch.object(desktop.sys, 'platform', 'darwin'), mock.patch.dict('sys.modules', {'webview.platforms.cocoa': cocoa,
+                                                                                              'webview.platforms': types.SimpleNamespace(cocoa=cocoa)}):
+        assert desktop.allow_text_menus() == 'mac'
+    menu = mock.Mock(); Host().willOpenMenu_withEvent_(menu, None); menu.removeAllItems.assert_not_called()
+    with mock.patch.object(desktop.sys, 'platform', 'linux'): assert desktop.allow_text_menus() == ''

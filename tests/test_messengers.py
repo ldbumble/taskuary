@@ -117,6 +117,33 @@ class WhatsAppTests(unittest.TestCase):
         c2 = s.get_connector_by_type('whatsapp')
         self.assertEqual(json.loads(c2['ConfigJson'])['wa_seq'], 7)
 
+    def test_a_restarted_bridge_loses_nothing_that_came_in_before_the_next_poll(self):
+        """TQ-1251 ("whatsapp should work and not skip messages"). The bridge numbers what it holds from 0 again after a restart, and
+        the poll asked for "after" its old number: nothing that arrived between the restart and the next poll was ever read - the
+        burst WhatsApp hands over on reconnect included. A new start-up id (boot), or a number that went backwards, reads it all."""
+        def bridge(boot, held):
+            def _wa(c_, p, body=None):
+                if not p.startswith('/messages'): return {}
+                after = int(p.split('after=')[1])
+                return {'seq': len(held), **({'boot': boot} if boot else {}), 'messages': [m for m in held if m['seq'] > after]}
+            return _wa
+        held = [{'seq': 1, 'id': 'r1', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'the export failed again', 'ts': 1755700000},
+                {'seq': 2, 'id': 'r2', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'and payroll is due today', 'ts': 1755700001}]
+        for was, now in ((('b1', 40), 'b2'), ((None, 40), None), (('b1', 1), 'b2')):        # new boot; an older bridge; a boot that passed the old number
+            s, c = self._store()
+            s.set_connector_config(c['ConnectorId'], {**json.loads(c['ConfigJson'] or '{}'), 'wa_seq': was[1], **({'wa_boot': was[0]} if was[0] else {})})
+            c = s.get_connector_by_type('whatsapp', with_secret=True)
+            with mock.patch.object(messengers, '_wa', bridge(now, held)):
+                self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 2, (was, now))
+            cfg = json.loads(s.get_connector_by_type('whatsapp')['ConfigJson'])
+            self.assertEqual((cfg['wa_seq'], cfg.get('wa_boot')), (2, now))
+        # the same bridge, still running: only what is new is asked for and read
+        s, c = self._store()
+        s.set_connector_config(c['ConnectorId'], {**json.loads(c['ConfigJson'] or '{}'), 'wa_seq': 1, 'wa_boot': 'b2'})
+        c = s.get_connector_by_type('whatsapp', with_secret=True)
+        with mock.patch.object(messengers, '_wa', bridge('b2', held)):
+            self.assertEqual(messengers.poll_whatsapp(s, c, s.list_sources(), llm=None), 1)
+
     def test_an_idle_check_in_leaves_the_sequence_unwritten(self):
         # the bridge answers ~2/s with nothing new: rewriting the same seq every time moved the rail and emptied the pile
         s, c = self._store()

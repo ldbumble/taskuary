@@ -40,6 +40,8 @@ const CODE = crypto.createHash("sha1").update(Buffer.concat(fs.readdirSync(path.
   .map((f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), f))))).digest("hex").slice(0, 12);
 
 let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = "", seq = 0;
+// a new id each start: `seq` counts from 0 again, and Taskuary (messengers.poll_whatsapp) reads all this one holds rather than "after" the last one's number
+const BOOT = crypto.randomUUID();
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
 const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
 const lids = createLidMap();                 // phone <-> LID, so a person picked by number is heard when WhatsApp writes by LID
@@ -378,7 +380,7 @@ http.createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/messages") {
       const after = Number(url.searchParams.get("after") || 0);
-      return json(res, 200, { seq, messages: messages.filter((m) => m.seq > after),
+      return json(res, 200, { seq, boot: BOOT, messages: messages.filter((m) => m.seq > after),
         blockedChats: chatGate.blockedChats() });
     }
     if (req.method === "GET" && url.pathname === "/chats") {

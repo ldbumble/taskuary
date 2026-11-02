@@ -540,9 +540,16 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         except RuntimeError as e:
             if '(404)' not in str(e): raise                 # an older detached bridge: keep polling until its next restart
         _WA_FILTERED[url] = (policy, now)
-    seq = int(cfg.get('wa_seq') or 0)
+    seq, boot = int(cfg.get('wa_seq') or 0), cfg.get('wa_boot')
     out = _wa(c, f"/messages?after={seq}")
-    if out.get('seq') is not None and int(out['seq']) < seq: _WA_FILTERED.pop(url, None)    # the bridge restarted
+    # A RESTARTED BRIDGE COUNTS FROM 0 AGAIN (TQ-1251: "whatsapp should work and not skip messages"). Asking it for "after" the old
+    # number returned nothing it held, and the old number was then written down as its new one: every message between the restart and
+    # this poll - the burst WhatsApp hands over on reconnect - was never read. Its start-up id (bridge.mjs BOOT) says it restarted, or,
+    # from a bridge older than that id, a number gone backwards; then all it holds is new to us, read from the start. A message already
+    # filed is a duplicate by its id (ingest), so reading one twice costs nothing.
+    if (boot and out.get('boot') and out['boot'] != boot) or (out.get('seq') is not None and int(out['seq']) < seq):
+        _WA_FILTERED.pop(url, None)
+        if seq: out = _wa(c, '/messages?after=0')
     n, took = 0, []
     from . import remote_assistant
     known = wanames.names(store)
@@ -665,8 +672,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         try: _wa(c, '/read', {'ids': [i for i in took if i]})
         except Exception as e: logger.warning(f'marking whatsapp read failed: {e}')
     # only a sequence that moved: an idle check-in rewrote the same number ~2/s, and every write moved the rail (2026-10-12)
-    if out.get('seq') is not None and out['seq'] != cfg.get('wa_seq'):
-        store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq']})
+    if out.get('seq') is not None and (out['seq'] != cfg.get('wa_seq') or (out.get('boot') and out['boot'] != cfg.get('wa_boot'))):
+        store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq'], **({'wa_boot': out['boot']} if out.get('boot') else {})})
     return n
 
 

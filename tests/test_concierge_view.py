@@ -102,6 +102,20 @@ class TakeTests(unittest.TestCase):
         self.assertEqual(ops, [{'op': 'press', 'button': 'check_now'}, {'op': 'point', 'target': 'update_to_v9_9_9', 'why': pageview.INSTALL_IS_YOURS}])
         self.assertFalse(pageview.is_install({'id': 'up_to_date', 'label': 'Up to date'}))
 
+    def test_a_box_a_press_or_a_pick_draws_is_the_pages_to_find_and_still_never_a_secret_or_a_send(self):
+        # 2026-11-02: New's Set a goal tab draws its By box - "make it a goal due friday" dropped the date as a box the view never had
+        new = pageview.clean({'area': 'new', 'fields': [{'key': 'repo', 'label': 'Repository', 'kind': 'choice', 'value': 'Auto'}],
+                              'buttons': [{'id': 'set_a_goal', 'label': 'Set a goal'}]})
+        _, ops = pageview.take('\n'.join([view_line(op='press', button='Set a goal'), view_line(op='set', field='By', value='2026-11-06')]), new)
+        self.assertEqual(ops, [{'op': 'press', 'button': 'set_a_goal'}, {'op': 'set', 'field': 'By', 'value': '2026-11-06'}])
+        _, ops = pageview.take('\n'.join([view_line(op='set', field='Repository', value='Another repository…'),
+                                          view_line(op='set', field='Folder on this machine', value='C:/code/portal'),
+                                          view_line(op='set', field='API key', value='k-1'), view_line(op='press', button='Send now')]), new)
+        self.assertEqual([o['op'] for o in ops], ['set', 'set', 'refused', 'point'])
+        # ...never after a row's press: Mark done on the walk moves to the next task
+        _, ops = pageview.take('\n'.join([view_line(op='press', button='Mark done'), view_line(op='set', field='Notes', value='x')]), pageview.clean(TASK))
+        self.assertEqual(ops, [{'op': 'press', 'button': 'row:done'}])
+
 
 class TurnTests(unittest.TestCase):
     def setUp(self): self.s = store()

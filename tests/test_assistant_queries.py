@@ -80,6 +80,23 @@ class EverydayAsks(unittest.TestCase):
         for r in (r for r in self.rows if r['q'].cat == 'agentwork' and r['q'].text.startswith(('make me', 'write'))):
             with self.subTest(ask=r['q'].text): self.assertIn('new:agent:general', r['ideal']['got'])
 
+    def test_a_job_written_into_new_names_the_press_its_tab_draws(self):
+        # the audit of New, 2026-11-02: "Wrote it into New - Build it there starts it." over a report, a dashboard and a routine, whose tab
+        # has had Set up with AI since 2026-10-30 (NewSheet.jsx) - and a goal's press is Plan it while an AI can plan the steps
+        from taskuary import capabilities
+        drawn = {'agent:general': 'Send to agent', 'agent:terminal': 'Send to coding agent', 'send': 'Draft it', 'note': 'Note it',
+                 'goal': 'Plan it' if capabilities.has_ai(Q._world()) else 'Track it',
+                 **{k: 'Set up with AI' for k in ('report', 'dashboard', 'workflow', 'playbook')}}
+        for r in (r for r in self.rows if r['q'].cat == 'new' and r['q'].expect.startswith('new:')):
+            with self.subTest(ask=r['q'].text):
+                self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
+
+    def test_every_address_an_ask_about_new_is_answered_with_is_one_the_prompt_names(self):
+        # "I want to start something new" and "open the new dashboard builder" had no address in APP PAGES (2026-11-02)
+        pages = concierge.pages_block(Q._world())
+        for r in (r for r in self.rows if r['q'].cat == 'new' and r['q'].expect.startswith('link:')):
+            with self.subTest(ask=r['q'].text): self.assertIn(r['q'].expect[5:], pages)
+
     def test_a_number_on_the_desk_is_the_action_word_it_numbers(self):
         r = next(r for r in self.rows if r['q'].text == '2')
         self.assertNotEqual(r['ideal']['heard'], '2', 'the digit reached the model as a digit')

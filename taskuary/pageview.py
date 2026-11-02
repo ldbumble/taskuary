@@ -154,6 +154,7 @@ def take(raw: str, view: dict | None) -> tuple[str, list]:
                 ops.append({'op': 'refused', 'target': (f or {}).get('label') or name, 'why': REFUSED_SECRET}); continue
             if not f and not moved: continue
             ops.append({'op': 'set', 'field': (f or {}).get('key') or name, 'value': str(o.get('value') if o.get('value') is not None else '')[:4000]})
+            moved = moved or (f or {}).get('kind') == 'choice'
             continue
         name = str(o.get('button') or o.get('target') or '')
         b = _match(view.get('buttons') or [], name, 'id', 'label')
@@ -169,7 +170,10 @@ def take(raw: str, view: dict | None) -> tuple[str, list]:
             ops.append({'op': 'point', 'target': (b or {}).get('id') or name, 'why': INSTALL_IS_YOURS}); continue
         if op == 'press' and f: op = 'point'
         ops.append({'op': op, ('button' if op == 'press' else 'target'): (b or f or {}).get('id') or (f or {}).get('key') or name})
-        # ...a press can draw a form (Routing policies' Add rule): the boxes filled after it are the new page's, checked there - they were
-        # dropped here for not being on the screen sent before the press (2026-11-02, the Settings audit)
-        if op == 'press': moved = True
+        # ...and A PRESS OR A PICK CAN DRAW NEW BOXES (2026-11-02): New's Set a goal tab brings its By box, Another repository… its folder,
+        # Routing policies' Add rule its form -
+        # "make it a goal due friday" lost the date, dropped as a box this view never had. What follows is the page's to find, as after an
+        # `open`; the send and secret lines above still hold every one of them, and the page checks each again (pageView.runOne). Never
+        # after a row's press: Mark done on the walk's table moves to the next task, whose boxes this ask was never about
+        moved = moved or (op == 'press' and not str(ops[-1].get('button') or '').startswith('row:'))
     return text, ops

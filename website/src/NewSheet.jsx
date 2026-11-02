@@ -80,7 +80,8 @@ const Fork = ({ on, title, hint, onClick }) => (
 
 // A WHOLE ADDRESS TYPED IS AN ADDRESS GIVEN, however the box is left: Tab or a click away threw it away, and the reply went to
 // nobody (the UI audit, 2026-10-21). Only a whole address is taken - half a name never becomes a recipient behind the owner's back.
-export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
+// `label`: its name for the Assistant (pageView.labelOf) - its placeholder turns "Add another email" once one is in, a box renamed mid-ask
+export const EmailRecipients = ({ value, onChange, options, placeholder, label = "" }) => {
   const [typed, setTyped] = useState("");
   // ...and the server's search beside the list this form was given: "dynamo" is everyone at Dynamo (peopleSearch.js)
   const found = usePeopleSearch(typed, "email");
@@ -108,6 +109,7 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
     }}
     renderInput={(params) => (
       <TextField {...params} placeholder={value.length ? "Add another email" : placeholder}
+        inputProps={{ ...params.inputProps, ...(label ? { "data-tq-label": label } : {}) }}
         sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
     )} />
   );
@@ -144,7 +146,7 @@ export const ChatRecipient = ({ channel, options, value, onChange }) => {
 // discovery, menus, forks, and a MUI dialog; owning this value at the sheet level rebuilt all of
 // that on every keystroke and made an ordinary sentence feel like terminal input over a slow
 // connection. The parent only hears when empty/non-empty changes and reads the value on submit.
-const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics, initial = "", onWords }, ref) {
+const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics, initial = "", onWords, label = "" }, ref) {
   const [value, setValue] = useState(initial);
   const ready = useRef(false);
   // the words the Assistant wrote it up with (concierge._new) count as typed: the button is live from the first render
@@ -166,6 +168,9 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     <>
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
       onChange={changed} {...(withPics ? pics.drop : {})}
+      // ...named for the Assistant by the label over it (pageView.labelOf): it read as its placeholder - "chase the Payworth AP replacement" -
+      // a box the model could not tell held the job's own words (the audit of New, 2026-11-02)
+      inputProps={{ "data-tq-field": "about", "data-tq-label": label }}
       placeholder={kind === "goal" ? "the nightly census lands in the new ledger for all three sites, and the old portal's export is switched off"
         : kind === "send" ? "the census numbers he asked for, plus why Site 7 moved"
         : kind === "agent" ? (how === "general" ? "why did Site 3's census move four points in July?"
@@ -367,6 +372,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
     : kind === "playbook" ? "Set up with AI" : "Note it";
 
+  const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
+    : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
+    : kind === "playbook" ? "What should this playbook do" : "What do you want to remember";
+
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
   const shell = inline
@@ -422,7 +431,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Box>
               <Label>To</Label>
               {channel === "email" ? (
-                <EmailRecipients value={emailTo} onChange={setEmailTo} options={chanTargets}
+                <EmailRecipients value={emailTo} onChange={setEmailTo} options={chanTargets} label="To"
                   placeholder="Search contacts or type any email address" />
               ) : <ChatRecipient key={channel} channel={channel} options={chanTargets}
                 value={chanTargets.find((target) => target.to === to) || (to ? { to, name: "" } : null)}
@@ -431,7 +440,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             {channel === "email" && (
               <Box>
                 <Label>CC</Label>
-                <EmailRecipients value={cc} onChange={setCc} options={chanTargets}
+                <EmailRecipients value={cc} onChange={setCc} options={chanTargets} label="CC"
                   placeholder="Search contacts or type any email address" />
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
                   Drafts use STYLE.md. Docs → STYLE.md → Generate from history learns your recurring email signature.
@@ -505,10 +514,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         {!REPEATS.includes(kind) && kind !== "meeting" && <Box>
-          <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
-            : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
-            : kind === "playbook" ? "What should this playbook do" : "What do you want to remember"}</Label>
-          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setWords} />
+          <Label>{aboutLabel}</Label>
+          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setWords} label={aboutLabel} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.
@@ -537,12 +544,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <>
             <Box>
               <Label>By</Label>
-              <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
+              <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} inputProps={{ "data-tq-field": "by", "data-tq-label": "By" }} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
               <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>The date shows on the goal's row on your rail, as "due" and the day.</Typography>
             </Box>
             <Box>
               <Label>Who is involved</Label>
               <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Ray Colton, Payworth (Marcus), the coding agent"
+                inputProps={{ "data-tq-field": "who", "data-tq-label": "Who is involved" }}
                 sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
               <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>People it may chase and systems it may touch. Anyone else is a question to you first.</Typography>
             </Box>
@@ -563,7 +571,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Label>Come back to it</Label>
             {/* the note's row is stamped with WHEN IT IS FOR, so the Timeline's own clock is the
                 reminder: it sits in that day, out of the way until then (ownwork.note) */}
+            {/* ...it and the goal's By and Who are named for the Assistant (pageView.labelOf): a box with no label of its own was never on
+                the view it was sent, so "come back to it friday" had nothing to fill (2026-11-02) */}
             <TextField type="datetime-local" size="small" value={when} onChange={(e) => setWhen(e.target.value)}
+              inputProps={{ "data-tq-field": "when", "data-tq-label": "Come back to it" }}
               sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Leave it empty for now. A date puts the row in that day and it stays quiet until then.

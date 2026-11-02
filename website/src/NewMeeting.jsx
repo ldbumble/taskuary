@@ -56,13 +56,14 @@ export default function NewMeeting({ renderTo, options = [], initial, onPicked }
     <Box data-tq-meeting="" sx={{ display: "grid", gap: 2, minWidth: 0 }}>
       <Box>
         <Label>With</Label>
-        {renderTo({ value: f.to, onChange: set("to"), options, placeholder: "Search people or type an email address" })}
+        {/* ...each box named for the Assistant by the label over it (pageView.labelOf), never by its placeholder (2026-11-02) */}
+        {renderTo({ value: f.to, onChange: set("to"), options, placeholder: "Search people or type an email address", label: "With" })}
         {!!f.unplaced.length && <Typography sx={{ fontSize: 11.5, color: FAINT, mt: 0.5 }}>
           Could not place {f.unplaced.join(", ")} - search for them above or type their address.</Typography>}
       </Box>
       <Box>
         <Label>About</Label>
-        <TextField fullWidth size="small" value={f.subject} onChange={(e) => set("subject")(e.target.value)} placeholder="the Q3 budget" inputProps={{ "data-tq-meeting-subject": "" }} sx={FIELD} />
+        <TextField fullWidth size="small" value={f.subject} onChange={(e) => set("subject")(e.target.value)} placeholder="the Q3 budget" inputProps={{ "data-tq-meeting-subject": "", "data-tq-field": "about", "data-tq-label": "About" }} sx={FIELD} />
       </Box>
       <Box sx={{ display: "flex", gap: 2.5, flexWrap: "wrap" }}>
         <Box>
@@ -86,7 +87,7 @@ export default function NewMeeting({ renderTo, options = [], initial, onPicked }
       <Box>
         <Label>Note or agenda</Label>
         <TextField fullWidth multiline minRows={2} size="small" value={f.note} onChange={(e) => set("note")(e.target.value)}
-          placeholder="Optional - it goes in the invite" sx={FIELD} />
+          placeholder="Optional - it goes in the invite" inputProps={{ "data-tq-field": "note", "data-tq-label": "Note or agenda" }} sx={FIELD} />
       </Box>
       <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
         <Button size="small" variant="contained" disableElevation data-tq-find-times="" disabled={!canFind(f) || !!busy} onClick={find}

@@ -1479,8 +1479,13 @@ NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent',
            # ...and New's other tabs (the whole-app design, 2026-10-28): a message the owner starts, drafted for their Send; a goal; a dashboard
            'send': ('send', '', ''), 'goal': ('goal', '', ''), 'dashboard': ('dashboard', '', '')}
 NEW_ONLY = ('send', 'goal', 'dashboard')          # New's tabs alone: no task kind, so on a phone they are the desk's
-NEW_PRESS = {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it', 'playbook': 'Set up with AI', 'send': 'Draft it', 'goal': 'Track it',
-             'dashboard': 'Build it'}
+# ...each the button New's tab draws (NewSheet.jsx): since 2026-10-30 a report, a dashboard and a routine have no Build it - their describe
+# box became Set up with AI - and a goal reads Plan it while an AI can plan the steps. The line named presses nobody could find (2026-11-02)
+NEW_PRESS = {'note': 'Note it', 'report': 'Set up with AI', 'workflow': 'Set up with AI', 'playbook': 'Set up with AI', 'send': 'Draft it',
+             'goal': 'Track it', 'dashboard': 'Set up with AI'}
+def new_press(store, kind: str) -> str:
+    from . import capabilities
+    return 'Plan it' if kind == 'goal' and capabilities.has_ai(store) else NEW_PRESS[kind]
 
 def recurs_of(raw) -> dict | None:
     """The model's structured word that an ask repeats on a clock, kept to its four fields - None when it said nothing of the kind."""
@@ -1495,15 +1500,20 @@ def routine_prefill(recurs: dict, text: str = '') -> tuple:
     repository and skill the owner named - a named one makes it a coding routine."""
     r = recurs or {}
     words = ' - '.join(x for x in (r.get('schedule'), r.get('objective') or str(text or '').strip()) if x)
+    # ...and the repository and skill IN the words: Set up with AI carries only words to the builder since 2026-10-30, so a named
+    # repository and skill were dropped on the way (2026-11-02)
+    named = ', '.join(x for x in (f"in {r['repo']}" if r.get('repo') and r['repo'].lower() not in words.lower() else '',
+                                  f"with the /{r['skill'].lstrip('/')} skill" if r.get('skill') and r['skill'].lstrip('/').lower() not in words.lower() else '') if x)
+    words = f'{words} - {named}' if named else words
     return words, {'coding': bool(r.get('repo') or r.get('skill')), 'repo': r.get('repo') or '', 'skill': r.get('skill') or ''}
 
 
 def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '') -> dict:
     # A JOB THAT REPEATS IS A ROUTINE (the owner, 2026-10-29): the model's `recurs` brings up New → Routine filled in - its clock, its job,
-    # its repository and skill - and Build it, then Save, are the owner's presses; nothing is saved from here
+    # its repository and skill - and Set up with AI, then Save, are the owner's presses; nothing is saved from here
     if recurs: want, (text, runs) = 'workflow', routine_prefill(recurs, text)
     kind, how, verb = NEW_TAB[want]
-    press = buttons.label(verb) if verb else NEW_PRESS[kind]
+    press = buttons.label(verb) if verb else new_press(store, kind)
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     said = f"{lead + ' ' if lead else ''}Wrote it into New - {press} there starts it."
     # `line`: this line's id, which the card's press says again as what it started (said_started)
@@ -2093,8 +2103,12 @@ def pages_block(store) -> str:
             # ...and each shelf of the Reports page by its own address: "go to reports" opened the Workflows shelf, the one address the
             # list had (2026-10-26)
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
-            '#report=new-agent; the Reports page and its list of reports #report=reports; the workflows #report=workflows; the dashboards '
-            '#report=dashboards; the playbooks #report=playbooks\n'
+            '#report=new-agent; a new dashboard #report=new-dashboard; the Reports page and its list of reports #report=reports; the '
+            'workflows #report=workflows; the dashboards #report=dashboards; the playbooks #report=playbooks\n'
+            # ...and NEW ITSELF, blank (canvasLinks #new-task): "I want to start something new" had no address, and a job with no words yet
+            # is not task.create_from_text's to write (2026-11-02)
+            '- New, the card that starts something, empty on one of its tabs: #new-task&kind=<agent|send|note|meeting|goal|report|dashboard|'
+            'workflow|playbook> (#new-task alone opens Send something)\n'
             '- settings, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
 
 

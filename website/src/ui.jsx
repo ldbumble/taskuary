@@ -702,7 +702,7 @@ export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "too
   const list = model && !ids.includes(model) ? [model, ...ids] : ids;
   const fs = sx?.fontSize || 12.5;
   return (
-    <Select size="small" displayEmpty value={model || ""} onChange={(e) => onModel(e.target.value)} MenuProps={menuProps}
+    <Select size="small" displayEmpty value={model || ""} onChange={(e) => onModel(e.target.value)} MenuProps={menuProps} inputProps={{ "aria-label": "Model" }}
       sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150, ...sx }}>
       <MenuItem value="" sx={{ fontSize: fs }}>
         {empty || (info.default ? `default · ${info.default}` : `the ${whose}'s default model`)}
@@ -752,7 +752,9 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
       {/* A HAND-OFF NAMES NO PROFILE (the owner, 2026-10-29: "the agent should just say Taskuary but the profile inherits from it" - a
           reservation was being made by "researcher", and "assistant" is no profile they ever made). It runs the profile the task has
           (triage's role, else the assistant's own), behind the scenes; the profiles themselves are kept in Docs -> Profiles. */}
-      {!handOff && <Select size="small" value={selected || ""}
+      {/* ...each picker named for the Assistant (pageView.labelOf reads aria-label): unnamed, New's and the task's pickers were never on
+          the view it was sent, and "use Claude Code for it" had nothing to pick (the audit of New, 2026-11-02) */}
+      {!handOff && <Select size="small" value={selected || ""} inputProps={{ "aria-label": coding ? "Coding tool" : "Profile" }}
         onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
         {list.map((a) => (
@@ -762,7 +764,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
         ))}
       </Select>}
       {handOff && (
-        <Select size="small" displayEmpty value={pick || ""} onChange={(e) => { onPick(e.target.value); onModel(""); }}
+        <Select size="small" displayEmpty value={pick || ""} inputProps={{ "aria-label": "Brain" }} onChange={(e) => { onPick(e.target.value); onModel(""); }}
           sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
           <MenuItem value="" sx={{ fontSize: 12.5 }}>
             {!generalBrains.length ? "No AI connected" : browser ? "an AI that can use the browser" : "the brain it runs on"}

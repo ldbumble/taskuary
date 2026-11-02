@@ -170,7 +170,8 @@ def sender_check(store, msg: dict, now=None) -> dict:
         if (a := next((a for a in store.audit_since(since) if a.get('Action') == 'cli_setup'), None)):
             d = json.loads(a.get('Detail') or '{}') or {}
             from .timewords import ago
-            out['owner_started_a_sign_in'] = f"{d.get('name') or 'an AI tool'}, {ago(a['CreatedAt'], now, long=True) or 'just now'}, in Taskuary"
+            when = ago(a['CreatedAt'], now, long=True)
+            out['owner_started_a_sign_in'] = ', '.join(x for x in (d.get('name') or 'an AI tool', when, 'in Taskuary') if x)
     except Exception as e: logger.debug(f'sender check: sign-ins unread - {e}')
     return out
 

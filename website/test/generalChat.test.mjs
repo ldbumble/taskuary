@@ -68,3 +68,15 @@ test("the chat box names the agent the pane names, never \"the assistant\" over 
   assert.match(workspace, /placeholder=\{working \? "Add something for it to pick up…" : `Tell \$\{dock \? "Taskuary" : name\} what to do next…`\}/);
   assert.doesNotMatch(workspace, /Tell the assistant what to do next/);
 });
+
+// A SEND THAT FAILED STAYS ON SCREEN (the owner, 2026-11-02: "the text goes no where"): the read after a failed turn tells the page the
+// session is down, but never resets the thread - the server's copy has neither the reason nor words the agent never took
+test("a failed send keeps the owner's words and the reason in the chat", () => {
+  const failed = workspace.slice(workspace.indexOf("const failed = useCallback("), workspace.indexOf("const loaded = !!data"));
+  assert.match(failed, /\.then\(\(r\) => accept\(r\.data\)\)/);
+  assert.doesNotMatch(failed, /setRevision/, "a revision bump swaps the thread for the server's copy");
+  assert.match(workspace, /onEnded=\{failed\}/);
+  // ...and the adapter still says the reason under the message on both roads: an error event and a refused request
+  assert.match(workspace, /onEnded\?\.\(\);\s*\n\s*yield \{ content: content\(`⚠ \$\{event\.error/);
+  assert.match(workspace, /onEnded\?\.\(\);\s*\n\s*yield \{ content: content\(`⚠ \$\{e\?\.message/);
+});

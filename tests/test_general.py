@@ -370,6 +370,41 @@ class GeneralApiTests(unittest.TestCase):
         self.assertEqual(events[-1]['reply'], 'Here is the researched answer.')
         self.assertEqual([m['role'] for m in events[-1]['payload']['messages']], ['user', 'assistant'])
 
+    def test_words_typed_to_an_agent_waiting_on_you_reach_it_when_the_mail_sync_cannot_run(self):
+        """A follow-up to a live agent is the owner talking to work under way, as Continue is: a mail poll still running (or a
+        mailbox's old error) refused it, and the chat showed nothing (the owner, 2026-11-02: "the text goes no where")."""
+        store = MemoryStore(); tid = general_task(store)
+        connect_cli(self, claude={'cmd': 'claude'})
+        said = []
+        def brain(system, user, **k): said.append(user); return f'Turn {len(said)} done.'
+        busy = RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(llm, 'build_llm', return_value=brain), mock.patch.object(handbook, 'enabled', return_value=False):
+            client = TestClient(server.app)
+            first = client.post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Make the chart', 'pick': 'cli:claude'})
+            self.assertEqual(json.loads(first.text.splitlines()[-1])['type'], 'done')
+            self.assertTrue(general.session_for(tid).waiting(), 'parked: the agent is waiting on you, with no question open')
+            with mock.patch.object(server, '_refresh_chat_context', side_effect=busy):
+                r = client.post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Now make it blue', 'pick': 'cli:claude'})
+        events = [json.loads(line) for line in r.text.splitlines()]
+        self.assertEqual(events[-1]['type'], 'done', events[-1])
+        self.assertEqual(events[-1]['reply'], 'Turn 2 done.')
+        self.assertIn({'type': 'progress', 'name': 'sync_messages', 'detail': server.FOLLOW_UP_STALE}, events)
+        self.assertIn('Now make it blue', said[-1])
+        self.assertEqual([m['role'] for m in events[-1]['payload']['messages']], ['user', 'assistant', 'user', 'assistant'])
+
+    def test_starting_an_agent_still_reads_the_chat_first(self):
+        "No agent live: a typed message STARTS one, and that still waits on a sync it can trust - said, not swallowed."
+        store = MemoryStore(); tid = general_task(store)
+        connect_cli(self, claude={'cmd': 'claude'})
+        busy = RuntimeError('messages are still syncing; I did not use stale chat context - try again in a moment')
+        with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
+             mock.patch.object(server, '_refresh_chat_context', side_effect=busy), \
+             mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'never asked'):
+            r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/stream', json={'text': 'Make the chart', 'pick': 'cli:claude'})
+        events = [json.loads(line) for line in r.text.splitlines()]
+        self.assertEqual(events, [{'type': 'error', 'error': str(busy)}])
+
     def test_a_turn_that_dies_mid_way_is_said_once_its_session_is_down(self):
         """The page reads the conversation again on the stream's error: said before the session's close (0.1 s after the raise), it
         found it alive and kept "Agent is working" with Stop and save over a dead CLI (the agents walk, 2026-10-26)."""

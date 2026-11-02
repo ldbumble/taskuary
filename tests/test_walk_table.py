@@ -202,3 +202,20 @@ def test_peek_says_what_next_reads(world):
         assert reads == (not any(walkworld.matches(r, src[sym]) for r in walkworld.rows(s))), f'{sym}: peek said reads={reads}'
     w.do('open R3'); w.do('next')
     assert w.on.startswith('fyis:') and railwalk.peek(s)['reads'], 'the batch Next put up is read by the next Next'
+
+def test_peek_says_what_comes_after_the_row_below(world):
+    """`walk.then` and `walk.below_reads` are the page's word for a Next pressed on the row a press drew while that press is still out
+    (the owner, 2026-11-02: "when you hit next the one you are on, task or report, does not disappear right away"): the row after the one
+    below, and whether Next reads the one below - so the second press puts its row down and draws the next at once, not after the first
+    answer. They are exactly what two Nexts bring and read."""
+    from taskuary import railwalk
+    s, src = world
+    w = Walk(s, src)
+    for sym in ('T1', 'T5', 'M1', 'R1', 'R3', 'I1'):
+        w.do(f'open {sym}')
+        walk = railwalk.peek(s)
+        w.do('next')
+        assert w.on == walk['below'], f'{sym}: Next went to {w.on}, peek said {walk["below"]}'
+        assert railwalk.peek(s)['reads'] == walk['below_reads'], f'{sym}: below_reads={walk["below_reads"]} for {w.on}'
+        w.do('next')
+        assert w.on == walk['then'], f'{sym}: a second Next went to {w.on}, peek said {walk["then"]}'

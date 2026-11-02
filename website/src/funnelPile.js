@@ -82,6 +82,14 @@ export const refreshPilePresentation = (current, fresh) => {
 // grey its buttons and mark the rail, and draws only what a move answers.
 export const walkOf = (pile) => pile?.walk || null;
 export const nextMarkerKey = (pile) => { const b = walkOf(pile)?.below; return b ? (b.startsWith("fyis:") ? b.slice(5).split(",")[0] : b) : null; };
+// A NEXT PRESSED ON THE ROW A PRESS DREW, while that press is still out (the owner, 2026-11-02: "when you hit next the one you are on, task
+// or report, does not disappear right away"): it was held until the first answer landed, the row sitting there for seconds. The walk
+// says one step further (railwalk.peek `then`, `below_reads`) - so when the row on the table is the walk's `below`, the second press puts it
+// down, takes it off the rail if Next reads it, and draws the row after it, at its press. `gone`: the rail keys it reads; any other row: none
+export const heldStep = (walk, from) => {
+  const known = !!walk && !!from && walk.below === from, reads = known && !!walk.below_reads;
+  return { known, reads, gone: reads ? [from, ...(from.startsWith("fyis:") ? from.slice(5).split(",") : [])] : [], then: known ? walk.then || null : null };
+};
 // can Next go on from here: the walk says what is below; before any walk was read, anything on the rail
 export const canAdvance = (pile, ready) => walkOf(pile) ? !!walkOf(pile).below : (ready || []).length > 0;
 

@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.15 - 2026-11-01
+
+- The everyday-asks audit covers the Assistant's newer powers, and three asks it refused now work
+
 ## 0.3.10.14 - 2026-11-01
 
 - The assistant stops reading names and labels with word lists

@@ -278,10 +278,10 @@ jobs:
       - name: Build TaskuarySetup.exe
         shell: pwsh
         run: |
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -First 1).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          & $iscc installer	askuary.iss
+          & $iscc installer/taskuary.iss
           if ($LASTEXITCODE) { throw "the installer did not build" }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: Taskuary-windows-setup, path: dist/TaskuarySetup.exe }

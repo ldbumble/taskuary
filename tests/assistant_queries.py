@@ -992,6 +992,58 @@ AREA_HUB_BOARD_SEARCH = [
 ]
 CASES += AREA_HUB_BOARD_SEARCH
 
+# THE SAME ASKS BY PHONE (the phone audit, 2026-11-02): each row verb reach() names, typed in a phone chat - what goes out or changes the
+# task asks yes or no, a put-down is done at once, an act the row cannot do is said (never asked, so no yes runs into nothing), and what only
+# a screen has is said in words, at the desk
+AREA_PHONE = [
+    Q('phone', 'next', 'todo', c('next'), 'next', freq=5, phone=True, note="the phone drops the bare Next. - the next card is its receipt"),
+    Q('phone', 'make the draft shorter', 'review', c('redraft', text='shorter'), 'draft:redraft', freq=4, phone=True),
+    Q('phone', 'aprove it', 'review', c('approve'), 'proposal:review.approve', freq=3, phone=True, note='a misspelling: the model reads it'),
+    Q('phone', 'forward this to gail@northwind.example', 'todo', c('task.handoff', who='gail@northwind.example'), 'proposal:task.handoff', freq=3, phone=True),
+    Q('phone', "this isn't a task", 'todo', c('task.not_a_task'), 'proposal:task.not_a_task', freq=3, phone=True, note='a put-down: done at once'),
+    Q('phone', 'close it with a note: paid on the 3rd', 'todo', c('task.complete', note='paid on the 3rd'), 'proposal:task.complete', freq=3, phone=True),
+    Q('phone', 'remnd me firday', 'todo', c('task.defer', until='friday 9am'), 'proposal:task.defer', freq=3, phone=True),
+    Q('phone', 'accept it', 'invite', c('accept_invite'), 'proposal:calendar.answer', freq=3, phone=True),
+    Q('phone', 'decline it', 'invite', c('decline_invite'), 'proposal:calendar.answer', freq=3, phone=True),
+    Q('phone', 'can we do thursday instead', 'invite', c('propose_time', text='thursday'), 'proposal:calendar.answer', freq=3, phone=True),
+    Q('phone', 'find a time with Gail', 'invite', c('find_time'), 'words', freq=2, phone=True, note='an invite is no ask for a time: said'),
+    Q('phone', 'split this in two: the refund is its own job', 'todo', c('task.split', text='the refund is its own job'), 'proposal:task.split', freq=2, phone=True),
+    Q('phone', f'reopen {T4}', None, [c('task.reopen', ref=T4), f'{T4} is still open - there is nothing to reopen.'], 'words', freq=2, phone=True,
+      note='an open task has no Reopen: said, never asked (the phone audit, 2026-11-02)'),
+    Q('phone', 'make it high priority', 'todo', c('task.update', priority='high'), 'proposal:task.update', freq=3, phone=True),
+    Q('phone', 'this is a coding task', 'todo', c('task.set_kind', kind='coding'), 'proposal:task.set_kind', freq=2, phone=True),
+    Q('phone', 'put it in northwind/importers', 'coding', c('task.set_repo', repo='northwind/importers'), 'proposal:task.set_repo', freq=1, phone=True),
+    Q('phone', 'put an agent on it', 'todo', c('regular_agent'), 'proposal:task.create_from_message', freq=3, phone=True),
+    Q('phone', 'stop the agent', 'agent', c('stop_agent'), 'proposal:agent.stop', freq=4, live=6, phone=True),
+    Q('phone', 'keep going', 'agent', [c('agent.continue', ref=T6), 'It has no saved session to pick up.'], 'words', freq=3, phone=True,
+      note='no saved session in the demo world: said, never asked (the phone audit, 2026-11-02)'),
+    Q('phone', 'triage this again', 'fyi', [c('message.retriage'), 'Triage already sorted this one as an FYI.'], 'words', freq=1, phone=True,
+      note="an FYI's row has no Sort it again: said, never asked (the phone audit, 2026-11-02)"),
+    Q('phone', "watch this, it's Gail's problem", 'todo', c('task.watch'), 'proposal:task.watching', freq=3, phone=True,
+      note="the row's Watch it, as its chip runs it - not the tell-me-here watch (the phone audit, 2026-11-02)"),
+    Q('phone', 'tell me when Gail replies', 'todo', c('task.watch', what='reply'), 'proposal:task.watch', freq=3, phone=True),
+    Q('phone', 'block this sender', 'fyi', c('block_sender'), 'proposal:preference.sender_rule', freq=2, phone=True),
+    Q('phone', 'email what it found to gail@northwind.example', 'agent', c('task.share', who='gail@northwind.example'), 'proposal:task.share', freq=2, phone=True),
+    Q('phone', 'clear all the fyi', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'proposal:pipe.clear', freq=3, phone=True),
+    Q('phone', 'research what Payworth charges per seat', 'todo',
+      c('task.create_from_text', kind='general', text='research what Payworth charges per seat', title='Payworth seat price'), 'proposal:task.create_from_text',
+      freq=3, phone=True),
+    Q('phone', "what's on my plate today?", None, [c('tasks.list'), 'Three tasks wait on you.'], 'read:tasks.list', freq=5, phone=True),
+    Q('phone', 'Gail moved to Ops', None, c('memory.remember', note='Gail Moreno moved to Ops', about='gail@northwind.example'), 'did:memory.remember', freq=2, phone=True),
+    Q('phone', 'turn on the morning message', None, [c('settings.list', group='Assistant on your phone'), c('setting.set', setting='phone_morning_line', value='1')],
+      'proposal:setting.set', freq=2, phone=True),
+    Q('phone', "whatsapp isn't working", None, [c('app.health', name='whatsapp'), 'WhatsApp is switched off - Open the connection on its card, at your desk.'],
+      'read:app.health', freq=3, phone=True),
+    Q('phone', 'how do I hook up telegram', None, [c('docs.search', query='telegram'), 'At your desk: its card under Connections takes the bot token.'],
+      'read:docs.search', freq=2, phone=True),
+    Q('phone', 'open settings', None, ['Settings is on your desk - no link opens on a phone.'], 'words', tools=('screens',), freq=2, phone=True),
+    Q('phone', 'copy the draft', 'review', ['The draft is the text above - copy it from the chat.'], 'words', tools=('words',), freq=2, phone=True,
+      note="Copy is the screen's clipboard (PHONE_UNREACHABLE)"),
+    Q('phone', 'show me the diff', 'agent', ['The diff opens from the task page, at your desk.'], 'words', tools=('words',), freq=2, phone=True,
+      note="Review changes is the screen's (PHONE_UNREACHABLE)"),
+]
+CASES += AREA_PHONE
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 
@@ -1043,6 +1095,8 @@ def said_what(say: str, got: list, q) -> bool:
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)
     # ...and so does a press on the page itself: the chat shows each one as it runs (pageview.GUIDE)
     if any(g.split(':')[0] in ('light', 'pressed', 'view') for g in got): return not say.startswith('Lit ')
+    # ...and Next on a phone: remote_assistant drops its bare "Next." and the next card is the receipt (the phone audit, 2026-11-02)
+    if q.phone and got == ['next']: return True
     return not acted or say.startswith(ACTS) and len(say.split()) > 2
 
 
@@ -1163,7 +1217,8 @@ def reach() -> list:
     for v, d in buttons.VERBS.items():
         if not d.get('row') or v == 'fix': continue          # fix is a failure's own way out, worn by the failure
         tool = v if v in toolcatalog.DECISIONS else toolcatalog.CHIP_TOOL.get(v) or concierge.PICKER_TOOL.get(v)
-        rows.append((v, tool or 'button.light', tool or ''))
+        # ...and Watch it, whose tool a phone's yes now runs as the row's own task.watching (concierge, the phone audit 2026-11-02)
+        rows.append((v, tool or 'button.light', tool or {'watch': 'task.watch'}.get(v, '')))
     return rows
 
 

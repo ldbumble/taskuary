@@ -11,8 +11,8 @@ UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigg
 # ...and the row buttons a phone chat cannot reach - each opens something only a screen has (the diff, a second agent's form, a file picker)
 # ...and Copy, which puts an unsendable draft on the screen's own clipboard - a phone chat's draft is already text to copy
 # ...and a result's Share: its link goes on the screen's clipboard and its Email it picks people in a dialog (ASK OWNER: Email it by phone)
-# ...and Watch it, a press the phone's own chip buttons carry - no typed sentence names it (the Assistant's index cap, 2026-11-01)
-PHONE_UNREACHABLE = {'watch', 'review_changes', 'run_another', 'attach', 'copy', 'share_result', 'strong_again'}   # strong_again: the task page's own press (the router, 2026-10-25)
+# (Watch it left this list 2026-11-02: "watch this" typed by phone is task.watch, whose yes runs the row's task.watching - the phone audit)
+PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach', 'copy', 'share_result', 'strong_again'}   # strong_again: the task page's own press (the router, 2026-10-25)
 
 
 class EverydayAsks(unittest.TestCase):

@@ -3353,6 +3353,22 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         named = named or str((_l or {}).get('text') or (store._one('SELECT Text FROM learned_line WHERE Key=?', (str(params.get('key') or ''),)) or {}).get('Text') or '')[:120].rstrip('.')
     if tk == 'task' and (wrote := _task_writes(store, tid, kind, int(target or 0), params, named, actor)) is not None: return wrote
     if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
+    # A PHONE ASKS YES OR NO ONLY FOR WHAT THE ROW CAN DO (2026-11-02): the desk refuses a tool whose button the row cannot carry (cannot) or
+    # does not draw (_label_on); the phone skipped both, so "keep going" over an agent with no saved session asked "Continue: TQ-0006?",
+    # "reopen TQ-0004" over an open task asked to reopen it and "triage this again" over a sorted FYI asked to sort it again - each yes
+    # ran into nothing. The same checks, against the row's buttons and the chips the phone draws for it. An answer to an agent keeps its own
+    # check above (no agent on the task is said there): the run it goes to, not the row's state, decides it.
+    on, b = _row_button(store, kind, int(target or 0), params, item)
+    if on and b and b != 'answer_agent':
+        if why := cannot(on, b, store): raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
+        if b not in {x['verb'] for x in row_buttons(store, on) + chips_for(store, on)}: _label_on(store, on, b)
+    # WATCH IT BY PHONE IS WATCH IT (2026-11-02): task.watch is the row's Watch it (KIND_BUTTON; its description: off the walk until the thread
+    # moves or 7 quiet days), whose light on the desk and chip on the phone run task.watching - but the phone's yes to the tool ran
+    # asks.watch_task, "I'll tell you here when anything happens on it", and the task stayed on the walk. A `what` of done or reply is
+    # still the tell-me-here watch, said at the door it was asked on (asks.py).
+    if kind == 'task.watch' and (w := str(params.get('what') or 'any').strip().lower()) in ('any', 'off'):
+        kind, params = 'task.watching', ({'off': True} if w == 'off' else {})
+        label = op_label(kind, params)
     # the phone's words: one yes-or-no, whatever the kind
     instant = False
     # ...and the ANSWER to the agent asking on the table, whichever road the model took to it (the tool, or the answer_agent verb in
@@ -3464,6 +3480,23 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
     return None
 
 
+def _row_button(store, kind: str, target: int, params: dict, table: dict | None) -> tuple:
+    """(the row a tool acts on, the button on it that IS the tool) - (None, '') when it has neither. Shared by the desk's light (_route) and
+    the phone's yes-or-no, so both ask the same row the same question."""
+    tk, on = operations.KINDS[kind][0], None
+    if tk == 'item' or (tk == 'message' and table and int(table.get('mid') or 0) == target): on = table
+    elif tk == 'message' and target: on = funnel.item_for_key(store, f'msg:{target}')
+    elif tk in ('task', 'review') and target:
+        t = target if tk == 'task' else int((store.get_review(target) or {}).get('TaskId') or 0)
+        on = table if table and int(table.get('tid') or 0) == t else funnel.item_for_key(store, f'task:{t}') if t else None
+    elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
+    # ...an assignee of the owner is "mine" (Put it on my list), an agent's is Send to agent - "assign it to me" never lit Send to agent
+    b = (('mine' if str(params.get('assignee') or '') == 'owner' else next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '')) if kind == 'task.update'
+         else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
+         else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
+    return on, b
+
+
 def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it: dict, table: dict | None, text: str, actor: str) -> dict:
     """call_turn on the desk (routes): the tool the model picked, as the button that does it - lit on its item, brought up first - or the page
     that holds it, opened beside the answer. A tool with neither goes back to the model as a miss it can fix by answering in words."""
@@ -3490,18 +3523,8 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if tk == 'connector':
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
         if typ: return _page(store, tid, table, f'#connector={typ}', f"Opened {named or typ}'s card under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
-    on = None
-    if tk == 'item' or (tk == 'message' and table and int(table.get('mid') or 0) == target): on = table
-    elif tk == 'message' and target: on = funnel.item_for_key(store, f'msg:{target}')
-    elif tk in ('task', 'review') and target:
-        t = target if tk == 'task' else int((store.get_review(target) or {}).get('TaskId') or 0)
-        on = table if table and int(table.get('tid') or 0) == t else funnel.item_for_key(store, f'task:{t}') if t else None
-    elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
+    on, b = _row_button(store, kind, target, params, table)
     if tk == 'source' and not on and target: return _page(store, tid, table, *report_page(store, target, kind, named))
-    # ...an assignee of the owner is "mine" (Put it on my list), an agent's is Send to agent - "assign it to me" never lit Send to agent
-    b = (('mine' if str(params.get('assignee') or '') == 'owner' else next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '')) if kind == 'task.update'
-         else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
-         else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
     if on and b:
         why = cannot(on, b, store)
         if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")

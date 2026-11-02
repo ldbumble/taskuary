@@ -806,7 +806,7 @@ Change or delete one routing rule (its page: rules). Adding a rule for a sender 
 
 ### `deleted.restore`
 
-Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile.
+Bring back something removed in the last 30 days - a report, workflow, dashboard, routing rule or profile. A Hub post taken off is not here: it is on the Hub's own removed shelf, restored there.
 
 - `what` - its title as deleted.list says it
 
@@ -814,7 +814,7 @@ Bring back something removed in the last 30 days - a report, workflow, dashboard
 
 ### `hub.publish`
 
-Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.
+Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there - at the desk the Hub comes up at its Write one with your words, theirs to post - or, on a phone, when a turn clearly earns it.
 
 - `title` - one durable claim
 - `body` - why it matters and what to do
@@ -1005,7 +1005,7 @@ The files agents made on tasks - workbooks, PDFs, documents, charts, pages - eac
 
 ### `deleted.list`
 
-What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles.
+What was removed in the last 30 days and can still come back - reports, workflows, dashboards, rules, profiles (never a Hub post: the Hub keeps its own removed shelf)
 
 <p class="runs">Runs at once and changes nothing.</p>
 

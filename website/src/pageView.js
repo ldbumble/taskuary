@@ -60,8 +60,10 @@ const inView = (el) => { const r = el.getBoundingClientRect(), h = window.innerH
   return Math.max(0, Math.min(r.bottom, h) - Math.max(r.top, 0)) * Math.max(0, Math.min(r.right, w) - Math.max(r.left, 0)); };
 const areaOf = (root) => root.getAttribute("data-tq-browse") || (root.hasAttribute("data-tq-task-page") ? "task" : root.getAttribute("data-tq-view") || "");
 // the view the owner is looking at: of those on the canvas, the one most in sight - a task's view inside a browse card is the card's
+// ...never the top bar's Chat / Board / Game switch (the assistant audit, 2026-11-02): its tabs wear data-tq-view too, so with no card on the
+// chat the widest tab was "the page" - the Assistant was told the owner was on the Board, with nothing on it
 export function currentRoot() {
-  const all = [...document.querySelectorAll(ROOTS)].filter((el) => shown(el) && !el.closest(".tq-chat-pop") && !el.parentElement?.closest(ROOTS));
+  const all = [...document.querySelectorAll(ROOTS)].filter((el) => shown(el) && !el.closest(".tq-chat-pop, [data-tq-view-switch]") && !el.parentElement?.closest(ROOTS));
   let best = null, area = -1;
   all.forEach((el) => { const a = inView(el); if (a >= area) { best = el; area = a; } });
   return best;

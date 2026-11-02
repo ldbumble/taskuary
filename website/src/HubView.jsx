@@ -318,15 +318,17 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
       query: q, searched: "the Hub", empty: removed ? "Nothing has been voted off." : "Nothing posted yet.",
       // the tab's own controls: which order, which tag, the shelf the vote took things off, and writing one
+      // ...each menu NAMED (the assistant audit, 2026-11-02): an unnamed menu is no field to pageView.js, so "sort by newest" asked
+      // with the Hub up had nothing on the page to set
       tools: (
         <Box sx={{ mt: 1.25, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           {note}
           {failed && <Box sx={{ flexBasis: "100%" }}>{failed}</Box>}
-          <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)} sx={{ fontSize: 12, bgcolor: PANEL, height: 32 }}>
+          <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)} SelectDisplayProps={{ "aria-label": "Order" }} sx={{ fontSize: 12, bgcolor: PANEL, height: 32 }}>
             <MenuItem value="top" sx={{ fontSize: 12.5 }}>most valuable</MenuItem>
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
           </Select>
-          <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty sx={{ fontSize: 12, bgcolor: PANEL, height: 32, minWidth: 120 }}>
+          <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty SelectDisplayProps={{ "aria-label": "Tag" }} sx={{ fontSize: 12, bgcolor: PANEL, height: 32, minWidth: 120 }}>
             <MenuItem value="" sx={{ fontSize: 12.5 }}>all tags</MenuItem>
             {Object.entries(KINDS).map(([key, value]) => <MenuItem key={key} value={key} sx={{ fontSize: 12.5 }}>{value.mark} {value.label}</MenuItem>)}
           </Select>
@@ -387,12 +389,12 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
             placeholder="search Hub…"
             InputProps={{ startAdornment: <SearchIcon sx={{ fontSize: 16, color: FAINT, mr: 0.75 }} /> }}
             sx={{ width: { xs: "100%", sm: 260 }, "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: PANEL } }} />
-          <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)}
+          <Select size="small" value={sort} onChange={(e) => setSort(e.target.value)} SelectDisplayProps={{ "aria-label": "Order" }}
             sx={{ fontSize: 12, bgcolor: PANEL, height: 34 }}>
             <MenuItem value="top" sx={{ fontSize: 12.5 }}>most valuable</MenuItem>
             <MenuItem value="new" sx={{ fontSize: 12.5 }}>newest</MenuItem>
           </Select>
-          <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty
+          <Select size="small" value={kind} onChange={(e) => setKind(e.target.value)} displayEmpty SelectDisplayProps={{ "aria-label": "Tag" }}
             sx={{ fontSize: 12, bgcolor: PANEL, height: 34, minWidth: 128 }}>
             <MenuItem value="" sx={{ fontSize: 12.5 }}>all tags</MenuItem>
             {Object.entries(KINDS).map(([key, value]) => (

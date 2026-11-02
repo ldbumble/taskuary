@@ -129,7 +129,7 @@ Later and Tomorrow are gone: **Next** is the "not now", and **Remind me** puts a
 ## It works on the page you ask it about
 
 Ask the chat about what is on the canvas - a task, a connection's card, a report being set up, a settings
-group, the Hub - and the page goes with your words: what is open, its boxes and what they hold, and its
+group, the Hub, the Board - and the page goes with your words: what is open, its boxes and what they hold, and its
 buttons. Only then: a page nobody asked about is never read, and setting a card up by hand never brings the
 Assistant in.
 
@@ -138,7 +138,9 @@ step under its answer in the chat:
 
 - **It fills boxes and presses buttons** - a task's title, a reply draft's words, a card's fields; Save,
   Test, Sync, Mark done, Remind me, a setting's switch. "Turn off sign every email" over Settings opens the
-  setting's group and turns its switch off.
+  setting's group and turns its switch off. On the Hub it searches, picks a topic, sorts, opens a post by its
+  number, votes and removes; a comment it writes in is yours to **Post**, and "put this on the Hub" brings the
+  Hub up with the words for its **Write one**. On the Board it switches Columns, Wall and Live handoffs.
 - **It never sends.** A press that would send something out of the app - **Send**, **Approve**, an email, a
   chat message - is lit for you to press instead, whatever asked for it, the words on the page included.
 - **It never sees a secret.** A password, a key or a token goes as "empty", "typed" or "saved", never its

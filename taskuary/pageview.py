@@ -102,7 +102,8 @@ GUIDE = ('WHAT IS ON THE SCREEN IS YOURS TO WORK, as the owner would - only beca
          'switch)\nVIEW: {"op": "press", "button": "<id or label>"}  - press a button: Save, Test, Sync, Mark done, Remind me...\n'
          'VIEW: {"op": "point", "target": "<field or button>"}  - light it for the owner\nVIEW: {"op": "open", "area": "settings|'
          'connections|reports|hub|board", "section": "...", "open": "...", "knob": "..."}  - bring up another page first (Settings: '
-         'section "config", open the group, knob the setting\'s key - settings.list names them)\nThey run in order, on the page, through '
+         'section "config", open the group, knob the setting\'s key - settings.list names them; the Hub: section the topic, open the post\'s '
+         'number, as knowledge.search prints it; the Board: the area alone)\nThey run in order, on the page, through '
          'its own buttons, and the owner sees each one in the chat. Never press a button that SENDS something out (Send, Approve, an email, '
          'a chat message) or installs Taskuary\'s update (Update to v...): point at it - the owner presses it. Never set a secret (a password, a key, a token): tell them to paste it into '
          'its box. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Say in '
@@ -145,7 +146,11 @@ def take(raw: str, view: dict | None) -> tuple[str, list]:
         if op == 'open':
             area = str(o.get('area') or '').strip().lower()
             if area not in AREAS: continue
-            ops.append({'op': 'open', 'area': area, **{k: str(o[k])[:120] for k in OPEN_KEYS if o.get(k) not in (None, '')}})
+            st = {k: str(o[k])[:120] for k in OPEN_KEYS if o.get(k) not in (None, '')}
+            # ...a Hub post opens by its NUMBER, as a click on its card writes it (the assistant audit, 2026-11-02): HubView finds the open
+            # post with ===, so "3" opened nothing and the Hub stayed on its list
+            if area == 'hub' and st.get('open', '').lstrip('#').isdigit(): st['open'] = int(st['open'].lstrip('#'))
+            ops.append({'op': 'open', 'area': area, **st})
             moved = True; continue
         if op == 'set':
             name = str(o.get('field') or o.get('target') or '')

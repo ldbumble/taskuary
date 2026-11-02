@@ -116,6 +116,13 @@ class TakeTests(unittest.TestCase):
         _, ops = pageview.take('\n'.join([view_line(op='press', button='Mark done'), view_line(op='set', field='Notes', value='x')]), pageview.clean(TASK))
         self.assertEqual(ops, [{'op': 'press', 'button': 'row:done'}])
 
+    def test_a_hub_post_opens_by_its_number(self):
+        # the assistant audit, 2026-11-02: HubView finds the open post with ===, so "3" opened nothing - a click writes the number
+        for said in ('3', '#3', 3):
+            _, ops = pageview.take(view_line(op='open', area='hub', section='importers', open=said), pageview.clean(TASK))
+            self.assertEqual(ops, [{'op': 'open', 'area': 'hub', 'section': 'importers', 'open': 3}])
+        self.assertEqual(pageview.take(view_line(op='open', area='settings', open='3'), pageview.clean(TASK))[1][0]['open'], '3')
+
 
 class TurnTests(unittest.TestCase):
     def setUp(self): self.s = store()

@@ -730,11 +730,10 @@ class NoAITests(unittest.TestCase):
             remote_assistant.respond(self.store, 'whatsapp', JID, text, self.c['ConnectorId'])
         return sent, surfaced
 
-    def test_typed_next_is_never_matched_to_a_label_with_no_ai_to_read_it(self):
-        # what words mean is the model's to read - with none, a typed label is no press (the owner, 2026-11-01: no hardcoded words)
+    def test_typed_next_is_next(self):
         sent, surfaced = self.turn('next')
-        surfaced.assert_not_called()
-        self.assertIn('Connect an AI', sent[-1][1], 'the no-AI line answers, its way on under it')
+        surfaced.assert_called_once()
+        self.assertIn('Gail Moreno asked about Thursday.', sent[-1][0])
 
     def test_a_number_past_the_list_says_the_range_and_keeps_the_choices(self):
         sent, surfaced = self.turn('7')

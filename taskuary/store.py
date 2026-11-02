@@ -1796,11 +1796,13 @@ class SQLiteStore:
                                    WHERE Channel = ? AND ConnectorId IS NULL''', (typ, ch))
             # data heal: dbs written before review dedupe can hold stacked pending reviews
             # of the same kind on one task - keep the newest, supersede the rest. NOT a task's emails (slots.py): several
-            # pending at once is what they are, and every start retired all but the newest (TQ-0957, 2026-10-05)
+            # pending at once is what they are, and every start retired all but the newest (TQ-0957, 2026-10-05). Nor a reply to
+            # ANOTHER PERSON on the same task: an agent's reply to one requester and one to a second are two letters (2026-11-02)
             self.cx.execute("""UPDATE review SET Status='superseded'
                                WHERE Status='pending' AND Kind<>'slot' AND ReviewId NOT IN (
-                                   SELECT MAX(ReviewId) FROM review WHERE Status='pending'
-                                   GROUP BY TaskId, Kind)""")
+                                   SELECT MAX(rv.ReviewId) FROM review rv LEFT JOIN message m ON m.MessageId=rv.MessageId
+                                   WHERE rv.Status='pending'
+                                   GROUP BY rv.TaskId, rv.Kind, lower(IFNULL(m.FromEmail, IFNULL(m.FromName, ''))))""")
             # ...and the email drafts it wrongly retired come back: superseded with nobody deciding, on a task still open,
             # whose email is still owed (its slot names this draft and is not done)
             for r in self.cx.execute("""SELECT rv.ReviewId, t.Checklist FROM review rv JOIN task t ON t.TaskId=rv.TaskId
@@ -2888,9 +2890,17 @@ class SQLiteStore:
     def owner_started(self, conversation_id):
         """The owner's own sent message that STARTED this thread, when no task holds the thread yet - else None."""
         if not conversation_id or self.task_for_conversation(conversation_id): return None
-        m = self._one("SELECT * FROM message WHERE ConversationId=? AND IFNULL(Channel,'') NOT IN ('report','assistant','own') "
-                      'ORDER BY SentAt, MessageId LIMIT 1', (conversation_id,))
-        return m if m and (m.get('Status') == 'context' or m.get('Direction') == 'out') else None
+        rows = self._rows("SELECT * FROM message WHERE ConversationId=? AND IFNULL(Channel,'') NOT IN ('report','assistant','own') "
+                          'ORDER BY SentAt, MessageId', (conversation_id,))
+        mine = lambda r: r.get('Status') == 'context' or r.get('Direction') == 'out'
+        m = rows[0] if rows and mine(rows[0]) else None
+        if not m: return None
+        # ...and never the owner's REPLY to somebody's mail: a sent copy stamped to the minute sorted seconds ahead of the mail it
+        # answered, so triage was told "you started this thread" while working another task, and a second person's separate ask
+        # joined that task (2026-11-02). Theirs from the same minute or earlier, or quoted in the owner's words, came first
+        said, at = ' '.join(str(m.get('BodyText') or '').split()), str(m.get('SentAt') or '')[:16]
+        quoted = lambda r: (q := ' '.join(str(r.get('BodyText') or '').split())[:200]) and q in said
+        return None if any(str(r.get('SentAt') or '')[:16] <= at or quoted(r) for r in rows[1:] if not mine(r)) else m
     def tasks_closed_since(self, since: str, limit=60):
         """Tasks closed (done or dropped) on or after `since`, newest first, each with the senders and
         conversations it carried - enough for a caller to decide whether it touches the message in hand

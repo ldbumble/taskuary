@@ -310,9 +310,9 @@ def main():
                     help='with --done: nobody should hear back (the owner said not to answer, or there is nothing '
                          'for the sender) - the task closes with no reply drafted, and your sentence says why'),
     ap.add_argument('--reply', metavar='TEXT',
-                    help="write the reply the person who asked will get, in your own words - it becomes this "
-                         "task's pending reply for the owner to approve (you are not sending it), and "
-                         "finishing keeps it instead of redrafting. Use - to read it from stdin.")
+                    help="write the reply a person on this task will get, in your own words - it becomes a pending reply for the owner "
+                         "to approve (you are not sending it), and finishing keeps it instead of redrafting. Say who it is to with --to "
+                         "(their name or address) - without it, it answers the newest mail on the task. Use - to read it from stdin.")
     ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
     ap.add_argument('--follow-up', action='store_true',
                     help='with --reply: the owner asked you for ANOTHER message after your reply already went - it is saved as a '
@@ -325,7 +325,8 @@ def main():
                                                     "pending for the owner to approve; use with --slot or --to. Use - for stdin.")
     ap.add_argument('--draft-file', metavar='PATH', help='--draft, read from a file')
     ap.add_argument('--slot', default='', help='the checklist slot this email fills (the id after --slot in your checklist)')
-    ap.add_argument('--to', default='', help='who it goes to, when no slot names them')
+    ap.add_argument('--to', default='', help='who it goes to: with --draft, when no slot names them; with --reply, the person on this '
+                                             'task you are answering or asking (a name or address)')
     ap.add_argument('--subject', default='', help='the subject line')
     # ...and a BATCH's items (batch.py): one finding per item, as the agent finishes each
     ap.add_argument('--item', type=int, metavar='N', help='in a batch: report on item N (with --result, and --overlap/--settled)')
@@ -395,12 +396,17 @@ def main():
         who = os.environ.get('TASKUARY_AGENT') or 'agent'
         got = (_post('/api/agent/draft', {'task_id': int(tid), 'text': text, 'to': args.to, 'subject': args.subject, 'slot': args.slot,
                                           'agent': who, 'files': files}, stranger) if drafting
-               else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up}, stranger))
+               else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up,
+                                                'to': args.to}, stranger))
         if not got: return
         r, out = got
+        # ...saying to WHOM it was saved: "reply saved" alone let a question meant for one requester sit as an answer to another (2026-11-02)
+        to = f" to {out['to']}" if not drafting and out.get('to') else ''
         if text or not out.get('ok'): print("saved on the task as its result - nobody is waiting on a reply, so nothing will be sent." if out.get('saved') == 'result'
-                                            else f"{'email' if drafting else 'reply'} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
+                                            else f"{'email' if drafting else 'reply'}{to} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
                                             else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
+        if out.get('ok') and out.get('people'):
+            print(f"this task has more than one person on it ({', '.join(out['people'])}) - if it is meant for someone else, save it again with --to <name or address>")
         if out.get('attached'): print('attached: ' + ', '.join(out['attached']))
         for w in out.get('not_attached') or []: print(f'NOT attached - {w}')
         return

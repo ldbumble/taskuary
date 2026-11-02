@@ -29,7 +29,13 @@ def context_moved(store, rv: dict):
     if rv.get('Kind') == 'slot': return False, None
     # ...nor does a calendar answer (calwrite.py): it answers the invite, not the newest mail on the thread
     if _envelope(rv).get('kind') == 'calendar': return False, None
-    if tid:
+    if tid and (mine := _own_lines(store, rv)) is not None:
+        # ...and a reply moves only with ITS conversation: a line on another thread of the task, from somebody it does not go to, is
+        # theirs - Send on an agent's question to one requester redrafted it as an answer to a second one's "Perfect!" (2026-11-02)
+        seen = operations.seen_upto(store, tid, rv['ContextRevision']) if rv.get('ContextRevision') else None
+        later = [m for m in mine if m['MessageId'] > max(rv['MessageId'], seen or 0)]
+        latest, moved = (later[-1] if later else None), bool(later)
+    elif tid:
         latest = store.last_material_inbound_on_task(tid)
         if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
         else: moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
@@ -38,6 +44,18 @@ def context_moved(store, rv: dict):
         latest = store.last_inbound_in(m['ConversationId']) if m and m.get('ConversationId') else None
         moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
     return bool(rv.get('Stale') or moved), latest
+
+
+def _own_lines(store, rv: dict):
+    """The task's material inbound lines (store.last_material_inbound_on_task's rule) that bear on this reply - on the thread of the
+    message it answers, or from someone it goes to - oldest first. None where the reply has no thread to measure by."""
+    m = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
+    if not (m and m.get('ConversationId')): return None
+    env = _envelope(rv)
+    them = {str(a).strip().lower() for a in [m.get('FromEmail'), *(env.get('to') or []), *(env.get('cc') or [])] if a}
+    return [x for x in store._rows("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped','filed') "
+                                   "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' ORDER BY MessageId", (rv['TaskId'],))
+            if x.get('ConversationId') == m['ConversationId'] or str(x.get('FromEmail') or '').strip().lower() in them]
 
 
 def draft_revision(store, rv) -> str:

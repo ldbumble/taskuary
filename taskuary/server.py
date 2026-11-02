@@ -4503,12 +4503,26 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
             yours = str(body.final_text or '').strip()
             if yours and yours != str(rv.get('DraftText') or '').strip() and rv.get('TaskId'):
                 store.add_comment(rv['TaskId'], ACTOR, 'human', f'Your edited reply, kept for comparison - the thread moved before it was sent:\n{yours[:4000]}')
-            draft = None
-            try:
-                draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, pressed=True)
-                         if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
-            except Exception as e:
-                logger.warning(f'could not refresh stale review {rid}: {e}')
+            draft, kept = None, None
+            from .wrapup import agent_drafted
+            if agent_drafted(rv) and rv.get('TaskId'):
+                # AN AGENT'S OWN LETTER IS NEVER REWRITTEN HERE: the responder's fresh draft answered whoever wrote last, and the
+                # session's question to the person it meant was gone (2026-11-02). It stays as written, to whom it was written;
+                # what arrived is shown, and it now stands against the thread as it is - the next press sends it
+                from . import operations
+                store.pin_review_context(rid, rv['MessageId'], operations.message_revision(store, rv['TaskId']))
+                kept = draft = str(rv.get('DraftText') or '')
+            else:
+                try:
+                    draft = (responder.write_draft(store, rv['TaskId'], rid, actor=ACTOR, pressed=True)
+                             if rv.get('TaskId') else responder.draft_for_message(store, latest, rid))
+                except Exception as e:
+                    logger.warning(f'could not refresh stale review {rid}: {e}')
+            now = store.get_review(rid) or rv
+            # ...and said truthfully: nothing went, and - where the refreshed draft answers someone else now - to whom it goes
+            them = lambda r: str((store.get_message(r.get('MessageId')) or {}).get('FromEmail') or '').lower() if r.get('MessageId') else ''
+            nm = store.get_message(now.get('MessageId')) if now.get('MessageId') else None
+            moved_to = (nm.get('FromName') or nm.get('FromEmail') or '') if nm and them(now) != them(rv) else ''
             triage = ''
             if rv.get('TaskId'):
                 notes = [c for c in store.list_comments(rv['TaskId']) if str(c.get('Actor') or '').lower() == 'triage']
@@ -4519,9 +4533,11 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                   'latest': ({'MessageId': latest.get('MessageId'), 'FromName': latest.get('FromName'), 'FromEmail': latest.get('FromEmail'),
                                               'SentAt': latest.get('SentAt'), 'preview': str(latest.get('BodyText') or '')[:1500]} if latest else None),
                                   'triage': triage, 'yours': yours or None, 'refreshed': draft},
-                    'send_error': ('New messages arrived after this draft. '
-                                   + ('I refreshed it with the latest context; review it and approve again.' if draft
-                                      else f"Nothing was sent. Press {buttons.label('redraft')} to write it with the latest context before approving."))}
+                    'send_error': ('New messages arrived after this draft. Nothing was sent. '
+                                   + ('It is kept as its agent wrote it - read what arrived, and send it again if it still stands.' if kept is not None
+                                      else 'I refreshed it with the latest context' + (f' - it now answers {moved_to}' if moved_to else '')
+                                      + '; review it and approve again.' if draft
+                                      else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway)
 
@@ -5010,7 +5026,7 @@ def agent_memory(request: Request, task_id: int, section: str = ''):
     return {'text': text, 'says': text or 'nothing learned about the owner yet' + (f' under {learned_cut.TITLE[section]}' if section else '')}
 
 class AgentFile(BaseModel): name: str; data: str                 # data is base64: the CLI reads the file, the server never opens a path it is handed
-class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False
+class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''
 
 def _agent_files(files):
     import base64, binascii
@@ -5025,7 +5041,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up)
+    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to)
 
 class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
 
@@ -5110,7 +5126,7 @@ async def mcp_rpc(request: Request, task: int = 0):
                              'error': {'code': -32001, 'message': 'agents cannot do this: a session uses the tools of its OWN task'}}, status_code=403)
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
-             'reply': lambda tid, text: agent_reply(AgentReplyBody(task_id=tid, text=text), request),
+             'reply': lambda tid, text, to='': agent_reply(AgentReplyBody(task_id=tid, text=text, to=to), request),
              'draft': lambda tid, text, to, subject: agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
     def run(name, args):

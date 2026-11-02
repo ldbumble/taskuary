@@ -5349,7 +5349,8 @@ def next_badge(card: dict) -> str:
     "Read" where Next settled it read, "Next" where it only passed it. The page's nextBadge (assistantTurns.js) is the same rule."""
     c = card or {}
     # ...a report that failed is in the broken lane, and read all the same: it has no task to stay on
-    read = c.get('lane') in READ_ON_NEXT or (c.get('kind') == 'report' and not c.get('tid'))
+    # ...and an agent's finished task, read by Next from its place under Tasks (the owner, 2026-11-02)
+    read = c.get('lane') in READ_ON_NEXT or c.get('kind') == 'agentdone' or (c.get('kind') == 'report' and not c.get('tid'))
     return buttons.label('next', 'batch' if c.get('kind') == 'fyis' else 'read' if read else None)
 
 

@@ -296,9 +296,9 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
 
 test("a few kinds say more than their lane does", async () => {
   const { rowMeta, laneMeta } = await import("../src/funnelPile.js");
-  // an agent's finished job and a report you set up share the 'report' lane; they do not read alike
-  assert.equal(rowMeta({ kind: "agentdone", lane: "report" }).word, "agent finished");
-  assert.equal(rowMeta({ kind: "agentdone", lane: "report" }).role, "done");
+  // an agent's finished task sits in a task lane under Tasks until read (2026-11-02); it reads "agent finished", not "on you"
+  assert.equal(rowMeta({ kind: "agentdone", lane: "yours" }).word, "agent finished");
+  assert.equal(rowMeta({ kind: "agentdone", lane: "yours" }).role, "done");
   // ...and a kind never beats a lane that is MORE specific: both of these carry kind 'todo'
   assert.equal(rowMeta({ kind: "todo", lane: "yours" }).word, "on you");
   assert.equal(rowMeta({ kind: "todo", lane: "queued" }).word, "waiting to start");

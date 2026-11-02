@@ -358,12 +358,13 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         self.assertLess(text.index('TASKS'), text.index('REPORTS ·')); self.assertLess(text.index('REPORTS ·'), text.index('FYI ·'))
         self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')
 
-    def test_a_finished_agents_task_is_a_result_as_on_the_rail(self):
-        # the owner's screenshot, 2026-10-02: the opener said "Agents waiting" - no agent was working. Since 2026-10-30 (3.5) an agent's
-        # finished task is a result, drawn under Reports, and the phone groups it where the rail draws it
-        done = {'key': 'agentdone:9', 'lane': 'report', 'kind': 'agentdone', 'agent': 'coding', 'title': 'Investigate the export'}
-        self.assertEqual(remote_assistant.group_of(done), 'reports')
-        self.assertIn('REPORTS · 1', remote_assistant.who_wants_what([done]))
+    def test_a_finished_agents_task_is_in_tasks_as_on_the_rail(self):
+        # the owner's screenshot, 2026-10-02: the opener said "Agents waiting" - no agent was working. An agent's finished task stays in
+        # Tasks until read (the owner, 2026-11-02: "it should not be in reports"), and the phone groups it where the rail draws it
+        done = {'key': 'agentdone:9', 'lane': 'yours', 'kind': 'agentdone', 'agent': 'coding', 'title': 'Investigate the export', 'closed': True}
+        self.assertEqual(remote_assistant.group_of(done), 'task')
+        text = remote_assistant.who_wants_what([done])
+        self.assertIn('TASKS', text); self.assertNotIn('REPORTS', text)
 
     def test_what_you_passed_stays_in_tasks_and_remind_me_is_for_later_as_on_the_rail(self):
         # Next moves on and the task stays under Tasks; Remind me puts it in For later (the owner, 2026-10-21)

@@ -153,5 +153,6 @@ export const pressedNoteOf = (m) => m?.pressedNote || m?.card?.pressed_note || "
 // still yours. The server's next_badge (concierge.py) is the same rule, so the stamp a reload reads says the same word.
 // ...a report that failed is in the broken lane, and read all the same: it has no task to stay on
 const READ_ON_NEXT = new Set(["report", "fyi"]);
-const readOnNext = (c) => READ_ON_NEXT.has(c?.lane) || (c?.kind === "report" && !c?.tid);
+// ...and an agent's finished task, read by Next from its place under Tasks (the owner, 2026-11-02)
+const readOnNext = (c) => READ_ON_NEXT.has(c?.lane) || c?.kind === "agentdone" || (c?.kind === "report" && !c?.tid);
 export const nextBadge = (card) => btn("next", card?.kind === "fyis" ? "batch" : readOnNext(card) ? "read" : undefined);

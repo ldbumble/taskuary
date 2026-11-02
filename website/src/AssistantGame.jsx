@@ -179,7 +179,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
   const quests = useMemo(() => questsFor(game, {
     approve: pile.filter((i) => i.lane === "approve" || (i.lane === "asked" && i.mid)).length,
     dispatch: pile.filter((i) => matchFor(i, agents).verb === "dispatch").length,
-    read: pile.filter((i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis") && !i.bad && !passed.has(i.key)).length,
+    read: pile.filter((i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis" || i.kind === "agentdone") && !i.bad && !passed.has(i.key)).length,
     rep: mine.reduce((n, t) => n + rowChecklist(t).filter((c) => !c.done).length, 0),
   }), [game, pile, agents, mine, passed]);
   const questsRef = useRef(quests);
@@ -237,7 +237,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
   const settle = (item, verb, move) => play(move, item.key, () => api.post("/api/funnel/settle", { key: item.key, verb }));
   // NEXT, the chat's own: this one is read (settle surfaced, read - "shown is read"), and the next thing in
   // the assistant's ranked order comes up, wherever in the office it stands - you walk there
-  const knowOnly = (i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis") && !i.bad;
+  const knowOnly = (i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis" || i.kind === "agentdone") && !i.bad;
   const nextAfter = (key) => {
     const order = pileRef.current.filter((i) => i.key !== key && !passedRef.current.has(i.key) && i.lane !== "working");
     const at = pile.findIndex((i) => i.key === key);
@@ -701,7 +701,7 @@ function CoffeeSpace({ items, onSettle, ...room }) {
   // THE WHOLE POT, the count the room's badge shows: what is only there to be known is read away (done), and a
   // broken connection or a failed report is put down the way Next puts it down (read, back if the error changes) -
   // never marked done, because nothing fixed it
-  const knowOnly = (i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis") && !i.bad;
+  const knowOnly = (i) => (i.lane === "fyi" || i.lane === "report" || i.kind === "fyis" || i.kind === "agentdone") && !i.bad;
   const drain = async () => {
     for (const i of items) {
       if (knowOnly(i)) await onSettle(i, "done", "read");

@@ -1119,7 +1119,7 @@ class NextBadge(unittest.TestCase):
         read, nxt = buttons.label('next', 'read'), buttons.label('next')
         self.assertEqual(read, 'Read')
         for c in ({'kind': 'report', 'lane': 'report'}, {'kind': 'report', 'lane': 'report', 'dashboard': True}, {'kind': 'report', 'lane': 'broken', 'bad': True},
-                  {'kind': 'agentdone', 'lane': 'report', 'tid': 8}, {'kind': 'fyi', 'lane': 'fyi'}):
+                  {'kind': 'agentdone', 'lane': 'yours', 'tid': 8}, {'kind': 'fyi', 'lane': 'fyi'}):
             self.assertEqual(concierge.next_badge(c), read, c)
         for c in ({'kind': 'task', 'lane': 'yours', 'tid': 7}, {'kind': 'review', 'lane': 'approve', 'tid': 3}, {'kind': 'meeting', 'lane': 'time'},
                   {'kind': 'connection', 'lane': 'broken'}, None):

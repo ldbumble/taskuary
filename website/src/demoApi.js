@@ -90,7 +90,7 @@ if (!numbersWorkflow) {
     { key: "msg:943", kind: "fyi", lane: "fyi", title: said[943][3], who: said[943][1], when: at(new Date()), why: "an announcement - nothing to do", mid: 943, channel: "slack", preview: said[943][4] },
     { key: "idea:badges", kind: "idea", lane: "forgotten", title: "The badge printer quote has gone quiet", who: "Paula Vance", when: scripted(["2026-09-01 14:00:00"])[0],
       why: "no reply since Monday; the quote runs out Friday", idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 944 }, mid: 944 },
-    { key: `agentdone:${gl}`, kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coding", when: at(new Date()), tid: gl, ref: `TQ-${String(gl).padStart(4, "0")}`,
+    { key: `agentdone:${gl}`, kind: "agentdone", lane: "yours", closed: true, title: "Reconcile the August GL export", who: "coding", when: at(new Date()), tid: gl, ref: `TQ-${String(gl).padStart(4, "0")}`,
       summary: "Found the two inter-company rows the export dropped; the fix is on a branch with a test.", channel: "github" },
   );
 }

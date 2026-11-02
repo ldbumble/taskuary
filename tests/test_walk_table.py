@@ -143,9 +143,10 @@ def check(w: Walk, case: dict, out, before: int):
     for sym in case.get('later') or ():
         row = next((r for r in items if walkworld.matches(r, src[sym])), None)
         assert row and lanes.level_of(row) == 'later', f'{rid}: {sym} should be under For later - {trail}'
-    for sym in case.get('reports') or ():
+    # a task its agent closed stays in Tasks, in its place, until read (the owner, 2026-11-02) - never under Reports
+    for sym in case.get('finished') or ():
         row = next((r for r in items if walkworld.matches(r, src[sym])), None)
-        assert row and lanes.level_of(row) == 'reports' and row.get('kind') == 'agentdone', f'{rid}: {sym} should be a result under Reports - {trail}'
+        assert row and lanes.level_of(row) == 'task' and row.get('kind') == 'agentdone', f'{rid}: {sym} should be an agent-finished task under Tasks - {trail}'
     if case.get('urgent'):
         row = next(r for r in items if walkworld.matches(r, src[case['urgent']]))
         assert lanes.is_urgent(row) and lanes.level_of(row) == 'task', f'{rid}: {case["urgent"]} is urgent, walked in its place'
@@ -184,7 +185,7 @@ def test_the_world_is_the_table():
         s = MemoryStore(); demo.seed(s); initialize(s, live_state=[])
         src = walkworld.build(s)
         assert [sym for _, sym in walkworld.dump(s, src)] == list(walkworld.ORDER)
-        assert [lv for lv, _ in walkworld.dump(s, src)] == ['task'] * 6 + ['later'] + ['reports'] * 3 + ['ideas'] + ['fyi'] * 7
+        assert [lv for lv, _ in walkworld.dump(s, src)] == ['task'] * 7 + ['later'] + ['reports'] * 3 + ['ideas'] + ['fyi'] * 7
         funnel.invalidate()
 
 

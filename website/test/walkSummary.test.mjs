@@ -17,10 +17,10 @@ test("the groups are the rail's bands, in the rail's order, under the rail's nam
   assert.deepEqual(summarize(rows).groups.map((g) => [g.key, g.n]), bandsOf(rows).map((b) => [b.level, b.items.length]));
 });
 
-test("a finished agent's task is a result under Reports, as on the rail - not an agent waiting (2026-10-02; Reports since 2026-10-30)", () => {
-  const done = it("report", "agentdone", { agent: "coding", title: "Investigate the export" });
-  assert.equal(groupOf(done), "reports");
-  assert.equal(summarize([done]).groups[0].word, "Reports");
+test("a finished agent's task stays in Tasks until read, as on the rail - not an agent waiting, not a report (2026-10-02; 2026-11-02)", () => {
+  const done = it("yours", "agentdone", { agent: "coding", title: "Investigate the export", closed: true });
+  assert.equal(groupOf(done), "task");
+  assert.equal(summarize([done]).groups[0].word, "Tasks");
 });
 
 test("the lead counts each band as the rail does", () => {

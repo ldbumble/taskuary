@@ -114,7 +114,7 @@
       "role": "info",
       "mark": "📄",
       "section": "reports", "on_you": false,
-      "hint": "a report you set up landed, or an agent finished a job",
+      "hint": "a report you set up landed",
       "counted": "landed"
     },
     {

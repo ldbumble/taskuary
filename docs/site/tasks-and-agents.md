@@ -363,7 +363,7 @@ Neither moves a row. A priority you set by hand stays yours: triage never raises
 | **Mark done** | off | THEY write after the close - your own reply does not count |
 | **Remind me** | For later, with its day | 07:00 on that day, saying "you asked to be reminded about this today" |
 | **Watch it** | Watching, still open | a new message from anybody else on it; else after 7 quiet days, once. Nothing ever closes it for you |
-| Its agent closes the task | "Agent finished" until you read it | a new message on it |
+| Its agent closes the task | "Agent finished", under Tasks in its place, until **Next** reads it - then off | a new message on it |
 | A draft decided anywhere, an idea dismissed | off | they write again |
 | An auto-reply, a withdrawn message, a thread where yours is the last word | never shown (Settings → Hide auto-replies and answered threads) | - |
 | A meeting starts | off 5 minutes in (Settings) | - |

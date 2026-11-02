@@ -173,7 +173,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
     def test_a_report_wears_the_report_mark_and_a_finished_agent_its_own(self):
         report = {'say': 'Process Error Check - 0 rows landed 8 min ago.', 'item': {'lane': 'report', 'kind': 'report'}}
         self.assertTrue(remote_assistant.turn_text(report).startswith('📄 Process Error Check'))
-        done = {'say': 'coding finished TQ-0491.', 'item': {'lane': 'report', 'kind': 'agentdone'}}
+        done = {'say': 'coding finished TQ-0491.', 'item': {'lane': 'yours', 'kind': 'agentdone'}}
         self.assertTrue(remote_assistant.turn_text(done).startswith('✅ agent finished'), 'the kind outranks the lane')
 
     def test_an_fyi_batch_is_its_items_one_per_line_and_no_summary(self):

@@ -112,7 +112,7 @@ test("Next leaves its own badge on the card it passed, and a failed Next takes i
 test("Next's badge is Read on a report, a dashboard or an fyi it read, and Next on a task it only passed", () => {
   assert.equal(btn("next", "read"), "Read");
   for (const c of [{ kind: "report", lane: "report" }, { kind: "report", lane: "report", dashboard: true }, { kind: "report", lane: "broken", bad: true },
-    { kind: "agentdone", lane: "report", tid: 8 }, { kind: "fyi", lane: "fyi" }]) assert.equal(nextBadge(c), "Read", JSON.stringify(c));
+    { kind: "agentdone", lane: "yours", tid: 8 }, { kind: "fyi", lane: "fyi" }]) assert.equal(nextBadge(c), "Read", JSON.stringify(c));
   for (const c of [{ kind: "task", lane: "yours", tid: 7 }, { kind: "review", lane: "approve", tid: 3 }, { kind: "agent", lane: "blocked", tid: 5 },
     { kind: "meeting", lane: "time" }, { kind: "connection", lane: "broken" }, null]) assert.equal(nextBadge(c), "Next", JSON.stringify(c));
   assert.equal(nextBadge({ kind: "fyis", lane: "fyi" }), btn("next", "batch"));

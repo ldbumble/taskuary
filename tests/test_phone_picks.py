@@ -240,7 +240,7 @@ class PhoneCardTests(unittest.TestCase):
 
     def test_an_agents_card_is_the_task_then_what_the_agent_did(self):
         item = {'key': 'agent:9', 'kind': 'agentdone', 'tid': 9, 'ref': 'TQ-0009', 'title': 'Why the nightly export times out',
-                'who': 'coding', 'channel': 'report', 'lane': 'report', 'why': 'the agent finished and closed it'}
+                'who': 'coding', 'channel': 'report', 'lane': 'yours', 'why': 'the agent finished and closed it'}
         text = ra.turn_text({'say': 'coding finished TQ-0009: the export timed out on a mass update.', 'item': item})
         # the task, then the agent and what it found (the card as a story, 2026-09-28)
         # ...and no "🔵 The task · just now" filler where nobody asked (F6)

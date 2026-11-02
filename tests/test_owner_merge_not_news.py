@@ -8,7 +8,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import server
+from taskuary import lanes, server
 from taskuary.processing_unread import _agent_finished, finish_evidence
 from taskuary.store import SQLiteStore
 from taskuary.testing import Factory
@@ -58,5 +58,6 @@ class OwnerMergeNotNewsTests(unittest.TestCase):
 
     def test_an_agents_own_close_is_still_a_result_to_read(self):
         for tid in (self.plain, self.declined):
-            self.assertEqual(self.pile.get(tid, {}).get('lane'), 'report', tid)
+            row = self.pile.get(tid, {})                # ...in Tasks until read, never under Reports (the owner, 2026-11-02)
+            self.assertEqual((row.get('kind'), lanes.level_of(row)), ('agentdone', 'task'), tid)
             self.assertTrue(_agent_finished(self.s, tid, False, None, None, None)['unread'])

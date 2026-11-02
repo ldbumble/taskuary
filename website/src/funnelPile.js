@@ -31,9 +31,9 @@ export const LANE_COUNTED = Object.fromEntries(vocab.lanes.map((l) => [l.key, l.
 export const laneCounted = (lane) => LANE_COUNTED[lane] || LANE_COUNTED.fyi;
 export const laneMeta = (lane) => LANE_META[lane] || LANE_META.fyi;
 
-// A few KINDS carry more than their lane does. An agent's finished job and a report you set up share
-// the 'report' lane (both just landed), but reading "report" on the agent's own summary is wrong (the
-// owner, 2026-09-03: "it's not a report but agent awaiting little hand no?").
+// A few KINDS carry more than their lane does. An agent's finished task sits in a task lane under Tasks
+// until it is read (the owner, 2026-11-02), but reading "on you" on the agent's own summary is wrong: it
+// reads "agent finished" (the owner, 2026-09-03: "it's not a report but agent awaiting little hand no?").
 export const KIND_META = byKey(vocab.kinds);
 export const STATE_META = byKey(vocab.states);
 // A TASK'S STATE (taskstate.py, T1-T9): a lane where the rail has one, else a state (theirs, closed) or a kind (agentdone)

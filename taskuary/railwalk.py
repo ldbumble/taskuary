@@ -93,8 +93,8 @@ def batchable(row: dict) -> bool:
 
 def kind_of(row: dict | None) -> str:
     """The effect Next has on a row, taken from its section WHEN IT WAS PUT ON SCREEN (3.5): `stays` under Tasks, `reads` under Reports,
-    Advisor ideas and FYI (an agent's finished task included), `stays` under Watching too, `none` for a For later row or a closed task
-    opened by name."""
+    Advisor ideas and FYI - and an agent's finished task, though it sits in Tasks (2026-11-02) - `stays` under Watching too, `none` for a
+    For later row or a closed task opened by name."""
     if not row: return 'none'
     if row.get('kind') in ('agentdone', 'fyis'): return 'reads'
     level = lanes.level_of(row)
@@ -127,7 +127,7 @@ def place_of(store, key: str, st: dict = None, rows: list = None):
     if str(key).startswith('fyis:'):
         got = [p for p in (place_of(store, k, st, rows) for k in members_of(key)) if p]
         if got: return (min(p[0] for p in got), max(p[1] for p in got))
-    # the row on screen keeps the place it was put up at, even where it has moved since: closed by its agent into Reports, made a task by
+    # the row on screen keeps the place it was put up at, even where it has moved since: closed by its agent, made a task by
     # Put it on my list, a task's mail filed as FYI by Not a task - Next goes on from where the walk stood (5: "a row changes section")
     if st.get('on') and (key == st['on'] or key in (st.get('members') or ())) and st.get('first'):
         return (_tuple(st['first']), _tuple(st['last']))
@@ -402,7 +402,9 @@ def open(store, key: str, actor: str = 'owner', press: str = None, llm=None, at:
         if not item:
             from . import concierge
             return _remember(press, _answer(store, st, rows, concierge.missing_turn(store, key, actor)))
-        if row is not None and lanes.level_of(row) in (*TASKS, *AWAY):
+        # ...but not an agent's finished task: that read is its whole read, and it would leave the rail under the open (the owner, 2026-09-24:
+        # "it disappears instead of staying on sidebar until next") - it stays in Tasks until Next reads it (2026-11-02)
+        if row is not None and lanes.level_of(row) in (*TASKS, *AWAY) and row.get('kind') != 'agentdone':
             try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True)
             except Exception as e: logger.debug(f'railwalk: the +N on {key} was not cleared - {e}')
         place = place_of(store, at, st, rows) if at else place_of(store, item['key'], st, rows) if row is None else None

@@ -24,7 +24,7 @@ class PillTests(unittest.TestCase):
         "no keep going if finished") - more for it is said in the task's own box."""
         s = MemoryStore()
         with mock.patch.object(s, 'resumable_session', return_value={'ExtId': 'thread-1'}):
-            verbs = [c['verb'] for c in concierge.chips_for(s, {'key': 'k', 'kind': 'agentdone', 'tid': 7, 'ref': 'TQ-0007', 'lane': 'report'})]
+            verbs = [c['verb'] for c in concierge.chips_for(s, {'key': 'k', 'kind': 'agentdone', 'tid': 7, 'ref': 'TQ-0007', 'lane': 'yours'})]
         self.assertNotIn('continue', verbs); self.assertTrue(verbs, 'it still has moves to offer')
 
     def test_a_general_agent_is_continued_in_its_chat_so_there_is_no_pill(self):

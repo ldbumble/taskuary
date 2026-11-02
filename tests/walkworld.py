@@ -3,9 +3,10 @@ out again as the table names it - so the Python runner (tests/test_walk_table.py
 walk the same rows. Rows are named by symbol and resolved to keys by what they were made from (a task, a message, a meeting), never by
 a key written into the table. Everyone here is invented (CLAUDE.md): Northwind, Erin Blake, Gail Moreno, Paula Vance, *.example.
 
-    Tasks:      T1 (task, oldest)  T2 (urgent ask)  T3 (agent working)  T4 (draft ready, Erin Blake)  T5 (task)  M1 (meeting, in 10 min)
+    Tasks:      T1 (task, oldest)  T2 (urgent ask)  T3 (agent working)  T4 (draft ready, Erin Blake)  T5 (task)
+                D1 (a task its agent closed, unread - in Tasks until Next reads it, the owner 2026-11-02)  M1 (meeting, in 10 min)
     For later:  L1 (reminded task)
-    Reports:    R1 (report)  R2 (agent-finished task)  R3 (dashboard)
+    Reports:    R1 (report)  R2 (report)  R3 (dashboard)
     Ideas:      I1 (Advisor idea)
     FYI:        F1 .. F7   (fyi_batch 4, set by the owner: B1 = F1-F4, B2 = F5-F7)
     Off rail:   C1 (closed task, arrived between T2 and T3)
@@ -13,7 +14,7 @@ a key written into the table. Everyone here is invented (CLAUDE.md): Northwind, 
 import json
 from datetime import datetime, timedelta
 
-ORDER = ('T1', 'T2', 'T3', 'T4', 'T5', 'M1', 'L1', 'R1', 'R2', 'R3', 'I1', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7')
+ORDER = ('T1', 'T2', 'T3', 'T4', 'T5', 'D1', 'M1', 'L1', 'R1', 'R2', 'R3', 'I1', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7')
 LINE = tuple(s for s in ORDER if s != 'L1')
 MEETING = 'Northwind cutover check-in'
 
@@ -89,13 +90,17 @@ def build(store, now: datetime = None) -> dict:
     src['M1'] = {'meeting': MEETING}
     l1, _ = task('L1', 'Check the portal export after the upgrade', 560)
     store._exec('UPDATE task SET RemindAt=? WHERE TaskId=?', (_stamp(now + timedelta(days=2)), l1))
-    # Reports: a report run, an agent's finished task, a dashboard landing - oldest first
+    # D1: a task its agent finished and closed itself - unread, so it stays in Tasks at its arrival place until Next reads it
+    d1, _ = task('D1', 'Find why the nightly ledger export was empty', 280, kind='general', status='in_progress')
+    store.add_comment(d1, 'coding', 'agent', 'The agent closed this itself: the export ran before the bank feed landed; moved it to 02:00.')
+    store.update_task(d1, {'Status': 'done'}, 'coding')
+    # Reports: two report runs and a dashboard landing - oldest first
     r1 = f.report_row(title='Northwind headcount by site')
     store._exec('UPDATE message SET SentAt=? WHERE MessageId=?', (at(300), r1.mid))
     src['R1'] = {'mid': r1.mid}
-    r2, _ = task('R2', 'Find why the nightly ledger export was empty', 280, kind='general', status='in_progress')
-    store.add_comment(r2, 'coding', 'agent', 'The agent closed this itself: the export ran before the bank feed landed; moved it to 02:00.')
-    store.update_task(r2, {'Status': 'done'}, 'coding')
+    r2 = f.report_row(title='Northwind open purchase orders')
+    store._exec('UPDATE message SET SentAt=? WHERE MessageId=?', (at(280), r2.mid))
+    src['R2'] = {'mid': r2.mid}
     r3 = f.report_row(title='Northwind desk')
     store._exec('UPDATE message SET SentAt=? WHERE MessageId=?', (at(260), r3.mid))
     src['R3'] = {'mid': r3.mid}
@@ -156,7 +161,7 @@ def close_elsewhere(store, src: dict, sym: str):
 
 
 def agent_closes(store, src: dict, sym: str):
-    """The task's agent finished it and closed it itself: its result is a row under Reports."""
+    """The task's agent finished it and closed it itself: it stays in Tasks, in its place, worded "agent finished", until read."""
     tid = src[sym]['tid']
     import time; time.sleep(1.1)                      # after the open that read it: stamps are to the second, and a close in that second reads as seen
     store._exec("UPDATE run SET Status='done' WHERE TaskId=?", (tid,))

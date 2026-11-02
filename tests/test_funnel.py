@@ -1081,10 +1081,12 @@ class MemoryTests(unittest.TestCase):
             self.assertTrue(card['actionable'])
             self.assertEqual(railwalk.start(s)['item']['tid'], t)
 
-    def test_a_task_its_agent_finished_shows_once_as_a_result(self):
+    def test_a_task_its_agent_finished_stays_in_tasks_until_read(self):
         """"same for finished agent task?" - an agent that closed its task left nothing on the rail: the result
-        the owner asked for was only on the Tasks tab. It is a result now, with Reports, until it is read."""
-        from taskuary import processing_unread
+        the owner asked for was only on the Tasks tab. It is on the rail until it is read - in TASKS, its task lane, never under
+        Reports (the owner, 2026-11-02: "when an agent closes a task on its own it should not be in reports - it stays in Tasks
+        until read")."""
+        from taskuary import lanes, processing_unread
         s, settle = self._canonical()
         t = s.create_task({'Title': 'AP clerk checklist', 'Kind': 'general', 'Status': 'open'}, 'o')
         s.add_message({'TaskId': t, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'AP clerk checklist',
@@ -1093,10 +1095,10 @@ class MemoryTests(unittest.TestCase):
         s.add_comment(t, 'assistant', 'agent', 'The agent closed this itself: a ten-line checklist, on the task.')
         s.update_task(t, {'Status': 'done'}, 'assistant'); settle()
         card = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
-        self.assertEqual([(i['kind'], i['lane'], i['unread'], i.get('mid')) for i in card], [('agentdone', 'report', True, None)])
+        self.assertEqual([(i['kind'], i['lane'], i['unread'], i.get('mid')) for i in card], [('agentdone', 'yours', True, None)])
         self.assertIn('ten-line checklist', card[0]['summary'])
-        self.assertEqual(card[0]['order_band'], 3)      # a result, under Reports (the walk has one owner, 2026-10-30, 3.5)
-        # ...and put on the table it is STILL the agent's result, in Reports, until Next moves on (the owner, 2026-09-24: "when
+        self.assertEqual((card[0]['order_band'], lanes.level_of(card[0])), (2, 'task'))    # under Tasks, at its arrival place
+        # ...and put on the table it is STILL the agent's result, in Tasks, until Next moves on (the owner, 2026-09-24: "when
         # bringing into assistant it disappears instead of staying on sidebar until next") - opening never reads (rule 4)
         from taskuary import concierge, funnel, railwalk
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
@@ -1110,7 +1112,7 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual((concierge.restore_current(s, home) or {}).get('key'), key)
         self.assertEqual(concierge.current_key(s, home), key)
         here = funnel.next_item(s, key)
-        self.assertEqual((here['kind'], here['lane']), ('agentdone', 'report'))
+        self.assertEqual((here['kind'], here['lane']), ('agentdone', 'yours'))
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             railwalk.next(s, key)                            # Next reads it
         settle()

@@ -511,6 +511,8 @@ def who_of(i: dict) -> str:
 def state_of(i: dict) -> str:
     """The one word under a row's who: its lane's word - but an agent's proposed action wants a yes. A drafted reply and a
     close-out say the lane's word (the desktop's rule; the phone's own "draft ready" is gone)."""
+    # ...an agent's finished task is in a task lane under Tasks until read (the owner, 2026-11-02): it says "agent finished", not "on you"
+    if i.get('kind') == 'agentdone': return lanes.word('agentdone')
     word = _LANE_WORDS.get(str(i.get('lane') or '')) or _LANE_WORDS['fyi']
     return 'wants a yes' if i.get('lane') == 'approve' and i.get('kind') == 'action' and not i.get('closeout') else word
 

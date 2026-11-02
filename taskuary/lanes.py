@@ -53,9 +53,8 @@ def band_of(item: dict) -> int:
     lane, kind = item.get('lane'), item.get('kind')
     if kind == 'meeting': return attention_band(urgent=not not_yet(item), actionable=True)
     l, sec = LANE.get(lane) or {}, lane_section(lane)
-    # a task an agent FINISHED is a result to read, drawn under Reports in its report lane - Next reads it and it leaves (the walk has
-    # one owner, 2026-10-30, rule 4 and 3.5; it was On you, band 2, from 2026-09-24); an unjudged row the retry gave up on is
-    # nobody's to judge now, so it is the owner's
+    # a task an agent FINISHED stays in Tasks, in its task lane at its arrival place, until it is read - Next reads it and it leaves (the
+    # owner, 2026-11-02; it was under Reports from 2026-10-30); an unjudged row the retry gave up on is nobody's to judge now, so it is the owner's
     return attention_band(urgent=bool(l.get('urgent') or (l.get('urgent_request') and item.get('urgent_request'))),
                           owner_wait=bool(l.get('waits')),
                           actionable=sec == 'task' or (lane == 'unjudged' and bool(item.get('held'))),

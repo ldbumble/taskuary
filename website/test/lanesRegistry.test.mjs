@@ -64,7 +64,7 @@ test("every kind of row is counted, filed as mail and placed by lanes.json's ite
   assert.equal(kindSays("nonsense", 3), "3 other things", "an internal name never reaches a sentence");
   // the game: an agent's own news at its desk, a finished task in the gym, mail an agent drafted at the meeting table
   assert.equal(zoneOf({ kind: "wrapup", lane: "report" }), "floor");
-  assert.equal(zoneOf({ kind: "agentdone", lane: "report" }), "gym");
+  assert.equal(zoneOf({ kind: "agentdone", lane: "yours" }), "gym");
   assert.equal(zoneOf({ kind: "action", lane: "approve" }), "meeting");
 });
 

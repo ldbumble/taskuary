@@ -22,9 +22,10 @@ is there:
 | **reply pending** | a reply or an action is drafted and waits for your yes |
 | **asked you** | a person asked you for something and nobody is on it |
 | **slipped** | the ask that went unanswered, the promise you made, the thread gone quiet |
-| **landed** | a report you set up arrived; an agent finished a job |
+| **landed** | a report you set up arrived |
 | **fyi** | a person told you something — read it or don't |
 | **agent working** | in hand: nothing for you until it stops or asks |
+| **agent finished** | an agent closed its task — it stays with your tasks until you read what it found |
 
 The rail is **unread**, the way an inbox is: showing something in the chat is reading it, and read is
 gone. What is still on you comes back on its own — a draft you skipped, an agent still parked, a

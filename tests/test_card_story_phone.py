@@ -103,7 +103,7 @@ def test_a_finished_agents_card_names_who_asked_never_the_agent_or_the_task():
     tid = s.create_task({'Title': 'Summarise the vendor contract', 'Kind': 'general', 'Status': 'open'}, 'owner')
     mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Vendor contract', 'FromName': 'Gail Moreno',
                          'FromEmail': 'gail@northwind.example', 'BodyText': 'Can someone summarise this?', 'Status': 'open'})
-    item = {'kind': 'agentdone', 'lane': 'report', 'tid': tid, 'mid': mid, 'ref': 'TQ-0001', 'who': 'claude', 'channel': 'email',
+    item = {'kind': 'agentdone', 'lane': 'yours', 'tid': tid, 'mid': mid, 'ref': 'TQ-0001', 'who': 'claude', 'channel': 'email',
             'title': 'Summarise the vendor contract'}
     story, move = ra.story_block(s, item), ra.move_block(s, item)
     assert '**The task**' not in story

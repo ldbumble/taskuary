@@ -12,7 +12,7 @@ test("the header's status is exactly the rail row's mark and word, for every lan
     assert.deepEqual(railStatus(item), st, `${lane}: the rail's icon and the header read one status`);
   }
   // a kind over its lane, and a refused send over both - as the rail says them
-  assert.equal(railStatus({ lane: "report", kind: "agentdone" }).word, "agent finished");
+  assert.equal(railStatus({ lane: "yours", kind: "agentdone" }).word, "agent finished");
   assert.equal(railStatus({ lane: "approve", kind: "review", not_sent: true }).word, "didn't send");
 });
 

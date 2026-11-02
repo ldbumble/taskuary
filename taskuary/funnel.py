@@ -42,7 +42,7 @@ LANE_WORDS = {l['key']: (l['word'], l['role']) for l in _VOCAB['lanes']}   # the
 # ever carried two words. Everything else counts under the word it wears.
 LANE_COUNTED = {l['key']: l.get('counted') or l['word'] for l in _VOCAB['lanes']}
 # A chat cannot draw an icon, so it wears the emoji the desktop uses - the same entry, not a copy.
-# A few KINDS outrank their lane: an agent's own finish and a report you set up share the 'report' lane.
+# A few KINDS outrank their lane: an agent's own finish is a task in a task lane, worded "agent finished", not "on you".
 LANE_MARKS = {l['key']: l['mark'] for l in _VOCAB['lanes']}
 KIND_MARKS = {k['key']: k['mark'] for k in _VOCAB['kinds']}
 # ...and where it came from. The desktop paints a brand logo here; a chat gets one emoji per source,

@@ -34,7 +34,7 @@ export const attentionBand = (item) => {
   if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 4) return item.order_band;
   if (item?.kind === "meeting") return band({ urgent: !notYet(item), actionable: true });
   const l = LANE[item?.lane] || {}, sec = laneSection(item?.lane);
-  // a task its agent finished is a result, under Reports (2026-10-30); an unjudged row the retry gave up on is the owner's
+  // a task its agent finished stays in Tasks until read (the owner, 2026-11-02); an unjudged row the retry gave up on is the owner's
   return band({ urgent: !!(l.urgent || (l.urgent_request && item?.urgent_request)), wait: !!l.waits,
     actionable: sec === "task" || (item?.lane === "unjudged" && !!item?.held), result: sec === "reports" });
 };

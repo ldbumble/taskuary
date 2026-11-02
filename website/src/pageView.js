@@ -29,6 +29,9 @@ export const isSecret = (key = "", label = "") => {
 };
 export const isSend = (b) => !!b && (!!b.send || SEND_VERBS.has(String(b.id || "").split(":").pop().toLowerCase())
   || SEND_VERBS.has(String(verbOfRow(String(b.id || "").replace(/^row:/, "")) || "")) || SEND_WORDS.test(String(b.label || "")));
+// ...and Taskuary's own install (UpdateCard's "Update to v..."): it reopens the app, and Updates promises nothing installs unless the owner
+// presses it - lit, never pressed, the same as a send (2026-11-02, the Settings audit; pageview.is_install)
+export const isInstall = (b) => !!b && (/^\s*update to v\d/i.test(String(b.label || "")) || /^update_to_v\d/i.test(String(b.id || "")));
 
 // ── EXTRAS: what a page holds that is no box on it ──
 // root element, or an area's name for a page drawn inside a frame it does not own (Reports) ->
@@ -285,14 +288,15 @@ async function runOne(op, n) {
   }
   const name = op.button || op.target;
   const b = find(v.buttons, name, "id", "label"), f = b ? null : find(v.fields, name, "key", "label");
-  if (op.op === "point" || (b && isSend(b))) {
+  if (op.op === "point" || (b && (isSend(b) || isInstall(b)))) {
     // AN OUTWARD SEND IS THE OWNER'S (the owner, 2026-10-30): lit where it stands, never pressed - whatever asked for the press
     if (b?.row && lighter) lighter(b.row, b.label);
     if (b?.el || f?.el) light(b?.el || f.el);
     else if (b?.row) light(document.querySelector(`.tq-dock [data-tq-verb="${CSS.escape(b.row)}"]`));
     if (!b && !f) return step(n, `Could not find ${name} on the page`, "error");
     const what = b?.label || f?.label;
-    return step(n, b && isSend(b) ? `Lit ${what} for you - a send is yours to press` : `Pointed at ${what}`, "done", "read");
+    return step(n, b && isSend(b) ? `Lit ${what} for you - a send is yours to press` : b && isInstall(b) ? `Lit ${what} for you - installing is yours to press`
+      : `Pointed at ${what}`, "done", "read");
   }
   if (!b) return step(n, `Could not find ${name} on the page`, "error");
   if (!b.enabled) return step(n, `${b.label} is greyed out`, "error");

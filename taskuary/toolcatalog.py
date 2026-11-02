@@ -577,9 +577,12 @@ READS = {
     'message.read':     'one message in full - who, when, its task and the whole text. `mid`: the m-number timeline.search printed',
     'sender.read':      ('one person at a glance - how often they write, their recent messages, their open tasks, when you last '
                          'wrote back and what the owner told you to remember about them. `who`: a name or an address'),
+    # ...and one of the owner's docs by name (2026-11-02, the Settings audit): "what's in my STYLE.md" reached its whole text only through
+    # a contents list first - SOUL, JOB, LEARNED and COUNSEL ride every turn (concierge._system); the rest are read here
     'docs.search':      ("how Taskuary works and how to set it up (the help pages), and the owner's own docs (SOUL, TRIAGE, "
                          'COUNSEL...) and what each release changed (help/whats-new). `query`: the words; `section`: one section read whole, '
-                         'as its contents list names it. Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app'),
+                         'as its contents list names it - one of the owner\'s docs whole is `your doc <name>` (your doc style, your doc triage). '
+                         'Use it for any "how do I", "what does X do", "what changed" or "why did it" about the app'),
     # THE APP AT WORK (lookups.py, 2026-09-24): which agent is on what, what waits on a yes, the
     # calendar past today, what happened, and every place a failure is written down.
     'agents.now':       'every agent session running now - its task, which CLI, and whether it is working, idle, stuck or asking the owner something',

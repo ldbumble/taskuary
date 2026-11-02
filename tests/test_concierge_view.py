@@ -88,6 +88,20 @@ class TakeTests(unittest.TestCase):
         self.assertEqual([o['op'] for o in ops], ['open', 'set'])
         self.assertEqual(ops[0], {'op': 'open', 'area': 'settings', 'section': 'config', 'open': 'Digest', 'knob': 'digest_enabled'})
 
+    def test_a_press_that_draws_a_form_lets_its_boxes_be_filled_and_a_secret_still_never(self):
+        # Routing policies' Add rule draws the form the next lines fill (the Settings audit, 2026-11-02)
+        v = pageview.clean({'area': 'settings', 'buttons': [{'id': 'add_rule', 'label': 'Add rule'}]})
+        _, ops = pageview.take('\n'.join([view_line(op='press', button='Add rule'), view_line(op='set', field='Name', value='vendor mail'),
+                                          view_line(op='set', field='API key', value='k-1')]), v)
+        self.assertEqual([o['op'] for o in ops], ['press', 'set', 'refused'])
+
+    def test_taskuarys_own_install_is_lit_never_pressed(self):
+        # update.status_line: "Nothing installs unless the owner presses it" - and the install reopens the app under the chat
+        v = pageview.clean({'area': 'settings', 'buttons': [{'id': 'check_now', 'label': 'Check now'}, {'id': 'update_to_v9_9_9', 'label': 'Update to v9.9.9'}]})
+        _, ops = pageview.take('\n'.join([view_line(op='press', button='Check now'), view_line(op='press', button='Update to v9.9.9')]), v)
+        self.assertEqual(ops, [{'op': 'press', 'button': 'check_now'}, {'op': 'point', 'target': 'update_to_v9_9_9', 'why': pageview.INSTALL_IS_YOURS}])
+        self.assertFalse(pageview.is_install({'id': 'up_to_date', 'label': 'Up to date'}))
+
 
 class TurnTests(unittest.TestCase):
     def setUp(self): self.s = store()

@@ -154,7 +154,7 @@ PURPOSE = {
                                  'and the count said. `scope`: all (the default - every one waiting that `select` matches, the batch on the table '
                                  'and every one after it: "all the FYI", "mark every FYI read", "ignore all the FYI") | table (only those on the table: '
                                  '"mark these read", "these four") - ALL in their words is every one waiting, never just the batch on the table. '
-                                 'It only clears: when the owner says "from now on" too, also CALL '
+                                 'It only marks read - "dismiss them", "get rid of them" is pipe.remove. When the owner says "from now on" too, also CALL '
                                  'preference.exclude_sender or preference.sender_rule'),
     'pipe.defer':               ('put a SET away until a day - `select` (below) and `until` (as task.defer takes it): "snooze everything '
                                  'from Gail until Monday" is select sender: Gail. Runs at once and the count is said'),
@@ -662,7 +662,8 @@ def is_read(kind: str) -> bool: return kind in READS
 # ...and the report the owner asks for about Taskuary ITSELF (bugreport.py, the owner 2026-11-01): drafted, scrubbed and shown in the
 # Report popup under the answer - the owner reads it, edits it and presses Submit on GitHub. Nothing is filed from here, so it is the chat's
 NOW = {'app.repair': ('run the simple repair app.health named for a part of Taskuary, then read it again - `name`: the connection; '
-                      '`how`: restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said'),
+                      '`how`: restart_bridge (the WhatsApp bridge this computer runs), sync or test, as app.health said - and a sync the '
+                      'owner asks for now ("sync my work mail now") is this with how: sync'),
        'issue.draft': ("draft a bug report or a feature request for Taskuary's own public tracker, when the owner says Taskuary ITSELF did "
                        'something wrong or wishes it could do something it cannot - never about their work, their mail or a person; '
                        '`kind`: bug or feature; `trying`: what they were trying to do in the app, in general words with no names, mail, '

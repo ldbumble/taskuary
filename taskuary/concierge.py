@@ -72,6 +72,30 @@ _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
 # A CALL names an operation out of the registry itself (toolcatalog) instead of a verb out of prose.
 # It exists for the targets a verb cannot say: a SET, described rather than listed.
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
+# ...and a CALL WRAPPED IN A MODEL'S OWN TOOL HABIT (the live audit, 2026-11-02): with its tools off, a CLI brain now and then writes its
+# CALL inside `<invoke name=...>` markup or ends it with a stray ``` fence. _CALL then found no CALL at the end, and the markup reached the
+# owner as the answer ("<invoke name="docs.search"> </invoke> ```"). That markup is never words for the owner; a fence goes only around a CALL
+_TOOLTAG = re.compile(r'</?(?:antml:)?(?:invoke|function_calls|parameter|tool_use|tool_call)\b[^>]*>', re.I)
+_FENCE = re.compile(r'^[ \t]*```[\w-]*[ \t]*$\n?', re.M)
+_INVOKE = re.compile(r'<(?:antml:)?invoke\s+name="([\w.]+)"\s*>(.*?)</(?:antml:)?invoke>', re.I | re.S)
+_PARAM = re.compile(r'<(?:antml:)?parameter\s+name="(\w+)"\s*>(.*?)</(?:antml:)?parameter>', re.I | re.S)
+def _pval(s: str):
+    try: return json.loads(s)
+    except ValueError: return s.strip()
+def tidy(text: str) -> str:
+    """The model's answer without tool-call markup, and - when it carries a CALL - without the code fences around it. An invoke with no
+    CALL beside it IS its call: the tool it names, with its parameters."""
+    t = str(text or '')
+    if not re.search(r'\bCALL:', t, re.I) and (m := _INVOKE.search(t)):
+        t = t[:m.start()] + '\nCALL: ' + json.dumps({'kind': m.group(1), 'params': {k: _pval(v) for k, v in _PARAM.findall(m.group(2))}})
+    marked, t = bool(_TOOLTAG.search(t)), _TOOLTAG.sub('', t)
+    return _FENCE.sub('', t).strip() if marked or re.search(r'\bCALL:', t, re.I) else t.strip()
+def _call_json(s: str) -> dict:
+    """The CALL's JSON - the FIRST one, when the model wrote two CALL lines (the greedy match takes both, and was no JSON at all)."""
+    try: got = json.loads(s)
+    except ValueError: got = json.JSONDecoder().raw_decode(s)[0]
+    if not isinstance(got, dict): raise ValueError('a CALL is one JSON object')
+    return got
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
@@ -664,10 +688,11 @@ def _stopped_work(store, item: dict) -> str:
 def parse_call(text: str) -> tuple[str, dict | None]:
     """The model's CALL line, off the end of its answer: {'kind', 'params'} or None. Validated against
     operations.KINDS here, so an invented kind never reaches a handler - it is simply not a call."""
-    m = _CALL.search(text or '')
-    if not m: return (text or '').strip(), None
+    text = tidy(text)
+    m = _CALL.search(text)
+    if not m: return text, None
     from . import toolcatalog
-    try: got = json.loads(m.group(1))
+    try: got = _call_json(m.group(1))
     except ValueError:
         logger.info('concierge: a CALL line was not JSON - ignoring it'); return text[:m.start()].strip(), None
     kind, params = str(got.get('kind') or ''), got.get('params') or {}
@@ -693,10 +718,11 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     decisions are tools like any other (2026-09-25); this is where the one line reaches the decision road the
     card's buttons take. There is no other line - the DECIDE line and its fallbacks are gone."""
     from . import toolcatalog
-    m = _CALL.search(text or '')
-    if not m: return (text or '').strip(), None
-    try: got = json.loads(m.group(1))
-    except ValueError: return (text or '').strip(), None
+    text = tidy(text)
+    m = _CALL.search(text)
+    if not m: return text, None
+    try: got = _call_json(m.group(1))
+    except ValueError: return text, None
     verb, p = canon_verb(str(got.get('kind') or '').lower()), got.get('params') or {}
     # a tool that does not exist at all is no line to show the owner either; an operation is parse_call's
     if verb not in toolcatalog.DECISIONS and verb not in toolcatalog.PURPOSE and not toolcatalog.runs_now(verb):
@@ -704,7 +730,9 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if verb not in toolcatalog.DECISIONS or verb not in VERBS or not isinstance(p, dict): return (text or '').strip(), None
     d = {'verb': verb, 'text': str(p.get('text') or '').strip()}
     if str(p.get('as') or '').strip(): d['as'] = str(p['as']).strip().lower()       # the worker or repository - checked, never trusted
-    if str(p.get('on') or '').strip(): d['on'] = str(p['on']).strip()               # the decision is about ANOTHER item, named (PW-121)
+    # the decision is about ANOTHER item, named (PW-121) - in `ref` too, as HOW YOU ACT says a task the owner names goes: a live "mark it
+    # done" called close with ref TQ-0004 and the ref was thrown away (2026-11-02)
+    if (on := str(p.get('on') or p.get('ref') or '').strip()): d['on'] = on
     if p.get('new') is True or str(p.get('new')).lower() == 'true': d['new'] = True  # a job of its own, not the item's hand-off
     if verb == 'next' and str(p.get('section') or '').strip(): d['section'] = str(p['section']).strip()[:40]   # a rail heading (rail_section)
     cc = p.get('cc')                                                                # a reply's people to loop in - looked up, never trusted
@@ -1519,7 +1547,9 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     kind, how, verb = NEW_TAB[want]
     press = buttons.label(verb) if verb else new_press(store, kind)
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
-    said = f"{lead + ' ' if lead else ''}Wrote it into New - {press} there starts it."
+    # ...and what it did LEADS, what it found after: the receipt at the end of a paragraph read as a turn that did nothing (said_what; the
+    # live audit, 2026-11-02)
+    said = f"Wrote it into New - {press} there starts it.{' ' + lead if lead else ''}"
     # `line`: this line's id, which the card's press says again as what it started (said_started)
     line = record(store, tid, 'assistant', said)
     # ...and Send something's recipient, as its own field takes it (NewSheet initialTo) - nothing goes before its Send
@@ -1768,7 +1798,18 @@ TURN_GUIDE = ('HOW EACH OF THE OWNER\'S TURNS READS - the message that carries t
               f'- With an item on the table: {WHAT_ABOUT}\n'
               f'- Last, the owner\'s words ("{OWNER_SAYS.strip()}"). Answer them, briefly. If a look-up would answer it, CALL it now instead of '
               'saying you will. If their words mean one of the actions for the item on the table, CALL it. With nothing on the table, if they '
-              f'ask for something to be done, CALL it now - its button is their confirmation. {EMPTY_TABLE}')
+              f'ask for something to be done, CALL it now - its button is their confirmation. {EMPTY_TABLE}\n'
+              # the live audit, 2026-11-02: a CLI brain with its tools off wrapped CALLs in its own tool markup, or a ``` fence; "what's the
+              # weather" went to a researcher; "I wish taskuary could read my Teams calls" was searched, never drafted; "sync my work mail
+              # now" brought up a card whose sync app.repair runs; "dismiss the newsletters" only marked them read; a phone answered "turn off
+              # the sounds" with directions
+              '- How you write: plain text. A CALL is one bare line at the end - no code fence, no XML or tool-call markup around it, '
+              'one CALL per answer.\n'
+              '- A plain question nothing here knows (the weather, a fact of the world) is answered in words - "I can\'t tell from here" is '
+              'an answer. An agent is for work the owner wants done, never a stand-in for "I don\'t know".\n'
+              '- A wish or a bug about Taskuary itself ("I wish it could...", "it keeps getting X wrong") is issue.draft. A sync asked for now '
+              'is app.repair with how: sync. Dismissing or getting rid of a set is pipe.remove; pipe.clear only marks it read. A setting '
+              'app.find found is changed with setting.set - on a phone too, where its yes-or-no is the confirmation.')
 RAIL_FULL_EVERY = 8          # a rail said unchanged is said whole again after this many turns: a long conversation may be compacted
 
 
@@ -2860,8 +2901,8 @@ def read_op(store, kind: str, params: dict) -> str:
     # the second try finds it; an id is printed with every row, so the next call can be exact.
     if kind == 'report.read':
         from . import appfacts
-        r = appfacts.find_report(store, str(p.get('title') or ''), p.get('source_id'))
-        if not r: return 'No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20])
+        r = appfacts.find_report(store, str(p.get('title') or p.get('name') or ''), p.get('source_id'))
+        if not r: return 'No report by that name (`title`: its name as reports.list prints it). The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20])
         out = [f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}, {'on' if r['active'] else 'off'}) - "
                f"runs {r['schedule'] or 'on no clock'}; reaches you: {r['reach']}; goes: {r['goes']}"]
         for run in (store.report_runs(r['source_id'], 6) or []):
@@ -3289,9 +3330,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # picked another report by name (the 2026-10-01 press audit)
         if tk == 'source':
             title, sid = str(params.pop('title', '') or ''), params.pop('source_id', None) or params.get('target')
+            # ...and a report named in `name`, `ref` or `on`: the index shows report.run bare, and a live "run the end of day report" guessed
+            # each of them with the exact name - every one missed, and the retry guessed again (2026-11-02). A number is its source_id
+            al = next((str(params.pop(k)).strip() for k in ('name', 'ref', 'on') if str(params.get(k) or '').strip()), '')
+            if al and not title and not sid: title, sid = ('', int(al.lstrip('#'))) if al.lstrip('#').isdigit() else (al, None)
             if not title and not sid: sid = it.get('source_id')
             r = appfacts.find_report(store, title, sid)
-            if not r: return _miss('No report by that name. The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
+            if not r: return _miss(f"No report {'called ' + repr(title) if title else 'by that name'} (`title`: its name as reports.list prints it). "
+                                   'The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
             params['target'], named = r['source_id'], r['title']
             if kind == 'report.route' and (str(params.get('line') or '').lower() not in ('timeline', 'alert', 'send')
                                            or str(params.get('how') or '').lower() not in ('always', 'ai', 'rule', 'never')):
@@ -5421,6 +5467,15 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             again = _view_lines(str(llm(system, asked + "\n\nYOUR LAST ANSWER WAS CUT OFF in the middle. Answer again, briefly - and a CALL, if one "
                                      "is needed, as one whole line at the end.", max_tokens=MAX_TOKENS) or '').strip())
             again, call = parse_call(again)
+            # ...ONE look-up on the retry, then its answer: a clean "CALL sender.read" asked again was dropped, and "who is <a sender>"
+            # ended in "I didn't get an answer to that one" (the live audit, 2026-11-02). A second is still never run here
+            if call and toolcatalog.runs_now(call['kind']):
+                did_read = True; _strays(item, call)
+                found = _read(store, item, call)
+                trace and trace('tool', call['kind'], {'params': call['params']})
+                again = _view_lines(str(llm(system, f"{table}\n\nYou looked up {call['kind']} and it says:\n{_cut(found, read_chars(call['kind']))}\n\n"
+                                            f"{on_page}The owner asked: {text}\n{LAST_READ}", max_tokens=answer_tokens(call['kind'])) or '').strip())
+                again, call = parse_call(again)
             if call and toolcatalog.runs_now(call['kind']): call = None              # no second round of look-ups on a retry
             again, decision = parse_decision(again)
             reply, options = parse_options(again)
@@ -5491,6 +5546,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # "Nothing is on the table ... name the one you mean" - the owner had named it, and so had the model (2026-10-06). The
     # named item is the target, exactly as it is when something else is on the table.
     target_item, elsewhere = item, False
+    # ...and NOTHING ON THE TABLE BUT A TASK ON SCREEN: the page sent its view, and its item is the task the owner is looking at. A live
+    # "mark it done" / "send it" with TQ-0004's page up called close / approve bare and was answered "Nothing is on the table" (2026-11-02)
+    vi = (turn.get('view') or {}).get('item') or {}
+    if decision and not item and not decision.get('on') and verb != 'next' and vi.get('kind') == 'task' and vi.get('ref'): decision['on'] = vi['ref']
     # AN `on` THAT IS NO ROW goes back to the model once, with the rail in front of it, to name the handle - code does not guess
     # which row its words meant (2026-10-08)
     if decision and decision.get('on') and _resolve_named(store, decision['on'], item) == '?' and llm:

@@ -1108,6 +1108,30 @@ AREA_SELF_KNOWLEDGE = [
 ]
 CASES += AREA_SELF_KNOWLEDGE
 
+# WHAT A REAL MODEL WROTE (the live audit, 2026-11-02): the scripted brains above answer as the road expects; a real one, asked the same,
+# picked a row's decision with the task's ref - or none - over a task page, guessed a report's parameter, and wrapped its CALL in its own
+# tool markup or a code fence. Each answer here is the shape it wrote, and the road has to land it
+AREA_LIVE = [
+    Q('task', 'mark it done', None, c('close'), 'light:close', view=TASK4V, freq=5, note="no table, but the page sent its task: that is the one"),
+    Q('task', 'mark it done', None, c('close', ref=T4), 'light:close', view=TASK4V, freq=4, note='a decision takes the ref HOW YOU ACT says a named task goes in'),
+    Q('task', 'send it', None, c('approve'), 'light:approve', view=TASK4V, freq=4, note='lit, never sent'),
+    Q('reports', 'run the end of day report', None, c('report.run', name='End of day checkup'), 'open:#report=', freq=4),
+    Q('reports', 'delete the headcount report', None, c('report.delete', ref='Headcount by site, nightly'), 'open:#report=', freq=1),
+    Q('help', "what's new in this version?", None,
+      ['<invoke name="docs.search">\n<parameter name="query">what changed</parameter>\n</invoke>', 'The newest release adds the Watch it button.'],
+      'read:docs.search', tools=('docs.search',), freq=3, note="a CLI brain's own tool markup is its CALL, and never shown"),
+    Q('people', 'who is Erin Blake', None, ['```\n' + c('sender.read', who='Erin Blake') + '\n```', 'Erin Blake writes most weeks.'], 'read:sender.read', tools=('sender.read',), freq=3,
+      note='a stray fence after the CALL'),
+    Q('people', 'who is Gail Moreno', None, ['One moment.\n' + c('sender.read', who='Gail') + '\n' + c('timeline.search', contains='Gail'), 'Gail Moreno writes now and then.'],
+      'read:sender.read', tools=('sender.read',), freq=2, note='two CALL lines: the first runs'),
+    Q('people', 'who is Paula Vance', None, ['Let me look. CALL: {"kind": "sender.read", "par', c('sender.read', who='Paula'), 'Paula Vance is on the finance team.'],
+      'read:sender.read', tools=('sender.read',), freq=2, note='cut off, asked again: the retry runs its one look-up and answers'),
+    Q('agentwork', 'what is the PO approval limit here', None,
+      [c('knowledge.search', query='PO approval limit'), 'Nothing written here says.\n' + c('regular_agent', text='find the PO approval limit', new=True)],
+      'new:', freq=2, note='what it did leads, what it found follows (said_what)'),
+]
+CASES += AREA_LIVE
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'screens': 'APP SCREENS', 'words': 'Answer in plain words', 'digit': None}
 

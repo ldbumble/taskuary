@@ -3336,7 +3336,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             if al and not title and not sid: title, sid = ('', int(al.lstrip('#'))) if al.lstrip('#').isdigit() else (al, None)
             if not title and not sid: sid = it.get('source_id')
             r = appfacts.find_report(store, title, sid)
-            if not r: return _miss(f"No report {'called ' + repr(title) if title else 'by that name'} (`title`: its name as reports.list prints it). "
+            if not r: return _miss(f"No report by that name{' (' + repr(title) + ')' if title else ''} - `title` is its name as reports.list prints it. "
                                    'The ones set up: ' + ', '.join(x['title'] for x in appfacts.reports(store)[:20]) + '.')
             params['target'], named = r['source_id'], r['title']
             if kind == 'report.route' and (str(params.get('line') or '').lower() not in ('timeline', 'alert', 'send')

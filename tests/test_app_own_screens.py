@@ -73,7 +73,9 @@ class NoAppAskEndsAtAnAgent(unittest.TestCase):
     """An ask about the app itself - a setting, a connection, a brain, its update, or one it does not have - never comes out as a hand-off:
     the owner's rule of 2026-10-23 (app problems and "update things" are not a task or a general agent's)."""
     def test_settings_connections_and_bring_ups_on_desk_and_phone(self):
-        asks = [q for q in Q.CASES if q.cat in ('settings', 'connectors', 'bring-up') or (q.phone and q.table is None)]
+        # ...an owner who ASKS for an agent gets one, at once on a phone too (the owner, 2026-11-02): only app asks are held to this
+        hand = ('task.create_from_text', 'regular_agent', 'coding_agent', 'dispatch.prepare')
+        asks = [q for q in Q.CASES if (q.cat in ('settings', 'connectors', 'bring-up') or (q.phone and q.table is None)) and not set(q.tools) & set(hand)]
         self.assertGreater(len(asks), 40)
         for q in asks:
             with self.subTest(q=q.text, phone=q.phone):

@@ -272,6 +272,91 @@ def allow_downloads(webview) -> bool:
     return True
 
 
+# Download in the window puts the file in the computer's Downloads folder and the page says so (the owner, 2026-11-02: "the download
+# should go to the local computer download"). WebView2's own download asked where to save it from a dialog that opened wherever
+# pywebview pointed it - so the page hands the file's address here instead (Attachments.saveFile), and a plain link that still
+# downloads lands in the same folder (downloads_to_folder).
+_BAD = set('<>:"/\\|?*')
+LOOPBACK = {'127.0.0.1', 'localhost', '::1'}
+
+
+def downloads_dir() -> Path:
+    "The Downloads folder Windows knows (it can be moved off the profile), else ~/Downloads."
+    if sys.platform == 'win32':
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') as k:
+                p = Path(os.path.expandvars(winreg.QueryValueEx(k, '{374DE290-123F-4565-9164-39C4925E467B}')[0]))
+            if p.is_dir(): return p
+        except Exception as e: logger.debug(f'downloads: no known folder - {e}')
+    return Path.home() / 'Downloads'
+
+
+def safe_name(name: str, fallback: str = 'download') -> str:
+    "A file name only: no folder in it, nothing Windows refuses - a name off the wire never picks where it lands."
+    n = ''.join('_' if c in _BAD or ord(c) < 32 else c for c in str(name or '').replace('\\', '/').split('/')[-1]).strip().rstrip('. ')
+    return n if n and n not in ('.', '..') else fallback
+
+
+def free_name(folder: Path, name: str) -> Path:
+    "folder/name, or 'name (1).ext', 'name (2).ext'... when one is there already - a download never overwrites."
+    p = Path(folder) / safe_name(name)
+    stem, ext, i = p.stem, p.suffix, 1
+    while p.exists(): p, i = p.with_name(f'{stem} ({i}){ext}'), i + 1
+    return p
+
+
+def _disposition_name(cd: str) -> str:
+    from email.message import Message
+    m = Message(); m['content-disposition'] = cd or ''
+    return m.get_filename() or ''
+
+
+def save_download(url: str, folder: Path = None) -> dict:
+    """Fetch one of this app's own files and save it in Downloads: {'name', 'folder', 'path'}, or {'error'} in the server's words.
+    Only this machine's server is asked - the page's address for the file, which carries the owner token it was shown with."""
+    u = urllib.parse.urlsplit(str(url or ''))
+    if u.scheme not in ('http', 'https') or (u.hostname or '') not in LOOPBACK: return {'error': 'Only a file from Taskuary itself can be saved here.'}
+    import json, urllib.request as ureq, urllib.error as uerr
+    folder = Path(folder) if folder else downloads_dir()
+    try: folder.mkdir(parents=True, exist_ok=True)
+    except OSError as e: return {'error': f'The Downloads folder could not be opened - {e.strerror or e}.'}
+    opener = ureq.build_opener(ureq.ProxyHandler({}))       # loopback: a system proxy must not see the token
+    try:
+        with opener.open(url, timeout=60) as r:
+            name = _disposition_name(r.headers.get('Content-Disposition')) or urllib.parse.unquote(u.path.rsplit('/', 1)[-1])
+            p = free_name(folder, name)
+            try:
+                with open(p, 'xb') as f:
+                    while chunk := r.read(1 << 16): f.write(chunk)
+            except BaseException:
+                p.unlink(missing_ok=True); raise
+    except uerr.HTTPError as e:
+        try: why = json.loads(e.read() or b'{}').get('detail')
+        except Exception: why = None
+        return {'error': why if isinstance(why, str) and why else 'This file was moved or deleted.' if e.code == 404 else 'This file could not be saved - try again.'}
+    except OSError as e:
+        logger.warning(f'downloads: {u.path} was not saved - {e}')
+        return {'error': 'This file could not be saved - try again.'}
+    logger.info(f'downloads: saved {p.name} in {folder}')
+    return {'name': p.name, 'folder': folder.name or str(folder), 'path': str(p)}
+
+
+def downloads_to_folder() -> bool:
+    """A download the window starts by itself (a plain link) goes straight into Downloads too, under a free name - not the Save As
+    box pywebview opens for every one. Windows only; elsewhere the toolkit's own handling stays."""
+    if sys.platform != 'win32': return False
+    try:
+        from webview.platforms import edgechromium as ec
+        if getattr(ec.EdgeChrome.on_download_starting, '_tq_downloads', False): return True
+        def on_download_starting(self, sender, args):
+            try: args.ResultFilePath = str(free_name(downloads_dir(), os.path.basename(args.ResultFilePath)))
+            except Exception as e: logger.warning(f'downloads: where it goes was not set - {e}')
+        on_download_starting._tq_downloads = True; ec.EdgeChrome.on_download_starting = on_download_starting
+        return True
+    except Exception as e: logger.debug(f'downloads: not reached on this pywebview - {e}'); return False
+
+
 def closing_handler(window, store_of=_server_store, secs: float = GOODBYE_SECS, shell: dict = None):
     """pywebview's `closing` event. With a tray (`shell['tray']`) a close that is not a Quit HIDES the window and the tray says the
     goodbye; nothing stops. A Quit (`shell['quit']`), or any close with no tray: with work running, the first close ASKS (Keep working /
@@ -507,8 +592,11 @@ def main():
     # the window is up: the exe's splash hands over to it (and its own spinner and seconds take the wait from here)
     try: window.events.shown += lambda: splash()
     except Exception: pass
+    try: window.expose(save_download)      # Download on the page saves into Downloads and says so (Attachments.saveFile)
+    except Exception as e: logger.debug(f'downloads: this pywebview cannot take them from the page - {e}')
     if running:
         print(f'Taskuary is already running at {running} - opening that one.')
+        dotnet(); downloads_to_folder()
         webview.start(follow_server, (running, window))
         return 0
 
@@ -524,6 +612,7 @@ def main():
         except Exception as e: logger.debug(f'tray: the window was already gone - {e}')
     dotnet()                              # imported here, on the main thread; the icon comes up in opened(), once the window has
     allow_text_menus()                    # a right-click on a misspelt word offers the fix again
+    downloads_to_folder()                 # ...and a download the window starts itself lands in Downloads, no Save As box
     try: window.events.closing += closing_handler(window, lambda: _server_store() if 'server' in held else None, shell=shell)
     except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
 

@@ -24,10 +24,12 @@ const prog = (w) => String(w || "").split(/[\\/]/).pop().toLowerCase().replace(/
 
 // ── a shell command, read the way a person skims it ─────────────────────────────────────────────
 // Split at the operators outside quotes; a segment after a pipe only filters what came before it.
+// ...and a heredoc's body is the file being written, not commands: its lines read as "and 3 more" steps, its quotes broke the split
+const HEREDOC = /<<-?[ \t]*(['"]?)(\w+)\1([^\n]*)\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g;
 const segments = (cmd) => {
   const out = []; let cur = "", q = null, piped = false;
   const push = (nextPiped) => { if (cur.trim()) out.push({ text: cur.trim(), piped }); cur = ""; piped = nextPiped; };
-  const s = String(cmd || "");
+  const s = String(cmd || "").replace(HEREDOC, "$3");
   for (let i = 0; i < s.length; i += 1) {
     const c = s[i];
     if (q) { if (c === q) q = null; else if (c === "\\" && q === '"') { cur += c + (s[i + 1] || ""); i += 1; continue; } cur += c; continue; }
@@ -133,6 +135,9 @@ const commandStep = (cmd, depth = 0) => {
       else found.push({ kind: "page", summary: `Read a page on ${host || clip(url, 40)}`, host });
       continue;
     }
+    // `cat > desk.svg` WRITES desk.svg: it read "Read <<EOF" (the stress test, 2026-11-02)
+    const to = args.findIndex((a) => /^>>?$/.test(a)), into = to >= 0 ? args[to + 1] : (args.find((a) => /^>>?[^>&]/.test(a)) || "").replace(/^>+/, "");
+    if (READERS.has(p) && into && !/^(\/dev\/null|nul|\$null)$/i.test(into)) { found.push({ kind: "edit", summary: `Wrote ${baseName(into)}`, file: into }); continue; }
     if (READERS.has(p) && plain.length) { const f = plain[plain.length - 1]; found.push({ kind: "read", summary: `Read ${baseName(f)}`, file: f }); continue; }
     if (GREPS.has(p) || (p === "git" && args[0] === "grep")) {
       const e = args.indexOf("-e"), pat = e >= 0 ? args[e + 1] : plain[p === "git" ? 1 : 0];

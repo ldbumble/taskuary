@@ -280,3 +280,49 @@ test("a pairing a live bridge holds is refused with 75; a lock whose bridge is g
     await run;
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); }
 });
+
+// "We lost the names" (2026-11-02): the group roster was asked for once per connect, and a bridge restarted by an update whose one
+// ask timed out listed no group at all - every switched-on group a bare id until the next drop. The first ask fails here; the next names it.
+const SLOW_GROUPS = `
+import { EventEmitter } from "node:events";
+export const DisconnectReason = { loggedOut: 401 };
+export const useMultiFileAuthState = async () => ({ state: { creds: {}, keys: { set: async () => {} } }, saveCreds: async () => {} });
+export const downloadMediaMessage = async () => Buffer.alloc(0);
+export const decryptPollVote = () => { throw new Error("no polls here"); };
+let asked = 0;
+export default function makeWASocket() {
+  const ev = new EventEmitter();
+  setTimeout(() => ev.emit("connection.update", { connection: "open" }), 20);
+  return { ev, user: { id: "15550100100:1@s.whatsapp.net", name: "Alex Doyle" }, resyncAppState: async () => {},
+    groupFetchAllParticipating: async () => {
+      if (++asked === 1) throw new Error("Timed Out");
+      return { "120363000000000007@g.us": { id: "120363000000000007@g.us", subject: "Northwind ops", participants: [{ id: "15550100123@s.whatsapp.net" }] } };
+    } };
+}`;
+
+test("a group roster ask that times out at connect is asked again, and the groups come back named", { timeout: 30_000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
+  const fake = path.join(dir, "fake-baileys.mjs");
+  fs.writeFileSync(fake, SLOW_GROUPS);
+  const hooks = `export async function resolve(s, c, next) {
+    return s === "@whiskeysockets/baileys" ? { url: ${JSON.stringify(pathToFileURL(fake).href)}, shortCircuit: true } : next(s, c); }`;
+  const reg = `import { register } from "node:module"; register(${JSON.stringify("data:text/javascript," + encodeURIComponent(hooks))});`;
+  const port = await freePort(), token = "test-token";
+  const child = spawn(process.execPath, ["--import", "data:text/javascript," + encodeURIComponent(reg), BRIDGE],
+    { cwd: dir, env: { ...process.env, WA_BRIDGE_PORT: String(port), WA_BRIDGE_TOKEN: token, WA_GROUPS_RETRY_MS: "200" }, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "", exited = null;
+  child.stdout.on("data", (c) => (out += c)); child.stderr.on("data", (c) => (out += c));
+  child.on("exit", (code) => (exited = code ?? "signal"));
+  try {
+    let chats = [];
+    for (let i = 0; i < 100 && exited === null && !chats.length; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      chats = (await get(port, "/chats", token))?.chats || [];
+    }
+    assert.deepEqual(chats.map((c) => [c.jid, c.name, c.group]), [["120363000000000007@g.us", "Northwind ops", true]], out);
+    assert.match(out, /could not refresh WhatsApp group roster: Timed Out - asking again/);
+  } finally {
+    if (exited === null) { const gone = new Promise((r) => child.once("exit", r)); child.kill(); await gone; }
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
+});

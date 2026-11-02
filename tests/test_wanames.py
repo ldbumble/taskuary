@@ -93,6 +93,35 @@ class RosterTests(unittest.TestCase):
         self.assertEqual([r['name'] for r in self.chats({'chats': [{'jid': '88002@lid', 'group': False, 'name': '', 'n': 0, 'last': 1}]})],
                          ['Marcus Reed'])
 
+    # "We lost the names" (2026-11-02): a bridge restarted by an update holds only what happened since, and a group roster ask that
+    # timed out left it no group at all. The switched-on chats fell off the card's list onto raw ids, and a search by name found nobody.
+    def test_a_restarted_bridge_still_lists_the_switched_on_chats_by_name_and_the_people_kept(self):
+        self.chats()                                                       # the names are kept while the bridge knew them
+        self.s.add_message({'Channel': 'whatsapp', 'BodyText': 'rota attached', 'ConversationId': f'whatsapp:{ERIN}', 'FromName': 'EB',
+                            'FromEmail': 'whatsapp:15550100123', 'SentAt': '2026-10-30 09:15:00', 'Status': 'filed',
+                            'Direction': 'in', 'ExternalId': 'wa:k1'})
+        for a in (OPS, ERIN): self.s.save_source({'Channel': 'whatsapp', 'Address': a, 'Active': 1, 'ConnectorId': 1}, 't')
+        stranger = '15550100199@s.whatsapp.net'
+        cold = {'chats': [{'jid': stranger, 'group': False, 'name': '', 'n': 0, 'last': 0}]}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: cold):
+            rows = {r['jid']: r for r in messengers.wa_chats(self.c, self.s, kept=True)}
+            live = [r['jid'] for r in messengers.wa_chats(self.c, self.s)]
+        self.assertEqual(live, [stranger], 'the send picker and the doorway still see the live roster alone')
+        self.assertEqual({j: r['name'] for j, r in rows.items()}, {OPS: 'Northwind ops', ERIN: 'Erin Blake', stranger: ''})
+        self.assertEqual((rows[ERIN]['n'], rows[ERIN]['last'], rows[ERIN]['kept']), (1, '2026-10-30 09:15', True))
+        self.assertEqual(find(list(rows.values()), 'erin'), [ERIN])
+        self.assertEqual(find(list(rows.values()), 'northwind'), [OPS])
+
+    def test_a_kept_group_stands_in_only_while_the_bridge_lists_none_and_a_lid_is_never_a_second_row(self):
+        self.s.set_setting(wanames.KEY, '{"%s": "Northwind ops", "88003@lid": "Erin Blake", "%s": "Erin Blake"}' % (OPS, ERIN), 't')
+        other = {'jid': '120363000000000002@g.us', 'group': True, 'name': 'Payworth rollout', 'n': 0, 'last': 1755700000}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'chats': [other]}):
+            rows = [r['jid'] for r in messengers.wa_chats(self.c, self.s, kept=True)]
+        self.assertEqual(rows, [other['jid'], ERIN], 'a group the owner left is not brought back while the bridge lists its groups')
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: {'chats': []}):
+            cold = {r['jid']: r['name'] for r in messengers.wa_chats(self.c, self.s, kept=True)}
+        self.assertEqual(cold, {OPS: 'Northwind ops', other['jid']: 'Payworth rollout', ERIN: 'Erin Blake'})
+
     def test_send_targets_name_and_number_whatsapp_never_the_jid(self):
         with mock.patch.object(outbound, 'send_channels', return_value=['whatsapp']), \
              mock.patch.object(self.s, 'list_connectors', return_value=[self.c]), \

@@ -33,6 +33,7 @@ const PORT = Number(process.env.WA_BRIDGE_PORT || 8977);
 const TOKEN = process.env.WA_BRIDGE_TOKEN || "";
 const PHONE = (process.argv.includes("--phone") && process.argv[process.argv.indexOf("--phone") + 1]) || "";
 const MAX_KEPT = 500;
+const GROUPS_RETRY_MS = Number(process.env.WA_GROUPS_RETRY_MS || 15000);   // the first wait before asking for the groups again; doubles
 // the fingerprint of this code, as Taskuary computes it off disk (wabridge.code): a bridge older than the files
 // is replaced at startup instead of adopted - the running copy is detached and outlives an update
 const CODE = crypto.createHash("sha1").update(Buffer.concat(fs.readdirSync(path.dirname(fileURLToPath(import.meta.url)))
@@ -205,12 +206,20 @@ async function connect() {
       // Baileys exposes every group this linked account is still participating in without a
       // message-history download. This gives compose a real account roster even when a group has
       // never been allowed into Taskuary's inbound timeline.
-      thisSock.groupFetchAllParticipating().then((groups) => {
+      // ...ASKED AGAIN WHEN IT FAILS (2026-11-02, "we lost the names"). It was asked once per connect, and a query sent the moment the
+      // socket opens times out often (the props query did on every connect). The roster lives in memory, so a bridge restarted by an
+      // update whose one ask timed out had no group at all until the next drop: every group the owner switched on was a bare id.
+      const fetchGroups = (tries = 0) => thisSock.groupFetchAllParticipating().then((groups) => {
         if (thisSock !== sock) return;
         // every participant carries its phone and its LID side by side: the widest map 6.7 hands over without asking
         for (const g of Object.values(groups || {})) for (const p of g?.participants || []) { lids.learn(p.id, p.lid); lids.learn(p.jid, p.lid); }
         chatRoster.replaceGroups(Object.values(groups || {}));
-      }).catch((e) => console.log("could not refresh WhatsApp group roster:", e?.message || e));
+      }).catch((e) => {
+        const wait = GROUPS_RETRY_MS * 2 ** tries, again = tries < 5 && thisSock === sock && connected;
+        console.log("could not refresh WhatsApp group roster:", e?.message || e, again ? `- asking again in ${Math.round(wait / 1000)}s` : "");
+        if (again) setTimeout(() => { if (thisSock === sock && connected) fetchGroups(tries + 1); }, wait).unref?.();
+      });
+      fetchGroups();
       syncContactNames("connect");
       lookupLids(thisSock);
     }

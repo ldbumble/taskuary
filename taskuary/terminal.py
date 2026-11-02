@@ -1765,6 +1765,11 @@ BIG_LINE = ('Big results: when a query, file, log or page may be large, do not p
 # never showed which part of the job was done. Only the box moves (server.agent_tick), and only on the session's own task.
 TICK_LINE = ('To-dos: when you finish one of the checklist\'s to-dos, tick it with `taskuary --tick <id>` (the id in brackets after it; '
              '`--untick <id>` takes back a mistaken tick). Tick nothing you did not do.')
+# ...said again AT the checklist, where the ids are: one line in a long rules block reached a CLI session on about a quarter of its
+# boxes and a general chat on one in thirty (2026-11-02, both kinds told) - the close ticked the rest, so the page showed no progress
+TICK_HEAD = 'tick each to-do the moment you finish it, by the id in brackets after it - not all at the end'
+_OPEN_BOX = re.compile(r'^- \[ \] .*\[[A-Za-z0-9_-]{4,}\]', re.M)
+def _tickable(md: str) -> bool: return bool(_OPEN_BOX.search(md or ''))    # an open box carrying an id (store.checklist_markdown ids=True)
 
 
 def with_fence_rule(rules: str) -> str:
@@ -1896,7 +1901,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if b['objective'] and not m: say(f"ASK: {fence(_cut(strip_boilerplate(b['objective']), ASK_CHARS))}", theirs_too=True)
     elif b['objective']: say(f"OBJECTIVE: {fence(_cut(b['objective'], 600))}", theirs_too=True)
     md = b['checklist']
-    if md: say('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority:\n' + fence(md), theirs_too=True)
+    if md: say('CHECKLIST - what was asked for, as triage read it; the source message follows, and it is the authority'
+               + (f' ({TICK_HEAD}: `taskuary --tick <id>`)' if _tickable(md) else '') + ':\n' + fence(md), theirs_too=True)
     if m: say(f"FROM {m.get('FromName') or m.get('FromEmail')} on {m.get('Channel')}, "
               f"subject \"{m.get('Subject') or ''}\": "
               f"{fence(_cut(strip_boilerplate(m.get('BodyText') or ''), ASK_CHARS))}", theirs_too=True)

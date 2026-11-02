@@ -360,6 +360,21 @@ def chat_marker(text: str) -> tuple:
     return (text[:m.start()].rstrip(), ' '.join((m.group(1) or '').split())[:600])
 
 
+# ...and the to-dos it finished. A chat with no shell (an API card, or a CLI the owner set to look things up only) cannot run
+# `taskuary --tick`, so it was told to and could not: its boxes stayed empty until the close ticked them all (2026-11-02). It says
+# so with a mark instead, and the mark takes the same road the command does (store.agent_tick).
+TICK_MARKER = '[[TASKUARY-TICK: <id>]]'
+_TICK_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?TICK\s*:?\s*([A-Za-z0-9_-]+)\s*\]\][ \t]*\n?', re.I | re.M)
+TICK_CHAT_LINE = (f'TO-DOS HERE: you have no shell, so `taskuary --tick` is not yours to run. When you finish one of the checklist\'s '
+                  f'to-dos, put a line {TICK_MARKER} in your reply - the id in brackets after it - and Taskuary ticks it. One line per '
+                  f'to-do, only for what you actually did.')
+
+
+def tick_markers(text: str) -> tuple:
+    "(reply with every tick line taken out, [ids] in the order said)."
+    return _TICK_RE.sub('', text or '').strip(), list(dict.fromkeys(_TICK_RE.findall(text or '')))
+
+
 # ── ...and its question (PW-225) ────────────────────────────────────────────────────────
 # A regular worker has no AskUserQuestion tool and no hook: when it cannot go on without the owner it says
 # so with a marker, and Taskuary records the exact question as an Input-needed request - the one the

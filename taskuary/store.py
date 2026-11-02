@@ -266,6 +266,14 @@ def by_sentence(s, n: int = 1200) -> str:
     return head[:end + 1] if end > n // 3 else head.rsplit(' ', 1)[0] + '…'
 def is_goal(t) -> bool: return bool((t or {}).get('DoneWhen'))      # a goal is a task with a done-when sentence (spec 2026-10-12)
 def agent_tickable(i) -> bool: return not (i.get('out') or i.get('tid'))   # an email box ticks when it goes, a goal's step when its task closes
+def agent_tick(store, tid, item, done: bool = True, actor: str = 'agent') -> tuple:
+    """THE ONE TICK ROAD for a session (`taskuary --tick`, the MCP tick tool, a shell-less chat's TICK mark): (box, None) once moved, or
+    (None, (status, why)) - 404 for an id not on this task, 422 for a box that ticks itself. Only the box's state, never its words."""
+    hit = next((i for i in store.task_checklist(tid) if i['id'] == str(item or '').strip()), None)
+    if not hit: return None, (404, f'no to-do {item} on this task - the id is in brackets after it in your checklist')
+    if not agent_tickable(hit): return None, (422, f"\"{hit['text']}\" ticks itself - when its email goes, or its task closes")
+    store.tick_checklist_item(tid, hit['id'], done, actor)
+    return hit, None
 def auto_code_enabled(src) -> bool:
     """Does new coding work start its agent by itself? ONE read of `coding_auto_enabled` (a store or its settings
     dict), missing = the seeded default. Four readers used to disagree: three read missing as off, one as on."""

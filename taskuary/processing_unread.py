@@ -128,6 +128,24 @@ def finish_evidence(store, tid):
     return None
 
 
+# THE STEPS THAT END THE ITEM A TASK IS ABOUT, in Taskuary's own words for a held shell step (shellgate.GH/GLAB) - never the agent's
+ENDING_STEPS = ('merge a pull request', 'close a pull request', 'close an issue', 'merge a merge request')
+
+
+def owner_ended_at(store, tid):
+    """When the OWNER'S OWN YES ran the step that ended this task's item - a held `gh pr merge` or close it approved (shellgate), or
+    a close-out merge or close (proposals.CLOSEOUT) - else None. The agent closing the task after that is the tail of the owner's act,
+    and theirs is never news, as their own merge on GitHub is not (channels._gh_ended; the owner, 2026-11-02: a PR they had merged
+    sat under Reports, "1 of 1 done"). Taskuary's record of the review it ran decides, never what the agent said about it."""
+    at = []
+    for r in store._rows("SELECT DraftText, DecidedAt FROM review WHERE TaskId=? AND Kind='action' AND Status IN ('approved','edited')", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except (TypeError, ValueError): continue
+        steps = [x.strip() for x in str(p.get('what') or '').split(';')]
+        if (p.get('action') == 'shell_act' and any(x in ENDING_STEPS for x in steps)) or p.get('action') in proposals.CLOSEOUT: at.append(r.get('DecidedAt'))
+    return max((processing_all._stamp(a) for a in at if processing_all._stamp(a)), default=None)
+
+
 def _agent_finished(store, tid, active, review, read_at, now):
     """{'who', 'summary', 'unread'} when this task was closed by its agent or its upstream item ending - not the owner.
     NEVER SEEN BY A PERSON STAYS ON THE RAIL (the owner, 2026-09-24): there is no age limit any more - it was
@@ -141,7 +159,8 @@ def _agent_finished(store, tid, active, review, read_at, now):
     if t.get('Status') != 'done' or t.get('SourceRef') == 'assistant:dock' or closed_at is None: return None
     ev = finish_evidence(store, tid)
     if not ev: return None
-    return {**ev, 'unread': not (read_at and read_at >= closed_at)}
+    mine = owner_ended_at(store, tid)
+    return {**ev, 'unread': not mine and not (read_at and read_at >= closed_at), 'owner_at': mine}
 
 
 # the lanes an agent's run puts a row in by stopping - blocked (asking, parked), stopped, saved
@@ -486,11 +505,15 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
         from .ingest import is_ours
         # ...and not one triage FILED as nothing new: a report that repeats every run joins the task it repeats
         # (same_as, fyi) and brought the finished result back after every run - read ten times (the owner, 2026-09-25)
-        ours = {str(m['MessageId']) for m in view.get('messages') or [] if is_ours(m) or m.get('Status') == 'filed'}
+        # ...nor one that was there when the owner's own yes ended it (owner_ended_at): they answered the task it is on - and the
+        # review they answered is read by answering it (a pending one keeps the card off this road: _agent_finished)
+        mine = finished.get('owner_at')
+        ours = {str(m['MessageId']) for m in view.get('messages') or [] if is_ours(m) or m.get('Status') == 'filed'
+                or (mine and (processing_all._stamp(m.get('CreatedAt')) or mine) <= mine)}
         units = view.get('processing_read', {}).get('units', ())
         # ...nor an Advisor idea about it: the idea is the Advisor's own card, and one never opened kept a result the
         # owner had read on the rail for days (2026-09-25)
-        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') not in ('task', 'idea')
+        read = read | {'unread': any(not u.get('read') for u in units if u.get('entity_kind') not in ('task', 'idea', *(('review',) if mine else ()))
                                      and not (u.get('entity_kind') == 'message' and u.get('local_id') in ours))}
     # OUR OWN SEND IS A RECEIPT, NOT AN ARRIVAL. A report's alert files the message it just sent so
     # you can see that it went (reports.send_alert) - Taskuary writing to you, on WhatsApp or

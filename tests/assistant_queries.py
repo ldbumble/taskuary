@@ -1308,6 +1308,8 @@ def _guards(stack, sort=None, live=None, agenda=None):
     from taskuary import server, waitroom
     stack.enter_context(mock.patch.object(server, '_dispatch_task_to_its_agent', lambda tid, body, bg: {'dispatch': 'session', 'started': True, 'existing': False,
                                                                                                         'taskId': tid, 'ref': f'TQ-{int(tid):04d}'}))
+    # ...so the AI that would run it counts as connected (server._brainless): run_all runs in setUpClass, outside conftest's an_ai_is_connected
+    stack.enter_context(mock.patch.object(server, '_brainless', lambda coding: ''))
     stack.enter_context(mock.patch.object(waitroom, 'state', lambda store, tid: ('working', None)))
     sorted_ = json.dumps(sort or {'kind': 'report', 'why': 'scripted'})
     stack.enter_context(mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: sorted_))

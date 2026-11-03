@@ -44,7 +44,7 @@ class ErrorStateTests(unittest.TestCase):
         self.assertEqual(out['status'], 'error')
         route = s.message_routes(out['message_id'])[-1]
         self.assertEqual(route['RawOutput'], 'I think this is probably a task?')
-        self.assertIn('JSONDecodeError', route['ParseError'])
+        self.assertIn('plain words instead of the JSON', route['ParseError'])      # what came back, said plainly (llm.unreadable)
 
     def test_a_drain_that_blows_up_leaves_an_error_not_a_filed_row(self):
         s = MemoryStore()

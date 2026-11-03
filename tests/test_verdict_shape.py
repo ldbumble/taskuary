@@ -234,5 +234,97 @@ class TriageUsesItTests(unittest.TestCase):
         self.assertNotIn('title', out)
 
 
+VERDICT = '{"intent": "task", "why": "asks for approval", "title": "Approve the Q3 invoice", "summary": "Erin asks Alex to approve it."}'
+
+
+class CompatProxyTests(unittest.TestCase):
+    """An OpenAI-compatible AI card whose proxy fronts some other model (an access-code card, any proxy that routes to several models): first-run's
+    test email came back "wrong format". Such a proxy may refuse json_schema - not always with a 400 - answer in a fence, hand
+    `content` back as a list of parts, or put the answer in a forced tool call."""
+    URL = 'https://ai.northwind.example/v1'
+
+    def setUp(self): llm_mod._FORMAT_FROM.clear()
+
+    def _brain(self, answer, refuse=lambda fmt: False, status=400, said='BadRequestError: response_format json_schema is not supported'):
+        """A proxy that refuses each response_format `refuse` names, with `status`, and answers the rest with `answer` (a message)."""
+        posts = []
+        def post(url, headers, body, timeout):
+            fmt = (body.get('response_format') or {}).get('type')
+            posts.append(fmt)
+            r = mock.Mock(status_code=status if refuse(fmt) else 200, text=said)
+            r.json.return_value = {'choices': [{'message': answer, 'finish_reason': 'stop'}]}
+            return r
+        return posts, post
+
+    def ask(self, post, **kw):
+        with mock.patch.object(llm_mod, 'post_retrying', side_effect=post):
+            brain = llm_mod.make_llm('hipaa_ai', {'base_url': self.URL}, 'code-1234567890')
+            return brain('Answer JSON only.', 'usr', want={'name': 'v', 'schema': {'type': 'object'}}, **kw)
+
+    def test_a_refused_schema_falls_back_to_json_object_then_to_the_prompt(self):
+        posts, post = self._brain({'content': VERDICT}, refuse=lambda f: f == 'json_schema')
+        self.assertEqual(self.ask(post), VERDICT)
+        self.assertEqual(posts, ['json_schema', 'json_object'])
+        llm_mod._FORMAT_FROM.clear()
+        posts, post = self._brain({'content': VERDICT}, refuse=lambda f: f is not None)
+        self.assertEqual(self.ask(post), VERDICT)
+        self.assertEqual(posts, ['json_schema', 'json_object', None])
+
+    def test_a_refusal_that_is_not_a_400_still_falls_back(self):
+        for status in (422, 500):
+            llm_mod._FORMAT_FROM.clear()
+            posts, post = self._brain({'content': VERDICT}, refuse=lambda f: f is not None, status=status)
+            self.assertEqual(self.ask(post), VERDICT, status)
+            self.assertEqual(posts[-1], None)
+
+    def test_an_error_that_is_not_about_the_format_is_still_an_error(self):
+        posts, post = self._brain({'content': VERDICT}, refuse=lambda f: True, status=500, said='upstream connect error')
+        with self.assertRaises(RuntimeError): self.ask(post)
+        self.assertEqual(posts, ['json_schema'])
+
+    def test_the_format_an_endpoint_refused_is_not_asked_again_on_the_next_call(self):
+        posts, post = self._brain({'content': VERDICT}, refuse=lambda f: f == 'json_schema')
+        self.ask(post); posts.clear(); self.ask(post)
+        self.assertEqual(posts, ['json_object'])
+
+    def test_content_as_a_list_of_parts_is_the_text_of_its_parts(self):
+        _, post = self._brain({'content': [{'type': 'text', 'text': '{"intent": '}, {'type': 'text', 'text': '"fyi"}'}]})
+        self.assertEqual(self.ask(post), '{"intent": "fyi"}')
+
+    def test_an_answer_in_a_forced_tool_call_is_its_arguments(self):
+        _, post = self._brain({'content': None, 'tool_calls': [{'type': 'function', 'function': {'name': 'v', 'arguments': VERDICT}}]})
+        self.assertEqual(self.ask(post), VERDICT)
+
+    def test_a_verdict_comes_through_whatever_the_proxy_wrapped_it_in(self):
+        for raw in (f'```json\n{VERDICT}\n```', f'```JSON\n{VERDICT}\n```\n', f'Here is the verdict:\n```json\n{VERDICT}\n```\nHope that helps.',
+                    f'Sure - {VERDICT}', f'﻿{VERDICT}'):
+            out = llm_mod.ask_json(lambda s, u, **k: raw, 'sys', 'usr')
+            self.assertEqual(out.data and out.data.get('title'), 'Approve the Q3 invoice', raw)
+
+
+class WrongFormatSaysWhatCameBackTests(unittest.TestCase):
+    """"Wrong format" helped nobody: the error says, in plain words, what the AI sent instead."""
+
+    def error(self, raw): return llm_mod.ask_json(lambda s, u, **k: raw, 'sys', 'usr').error
+
+    def test_each_kind_of_answer_is_named(self):
+        self.assertIn('empty answer', self.error(''))
+        e = self.error('Sure! I can help Alex with the Payworth invoice.')
+        self.assertIn('plain words', e); self.assertIn('Sure! I can help Alex', e)
+        self.assertIn('cut off or broken', self.error('{"intent": "task", "why": "asks'))
+        self.assertIn('a list', self.error('[{"intent": "task"}]'))
+        self.assertIn('web page', self.error('<!doctype html><html><body>Sign in</body></html>'))
+        self.assertNotIn('JSONDecodeError', e)
+
+    def test_triage_carries_those_words_and_the_setup_line_says_them(self):
+        from taskuary import firstrun
+        out = triage.classify_intent(MSG, llm=lambda *a, **k: 'I think this is probably a task?', system='My rules. Answer JSON only.')
+        self.assertTrue(out['degraded'])
+        self.assertIn('plain words instead of the JSON', out['parse_error'])
+        self.assertNotIn('ValueError', out['parse_error'])
+        said = firstrun.plain_ai_error(f"its answers could not be read as a verdict ({out['parse_error'][:140]})")
+        self.assertIn("can't read", said); self.assertIn('I think this is probably a task?', said)
+
+
 if __name__ == '__main__':
     unittest.main()

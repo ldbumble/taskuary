@@ -288,7 +288,7 @@ class DegradedTriageTests(unittest.TestCase):
             r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])['RouteReason'])
         route = s.message_routes(out['message_id'])[-1]
         self.assertEqual(route['RawOutput'], raw)
-        self.assertIn('JSONDecodeError', route['ParseError'])
+        self.assertIn('plain words instead of the JSON', route['ParseError'])      # what came back, said plainly (llm.unreadable)
 
     def test_there_is_no_keyword_fyi_before_the_model(self):
         """The cheap short circuit is gone (the owner, 2026-09-25: "fyi can sometimes be tasks"): an "automated

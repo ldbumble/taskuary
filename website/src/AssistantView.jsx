@@ -99,7 +99,7 @@ import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, levelOf, placed, pulledRow } from "./funnelPile.js";
-import { dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
+import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
@@ -351,11 +351,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     frame = requestAnimationFrame(addBatch);
     return () => cancelAnimationFrame(frame);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
-  // SHOULD BE A TASK KEEPS THE FYI WHERE IT WAS (movedFyi.js): its row stays in FYI wearing where it went, and the task's own row under Tasks
-  // is its twin - the FYI row speaks for the table (its ring, its batch), the twin is a plain row of Tasks
+  // SHOULD BE A TASK KEEPS THE FYI WHERE IT WAS (movedFyi.js): its row stays in FYI - a report's in Reports - wearing where it went, and the
+  // task's own row under Tasks is its twin - the kept row speaks for the table (its ring, its batch), the twin is a plain row of Tasks
   const ghosts = ghostsOf(moved), movedKeys = new Set(ghosts.map((g) => g.key));
   const twin = (i) => !i.moved && movedKeys.has(i.key);
-  const stillFyi = new Set(items.filter((i) => movedKeys.has(i.key) && levelOf(i) === "fyi").map((i) => i.key));
+  const stillFyi = new Set(items.filter((i) => movedKeys.has(i.key) && STAYS.has(levelOf(i))).map((i) => i.key));
   const visibleItems = items.slice(0, revealed).map((i) => (stillFyi.has(i.key) ? ghosts.find((g) => g.key === i.key) : i));
   // WHAT IS ON THE TABLE STAYS WHERE IT IS. The current item used to be lifted out of the pile and
   // redrawn at the top of one flat stack. The rail is grouped by category now, so hoisting would
@@ -830,7 +830,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
                         {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}
-                        {/* ...an FYI made a task says where it went, quietly, its ref the way to the task (movedFyi.js) */}
+                        {/* ...an FYI or a report made a task says where it went, quietly, its ref the way to the task (movedFyi.js) */}
                         {!!i.moved && <span className="tq-pile-moved" data-tq-moved={i.moved.ref}><span className="w">Moved to Tasks ·</span><span className="ref" role="link"
                           title={`Open ${i.moved.ref}`} onClick={(e) => { e.stopPropagation(); onPull(i.key); }}>{i.moved.ref}</span></span>}
                         {!!word && (

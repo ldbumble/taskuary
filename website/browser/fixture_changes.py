@@ -1312,6 +1312,16 @@ def install_processing_changes(app, store):
             tid = (matrix_state({'state': kind}) if kind in MATRIX else {'failed': playbook_failed, 'saved': chat_saved, 'coding_saved': coding_saved}[kind]({}))['taskId']
             # ...its own number on its title: the states share theirs, and a row is found by its words
             if tid: title = f"{(store.get_task(tid) or {}).get('Title')} ({n})"; store._exec('UPDATE task SET Title=? WHERE TaskId=?', (title, tid))
+            # ...a rail item with no task is found by its own words (the stress world empties the rail first, so they are its only row)
+            else: title = {'idea': 'weekly report could send it', 'fyi_thread': 'Badge reader rollout', 'idea_mail': 'Payworth statement still shows'}.get(kind)
+        elif kind == 'fyis':
+            # an FYI batch: three notices on three threads, read together under All read, next
+            for i, (who, subject) in enumerate((('Payworth Updates', f'Payroll calendar, week {n}'), ('Trainly', f'Course catalogue update {n}'),
+                                                ('PhishGuard', f'Monthly phishing report {n}'))):
+                mid = f.message(task_id=None, status='filed', subject=subject, from_email=f'news{i}@vendor.example', from_name=who, conversation_id=f'email:stress-{n}-{i}',
+                                body='For your information - nothing is asked.', sent_at=f.ago(minutes=20 + i))
+                f.route(mid, None, 'file', 'automated/informational')
+            title, tid = f'Payroll calendar, week {n}', None
         elif kind == 'general':
             title = f'Payroll export mismatch, batch {n}'
             tid = f.task(title=title, kind='general')

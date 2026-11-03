@@ -7,11 +7,13 @@ import "./agentStepRows.css";
 
 // A step is one line. What it did is a row whose raw call - the command, its output - waits behind the row's own disclosure, for
 // debugging; what it SAID is its own words, in the type the answer is in.
+// ...a failure the agent made good by trying again (`recovered`, agentSteps.stepsOf) says so quietly; red is for one it did not
+const STATUS_WORD = { running: "working", recovered: "retried - worked", error: "failed" };
 export const StepRow = ({ step }) => {
   if (step.kind === "said") return <div className="tq-aui-said"><Md text={step.summary} /></div>;
   if (step.kind === "note" || step.kind === "error") return <div className={`tq-aui-note tq-aui-note-${step.kind}`}>{step.summary}</div>;
   const head = <><span className="tq-aui-tool-dot" /><span>{step.summary}</span>
-    {step.status !== "done" && <em>{step.status === "running" ? "working" : "failed"}</em>}</>;
+    {step.status !== "done" && <em>{STATUS_WORD[step.status] || "failed"}</em>}</>;
   const cls = `tq-aui-step tq-aui-step-${step.kind} tq-aui-tool-${step.status === "done" ? "complete" : step.status}`;
   return step.detail
     ? <details className={cls}><summary>{head}</summary><pre>{step.detail}</pre></details>

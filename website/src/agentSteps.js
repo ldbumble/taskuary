@@ -269,6 +269,10 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   // what it said that the answer says again is the answer: a CLI's final text streams in as progress too
   // ...paragraph by paragraph: the streamed text has the reply draft taken out where the filed answer keeps it, so the whole never
   // matched and a general turn's answer showed twice, once without its draft and once with it (the overnight QA, 2026-10-30)
+  // A RETRY THAT WORKED IS NO FAILURE (the stress test, 2026-11-02): the agent's own retried steps wore red "failed" though it recovered.
+  // A failed call the same step later did without error is `recovered` - a quiet word; red stays for a failure nothing made good
+  steps.forEach((s, i) => { if (s.status === "error" && "raw" in s
+    && steps.slice(i + 1).some((x) => "raw" in x && x.kind === s.kind && x.summary === s.summary && x.status === "done")) s.status = "recovered"; });
   const said = flat(forScreen(answer));
   const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(flat).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
   const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.summary)) : steps;
@@ -290,7 +294,8 @@ const together = (run) => {
   if (k === "edit") return `Changed ${n} files`;
   return run.every((s) => s.summary === run[0].summary) ? `${run[0].summary} (${n} times)` : null;
 };
-const statusOf = (run) => run.some((s) => s.status === "running") ? "running" : run.some((s) => s.status === "error") ? "error" : "done";
+const statusOf = (run) => run.some((s) => s.status === "running") ? "running" : run.some((s) => s.status === "error") ? "error"
+  : run.some((s) => s.status === "recovered") ? "recovered" : "done";
 const detailOf = (s) => [s.raw, s.output && `→ ${s.output.length > 1500 ? `${s.output.slice(0, 1500)}…` : s.output}`].filter(Boolean).join("\n");
 const withCount = (summary, run) => run[0].kind === "mail" && run.every((s) => s.count !== undefined)
   ? `${summary} (${plural(run.reduce((t, s) => t + s.count, 0), "result")})` : summary;

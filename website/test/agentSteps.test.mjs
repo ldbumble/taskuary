@@ -104,6 +104,25 @@ test("a failed or still-running call says so on its row", () => {
   assert.deepEqual(steps.map((s) => s.status), ["error", "running"]);
 });
 
+// A RETRY THAT WORKED IS NO FAILURE (the stress test, 2026-11-02): the agent's own retried steps wore red "failed" though it recovered
+test("a failed step the agent retried with success reads as recovered; one never retried stays failed", () => {
+  const call = (id, name, args) => ({ type: "tool_call", name, detail: { tool_call_id: id, args } });
+  const res = (id, bad) => ({ type: "tool_result", name: id, detail: { result: bad ? "exit 1" : "ok", is_error: bad } });
+  const steps = stepsOf([
+    call("a", "Bash", { command: "npm test" }), res("a", true),
+    call("b", "Read", { file_path: "/x/notes.md" }), res("b", false),
+    call("c", "Bash", { command: "npm test" }), res("c", false),
+    call("d", "Bash", { command: "git push" }), res("d", true),
+  ]);
+  assert.deepEqual(steps.map((s) => [s.summary, s.status]), [["Ran npm test", "recovered"], ["Read notes.md", "done"], ["Ran npm test", "done"], ["Ran git push", "error"]]);
+  // ...and back to back, folded into one row: the row is the retry that worked
+  const twice = stepsOf([call("a", "Bash", { command: "npm test" }), res("a", true), call("b", "Bash", { command: "npm test" }), res("b", false)]);
+  assert.deepEqual(twice.map((s) => s.status), ["recovered"]);
+  // ...but the last try failing is a failure, whatever came before
+  const last = stepsOf([call("a", "Bash", { command: "npm test" }), res("a", false), call("b", "Bash", { command: "npm test" }), res("b", true)]);
+  assert.deepEqual(last.map((s) => s.status), ["error"]);
+});
+
 test("a turn whose answer carries its reply draft is not shown twice - the stream had the draft taken out, the filed answer keeps it", () => {
   const report = "My recommendation is to send Erin alone.\n\n**Worth going.** The tax changes land in January.";
   const after = "If you'd rather send both of them, tell me and I'll rewrite the reply.";

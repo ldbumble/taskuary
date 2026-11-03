@@ -580,3 +580,40 @@ def came_back(now: float = None):
         down = _SUP['down']
         _SUP.update(down=0.0, up=now if down or not _SUP['up'] else _SUP['up'], gave_up='')
     if down: logger.info(f'whatsapp bridge is back after {now - down:.0f}s')
+
+
+# ── ANSWERING IS NOT CONNECTED (TQ-1283, 2026-11-03: a switched-on group, nothing in since 10-25, and the card looked fine) ──────────
+# supervise() above acts only when the bridge does not answer. A bridge whose WhatsApp link was down - reconnects paused after four
+# quick drops (an older bridge.mjs), or the phone logged it out - answered every poll with an empty list, so nothing was ever wrong
+# as far as Taskuary could tell. After a poll that reached it, its /status is read (once a minute): paused, it is restarted; logged
+# out, or down past LINK_GRACE, the card carries the words and the bell rings - nothing comes in until it is fixed.
+LINK_EVERY, LINK_GRACE, LINK_RESTART_EVERY = 60, 15 * 60, 10 * 60
+_LINK = {'at': 0.0, 'down': 0.0, 'restarted': 0.0, 'err': None}
+
+
+def check_link(store, c: dict, read=None, now: float = None):
+    """The poll reached the bridge. Is WhatsApp itself connected? None when it is (or not yet known); else the error the card carries."""
+    now = time.time() if now is None else now
+    if now - _LINK['at'] < LINK_EVERY: return _LINK['err']
+    _LINK['at'] = now
+    if read is None:
+        from .messengers import _wa
+        read = lambda: _wa(c, '/status')
+    try: st = read() or {}
+    except Exception as e: logger.debug(f'whatsapp link check: {e}'); return _LINK['err']
+    if st.get('connected'):
+        if _LINK['down']: logger.info(f"whatsapp link is back after {now - _LINK['down']:.0f}s")
+        _LINK.update(down=0.0, err=None); return None
+    if not _LINK['down']: _LINK['down'] = now; logger.warning(f"whatsapp bridge answers but is not connected to WhatsApp: {(st.get('reconnect') or {}).get('reason') or 'no reason given'}")
+    if (st.get('qr') or st.get('pairingCode')) and not st.get('loggedOut'):
+        _LINK['err'] = 'WhatsApp is not paired on this computer - nothing comes in until you pair it on the WhatsApp card'
+    elif st.get('loggedOut'):
+        _LINK['err'] = 'WhatsApp logged this computer out - nothing comes in until you press Pair again on the WhatsApp card'
+    elif (st.get('reconnect') or {}).get('paused') and managed(c) and now - _LINK['restarted'] >= LINK_RESTART_EVERY:
+        _LINK['restarted'] = now
+        logger.warning('whatsapp bridge stopped reconnecting - restarting it')
+        threading.Thread(target=restart, kwargs={'filter_policy': filter_policy(store, c['ConnectorId'])}, daemon=True).start()
+    elif now - _LINK['down'] >= LINK_GRACE:
+        _LINK['err'] = (f"WhatsApp has not been connected since {datetime.fromtimestamp(_LINK['down']).strftime('%b %d %H:%M')} - "
+                        'nothing is coming in; Restart bridge on the WhatsApp card')
+    return _LINK['err']

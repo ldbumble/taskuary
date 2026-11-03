@@ -570,3 +570,40 @@ class HomeStagingTests(unittest.TestCase):
         calls = self.launch(lambda: [wabridge.supervise(s, c, err, now=1000.0 + t) for t in (0, 3, 6)])
         self.assertEqual(len(calls), 1); self.assertEqual(calls[0].kwargs['cwd'], str(self.home))
         self.assertEqual((self.home / 'bridge.mjs').read_bytes(), (self.pkg / 'bridge.mjs').read_bytes())
+
+
+class LinkCheckTests(unittest.TestCase):
+    """TQ-1283: the bridge answered every poll while WhatsApp itself was down - a switched-on group took in nothing for nine days."""
+    C = {'ConnectorId': 7, 'ConfigJson': '{}'}
+    def setUp(self): wabridge._LINK.update(at=0.0, down=0.0, restarted=0.0, err=None)
+    def check(self, st, now):
+        with mock.patch.object(wabridge, 'filter_policy', return_value={}): return wabridge.check_link(None, self.C, read=lambda: st, now=now)
+
+    def test_connected_is_quiet(self):
+        self.assertIsNone(self.check({'connected': True}, 1000))
+
+    def test_a_paused_bridge_is_restarted_once_per_window(self):
+        with mock.patch.object(wabridge, 'restart') as rs, mock.patch.object(wabridge, 'managed', return_value=True):
+            st = {'connected': False, 'reconnect': {'paused': True}}
+            self.assertIsNone(self.check(st, 1000))
+            for _ in range(50):
+                if rs.called: break
+                time.sleep(0.01)
+            self.assertEqual(rs.call_count, 1)
+            self.check(st, 1000 + wabridge.LINK_EVERY)                         # inside the restart window: not again
+            time.sleep(0.05); self.assertEqual(rs.call_count, 1)
+
+    def test_logged_out_says_pair_again_at_once(self):
+        self.assertIn('Pair again', self.check({'connected': False, 'loggedOut': True, 'reconnect': {'paused': True}}, 1000))
+
+    def test_down_past_the_grace_says_so_and_clears_when_back(self):
+        st = {'connected': False, 'reconnect': {'paused': False}}
+        self.assertIsNone(self.check(st, 1000))
+        self.assertIn('nothing is coming in', self.check(st, 1000 + wabridge.LINK_GRACE))
+        self.assertIsNone(self.check({'connected': True}, 1000 + wabridge.LINK_GRACE + wabridge.LINK_EVERY))
+
+    def test_read_once_a_minute(self):
+        n = []
+        wabridge.check_link(None, self.C, read=lambda: n.append(1) or {'connected': True}, now=1000)
+        wabridge.check_link(None, self.C, read=lambda: n.append(1) or {'connected': True}, now=1030)
+        self.assertEqual(len(n), 1)

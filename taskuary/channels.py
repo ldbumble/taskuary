@@ -1943,6 +1943,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 if c['Type'] == 'whatsapp':
                     from . import wabridge
                     wabridge.came_back()
+                    if (down := wabridge.check_link(store, full)): errors.append(down)   # answering is not connected (TQ-1283)
             elif c['Type'] == 'imessage':
                 from . import imessage
                 n += imessage.poll(store, full, mine, llm, file_only)

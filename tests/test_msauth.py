@@ -48,7 +48,12 @@ class DeviceFlowTests(unittest.TestCase):
     def test_the_admin_link_is_a_consent_grant_on_our_app_id(self):
         u = msauth.admin_consent_url(CFG)
         self.assertTrue(u.startswith('https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=app-1&'))   # common -> organizations: personal accounts have no admin
-        self.assertIn('Mail.ReadWrite', u); self.assertIn('redirect_uri=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon%2Foauth2%2Fnativeclient', u)
+        self.assertIn('Mail.ReadWrite', u)
+        # the one redirect Taskuary's registration lists, exactly as listed - no port; the stock nativeclient URI it does not list
+        # ended an admin's approval on Microsoft's page with AADSTS900971 "No reply address provided"
+        q = parse_qs(urlsplit(u).query)
+        self.assertEqual((q['redirect_uri'][0], q['state'][0]), ('http://localhost/api/ms/callback', msauth.ADMIN_STATE)); self.assertNotIn('nativeclient', u)
+        self.assertEqual(msauth.ADMIN_REDIRECT, 'http://localhost' + msauth.REDIRECT_PATH)
         self.assertIn('/contoso.example/v2.0/adminconsent', msauth.admin_consent_url({**CFG, 'tenant_id': 'contoso.example'}))
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''), self.assertRaises(RuntimeError): msauth.admin_consent_url({})
 
@@ -283,6 +288,32 @@ class BrowserSignInTests(unittest.TestCase):
 
     # A TENANT THAT APPROVED THE BASE SCOPES ONLY (user consent off, device code blocked) refuses a sign-in asking for People.Read /
     # Contacts.Read: the round signs in again for the base scopes, in the same tab, and the card stops asking for the people ones.
+    def test_an_admins_approval_comes_back_to_a_plain_page_not_a_broken_sign_in(self):
+        flows = dict(server._MSFLOWS)
+        for client in (self.LOCAL, c):       # from any browser: it carries no secret and signs nobody in
+            r = client.get('/api/ms/callback', params={'admin_consent': 'True', 'tenant': 'tenant-1', 'state': msauth.ADMIN_STATE})
+            t = html.unescape(r.text)
+            self.assertEqual(r.status_code, 200); self.assertIn('Approved', t)
+            self.assertIn('Everyone in your organisation can now sign in to Taskuary. You can close this tab.', t)
+            for w in ('sign-in was not started', 'go back to Taskuary', 'Not changed'): self.assertNotIn(w, t)
+        r = self.LOCAL.get('/api/ms/callback', params={'admin_consent': 'True'})          # no state at all reads the same
+        self.assertIn('Approved', r.text)
+        self.assertEqual(server._MSFLOWS, flows, 'no sign-in round touched')
+
+    def test_an_admins_refusal_says_what_happened_in_plain_words(self):
+        for err, desc, says in (('access_denied', 'AADSTS65004: User declined to consent to access the app.', 'cancelled, so nothing changed'),
+                                ('access_denied', 'AADSTS90008: The user or administrator has not consented.', 'takes a Microsoft 365 admin'),
+                                ('invalid_request', 'AADSTS900971: No reply address provided.', 'Get a fresh link'),
+                                ('server_error', 'AADSTS12345: Something odd.', 'did not record the approval: AADSTS12345')):
+            r = c.get('/api/ms/callback', params={'error': err, 'error_description': desc, 'state': msauth.ADMIN_STATE})
+            t = html.unescape(r.text)
+            self.assertIn('Not approved', t); self.assertIn(says, t); self.assertNotIn('sign-in was not started', t)
+
+    def test_a_sign_ins_own_error_is_still_the_sign_ins(self):
+        cid = self._card(); d, q = self._start(cid)
+        self.LOCAL.get('/api/ms/callback', params={'state': q['state'][0], 'error': 'access_denied', 'error_description': 'The user has cancelled.'})
+        self.assertEqual(c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()['detail'], 'you declined the sign-in')
+
     def _refuse(self, q, error='consent_required', desc='AADSTS65001: The user or administrator has not consented to use the application.'):
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
             return self.LOCAL.get('/api/ms/callback', params={'state': q['state'][0], 'error': error, 'error_description': desc}, follow_redirects=False)

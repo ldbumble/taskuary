@@ -7337,12 +7337,18 @@ def _is_loopback(host) -> bool:
     except ValueError: return str(host or '').lower() == 'localhost'
 
 @app.get('/api/ms/callback', response_class=HTMLResponse)
-def ms_callback(request: Request, code: str = None, state: str = '', error: str = None, error_description: str = None):
+def ms_callback(request: Request, code: str = None, state: str = '', error: str = None, error_description: str = None,
+                admin_consent: str = None):
     """Microsoft sends the browser back here with the code. Outside the token gate like every OAuth return: it answers only a state
     ms_signin issued and nobody has used, within MS_TTL, from this machine; the code is redeemed with the round's own PKCE verifier,
     and the tab is told only whether it worked - never a token (escaped, under a CSP, no-store)."""
     import hmac
     from . import msauth
+    # AN ADMIN'S APPROVAL comes back here too (msauth.admin_consent_url): admin_consent=True, or an error, and no code. It carries no
+    # secret and starts no sign-in, so it is answered first, from any browser, as the plain page an admin who may never run Taskuary reads
+    if admin_consent is not None or (state == msauth.ADMIN_STATE and not code):
+        ok, head, line = msauth.admin_return(admin_consent, error, error_description or '')
+        return _oauth_tab(ok, line, head=head, tail='')
     if not _is_loopback(request.client.host if request.client else ''):
         return _oauth_tab(False, 'This sign-in only finishes on the computer Taskuary runs on.')
     f = next((v for v in list(_MSFLOWS.values()) if v.get('state') and hmac.compare_digest(str(v['state']), str(state or ''))), None)
@@ -7443,10 +7449,11 @@ def google_files_callback(code: str = None, state: str = '', error: str = None):
     return _oauth_tab(ok, msg)
 
 
-def _oauth_tab(ok: bool, msg: str, head: str = '') -> HTMLResponse:
+def _oauth_tab(ok: bool, msg: str, head: str = '', tail: str = 'You can close this tab and go back to Taskuary.') -> HTMLResponse:
     from html import escape as _esc
     return HTMLResponse(f'<!doctype html><meta charset=utf-8><title>Taskuary</title><body style="font:15px system-ui;padding:40px;color:#262521;background:#f6f4f1">'
-                        f'<p style="font-weight:700">{_esc(head or ("Done" if ok else "Not changed"))}</p><p>{_esc(str(msg))}</p><p style="color:#6e685f">You can close this tab and go back to Taskuary.</p>',
+                        f'<p style="font-weight:700">{_esc(head or ("Done" if ok else "Not changed"))}</p><p>{_esc(str(msg))}</p>'
+                        + (f'<p style="color:#6e685f">{_esc(tail)}</p>' if tail else ''),
                         headers={'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'Cache-Control': 'no-store'})
 
 

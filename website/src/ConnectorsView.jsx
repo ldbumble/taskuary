@@ -120,8 +120,8 @@ const META = {
     secretLabel: "client secret (tenant app only)",
     desc: "Your Microsoft mailbox, read and sorted for you. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
     howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → Microsoft's sign-in page opens in your browser; sign in with your own account and accept, and the tab hands you back to Taskuary. No code to type. (Taskuary on another computer, or a browser that cannot reach it? \"Sign in with a code instead\" shows a code for microsoft.com/devicelogin - some organisations block that one.) That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). Nobody registers anything.",
-      "\"Need admin approval\": some organisations let only an admin say yes to a new app. The card then shows an approval link - forward it to your Microsoft 365 admin. They sign in, click Accept once, and everyone in the organisation can sign in from then on. It is a consent grant on Taskuary's app id, not an app registration on their side; the yellow \"unverified publisher\" note on their screen is expected.",
-      "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", enter http://localhost/api/ms/callback (the browser sign-in comes back to Taskuary on whatever port it runs; Entra ignores the port of a localhost redirect) and tick https://login.microsoftonline.com/common/oauth2/nativeclient (the admin-approval link) → Register.",
+      "\"Need admin approval\": some organisations let only an admin say yes to a new app. The card then shows an approval link - forward it to your Microsoft 365 admin. They open it, sign in and click Accept once, and everyone in the organisation can sign in from then on. If the page after Accept says it can't connect (localhost), that is expected - the approval is done. It is a consent grant on Taskuary's app id: nothing to set up in Azure; the yellow \"unverified publisher\" note on their screen is expected.",
+      "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", enter http://localhost/api/ms/callback (the browser sign-in comes back to Taskuary on whatever port it runs; Entra ignores the port of a localhost redirect - the admin-approval link returns to the same address) → Register.",
       "Then: Authentication → Advanced settings → Allow public client flows = Yes → Save (needed only for the \"Sign in with a code instead\" fallback). API permissions → Add a permission → Microsoft Graph → Delegated permissions: offline_access, User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite (reads the calendar and answers invites) → Add. No client secret - a sign-in app is public by design. Copy the Application (client) ID into client_id here (under Admin?) and sign in above - or set TASKUARY_MS_CLIENT_ID on the server so every install uses it. No Partner Center and no publisher verification: those only remove the \"unverified\" label on the consent screen.",
       "Tenant app (admins - required for Teams chat reading and for mailboxes other than your own): the same App registrations → New registration, then API permissions → APPLICATION permissions Mail.Read (Mail.ReadWrite for Outlook drafts on approve or 'Handled mail, at the source') and Calendars.Read (Calendars.ReadWrite to answer invites and book meetings from Taskuary) → Grant admin consent; Certificates & secrets → New client secret. Enter tenant_id + client_id and paste the secret under Admin?; blank = the server's AZURE_* env vars.",
       "Mailboxes: signing in adds your own automatically. A tenant app reads every mailbox you add as a UPN under Sources.",
@@ -4018,6 +4018,11 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   );
 };
 
+// AADSTS900971 "No reply address provided": Microsoft's page stopped at the organisation's approval step - for a person signing in, or
+// for an admin who opened an approval link from before it returned to http://localhost/api/ms/callback (msauth.admin_consent_url)
+const NO_REPLY = /AADSTS900971/;
+export const msSays = (d) => NO_REPLY.test(d || "") ? "Microsoft stopped at your organisation's approval step (error AADSTS900971, \"No reply address provided\") - "
+  + "your IT admin approves Taskuary once with the link below, then sign in again." : d;
 const STALL_MS = 90 * 1000;   // a browser sign-in this long without coming back: say what a tenant's admin approval looks like
 // shared with the first-run card on the canvas (FirstRun.jsx) - one Microsoft sign-in, wherever it is drawn
 export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
@@ -4060,7 +4065,10 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
           setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under ${chats ? "Users / chat ids" : "Mailboxes"} below and the first sync is running; what needs you shows up in the Assistant in a minute.`);
           reload(); onSignedIn?.();
         }
-        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); }
+        else {
+          setState("error"); setDetail(msSays(data.detail || "the sign-in did not complete"));
+          if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); else if (NO_REPLY.test(data.detail || "")) adminLink();
+        }
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };
     const id = setTimeout(tick, wait);
@@ -4191,8 +4199,12 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
         <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", display: "flex", flexDirection: "column", gap: 0.5 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-            Forward this to whoever runs your Microsoft 365. They sign in, click Accept once, and everyone in your organisation can
-            sign in above. It is a consent grant, not an app registration - nothing to build on their side. Then click Sign in with Microsoft again.
+            Forward this to whoever runs your Microsoft 365. They open the link, sign in, and click Accept - once, for everyone in your
+            organisation. If the page after Accept says it can't connect, that's expected: the approval is done. Nothing to set up in Azure.
+            Then click Sign in with Microsoft again.
+          </Typography>
+          <Typography variant="caption" data-tq-ms-no-reply="" sx={{ color: DIM, lineHeight: 1.5 }}>
+            Your admin saw error AADSTS900971 ("No reply address provided")? Their link came from an older Taskuary - send them this one.
           </Typography>
           <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
             <Typography sx={{ ...mono, fontSize: 11, color: INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adminUrl}</Typography>

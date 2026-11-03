@@ -618,6 +618,10 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     thread = others_on_thread(store, msg, mine)
     if (put_to := addressed_to(store, msg, me)): thread = {**thread, 'addressed_to': put_to}
     if (cc := copied(store, msg, me)): thread = {**thread, 'copied': cc}
+    # ...and who answered the like of it before, with these same colleagues on the mail (2026-11-03: theirs, not the owner's)
+    try:
+        if (ab := answered_before(store, msg, me)): thread = {**thread, 'answered_before': ab}
+    except Exception as e: logger.debug(f'answered_before skipped: {e}')
     # ...and who the sender IS to the owner - their manager, someone reporting to them, the person who owns payroll (orgchart.py): a
     # request from the owner's own manager read exactly like anybody's on the To line (the org-chart gap, 2026-10-22)
     try:
@@ -1814,15 +1818,108 @@ def lines_by_name(store, msg: dict, addrs, me=()) -> list:
     return (['you'] if len(rest) < len(xs) else []) + names_on_thread(store, msg, rest)
 
 
-def names_on_thread(store, msg: dict, addrs) -> list:
-    """Each address as the name this thread knows it by, else "someone at <domain>" - what a prompt is told instead of the
-    address itself. Shared by triage's `addressed_to` and the reply writer's To/Cc lines."""
+def names_on_thread(store, msg: dict, addrs, memo=None) -> list:
+    """Each address as the name this thread knows it by, else the name their own mail carries anywhere (known_names), else
+    "someone at <domain>" - what a prompt is told instead of the address itself. Shared by triage's `addressed_to`, the reply
+    writer's To/Cc lines and Came from's "to ... · cc ..." line. `memo` keeps each thread's names across calls: a task's page asks
+    for every message on it, and a read per message is what made a long task slow to open (test_big_task_opens_fast)."""
     addrs = [str(a).strip().lower() for a in addrs or [] if a]
-    names = {}
-    for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject')) or []:
-        a = str(m.get('FromEmail') or '').lower()
-        if a in addrs and m.get('FromName'): names[a] = ' '.join(str(m['FromName']).split())
-    return [names.get(a) or f"someone at {a.rsplit('@', 1)[-1]}" for a in addrs]
+    conv = msg.get('conversation_id')
+    key, memo = (conv, None if conv else msg.get('subject')), {} if memo is None else memo     # a thread's "RE:" rows are one thread
+    if key not in memo:
+        memo[key] = {str(m.get('FromEmail') or '').lower(): ' '.join(str(m['FromName']).split())
+                     for m in store.thread_messages(conv, msg.get('subject')) or [] if m.get('FromName')}
+    names = memo[key]
+    # ...a colleague who never wrote on THIS thread was "someone at <domain>", though their own mail names them (2026-11-03)
+    known = known_names(store) if set(addrs) - set(names) else {}
+    return [names.get(a) or known.get(a) or f"someone at {a.rsplit('@', 1)[-1]}" for a in addrs]
+
+
+def known_names(store) -> dict:
+    """{address: the name their newest mail carries} over everyone who ever wrote in - kept on the store and read again only when
+    a message arrives (people.written_to's way). Most stored addresses are mixed case, so lower() rules out idx_message_from."""
+    with store.lock: newest = store.cx.execute('SELECT MAX(MessageId) FROM message').fetchone()[0]
+    held = getattr(store, '_known_names', None)
+    if held and held[0] == newest: return held[1]
+    rows = store._rows("SELECT lower(trim(FromEmail)) a, FromName n, MAX(SentAt) FROM message WHERE IFNULL(Direction,'in')<>'out' "
+                       "AND Status<>'context' AND FromEmail LIKE '%@%' AND trim(IFNULL(FromName,''))<>'' GROUP BY 1")
+    names = {r['a']: ' '.join(str(r['n']).split()) for r in rows if '@' not in str(r['n'])}
+    store._known_names = (newest, names)
+    return names
+
+
+def recipients_by_name(store, msg: dict, me=(), cap=12, memo=None) -> dict:
+    """{'to': [...], 'cc': [...], 'n': how many in all} by name, the owner "you" first and each line cut to `cap` - {} when nobody but
+    the owner is on them. Came from showed only who SENT it (the owner, 2026-11-03: "there are 2 people on this email (though you
+    don't see recipients of the email in came from) and the other person will take care of it")."""
+    xs = lambda f: list(dict.fromkeys(str(a).strip().lower() for a in msg.get(f) or [] if a))
+    to, cc, mine = xs('to'), xs('cc'), {str(a).strip().lower() for a in me if a}
+    if not set(to + cc) - mine: return {}
+    line = lambda ys: (['you'] if set(ys) & mine else []) + names_on_thread(store, msg, [y for y in ys if y not in mine][:cap], memo)
+    return {**{k: line(ys) for k, ys in (('to', to), ('cc', cc)) if ys}, 'n': len(set(to + cc))}
+
+
+def row_recipients(store, m: dict, me=None, memo=None) -> dict:
+    """recipients_by_name for a stored message row (RecipientsJson); {} for a chat, or a mail stored without its lines."""
+    try: r = json.loads((m or {}).get('RecipientsJson') or 'null') or {}
+    except (TypeError, ValueError): r = {}
+    if not isinstance(r, dict) or not (r.get('to') or r.get('cc')): return {}
+    msg = {'to': r.get('to'), 'cc': r.get('cc'), 'conversation_id': m.get('ConversationId'), 'subject': m.get('Subject')}
+    return recipients_by_name(store, msg, own_addresses(store) if me is None else me, memo=memo)
+
+
+def recipients_said(rec: dict) -> str:
+    """"to you, Gail Moreno · cc Ray Colton" - one line of recipients_by_name, for a prompt."""
+    return ' · '.join(f"{k} {', '.join(rec[k])}" for k in ('to', 'cc') if rec.get(k)) if rec else ''
+
+
+def answered_before(store, msg: dict, me=(), days=365, n=6, crowd=8) -> list:
+    """WHO TOOK IT LAST TIME, when a mail reaches the owner beside colleagues (the owner, 2026-11-03: an ask to the owner and one
+    colleague to change a role in an app became the owner's coding task - "the other person will take care of it. it's basically
+    not our task"). The mail cannot say who usually handles it; the mail before it can. Earlier mail (not this thread) that had one
+    of these same colleagues on it, this sender's first, then the newest, each with who answered it first: "you", a colleague by
+    name, or None when no reply reached the owner. Its subject is there so the model can tell a like ask from an unlike one - the
+    facts, never a rule; a mail put to more than `crowd` others is a broadcast, which `recipients` already says."""
+    if is_chat(msg): return []
+    mine, frm = {str(a).strip().lower() for a in me if a}, str(msg.get('from_email') or '').strip().lower()
+    co = list(dict.fromkeys(a for a in (str(x).strip().lower() for x in (msg.get('to') or []) + (msg.get('cc') or []) if x)
+                            if '@' in a and a not in mine and a != frm))
+    if not co or len(co) > crowd: return []
+    from .store import norm_stamp
+    at = norm_stamp(msg.get('sent_at'))[:19]
+    try: since = str(datetime.fromisoformat(at) - timedelta(days=days))[:19]
+    except ValueError: return []
+    rows = store._rows("SELECT MessageId, ConversationId, Subject, FromEmail, FromName, SentAt, RecipientsJson FROM message "
+                       "WHERE Channel='email' AND IFNULL(Direction,'in')='in' AND Status<>'context' AND SentAt>=? AND SentAt<? "
+                       "AND IFNULL(ConversationId,'')<>'' AND ConversationId<>? AND (" + ' OR '.join(['lower(RecipientsJson) LIKE ?'] * len(co))
+                       + ') ORDER BY SentAt DESC LIMIT 300',
+                       (since, at, str(msg.get('conversation_id') or ''), *[f'%"{a}"%' for a in co]))
+    first = {}                                              # each thread by the ask that opened it among these, from someone else
+    for r in rows:
+        a = str(r.get('FromEmail') or '').strip().lower()
+        if a and a not in mine and a not in co: first[r['ConversationId']] = r      # newest first, so the last write is the earliest
+    asks = sorted(first.values(), key=lambda r: (str(r.get('FromEmail') or '').lower() == frm, str(r.get('SentAt') or '')), reverse=True)[:n]
+    if not asks: return []
+    convs = [r['ConversationId'] for r in asks]
+    after = {}
+    for m in store._rows(f"SELECT ConversationId, FromEmail, FromName, SentAt, Status, Direction FROM message WHERE ConversationId IN "
+                         f"({','.join('?' * len(convs))}) ORDER BY SentAt", tuple(convs)): after.setdefault(m['ConversationId'], []).append(m)
+    known, out = known_names(store), []
+    for r in asks:
+        asker = str(r.get('FromEmail') or '').strip().lower()
+        def who(m):
+            a = str(m.get('FromEmail') or '').strip().lower()
+            if m.get('Direction') == 'out' or m.get('Status') == 'context' or a in mine: return 'you'
+            return known.get(a) or ' '.join(str(m.get('FromName') or '').split()) or f"someone at {a.rsplit('@', 1)[-1]}"
+        reply = next((m for m in after.get(r['ConversationId']) or [] if str(m.get('SentAt') or '') > str(r.get('SentAt') or '')
+                      and str(m.get('FromEmail') or '').strip().lower() != asker), None)
+        try: on = json.loads(r.get('RecipientsJson') or '{}') or {}
+        except ValueError: on = {}
+        there = {str(x).strip().lower() for x in (on.get('to') or []) + (on.get('cc') or [])}
+        out.append({'sent_on': str(r.get('SentAt') or '')[:10], 'from': known.get(asker) or ' '.join(str(r.get('FromName') or '').split()) or 'someone',
+                    'subject': ' '.join(str(r.get('Subject') or '').split())[:120],
+                    'with': names_on_thread(store, {}, [a for a in co if a in there]), 'answered_by': who(reply) if reply else None})
+    return out
 
 
 # ── a chat room is not a task ────────────────────────────────────────────────────────────

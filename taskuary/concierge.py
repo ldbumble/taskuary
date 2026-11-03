@@ -580,6 +580,9 @@ def facts(store, item: dict, whole: bool = False) -> str:
         from .triage import own_words
         body = own_words(str(m.get('BodyText') or item.get('preview') or ''))
         if body: lines.append(f"what they wrote:\n{_cut(body, 400 if item['kind'] == 'report' else FACT_CHARS)}")   # a report's body is for the button, not the intro
+        # ...and who else it went to: a colleague on the To line may be the one taking it (the owner, 2026-11-03)
+        from .ingest import recipients_said, row_recipients
+        if (rc := recipients_said(row_recipients(store, m))): lines.append(f"sent {rc}")
         sent = store.sent_reply(message_id=item['mid']) if not item.get('tid') else None
         if sent: lines.append(f"YOU ALREADY REPLIED ({str(sent.get('DecidedAt') or sent.get('CreatedAt') or '')[:16]}): {_cut(sent.get('FinalText') or sent.get('DraftText'), 240)}")
         try:
@@ -3025,8 +3028,10 @@ def read_op(store, kind: str, params: dict) -> str:
         if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} ({buttons.label('defer')})")
         from . import watch
         if w := watch.said(t): out.append(w)
+        from .ingest import recipients_said, row_recipients
         for msg in (store.list_messages(tid) or [])[:6]:
-            out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
+            rc = recipients_said(row_recipients(store, msg))         # ...and whom it went to (2026-11-03)
+            out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}{f' ({rc})' if rc else ''}: "
                        f"{_cut(msg.get('Subject') or '', 120)} - {_cut(msg.get('BodyText') or '', 400)}")
         for c in (store.list_comments(tid) or [])[-8:]:
             out.append(f"  {c.get('Actor')} ({c.get('ActorType')}) {str(c.get('CreatedAt') or '')[:16]}: {_cut(c.get('Body') or '', 500)}")

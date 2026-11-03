@@ -187,11 +187,11 @@ test("a task system alone is the main source: connected on setup's own card, set
   const st = await api("/api/setup/first-run");
   assert.equal(st.step, "reading"); assert.deepEqual(st.sources.map((s) => s.type), ["monday"]);
   assert.ok(st.rail.find((r) => r.key === "mail").done, "the main source step is done with no mailbox at all");
-  // ...and the sources step before the job counts it: listed, and That's all my sources can be pressed
+  // ...and the sources step before the job counts it: listed, and its Next can be pressed
   assert.ok(await press("Skip these questions"));
   await until(() => document.querySelector('[data-tq-firstrun-about="mailboxes"]'));
   await until(() => /monday\.com/i.test(document.querySelector("[data-tq-mailboxes]")?.innerText || ""));
-  await until(() => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "That's all my sources" && !b.disabled));
+  await until(() => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Next" && !b.disabled));
   assert.match(await page.evaluate(() => document.querySelector(".tq-next-txt").innerText), /One source is connected\./);
   assert.deepEqual(errors, []);
 });

@@ -7,7 +7,7 @@
 // EVERY SOURCE BEFORE THE JOB (the owner, 2026-10-20; any source, 2026-10-21): the job is read out of what comes in, so a step lists the
 // sources connected so far - mailboxes, chats, task systems (firstrun.sources) - and adds the rest with the main source step's own
 // cards (FirstRun hands its shelf in as `mailShelf`). It is never skipped - Skip on a question before it lands on it - and
-// "That's all my sources" moves on once one is connected.
+// Next moves on once one is connected.
 // ...AND THREE DRAFTS, each written from the mail, edited, then accepted: the job (JOB.md), how you write (STYLE.md - it was written
 // silently after the job and its failure only logged) and who you are (SOUL.md). Each says its state, and a failure is said with
 // Write it again.
@@ -42,21 +42,21 @@ const ASK = {
 const SAYS = {
   job: { running: "Reading three months of your email to write your job description - about a minute.",
     failed: (why) => `I couldn't write it from your email (${why}). Press Write it again, or say it in your own words.`,
-    ready: "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Looks right.",
+    ready: "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Next.",
     none: "Press Write it - I read your email and describe your job.", busy: "Writing your job description from your email…" },
   // HERE'S WHAT I THINK YOU WORK ON (the owner, 2026-11-01): six months of mail grouped into workstreams - rename one, mark it personal,
   // or leave it out; a personal one is never learned from
   workstreams: { running: "Reading six months of your mail to see what you work on - about a minute.",
     failed: (why) => `I couldn't tell what you work on from your mail (${why}). Press Write it again, or skip this step.`,
-    ready: "Here's what I think you work on. Rename any, mark the personal one, untick any that's wrong, then press Looks right.",
+    ready: "Here's what I think you work on. Rename any, mark the personal one, untick any that's wrong, then press Next.",
     none: "Press Write it - I read six months of your mail and list what you work on.", busy: "Grouping your mail into what you work on…" },
   style: { running: "Reading your sent mail to describe how you write - about a minute.",
     failed: (why) => `I couldn't write it from your sent mail (${why}). Press Write it again, or describe it in your own words.`,
-    ready: "This is how you write, as your sent mail shows it. Edit anything that's off, then press Looks right.",
+    ready: "This is how you write, as your sent mail shows it. Edit anything that's off, then press Next.",
     none: "Press Write it - I read your sent mail and describe how you write.", busy: "Describing how you write from your sent mail…" },
   soul: { running: "Reading your mail and your answers to describe how you like to work - about a minute.",
     failed: (why) => `I couldn't write it from your mail (${why}). Press Write it again, or say it in your own words.`,
-    ready: "This is how you like to work, from your mail and your answers. Edit anything that's off, then press Looks right.",
+    ready: "This is how you like to work, from your mail and your answers. Edit anything that's off, then press Next.",
     none: "Press Write it - I describe how you like to work from your mail and your answers.", busy: "Describing how you like to work…" },
 };
 const NONE = { state: "none", why: "", text: "" };
@@ -161,8 +161,9 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   // THE ONE LIT MOVE (FirstRun.jsx, the owner 2026-10-19): Write it while there is no draft to look at, else the row's Next - and the
   // line names it by its label
   const writeLit = !!draft && ["none", "failed"].includes(draft.state);
-  const nextLabel = busy === "save" ? "Saving…" : draft ? (draft.state === "ready" ? "Looks right" : last ? "Save" : "Next")
-    : step === "mailboxes" ? "That's all my sources" : "Next";
+  // ...and it says Next on every step (the owner, 2026-11-03): "Looks right", "That's all my sources" and "Save" named what each press did,
+  // and a word that changes per step is one more thing to read before the same press. What it does is said on the line and in its hover
+  const nextLabel = busy === "save" ? "Saving…" : "Next";
   useVerbs("setup-about", a ? [
     // ...in the walk's Nav pill, Back and Next in their own slots, as every setup step's (FirstRun, the owner 2026-11-03)
     { id: "about:back", group: "back", tone: "s", label: "Back", title: at ? "The question before" : "Your main source", run: back },

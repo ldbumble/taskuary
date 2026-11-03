@@ -2155,7 +2155,10 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     if not t and a.get('title'): store.update_task(tid, {'Title': str(a['title'])[:200]}, actor)
     store.set_idea_action(i['IdeaId'], a | {'tid': tid})
     if agent:
-        brief = str(a.get('title') or i.get('Text') or '').strip()
+        # ...as the owner's ask, not a proposal to grade (the owner, 2026-11-03: an agent answered "change it, don't adopt it as written"
+        # to an idea they had already taken up - words about the idea, not for them)
+        brief = ("The owner took up this Advisor idea and handed it to you: do the work it points at and tell them, in plain words, what you "
+                 "found and what to do next - they already chose it, so it is not a proposal to judge.\n\n" + str(a.get('title') or i.get('Text') or '').strip())
         if a.get('why'): brief += f"\n\nWhy the assistant raised it: {a['why']}"
         if a.get('type') == 'lookout':                    # ...its next step, the pitch and the ids it rests on (lookout.brief)
             from . import lookout

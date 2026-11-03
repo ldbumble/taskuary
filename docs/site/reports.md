@@ -37,7 +37,7 @@ Four things are worth knowing:
 - **my own system** says the source reads a system you own. It starts on for databases and corporate
   systems like Intacct and QuickBooks, and off for news, the web, social timelines and REST
   addresses. A report whose every source is on is trusted, and so are the tasks it opens; one source
-  off makes it a stranger's. See [Security](security.md).
+  off makes it a stranger's. See [Security](security).
 - **max rows** is blank by default, and blank means 200 — a cap nobody chose. When a run is
   capped the headline says so, so the AI can never describe a truncated slice as complete.
 - **Test — show me the data** returns the exact text a scheduled run would hand the prompt. Use

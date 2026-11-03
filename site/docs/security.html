@@ -263,8 +263,24 @@ session with full permissions still runs as your Windows user and has a shell.</
 <h2 id="a-strangers-task-runs-in-auto-mode">A stranger&#39;s task runs in auto mode<a class="anchor" href="#a-strangers-task-runs-in-auto-mode" aria-label="Link to this section">#</a></h2>
 <p>Every task knows <strong>where its words came from</strong>: you, a trusted sender, or a stranger. The least trusted
 text on it decides, and a stranger who writes on your colleague&#39;s thread makes it a stranger&#39;s task.
-Advisor ideas and reports count as a stranger&#39;s too, since they carry what they read. Only you raise a
-task: <strong>Trust this task</strong> on its card. Pressing Start does not.</p>
+Only you raise a task: <strong>Trust this task</strong> on its card. Pressing Start does not.</p>
+<p>A task Taskuary wrote itself, from an Advisor idea, is as trusted as the least trusted thing it was built
+from. Taskuary reads the messages and tasks the idea names: if every one is yours, a trusted sender&#39;s,
+or a report from your own systems that came in as mail from them, the task is trusted. If one is a
+stranger&#39;s, so is the task. A summary that mixes everyone&#39;s mail, like the morning digest, counts only
+through the messages the idea names, never as a whole. An idea that names nothing Taskuary can find is a
+stranger&#39;s.</p>
+<p>A report is as trusted as what it read. Each of its sources has a <strong>my own system</strong> switch. It starts on
+for your databases and your books (Intacct, QuickBooks and the like) and off for everything else: news,
+web pages, social timelines, any REST address. A report whose every source is switched on is trusted,
+and so are the tasks it opens and an Advisor idea that names it. One source switched off makes it a
+stranger&#39;s. Each run records which sources it read, and a report written before it kept that record is
+a stranger&#39;s. Turning a switch off counts for that report&#39;s earlier runs too. A report is never more
+than trusted: it is still Taskuary&#39;s summary, not your own words. Taskuary&#39;s own tables, like the
+morning digest, can&#39;t be switched on, since they hold everyone&#39;s mail.</p>
+<p>An idea that rests on a line of what Taskuary learned is judged by where that line came from. A line
+you said or reworded, or one learned only from your own sent mail, is yours. A line learned from anyone
+else&#39;s mail, or with no record of where it came from, is a stranger&#39;s.</p>
 <p>A stranger&#39;s task runs differently from yours:</p>
 <ul>
 <li><strong>Its CLI runs in its own auto mode</strong>, not with permissions bypassed. Claude Code&#39;s reviewer approves

@@ -204,6 +204,11 @@ def state(store, item: dict, verbs: list) -> tuple:
     if tid and (h := proposals.held_pending(store, tid)): return 'action_held', {'what': h['what'], EV: [f"rv{h['rid']}"]}
     if lane == 'working' or (tid and advisor._at_work(store, 'task', tid)): return 'working', {}
     if kind == 'agent' and (it.get('asking') or lane == 'blocked'): return 'agent_asking', {}
+    # ...and a run that ENDED on a question to the owner - a restart cut it off at "go ahead?" - is still asking, not stopped: the finish
+    # check read it as stopped work and lit Reply to the sender over the agent's ask (the owner, 2026-11-03)
+    if tid and (kind in ('agent', 'agentdone', 'wrapup') or lane in ('stopped', 'saved')):
+        from . import workerstate
+        if workerstate.left_asking(store, tid): return 'agent_asking', {}
     try: f = advisor.failure(store, it)
     except Exception: f = None
     if kind == 'report' and (it.get('bad') or f): return 'report_failed', {'why': _plain_why((f or {}).get('why'), it.get('why'), default='it did not run')}

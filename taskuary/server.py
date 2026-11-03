@@ -2060,6 +2060,9 @@ def task_detail(task_id: int):
             'closedWhy': taskstate.closed_why(store, d['task'], d.get('comments')),
             # ...and how its last run ENDED, in the run's own word (finished / failed / stopped / disconnected) - what taskstate read
             'runEnded': ran,
+            # ...and the question it was still asking the owner when it ended (workerstate.left_asking): its Continue is the answer, and
+            # says so (the owner, 2026-11-03: "it's asking me question but the ai closed the agent why?")
+            'leftAsking': [r['text'] for r in _workerstate().left_asking(store, task_id)] if ran else [],
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)

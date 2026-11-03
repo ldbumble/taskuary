@@ -66,12 +66,14 @@ class OpenQuestionAtWrap(unittest.TestCase):
         self.assertEqual(wrapup.unanswered(s, tid), [])
         self.assertTrue(self.finish(s, tid)[0]['drafting'])
 
-    def test_a_question_only_the_turn_judge_read_into_the_screen_does_not_count(self):
-        """selfclose's own rule: the model's read of a turn is not the agent asking - its own word outranks it."""
+    def test_a_question_asked_only_in_the_turns_final_words_counts_as_the_model_read_it(self):
+        """The model's read of the prose that ended the turn (hooks.judge_turn) is a question nobody answered too (the owner, 2026-11-03:
+        "it's asking me question but the ai closed the agent why?") - put away there, the run did not finish and drafts nothing."""
         s = MemoryStore(); tid, mid = vendor_task(s)
         ev(s, tid, 'turn_end', NOTE); ev(s, tid, 'input_needed', ASK, source='judge', rid='q1')
-        self.assertEqual(wrapup.unanswered(s, tid), [])
-        self.assertTrue(self.finish(s, tid)[0]['drafting'])
+        self.assertEqual([r['text'] for r in wrapup.unanswered(s, tid)], [ASK])
+        out, wd = self.finish(s, tid)
+        wd.assert_not_called(); self.assertFalse(out['drafting'])
 
     def test_an_approval_it_was_waiting_on_is_unfinished_work_too(self):
         s = MemoryStore(); tid, mid = vendor_task(s)

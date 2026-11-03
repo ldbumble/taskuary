@@ -232,6 +232,24 @@ def status(store, tid: int) -> dict:
 ENDINGS = ('finished', *TERMINAL)
 
 
+# A QUESTION THE AGENT ITSELF ASKED, as its run recorded it: its question tool's (q:<group>:<n>), a chooser read off its screen, an API
+# agent's ask, or the model's read of the prose that ended its turn (hooks.judge_turn) - never the CLI's bare idle notice, which follows
+# every quiet turn whether or not anything was asked
+def own_question(r: dict) -> bool:
+    return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('judge', 'screen', 'api') or bool(group_of(r.get('request_id'))))
+
+
+def left_asking(store, tid) -> list:
+    """The questions a run that is OVER was still asking the owner when it ended - cut off by a restart, its CLI gone, stopped - with no
+    prompt of theirs since: [] while a session is live (its own pane asks) or when the run ended on no question of its own.
+
+    A run that ends there is still waiting on the owner (the owner, 2026-11-03: "it's asking me question but the ai closed the agent why?"):
+    an agent's "Ready to push to main - go ahead?" was cut off by an update's restart, and the page drew a finished run with nothing asking."""
+    if not tid or _live(int(tid)): return []
+    st = status(store, int(tid))
+    return [r for r in st['requests'] if own_question(r)] if st['state'] in ('disconnected', 'stopped') else []
+
+
 def ended(store, tid, live_too: bool = False) -> str | None:
     """How the task's last run ENDED, by its own word, with nothing live on it: 'finished' (an explicit result no prompt has
     followed, as status reads it), 'failed', 'stopped' or 'disconnected' - else None: live, never reported, or silent on how it

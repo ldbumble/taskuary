@@ -429,7 +429,7 @@ def unanswered(store, task_id: int) -> list:
     except Exception as e: logger.debug(f'task {task_id}: open questions not read - {e}'); return []
     # ...and a question asked only in the prose that ended its turn, as the model read it (hooks.judge_turn): "Ready to push to main - go
     # ahead?" is as unanswered as one asked through a tool (the owner, 2026-11-03). selfclose still lets the agent's own --done outrank it
-    return [r for r in reqs if r.get('text') and (r['kind'] == 'approval_needed' or (r['kind'] == 'input_needed' and r.get('source') in ('hook', 'api', 'judge', 'screen')))]
+    return [r for r in reqs if r.get('text') and (r['kind'] == 'approval_needed' or (r['kind'] == 'input_needed' and r.get('source') in ('hook', 'api', 'judge', 'screen', ws.RESUMED)))]
 
 
 def left_open(asked: list) -> str:

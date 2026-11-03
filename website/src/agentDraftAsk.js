@@ -13,6 +13,13 @@ export const isAgentDraft = (r) => !!r && r.Status === "pending" && isReply(r) &
 export const draftKey = (r) => `${r.ReviewId}|${String(r.DraftText || "")}`;
 // the drafts the agent pane says, in the order the task holds them
 export const agentAsks = (reviews = []) => (reviews || []).filter(isAgentDraft);
+// AN EARLIER SESSION'S DRAFT IS NOT THE REPLY (the owner, 2026-11-03: "when you continue on general agent it shows the prior reply on bottom that
+// the agent generated. Don't show that reply if it was based off another general session not the latest one"). A draft keeps the session that
+// wrote it (DraftSid; "owner" once the owner edited it); while another session is live (`sid`) its pending draft is not the page's - the server
+// holds it the same way (wrapup.stale_draft) and this keeps a read from before the hold from drawing it, its notice or its Send
+export const earlierSession = (r, sid) => !!sid && r?.Status === "pending" && String(r.DraftBy || "").startsWith("agent:")
+  && !!r.DraftSid && r.DraftSid !== "owner" && r.DraftSid !== sid;
+export const latestDrafts = (reviews = [], sid = "") => (reviews || []).filter((r) => !earlierSession(r, sid));
 // where it is said: over a terminal (a CLI agent) in its corner, at the foot of a general agent's conversation - nowhere else
 export const askWhere = (mode) => (mode === "live" ? "popup" : mode === "general" ? "chat" : null);
 // the notice's words: the agent by the name it wrote under, the person by name ("Erin Blake", not "Erin Blake <erin@...>")

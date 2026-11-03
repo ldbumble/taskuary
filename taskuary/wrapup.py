@@ -191,6 +191,49 @@ def agent_drafted(rv) -> bool:
     return bool(rv) and str(rv.get('DraftBy') or '').startswith(AGENT_DRAFT) and bool(str(rv.get('DraftText') or '').strip())
 
 
+# AN EARLIER SESSION'S DRAFT IS NOT THE REPLY (the owner, 2026-11-03: "when you continue on general agent it shows the prior reply on bottom
+# that the agent generated. Don't show that reply if it was based off another general session not the latest one"). A draft keeps the sid of
+# the session that wrote it (DraftSid); a newer session holds it out of sight while it works (hold_stale), takes its place when it drafts
+# (agent_reply), and closes it as superseded when it ends without one (terminal.release_held, raise_reply) - closed, never written over, so it
+# reads under Close out's "Not sent" and Earlier rounds and comes back with Bring it back. The owner's own hand on it (an edit, a readdress, a
+# file) makes it theirs: OWNER_SID, never held.
+OWNER_SID = 'owner'
+STALE_HOLD = "held - an earlier agent session drafted it; the newer session's reply takes its place"
+SUPERSEDED = "superseded - an earlier agent session's draft; a newer session took over"
+_OWNER_HANDS = ('edit_draft', 'envelope', 'attached', 'detached', 'release', 'reopen')
+
+def stale_draft(store, rv, sid=None) -> bool:
+    """Is this pending/held draft an agent session's other than `sid` (None: any session - a new one is about to start)?
+    A draft from before sids were kept is the owner's if their hand is on it in the audit."""
+    if not agent_drafted(rv) or rv.get('Kind') in ('slot', 'action'): return False
+    have = rv.get('DraftSid')
+    if have == OWNER_SID or (sid and have == str(sid)): return False
+    if have: return True
+    q = f"SELECT 1 FROM audit WHERE EntityType='review' AND EntityId=? AND Actor=? AND Action IN ({','.join('?' * len(_OWNER_HANDS))}) LIMIT 1"
+    return not store._one(q, (rv['ReviewId'], OWNER_SID, *_OWNER_HANDS))
+
+def hold_stale(store, task_id: int, sid=None) -> int:
+    "Every pending reply an earlier agent session drafted, held while the session `sid` works - the count held."
+    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending' AND DeliveryClaim IS NULL "
+                       "AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (task_id,))
+    n = 0
+    for rv in rows:
+        if not stale_draft(store, rv, sid): continue
+        store._exec("UPDATE review SET Status='held', Reason=? WHERE ReviewId=? AND Status='pending'", (STALE_HOLD, rv['ReviewId']))
+        store._review_changed(rv['ReviewId']); n += 1
+    if n: store._poke('feed-changed', 'task-changed', task_id=task_id)
+    return n
+
+def supersede(store, rv, actor='agent'):
+    "An earlier session's draft closed unsent, its words kept - a newer session's reply is the task's now."
+    store.decide_review(rv['ReviewId'], 'closed_unsent', None, actor, note=SUPERSEDED)
+
+def _sid_now(store, task_id):
+    from . import workerstate as ws
+    try: return ws.current_sid(store, task_id)
+    except Exception: return None
+
+
 def own_draft(store, task_id: int):
     """The pending reply the agent wrote itself, if there is one."""
     return next((r for r in (store.pending_review(task_id, 'draft_reply', live_only=False),
@@ -251,7 +294,7 @@ def owner_asked_since(store, task_id: int, at: str) -> bool:
 
 
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
-                to: str = '') -> dict:
+                to: str = '', sid: str = None) -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
     the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
@@ -295,9 +338,13 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         return {'ok': False, 'already_answered': True, 'review_id': sent['ReviewId'],
                 'why': f'a reply to {to} already went at {at}, and nothing new has come from them since - nothing was saved. '
                        'Draft another only if the owner asked you to, and then say so: `taskuary --follow-up --reply "<text>"`.'}
+    # an EARLIER SESSION'S draft is not rewritten into this one: it is closed as superseded, its words kept, and this is a new review
+    sid = str(sid or _sid_now(store, task_id) or '') or None
+    if sid and held and stale_draft(store, held, sid): supersede(store, held, agent); held = {}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     # ...and a reply pending to SOMEONE ELSE is theirs: rewriting it into this letter took the one to them off the table (2026-11-02)
     if live and live.get('MessageId') and _person(store, live['MessageId']) != _person(store, mid): live = None
+    if sid and live and stale_draft(store, live, sid): supersede(store, live, agent); live = None
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:
         from .continuity import clock
@@ -324,7 +371,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...said once per letter: the same reply saved twice - its marker and its `--reply` in one turn - wrote "agent drafted the reply
     # itself" and "assistant drafted the reply itself" one under the other (the email walk, 2026-10-29)
     same = agent_drafted(rv) and ' '.join(str(rv.get('DraftText') or '').split()) == ' '.join(text.split())
-    store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent)
+    store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent); store.set_review_sid(rid, sid)
     if not same: store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
     many = [] if str(to or '').strip() else people_named(store, task_id)
@@ -932,6 +979,10 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     why = 'the agent finished - the reply is rewritten from what it found'
     if fresh.get('state') == 'changed': why = 'the agent finished, and the thread moved on after the work began - the reply answers the newest message; reread it before sending'
     if fresh.get('state') == 'unresolved': why = f"the agent finished, but the conversation could not be refreshed ({fresh.get('error')}) - drafted from the saved result; refresh it before sending"
+    # an EARLIER SESSION'S draft is not this session's answer: closed as superseded (its words kept), and the reply is drafted from this run
+    if (sid := _sid_now(store, task_id)):
+        for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('held','pending')", (task_id,)):
+            if stale_draft(store, rv, sid): supersede(store, rv)
     held = store.held_review(task_id, mid) or store.held_review(task_id)
     # one review per answer (PW-236): the held triage draft, else the pending one an earlier completion
     # event already raised - a repeated completion rewrites it, never duplicates it

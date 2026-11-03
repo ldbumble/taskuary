@@ -1099,6 +1099,9 @@ class SQLiteStore:
             # who wrote the draft: 'agent:<name>' when the agent that did the work wrote it itself
             # (wrapup.agent_reply), NULL when the responder did - the end of the run keeps the former
             if 'DraftBy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftBy TEXT')
+            # ...and the agent SESSION that wrote it (its sid), or 'owner' once the owner edited or readdressed it: a newer session holds
+            # an earlier one's draft out of sight and takes its place (wrapup.stale_draft, the owner 2026-11-03)
+            if 'DraftSid' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftSid TEXT')
             # THE FILES THE DRAFT SAYS RIDE WITH IT, in the writer's own words (responder.FILES): JSON {"named": [...]}, NULL when it
             # promises none or nobody judged. The card's "this mentions a file" line reads this, never a word list over the text (2026-10-28)
             if 'FilesPromised' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN FilesPromised TEXT')
@@ -5445,6 +5448,8 @@ class SQLiteStore:
         """
         self._exec("UPDATE review SET MessageId=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (mid, rid))
         self._review_changed(rid)
+    def set_review_sid(self, rid, sid):
+        self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)
     def save_review_draft(self, rid, draft):
         """Persist the owner's editor without erasing which agent run originally produced it."""
         self._exec("UPDATE review SET DraftText=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (draft, rid))

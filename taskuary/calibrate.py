@@ -59,9 +59,17 @@ def evidence(store, state: str, workstream: str = None, label=None) -> str:
         c = record(store, ws).get(state) or {}
         n = sum(c.values())
         if not n or (ws and n < MIN): continue
-        said = ', '.join(f"{(label or str)(v)} {k} of {n}" for v, k in sorted(c.items(), key=lambda x: -x[1]))
-        return f"in this state ({state}) over the last {DAYS} days{' in this workstream' if ws else ''}, the owner chose: {said}"
+        top = sorted(c.items(), key=lambda x: -x[1])
+        said = ', '.join(f"{(label or str)(v)} {k} of {n}" for v, k in top)
+        return f"in this state ({state}) over the last {DAYS} days{' in this workstream' if ws else ''}, the owner chose: {said}{habit(top, n, label)}"
     return ''
+
+
+def habit(top: list, n: int, label=None) -> str:
+    """A HABIT (the owner, 2026-11-02: "the same move >=80% of the time over >=5 cases, the Advisor starts lighting that move"): said beside
+    the record, with the instruction in advisor.SYSTEM - the model still reads whether this item is the usual one. '' under the bar."""
+    v, k = top[0] if top else ('', 0)
+    return f"; a HABIT: {(label or str)(v)} ({k} of {n})" if n >= MIN and k / n >= BAR else ''
 
 
 def clear(): _cache.clear()

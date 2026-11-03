@@ -25,7 +25,8 @@ def test_the_record_is_said_as_evidence_and_switches_nothing():
     s = MemoryStore()
     for n in range(1, 7): _press(s, n, 'agent_asking', 'close' if n > 1 else 'stop_agent')
     ev = calibrate.evidence(s, 'agent_asking', label=lambda v: {'close': 'Mark done'}.get(v, v))
-    assert ev == 'in this state (agent_asking) over the last 30 days, the owner chose: Mark done 5 of 6, stop_agent 1 of 6'
+    assert ev == ('in this state (agent_asking) over the last 30 days, the owner chose: Mark done 5 of 6, stop_agent 1 of 6; '
+                  'a HABIT: Mark done (5 of 6)'), 'one move on 80% of 5 or more answers is a habit, said - the model still decides'
     assert calibrate.evidence(s, 'never_seen') == '' and calibrate.evidence(s, '') == ''
     assert not hasattr(calibrate, 'trusted'), 'no on/off switch on a button any more'
 
@@ -43,8 +44,8 @@ def test_a_workstreams_own_record_is_the_evidence_once_it_has_enough():
                 (n, f'Ledger app bug {n}', 'open', 'ledger-app'))
         _press(s, n, 'asked', 'close')                       # in the Ledger app, an ask is fixed and closed, never answered
     for n in range(10, 40): _press(s, n, 'asked', 'reply')    # ...everywhere else, Reply (30 of 36 at home)
-    assert calibrate.evidence(s, 'asked', 'ledger-app').endswith('in this workstream, the owner chose: close 6 of 6')
-    assert calibrate.evidence(s, 'asked').endswith('the owner chose: reply 30 of 36, close 6 of 36')
+    assert calibrate.evidence(s, 'asked', 'ledger-app').endswith('in this workstream, the owner chose: close 6 of 6; a HABIT: close (6 of 6)')
+    assert calibrate.evidence(s, 'asked').endswith('the owner chose: reply 30 of 36, close 6 of 36; a HABIT: reply (30 of 36)')
     assert 'in this workstream' not in calibrate.evidence(s, 'asked', 'board-seat'), "a stream with no record of its own reads the home's"
 
 

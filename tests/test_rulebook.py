@@ -61,7 +61,7 @@ MATRIX = [
     ('Helpdesk tickets by day', 'report_ok', 'next', False),
     ('Vendor portal maintenance', 'fyi', 'next', False),
     ('Reconcile the August GL export', 'working', 'next', False),
-    ('agent asking (coding)', 'agent_asking', 'close', False),
+    ('agent asking (coding)', 'agent_asking', None, False),       # a coding agent's ask lights nothing (the owner, 2026-11-02)
     ('agent finished (general)', 'agent_done', 'close', True),
     ('agent failed (general)', 'failed_cause', 'continue', True),
     ('agent stopped-saved (coding)', 'stopped', 'continue', False),

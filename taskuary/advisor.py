@@ -190,8 +190,11 @@ SYSTEM = (
     f"screen in its pane, so never repeat it in the line. When the question really blocks work the owner wants - a choice only they can "
     f"make, a credential, a missing file - it is answered in its own pane: light the agent's answer when the row offers one, else "
     f"nothing (null). When the agent has delivered what was asked and only "
-    f"offers to go further (\"want me to also...?\", \"shall I carry on with...?\"), the work is done: {L('close')} when nothing more is "
-    f"owed, or {L('stop_agent')} to end the session - read the task, the owner's own words and their record in this state. "
+    f"offers to go further (\"want me to also...?\", \"shall I carry on with...?\", \"deploy now?\", \"may I check production?\"), read "
+    f"THE AGENT line: a GENERAL agent's work is done - {L('close')} when nothing more is owed, or {L('stop_agent')} to end the session - "
+    f"read the task, the owner's own words and their record in this state; a CODING agent's next step (a deploy, a push, a look at "
+    f"production) is the owner's own call in its pane - light nothing (null), never {L('close')} or {L('stop_agent')} over it "
+    f"(the owner, 2026-11-02). "
     "WHEN SOMETHING FAILED (a WHAT FAILED line below), the owner is owed the way past it, at any event: say in plain words what went "
     "wrong, and pick the move that fixes it - the fix offered when there is one (it opens the place that fixes it); else a verb offered "
     "that gets round it; else, when nothing here can fix it, the one that makes a task to fix it. Never advise the act that failed again "
@@ -227,7 +230,11 @@ SYSTEM = (
     # THE FACTS ARE EVIDENCE, NOT RULES (the owner, 2026-11-02): the state and the owner's record are handed over, and the model weighs them
     "THE STATE line names where the item stands from the app's own facts, and WHAT THE OWNER CHOSE BEFORE IN THIS STATE is their own "
     "record: both are evidence to weigh against this item, never a rule - the record says what they usually do, the item says whether this "
-    f"time is the usual one. {L('next')} is offered too: light it when there is nothing for the owner to do here but move on - an agent at "
+    "time is the usual one. "
+    # ...A HABIT IS FOLLOWED (the owner, 2026-11-02: "the same move >=80% of the time over >=5 cases, the Advisor starts lighting that move")
+    "When that record names a HABIT, light that move unless this item's own facts clearly differ from the usual case - and when you "
+    "light something else or nothing, the line says the fact that makes this time different. "
+    f"{L('next')} is offered too:light it when there is nothing for the owner to do here but move on - an agent at "
     "work, a report that landed fine, a notice. "
     # PROGRESSIVE TOOLS: the index rides the instructions (LOOK-UPS), the details come on demand (tools.describe)
     "LOOK BEFORE YOU DECIDE when the item leaves you unsure: answer {\"verb\": null, \"line\": \"\", \"evidence\": [], \"look\": "
@@ -790,9 +797,21 @@ def state_line(store, item, verbs, target_kind, target_id) -> str:
     try: ev = calibrate.evidence(store, st, _workstream(store, tgt), label=lambda v: L(v) or v)
     except Exception as e: logger.debug(f'advisor: no record read for {item.get("key")} - {e}'); ev = ''
     if ev: out.append(f'WHAT THE OWNER CHOSE BEFORE IN THIS STATE (their record - weigh it, it is no rule): {ev}')
+    # THE AGENT'S KIND (the owner, 2026-11-02): a coding agent asking to go further lights nothing, a general one may be closed - the model's
+    # to read, so the kind is said
+    if (ak := agent_kind(store, item)): out.append(f"THE AGENT: a {ak.upper()} agent")
     # A PERSONAL ASK (the owner, 2026-11-01: "a personal ask is an FYI") - said, for the model to weigh; it lit nothing by code before
     if target_kind == 'task' and _personal(store, tgt): out.append('PERSONAL: it is under a personal workstream - the owner answers personal asks in their own time, and the walk passes it')
     return '\n'.join(out)
+
+
+def agent_kind(store, item: dict) -> str:
+    """'coding' or 'general' for an agent's card (the task's own Kind), '' for anything else."""
+    it = item or {}
+    if str(it.get('kind') or '') != 'agent' or not it.get('tid'): return ''
+    try: k = str((store.get_task(int(it['tid'])) or {}).get('Kind') or it.get('task_kind') or '').lower()
+    except (TypeError, ValueError): return ''
+    return 'coding' if k == 'coding' else 'general'
 
 
 def is_goal(t) -> bool:
@@ -1367,6 +1386,8 @@ def checked(store, item: dict, verbs: list, d: dict) -> dict:
     elif kind in GAPS and verb == 'approve': why = 'a caution about the draft over its Send'
     # ...and the one that stays of a duplicate pair is never folded into its own twin: following it would drop the ask
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
+    # ...and a coding agent asking to go further is the owner's call in its pane, never closed under it (the owner, 2026-11-02)
+    elif d.get('state') == 'agent_asking' and verb in ('close', 'stop_agent') and agent_kind(store, item) == 'coding': why = "a coding agent's ask is the owner's"
     if not why: return {**d, 'kind': kind}
     logger.info(f"advisor: {d['key']} {verb} refused ({why}) - nothing lit instead")
     return {**d, 'verb': None, 'kind': kind, 'checked': why, **({} if kind in GAPS else {'line': '', 'evidence': []})}

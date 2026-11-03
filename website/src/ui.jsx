@@ -15,7 +15,6 @@ import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { browserRecogniser, dictate, dictationError } from "./dictation.js";
-import { toWav } from "./wav.js";
 import { onLive, touches } from "./live.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { RepoPicker } from "./RepoPicker.jsx";
@@ -505,11 +504,22 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
   // dictation, behind the desktop window too); only with neither is the mic crossed out and its press asks. A card still wins, and is
   // still what transcribes a voice-note FILE. A tab whose speech service will not answer hands over to the computer's own.
   const SR = browserRecogniser(), builtin = voice && !voice.ready ? voice.builtin : null;
+  // ...AND NOTHING THAT DOES NOT WORK (TQ-1283, the owner, 2026-11-03: "you can't use something that doesn't work ... trigger the
+  // question if you want to turn that on"): Windows voice typing with its speech setting off is not a fallback to worse dictation -
+  // the press asks to turn it on, and a yes turns it on and starts listening
+  const speechAsk = !!builtin?.ask;
   const viaBrowser = !!(voice && !voice.ready && SR && !(srDown && builtin));
   const viaBuiltin = !!(builtin && !viaBrowser);
-  const viaLive = !!(viaBuiltin && builtin.live);     // Windows voice typing hears the microphone itself: a session, not a clip
+  const viaLive = !!(viaBuiltin && builtin.live && !speechAsk);     // Windows voice typing hears the microphone itself: a session, not a clip
   const off = !!(voice && !voice.ready && !viaBrowser && !viaBuiltin);
-  const press = (e) => { if (!off) return start(); setAsk(e.currentTarget); voice.recheck(); };
+  const press = (e) => { if (!off && !(viaBuiltin && speechAsk)) return start(); setAsk(e.currentTarget); voice.recheck(); };
+  const [turning, setTurning] = React.useState(false);
+  const turnOn = async () => {
+    setTurning(true);
+    try { await api.post("/api/voice/speech-on"); setAsk(null); voice.recheck(); listen(); }
+    catch (e) { setAsk(null); flash(e?.response?.data?.detail || "Windows would not turn on speech recognition"); }
+    setTurning(false);
+  };
   // set up in the meantime (the popup's own button, or another tab): the mic is live the moment the status says so
   React.useEffect(() => { if (ask && voice?.ready) setAsk(null); }, [ask, voice?.ready]);
   const start = async () => {
@@ -536,6 +546,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       return;
     }
     if (viaLive) return listen();
+    if (viaBuiltin) return;     // nothing else on this computer hears dictation well enough to use (TQ-1283)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const type = window.MediaRecorder?.isTypeSupported?.("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : undefined;
@@ -547,7 +558,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         const clip = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
         setBusy(true);
         try {
-          const blob = viaBuiltin ? await toWav(clip) : clip;     // the computer's own recogniser reads WAV only
+          const blob = clip;
           const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm" } });
           if (data.text) onText?.(data.text); else flash("nothing audible");
         } catch (e) { flash(e?.response?.data?.detail || "transcription failed"); }
@@ -589,7 +600,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
     : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
     : viaLive ? `Dictate — ${builtin.label}. A voice AI (${placeName("voice")}) also reads voice notes.`
-    : viaBuiltin ? `Dictate — ${builtin.label}. ${builtin.hint ? `${builtin.hint}. ` : ""}A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
+    : viaBuiltin ? "Dictate — turn on Windows' speech recognition first (press to say yes)"
     : "Voice is off — no voice AI is set up yet");
   return (<>
     <MuiTooltip title={ask ? "" : err ? <span data-tq-mic-err="">{err}</span> : title} open={!ask && (!!err || (hover && !!title))}
@@ -603,16 +614,26 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
     <Popover open={!!ask} anchorEl={ask} onClose={() => setAsk(null)} data-tq-voice-ask
       anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
       slotProps={{ paper: { sx: { p: 1.75, maxWidth: 320, borderRadius: 2, mt: -0.75 } } }}>
-      <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Set up voice to talk instead of type</Typography>
-      <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
-        Pick a voice AI under {placeName("voice")}. Groq has a free tier; Local Whisper runs on this computer with no key.
-      </Typography>
+      {viaBuiltin && speechAsk ? <>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Turn on speech recognition?</Typography>
+        <Typography data-tq-speech-ask="" sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>{builtin.ask}</Typography>
+        <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>
+          Or pick a voice AI under {placeName("voice")} instead - it also reads voice notes.
+        </Typography>
+      </> : <>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Set up voice to talk instead of type</Typography>
+        <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
+          Pick a voice AI under {placeName("voice")}. Groq has a free tier; Local Whisper runs on this computer with no key.
+        </Typography>
+      </>}
       {/* a Mac's own voice typing takes any box with the cursor in it - this window cannot call it, the owner can (voice.py LIVE) */}
       {/Mac/.test(navigator.platform || navigator.userAgent || "") && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.75, lineHeight: 1.5 }}>
         Or use the Mac's own Dictation: click in the box and press the Dictation key (🎤), or Fn twice.
       </Typography>}
       <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
-        <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
+        {viaBuiltin && speechAsk && <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }} disabled={turning}
+          data-tq-speech-on="" onClick={turnOn}>{turning ? "Turning it on…" : "Turn it on"}</Button>}
+        <Button size="small" variant={viaBuiltin && speechAsk ? "text" : "contained"} disableElevation sx={{ textTransform: "none" }}
           onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>Set up voice AI</Button>
       </Box>
     </Popover>

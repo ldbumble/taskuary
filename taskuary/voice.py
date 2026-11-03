@@ -90,9 +90,6 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
     """Bytes in, {text, provider, model} out. Raises RuntimeError with something the owner can act on.
     `mic`: a clip from the prompt box's mic, which may fall to the computer's own recogniser when no card is set up."""
     c = c or pick(store)
-    if not c and mic and builtin():
-        if (mime or '').split(';')[0].strip() not in ('audio/wav', 'audio/x-wav'): raise RuntimeError(f"{BUILTIN['label']} reads WAV only - press the mic again")
-        return {'text': _windows(data).strip(), 'provider': BUILTIN['engine'], 'model': 'System.Speech dictation'}
     if not c: raise RuntimeError(NO_CONNECTOR)
     t, cfg, key, terms = c['Type'], _cfg(c), c.get('Secret') or '', vocabulary(store)
     mime = (mime or 'audio/ogg').split(';')[0].strip()
@@ -172,75 +169,8 @@ def _local(cfg, data, name, terms=()):
         except OSError: pass
 
 
-"""THE COMPUTER'S OWN VOICE, ON WITHOUT A PRESS (the owner, 2026-11-01: "local voice using microsoft edge is not working. it should be
-built in without having to turn it on if it finds it"). The desktop window is Edge's WebView2, whose SpeechRecognition has no speech
-service behind it ("network" at once), and Edge's on-device recognition reports itself unavailable. What every Windows desktop does ship
-is the SAPI dictation recogniser behind .NET's System.Speech: offline, no key, no install, about a second for a sentence. It reads a WAV
-file, so the mic sends one (wav.js) and a PowerShell child hears it - no Python package, nothing on macOS or Linux, where this is None
-and the mic stays as it was. It takes no vocabulary (SAPI dictation has no phrase biasing), and it serves the mic only: a voice note
-arrives as Ogg/Opus, which it cannot read, so voice notes still want a card. A configured card always wins (ready, transcribe)."""
-BUILTIN = {'engine': 'windows_speech', 'label': 'Windows speech recognition (on this computer)'}
-_RECOGNISERS = r'SOFTWARE\Microsoft\Speech\Recognizers\Tokens'
-_HAS = {}
-
-def builtin():
-    """The computer's own recogniser, once per run: Windows voice typing (LIVE) when it will take dictation, else System.Speech
-    (BUILTIN, with how to turn the better one on) when the registry has a recogniser, else None - macOS and Linux included."""
-    # ...and voice typing only while Online speech recognition is on: it compiles with the setting off, then stops at the first word with
-    # "the speech privacy policy was not accepted" - which one user met as the mic's only answer (TQ-1251). Read each time, so turning it
-    # on takes effect at the next press, no restart
-    if 'live' not in _HAS: _HAS['live'] = sys.platform == 'win32' and _live_ok()
-    if _HAS['live'] and speech_on(): return LIVE
-    if 'v' not in _HAS:
-        v = None
-        if sys.platform == 'win32':
-            try:
-                import winreg
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _RECOGNISERS) as k: v = {**BUILTIN, 'hint': SPEECH_OFF} if winreg.QueryInfoKey(k)[0] else None
-            except OSError: v = None
-        _HAS['v'] = v
-    return _HAS['v']
-
-
-def speech_on() -> bool:
-    """Is Online speech recognition on (Windows' speech privacy setting, which voice typing needs)? Off when never set - Windows' default."""
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy') as k:
-            return int(winreg.QueryValueEx(k, 'HasAccepted')[0]) == 1
-    except (OSError, ValueError, ImportError): return False
-
-# Recognize() answers null for a stretch it could not match, so a null is no end: the end is the engine letting go of the file, which throws
-_SAPI = r'''$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [Text.Encoding]::UTF8
-try {
-Add-Type -AssemblyName System.Speech
-$all = [System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()
-$ri = @($all | Where-Object { $_.Culture.Name -eq (Get-UICulture).Name }) + @($all) | Select-Object -First 1
-if (-not $ri) { throw 'no speech recogniser is installed' }
-$e = New-Object System.Speech.Recognition.SpeechRecognitionEngine $ri
-$e.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar)); $e.SetInputToWaveFile($env:TQ_WAV)
-$out = @(); for ($i = 0; $i -lt 500; $i++) { try { $r = $e.Recognize() } catch [InvalidOperationException] { break }; if ($r) { $out += $r.Text } }
-$e.Dispose(); [Console]::Out.Write(($out -join ' '))
-} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }'''
-
-def _windows(data: bytes) -> str:
-    from . import spawn
-    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f: f.write(data); path = f.name
-    try:
-        enc = base64.b64encode(_SAPI.encode('utf-16-le')).decode()
-        r = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc],
-                      capture_output=True, timeout=120, env={**os.environ, 'TQ_WAV': path})
-        if r.returncode: raise RuntimeError(f"{BUILTIN['label']} could not hear the clip: {r.stderr.decode('utf-8', 'replace').strip()[:200] or r.returncode}")
-        return r.stdout.decode('utf-8', 'replace')
-    except FileNotFoundError: raise RuntimeError(f"{BUILTIN['label']} needs PowerShell, which was not found")
-    except subprocess.TimeoutExpired: raise RuntimeError(f"{BUILTIN['label']} took over two minutes - try a shorter clip")
-    finally:
-        try: os.unlink(path)
-        except OSError: pass
-
-
 """WINDOWS VOICE TYPING FIRST (the owner, 2026-11-02, after System.Speech wrote a dictation as "a predetermined trading land on my left
-arm": "do the changes to use desktop if the machine has it"). Windows 10 and 11 ship two recognisers. System.Speech (above) is the 2006
+arm": "do the changes to use desktop if the machine has it"). Windows 10 and 11 ship two recognisers. System.Speech (removed, TQ-1283) is the 2006
 one, untrained and offline. Windows.Media.SpeechRecognition is the one behind Win+H and Edge's tabs: Microsoft's online service, on when
 Online speech recognition is on in Windows' speech privacy settings. It hears the MICROPHONE, never a file, so it is a session the
 server holds: started by the mic's press, each phrase read as it settles, stopped by the next press. PowerShell 5.1 reaches it as a WinRT
@@ -249,7 +179,41 @@ started cannot be cancelled from PowerShell); a silence ends each listen after 3
 It hears this computer's own microphone, so it serves only a page on this computer (server: loopback). macOS has no such door for an
 unbundled process - Apple's Speech framework kills a caller whose app carries no usage description - so a Mac uses its Dictation key."""
 LIVE = {'engine': 'windows_voice_typing', 'label': 'Windows voice typing (on this computer)', 'live': True}
-SPEECH_OFF = "For better results, turn on Online speech recognition in Windows' speech privacy settings, then press the mic again"
+SPEECH_ASK = ("Windows' speech recognition is off on this computer. Turn it on so the mic can hear you? "
+              "(Windows sends what you say to Microsoft to turn it into text.)")
+
+# NOTHING THAT DOES NOT WORK (TQ-1283, the owner, 2026-11-03: "You can't use something that doesn't work ... ask them, trigger the
+# question if you want to turn that on"). The fallback under voice typing was System.Speech, the 2006 offline dictation - it wrote the
+# owner's dictation as "a predetermined trading land on my left arm" and a user's as "Ojai idea or a bottle of Iraq Shore", text that
+# looks real and is not. It is gone. Voice typing with its setting off is no longer a reason to fall back: the mic ASKS to turn it on.
+_HAS = {}
+
+def builtin():
+    """The computer's own recogniser: Windows voice typing (LIVE) when it is here and Online speech recognition is on; here with the
+    setting off, LIVE with `ask` - the mic asks the owner to turn it on (turn_on_speech) before it listens; else None, and the mic asks
+    for a voice AI. The setting is read each time, so it takes effect at the next press, no restart."""
+    if 'live' not in _HAS: _HAS['live'] = sys.platform == 'win32' and _live_ok()
+    if not _HAS['live']: return None
+    return LIVE if speech_on() else {**LIVE, 'ask': SPEECH_ASK}
+
+_SPEECH_KEY = r'Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy'
+
+def speech_on() -> bool:
+    """Is Online speech recognition on (Windows' speech privacy setting, which voice typing needs)? Off when never set - Windows' default."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _SPEECH_KEY) as k: return int(winreg.QueryValueEx(k, 'HasAccepted')[0]) == 1
+    except (OSError, ValueError, ImportError): return False
+
+def turn_on_speech() -> bool:
+    """The owner said yes at the mic: Online speech recognition on for this Windows user - the value Windows' own speech privacy
+    toggle writes (HKCU, no admin). True when it reads back on."""
+    try:
+        import winreg
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, _SPEECH_KEY, 0, winreg.KEY_SET_VALUE) as k: winreg.SetValueEx(k, 'HasAccepted', 0, winreg.REG_DWORD, 1)
+    except (OSError, ImportError) as e: logger.warning(f'voice: could not turn on Online speech recognition - {e}'); return False
+    return speech_on()
+
 # what the child's stop means to the owner, by the WinRT status it names
 _LIVE_WHY = {'MicrophoneUnavailable': 'no microphone Windows will lend - turn on "Let desktop apps access your microphone" in the microphone privacy settings of Windows',
              'NetworkFailure': 'it needs the internet, and could not reach it',
@@ -305,7 +269,9 @@ def _read(s):
 
 def listen_start() -> str:
     """Start the one live session (an earlier one stops first) and return its id."""
-    if (builtin() or {}).get('engine') != LIVE['engine']: raise RuntimeError(f"{LIVE['label']} is not on this computer")
+    b = builtin() or {}
+    if b.get('engine') != LIVE['engine']: raise RuntimeError(f"{LIVE['label']} is not on this computer")
+    if b.get('ask'): raise RuntimeError(_LIVE_WHY['privacy'])
     from . import spawn
     with _LISTEN_LOCK:
         _stop(_LISTEN.pop('cur', None))

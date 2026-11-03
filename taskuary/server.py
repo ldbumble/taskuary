@@ -7010,6 +7010,14 @@ def voice_listen(request: Request):
     try: return {'id': voice.listen_start()}
     except (RuntimeError, OSError) as e: raise HTTPException(409, str(e))
 
+@app.post('/api/voice/speech-on')
+def voice_speech_on(request: Request):
+    """The owner's yes at the mic (TQ-1283): Online speech recognition on for this Windows user, so voice typing can hear them."""
+    voice = _live_voice(request)
+    if not voice.turn_on_speech(): raise HTTPException(409, "Windows would not turn on speech recognition - turn on Online speech recognition in Windows' speech privacy settings, then press the mic again")
+    store.audit('setting', 0, 'voice_online_speech', ACTOR, detail={'on': True})
+    return voice.ready(store)
+
 @app.get('/api/voice/listen/{sid}')
 def voice_listen_poll(sid: str, request: Request, since: int = 0):
     out = _live_voice(request).listen_poll(sid, since)

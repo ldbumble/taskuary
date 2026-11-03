@@ -3,32 +3,32 @@ import test from "node:test";
 
 import { startHarness } from "./harness.mjs";
 
-/* A VOICE THAT IS FOUND IS ON, WITH NO PRESS TO TURN IT ON (the owner, 2026-11-01: "local voice using microsoft edge is not working. it
-   should be built in without having to turn it on if it finds it"). With no card and no browser recogniser (the desktop window: WebView2
-   has the class but no service, so browserRecogniser is null there - here it is simply taken away), the computer's own recogniser the
-   server reports (voice.py builtin) makes the mic live: a press records at once, the clip goes up as 16 kHz WAV, and its words land in
-   the box. With nothing found the mic is crossed out and asks, and the ask offers no "use this browser's own" step. The server's answers
-   are stood in for, so the test reads the same on a box without Windows speech. */
+/* NOTHING THAT DOES NOT WORK, AND A QUESTION INSTEAD (TQ-1283, the owner, 2026-11-03: "You can't use something that doesn't work ... ask
+   them, trigger the question if you want to turn that on"). With no card and no browser recogniser (the desktop window: WebView2 has the
+   class but no service, so browserRecogniser is null there - here it is simply taken away), Windows voice typing with its speech setting
+   off makes the mic ASK: "Turn it on" switches the setting on (POST /api/voice/speech-on) and the mic starts listening at once. No clip
+   ever goes to the 2006 offline dictation - it is gone. With nothing found the mic is crossed out and asks for a voice AI. The server's
+   answers are stood in for, so the test reads the same on a box without Windows speech. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const LABEL = "Windows speech recognition (on this computer)";
+const LIVE = { engine: "windows_voice_typing", label: "Windows voice typing (on this computer)", live: true };
+const ASK = "Windows' speech recognition is off on this computer. Turn it on so the mic can hear you?";
 
-test("with no card the computer's own voice makes the mic live at once, and the clip goes up as WAV", { timeout: 300000 }, async (t) => {
+test("voice typing with its setting off asks, and a yes turns it on and listens", { timeout: 300000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
-  let builtin = { engine: "windows_speech", label: LABEL };
-  const posted = [];
+  let builtin = { ...LIVE, ask: ASK };
+  const hit = [];
   page.off("request", page.fixtureRequestGuard);     // the voice routes are answered here; everything else still goes through the guard
+  const ok = (q, body) => q.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   page.on("request", async (q) => {
-    const u = q.url();
-    if (u.includes("/api/voice/status")) return q.respond({ status: 200, contentType: "application/json",
-      body: JSON.stringify({ ready: false, provider: null, label: null, vocabulary: [], builtin }) });
-    if (u.includes("/api/voice/transcribe")) {
-      const raw = q.postData() ?? (await q.fetchPostData?.()) ?? "";
-      const body = raw.startsWith("RIFF") ? raw : Buffer.from(raw, "base64").toString("latin1");   // a binary body comes base64
-      posted.push({ type: q.headers()["content-type"], head: body.slice(0, 4), wave: body.slice(8, 12), len: body.length });
-      return q.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ text: "reply saying Thursday works", provider: "windows_speech" }) });
-    }
+    const u = q.url(), m = q.method();
+    if (u.includes("/api/voice/status")) return ok(q, { ready: false, provider: null, label: null, vocabulary: [], builtin });
+    if (u.includes("/api/voice/speech-on")) { hit.push("speech-on"); builtin = LIVE; return ok(q, { ready: false, builtin }); }
+    if (u.includes("/api/voice/transcribe")) { hit.push("transcribe"); return ok(q, { text: "should never be asked" }); }
+    if (/\/api\/voice\/listen\/[^/]+\/stop/.test(u)) { hit.push("stop"); return ok(q, { said: [], done: true, error: "" }); }
+    if (/\/api\/voice\/listen\/[^/?]+/.test(u)) return ok(q, { said: hit.includes("said") ? [] : (hit.push("said"), ["reply saying Thursday works"]), done: false });
+    if (u.includes("/api/voice/listen") && m === "POST") { hit.push("listen"); return ok(q, { id: "abc123" }); }
     return page.fixtureRequestGuard(q);
   });
   await page.evaluateOnNewDocument(() => {
@@ -55,17 +55,17 @@ test("with no card the computer's own voice makes the mic live at once, and the 
   await page.click(".tq-compose-box textarea");
   const mic = '.tq-compose-box button[data-tq-mic]';
   await page.waitForSelector(`${mic}:not([disabled])`, { timeout: 10000 });
-  assert.equal(await page.$eval(mic, (e) => e.dataset.tqMic), "on", "the mic is live, not crossed out");
+  assert.equal(await page.$eval(mic, (e) => e.dataset.tqMic), "on", "the mic is not crossed out - it can be made to work");
   await page.click('.tq-compose-box button[aria-label="dictate"]');
-  await page.waitForSelector('.tq-compose-box button[aria-label="stop recording"]', { timeout: 5000 });
-  assert.equal(await page.$("[data-tq-voice-ask]"), null, "no offer to press first");
-  await sleep(1200);
-  await page.click('.tq-compose-box button[aria-label="stop recording"]');
+  await page.waitForSelector("[data-tq-speech-ask]", { visible: true, timeout: 5000 });
+  assert.match(await page.$eval("[data-tq-speech-ask]", (e) => e.textContent), /Turn it on so the mic can hear you/);
+  assert.deepEqual(hit, [], "nothing listens or records before the yes");
+  await page.click("[data-tq-speech-on]");
   await page.waitForFunction(() => document.querySelector(".tq-compose-box textarea")?.value.includes("reply saying Thursday works"), { timeout: 15000 });
-  assert.equal(posted.length, 1);
-  assert.equal(posted[0].type, "audio/wav");
-  assert.equal(posted[0].head, "RIFF"); assert.equal(posted[0].wave, "WAVE");
-  assert.ok(posted[0].len > 16000, `about a second of 16 kHz audio (${posted[0].len} bytes)`);
+  await page.click('.tq-compose-box button[aria-label="stop recording"]');
+  await sleep(500);
+  assert.deepEqual(hit.filter((x) => x !== "said"), ["speech-on", "listen", "stop"], "the yes turns it on, then voice typing listens");
+  assert.ok(!hit.includes("transcribe"), "no clip goes to anything worse");
 
   // nothing found: crossed out, and the ask has one road - set up a voice AI
   builtin = null;

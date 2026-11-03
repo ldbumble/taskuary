@@ -25,74 +25,69 @@ def _voice_store(t='groq_stt', secret='k1'):
 class ProviderTests(unittest.TestCase):
     def test_no_connector_is_said_the_way_the_owner_can_fix_it(self):
         s = MemoryStore()
-        with mock.patch.dict(voice._HAS, {'v': None}):
+        with mock.patch.object(voice, 'builtin', return_value=None):
             self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': [], 'builtin': None})
             with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/ogg', mic=True)
         self.assertIn(VOICE, str(e.exception)); self.assertIn('Groq', str(e.exception))
 
 
 class BuiltinVoiceTests(unittest.TestCase):
-    """The owner, 2026-11-01: "local voice using microsoft edge is not working. it should be built in without having to turn it on if it
-    finds it". With no card, the computer's own recogniser (Windows' System.Speech) hears the mic - found, never configured."""
-    def test_found_with_no_card_it_is_reported_and_hears_the_mics_wav(self):
+    """The computer's own voice: Windows voice typing, found with no card. TQ-1283 (the owner, 2026-11-03: "You can't use something that
+    doesn't work ... trigger the question if you want to turn that on"): the 2006 System.Speech fallback is gone; voice typing with its
+    speech setting off ASKS to be turned on."""
+    def test_no_mic_clip_is_heard_by_anything_but_a_card(self):
         s = MemoryStore()
-        with mock.patch.dict(voice._HAS, {'v': voice.BUILTIN}), mock.patch.object(voice, '_windows', return_value=' call Erin back ') as w:
-            self.assertEqual(voice.ready(s)['builtin'], voice.BUILTIN); self.assertFalse(voice.ready(s)['ready'])
-            self.assertEqual(voice.transcribe(s, b'RIFF', 'audio/wav', 'clip.wav', mic=True),
-                             {'text': 'call Erin back', 'provider': 'windows_speech', 'model': 'System.Speech dictation'})
-            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'webm', 'audio/webm', mic=True)
-            self.assertIn('WAV', str(e.exception))
-            # a voice note is no mic clip: Ogg it cannot read, so it still says how to set up a card
-            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'OggS', 'audio/ogg')
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE):
+            self.assertEqual(voice.ready(s)['builtin'], voice.LIVE); self.assertFalse(voice.ready(s)['ready'])
+            with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'RIFF', 'audio/wav', 'clip.wav', mic=True)
             self.assertIn(VOICE, str(e.exception))
-        self.assertEqual(w.call_count, 1)
+        self.assertFalse(hasattr(voice, '_windows') or hasattr(voice, 'BUILTIN'), 'System.Speech is gone')
 
     def test_a_card_still_wins(self):
         s = _voice_store('groq_stt')
-        with mock.patch.dict(voice._HAS, {'v': voice.BUILTIN}), mock.patch.object(voice, '_windows') as w, \
-             mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'from groq'})):
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE),              mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'from groq'})):
             self.assertEqual(voice.ready(s)['builtin'], None)
             self.assertEqual(voice.transcribe(s, b'RIFF', 'audio/wav', mic=True)['provider'], 'groq_stt')
-        w.assert_not_called()
 
     def test_off_windows_nothing_is_found(self):
         with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'linux'):
             self.assertIsNone(voice.builtin())
 
-    def test_the_clip_goes_to_a_powershell_child_by_file_and_is_removed(self):
-        """The real run is checked by hand on Windows (the suite allows no child process): this pins what the child is handed."""
-        from taskuary import spawn
-        seen = {}
-        def run(argv, **kw):
-            seen.update(argv=argv, path=kw['env']['TQ_WAV'], timeout=kw['timeout'])
-            with open(seen['path'], 'rb') as f: seen['data'] = f.read()
-            return types.SimpleNamespace(returncode=0, stdout='call Erin back'.encode(), stderr=b'')
-        with mock.patch.object(spawn, 'run', run): self.assertEqual(voice._windows(b'RIFF....WAVE'), 'call Erin back')
-        self.assertEqual(seen['argv'][:2], ['powershell', '-NoProfile']); self.assertEqual(seen['data'], b'RIFF....WAVE')
-        script = base64.b64decode(seen['argv'][-1]).decode('utf-16-le')
-        self.assertIn('DictationGrammar', script); self.assertIn('$env:TQ_WAV', script)
-        self.assertFalse(os.path.exists(seen['path']), 'the clip does not outlive the call')
-        bad = lambda argv, **kw: types.SimpleNamespace(returncode=2, stdout=b'', stderr=b'Wave file not valid.')
-        with mock.patch.object(spawn, 'run', bad), self.assertRaises(RuntimeError) as e: voice._windows(b'x')
-        self.assertIn('Wave file not valid', str(e.exception))
-
-    def test_windows_voice_typing_comes_first_and_system_speech_says_how_to_reach_it(self):
-        """The owner, 2026-11-02: "do the changes to use desktop if the machine has it" - System.Speech is only the last resort."""
-        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), mock.patch.object(voice, '_live_ok', return_value=True), \
-             mock.patch.object(voice, 'speech_on', return_value=True):
-            self.assertEqual(voice.builtin(), voice.LIVE)
-        # ...but never while Online speech recognition is off: it compiles, then stops at the first word (TQ-1251)
-        reg = types.SimpleNamespace(HKEY_LOCAL_MACHINE=0, OpenKey=mock.MagicMock(), QueryInfoKey=lambda k: (1,))
-        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), mock.patch.object(voice, '_live_ok', return_value=True), \
-             mock.patch.object(voice, 'speech_on', return_value=False), mock.patch.dict(sys.modules, {'winreg': reg}):
-            self.assertEqual(voice.builtin()['engine'], voice.BUILTIN['engine'])
+    def test_voice_typing_with_its_setting_off_asks_and_never_falls_back(self):
+        win = lambda live: (mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'),
+                            mock.patch.object(voice, '_live_ok', return_value=live))
+        a, b, c = win(True)
+        with a, b, c, mock.patch.object(voice, 'speech_on', return_value=True): self.assertEqual(voice.builtin(), voice.LIVE)
+        a, b, c = win(True)
+        with a, b, c, mock.patch.object(voice, 'speech_on', return_value=False):
+            self.assertEqual(voice.builtin(), {**voice.LIVE, 'ask': voice.SPEECH_ASK})
             with mock.patch.object(voice, 'speech_on', return_value=True): self.assertEqual(voice.builtin(), voice.LIVE, 'on at the next press, no restart')
+        a, b, c = win(False)
+        with a, b, c: self.assertIsNone(voice.builtin(), 'no voice typing: the mic asks for a voice AI, nothing worse stands in')
+        self.assertIn('Microsoft', voice.SPEECH_ASK)
         self.assertEqual(voice._why('the speech privacy policy was not accepted'), "Voice typing stopped: " + voice._LIVE_WHY['privacy'])
-        reg = types.SimpleNamespace(HKEY_LOCAL_MACHINE=0, OpenKey=mock.MagicMock(), QueryInfoKey=lambda k: (1,))
-        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), \
-             mock.patch.object(voice, '_live_ok', return_value=False), mock.patch.dict(sys.modules, {'winreg': reg}):
-            self.assertEqual(voice.builtin(), {**voice.BUILTIN, 'hint': voice.SPEECH_OFF})
-        self.assertIn('Online speech recognition', voice.SPEECH_OFF)
+
+    def test_a_yes_writes_the_setting_windows_own_toggle_writes(self):
+        vals = {}
+        class K:
+            def __enter__(s): return s
+            def __exit__(s, *a): pass
+        reg = types.SimpleNamespace(HKEY_CURRENT_USER='HKCU', KEY_SET_VALUE=2, REG_DWORD=4, CreateKeyEx=lambda *a: K(), OpenKey=lambda *a: K(),
+                                    SetValueEx=lambda k, n, _, t, v: vals.__setitem__(n, (t, v)), QueryValueEx=lambda k, n: (vals[n][1], 4) if n in vals else (_ for _ in ()).throw(OSError()))
+        with mock.patch.dict(sys.modules, {'winreg': reg}):
+            self.assertFalse(voice.speech_on(), "Windows' default: never set is off")
+            self.assertTrue(voice.turn_on_speech()); self.assertEqual(vals['HasAccepted'], (4, 1)); self.assertTrue(voice.speech_on())
+
+    def test_the_yes_is_served_only_on_this_computer_and_audited(self):
+        here, there = TestClient(server.app, client=('127.0.0.1', 5000)), TestClient(server.app, client=('192.168.1.20', 5000))
+        st = MemoryStore()
+        with mock.patch.object(server, 'store', st), mock.patch.object(voice, 'turn_on_speech', return_value=True) as on,              mock.patch.object(voice, 'builtin', return_value=voice.LIVE):
+            self.assertEqual(there.post('/api/voice/speech-on').status_code, 409); on.assert_not_called()
+            r = here.post('/api/voice/speech-on'); self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['builtin'], voice.LIVE)
+        with mock.patch.object(server, 'store', st), mock.patch.object(voice, 'turn_on_speech', return_value=False):
+            r = here.post('/api/voice/speech-on'); self.assertEqual(r.status_code, 409); self.assertIn('speech privacy', r.json()['detail'])
+        from taskuary import guard
+        self.assertEqual(guard.classify('POST', '/api/voice/speech-on')[0], 'owner')
 
     def test_the_probe_asks_a_powershell_child_for_winrt_dictation(self):
         from taskuary import spawn
@@ -115,7 +110,7 @@ class BuiltinVoiceTests(unittest.TestCase):
             def kill(self): pass
         made = []
         def popen(argv, **kw): made.append(kw['env']['TQ_STOP']); return Child(b'.\r\n+call Erin back\r\n+about the payroll report\r\n')
-        with mock.patch.dict(voice._HAS, {'v': voice.LIVE}), mock.patch.object(spawn, 'popen', popen):
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(spawn, 'popen', popen):
             sid = voice.listen_start()
             voice._LISTEN['cur']['reader'].join(2)
             self.assertEqual(voice.listen_poll(sid), {'said': ['call Erin back', 'about the payroll report'], 'ready': True, 'done': True, 'error': ''})
@@ -125,14 +120,15 @@ class BuiltinVoiceTests(unittest.TestCase):
             self.assertIsNone(voice.listen_stop(sid), 'a stopped session is gone')
             self.assertFalse(os.path.exists(made[0]), 'the stop file does not outlive the session')
         bad = lambda argv, **kw: Child(b'', 2, b'MicrophoneUnavailable')
-        with mock.patch.dict(voice._HAS, {'v': voice.LIVE}), mock.patch.object(spawn, 'popen', bad):
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(spawn, 'popen', bad):
             sid = voice.listen_start(); voice._LISTEN['cur']['reader'].join(2)
             self.assertIn('Let desktop apps access your microphone', voice.listen_stop(sid)['error'])
-        with mock.patch.dict(voice._HAS, {'v': voice.BUILTIN}), self.assertRaises(RuntimeError): voice.listen_start()
+        with mock.patch.object(voice, 'builtin', return_value=None), self.assertRaises(RuntimeError): voice.listen_start()
+        with mock.patch.object(voice, 'builtin', return_value={**voice.LIVE, 'ask': voice.SPEECH_ASK}), self.assertRaises(RuntimeError): voice.listen_start()
 
     def test_voice_typing_serves_only_a_page_on_this_computer(self):
         here, there = TestClient(server.app, client=('127.0.0.1', 5000)), TestClient(server.app, client=('192.168.1.20', 5000))
-        with mock.patch.dict(voice._HAS, {'v': voice.LIVE}), mock.patch.object(server, 'store', MemoryStore()):
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(server, 'store', MemoryStore()):
             self.assertEqual(here.get('/api/voice/status').json()['builtin'], voice.LIVE)
             self.assertIsNone(there.get('/api/voice/status').json()['builtin'])
             with mock.patch.object(voice, 'listen_start') as start:

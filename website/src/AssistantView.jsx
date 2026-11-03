@@ -3550,7 +3550,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     {!boxWide && unseen > 0 && <i className="tq-chat-unseen" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}
     {/* THE FIELD: nothing of its own at rest (display: contents - the pill is the box); in the chat window it is the bordered
         field the words are typed in, tools and send inside it (the owner, 2026-10-28: "it does not look like a prompt input box?") */}
-    <div className="tq-compose-field">
+    {/* ...and A PRESS ANYWHERE ON IT OPENS IT: grown under the mouse, the words rise to the top line and where they sat at rest is the field's
+        bare middle between the tools and send - a press there, the pill's own middle, opened nothing (chat-window in CI, 2026-11-03) */}
+    <div className="tq-compose-field" onMouseDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); composeRef.current?.focus(); } }}>
     <div className="tq-compose-tools">
     <AttachImage pics={pics} sx={{ color: DIM }} />
     <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} ctl={micRef} onInterim={setHeard}

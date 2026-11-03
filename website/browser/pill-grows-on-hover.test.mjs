@@ -76,7 +76,9 @@ test("the chat pill grows under the mouse, shrinks after it leaves, and never wi
   // ...opened by a click on the grown pill: the window at the same width, then the mouse away: open (only its × or Esc shuts it)
   await page.mouse.move(x, y); await sleep(400);
   assert.ok((await geo()).grow, "grown before the press");
-  await page.click(".tq-chat-unit > .tq-compose-box textarea");
+  // ...pressed where its words sat at rest, the grown field's bare middle between the tools and send: that opens it too (chat-window, CI)
+  assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [x, y]), "tq-compose-field", "the press lands on the field's middle");
+  await page.mouse.click(x, y);
   await page.waitForSelector(".tq-compose-box[data-tq-open]", { timeout: 5000 });
   await page.waitForSelector("[data-tq-chat-pop]:not([hidden])", { timeout: 5000 }); await sleep(300);
   const opened = await geo(), popW = await page.$eval("[data-tq-chat-pop]", (e) => Math.round(e.getBoundingClientRect().width));

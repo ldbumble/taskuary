@@ -30,10 +30,14 @@ The type picker is grouped by where the data lives: this computer, files and she
 AWS, Azure, Microsoft 365, monitoring, corporate systems, the AI itself, the web, and Taskuary's
 own data.
 
-Three things are worth knowing:
+Four things are worth knowing:
 
 - **label** is how the prompt refers to that data. Two queries against the same database are two
   sources, and without labels the prompt cannot tell them apart.
+- **my own system** says the source reads a system you own. It starts on for databases and corporate
+  systems like Intacct and QuickBooks, and off for news, the web, social timelines and REST
+  addresses. A report whose every source is on is trusted, and so are the tasks it opens; one source
+  off makes it a stranger's. See [Security](security.md).
 - **max rows** is blank by default, and blank means 200 — a cap nobody chose. When a run is
   capped the headline says so, so the AI can never describe a truncated slice as complete.
 - **Test — show me the data** returns the exact text a scheduled run would hand the prompt. Use

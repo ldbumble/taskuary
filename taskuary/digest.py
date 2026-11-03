@@ -160,10 +160,21 @@ PROMPT = _PROMPT_2026_09_15.replace(
     'one it fits - and never comes back in a later section.')
 assert 'a PERSON still waiting' in PROMPT and 'ONE section only' in PROMPT
 
+# 2026-11-02: a digest written at 22:12 listed the day's 10:00 and 16:00 under Meetings today as if
+# still coming. MEETINGS TODAY now carries only what is ahead or under way, each with its state;
+# the section says so instead of "one item per meeting".
+_PROMPT_2026_10_09 = PROMPT
+PROMPT = _PROMPT_2026_10_09.replace(
+    'one item per meeting from MEETINGS TODAY, in time order:',
+    'one item per meeting from MEETINGS TODAY that is still ahead or in progress at NOW (each line carries its state; '
+    'what already happened is left out, at most "earlier: N meetings"; with nothing ahead, name tomorrow\'s first '
+    'meeting if the block gives it, else omit the section), in time order:')
+assert 'still ahead or in progress' in PROMPT
+
 # every prompt ever SHIPPED, so store.__init__ can tell "still the stock text" (upgrade it)
 # from "the owner wrote this" (never touch) - same deal the template docs get
 OLD_PROMPTS = (
-    _PROMPT_2026_09_15,
+    _PROMPT_2026_10_09, _PROMPT_2026_09_15,
     _PROMPT_WITHOUT_STANDING_MEMORY, _PROMPT_2026_09_02_MEMORY,
     _PROMPT_2026_08_31, _PROMPT_2026_08_31_MEMORY,
     (
@@ -366,7 +377,13 @@ def gather(store, days: int = DAYS) -> str:
     try:
         from . import calendar as cal
         t = cal.today(store)
-        lines = cal.render_today(t) + [f'  COULD NOT READ: {e}' for e in t.get('errors') or []]
+        now = datetime.now(cal.tz_of(store)).replace(tzinfo=None)
+        tmr = None
+        if not any(cal.state(e, now) != 'done' for e in t.get('events') or []):
+            try: tmr = next(iter(cal.agenda(store, days=1, start=datetime.now(cal.tz_of(store)).replace(hour=0, minute=0, second=0, microsecond=0)
+                                            + timedelta(days=1))['events']), None)
+            except Exception as e: logger.debug(f'digest: tomorrow skipped - {e}')
+        lines = cal.render_today(t, now, tmr) + [f'  COULD NOT READ: {e}' for e in t.get('errors') or []]
     except Exception as e:
         lines = [f'  COULD NOT READ: {str(e)[:160]}']
     _block(out, 'MEETINGS TODAY:', lines)

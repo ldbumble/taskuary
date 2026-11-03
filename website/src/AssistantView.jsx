@@ -115,6 +115,7 @@ import { pressable } from "./pressable.js";
 import { coalesce } from "./coalesce.js";
 import { takeAsk } from "./askAssistant.js";
 import { WorkstreamLabel } from "./Workstream.jsx";   // a task row's workstream, a small label (the owner, 2026-11-01)
+import { digestLabel } from "./digestLabel.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -275,12 +276,12 @@ function SinceBlock({ onOpen, onReading }) {
     <div className="tq-since" data-tq-since="">
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
         {/* queued by Finish setup (firstrun.first_digest): not written until the mail it reads is sorted - said so, with how many are left */}
-        <span className="tag">MORNING DIGEST</span>{spin(dg.waiting ? `Not written yet - ${plural(dg.waiting, "email")} still being sorted first`
+        <span className="tag">{digestLabel()}</span>{spin(dg.waiting ? `Not written yet - ${plural(dg.waiting, "email")} still being sorted first`
           : "Writing today's digest…")}
       </div>}
       {dg.source_id && !(dg.writing && !writing) && <>
         <div className="tq-since-digest" data-tq-digest="">
-          <span className="tag">MORNING DIGEST</span>
+          <span className="tag">{digestLabel(dg.at)}</span>
           {dg.at ? <span>written {ago(dg.at)}</span> : <span>not written yet today</span>}
           <span className="sep">|</span>
           {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}

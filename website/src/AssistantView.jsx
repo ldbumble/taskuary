@@ -99,6 +99,7 @@ import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, levelOf, placed, pulledRow } from "./funnelPile.js";
+import { dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 const GeneralWorkspace = lazyView(loadGeneral);
@@ -313,7 +314,7 @@ class BeforeCommit extends React.Component {
   render() { return null; }
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table", coming = false }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table", coming = false, moved = {} }) {
   const items = pile?.items || [];
   const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
   // a task read newer than this rail takes back its agent lane (railStatus.agentGone): the row draws again when one says something new
@@ -350,7 +351,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     frame = requestAnimationFrame(addBatch);
     return () => cancelAnimationFrame(frame);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
-  const visibleItems = items.slice(0, revealed);
+  // SHOULD BE A TASK KEEPS THE FYI WHERE IT WAS (movedFyi.js): its row stays in FYI wearing where it went, and the task's own row under Tasks
+  // is its twin - the FYI row speaks for the table (its ring, its batch), the twin is a plain row of Tasks
+  const ghosts = ghostsOf(moved), movedKeys = new Set(ghosts.map((g) => g.key));
+  const twin = (i) => !i.moved && movedKeys.has(i.key);
+  const stillFyi = new Set(items.filter((i) => movedKeys.has(i.key) && levelOf(i) === "fyi").map((i) => i.key));
+  const visibleItems = items.slice(0, revealed).map((i) => (stillFyi.has(i.key) ? ghosts.find((g) => g.key === i.key) : i));
   // WHAT IS ON THE TABLE STAYS WHERE IT IS. The current item used to be lifted out of the pile and
   // redrawn at the top of one flat stack. The rail is grouped by category now, so hoisting would
   // tear a row out of its band on every Next - and an fyi BATCH would tear out ten. Nothing is
@@ -370,12 +376,13 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // nothing left to ring. While the batch is ON THE TABLE its entries are put back, in their own
   // band, so you can see the four things being talked about instead of watching them disappear.
   const have = new Set(visibleItems.map((i) => i.key));
-  const onTable = batch ? (batch.items || []).filter((i) => i.key && !have.has(i.key)) : [];
+  const onTable = batch ? (batch.items || []).filter((i) => i.key && !have.has(i.key) && !movedKeys.has(i.key)) : [];
   // the card on the table lends the row its words; WHERE the row sits is the rail's (placed) - its older lane drew a
   // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28). A row from outside the pile takes
   // its place in the order (inOrder), never the top of its section.
-  const drawn = inOrder(drawOrder(visibleItems).map((i) => (i.key === curKey ? { ...placed(i, current), key: i.key } : i)),
-    [...(curKey && !known ? [pulledRow(current)] : []), ...onTable]);
+  const drawn = inOrder(drawOrder(visibleItems).map((i) => (i.key === curKey && !i.moved ? { ...placed(i, current), key: i.key } : i)),
+    [...(curKey && !known ? [pulledRow(current)] : []), ...onTable, ...ghosts.filter((g) => !stillFyi.has(g.key))]);
+  const ringed = (i) => i.key === curKey && !twin(i), batched = (i) => batchKeys.has(i.key) && !twin(i);
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
   // ...and only into a rail that had rows: after an empty one (a read that failed, a first sync) every row would fall at once, the
@@ -446,11 +453,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // ...and the row on the table stays in the band it was clicked in (2026-10-19 UI walk): a For later row clicked was taken up by the
   // server (no longer put down) and jumped to Tasks under the pointer. It moves when the owner moves on, never while they look.
   const lastLevel = useRef({}), pin = useRef(null);
-  const tableRow = current ? drawn.find(atTable) : null;
-  if (!tableRow) pin.current = null;
+  const tableRow = current ? drawn.find((i) => !i.moved && atTable(i)) : null;
+  if (!tableRow || movedKeys.has(tableRow.key)) pin.current = null;
   else if (pin.current?.key !== tableRow.key) pin.current = { key: tableRow.key, level: lastLevel.current[tableRow.key] || null };
   const bands = bandsOf(drawn.map((i) => (i.surfaced && atTable(i) ? { ...i, surfaced: false } : i)), pin.current);
-  lastLevel.current = Object.fromEntries(bands.flatMap((b) => b.items.map((i) => [i.key, b.level])));
+  lastLevel.current = Object.fromEntries(bands.flatMap((b) => b.items.filter((i) => !i.moved).map((i) => [i.key, b.level])));
   // the FYI band is costed whole: its "N more fyi" stays while any of it is not here (fillCaps reads `total`)
   if (tail) for (const b of bands) if (b.level === "fyi") b.total = b.items.length + tail;
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
@@ -529,7 +536,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useEffect(() => { if (fyiFills && fyiAsked.current !== fyiHave) { fyiAsked.current = fyiHave; onMoreFyi?.(); } }, [fyiFills, fyiHave]);   // eslint-disable-line react-hooks/exhaustive-deps
   // what a band draws: its cap's worth, and whatever is on the table wherever in the band it sits
   const shownIn = (level, rows) => { const cap = opened.has(level) ? rows.length : (caps[level] ?? rows.length);
-    return rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key)); };
+    return rows.filter((i, n) => n < cap || ringed(i) || batched(i)); };
   // THE RAIL IS ONE TAB STOP (owner-approved, 2026-10-20): a listbox with a roving tabindex - Tab lands on the row on the table (else
   // the first), Up/Down move the focus ring, Enter opens the row as a click does, Escape gives focus back to where it came from
   const [kbdKey, setKbdKey] = useState(null);
@@ -679,7 +686,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
           // "on the table · 4 fyi" hangs in a gap instead of being printed across the next fyi's
           // subject (the owner, 2026-09-22). One gap, once, while a batch is up: no row is reordered
           // and nothing above it moves, which is what "the row wears the ring where it sits" protects.
-          const inBatch = batchKeys.has(item.key);
+          const inBatch = batched(item);
           // ...and when the batch OPENS the band there is nowhere above it for the bracket's own
           // edge to go: the stack starts flush under the sticky heading. Four pixels here put the
           // ring around the first card instead of along its top border.
@@ -687,14 +694,14 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
           if (wasInBatch && !inBatch) stackHeight += BATCH_TAIL;
           wasInBatch = inBatch;
           const top = stackHeight;
-          stackHeight += item.key === curKey ? CUR_H : ROW_H;
+          stackHeight += ringed(item) ? CUR_H : ROW_H;
           if (byKey[item.key]) { moreTops.push({ top: stackHeight, mark: byKey[item.key] }); stackHeight += MORE_PX; }
           placedNow.current.push(`${level} ${item.key}`);
-          if (!falls(item.key)) restNow.current.set(`${level} ${item.key}`, { top, h: (item.key === curKey ? CUR_H : ROW_H) - 3 });
+          if (!falls(item.key)) restNow.current.set(`${level} ${item.key}`, { top, h: (ringed(item) ? CUR_H : ROW_H) - 3 });
           return { item, top };
         });
         // the bracket spans its members where they already are: it adds no height and moves no row
-        const mem = positioned.filter(({ item }) => batchKeys.has(item.key));
+        const mem = positioned.filter(({ item }) => batched(item));
         if (mem.length && wasInBatch) stackHeight += BATCH_TAIL;      // ...the batch ends the band
         // Its bottom edge is where it always was; its TOP is clamped into the stack. Four pixels of
         // breathing room above the first member is four pixels UNDER the band heading, which is
@@ -734,8 +741,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
               )}
               {positioned.map(({ item: i, top }) => {
                 const meta = rowMeta(i);
-                const isCur = i.key === curKey;
-                const inBatch = batchKeys.has(i.key);
+                const isCur = ringed(i);
+                const inBatch = batched(i);
                 // URGENT IS A QUIET SHADE ON THE ROW, IN ITS PLACE (the owner, 2026-10-22: "remove the urgent section and just add quiet
                 // shading around it") - no heading of its own, no icon, no word; Next walks it in its place
                 const hot = !i.settling && isUrgent(i);
@@ -746,7 +753,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // ...and IMPORTANT a quieter mark of its own, in its place too - never a move (the owner, 2026-10-25: "show it as a mark
                 // in its row's place"); urgent outranks it, so an urgent row wears urgent's shade alone
                 const imp = isImportant(i, hot);
-                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", urgentDot ? "urgent" : imp ? "important" : "",
+                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "", i.moved ? "moved" : "", urgentDot ? "urgent" : imp ? "important" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
                 // for every lane - "ready to send" and "agent waiting on you" included
@@ -789,12 +796,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it. Any other row is pulled
                         QUIETLY, as a search hit is: a 'Show me "..."' bubble per click was free text saying what the click did (2026-10-22) */}
                     <div className="card" role="option" aria-selected={isCur} aria-disabled={i.settling ? true : undefined}
-                      tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
+                      tabIndex={i.key === tabKey && !twin(i) ? 0 : -1} onFocus={() => setKbdKey(i.key)}
                       onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       onPointerDown={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}   /* a touch has no hover: read at the press */
                       aria-label={urgentDot ? `${i.title} - urgent` : imp ? `${i.title} - important` : undefined}
-                      title={[i.who, st?.word || meta.word, i.ref, imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', dangerLine(i.danger, i.danger_aim), why].filter(Boolean).join(" · ")}>
+                      title={[i.who, st?.word || meta.word, i.ref, i.moved ? `moved to Tasks as ${i.moved.ref}` : "", imp ? "important" : "", i.promoted ? 'moved up - it looked urgent' : '', dangerLine(i.danger, i.danger_aim), why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
                             finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}
@@ -823,6 +830,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
                         {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}
+                        {/* ...an FYI made a task says where it went, quietly, its ref the way to the task (movedFyi.js) */}
+                        {!!i.moved && <span className="tq-pile-moved" data-tq-moved={i.moved.ref}><span className="w">Moved to Tasks ·</span><span className="ref" role="link"
+                          title={`Open ${i.moved.ref}`} onClick={(e) => { e.stopPropagation(); onPull(i.key); }}>{i.moved.ref}</span></span>}
                         {!!word && (
                           <span className={`tq-pile-word${goal ? " keep" : ""}`}
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
@@ -1013,7 +1023,8 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
     brief: <BriefCard card={m.card} onStart={actions.start} />,
     // SET UP TASKUARY is the two cards, not the 13-stop walk (the owner, 2026-10-14: "what is this garbage ... where are the cards")
     firstrun: <FirstRun revisit onChanged={actions.reload} onWalk={() => actions.start(null)} />,
-    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} onAgent={actions.agent} table={table} />,
+    fyis: <FyisCard card={c} onDone={actions.done} onSurface={actions.surface} onTimeline={actions.timeline} onPropose={actions.propose} onAgent={actions.agent} table={table}
+      movedTo={actions.movedTo} onOpenRef={actions.openRef} />,
   }[kind] : null;
   // A STOP THE WALK HAS MOVED PAST is a finished step, not something the assistant said. Falling
   // through to the title note below drew six near-identical rows, each carrying the message avatar
@@ -1195,6 +1206,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and the rows a walk press READS (rule 4), by key: {keys, coming, after} - `coming` the fyi batch below them, `after` the rail they
   // wait out when the answer brought none (surface)
   const [readGone, setReadGone] = useState(null);
+  // ...and the FYI lines Should be a task made tasks, kept in FYI wearing where they went until the walk moves past their table (movedFyi.js)
+  const [movedTo, setMovedTo] = useState({}), movedRef = useRef({});
+  movedRef.current = movedTo;
   // A TASK BEING CONTINUED rings at the press the same way: "Continuing" said so at 0.3 s while its row sat still until the next
   // pile, two seconds on (press audit, 2026-10-01). Held until the pile has it working; it stays where it is, under Tasks.
   const [continuingTid, setContinuingTid] = useState(null);
@@ -1214,6 +1228,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   }, []);
   const [current, setCurrent] = useState(null);       // the key on the table - the walk's item
   const [currentItem, setCurrentItem] = useState(null);   // ...and the item itself, drawn at the top of the pipe
+  useEffect(() => { setMovedTo((m) => keepHeld(m, currentItem)); }, [currentItem]);   // eslint-disable-line react-hooks/exhaustive-deps
   const [cardKey, setCardKey] = useState(null);       // ...or a task opened by name (the Board's open), which is no pile item
   const [text, setText] = useState("");
   // what the mic is still hearing, shown after the typed words until it settles into them (MicButton's onInterim); micRef cancels it on a send
@@ -2038,7 +2053,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the answer draws (rule 7: never blank); a move that fails opens it again. Back folds nothing - it never reads or passes anything (rule 3)
     // ...but a close the page knows will be kept open (`stays`: a Send with work still live on it, 2026-11-01) puts nothing down: its row stays
     const putDown = !key && (how === "next" || (how === "leave" && !left?.stays)) ? fromKey : null;
-    if (putDown) { setExpanded(false); setFoldedKey(putDown); leftKey.current = putDown; }
+    if (putDown) { setExpanded(false); setFoldedKey(putDown); leftKey.current = putDown; setMovedTo((m) => dropHeld(m, currentRef.current)); }
     // ...AND A PAGE OPEN OVER THE TABLE GOES WITH IT (the owner, 2026-10-29), AND THE REPORT OPEN ON IT IS READ (2026-10-30: "i hit next on
     // reports on github reports and it did not mark it as read and disappear"): its rail rows go with the press, read by the server's Next
     const pageReads = [];
@@ -2094,7 +2109,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const reads = onIt && (how === "leave" ? left?.how === "settle" : walkNow.reads);
     // ...and the batch coming in its place is drawn on the table already: its rows uncapped for that moment, the band said "4 more fyi"
     // ...every rail row they name by key or alias going with them (rowKeys), as the ring finds its row
-    const goneKeys = reads ? rowKeys(railNow, [putDown, walkNow.on, ...(walkNow.members || [])], currentRef.current) : [];
+    // ...but never a line made a task: that row is the task now, under Tasks, and the batch's read is not its read (movedFyi.js)
+    const goneKeys = reads ? rowKeys(railNow, [putDown, walkNow.on, ...(walkNow.members || [])], currentRef.current).filter((k) => !movedRef.current[k]) : [];
     const goneRows = railNow.filter((r) => goneKeys.some((k) => answersTo(r, k)));
     if (reads) setReadGone({ keys: goneKeys, coming: walkNow.below?.startsWith("fyis:") ? walkNow.below : null });
     const epoch = chatEpoch.current;
@@ -2477,6 +2493,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           : { status: "error", error: b.detail || errText(e) };
       }
       const out = afterExecute(p, res);
+      // SHOULD BE A TASK on an FYI: the line stays where it was, wearing where it went (movedFyi.js)
+      const mv = out.status === "done" && p.kind === "task.create_from_message"
+        ? movedEntry(p.key, out.tid || res?.outcome?.taskId, res?.outcome?.ref, pileRef.current?.items, currentRef.current) : null;
+      if (mv) setMovedTo((m) => ({ ...m, [mv.key]: mv }));
       const step = afterConfirm(p, out, current);
       // a sweep cleared what was on the table too: the receipt carries Next, and the walk waits for it
       // ...and an act that did NOT happen carries its way on (concierge.recover): Try again, GitHub's own offers, the
@@ -3149,7 +3169,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
   // SEND TO AGENT WITH NO AI IS GREYED, ITS REASON THE HOVER - on a report, an FYI or a mail as on a task (trust audit F3, 2026-10-28): the
   // card's word stood live there and opened a "No AI connected" box (capabilities.cannotStart, the task page's own check)
-  const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
+  const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), movedTo, done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     next: () => runChip({ verb: "next" }), leave, reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
@@ -3879,7 +3899,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
-        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} /></>}
+        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} moved={movedTo} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

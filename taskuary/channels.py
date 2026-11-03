@@ -1407,6 +1407,13 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
           'google_chat': 'google_chat',
           # cloud objects are DISCOVERED sources: each carries its own mode (report/feed/tasks/off)
           'aws': 'aws', 'azure': 'azure'}
+# One small mark per source, so a brief's line says where it came from without an '[Outlook mail]' label (the owner,
+# 2026-11-02: "these should be emojis?"). Keyed by the channel a row lands in (CH2SRC's values); anything unnamed is 🔗.
+CH_ICON = {'email': '✉️', 'teams': '👥', 'calendar': '🗓️', 'github': '🔧', 'gitlab': '🔧', 'azdo': '🔧',
+           **dict.fromkeys(('slack', 'whatsapp', 'telegram', 'imessage', 'discord', 'mattermost', 'rocketchat', 'matrix', 'google_chat', 'sms'), '💬'),
+           **dict.fromkeys(('jira', 'asana', 'monday', 'clickup', 'todoist', 'linear', 'trello', 'notion'), '📋'),
+           'sentry': '🚨', 'pagerduty': '🚨'}
+def ch_icon(ch) -> str: return CH_ICON.get(str(ch or 'email'), '🔗')
 # A cloud object's mode lives on the SOURCE, not the connector - one bucket can feed the
 # Timeline while the next is only a report. 'report' (the default) polls nothing at all.
 CLOUD = ('aws', 'azure')

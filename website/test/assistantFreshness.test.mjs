@@ -24,7 +24,7 @@ test("selection freshness preserves explicit action advancement while background
   const view = read("AssistantView.jsx");
   // one press, one answer: the row the page had on screen goes with it (railwalk.next), and the answer is drawn as it lands
   assert.match(view, /data = await turn\(\{ mode: key \? "next" : how, key: key \|\| \(how === "leave" \? fromKey : null\), from_key: fromKey, press,/);
-  assert.match(view, /\n\s*else landed\(data\);/);
+  assert.match(view, /\n\s*else landed\(data, off\(\)\);/);
   const events = view.slice(view.indexOf("if (data.events?.length)"), view.indexOf("// the item on the table is live"));
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|putOnTable|surfaceRef|deferInChat/);
   // explicit advancement after a confirmed proposal: only a success that settles the item on the table moves the walk (PW-125)

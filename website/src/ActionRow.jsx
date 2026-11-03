@@ -87,14 +87,17 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
     return () => clearTimeout(t);
   });
   if (free || !apart) seen.current = { verbs: now, advised: free || !seen.current ? given : seen.current.advised };
-  const { verbs, advised } = seen.current || { verbs: { list: [], ref: "" }, advised: null };
-  // ...a held button acts only where it stands for no item and is still live - Next pressed over a pick in flight is held and runs once
-  // the pick lands (AssistantView) - never the item being left's own
+  const { verbs: kept, advised } = seen.current || { verbs: { list: [], ref: "" }, advised: null };
+  // ...all but the walk's Back and Next, which stand as they do now: greyed from a press until its move lands (the owner, 2026-11-03: one move
+  // at a time) - a held row drew them live over the move, and a click on them then did nothing
+  const navNow = (v) => ((v.group === "next" || v.group === "back") && !now.list.some((x) => x.group === v.group && !x.disabled) ? { ...v, disabled: true } : v);
+  const verbs = kept === now ? now : { ...kept, list: kept.list.map(navNow) };
+  // ...a held button acts only where it stands for no item and is still live - never the item being left's own
   // ...and a held button of the item STILL ON THE TABLE acts too (2026-10-27, Run another agent on a general agent did nothing): while its
   // write-up ran the row kept re-drawing and stayed held, and every press of the item's own verbs fell through to nothing
   // ...and a held Back or Next is the live row's own Back or Next, whatever name the item drawn under it gives it: a batch coming in registers
   // its Next as its line's (chat:next), and the held "next" found nothing and every Next pressed while it came did nothing (the stress walk,
-  // 2026-11-02) - the walk itself holds a move pressed over a move
+  // 2026-11-02)
   const liveOf = (id) => { const h = verbs.list.find((x) => x.id === id), at = h?.at;
     return now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at)))
       || (h && (h.group === "next" || h.group === "back") ? now.list.find((x) => x.group === h.group && !x.disabled) : undefined); };
@@ -178,7 +181,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
             {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={short ? "" : undefined}
               aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
               onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{short ? "" : back.label}</button>}
-            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" data-tq-bare={nextWord !== next.label ? "" : undefined} {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
+            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" data-tq-bare={nextWord !== next.label ? "" : undefined} {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} title={next.title || undefined} disabled={next.disabled}
               onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{nextWord}</button>}</div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}
       </div>

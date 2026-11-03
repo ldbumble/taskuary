@@ -31,7 +31,7 @@ test("every walk move is one POST to /api/walk/*, never the stream or a settle o
   assert.equal((surface.match(/setMsgs\(\(m\) => \[\.\.\.m, \{[^}]*role: "assistant"/g) || []).length, 1, "one line drawn ahead of the answer, no more");
   assert.match(surface, /const onIt = !!putDown && sameKey\(railNow, walkNow\?\.on, putDown/); assert.match(surface, /const below = onIt && walkNow\.below/);
   assert.match(surface, /card: belowItem, ahead: true/);
-  assert.match(surface, /else landed\(data\);/);
+  assert.match(surface, /else landed\(data, off\(\)\);/);
 });
 
 test("a close on the table is railwalk.leave: Mark done, a note, Remove, Remind me and a Send that closes", () => {

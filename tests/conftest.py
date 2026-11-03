@@ -605,6 +605,16 @@ def no_ended_session_carryover():
 
 
 @pytest.fixture(autouse=True)
+def no_browser_page_carryover():
+    """browserview keeps the page each task's browser was last on in the home, by task id: a test whose task 1 was on a page left
+    every later file's task 1 opening its fresh browser there instead of about:blank (test_general's setup walkthrough)."""
+    from taskuary import browserview
+    yield
+    try: browserview._pages_file().unlink(missing_ok=True)
+    except OSError: pass
+
+
+@pytest.fixture(autouse=True)
 def no_stop_carryover():
     """workerstate.STOP is process-wide and set by a server told to exit (desktop.Server): a test that started and stopped
     a real one left every later held wait letting go at once, as if Taskuary were closing."""

@@ -134,8 +134,11 @@ PURPOSE = {
                                  '"tell me when Paula answers"): it moves under Watching, still walked after Tasks, and goes back to Tasks when '
                                  'the thread moves or after 7 quiet days; nothing is sent - `what`: off stops it; `ref`'),
     'task.comment':             'file a note on a task - `text`; `ref`',
-    'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
-                                 "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
+    # ...ANY ADDRESS (the owner, 2026-11-03): "a name or address that has written here" read as no road for an outside address, and the
+    # Assistant sent the owner to forward it from their own mail - the form takes any address (person), and a name only one that wrote here
+    'task.handoff':             ('hand a task to a PERSON (send, forward or pass it on) - `who` (any email address, or the name of someone who has '
+                                 "written here), `note` optional: a line for them - Hand it to a person comes up filled in for the owner's Send, "
+                                 'nothing is sent from the chat; `ref`'),
     'task.merge':               "fold a task into the one it duplicates - `into`: the survivor's ref (TQ-0123); `ref` is the one folded away",
     'task.ask_agent':           ("ask a trusted teammate's coding agent over Reason Network - `who`: their name or person/session, `text`: "
                                  'the question; the reply is noted on the task; `ref`'),

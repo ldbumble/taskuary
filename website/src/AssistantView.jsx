@@ -3347,7 +3347,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // a close that fails unfolds it and says why
     putDown: (key, tid = null) => { leftKey.current = key; setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); },
     pickUp: (key, why) => { leftKey.current = null; setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
-    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, noteAdvice?.for, noteAdvice?.state, noteAdvice?.line, noteAdvice?.verb]);   // eslint-disable-line react-hooks/exhaustive-deps
+    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, litNow?.hand?.to, litNow?.hand?.note, noteAdvice?.for, noteAdvice?.state, noteAdvice?.line, noteAdvice?.verb]);   // eslint-disable-line react-hooks/exhaustive-deps
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;
     // ...the canvas's own fallback (the newest card in the chat) included: a durable line about a closed task landing after Next drew it
     return i; }, [shown, old, current, cardKey]);

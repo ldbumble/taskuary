@@ -111,6 +111,17 @@ CASES = [
     Q('item', 'close it, the bank feed reconciled', 'todo', c('task.complete', note='the bank feed reconciled'), 'pressed:close_note', freq=3),
     Q('item', 'assign it to me', 'todo', c('task.update', assignee='owner'), 'words', freq=2),
     Q('item', 'forward this to Priya', 'todo', c('task.handoff', who='Priya Shah'), 'light:forward', freq=3),
+    # SENT ON TO A PERSON, IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" right after Should be a task did nothing and
+    # said to forward it from their own mail): Hand it to a person comes up with the address in its To - on a task, and on an FYI, whose
+    # task it makes first. An address nobody here has written from is still an address
+    Q('item', 'send this to gail@vendor.example', 'todo', c('task.handoff', who='gail@vendor.example'), 'hand:gail@vendor.example', freq=4),
+    Q('item', 'send this to gail@vendor.example', 'fyi', c('task.handoff', who='gail@vendor.example'), 'hand:gail@vendor.example', freq=4),
+    Q('item', 'forward this to Gail', 'todo', c('task.handoff', who='Gail Moreno'), 'hand:Gail Moreno', freq=4),
+    Q('item', 'forward this to Gail', 'fyi', c('task.handoff', who='Gail Moreno'), 'hand:Gail Moreno', freq=4),
+    Q('item', 'this should go to Ray', 'todo', c('task.handoff', who='Ray Colton', note='Yours to take from here.'), 'hand:Ray Colton', freq=3),
+    Q('item', 'this should go to Ray', 'fyi', c('task.handoff', who='Ray Colton'), 'hand:Ray Colton', freq=3),
+    # ...and the row's own id, which the canvas lists it by: forward was no tool, and the turn dropped it with nothing said
+    Q('item', 'hand it to gail@vendor.example', 'todo', c('forward', who='gail@vendor.example'), 'hand:gail@vendor.example', freq=2),
     Q('item', 'ask Marcus which account it is', 'todo', c('task.clarify', text='Which account is short?'), 'light:reply', freq=3),
     Q('item', 'put it on my list', 'fyi', c('mine'), 'light:mine', freq=3),
     Q('item', 'next', 'todo', c('next'), 'next', freq=5),
@@ -1309,6 +1320,7 @@ def _guards(stack, sort=None, live=None, agenda=None):
     # a running session on one task, where the case says so - what Stop and save is drawn by (concierge._agent_running)
     stack.enter_context(mock.patch.object(terminal, 'for_task', lambda tid, **k: {'sid': f's{tid}'} if live and int(tid) == int(live) else None))
     stack.enter_context(mock.patch.object(ingest, '_spawn'))
+    stack.enter_context(mock.patch.object(ingest, 'ask_later'))     # ...nor the model reading a promoted mail's ask (a hand-off makes its task)
     # ...and no agent starts, nothing is typed into a session: the dispatch door answers as a start would (concierge._start_agent, 2026-11-02),
     # and the waiting room holds every note as for an agent at work (concierge._tell_now)
     from taskuary import server, waitroom
@@ -1340,6 +1352,7 @@ def outcomes(out: dict, reads: list) -> list:
     """What the turn did, as words a case can expect."""
     o = []
     if (l := out.get('light')) is not None: o.append(f"light:{l.get('verb') or ''}")
+    if (l or {}).get('hand'): o.append(f"hand:{l['hand'].get('to') or ''}")      # ...Hand it to a person's To, filled in
     if (p := out.get('pressed')) is not None: o.append(f"pressed:{p.get('verb') or ''}")
     if out.get('open'): o.append(f"open:{out['open']}")
     if out.get('new'): o.append(f"new:{out['new'].get('kind')}" + (f":{out['new'].get('how')}" if out['new'].get('how') else ''))

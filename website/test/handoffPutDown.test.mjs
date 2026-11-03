@@ -21,7 +21,7 @@ test("the task view's hand-off moves on without closing: the drawer goes, the wa
     "the form stays mounted while it sends, so a failure brings back what was typed");
   // ...and on a desk's canvas the same form is a card in Close out (the owner, 2026-10-29), mounted through "sending" there too
   assert.match(page, /\{handInPane && handoff && <Box data-tq-handoff-card="" sx=\{\{[^\n]*display: handoff === true \? "block" : "none"/);
-  assert.match(page, /<Handoff taskId=\{selected\} onLeave=\{\(\) => \{ setHandoff\("sending"\); onLeave\?\.\(\); \}\}/);
+  assert.match(page, /<Handoff key=\{[^\n]+?\} taskId=\{selected\} said=\{handSaid\} onLeave=\{\(\) => \{ setHandoff\("sending"\); onLeave\?\.\(\); \}\}/);
   assert.match(page, /onStay=\{\(msg\) => \{ setHandoff\(true\); onStay\?\.\(msg\); \}\}/);
   assert.match(page, /onSent=\{handedOff\}/);
   const done = page.slice(page.indexOf("const handedOff = async"), page.indexOf("const handedOff = async") + 600);

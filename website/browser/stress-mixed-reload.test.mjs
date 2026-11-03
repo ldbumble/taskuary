@@ -69,6 +69,25 @@ test("a reload on a row, mid-press and over a server restart resumes the walk an
   assert.deepEqual(s.banners, [], "a banner from the outage is still up");
   assert.equal(await pressNext(page), true, "Next presses after the outage");
   oneTable(await still(page, 30000), "Next after the outage");
+
+  // ...and a Next out when the server goes down: it lands once or not at all, and the page is pressable again once the server is back
+  s = await still(page, 30000);
+  const was = ringIndex(s);
+  await pressNext(page); await sleep(200);
+  await h.restart({ down: 3000 });
+  await sleep(8000);
+  s = await still(page, 30000);
+  if (s.banners.length || ringIndex(s) - was > 1) await shot(page, "restart-mid-press");
+  assert.ok(ringIndex(s) - was <= 1 && ringIndex(s) >= was, `a Next out over a restart moved ${ringIndex(s) - was} rows`);
+  // ...the press the outage cut off may say so (the dev server's proxy answers a dead backend 500; the app itself, unreachable, "did not
+  // answer") - but the next press that goes through takes the line away: an error from an outage that has passed never stands
+  if (s.banners.length) console.log("the press cut off by the restart said:", s.banners);
+  oneTable(s, "after a restart mid-press");
+  assert.equal(await pressNext(page), true, "Next presses after the restart mid-press");
+  s = await still(page, 30000);
+  if (s.banners.length) await shot(page, "restart-mid-press-after-next");
+  assert.deepEqual(s.banners, [], "the outage's error line still stands after a Next went through");
+  oneTable(s, "Next after the restart mid-press");
   // a request the outage refused may log once; anything else is a failure
   clean(errors.filter((e) => !/Network Error|ERR_CONNECTION_REFUSED|ECONNREFUSED|503|502/.test(e)), "after an outage");
 });

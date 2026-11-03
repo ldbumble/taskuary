@@ -58,9 +58,9 @@ for (const delay of [0, 300, 1500]) {
 }
 
 /* A NEXT PRESSED WHILE A TYPED "next" IS OUT IS LOST (found 2026-11-02, left for the press-queue work on AssistantView's press road - the
-   coordinator's ruling - not patched here). Right after Enter the bar's Next is greyed for ~100 ms (a click there is refused); after that it
-   is live again while the typed answer is still out (every /api/ answer held 1500 ms), it takes the click - and the walk still moves one row,
-   not two: one of the two moves is dropped without a word. Whether the press should queue behind the ask (two rows on) or stay greyed until
+   coordinator's ruling - not patched here). After Enter the bar's Next is greyed for a while that varies run to run (~100 ms to the whole
+   answer), and a click there is refused; in some runs it is live again while the typed answer is still out (every /api/ answer held
+   1500 ms) and takes the click - and the walk still moves one row, not two: one of the two moves is dropped without a word. Whether the press should queue behind the ask (two rows on) or stay greyed until
    the ask lands is the owner's call; this pins the queued reading. */
 test("a Next pressed while a typed next is out is taken, not dropped", { timeout: 240000, todo: "press queue / ASK OWNER: a press during a typed ask is accepted and lost" }, async (t) => {
   const { page } = await bootMixed(t, { width: 1440, height: 900, delay: 1500 });

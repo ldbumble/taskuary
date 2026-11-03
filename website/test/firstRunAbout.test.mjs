@@ -52,7 +52,8 @@ test("the mailbox step comes right before the job, and Skip lands on it instead 
   assert.match(src, /export const canSkip = \(step\) => step !== "mailboxes";/);
   const skipTo = (i) => (i < at ? at : null);
   for (let i = 0; i < at; i++) assert.equal(skipTo(i), at, `Skip on ${steps[i]} lands on the mailboxes`);
-  assert.match(src, /\{!again && canSkip\(step\) && <Box><Button size="small" disabled=\{!!busy\} onClick=\{skip\}/);
+  assert.match(src, /const skipper = !again && canSkip\(step\);/);
+  assert.match(src, /\{skipper && <Button size="small" disabled=\{!!busy\} onClick=\{skip\}/);
   assert.match(src, /if \(to !== null\) return setAt\(to\);/);
   // "That's all my sources" moves on only with one connected - any source, not only a mailbox - and the cards are the main source step's own
   assert.match(src, /\(step !== "mailboxes" \|\| boxes > 0\)/);
@@ -81,7 +82,9 @@ test("the job reads as a document, and Edit opens its text", () => {
   assert.match(src, /: editing === step \|\| !text\.trim\(\)\s*\? <TextField key=\{step\} multiline/);
   // ...the workstreams step is a list to answer, never a text box (WorkstreamsConfirm)
   assert.match(src, /\{step === "workstreams" \? <WorkstreamsConfirm text=\{text\}/);
-  assert.match(src, /> Personal<\/label>/); assert.match(src, /> Keep<\/label>/);
+  // ...each line's box keeps it, "Personal" said in words (the owner, 2026-11-03: "Personal" and "Keep" on a lone card said nothing)
+  assert.match(src, /inputProps=\{\{ "aria-label": `Keep \$\{r\.name \|\| "this workstream"\}` \}\}/); assert.match(src, /label="Personal"/);
+  assert.match(src, /Untick any that isn't yours to leave it out\. Tick <b>Personal<\/b> for life outside/);
   assert.match(src, /<Md text=\{text\} \/>/);
   assert.match(src, /\{editing === step \? "Done editing" : "Edit"\}/);
 });

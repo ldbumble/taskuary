@@ -634,7 +634,7 @@ ${fix.detail || ""}`, screen: "Setup",
       <Light root={rootRef} card={litCard?.key || ""} canvas={canvas} onShown={onShown} />
       {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
       {shelf("mail", mail, "More chat and task")}
-      {q === "dev" && <Box data-tq-setup-dev="" sx={{ display: "flex", flexDirection: "column", gap: 1, maxWidth: 680 }}>
+      {q === "dev" && <Box data-tq-setup-dev="" sx={{ display: "flex", flexDirection: "column", gap: 1, maxWidth: 720, width: "100%", mx: "auto" }}>
         <Typography sx={{ fontSize: 16, fontWeight: 600, color: INK }}>Are you a developer?</Typography>
         <Typography sx={{ fontSize: 13.5, color: DIM }}>Turn this on only if you write code and use a coding tool such as Claude Code or
           Codex. Then work that changes code goes to a coding agent in your code. Off, every job goes to a general agent - most people

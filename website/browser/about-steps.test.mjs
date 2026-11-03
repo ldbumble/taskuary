@@ -121,6 +121,14 @@ test("About your work: the job, how you write and who you are are drafts to acce
   await until(page, () => document.querySelectorAll("[data-tq-workstream-row]").length === 2);
   assert.match(await line(page), /Here's what I think you work on/);
   assert.match(await page.evaluate(() => document.querySelector('[data-tq-workstream-row="home"]').innerText), /nothing here is learned from/);
+  // ...said plainly above the list, and the way on is the corner's Next, on screen however short the window (the owner, 2026-11-03)
+  assert.match(await page.evaluate(() => document.querySelector("[data-tq-workstreams-confirm]").innerText), /Untick any that isn't yours to leave it out/);
+  for (const [w, h] of [[1440, 900], [390, 844], [1280, 600]]) {
+    await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
+    await until(page, (vh) => { const b = document.querySelector('.tq-dock [data-tq-type="nav"] [data-tq-next]'); const r = b?.getBoundingClientRect();
+      return !!r && r.width > 0 && r.bottom <= vh && r.top >= 0 && b.innerText.trim() === "Looks right"; }, h, 10000);
+  }
+  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await shot(page, "about-workstreams");
   assert.ok(await press(page, "Looks right"));
   await onStep(page, "style");

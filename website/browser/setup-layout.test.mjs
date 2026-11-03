@@ -17,7 +17,9 @@ const measure = (page) => page.evaluate(() => {
   const tiles = [...fr.querySelectorAll("[data-tq-setup-grid] > *")].map((e) => ({ k: e.getAttribute("data-tq-card") || "more", grid: [...fr.querySelectorAll("[data-tq-setup-grid]")].indexOf(e.parentElement), ...r(e) }));
   const wide = []; for (let e = fr; e; e = e.parentElement) if (e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== "visible") wide.push(e.className || e.tagName);
   const btn = (sel) => { const e = pill?.querySelector(sel); return e && { ...r(e), off: e.disabled, text: e.innerText.trim(), label: e.getAttribute("aria-label") || "" }; };
-  return { fr: r(fr), dock: dock && r(dock), pill: pill && r(pill), back: btn("[data-tq-back]"), next: btn("[data-tq-next]"), tiles, wide,
+  const strip = document.querySelector("[data-tq-setup-steps]");
+  return { side: document.querySelector("[data-tq-sidenav]")?.getBoundingClientRect().height || 0, strip: strip && r(strip), canvas: r(document.querySelector("[data-tq-timeline-stage]")),
+    fr: r(fr), dock: dock && r(dock), pill: pill && r(pill), back: btn("[data-tq-back]"), next: btn("[data-tq-next]"), tiles, wide,
     page: document.documentElement.scrollWidth - innerWidth, others: [...dock.querySelectorAll("[data-tq-row] button")].filter((e) => !pill.contains(e) && !e.closest(".tq-arow-ghost") && e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim()) };
 });
 
@@ -48,6 +50,10 @@ test("setup's AI and mail steps: the Nav pill in the bar's corner, even cards, n
       await new Promise((r) => setTimeout(r, 600));
       const m = await measure(page), at = `${step} ${w}x${h}`;
       if (process.env.TASKUARY_SHOTS) { await mkdir(process.env.TASKUARY_SHOTS, { recursive: true }); await page.screenshot({ path: path.join(process.env.TASKUARY_SHOTS, `${step}-${w}x${h}.png`) }); }
+      // SETUP IS THE WHOLE SCREEN (the owner, 2026-11-03): no sidebar, the stage the window's width, its steps a strip across the top
+      assert.equal(m.side, 0, `${at}: no sidebar while setting up`);
+      assert.ok(m.canvas.w >= w - 40, `${at}: the setup screen is ${m.canvas.w}px of ${w}`);
+      assert.ok(m.strip && m.strip.b <= m.fr.t && m.strip.w >= m.canvas.w - 20, `${at}: the step strip runs across the top`);
       // NAV: Back then Next in one pill, one row, in the bar's bottom-left corner - and nothing else of setup's in the bar
       assert.ok(m.pill && m.back && m.next, `${at}: Back and Next are the Nav pill`);
       assert.ok(m.back.r <= m.next.l + 1, `${at}: Back before Next`);

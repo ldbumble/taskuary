@@ -12,9 +12,9 @@
 // silently after the job and its failure only logged) and who you are (SOUL.md). Each says its state, and a failure is said with
 // Write it again.
 import React, { useEffect, useRef, useState } from "react";
-import { Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, TextField, Typography } from "@mui/material";
 import api from "./api";
-import { DIM } from "./theme.jsx";
+import { DIM, FAINT, INK } from "./theme.jsx";
 import { useVerbs } from "./actionRow.js";
 import { Md } from "./md.jsx";
 
@@ -198,10 +198,25 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   const enter = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); next(); } };
   const shown = all ? [...new Set([...seen, ...offered])] : seen;
   const text = draft ? texts[step] : "";
+  // ONE SHAPE FOR ALL TEN (the owner, 2026-11-03: a lone card, a bare "Write it again" and no way forward on "What you work on"): the question's
+  // name with where it stands beside it, what to answer, then one quiet line of the step's own small moves - Skip at its far end. The way on
+  // is always the bar's Next in the corner
+  const quiet = { color: DIM, fontSize: 12.5, minWidth: 0, px: 1 };
+  const moves = [
+    ...(step === "systems" ? [<Button key="all" size="small" sx={quiet} onClick={() => setAll((v) => !v)}>{all ? "Show only mine" : "Show the full list"}</Button>] : []),
+    ...(draft && draft.state !== "running" ? [
+      ...(text.trim() && step !== "workstreams" ? [<Button key="edit" size="small" sx={quiet} onClick={() => setEditing((v) => (v === step ? "" : step))}>
+        {editing === step ? "Done editing" : "Edit"}</Button>] : []),
+      <Button key="write" size="small" sx={quiet} onClick={() => { setEditing(""); learn([step]); }} disabled={!!busy}
+        data-tq-setup-lit={writeLit ? "about" : undefined}>{draft.state === "none" ? "Write it" : "Write it again"}</Button>] : []),
+  ];
+  const skipper = !again && canSkip(step);
   return (
-    <Box data-tq-firstrun-about={step} sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 760 }}>
-      <Typography sx={{ color: DIM, fontSize: 12 }}>About your work · {at + 1} of {STEPS.length}</Typography>
-      <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{LABEL[step]}</Typography>
+    <Box data-tq-firstrun-about={step} sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 720, width: "100%", mx: "auto" }}>
+      <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+        <Typography component="h2" sx={{ fontSize: 17, fontWeight: 600, color: INK, m: 0 }}>{LABEL[step]}</Typography>
+        <Typography sx={{ color: FAINT, fontSize: 12, whiteSpace: "nowrap" }}>About your work · {at + 1} of {STEPS.length}</Typography>
+      </Box>
       {["name", "org", "role"].includes(step) && <>
         <TextField key={step} size="small" fullWidth autoFocus value={a[step]} onChange={set(step)} onKeyDown={enter} sx={field}
           inputProps={{ "aria-label": LABEL[step] }} />
@@ -229,10 +244,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
         <Box sx={{ display: "flex", gap: 1, maxWidth: 460, alignItems: "center" }}>
           <TextField size="small" fullWidth value={other} onChange={(e) => setOther(e.target.value)} sx={field}
             inputProps={{ "aria-label": "Another system" }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOther(); } }} />
-          <Button size="small" onClick={addOther} disabled={!other.trim()} sx={{ whiteSpace: "nowrap" }}>Add a system</Button>
+          <Button size="small" variant="outlined" onClick={addOther} disabled={!other.trim()} sx={{ whiteSpace: "nowrap", flexShrink: 0 }}>Add a system</Button>
         </Box>
-        <Box><Button size="small" sx={{ color: DIM, fontSize: 12.5 }} onClick={() => setAll((v) => !v)}>
-          {all ? "Show only mine" : "Show the full list"}</Button></Box>
       </>}
       {step === "mailboxes" && <>
         <Box data-tq-mailboxes="" sx={{ display: "flex", flexDirection: "column", gap: 0.4 }}>
@@ -258,15 +271,13 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
               "& h2": { fontSize: 15.5, fontWeight: 700, mt: 2, mb: 0.5, borderBottom: "1px solid #ece6db" }, "& h2:first-of-type": { mt: 0.5 },
               "& h3": { fontSize: 14.5, fontWeight: 700, mt: 1.5, mb: 0.5 }, "& h3:first-of-type": { mt: 0.5 }, "& ul": { pl: 2.5, my: 0.5 },
               "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={text} /></Box>}
-        <Box sx={{ display: "flex", gap: 1 }}>
-          {text.trim() && step !== "workstreams" && <Button size="small" onClick={() => setEditing((v) => (v === step ? "" : step))}>{editing === step ? "Done editing" : "Edit"}</Button>}
-          <Button size="small" onClick={() => { setEditing(""); learn([step]); }} disabled={!!busy}
-            data-tq-setup-lit={writeLit ? "about" : undefined}>{draft.state === "none" ? "Write it" : "Write it again"}</Button>
-        </Box>
       </>}</Box>}
       {note && !draft && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
       {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}
-      {!again && canSkip(step) && <Box><Button size="small" disabled={!!busy} onClick={skip} sx={{ color: DIM, fontSize: 12.5 }}>Skip these questions</Button></Box>}
+      {(moves.length > 0 || skipper) && <Box data-tq-about-moves="" sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: -1, flexWrap: "wrap" }}>
+        {moves}
+        {skipper && <Button size="small" disabled={!!busy} onClick={skip} sx={{ ...quiet, ml: "auto" }}>Skip these questions</Button>}
+      </Box>}
     </Box>
   );
 }
@@ -278,21 +289,32 @@ export function WorkstreamsConfirm({ text, onChange }) {
   const rows = parseWorkstreams(text);
   const put = (i, patch) => onChange(JSON.stringify(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))));
   if (!rows.length) return <Typography sx={{ color: DIM, fontSize: 13.5 }}>Your mail did not show separate workstreams yet.</Typography>;
+  // ONE LIST, EACH LINE READ AT A GLANCE (the owner, 2026-11-03: "Personal" and "Keep" ticked on a lone card said nothing): the box at the
+  // start keeps a workstream, the name is the field beside it, and "Personal" is spelled out once above and again on the line it marks
   return (
     <Box data-tq-workstreams-confirm="" sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      {rows.map((r, i) => (
-        <Box key={r.slug} data-tq-workstream-row={r.slug} sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1,
-          opacity: r.keep === false ? 0.55 : 1 }}>
-          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-            <TextField size="small" value={r.name} onChange={(e) => put(i, { name: e.target.value })} sx={{ minWidth: 240, "& .MuiInputBase-root": { fontSize: 14.5 } }}
-              inputProps={{ "aria-label": "Workstream name" }} />
-            <label style={{ fontSize: 13, color: DIM }}><input type="checkbox" checked={!!r.personal} onChange={(e) => put(i, { personal: e.target.checked })} /> Personal</label>
-            <label style={{ fontSize: 13, color: DIM }}><input type="checkbox" checked={r.keep !== false} onChange={(e) => put(i, { keep: e.target.checked })} /> Keep</label>
-          </Box>
-          {r.about && <Typography sx={{ fontSize: 13, color: DIM, mt: 0.5 }}>{r.about}</Typography>}
-          {r.section && !r.personal && <Box sx={{ mt: 0.5, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 13.5, lineHeight: 1.5 } }}><Md text={r.section} /></Box>}
-          {r.personal && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5 }}>Personal: an ask here is an FYI, and nothing here is learned from.</Typography>}
-        </Box>))}
+      <Typography sx={{ fontSize: 13, color: DIM }}>Untick any that isn't yours to leave it out. Tick <b>Personal</b> for life outside
+        work - asks there are FYIs, and nothing there is learned from.</Typography>
+      <Box sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff" }}>
+        {rows.map((r, i) => { const kept = r.keep !== false; return (
+          <Box key={r.slug} data-tq-workstream-row={r.slug} sx={{ px: 1.5, py: 1.25, "& + &": { borderTop: "1px solid #ece6db" } }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Checkbox size="small" checked={kept} onChange={(e) => put(i, { keep: e.target.checked })} sx={{ p: 0.5, ml: -0.5 }}
+                inputProps={{ "aria-label": `Keep ${r.name || "this workstream"}` }} />
+              <TextField size="small" value={r.name} onChange={(e) => put(i, { name: e.target.value })} disabled={!kept}
+                sx={{ flex: 1, minWidth: 0, "& .MuiInputBase-root": { fontSize: 14.5 } }} inputProps={{ "aria-label": "Workstream name" }} />
+              <FormControlLabel disabled={!kept} control={<Checkbox size="small" checked={!!r.personal} onChange={(e) => put(i, { personal: e.target.checked })} sx={{ p: 0.5 }} />}
+                label="Personal" sx={{ m: 0, flexShrink: 0, gap: 0.25, "& .MuiFormControlLabel-label": { fontSize: 13, color: DIM } }} />
+            </Box>
+            <Box sx={{ pl: 4, pt: 0.5, opacity: kept ? 1 : 0.55 }}>
+              {!kept ? <Typography sx={{ fontSize: 12.5, color: DIM }}>Left out - Taskuary won't treat this as part of your work.</Typography> : <>
+                {r.about && <Typography sx={{ fontSize: 13, color: DIM }}>{r.about}</Typography>}
+                {r.section && !r.personal && <Box sx={{ mt: 0.25, "& ul": { pl: 2.5, my: 0.25 }, "& li": { fontSize: 13.5, lineHeight: 1.5 } }}><Md text={r.section} /></Box>}
+                {r.personal && <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.25 }}>Personal - asks here are FYIs, and nothing here is learned from.</Typography>}
+              </>}
+            </Box>
+          </Box>); })}
+      </Box>
     </Box>
   );
 }

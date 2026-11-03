@@ -26,6 +26,9 @@ async function pressSwitch(page, scope, also = () => false) {
     await until(page, (sel) => {
       const r = document.querySelector(sel).getBoundingClientRect(), at = `${r.x},${r.y}`, hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
       const still = window.__switchAt === at; window.__switchAt = at;
+      // ...and brought back into view while it is not under the pointer: the step still opening scrolled the canvas back past it once
+      // setup's step strip took the top of the screen (2026-11-03), and a scroll made only before the wait never came again
+      if (!hit?.closest("[data-tq-card-on]")) document.querySelector(sel).scrollIntoView({ block: "center" });
       return still && !!hit?.closest("[data-tq-card-on]");
     }, sel);
     await page.click(sel);

@@ -107,8 +107,20 @@ class ItemForKeyTests(unittest.TestCase):
         """It used to be fished out of the last week's 500 rows, so an older Recent row named in chat was 'not found'."""
         self.s._exec('UPDATE message SET CreatedAt=?, SentAt=? WHERE MessageId=?', (_stamp(days=40), _stamp(days=40), self.m['bare']))
         self.assertEqual(funnel.item_for_key(self.s, f"msg:{self.m['bare']}")['mid'], self.m['bare'])
-        self.assertIsNone(funnel.item_for_key(self.s, f"msg:{self.m['ctx']}"))      # still not a Timeline row
         self.assertIsNone(funnel.item_for_key(self.s, 'msg:999999'))
+
+    def test_a_hidden_message_opens_its_thread(self):
+        """The owner's own reply and a thread's back-filled start are no Timeline rows of their own, and opening one by its link said
+        "I can't find that one - it may be older than what I keep" over a thread active that week (TQ-1293). It opens the thread's row."""
+        self.assertEqual(funnel.item_for_key(self.s, f"msg:{self.m['ctx']}")['mid'], self.m['chain1'])    # on a task: the task's row
+        conv = lambda ext, **f: self.s.add_message({'ExternalId': ext, 'Channel': 'email', 'ConversationId': 'c2', 'Subject': 'Re: dock lease',
+                                                    'BodyText': 'x', **f})
+        start = conv('h1', FromEmail='paula@vendor.example', Status='history', SentAt=_stamp(days=120))
+        mine = conv('h2', FromEmail='alex@northwind.example', Direction='out', Status='context', SentAt=_stamp(days=2))
+        late = conv('h3', FromEmail='paula@vendor.example', Status='filed', SentAt=_stamp(days=1))
+        for hidden in (start, mine): self.assertEqual(funnel.item_for_key(self.s, f'msg:{hidden}')['mid'], late)
+        alone = self.s.add_message({'ExternalId': 'h4', 'Channel': 'email', 'ConversationId': 'c3', 'Status': 'history', 'SentAt': _stamp(days=90)})
+        self.assertIsNone(funnel.item_for_key(self.s, f'msg:{alone}'))            # nothing of its thread is shown: still nothing to open
 
     def test_a_task_whose_mail_is_all_old_still_has_its_row(self):
         self.s._exec('UPDATE message SET CreatedAt=? WHERE TaskId=?', (_stamp(days=40), self.tid))
@@ -142,6 +154,14 @@ class NewestRowsTests(unittest.TestCase):
         self.assertEqual([c['limit'] for c in calls], [100])        # one page, not 4,000 rows built to keep twelve
         want = [r['MessageId'] for r in real(limit=4000, days=3650) if r['Category'] == 'filed'][:12]
         self.assertEqual([h['mid'] for h in hits], want)
+
+    def test_words_only_in_a_threads_old_start_find_the_thread(self):
+        """A thread begun months ago keeps its start as back-filled `history`: words only there found nothing (TQ-1293)."""
+        conv = lambda ext, **f: self.s.add_message({'ExternalId': ext, 'Channel': 'email', 'ConversationId': 'c9', 'FromEmail': 'ray@vendor.example',
+                                                    **f})
+        conv('old', Subject='Warehouse dock lease renewal', BodyText='the dock lease terms', Status='history', SentAt=_stamp(days=120))
+        late = conv('new', Subject='Re: next steps', BodyText='see below', Status='filed', SentAt=_stamp(days=1))
+        self.assertEqual([h['mid'] for h in concierge.search_timeline(self.s, {'contains': 'dock lease'})], [late])
 
 
 if __name__ == '__main__': unittest.main()

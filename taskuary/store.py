@@ -2804,6 +2804,17 @@ class SQLiteStore:
     def last_inbound_in(self, conversation_id):
         return self._one("SELECT * FROM message WHERE ConversationId=? AND Status NOT IN ('context','history','skipped') AND IFNULL(Direction,'in')<>'out' "
                          'ORDER BY SentAt DESC LIMIT 1', (conversation_id,))
+    def shown_message_of(self, mid):
+        """The newest message the feed SHOWS on the thread of one it hides (the owner's own sent mail, a back-filled `history` start):
+        its task's, else its conversation's - None when nothing of that thread is shown. A hidden row is no row of its own, but its
+        thread is, and "I can't find that one" over a thread active that week is the wrong answer (TQ-1293)."""
+        m = self.get_message(mid)
+        for col in ('TaskId', 'ConversationId'):
+            if not m or m.get(col) is None: continue
+            r = self._one(f"SELECT MessageId FROM message WHERE {col}=? AND Status NOT IN ('context','history','skipped') "
+                          'ORDER BY SentAt DESC, MessageId DESC LIMIT 1', (m[col],))
+            if r: return r['MessageId']
+        return None
     def task_for_conversation(self, conversation_id, subject=None):
         """The task this thread already belongs to - OPEN OR CLOSED. The router matches a reply
         against open tasks only (snapshots), which is right for inbound work and wrong for the

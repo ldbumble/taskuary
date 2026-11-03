@@ -2921,6 +2921,8 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
     out, days = [], int(sel.get('days') or 3650)
     # the index reaches every message, body included, best match first; without one, the newest 4000 by subject
     ids = store.message_search(words, who, days) if (words or who) else None
+    # ...and a hit the feed hides - a thread's back-filled start months back - stands for its thread's shown row (TQ-1293)
+    if ids: ids = list(dict.fromkeys(i for i in (_shown(store, i) for i in ids) if i))
     if ids is None: rows = newest_rows(store, days, sent=True)
     else: rank = {i: n for n, i in enumerate(ids)}; rows = sorted(store.feed(limit=len(ids) or 1, days=days, ids=ids, sent=True), key=lambda r: rank[r['MessageId']])
     for r in rows:
@@ -2938,6 +2940,13 @@ def search_timeline(store, sel: dict, limit: int = 12) -> list:
         if len(out) >= limit: break
     if not out and len(words) > 1: return _search_loose(store, str(sel.get('contains') or ''), who, cat, days, limit)
     return out
+
+
+def _shown(store, mid: int):
+    """The id a search hit is listed by: itself when the feed shows it (the owner's sent mail included), else its thread's shown row."""
+    m = store.get_message(mid) or {}
+    hidden = m.get('Status') in ('history', 'skipped') or (m.get('Status') == 'context' and m.get('Direction') != 'out')
+    return store.shown_message_of(mid) if hidden else mid
 
 
 def _search_loose(store, about: str, who: str, cat: str, days: int, limit: int) -> list:

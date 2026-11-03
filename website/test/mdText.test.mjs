@@ -21,6 +21,14 @@ test("a fence, inline code or a link is markdown; plain prose and an email's ast
   for (const s of ["Morning, Dana. Two are waiting on you.", "Price is 5 * 3 today", "", null]) assert.ok(!looksMd(s), String(s));
 });
 
+test("a chat answer with a bare web address is drawn as markdown, so the address is a link", async () => {
+  const { chatMd } = await import("../src/mdText.js");
+  assert.ok(chatMd("Here it is: https://nodejs.org/en/download"));
+  assert.ok(chatMd("**bold**"));
+  for (const s of ["Morning, Dana. Two are waiting on you.", "the http header", "", null]) assert.ok(!chatMd(s), String(s));
+  assert.match(fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8"), /chatMd\(text\) \? <Md text=\{text\} onTask=/);
+});
+
 test("a task's ref is one word in a table cell", () => {
   assert.deepEqual(refParts("TQ-0001 and TQ-12"), ["", "TQ-0001", " and ", "TQ-12", ""]);
   assert.deepEqual(refParts("no ref here"), ["no ref here"]);

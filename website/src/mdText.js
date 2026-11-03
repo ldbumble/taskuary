@@ -5,6 +5,10 @@
 // prose: every line its own paragraph, the spacing collapsed, the boxes in pieces (2026-10-06).
 export const looksMd = (s) => /^#{1,6} |^\s*\|.*\|\s*$|\*\*[^*]+\*\*|^\s*[-*] |^\s*\d+\. |^\s*```|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)/m.test(String(s || ""));
 
+// ...and a CHAT answer with a bare web address is markdown too, so remark-gfm makes the address a link (md.jsx's A, its own road): "give me the link
+// to the Node.js download page" was answered "Here it is: https://nodejs.org/en/download" as plain words nobody could press (the stress run, 2026-11-03)
+export const chatMd = (s) => looksMd(s) || /\bhttps?:\/\/[^\s<]+/.test(String(s || ""));
+
 // a task's ref is one word: "TQ-0001" broke at its hyphen in a narrow table column, the ref on two lines
 export const REF = /\b(TQ-\d+)\b/;
 export const refParts = (s) => String(s).split(REF);              // odd indexes are the refs

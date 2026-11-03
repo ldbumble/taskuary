@@ -44,7 +44,7 @@ import { TAB, covers, mine } from "./liveSeq.js";
 import { fyiHeaders } from "./fyiBatch.js";
 import { adviceKeyFor, adviceShown, nothingToAdd, stripWord, taskNote } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
-import { refParts, refNumber } from "./mdText.js";
+import { chatMd, refParts, refNumber } from "./mdText.js";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
 // taskuary logo ... at least how it shows in the assistant"): its six-point star drawn in Taskuary's sage, outlined like
@@ -1076,7 +1076,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
               first half (the owner, 2026-09-24: "if there is box don't show it again") */}
           {/* WHAT IT LOOKED AT AND PRESSED, over what it says (troubleshoot.py): the general agent's own rows, kept on the line */}
           {!!(m.steps?.length || m.card?.steps?.length) && <AgentSteps data={{ steps: m.steps?.length ? m.steps : m.card.steps }} />}
-          {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} onTask={actions.openRef} /> : text.split("\n").map((p, i) => <p key={i}>{withRefs(p, actions.openRef)}</p>)) : null}
+          {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (chatMd(text) ? <Md text={text} onTask={actions.openRef} /> : text.split("\n").map((p, i) => <p key={i}>{withRefs(p, actions.openRef)}</p>)) : null}
           {/* a word pressed under a line that carries no item (a failure's Update branch): its badge on that line */}
           {!kind && pressedOf(m) && <Pressed label={pressedOf(m)} />}
           {passed && (

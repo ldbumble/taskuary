@@ -85,7 +85,7 @@ test("one CLI genuinely on PATH is said to be found - as one choice, never lit, 
 // SETUP IS NOT LOST (W2, the 2026-10-21 UI audit): a page opened from the sidebar during setup replaced it, and the rail's step, the
 // Setup chip and Chat all left that page on screen - only a reload brought setup back, on its first card. A task found in Search
 // never opened at all. Setup now waits, mounted, under whatever is opened over it, and each of the three takes that away.
-test("setup comes back as it was left from the rail, the Setup chip and Chat - and a task found in Search opens over it", { timeout: 240000 }, async (t) => {
+test("setup is its own screen: a task found in Search opens over it, and its step strip, the Setup chip and Chat bring setup back as it was left", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
   const { page, errors } = await firstRun(harness);
   const shelfOpen = () => page.evaluate(() => {
@@ -96,9 +96,21 @@ test("setup comes back as it was left from the rail, the Setup chip and Chat - a
   // a state of the step that only lives on the screen: every AI card open (the shelf's own Show all)
   await page.click("[data-tq-firstrun] [data-tq-shelf-more]");
   await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-firstrun] button")].some((b) => b.innerText === "Show fewer"));
+  // SETUP IS ITS OWN SCREEN NOW (the owner, 2026-11-03): no sidebar to open a page from - what opens over it is a task found in Search
+  const made = await fetch(`${harness.fixtureApi}/api/tasks`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": harness.token },
+    body: JSON.stringify({ Title: "Chase the Payworth invoice for Northwind", Summary: "Ask Erin Blake where the invoice is", Kind: "task" }) }).then((r) => r.json());
+  assert.ok(made.taskId, JSON.stringify(made));
+  assert.equal(await page.evaluate(() => document.querySelector("[data-tq-sidenav]")?.getBoundingClientRect().height || 0), 0, "no sidebar while setting up");
   const away = async () => {
-    await page.evaluate(() => document.querySelector('[data-tq-nav="connections"]').click());
-    await page.waitForFunction(() => document.querySelector("[data-tq-setup-back]") && !(document.querySelector("[data-tq-firstrun]")?.getBoundingClientRect().height > 0));
+    await page.click("[data-tq-search-open]");
+    await page.waitForSelector("[data-tq-search-input]");
+    await page.type("[data-tq-search-input]", "Payworth invoice");
+    await page.waitForSelector(`[data-tq-search-task="${made.taskId}"], [data-tq-search-hit]`, { timeout: 20000 });
+    await page.evaluate((tid) => (document.querySelector(`[data-tq-search-task="${tid}"]`) || document.querySelector("[data-tq-search-hit]")).click(), made.taskId);
+    await page.waitForFunction((tid) => document.querySelector(`[data-tq-task-page="${tid}"]`)?.getBoundingClientRect().height > 0, { timeout: 30000 }, made.taskId)
+      .catch(() => { throw new Error("the task found in Search did not open during setup"); });
+    assert.ok(await page.$("[data-tq-setup-back]"), "the way back to setup stands over the task");
+    assert.ok(await page.evaluate(() => document.querySelector('[data-tq-setup-step="ai"]')?.getBoundingClientRect().height > 0), "the step strip stays over it");
   };
   const back = async (how) => {
     await page.waitForFunction(() => !document.querySelector("[data-tq-setup-back]") && document.querySelector("[data-tq-firstrun]")?.getBoundingClientRect().height > 0,
@@ -106,25 +118,12 @@ test("setup comes back as it was left from the rail, the Setup chip and Chat - a
     assert.deepEqual(await shelfOpen(), { shown: true, more: false, fewer: true }, `${how}: setup is where it was left - every AI card still open`);
   };
   await away();
-  await page.click('[data-tq-setup-step="ai"]'); await back("the rail's step");
+  await page.click('[data-tq-setup-step="ai"]'); await back("the step strip");
   await away();
   await page.evaluate(() => [...document.querySelectorAll("#tqTopNav p, #tqTopNav span")].find((e) => /^Setup:/.test(e.innerText || ""))?.click());
   await back("the Setup chip");
   await away();
   await page.click('[data-tq-view="chat"]'); await back("Chat");
-  // a task made during setup, found in Search, opens over setup - and setup is still there behind it
-  const made = await fetch(`${harness.fixtureApi}/api/tasks`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": harness.token },
-    body: JSON.stringify({ Title: "Chase the Payworth invoice for Northwind", Summary: "Ask Erin Blake where the invoice is", Kind: "task" }) }).then((r) => r.json());
-  assert.ok(made.taskId, JSON.stringify(made));
-  await page.click("[data-tq-search-open]");
-  await page.waitForSelector("[data-tq-search-input]");
-  await page.type("[data-tq-search-input]", "Payworth invoice");
-  await page.waitForSelector(`[data-tq-search-task="${made.taskId}"], [data-tq-search-hit]`, { timeout: 20000 });
-  await page.evaluate((tid) => (document.querySelector(`[data-tq-search-task="${tid}"]`) || document.querySelector("[data-tq-search-hit]")).click(), made.taskId);
-  await page.waitForFunction((tid) => document.querySelector(`[data-tq-task-page="${tid}"]`)?.getBoundingClientRect().height > 0, { timeout: 30000 }, made.taskId)
-    .catch(() => { throw new Error("the task found in Search did not open during setup"); });
-  assert.ok(await page.$("[data-tq-setup-back]"), "the way back to setup stands over the task");
-  await page.click('[data-tq-setup-step="ai"]'); await back("the rail's step, from the task");
   assert.deepEqual(errors, []);
 });
 

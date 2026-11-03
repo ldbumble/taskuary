@@ -182,8 +182,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // WORK IS THE ONLY VIEW. The Timeline - every message in date order, a second tab beside Work - is gone (the owner,
   // 2026-10-15: "removing the timeline tab ... replace it with the filter being a little larger"); the rail is the pipe.
   const visibleStage = stage;
-  const railShown = !narrow || !visibleStage || railOnNarrow;
-  const stageShown = !narrow || (!!visibleStage && !railOnNarrow);
+  // SETUP IS A SCREEN OF ITS OWN (the owner, 2026-11-03: "the welcome screen should take up the entire screen not just the left side"): no
+  // sidebar and no rail while setting up - the stage takes the width, its steps a strip across its top (setupRail). The rail stays mounted, hidden
+  const railShown = !setupMode && (!narrow || !visibleStage || railOnNarrow);
+  const stageShown = setupMode || !narrow || (!!visibleStage && !railOnNarrow);
   const calEvents = useCalToday();
   // The filter dock is a fixed flex sibling of the scroller. Rows never fade at its top edge;
   // the only visual fade belongs to the true bottom edge of the rail.
@@ -502,7 +504,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       // card - no ref, a lane's mark only. A ref back on the row cut every subject at a laptop to ~14
       // characters (the walk click-through, 2026-10-17), so a narrower floor means a leaner row, not a wider rail.
       // Everything else goes to the stage, which holds a whole message, the agent's work and the draft.
-      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, clamp(320px, 23.6vw, 380px)) minmax(0, 1fr)" },
+      gridTemplateColumns: { xs: "minmax(0, 1fr)", md: setupMode ? "minmax(0, 1fr)" : "minmax(0, clamp(320px, 23.6vw, 380px)) minmax(0, 1fr)" },
       mt: { xs: -1.5, md: -2.25 }, pt: { xs: 1.5, md: 2 } }}>
       {/* ── the rail ────────────────────────────────────────────────────────────── */}
       <Box data-tq-keep
@@ -632,7 +634,6 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
           // no top padding under the pipe: a sticky heading sticks at the padding edge, and rows showed through above it
           position: "relative", pl: "2px", pr: 1, pt: 0, pb: 3 }}>
-          {setupRail}
           {setupRail ? null : top}
         </Box>
         {bottomFade && more && (
@@ -651,6 +652,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           Each of those roads now puts the item's own card on the canvas (canvasLinks: #msg=N is a pull of msg:N). */}
       <Box data-tq-keep data-tq-timeline-stage
         sx={{ minWidth: 0, minHeight: 0, display: stageShown ? "flex" : "none", flexDirection: "column", "& > *": { minHeight: 0 } }}>
+        {setupMode && setupRail}
         {visibleStage}
       </Box>
 

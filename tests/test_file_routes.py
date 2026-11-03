@@ -220,6 +220,87 @@ class FileRoutesTests(unittest.TestCase):
         self.assertEqual(desktop.safe_name('..\\..\\x:y.txt'), 'x_y.txt')
         self.assertEqual((desktop.safe_name('..'), desktop.safe_name('')), ('download', 'download'))
 
+    # -- the desktop road against the REAL server: what the window's Download leaves on disk ---------------------------------------
+    def _serve(self):
+        "The app itself on a loopback port, as the desktop window reaches it - not a stand-in that answers what a test expects."
+        import threading, time, uvicorn
+        srv = uvicorn.Server(uvicorn.Config(server.app, host='127.0.0.1', port=0, log_level='warning', lifespan='off'))
+        threading.Thread(target=srv.run, daemon=True).start()
+        for _ in range(200):
+            if srv.started: break
+            time.sleep(0.05)
+        self.addCleanup(setattr, srv, 'should_exit', True)
+        return f'http://127.0.0.1:{srv.servers[0].sockets[0].getsockname()[1]}', server.cfg['server'].get('token') or ''
+
+    def test_the_desktop_download_saves_each_real_file_whole_from_the_real_server(self):
+        """A PDF, a workbook, a 12 MB ZIP and a published page an agent made: the window's Download (desktop.save_download, the page's
+        own address for each) leaves the file itself on disk - every byte, its own name and extension - and says the whole folder.
+        The earlier test asked a stand-in server, and the stress run pressed Download in a plain browser: neither saved a byte here."""
+        import os, tempfile, zipfile
+        from openpyxl import Workbook
+        from taskuary import claude_artifacts, desktop
+        (self.dir / 'Collections – Q3.pdf').write_bytes(b'%PDF-1.4\n' + os.urandom(60000) + b'\n%%EOF')
+        wb = Workbook(); wb.active.append(['Payer', 'Paid']); wb.active.append(['Payworth', 1100]); wb.save(self.dir / 'Collections by payer.xlsx')
+        with zipfile.ZipFile(self.dir / 'Quarter pack.zip', 'w', zipfile.ZIP_STORED) as z: z.writestr('scans.bin', os.urandom(12 << 20))
+        page = self.dir.parent / 'budget.html'; page.write_text('<h1>Budget coverage</h1>', encoding='utf-8'); self.addCleanup(page.unlink, True)
+        art = claude_artifacts.keep(self.store, self.tid, {'url': 'https://claude.ai/artifact/abcdef1234', 'artifact_id': 'abcdef1234',
+                                                          'title': 'Budget coverage', 'path': str(page)})
+        base, tok = self._serve()
+        rows = self.rows()
+        with tempfile.TemporaryDirectory() as d:
+            dl = Path(d) / 'Downloads'
+            for n in ('Collections – Q3.pdf', 'Collections by payer.xlsx', 'Quarter pack.zip'):
+                got = desktop.save_download(f"{base}{rows[n]['url']}?download=true&token={tok}", folder=dl)
+                self.assertEqual((got.get('name'), got.get('folder')), (n, str(dl)), got)
+                self.assertEqual((dl / n).read_bytes(), (self.dir / n).read_bytes(), n)
+            got = desktop.save_download(f"{base}/api/task-artifacts/{art['ArtifactId']}?download=true&token={tok}", folder=dl)
+            self.assertEqual(got.get('name'), 'Budget coverage.html', got)
+            self.assertEqual((dl / 'Budget coverage.html').read_bytes(), page.read_bytes())
+            # the bridge the window calls it through (pywebview's js_bridge_call): what the page is handed back is the same line
+            try: from webview.util import js_bridge_call
+            except ImportError: return
+            said = []
+            win = type('Window', (), {'_functions': {'save_download': desktop.save_download}, '_js_api': None, 'evaluate_js': lambda s, js: said.append(js)})()
+            with mock.patch.object(desktop, 'downloads_dir', lambda: dl):      # the page passes the address alone: Downloads is the window's
+                js_bridge_call(win, 'save_download', [f"{base}{rows['Quarter pack.zip']['url']}?download=true&token={tok}"], 'p1')
+                for _ in range(400):
+                    if said: break
+                    __import__('time').sleep(0.05)
+            raw = said[0].split("{value: '", 1)[1].rsplit("'}", 1)[0].replace("\\'", "'").replace('\\\\', '\\')
+            back = __import__('json').loads(raw)
+            self.assertEqual((back['name'], back['folder']), ('Quarter pack (1).zip', str(dl)))
+            self.assertEqual(Path(back['path']).read_bytes(), (self.dir / 'Quarter pack.zip').read_bytes())
+
+    def test_a_file_rewritten_while_it_is_saved_is_not_called_saved(self):
+        """The owner, 2026-11-03: "download button not working when generating artifacts". An agent writes its one final file again in
+        place; pressed meanwhile, the server had declared the old size and streamed what was there as it read - cut short (http.client
+        reads that as a clean end) or half of each version - and the window said "Saved" over a file that was neither."""
+        import http.server, tempfile, threading
+        from taskuary import desktop
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def head(self, tag):
+                self.send_response(200); self.send_header('Content-Length', '9'); self.send_header('ETag', tag)
+                self.send_header('Content-Disposition', 'attachment; filename="report.pdf"'); self.end_headers()
+            def do_HEAD(self): self.head('"v2"')                 # by the time it was all read, the file was a new version
+            def do_GET(self):
+                if 'short' in self.path:                          # declared 4000 bytes, the file shrank under it: 9 arrive
+                    self.send_response(200); self.send_header('Content-Length', '4000')
+                    self.send_header('Content-Disposition', 'attachment; filename="report.pdf"'); self.end_headers()
+                    self.wfile.write(b'%PDF-half'); self.close_connection = True
+                else: self.head('"v1"'); self.wfile.write(b'%PDF-v1v2')
+        srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        base = f'http://127.0.0.1:{srv.server_address[1]}'
+        with tempfile.TemporaryDirectory() as d:
+            dl = Path(d) / 'Downloads'
+            for how in ('short', 'moved'):
+                got = desktop.save_download(f'{base}/api/task-outputs/7/report.pdf?{how}=1', folder=dl)
+                self.assertNotIn('name', got, how)
+                self.assertIn('report.pdf changed while it was being saved', got['error'], how)
+                self.assertEqual(list(dl.iterdir()), [], how)                        # nothing half-written left behind
+
 
 if __name__ == '__main__':
     unittest.main()

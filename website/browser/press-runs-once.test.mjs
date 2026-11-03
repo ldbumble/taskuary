@@ -24,7 +24,8 @@ test("Not ours on an fyi: no owner line, its badge on the fold, and what came up
   // ...and the batch the walk brought next stays up, not folded by a second card the server wrote for the same press
   await sleep(4000);
   assert.ok(!(await folded(page)).some((f) => /fyi/i.test(f.title)), `the next batch folded with nothing pressed: ${JSON.stringify(await folded(page))}`);
-  assert.equal(await page.$eval("[data-tq-row] [data-tq-next]", (b) => b.textContent.trim()).catch(() => ""), "All read, next");
+  // ...said short as "All read" on a squeezed desk bar (buttons.json next.batch_short, the owner, 2026-11-03)
+  assert.match(await page.$eval("[data-tq-row] [data-tq-next]", (b) => b.textContent.trim()).catch(() => ""), /^All read(, next)?$/);
 });
 
 test("Put it on my list runs at once: no confirm card, no owner line, and the new task takes the report's place on the table", { timeout: 180000 }, async (t) => {

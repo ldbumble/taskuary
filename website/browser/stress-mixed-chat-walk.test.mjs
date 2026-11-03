@@ -31,7 +31,7 @@ for (const delay of [0, 300, 1500]) {
     // (a Next reads nothing off the rail under Tasks - "stays" - so the rows keep their places and a move is one row)
     const at = (s) => s.keys.indexOf(s.ring[0]);
     let from = at(s);
-    // ...Next stands greyed while a typed ask is out (the press-queue question, see the todo test below): a press it refused is no move
+    // ...Next stands greyed while a typed ask is out (one move at a time, the test below): a press it refused is no move
     await type(page, "next"); const took = await pressNext(page); s = await check("typed next + pressed Next");
     assert.equal(at(s) - from, took ? 2 : 1, `a typed next and a Next ${took ? "pressed" : "refused"} are ${took ? 2 : 1} rows down, not ${at(s) - from}`);
     from = at(s); await pressBack(page); s = await check("Back");
@@ -57,16 +57,20 @@ for (const delay of [0, 300, 1500]) {
   });
 }
 
-/* A NEXT PRESSED WHILE A TYPED "next" IS OUT IS TAKEN (found 2026-11-02 as lost: greyed and refused, or taken and the walk still one row on -
-   the typed answer puts its row up a moment later (deferInChat), and the press ran in that moment to the same row and the typed move was
-   refused behind it). Now held behind the typed move, like any press over a move in flight: a typed next and a pressed Next are two rows. */
-test("a Next pressed while a typed next is out is taken, not dropped", { timeout: 240000 }, async (t) => {
+/* A NEXT PRESSED WHILE A TYPED "next" IS OUT IS GREYED (the owner, 2026-11-03: one move at a time). Found 2026-11-02 taken and lost - the
+   typed answer puts its row up a moment later (deferInChat), the press ran in that moment to the same row and the typed move was refused
+   behind it. Now Next stays greyed from the typed ask until its row is up, through that moment too: the typed next is one row, never lost. */
+test("a Next pressed while a typed next is out is greyed, and the typed next is one row", { timeout: 240000 }, async (t) => {
   const { page } = await bootMixed(t, { width: 1440, height: 900, delay: 1500 });
   let s = await startWalk(page);
   const from = s.keys.indexOf(s.ring[0]);
   await type(page, "next"); await sleep(200);
-  const took = await pressNext(page);
+  // ...live again only on the row the typed next brought: a frame of it live on the row it left would be a press lost or a move twice
+  const liveOn = () => page.evaluate(() => { const b = document.querySelector("[data-tq-row] [data-tq-next]");
+    return b && !b.disabled ? document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") : null; });
+  let early = false;
+  for (let i = 0; i < 40 && !early; i++) { early = (await liveOn()) === s.ring[0]; await sleep(50); }
+  assert.equal(early, false, "Next stood live over the typed ask before its row was up");
   s = await still(page, 30000);
-  assert.equal(took, true, "Next was greyed while the typed ask was out");
-  assert.equal(s.keys.indexOf(s.ring[0]) - from, 2, "the click was taken, so a typed next and a pressed Next are two rows down");
+  assert.equal(s.keys.indexOf(s.ring[0]) - from, 1, "a typed next is one row down");
 });

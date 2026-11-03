@@ -211,9 +211,14 @@ export async function newChat(page) {
   await sleep(600);
 }
 export const clickRow = (page, key) => page.evaluate((k) => { const c = document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .card`); if (c) (window.__sp ||= []).push(performance.now()); c?.click(); return !!c; }, key);
-// the ringed row's place on the rail (0 the top), and a press sequence at a pace: "N" Next, "B" Back
+// the ringed row's place on the rail (0 the top), and a press sequence at a pace: "N" Next, "B" Back - how many of each were taken (a greyed
+// button takes none: one move at a time, 2026-11-03)
 export const ringAt = async (page) => { const s = await look(page); return s.rail.findIndex(([, k]) => s.ring.includes(k)); };
-export async function presses(page, seq, pace) { for (const p of seq) { if (p === "N") await next(page); else if (p === "B") await back(page); await sleep(pace); } }
+export async function presses(page, seq, pace) {
+  const n = { N: 0, B: 0 };
+  for (const p of seq) { if (await (p === "N" ? next : back)(page)) n[p]++; await sleep(pace); }
+  return n;
+}
 export const firstRow = (page) => page.$eval("[data-tq-rail] .tq-pile-row[data-tq-key]", (e) => e.getAttribute("data-tq-key"));
 // the walk on the rail's first row, clicked, as the owner starts it
 export async function start(page) {

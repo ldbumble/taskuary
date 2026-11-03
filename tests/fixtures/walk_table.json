@@ -21,7 +21,7 @@
     {"id": "W18", "browser": {"skip": "the demo app's own Advisor pass re-judges the table's invented idea and I1 leaves the rail mid-case - pinned in process"}, "rule": [4], "steps": ["open I1", "next"], "action": "leave F1-F4 all_read", "expect": "F5-F7", "read": ["F1", "F2", "F3", "F4"], "back": true},
     {"id": "W19", "browser": {"skip": "the demo app's own Advisor pass re-judges the table's invented idea and I1 leaves the rail mid-case - pinned in process"}, "rule": [3, 4], "steps": ["open I1", "next"], "action": "back", "expect": "R3", "read": ["I1"], "rail": {"has": ["F1", "F2", "F3", "F4"]}, "back": true,
      "note": "the draft said I1; Next read I1 off the rail, and Back goes to the row now above (Q2, decided 2026-10-30)"},
-    {"id": "W20", "rule": [3, 4], "steps": ["open F5"], "action": "back", "expect": "F1-F4", "rail": {"has": ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]}, "back": true},
+    {"id": "W20", "browser": {"rail": {"has": ["F1", "F2", "F3", "F4", "F5", "F6"]}, "note": "the desk draws a fixed 6 FYI on a big window - F7 waits behind 1 more fyi"}, "rule": [3, 4], "steps": ["open F5"], "action": "back", "expect": "F1-F4", "rail": {"has": ["F1", "F2", "F3", "F4", "F5", "F6", "F7"]}, "back": true},
     {"id": "W21", "rule": [3, 4], "steps": ["open F5", "back"], "action": "next", "expect": "F5-F7", "read": ["F1", "F2", "F3", "F4"], "back": true},
     {"id": "W22", "rule": [2, 4], "steps": ["open F6"], "action": "next", "expect": "F7", "read": ["F6"], "back": true},
     {"id": "W23", "rule": [4], "steps": ["open F5", "next"], "action": "next", "expect": "END", "read": ["F5", "F6", "F7"], "rail": {"has": ["T1", "T2", "T3", "T4", "T5"]}, "back": true,

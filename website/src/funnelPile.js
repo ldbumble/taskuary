@@ -396,8 +396,9 @@ export const LEVEL_ROLE = { task: "you", watching: "passed", later: "passed", re
 
 // ── how the rail divides the height it has ────────────────────────────────────────────────────
 // tasks are NEVER capped: a task behind a "4 more" button is a task you do not do. Whatever is left over
-// goes to fyi, then reports, each keeping a floor of two - below that a band is a heading and a
-// button, which is worse than absent. If that still overflows the rail scrolls, and each capped band then draws a screenful (fillCaps).
+// goes to reports, then fyi, each keeping a floor of two - below that a band is a heading and a
+// button, which is worse than absent. If that still overflows nothing is crushed further and the
+// rail scrolls, so the only thing ever below the fold is work, in rank order.
 // The rail's own geometry, in one place - and it has to be what is actually PAINTED, or the rail
 // overflows the screen it was measured against. Read off assistantView.css: a row is 30px + its 3px
 // gap; a heading is 7 margin + 9/7 padding + its line + a 1px rule; a "more" button is 5 + 3/3 + its
@@ -490,36 +491,17 @@ export function trimCaps(caps, bands, rows) {
   return out;
 }
 
-// ROWS THAT FIT in `avail` px under a heading - the "N more" button costed while some stay hidden - never fewer than FLOOR
-export const fitRows = (avail, n, total = n, { row = ROW_PX, head = HEAD_PX, more = MORE_PX } = {}) => {
-  const all = Math.floor((avail - head) / row);
-  return Math.min(n, all >= total ? total : Math.max(FLOOR, Math.floor((avail - head - more) / row)));
-};
-// FYI FILLS FIRST, THEN REPORTS (the owner, 2026-11-02: "on FYI we should fit as many as can fit on the screen. In mine it's probably 8 at a
-// time or so"): the band he reads in bulk got the room last, behind every report, and sat at two rows with "10 more fyi" under them.
-const FILL_ORDER = ["fyi", "ideas", "reports"];
-// what the rail costs drawn with every capped band at its floor: past `avail` it scrolls whatever the caps say (tasks are never capped)
-const cheapest = (b, row, more) => { const n = Math.min(FLOOR, b.items.length); return n * row + (n < (b.total ?? b.items.length) ? more : 0); };
-export const railScrolls = (avail, bands, { row = ROW_PX, head = HEAD_PX, more = MORE_PX } = {}) => (bands || []).reduce((n, b) => n + head
-  + (CAPPED.includes(b.level) ? cheapest(b, row, more) : b.items.length * row), 0) > avail;
-
 export function fillCaps(avail, bands, { row = ROW_PX, head = HEAD_PX, more = MORE_PX } = {}) {
   const caps = {};
-  const capped = (bands || []).filter((b) => CAPPED.includes(b.level)).sort((a, b) => FILL_ORDER.indexOf(a.level) - FILL_ORDER.indexOf(b.level));
+  const capped = (bands || []).filter((b) => CAPPED.includes(b.level));
   if (!capped.length) return caps;
-  // ...and once the rail scrolls anyway, holding a band at two rows saves no scrollbar: each draws a screenful of its own, so scrolled to,
-  // it reads as many as the screen holds
-  if (railScrolls(avail, bands, { row, head, more })) {
-    for (const b of capped) caps[b.level] = fitRows(avail, b.items.length, b.total ?? b.items.length, { row, head, more });
-    return caps;
-  }
   // the cost of a band drawn n deep - the "N more" button goes away once nothing is left hidden
   // ...and `total` is a band's whole count when part of it is not here as rows (the FYI tail, pileRows)
   const cost = (b, n) => n * row + (n < (b.total ?? b.items.length) ? more : 0);
   let used = bands.length * head
     + bands.filter((b) => !CAPPED.includes(b.level)).reduce((n, b) => n + b.items.length * row, 0);
   for (const b of capped) { caps[b.level] = Math.min(FLOOR, b.items.length); used += cost(b, caps[b.level]); }
-  // ...then fyi, then reports, a row at a time while a row still fits
+  // ...then reports, then fyi, a row at a time while a row still fits
   for (const b of capped) {
     for (;;) {
       const n = caps[b.level];
@@ -570,6 +552,10 @@ export const heldSince = (pile, now = Date.now()) => {
 // or ACTS reads pile.items - the row on the table and the walk's next pick are always among them - and whatever COUNTS
 // (a heading, the day's opener, "in today", "N more fyi") reads pileRows, which is every row, the same as before paging.
 export const FYI_PAGE = 50;
+// FYI SHOWS A FIXED COUNT (the owner, 2026-11-02: "you also need some room for expanding the window. Okay leave it for now: 6 on big and 4 on
+// small"): a window at least BIG_H tall is big. Height, not the 960px width breakpoint, since this is about rows the rail can hold.
+export const BIG_H = 900;
+export const fyiCap = (h) => (h >= BIG_H ? 6 : 4);
 const tails = new WeakMap();
 export const fyiTail = (pile) => {
   const t = pile?.fyi_tail;

@@ -8,7 +8,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
    page were fetched only once the band was opened by hand, so a tall rail drew the batch, "N more fyi" and empty space; and "away from clear"
    counted the pile without the batch on the table. The demo has a dozen FYI, so its first page is cut to 4 here (every request's `fyi: 50`)
    - the shape of an account with more FYI than one page. */
-test("a tall rail draws every fyi it has room for, and its headings, its 'more' and 'away from clear' agree", { timeout: 180000 }, async (t) => {
+test("a tall rail draws its 6 fyi, and its headings, its 'more' and 'away from clear' agree", { timeout: 180000 }, async (t) => {
   const h = await startHarness(); t.after(() => h.close());
   const page = await h.newPage(), errors = [], asked = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -36,8 +36,10 @@ test("a tall rail draws every fyi it has room for, and its headings, its 'more' 
     const s = await state();
     if (batch) assert.match(s.batch, /on the table · \d+ fyi/, `${when}: a batch is on the table - ${JSON.stringify(s)}`);
     assert.equal(s.overflow <= 0, true, `${when}: the rail is tall enough for everything - ${JSON.stringify(s)}`);
-    assert.deepEqual(s.more, [], `${when}: no "N more fyi" over an empty rail - ${JSON.stringify(s)}`);
-    assert.equal(s.fyiRows, s.heads.fyi, `${when}: the FYI heading counts the rows it draws - ${JSON.stringify(s)}`);
+    // FYI is a fixed 6 on a big window (the owner, 2026-11-02: "6 on big and 4 on small"); the rest are counted behind "N more fyi"
+    assert.ok(s.fyiRows >= Math.min(6, s.heads.fyi), `${when}: at least 6 fyi rows on a big window - ${JSON.stringify(s)}`);
+    if (s.fyiRows < s.heads.fyi) assert.match(s.more[0]?.text || "", new RegExp(`^${s.heads.fyi - s.fyiRows} more`), `${when}: "N more fyi" counts the rest - ${JSON.stringify(s)}`);
+    else assert.deepEqual(s.more, [], `${when}: no "N more fyi" once every row is drawn - ${JSON.stringify(s)}`);
     assert.equal(s.left, Object.values(s.heads).reduce((a, b) => a + b, 0), `${when}: away from clear is the headings added up, the table's rows with them - ${JSON.stringify(s)}`);
     if (s.cheer) assert.match(s.cheer, new RegExp(`\\b${s.left}\\b|One more`), `${when}: the cheer says that count`);
   };

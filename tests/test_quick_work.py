@@ -429,7 +429,7 @@ def test_more_mail_after_a_quick_session_ended_is_answered_quick():
             assert ingest._carry_on(s, tid, new, mid, {'intent': 'task', 'kind': 'general'}, 'triage')
         general.OPENING.discard(tid)
     fn, *args = spawn.call_args[0]
-    assert fn is quickwork.start and args[:2] == [s, tid] and 'can Gail Moreno come' in args[2] and args[3] is False
+    assert fn is quickwork.start and args[:2] == [s, tid] and 'can Gail Moreno come' in args[2] and args[3:] == []    # filed as Taskuary's brief (as_owner default): the chat shows it
 
 def test_a_depth_that_cannot_be_read_starts_the_agent():
     s = home(); tid, _ = arrived(s)

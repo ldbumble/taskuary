@@ -219,5 +219,5 @@ def again(store, tid, session, turn: str) -> str:
     steps = []
     out, failed = _call(store, tid, turn, steps)
     if _escalated(store, tid, turn, out, failed): return 'escalated'
-    session.file_quick(turn, out, steps, as_owner=False)
+    session.file_quick(turn, out, steps, brief=True)      # filed as Taskuary's brief: the chat shows the line it was handed
     return 'filed'

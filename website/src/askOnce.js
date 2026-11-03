@@ -1,7 +1,7 @@
 // A GENERAL AGENT'S QUESTION IS SAID ONCE ON ITS CANVAS (the owner, 2026-10-21: "general agent question should only be once on the
-// canvas. No need for twice"): in the Agent work pane's answer box (AgentAsks). The answer above it carried the same question - the
-// model writes it over its ask marker, and general.py adds it when it did not - so the newest answer drops it while the box shows it.
-// The stored answer keeps it: a phone chat has no box, and reads the question there.
+// canvas. No need for twice"): in the Agent work pane's question card (AgentAsks). The answer above it carried the same question - the
+// model writes it over its ask marker, and general.py adds it when it did not - so the newest answer drops it while the card shows it.
+// The stored answer keeps it: a phone chat has no card, and reads the question there.
 const flat = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
 
 export function withoutAsked(messages, asking) {

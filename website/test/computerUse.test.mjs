@@ -62,7 +62,7 @@ test("a held act waits on the live canvas, and the sign-in ask never invites the
   assert.match(gw, /const actsHere = viewShown \? \(data\?\.browserActs \|\| \[\]\)\.filter\(\(r\) => !heldOn\(r, session\?\.sid\)\) : data\?\.browserActs \|\| \[\];/);
   assert.match(gw, /data-tq-browser-acts=""/);
   assert.match(gw, /acts\.map\(\(r\) => <ReviewDecision key=\{r\.ReviewId\} review=\{r\} onChanged=\{onDraftDecided\} \/>\)/);
-  assert.match(gw, /placeholder=\{site \? "Message the agent - never your password" : "Type your answer"\}/);
+  assert.match(gw, /startsWith\("signin:"\) \? "Message the agent - never your password" : `Answer \$\{name\}'s question…`/);
   assert.match(gw, /Sign in here opens a page Taskuary types from - the agent never sees it\. /);
   assert.match(gw, /Or sign in yourself in the browser, then press Signed in\./);
 });

@@ -65,7 +65,7 @@ test("on the canvas the chat's brain and Full screen sit in the agent step's hea
 });
 
 test("the chat box names the agent the pane names, never \"the assistant\" over an analyst (email walk 2026-10-29)", () => {
-  assert.match(workspace, /placeholder=\{working \? "Add something for it to pick up…" : `Tell \$\{dock \? "Taskuary" : name\} what to do next…`\}/);
+  assert.match(workspace, /placeholder=\{askWords \|\| \(working \? "Add something for it to pick up…" : `Tell \$\{dock \? "Taskuary" : name\} what to do next…`\)\}/);
   assert.doesNotMatch(workspace, /Tell the assistant what to do next/);
 });
 

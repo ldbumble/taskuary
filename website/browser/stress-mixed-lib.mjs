@@ -93,7 +93,7 @@ export const look = (page) => page.evaluate(() => {
     row: (document.querySelector("[data-tq-row]")?.innerText || "").replace(/\s+/g, " "),
     pop: pop ? !pop.hidden : null, pending: !!document.querySelector(".tq-pending"),
     dots: [...document.querySelectorAll(".tq-typing")].filter(vis).length,
-    spin: [...document.querySelectorAll(".MuiCircularProgress-root, [role=progressbar]")].filter(vis).length,
+    spin: [...document.querySelectorAll(".MuiCircularProgress-indeterminate, .MuiLinearProgress-indeterminate, [role=progressbar]:not([aria-valuenow])")].filter(vis).map((e) => `${String(e.className).split(" ")[0]}:${e.getAttribute("aria-label") || ""}:${(e.closest("[data-tq-canvas-item], [data-tq-row], section, li, div")?.innerText || "").replace(/\s+/g, " ").slice(0, 60)}`),
     banners: [...document.querySelectorAll("[role=alert], .MuiAlert-root, .MuiSnackbar-root, .tq-error, [data-tq-error]")].filter(vis).map((e) => e.innerText.replace(/\s+/g, " ").slice(0, 120))
       .concat((document.body.innerText.match(/[^\n]*(Network Error|went wrong|Request failed|could ?n[o']t reach|not answering|status code 5\d\d)[^\n]*/gi) || []).map((x) => x.slice(0, 120))),
     cards: [...document.querySelectorAll("[data-tq-canvas-item]")].filter(vis).map((e) => e.getAttribute("data-tq-canvas-item")),
@@ -106,8 +106,8 @@ export async function still(page, ms = 20000) {
   let last = "", same = 0, s;
   for (const t0 = Date.now(); Date.now() - t0 < ms; ) {
     s = await look(page);
-    const sig = JSON.stringify([s.ring, s.items, s.dots, s.pending, s.keys.length]);
-    same = sig === last && !s.dots && !s.pending ? same + 1 : 0; last = sig;
+    const sig = JSON.stringify([s.ring, s.items, s.dots, s.pending, s.keys.length, s.spin.length]);
+    same = sig === last && !s.dots && !s.pending && !s.spin.length ? same + 1 : 0; last = sig;
     if (same >= 6) return s;
     await sleep(250);
   }
@@ -120,6 +120,8 @@ export function oneTable(s, where) {
   assert.ok(new Set(s.items).size <= 1, `${where}: more than one item on the table ${JSON.stringify(s.items)}`);
   if (s.ring.length && s.items.length) assert.equal(s.items[0], s.ring[0], `${where}: the ring and the table disagree ${JSON.stringify(s)}`);
   assert.equal(new Set(s.cards).size, s.cards.length, `${where}: a card drawn twice ${JSON.stringify(s.cards)}`);
+  // ...and once it stands still nothing still turns: no dots, no spinner, no pending line (`still` waited for them)
+  assert.ok(!s.dots && !s.pending && !s.spin.length, `${where}: a spinner or the dots are still up ${JSON.stringify({ dots: s.dots, pending: s.pending, spin: s.spin })}`);
 }
 
 // THE ROW IS ONE LINE (row-one-line.test.mjs): every drawn row's buttons on one line, nothing past its edge, Next and the lit move unfolded

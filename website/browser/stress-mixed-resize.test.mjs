@@ -47,9 +47,12 @@ test("the FYI batch on the table is 6 on a big window, and the next one 4 once i
     const i = rows.findIndex((r) => r.closest('[data-tq-run="fyi"]')); return i > 0 ? rows[i - 1].getAttribute("data-tq-key") : null; });
   assert.ok(above, "a row above the FYI band");
   await page.evaluate((k) => document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .card`)?.click(), above); await still(page);
+  // ...the Reports band may hold rows behind its "N more" (a fixed FYI band, 2026-11-02): Next on down until the ring stands under FYI
+  const inFyi = () => page.evaluate(() => !!document.querySelector('[data-tq-run="fyi"] :is(.tq-pile-row.current, .tq-pile-row.inbatch)'));
   for (const [sz, n] of [[[1920, 1080], 6], [[900, 700], 4]]) {
     await size(page, sz); await sleep(500);
     await pressNext(page); await still(page);
+    for (let i = 0; i < 8 && !(await inFyi()); i++) { await pressNext(page); await still(page); }
     const batch = await page.$$eval("[data-tq-rail] .tq-pile-row.inbatch, [data-tq-rail] .tq-pile-row.current", (e) => e.length);
     if (batch !== n) await shot(page, `fyi-batch-${sz.join("x")}`);
     assert.equal(batch, n, `${sz.join("x")}: the FYI batch is ${batch}, not ${n}`);

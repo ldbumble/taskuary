@@ -93,7 +93,7 @@ test("what the writer needs is a plain line, whole, never a failure - and the re
     { state: "needs", line: "Not drafted - it needs the October invoice run. An agent can work it out and draft the reply, or Redraft with it", retry: true });
   assert.equal(draftState({ HasDraft: 1, DraftNeeds: why }).state, "drafted");
   const rd = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
-  assert.match(rd, /draftState\(r\)\.state === "needs"/);
+  assert.match(rd, /\["needs", "failed"\]\.includes\(draftState\(r\)\.state\)/);
   const job = readFileSync(new URL("../src/replyDraft.js", import.meta.url), "utf8");
   assert.match(job, /needs: data\?\.needs/);
 });

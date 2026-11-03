@@ -2003,9 +2003,11 @@ def task_detail(task_id: int):
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo, sigs = {}, {}
+    from .ingest import DRAFTING
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)     # what goes under it: the reply box shows it
+        r['Drafting'] = r['ReviewId'] in DRAFTING                         # its draft is being written: the box waits, never "nothing yet"
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
     from .ingest import own_addresses, row_recipients
     from .wrapup import from_owner
@@ -3675,25 +3677,8 @@ class OpenReplyBody(BaseModel):
     cc: list[str] | None = None
     # the instruction is the app's own (a chase's brief), not the owner's words: it rides into the draft and is not kept as theirs
     app_words: bool = False
-    # DRAFT WITH AI was pressed: the owner asked for the AI's draft, so it is written even where no agent has worked (_blank_reply)
+    # DRAFT WITH AI was pressed: every press that asks for a draft gets one now (open_reply), so it says no more than `draft`
     ai: bool = False
-
-
-def _agent_worked(tid) -> bool:
-    """Has an agent worked this task - a session's report, a filed transcript, or the assistant's own turns? What a reply drafts from."""
-    from . import general
-    try: return bool(responder.resolution_of(store, tid) or store.last_transcript(tid) or general.history(store, tid))
-    except Exception as e: logger.debug(f'agent work on task {tid} not read: {e}'); return False
-
-
-def _blank_reply(tid, body) -> bool:
-    """REPLY WITH NOTHING TO SAY OPENS EMPTY (the owner, 2026-10-28: "if you hit Reply on a task with no agent work, the reply is drafted
-    with AI but it has nothing to respond with since it knows nothing. Without an agent run, Reply should just leave it open with no
-    draft"). Reply on a task no agent has worked opens the box with its envelope and no AI draft; Draft with AI (`ai`), Redraft and the
-    owner's own words for it still draft, and a draft triage already wrote stays. A message with no task keeps drafting from itself."""
-    if not tid: return False
-    if body is not None and (body.ai or body.redraft or (body.instruction or '').strip()): return False
-    return not _agent_worked(tid)
 
 
 @app.post('/api/messages/{mid}/reply')
@@ -3747,7 +3732,11 @@ def open_reply(mid: int, body: OpenReplyBody = None):
         draft = ''
         # ...and kept, not thrown away once the model has read them (2026-10-23) - the owner's own, never a chase's brief
         if not body.app_words: _keep_instruction(rid, body.instruction)
-    owed = not draft and (body is None or body.draft) and not (not promise and _blank_reply(tid, body))
+    # REPLY DRAFTS, AGENT OR NOT (the owner, 2026-11-03: "drafting reply is broken ... if its still working stay spinning until done"):
+    # Reply on a task no agent had worked opened a signature-only box under Draft with AI, nothing coming (2026-10-28) - and when the
+    # arrival's own draft was still being written (ingest.DRAFTING) it landed in that box seconds later, unannounced. Every press that
+    # asks for a draft is owed one; the page's /draft waits on a draft already under way, and a writer with nothing to go on says so.
+    owed = not draft and (body is None or body.draft)
     if owed and not later:
         try:
             draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True) if tid
@@ -4575,11 +4564,13 @@ def get_run(run_id: int):
 @app.get('/api/reviews')
 def reviews(status: str = None):
     from .verdicts import context_moved
+    from .ingest import DRAFTING
     rows = store.list_reviews(status)
     memo, sigs = {}, {}
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)
+        r['Drafting'] = r['ReviewId'] in DRAFTING
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp
         r['Stale'] = bool(moved)
         if r['Stale'] and latest:
@@ -6296,7 +6287,11 @@ def draft_review(rid: int, body: DraftBody = None):
     # ...and a plain ask while the arrival's own draft is being written is that draft: one model call, not a second over it
     from .ingest import DRAFTING
     running = None if body and (body.instruction or '').strip() else DRAFTING.get(rid)
-    if running and running.wait(180) and (got := (store.get_review(rid) or {}).get('DraftText')): return {'ok': True, 'draft': got}
+    if running and running.wait(180):
+        got = store.get_review(rid) or {}
+        if got.get('DraftText'): return {'ok': True, 'draft': got['DraftText']}
+        # ...and what that writer said it needs is the answer too: a second call would only say it again (ingest._auto_draft)
+        if got.get('DraftNeeds'): return {'ok': False, 'draft': '', 'needs': by_sentence(str(got['DraftNeeds']), 2000)}
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob

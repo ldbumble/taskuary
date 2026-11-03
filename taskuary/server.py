@@ -261,6 +261,7 @@ async def _lifespan(_app):
         if t is not None and t.is_alive(): t.join(WALK_WAIT)   # never close the store under it
         _WALK_READY.set()
         awake.stop()               # ...and sleep is allowed again once nothing here can run
+        reasonnet.stop()           # ...and the Reason Network clock ends with the store it reads
         _close_permits()           # a permit holds for days: released, its thread returns and the process can exit
         if not _close_drain_workers(timeout=DRAIN_WAIT, target_store=store):
             logger.warning('triage drain still stopping during shutdown')

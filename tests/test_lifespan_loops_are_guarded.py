@@ -40,3 +40,13 @@ def test_the_doorway_ticks_fast_enough_to_matter():
     """Why this one bit when the older loops never did."""
     assert server.DOORWAY_TICK <= 2.0
     assert server.DOORWAY_TICK < server.POLL_TICK
+
+
+def test_every_module_watcher_the_lifespan_starts_is_stopped_in_tests():
+    # reasonnet.watch was started by every test lifespan and never stopped: the clocks piled up across the run and spun under
+    # a test that mocked time.sleep, timing out the Windows job (0.3.10.22's first CI)
+    from pathlib import Path
+    started = set(re.findall(r'^\s*(\w+)\.watch\(store\)', inspect.getsource(server._lifespan), re.M))
+    conftest = (Path(__file__).resolve().parent / 'conftest.py').read_text(encoding='utf-8')
+    missing = started - set(re.findall(r"mock\.patch\.object\((\w+), 'watch'", conftest))
+    assert started and not missing, f'{sorted(missing)}.watch runs for real during tests - stub it in safe_lifespan (conftest.py)'

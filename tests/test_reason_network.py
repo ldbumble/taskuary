@@ -318,3 +318,13 @@ def test_one_stores_card_is_never_read_as_anothers(world):
     other = MemoryStore()
     assert rn.active(other) is None
     assert rn.active(world.s)
+
+
+def test_the_clock_ends_with_its_lifespan_and_a_new_one_is_not_ended_by_the_old_stop(monkeypatch):
+    # every TestClient lifespan started a clock nothing stopped: dozens spun under a test that mocked time.sleep, and the
+    # Windows job timed out creating a MemoryStore (0.3.10.22's first CI)
+    monkeypatch.setattr(rn, 'POLL_EVERY', .01); monkeypatch.setattr(rn, 'active', lambda s: None)
+    a = rn.watch(None); rn.stop(); a.join(2)
+    b = rn.watch(None); time.sleep(.05)
+    assert not a.is_alive() and b.is_alive()
+    rn.stop(); b.join(2); assert not b.is_alive()

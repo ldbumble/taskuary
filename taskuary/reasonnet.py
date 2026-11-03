@@ -640,16 +640,25 @@ def poll(store) -> dict:
     return out
 
 
-def watch(store):
-    "The clock: while the card is on and the CLI is here, held messages and replies are looked at every few seconds."
+_STOP = [threading.Event()]
+
+
+def watch(store) -> threading.Thread:
+    """The clock: while the card is on and the CLI is here, held messages and replies are looked at every few seconds.
+    It ends with the store's lifespan (stop()): left running it read a closed store, or a later test's, forever - and under a
+    test that mocked time.sleep it spun, starving the Windows job into a two-minute timeout (0.3.10.22's first CI)."""
+    ev = _STOP[0] = threading.Event()               # each clock its own: a restart's watch() never revives the one stop() ended
     def loop():
-        while True:
-            time.sleep(POLL_EVERY)
+        while not ev.wait(POLL_EVERY):
             try:
                 if active(store) and exe(): poll(store)
             except (Unsupported, NotInstalled) as e: logger.debug(f'reason network: {e}')
             except Exception as e: logger.warning(f'reason network poll failed: {e}')
-    threading.Thread(target=loop, daemon=True, name='reason-network').start()
+    t = threading.Thread(target=loop, daemon=True, name='reason-network'); t.start()
+    return t
+
+
+def stop(): _STOP[0].set()
 
 
 def test() -> str:

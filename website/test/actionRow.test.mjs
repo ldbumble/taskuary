@@ -85,6 +85,26 @@ test("a verb still answering is not run again for the same card, and runs again 
   put("cal", null);
 });
 
+// A TRIPLE CLICK IS ONE PRESS (the button stress, 2026-11-02): Should be a task answered inside the triple-click, and its third click proposed
+// the task again. A hand's clicks of one verb of one card within the repeat window are that press; Next keeps its own rules
+test("a hand's second and third click of a verb that answered already run nothing, and a press after the window runs", async () => {
+  let n = 0, x = 0;
+  const click = { type: "click", isTrusted: true };
+  put("fyi", [{ ...v("w:mine", "decide"), run: async () => { n++; } }, { ...v("next", "next"), run: () => { x++; } }]);
+  press("w:mine", click); await new Promise((r) => setTimeout(r, 0));
+  press("w:mine", click); press("w:mine", click);
+  assert.equal(n, 1, "the triple-click ran it again");
+  press("next", click); press("next", click);
+  assert.equal(x, 2, "Next is the walk's: two presses, two moves");
+  await new Promise((r) => setTimeout(r, 500));
+  press("w:mine", click);
+  assert.equal(n, 2, "a press after the window is a press");
+  await new Promise((r) => setTimeout(r, 0));
+  press("w:mine", { type: "click", isTrusted: false });
+  assert.equal(n, 3, "the page's own click() is a press each time");
+  put("fyi", null);
+});
+
 test("the card's buttons leave the card on the canvas and come back on the Tasks tab", () => {
   const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
   const task = read("TaskPage.jsx");

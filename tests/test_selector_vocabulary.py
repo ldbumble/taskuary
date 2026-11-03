@@ -109,5 +109,18 @@ class AMissSaysWhatIsThereTests(unittest.TestCase):
         self.assertIn('nothing has been touched', out['say'])
 
 
+class AnIdeaIsNotAnFyiTests(unittest.TestCase):
+    def test_a_sweep_of_the_fyi_leaves_the_advisors_ideas(self):
+        # "close the ones that are just notifications" went out as kind: fyi and closed the four Advisor ideas with the notices (2026-11-03):
+        # they ride the fyi lane, but the rail shows them under ADVISOR
+        from unittest import mock
+        pipe = [dict(key='msg:1', kind='fyi', lane='fyi', category='feed', who='Trainly', title='Course catalogue update'),
+                dict(key='idea:1', kind='idea', lane='fyi', category='', who='Advisor', title='Payworth renewal idea')]
+        with mock.patch.object(concierge, '_pipe', return_value=pipe):
+            for sel in ({'kind': 'fyi'}, {'lane': 'fyi'}): self.assertEqual([i['key'] for i in concierge.select_items(None, sel)], ['msg:1'])
+            self.assertEqual([i['key'] for i in concierge.select_items(None, {'kind': 'idea'})], ['idea:1'])
+            self.assertEqual(len(concierge.select_items(None, {'everything': True})), 2)
+
+
 if __name__ == '__main__':
     unittest.main()

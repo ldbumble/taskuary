@@ -2703,7 +2703,9 @@ def select_items(store, sel: dict) -> list:
     cat, kind, lane = want('category'), want('kind'), want('lane')
     # WHAT IT IS, whichever field named it: "category: fyi" matched nothing, because fyi is a kind and a lane here, and
     # "mark all the fyi read" left all forty on the rail while "clear all fyis" (kind: fyi) cleared them (2026-09-25)
-    what = lambda i: {str(i.get(f) or '').lower() for f in ('category', 'kind', 'lane')}
+    # ...and an Advisor idea is not an FYI, though it rides the fyi lane: the rail shows it under ADVISOR (funnel.batchable), and "close the
+    # ones that are just notifications" (kind: fyi) closed the four ideas with the notices (the Assistant stress run, 2026-11-03)
+    what = lambda i: {str(i.get(f) or '').lower() for f in ('category', 'kind', 'lane')} - ({'fyi'} if i.get('kind') == 'idea' else set())
     who = want('sender')
     about = ' '.join(str(sel.get('contains') or '').split())
     older = sel.get('older_than_hours')

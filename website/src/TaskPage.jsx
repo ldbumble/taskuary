@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress,
-  Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
+  Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography, useMediaQuery,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -264,6 +264,11 @@ const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "mi
 // one on the right, each laid OVER the main view behind a tab, so nothing under it reflows. Two columns cut the owner's 1600x810 laptop
 // to a ~700px work column whose failure reason sat out of sight. A phone (the body under 760px) keeps its stacked page.
 export const STACK_BELOW = 760;
+// ...BUT NEVER ON THE DESK (the owner, 2026-11-03: "stage moves belong on the task's spine, never on the bottom bar"): from 900 to ~1100 wide the
+// rail and the canvas left a task ~490-700px, under 760, and it stacked - its moves went back on the bar. On a desk window (the rail's 900px)
+// the table keeps its three sections, spines and all, down to DESK_STACK_BELOW; a phone and a narrow window keep their stacked page
+export const DESK_W = 900, DESK_STACK_BELOW = 440, OPEN_MIN = 180;
+export const useStackBelow = (table = true) => (useMediaQuery(`(min-width:${DESK_W}px)`) && table ? DESK_STACK_BELOW : STACK_BELOW);
 const TODO_SHOWN = 6;   // open to-dos shown before "Show N more"
 const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
@@ -562,7 +567,8 @@ export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
   const box = useRef(null), [n, setN] = useState(99), [, refit] = useState(0), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setN(99); }, [sig]);
-  const keep = 1 + items.reduce((k, x, i) => (x.v && (isDoneMove(x.v) || x.v.tone === "p") ? i : k), 0);
+  // ...and with neither, everything may go: a ~240px Came from on a 900px desk had room for its ▾ alone, and Remind me pushed it off the end
+  const keep = 1 + items.findLastIndex((x) => x.v && (isDoneMove(x.v) || x.v.tone === "p"));
   useLayoutEffect(() => { const b = box.current; if (b && n > keep && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.max(keep, Math.min(k, items.length) - 1)); });
   // ...and a width change measures again even when nothing was folded: setN(99) on an n already 99 drew nothing, so a pane narrowing into
   // a half (side by side) left its last move cut off at the edge until some unrelated draw folded it seconds later
@@ -607,9 +613,11 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
   const pairWord = pair?.on ? "One pane" : "Side by side";
   return (
     <Box data-tq-pane-strip={sec} data-tq-live={live ? "" : undefined} sx={{ position: "absolute", top: 0, left: 0, right: 0, height: live ? STRIP_LIVE_H : STRIP_H, zIndex: 2,
-      boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: live ? 1 : 1.5, bgcolor: "#fff", borderBottom: `1px solid ${FOCUS_EDGE}` }}>
+      boxSizing: "border-box", display: "flex", alignItems: "center", gap: 1, px: live ? 1 : 1.5, bgcolor: "#fff", borderBottom: `1px solid ${FOCUS_EDGE}`,
+      // ...a pane ~240px wide (a 900px desk, useStackBelow) gives its name's room to its moves: Mark done and the ▾ whole, the name still read out
+      containerType: "inline-size", "@container (max-width: 280px)": { "& [data-tq-strip-name]": HIDDEN_WORDS } }}>
       {arrows.filter((a) => a.side === "left").map(arrow)}
-      {!live && <Typography sx={{ ...SECTION_NAME, flexShrink: 0 }}>{name}</Typography>}
+      {!live && <Typography data-tq-strip-name="" sx={{ ...SECTION_NAME, flexShrink: 0 }}>{name}</Typography>}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
         {live ? <Box sx={{ display: "flex", gap: 0.5 }}>
             {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" data-tq-verb="save-end" aria-label={btn("stop_agent")} onClick={onStop}
@@ -1704,7 +1712,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const list = !!(detail?.batch || t?.DoneWhen || (!t?.DoneWhen && todo.length));
   // THE MAIN VIEW: a phone's narrow body stays one stacked page (a live session there the work, Came from its left drawer); on the desk the
   // three sections in a row (SECTIONS), opening on the one the task is up to - a live agent's too, Came from and Close out its slim tabs
-  const narrow = bodyW > 0 && bodyW < STACK_BELOW;
+  const stackBelow = useStackBelow(canvas), narrow = bodyW > 0 && bodyW < stackBelow;
   const stacked = !sessionView && narrow;
   const threeUp = !narrow;
   const flow = threeUp && timeline.length > 1;
@@ -1761,8 +1769,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : tabW(bodyW));
   // ...less its slot's own 1px rule on the left (Agent and Close out), so the body lies inside it
   // ...side by side, half of what the closed tab and the two slots' rules leave
+  // ...never laid wider than its slot: a 320px floor ran a 900px desk's ~240px Came from under the Agent spine (useStackBelow)
   const openW = (k) => (paired ? Math.max(320, Math.floor((bodyW - SECTIONS.filter((s) => !isOpen(s.key)).reduce((n, s) => n + closedW(s.key), 0) - 2) / 2))
-    : Math.max(320, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1)));
+    : Math.max(OPEN_MIN, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1)));
   // ...and on the canvas the open one wears its white strip (PaneStrip): the body under it, its own name head given to the strip
   const stripOn = (k) => inRow && isOpen(k);
   const stripH = (k) => (sessionView && k === "agent" ? STRIP_LIVE_H : STRIP_H);

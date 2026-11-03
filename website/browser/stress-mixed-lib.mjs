@@ -150,9 +150,9 @@ export function oneLine(rows, where) {
     assert.ok(r.over <= 1, say("the row runs past its edge"));
     assert.deepEqual(r.broken, [], say("a label broke onto two lines"));
     assert.ok(r.page <= 1, say("the page scrolls sideways"));
-    // ...under ~960 wide beside the rail the fixed ask bar leaves the bar less than even the short Nav (~5px of Next under its edge): the owner's
-    // call on that band (stress-mixed-resize's todo), so there only Back is held whole
-    assert.deepEqual(r.vw < 960 ? r.navCut.filter((x) => x === "Back") : r.navCut, [], say("Back or Next is cut off"));
+    // ...at every width, 900 beside the rail too: the stage moves are on the spine there and the bar is Back and Next alone (2026-11-03). Only an
+    // FYI batch's long "All read, next" still runs ~20px past the bar under ~960 wide (the ask bar's 360px floor): left to the owner
+    assert.deepEqual(r.vw < 960 ? r.navCut.filter((x) => x === "Back" || x === "Next") : r.navCut, [], say("Back or Next is cut off"));
   }
 }
 

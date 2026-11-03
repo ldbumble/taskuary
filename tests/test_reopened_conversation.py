@@ -6,7 +6,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import advisor, concierge, continuity, funnel, server
+from taskuary import advisor, concierge, continuity, funnel, general, server
 from taskuary.store import MemoryStore
 
 
@@ -72,9 +72,27 @@ class ContinueBringsTheMailTests(unittest.TestCase):
              mock.patch('taskuary.general.start_session', return_value=session), \
              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
+        # THE NEWS LEADS THE TURN (2026-11-03): a resumed CLI is handed the turn alone, so the mail is in it, ahead of Resume's words -
+        # filed as Taskuary's brief, never as the owner's words
         args, kw = session.send_prompt.call_args
-        self.assertEqual(args[0], continuity.RESUME_PROMPT, 'the owner said nothing - nothing is put in their mouth')
-        self.assertIn('What would building it take', kw['delivery_instructions'])
+        self.assertTrue(args[0].startswith('NEW SINCE YOUR LAST TURN') and args[0].endswith(continuity.RESUME_PROMPT), args[0][:80])
+        self.assertIn('What would building it take', args[0])
+        self.assertEqual((kw['brief'], kw['kept'], 'delivery_instructions' in kw), (True, True, False))
+        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid) if c.get('ActorType') == general.USER_TYPE]
+        self.assertEqual([a for a, _ in said], [general.BRIEF_ACTOR], "shown in the chat as Taskuary's line, not the owner's")
+        self.assertIn('What would building it take', said[0][1])
+
+    def test_the_mail_leads_then_the_owners_note_then_resume(self):
+        s, tid = reopened()
+        session = mock.Mock()
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=True),              mock.patch('taskuary.general.provider_options', return_value=['x']),              mock.patch('taskuary.general.start_session', return_value=session),              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
+            TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'answer Paula first'})
+        turn = session.send_prompt.call_args[0][0]
+        at = [turn.index(x) for x in ('versus the vendor gateway', 'FROM THE OWNER: answer Paula first', continuity.RESUME_PROMPT)]
+        self.assertEqual(at, sorted(at))
+        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid) if c.get('ActorType') == general.USER_TYPE]
+        self.assertEqual([a for a, _ in said], [general.BRIEF_ACTOR, 'owner'])        # the news as Taskuary's line, then the owner's note
+        self.assertEqual(said[1][1], 'answer Paula first')
 
     def test_a_coding_agents_instruction_is_the_owners_note_alone(self):
         s, tid = reopened()

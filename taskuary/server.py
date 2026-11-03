@@ -2731,11 +2731,15 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # ...and the owner's words are on the conversation BEFORE this answers (the owner, 0.3.9.51: "I did Continue, filled it out and
         # nothing happened"): written by the turn once its CLI had started, the page's read at the answer missed them, and they showed
         # only on a poll seconds later, under an agent already "working"
-        said = (note or continuity.RESUME_PROMPT) if (note or imgs) else ''
-        if said: store.add_comment(task_id, 'owner', general.USER_TYPE, said)
+        # THE TURN LEADS WITH WHAT CAME IN (2026-11-03, as ingest.carry_on_turn): the news, then the owner's note, then Resume's words. A resumed
+        # CLI is handed the turn alone, so the news behind it in the instructions sat under "restate that one question and wait", shown nowhere.
+        # Taskuary's part is filed as its brief (the chat's grey line) and the note as the owner's own, in that order
+        brief = '\n\n'.join(x for x in [news, '' if note else continuity.RESUME_PROMPT] if x)
+        if brief: store.add_comment(task_id, general.BRIEF_ACTOR, general.USER_TYPE, brief)
+        if note: store.add_comment(task_id, 'owner', general.USER_TYPE, note)
+        turn = '\n\n'.join(x for x in [news, f'FROM THE OWNER: {note}' if note else '', continuity.RESUME_PROMPT] if x)
         def go():
-            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, imgs or None, as_owner=bool(note or imgs), echo=bool(note),
-                                                                              delivery_instructions=news or None, kept=bool(said))
+            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(turn, imgs or None, brief=True, kept=True)
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
             finally: general.OPENING.discard(task_id)
         # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has

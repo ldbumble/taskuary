@@ -38,3 +38,21 @@ def test_a_press_on_the_row_settles_every_mail_it_speaks_for():
         assert funnel.thread_of(s, 'processing:b') == ['processing:a', 'processing:c']
         funnel.settle(s, 'processing:b', 'surfaced', read=True)
     assert said == ['processing:b', 'processing:a', 'processing:c']
+
+
+def test_a_batch_reads_the_thread_under_every_row_not_only_the_first():
+    """A walk's FYI batch read only the FIRST row's folded thread (2026-11-03): each settle empties the rail cache `thread_of` reads, so
+    from the second row on the mails under it stayed unread, and a "+3" row came back on the rail after the walk said it was done."""
+    from taskuary import railwalk
+    from taskuary.store import MemoryStore
+    s, key = MemoryStore(), 'fyis:processing:b,processing:d'
+    heads = [fyi('processing:b', 'email:audit', '2026-10-28 09:00:00', thread=['processing:a']),
+             fyi('processing:d', 'email:payroll', '2026-10-28 09:30:00', thread=['processing:c', 'processing:e'])]
+    every = {'processing:a', 'processing:b', 'processing:c', 'processing:d', 'processing:e'}
+    for road in ('batch', 'walk'):
+        said = []
+        with mock.patch.dict(funnel._CACHE, {'store': s, 'pile': {'items': heads}, 'full': None}), \
+             mock.patch.object(s, 'set_funnel_state', side_effect=lambda k, *a, **kw: said.append(k)), mock.patch('taskuary.concierge._stamp_next'):
+            if road == 'batch': funnel.settle(s, key, 'surfaced', read=True)
+            else: railwalk._effect(s, {'on': key, 'members': ['processing:b', 'processing:d'], 'kind': 'reads'}, heads, key, 'owner', 1)
+        assert set(said) == every, f'{road}: {sorted(every - set(said))} never read'

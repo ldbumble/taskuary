@@ -25,7 +25,7 @@ test("no signature (chat, an invite, the switch off) leaves the box as filed", (
 
 test("the reply box is drawn with it and counts only the words above it", () => {
   const src = readFileSync(new URL("../src/ReviewDecision.jsx", import.meta.url), "utf8");
-  assert.match(src, /text \?\? withSignature\(reviewText\(r\), r\.Signature\)/);
+  assert.match(src, /boxText\(\{ text, draft: reviewText\(r\), drafting, signature: r\.Signature \}\)/);
   assert.doesNotMatch(src, /value\.trim\(\)/, "Send is offered on what the owner wrote, not on the signature alone");
 });
 

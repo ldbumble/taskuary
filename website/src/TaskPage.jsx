@@ -1466,7 +1466,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setOpenStage("reply");
     try {
       // the box at once and the AI's draft behind it, "Drafting…" in the decision meanwhile (replyDraft.js, 2026-10-01)
-      // ...and Reply on a task no agent has worked opens it EMPTY - only Draft with AI ("ai") asks for the AI's draft (2026-10-28)
+      // ...agent work or not: Draft reply drafts and spins until the draft lands (2026-11-03); a press in the empty box is writing it yourself
       const got = await (generate ? draftReply(api, replyMessage.MessageId, null, null, generate === "ai") : api.post(`/api/messages/${replyMessage.MessageId}/reply`, { draft: false }).then((r) => r.data));
       if (stale(id)) return;
       await loadDetail(id);

@@ -10,14 +10,14 @@ import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
-import { withSignature, withoutSignature } from "./signature.js";
+import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
-import { useDraftJob } from "./replyDraft.js";
+import { boxText, followDraft, useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { DECIDE_TIMEOUT, draftState, failureHead, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
@@ -134,9 +134,19 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   useEffect(() => { if (delivery.frozen) setSent(false); }, [delivery.frozen, r.ReviewId]);
   const filedDelivery = delivery.frozen ? { ...r, Deliver: JSON.stringify(delivery.envelope) } : r;
   const proposal = proposalPresentation(r);
+  // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
+  // then the task is read again and the draft is in the box; one that could not be written says why here
+  const job = useDraftJob(r.ReviewId);
+  // A REDRAFT IS NOT A SEND (the email walk, 2026-10-29: Redraft turned Send into "Sending…"): its own state holds every button off
+  // while the model writes, and only Redraft says what is happening
+  const [redrafting, setRedrafting] = useState(false);
+  // ...and one the SERVER is still writing (`Drafting`: the arrival's own) is followed and waited on, not shown as nothing coming (2026-11-03)
+  const drafting = job?.state === "drafting" || redrafting || !!r.Drafting;
+  useEffect(() => { followDraft(api, r); }, [r.ReviewId, r.Drafting]);   // eslint-disable-line react-hooks/exhaustive-deps
   // the signature that goes under this email (signatures.py) is in the box: an empty one opens on it, a draft gets it once - and
   // a box holding only it is still "write the reply first"
-  const value = delivery.frozen ? delivery.body : text ?? withSignature(reviewText(r), r.Signature);
+  // ...but while the AI writes it the box is empty under its spinner, reading "Drafting…" - the signature alone read as nothing coming
+  const value = delivery.frozen ? delivery.body : boxText({ text, draft: reviewText(r), drafting, signature: r.Signature });
   const words = withoutSignature(value, r.Signature);
   const ccNow = delivery.frozen ? deliveryCc(filedDelivery) : cc ?? deliveryCc(r);
   const meta = deliveryMeta(r);
@@ -189,13 +199,6 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const coRid = closeout?.ReviewId || (proposal?.kind === "closeout" ? r.ReviewId : null);
   const { gh, reload: reloadGh, act } = useCloseoutState(coRid);
   const blocked = !!gh && !gh.ok;
-  // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js, 2026-10-01): "Drafting…" until the model is done,
-  // then the task is read again and the draft is in the box; one that could not be written says why here
-  const job = useDraftJob(r.ReviewId);
-  // A REDRAFT IS NOT A SEND (the email walk, 2026-10-29: Redraft turned Send into "Sending…"): its own state holds every button off
-  // while the model writes, and only Redraft says what is happening
-  const [redrafting, setRedrafting] = useState(false);
-  const drafting = job?.state === "drafting" || redrafting;
   const off = busy || drafting;
   useEffect(() => {
     if (job?.state === "done") onChanged?.();
@@ -451,7 +454,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
       </Alert>}
       {/* the writer said what it needs: a plain line, never a red failure - its way on is Send to agent / Continue, lit by the Advisor */}
-      {!proposal && draftState(r).state === "needs" && (
+      {/* ...and a draft that FAILED says so the same plain way, Draft with AI under it to try again (the owner, 2026-11-03) - the arrival's
+          failure was written on the review and shown nowhere, so its empty box read as a reply nobody had tried */}
+      {!proposal && !drafting && !err && ["needs", "failed"].includes(draftState(r).state) && (
         <Typography variant="body2" data-tq-draft-needs="" sx={{ color: DIM, mb: 1 }}>{draftState(r).line}</Typography>
       )}
       {!proposal && <Inbound r={r} />}

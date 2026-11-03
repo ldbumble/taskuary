@@ -1402,11 +1402,12 @@ class GeneralSession:
         try:
             from . import workerstate as ws
             ws.record(self.store, self.task_id, self.sid, 'turn_end', text=reply[:4000], source=src)
-            # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group)
+            # ...each question of the reply as one group, so the owner answers them together (workerstate.answer_group). Plain
+            # questions, no choices (the owner, 2026-11-03): chips are a CLI question tool's or chooser's, answered in the box here
             g = ws.group_key(f'{self.sid}:' + '|'.join(q for q, _ in asks)) if len(asks) > 1 else None
-            for i, (q, choices) in enumerate(asks, 1):
+            for i, (q, _) in enumerate(asks, 1):
                 ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
-                          text=q, choices=choices, source=src)
+                          text=q, source=src)
         except Exception as e: logger.debug(f'api worker event skipped: {e}')
         if signing is not None:
             from . import signin

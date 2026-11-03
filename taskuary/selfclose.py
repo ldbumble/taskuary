@@ -379,10 +379,12 @@ def tick_markers(text: str) -> tuple:
 # A regular worker has no AskUserQuestion tool and no hook: when it cannot go on without the owner it says
 # so with a marker, and Taskuary records the exact question as an Input-needed request - the one the
 # owner's answer is bound to (workerstate.answer). A marker, again, not a judge reading prose for a '?'.
+# ...and the question is plain words, answered in the box under it (the owner, 2026-11-03): option chips are only for a CLI's own
+# question tool or its on-screen chooser, so the line no longer offers `| choice | choice` - and one written anyway stays text.
 ASK_MARKER = '[[TASKUARY-ASK]]'
 _ASK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?\s*(.*)', re.I | re.S)
 ASK_LINE = (f'ASKING THE OWNER: when you cannot continue without their answer, end your reply with a final line: '
-            f'{ASK_MARKER} <the exact question> | <choice> | <choice> (choices optional). Several questions: one such line each, '
+            f'{ASK_MARKER} <the exact question>. The owner answers it in their own words. Several questions: one such line each, '
             f'at the end. Taskuary shows them as questions waiting for them and brings their answers back to you together. '
             f'Only for a real blocker, never for a rhetorical question - and never after you have answered: a part you could not '
             f'do is said in the answer (what you could not check and what would let you), not asked as a question.')

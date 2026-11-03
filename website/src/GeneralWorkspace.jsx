@@ -359,8 +359,9 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   );
 }
 
-// WHAT THE AGENT ASKED (the UI audit's W6): the question in its own words, and the answers it named as one press each - only the ones
-// the agent itself offered (its ask line's choices, its CLI's own chooser). ONE BOX TYPES AN ANSWER (the owner, 2026-11-03: "i hate this
+// WHAT THE AGENT ASKED (the UI audit's W6): the question in its own words, and a press for each answer its CLI's own question tool or
+// on-screen chooser offered - a general agent's question is plain words and carries none (the owner, 2026-11-03: chips only for those
+// two; general.py records its ask with no choices), plus Taskuary's own Signed in and Done. ONE BOX TYPES AN ANSWER (the owner, 2026-11-03: "i hate this
 // double ui. we don't need question box if we have way to answer on the bottom"): the card's own field and Answer button went - what is
 // typed in the composer while a question is open is its answer (AssistantThread's answerTyped). `onAnswer(text)` delivers either - a
 // reply in this conversation, or the worker's own answer road - and throws with the reason when it could not.

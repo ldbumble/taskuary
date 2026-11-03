@@ -70,7 +70,8 @@ test("the general agent's question is drawn in its canvas, answered by its press
 });
 
 // ONE BOX TYPES THE ANSWER (the owner, 2026-11-03: "i hate this double ui. we don't need question box if we have way to answer on the
-// bottom"): the card keeps the question and the agent's own choices, and the composer below is where an answer is typed
+// bottom"): the card keeps the question and a CLI chooser's presses (a general agent's ask has none - general.py), and the composer
+// below is where an answer is typed
 test("the question card has no box of its own - the composer answers an open question", () => {
   const view = read("GeneralWorkspace.jsx");
   const card = view.slice(view.indexOf("export function AgentAsks"), view.indexOf("function AssistantThread("));

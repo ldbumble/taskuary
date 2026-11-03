@@ -589,10 +589,6 @@ def idle_state(store, tid) -> dict:
     tags = str(t.get('Tags') or '')
     old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
     out = lambda kind, line, row='': {'kind': kind, 'line': line, 'row': row}
-    # A LIVE SESSION IS THE STATE (the stress test, 2026-11-02): a general session leaves no run row and no transcript while it lives, so a
-    # parked one fell through every fact below to "Not started yet. Nothing has started the assistant on this." - beside "needs you"
-    live = live_state(tid, agent)
-    if live: return out('live', *live)
     news = news_since_agent(store, tid)
     if news: return out('news', news_line(store, tid, news))
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
@@ -671,6 +667,9 @@ def idle_state(store, tid) -> dict:
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')
     # ...the box says the hold is gone, and that it still waits for the owner's own Start: trusting is not starting (2026-10-26)
+    # ...and A LIVE SESSION IS NOT "NOT STARTED" (the stress test, 2026-11-02): a general session leaves no run row and no transcript while it
+    # lives, so a parked one fell through every fact above to "Not started yet. Nothing has started the assistant on this." - beside "needs you"
+    if (live := live_session_state(tid, agent)): return out('live', *live)
     if lifted: return out('idle', f'Not started yet. The sender is trusted now - start {agent} when you want it; what was held never starts by itself.' + old,
                           'not started yet')
     return out('idle', f'Not started yet. Nothing has started {agent} on this.' + old, 'not started yet')
@@ -679,7 +678,7 @@ def idle_state(store, tid) -> dict:
 def not_started_why(store, tid) -> str: return idle_state(store, tid)['line']
 
 
-def live_state(tid, agent: str = 'the agent') -> tuple | None:
+def live_session_state(tid, agent: str = 'the agent') -> tuple | None:
     "(line, row) for the session live on this task - parked waiting on you, or working - or None when none is."
     from . import terminal
     try:
@@ -716,7 +715,6 @@ def agent_story(store, tid) -> dict | None:
     if not t or t.get('Status') in ('done', 'dropped'): return None
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
     who = agent_word(t.get('Kind'))
-    if (live := live_state(tid, who)): return {'kind': 'live', 'line': live[0]}      # ...and the folded pane reads it beside "needs you"
     if news_since_agent(store, tid): return {'kind': 'news', 'line': news_line(store, tid)}
     left, q, st = agent_left(store, tid), store.get_dispatch(tid), idle_state(store, tid)
     held, why = st['kind'] == 'held', st['line']
@@ -727,7 +725,8 @@ def agent_story(store, tid) -> dict | None:
         return {'kind': 'none', 'line': why} if why else None
     # the sentence is whole and leads with its state ("Waiting for you.", "Couldn't start."): the page adds nothing before it
     # ...and a run that FINISHED is finished, not "not started" over its own "finished its work" sentence (G7, 2026-10-20)
-    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid) else 'idle', 'line': why,
+    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid)
+                                 else 'live' if st['kind'] == 'live' else 'idle', 'line': why,
                          **({'trust': st['trust']} if held and st.get('trust') else {})}
     evs = store.worker_events(tid) or []
     sid = str(evs[-1]['Sid']) if evs else None

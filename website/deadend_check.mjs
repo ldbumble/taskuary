@@ -441,6 +441,11 @@ const readPage = (page) => page.evaluate(() => {
   const lr = litEl?.getBoundingClientRect(), hit = lr && document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
   const lit = litEl ? { word: litEl.innerText.trim(), inView: lr.top >= 0 && lr.left >= 0 && lr.bottom <= innerHeight && lr.right <= innerWidth,
     covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
+  // ...unless the owner just opened a box of their own over the table - Hand it to a person's card, Close with a note's, Continue's or the
+  // agent box under the item - which scrolls itself into view as "where the owner is now" (AssistantView, TaskPage): a lit move it scrolls
+  // away is behind the owner's own box, as it is behind a menu (`pops`), not a dead end. Reply drafts on every press now (2026-11-03), so a
+  // drafted reply's Send stays lit under the draft while the sweep presses on, and those boxes pushed it out of sight
+  const opened = [...document.querySelectorAll("[data-tq-handoff-card], .tq-chat-inner > .tq-browse-line:not([data-tq-browse-line])")].some((e) => vis(e) && e.children.length);
   // From is the sender's own words, quoted (the two-column page, 0.3.9.21): a mail that says "Traceback ... null" is the ask, not
   // our jargon - so the words check reads the card without it, and everything Taskuary writes stays held to the list
   // ...and a closed section's tab (the three sections, 2026-10-27) quotes the latest message and the draft in its lines, marked “...”
@@ -451,7 +456,7 @@ const readPage = (page) => page.evaluate(() => {
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
-  return { verbs, moves, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
+  return { verbs, moves, cardBtns, advice: !!adviceEl, decided, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit, opened,
     swap: (window.__swap || []).splice(0),
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy", unlit: !!strip.querySelector("[data-tq-unlit]") } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
@@ -478,7 +483,7 @@ const judge = (s, at) => {
     if (s.advice && dark.length > 1) note("DARK", at, `the Advisor spoke and ${dark.length} buttons are dark - ${JSON.stringify(s.verbs.map((v) => v.word))} / "${s.adv.slice(0, 80)}"`);
   }
   if (s.strip?.empty && !s.strip.busy && !s.strip.unlit && !s.lit) note("STRIP", at, "the Advisor's strip under the item says nothing and nothing on the row is lit");
-  if (s.advice && s.lit && !s.pops.length && (!s.lit.inView || s.lit.covered)) note("LIT", at, `the Advisor's lit "${s.lit.word}" is ${s.lit.inView ? "covered" : "off the screen"}`);
+  if (s.advice && s.lit && !s.pops.length && !s.opened && (!s.lit.inView || s.lit.covered)) note("LIT", at, `the Advisor's lit "${s.lit.word}" is ${s.lit.inView ? "covered" : "off the screen"}`);
   if (s.card && s.card.shown < 120) note("SEEN", at, `only ${Math.round(s.card.shown)}px of the card on the table is in view`);
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off) && !s.cardBtns.some((b) => !b.off && NAMED.has(b.word)))
     note("FIX", at, `"${s.errs[0].slice(0, 90)}" and nothing on the row but Next`);

@@ -53,7 +53,7 @@ test("acting on it belongs to the one you opened", () => {
   // four buttons on every row is twelve on a three-fyi card, in a card whose point is that
   // nothing here needs you
   assert.match(card, /const actsOf = \(i\) => \(<>\s*<div className="tq-card-actions tq-fyi-acts"/);
-  assert.match(card, /\{open === i\.key && actsOf\(i\)\}/);
+  assert.match(card, /\{open === i\.key && !movedTo\[i\.key\] && actsOf\(i\)\}/);
   assert.match(card, /\{open !== i\.key && !folded && gistFor\(i\) &&/);
 });
 

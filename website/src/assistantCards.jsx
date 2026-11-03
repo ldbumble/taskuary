@@ -1668,7 +1668,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
       msgs={items.map((i) => (
         <FyiMessage key={i.key} item={i} open={open === i.key} onHead={() => setOpen((o) => (o === i.key ? null : i.key))} moved={movedTo[i.key]} onRef={onOpenRef}>
           {i.mid ? <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} /> : gistFor(i) && <div className="tq-card-full">{gistFor(i)}</div>}
-          {open === i.key && actsOf(i)}
+          {/* ...a line made a task belongs to the task now: its moves are the task's, its link the way there (the owner, 2026-11-03) */}
+          {open === i.key && !movedTo[i.key] && actsOf(i)}
         </FyiMessage>))} />
   );
   return (
@@ -1697,7 +1698,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
           {/* ...and acting on it belongs to the ONE you opened, through the same proposal road the words
               take (PW-151) - never on the handful, never marking its siblings; and an entry already filed under a
               task is never offered to be made one (the owner, 2026-10-01) */}
-          {open === i.key && actsOf(i)}
+          {open === i.key && !movedTo[i.key] && actsOf(i)}
         </div>
       ))}
       </div>

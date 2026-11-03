@@ -13,6 +13,10 @@ test("only an FYI line made a task is kept, by the row it was", () => {
   assert.deepEqual([m.key, m.tid, m.ref, m.on, m.row.title], ["p:2", 1290, "TQ-1290", batch.key, "Floor notice 2"]);
   assert.equal(movedEntry("p:2", 7, null, [], batch).ref, "TQ-0007", "from the batch's own line when the rail has paged it out");
   assert.equal(movedEntry("t:9", 9, "TQ-0009", [{ key: "t:9", lane: "asked", tid: 9 }], null), null, "a task's own Put it on my list is no FYI");
+  // ...and a report put on the list stays in Reports the same way (the owner, 2026-11-03)
+  const rep = { key: "r:1", kind: "report", lane: "report", order_band: 3, title: "Headcount by site" };
+  const r = movedEntry("r:1", 31, null, [rep], rep);
+  assert.deepEqual([r.ref, r.on, ghostsOf({ "r:1": r })[0].lane], ["TQ-0031", "r:1", "report"]);
   assert.equal(movedEntry("p:2", null, null, [fyi("p:2")], batch), null, "no task, nothing moved");
   assert.equal(refOf(12, "TQ-0012"), "TQ-0012");
 });

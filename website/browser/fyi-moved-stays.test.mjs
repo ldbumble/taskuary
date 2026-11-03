@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { boot, clickText, pressNext, sleep } from "./walkdriver.mjs";
+import { boot, clickRow, clickText, doVerb, findRow, pressNext, sleep } from "./walkdriver.mjs";
 
 /* SHOULD BE A TASK KEEPS THE FYI WHERE IT WAS (the owner, 2026-11-03: "i think we should keep it there but say was moved to task"). On a line
    of an FYI batch the press makes it a task under Tasks, and the line stays - in the FYI band and in the batch card - saying "Moved to Tasks
@@ -33,6 +33,9 @@ test("Should be a task on a batch line keeps it in FYI, says where it went, and 
   assert.ok(task && !task.moved, "the new task is under Tasks as usual");
   const card = await page.evaluate((k) => document.querySelector(`[data-tq-fyi-msg="${k}"] [data-tq-moved]`)?.innerText || "", key);
   assert.equal(card, `Moved to Tasks · ${fyi.moved}`, "the batch card's line says it too");
+  // ...and offers nothing of its own: it belongs to the task now, its link the way there (the owner, 2026-11-03)
+  const offers = await page.evaluate((k) => [...document.querySelectorAll(`[data-tq-fyi-msg="${k}"] button`)].map((b) => b.innerText.trim()), key);
+  assert.ok(!offers.some((w) => /^(Reply|Not ours|Talk about it|Should be a task|Send to agent)$/.test(w)), `the moved line offers only its link: ${offers}`);
   assert.match(await row(page), /All read, next/, "the batch is still on the table");
   // ...All read, next: the batch goes, the moved row with it, the task stays
   assert.ok(await pressNext(page)); await sleep(3000);
@@ -55,5 +58,28 @@ test("the moved line's ref opens the task", { timeout: 240000 }, async (t) => {
   assert.match(ref || "", /^TQ-\d+$/);
   await until(page, (r) => (document.querySelector("[data-tq-task-page]")?.innerText || "").includes(r), ref);
   assert.ok((await page.evaluate(() => document.querySelector("[data-tq-task-page]")?.innerText || "")).includes(ref), `the task ${ref} is on the table`);
+  assert.deepEqual(errors, []);
+});
+
+test("a report put on the list stays in Reports saying where it went, and Next lets it go", { timeout: 240000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  const key = await findRow(page, /Headcount by site/);
+  assert.ok(key && await clickRow(page, key));
+  let pressed = null;
+  for (let i = 0; i < 20 && !(pressed = await doVerb(page, "w:mine")); i++) await sleep(500);
+  assert.ok(pressed, "the report has no Put it on my list");
+  await until(page, (k) => !!document.querySelector(`[data-tq-run="reports"] .tq-pile-row[data-tq-key="${k}"] [data-tq-moved]`)
+    && !!document.querySelector(`[data-tq-run="task"] .tq-pile-row[data-tq-key="${k}"]`), key);
+  const after = await rows(page), rep = after.find((r) => r.run === "reports" && r.key === key);
+  assert.match(rep?.moved || "", /^TQ-\d+$/, `the report's row stays in Reports, saying where it went: ${JSON.stringify(rep)}`);
+  assert.ok(rep.cur, "it holds the ring - the walk stands at the report's place");
+  assert.ok(after.some((r) => r.run === "task" && r.key === key && !r.moved), "the new task is under Tasks as usual");
+  let next = false;
+  for (let i = 0; i < 20 && !(next = await pressNext(page)); i++) await sleep(500);
+  assert.ok(next, "no Next on the new task"); await sleep(3000);
+  const gone = await rows(page);
+  assert.ok(!gone.some((r) => r.run === "reports" && r.key === key), "the report's row left Reports once the walk moved past it");
+  assert.ok(gone.some((r) => r.run === "task" && r.key === key), "the task stays under Tasks");
+  assert.match((gone.find((r) => r.cur) || {}).text || "", /AP ageing over 30 days/, "Next went on to the row below the report");
   assert.deepEqual(errors, []);
 });

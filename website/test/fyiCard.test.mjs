@@ -28,9 +28,9 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   // ...and Send to agent on a line opens the agent box under that line first - it never proposes a start at the press (2026-10-23)
   assert.doesNotMatch(fyis, /propose\("(coding|regular)_agent", i\)/);
   assert.match(fyis, /setAsking\(\{ key: i\.key, coding: true \}\)/); assert.match(fyis, /setAsking\(\{ key: i\.key, coding: false \}\)/);
-  // ...the one line's moves (actsOf), drawn only under the line opened - on the card and in the three sections alike (ItemSections, 2026-10-28)
+  // ...the one line's moves (actsOf), drawn only under the line opened - on the card and in the three sections alike (ItemSections, 2026-10-28) - never under a line made a task (2026-11-03)
   assert.match(fyis, /\{asking\?\.key === i\.key && \(\s*<AgentAsk [^\n]*coding=\{asking\.coding\}/);
-  assert.equal((fyis.match(/\{open === i\.key && actsOf\(i\)\}/g) || []).length, 2);
+  assert.equal((fyis.match(/\{open === i\.key && !movedTo\[i\.key\] && actsOf\(i\)\}/g) || []).length, 2);
   assert.match(fyis, /onStart=\{async \(o\) => \{ await onAgent\?\.\(i, o\); setAsking\(null\); \}\}/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /openReply\(api, i\.mid\)/);   // a reply opens at once, its draft written behind it (replyDraft.js)

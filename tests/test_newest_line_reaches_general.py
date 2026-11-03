@@ -55,6 +55,13 @@ def worked(s, resumable=True):
     return tid
 
 
+def ended(tid):
+    """Close the task's conversation and forget it: a closed session left in terminal.SESSIONS is still the task's session to
+    terminal.session_for, and the next file's task 1 (test_no_ai_no_start) read it as one started with no AI."""
+    if (g := general.session_for(tid)): g.close(learn=False, report=False)
+    general.drop_session(tid)
+
+
 class NextTurn(unittest.TestCase):
     def setUp(self):
         self.brain, own = Brain(), general.start_session      # the router's start is a process boundary in tests: the same start, as the owner's
@@ -71,7 +78,7 @@ class NextTurn(unittest.TestCase):
         (fn, *args), _kw = spawned[-1]
         self.assertEqual(fn.__name__, '_continue_general')
         fn(*args)
-        self.addCleanup(lambda: general.session_for(tid) and general.session_for(tid).close(learn=False, report=False))
+        self.addCleanup(ended, tid)
 
     def test_a_stopped_conversation_resumed_on_its_cli_is_handed_the_new_ask_as_its_turn(self):
         s = store(); tid = worked(s)
@@ -99,7 +106,7 @@ class NextTurn(unittest.TestCase):
     def test_a_live_conversation_is_handed_the_new_ask(self):
         s = store(); tid = worked(s)
         general.start_session(s, tid, actor='router')
-        self.addCleanup(lambda: general.session_for(tid).close(learn=False, report=False))
+        self.addCleanup(ended, tid)
         ingest._pass_general(s, tid, {**mail(**AGAIN), 'message_id': 9})
         self.assertIn(ASK, self.brain.turn)
         self.assertTrue(any(general.is_brief(c) and ASK in c['Body'] for c in s.list_comments(tid)))
@@ -119,7 +126,7 @@ class NextTurn(unittest.TestCase):
         _out, spawned = ingested(s, mail(**AGAIN))
         self.assertIn('_auto_general', [c[0][0].__name__ for c in spawned])     # agent_on_reply starts a fresh conversation...
         with mock.patch.object(ingest, '_reads_quick', return_value=False): ingest._auto_general(s, tid)
-        self.addCleanup(lambda: general.session_for(tid) and general.session_for(tid).close(learn=False, report=False))
+        self.addCleanup(ended, tid)
         self.assertIn(ASK, self.brain.turn)                                     # ...whose source material holds the newest message
 
 

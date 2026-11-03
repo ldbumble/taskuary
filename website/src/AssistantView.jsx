@@ -1704,9 +1704,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...except Next: it puts the item down, and the read went for the item being left a moment before the next one's own (overnight walk)
   // ...nor a press that put its item down (leftKey: an FYI batch's "All read, next", a close): the walk is reading the next one's - nor
   // Back, which moves the table the other way (walkMove)
+  // ...nor one the table moved off while it ran: the item drawn at its press (an FYI batch's next batch) was read as it came up
+  const pressOn = useRef(null);
+  useEffect(() => onPressing(() => { pressOn.current = onTableRef.current; }), []);
   useEffect(() => onPressed((id) => {
-    const k = onTableRef.current;
-    if (k && !walkMove(id) && leftKey.current !== k) readAdvice(k, true);
+    const k = onTableRef.current, on = pressOn.current; pressOn.current = null;
+    if (k && !walkMove(id) && leftKey.current !== k && (!on || on === k)) readAdvice(k, true);
   }), [readAdvice]);
   // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row says what was lit and the revision it was judged at
   // (advisor.press) - the evidence the owner's moves are learned from. EVERY press, lit or not (phase B, 2026-10-23: only a press

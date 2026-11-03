@@ -57,7 +57,7 @@ import { onLive, touches } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { askLine, byLine, cameFromLabel, cameFromWhere, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isIdeaLine, isChat, madeLine, rowText, sortedLine, todoSources, toLine, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -1851,7 +1851,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // ...EVERY message of its conversations, newest first - the tab draws as many as it has room for (fitTabLines): who, and their words
       msgs: newestFirst(sources.flatMap((g) => g.msgs)).map((m) => ({ who: m.who || m.FromName || m.FromEmail || (m.Direction === "out" ? "You" : ""),
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
-      count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
+      count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ profile: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary, never the profile (kinds.js shownAgent) */
       word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun }),
@@ -1878,7 +1878,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // CAME FROM'S PARTS, drawn once and arranged by the layout: a phone's stacked page (and a live agent's left drawer there) keeps them as
   // they were - the facts and the conversations in one Came from part, what triage made of it at the foot - and the three sections set
   // them out as the owner's mockup does (2026-10-27): What came in | What triage made of it, the ask, then Full message history (N)
+  // ...WHOM IT WENT TO under who sent it, a plain line: its first few names, all of them with the whole email (the owner, 2026-11-03)
+  const toWent = () => { const w = toLine(cameIn?.Recipients); return w.short && (
+    <Typography data-tq-came-in-to="" title={w.full} sx={{ fontSize: 12.5, color: DIM, overflowWrap: "anywhere" }}>{cameInFull ? w.full : w.short}</Typography>); };
   const fromFacts = () => (<>
+                        {!threeUp && toWent()}
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)} data-tq-files-pill="" title="Open the message they came with"
@@ -2033,6 +2037,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {cameIn ? <>
           <Typography sx={{ fontSize: 13, color: DIM }}>{byLine(cameIn.who || cameIn.FromName || cameIn.FromEmail, cameFromWhere(cameIn),
             cameIn.SentAt ? whenShort(cameIn.SentAt) : "")}</Typography>
+          {toWent()}
           {flow ? <Typography data-tq-came-in-newest="" sx={{ fontSize: 13, color: FAINT }}>The newest of {timeline.length} messages - the conversation is below</Typography>
             : <Typography data-tq-came-in-words="" title={cameInFull ? undefined : "Read it all"} onClick={() => setCameInFull((v) => !v)}
             sx={{ fontSize: 15, lineHeight: 1.5, color: INK, overflowWrap: "anywhere", whiteSpace: "pre-wrap", cursor: "pointer",

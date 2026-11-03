@@ -106,7 +106,8 @@ def idea_reason(idea: dict) -> str:
     except (ValueError, TypeError): action = {}
     triage = action.get('triage') or {}
     intent = triage.get('intent')
-    if triage.get('error') or triage.get('pending') or intent not in ('task', 'reply_only', 'fyi'): return ''
+    from .triage import INTENTS
+    if triage.get('error') or triage.get('pending') or intent not in INTENTS: return ''
     why = str(triage.get('why') or '').strip()
     from .categories import route_head
     return f"triage: {route_head(intent, triage.get('kind') or '')}" + (f' - {why}' if why else '')

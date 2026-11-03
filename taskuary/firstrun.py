@@ -280,7 +280,7 @@ def _prove(store) -> str:
     def go():
         try:
             v = triage.classify_intent(dict(PROOF), llm=llm_mod.build_llm(store, job='triage'), system=store.doc('triage'))
-            if v.get('degraded') or v.get('intent') not in ('task', 'reply_only', 'fyi'):
+            if v.get('degraded') or v.get('intent') not in triage.INTENTS:
                 said['e'] = f"it couldn't sort a test email - {v.get('parse_error') or v.get('error') or 'its answer was not a verdict'}"
         except Exception as e: said['e'] = f"it couldn't sort a test email - {str(e)[:300]}"
     t = threading.Thread(target=go, daemon=True, name='first-run-proof'); t.start(); t.join(PROVE_SECONDS)

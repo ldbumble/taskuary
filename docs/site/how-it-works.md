@@ -36,6 +36,15 @@ Every message gets exactly one verdict, and there are only five places it can go
 Three of those — `coding`, `general`, `task` — are *kinds* stored on the task, and the kind is
 what routes the work. `reply` is a kind too. `fyi` creates nothing at all.
 
+Triage has one more answer, **watch**: a thread you care about that somebody else will handle -
+typically a colleague on the To line who has been answering asks like it. It takes the `task`
+road with one difference: the task opens already under **Watching**, the same state
+[Watch it](tasks-and-agents#the-work-rail) sets. Nothing works it and nothing is asked of you; it
+is still walked after Tasks, comes back to Tasks when the thread moves, and **Mark done** lights
+once a new message shows somebody else dealt with it. Its reason names who is expected to handle
+it. **Watch it**, **Stop watching** and every other move work on it as on any task, and pressing
+either one on a triaged item teaches triage for the next mail like it.
+
 `coding` and `general` can start an agent by themselves, when Settings allow it and the sender is
 someone Taskuary trusts; anything else waits for your Start. A `task` is yours by definition:
 nothing works it.
@@ -67,7 +76,7 @@ caught it before triage ever saw it".
 | 8 | Your standing ruling | gate | If you already ruled on this conversation it is filed, quoting your own words. Your rulings outrank the classifier. |
 | 9 | An agent is waiting | gate | If a run is live on the attached task, no verdict is asked for — the message goes to the agent as its answer. |
 | 10 | The verdict | gate, then **AI** | Tracker items, obvious noise and calendar mail settle with no call - an invite nobody has answered becomes yours to Accept, Decline or Propose a new time; an answer, an update or a cancellation is fyi. Everything else is one call reading `TRIAGE.md`, `SOUL.md`, `JOB.md`, `LEARNED.md` and your past verdicts. |
-| 11 | Acting on it | gate | `fyi` files. A reply files instead of drafting when replies are off for that channel. Anything else becomes a task with its kind. |
+| 11 | Acting on it | gate | `fyi` files. A reply files instead of drafting when replies are off for that channel. `watch` becomes a task under Watching. Anything else becomes a task with its kind. |
 
 Two rules hold wherever AI is involved. With no AI connector, a message is **filed** with
 "awaiting AI triage" rather than guessed at. A call that fails, or answers something unreadable,
@@ -159,7 +168,7 @@ allowed to read and to do, not by where they run.
 
 | | What it does | What it reads | When | Acts? |
 |---|---|---|---|---|
-| **Triage** | Judges each arrival: task, goal, reply, FYI or ignored. Attaches it to the thread's task, names the goal step a mail serves, opens a goal for the open-ended ask, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks; the open goals and their steps | every poll | makes rows; never sends |
+| **Triage** | Judges each arrival: task, goal, reply, watch, FYI or ignored. Attaches it to the thread's task, names the goal step a mail serves, opens a goal for the open-ended ask, names the profile, playbook and repository, assigns the worker | `TRIAGE.md`; the first 2,500 characters of `SOUL.md` and of `JOB.md`; `LEARNED.md`'s promoted lines; routing memory; the playbook menu; the recent open tasks; the open goals and their steps | every poll | makes rows; never sends |
 | **The assistant** | The voice and the hands: walks the rail, runs set-up, connects things, moves things (assign, route, close, later) through a button or by asking the model for the verb | `COUNSEL.md`, `SOUL.md` and `JOB.md` whole and `LEARNED.md`'s lines in use, on every page; the one item on the table and the page you asked about; `STYLE.md`, `AGENT.md` and the rest when you ask about them | on a turn | moves things; never does the work, never proposes |
 | **The Advisor** | The brain on the clock: the Advisor report, the morning brief and reflection say what is late, what was not followed up, what worked, which system is worth connecting | the head of `SOUL.md` and `JOB.md`, `COUNSEL.md`; your work as the hub sees it; the calendar; the knowledge base; the sources it watches; its own notes; `LEARNED.md`'s promoted lines and the last month of the outcome ledger with the pages of the people it names. At reflection: `LEARNED.md` whole, hypotheses too, and the outcome ledger | on its schedule and when the app opens; reflection at launch and after three corrections; and on the event - an agent stop or ask (or an agent cut off by a close, heard at the next launch), a reply, an attached mail, a PR, a close, a missed day, a report - one small prompt that leaves a line and a pill on that item | never; it leaves a line, an idea row or a proposal |
 
@@ -195,7 +204,7 @@ around the edges — they are what the models are actually told.
 |---|---|---|
 | `SOUL.md` | The constitution: rules, voice, escalation lines, repository map | triage, replies, the assistant |
 | `JOB.md` | What your job is: mission, responsibilities, who you serve, the cadences, what to protect. It weighs importance, never intent | triage, the assistant, the morning brief |
-| `TRIAGE.md` | What makes something a task, a reply or an FYI | triage |
+| `TRIAGE.md` | What makes something a task, a reply, a watch or an FYI | triage |
 | `STYLE.md` | Greeting, tone, length, phrasing | reply drafts |
 | `COUNSEL.md` | How the assistant speaks, and how readily it takes a position | the assistant, the morning brief, replies |
 | `CODING.md` | How coding agents work and close out | coding agents |

@@ -32,7 +32,9 @@ KINDS = {
     'task.complete':            ('task', (), None),
     'task.reopen':              ('task', (), None),
     'task.defer':               ('task', ('until',), None),
-    'task.watching':            ('task', (), None),          # Watch it: kept open under Watching, walked after Tasks (watch.py)
+    # Watch it: kept open under Watching, walked after Tasks (watch.py) - a verdict of its own since triage can say watch (2026-11-03):
+    # Watch it on what triage called the owner's teaches watch, Stop watching on what triage watched teaches task
+    'task.watching':            ('task', (), 'watch'),
     'preference.exclude_sender': ('message', ('scope',), None),
     'preference.sender_rule':   ('message', (), None),      # the Settings rule, not the learned verdict
     'preference.sender_rule':   ('message', (), None),      # the Settings rule, not the learned verdict
@@ -143,6 +145,7 @@ def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 def _change(kind: str, params: dict) -> str | None:
     how = KINDS[kind][2]
     if how is None: return None
+    if how == 'watch': return 'task' if (params or {}).get('off') else 'watch'
     if how != 'kind': return how
     k = str((params or {}).get('kind') or '').lower()
     return k if k in task_kinds.AGENT else 'task'
@@ -156,7 +159,7 @@ def verdict_of_message(store, m: dict) -> tuple:
     reason = str(last.get('Reason') or '')
     from .categories import route_intent
     said = route_intent(reason)
-    if said == 'fyi': return 'fyi', last.get('RouteId')
+    if said in ('fyi', 'watch'): return said, last.get('RouteId')
     if said == 'reply_only': return 'reply', last.get('RouteId')
     if m.get('TaskId'):
         kind = str((store.get_task(m['TaskId']) or {}).get('Kind') or '').lower()
@@ -169,6 +172,9 @@ def verdict_of_task(store, tid: int) -> tuple:
     kind = str(t.get('Kind') or '').lower()
     msgs = store.list_messages(tid)
     routes = store.message_routes(msgs[0]['MessageId']) if msgs else []
+    from .categories import route_intent
+    # ...a task triage opened under Watching was its watch, not the owner's work (ingest, 2026-11-03)
+    if routes and route_intent(routes[-1].get('Reason')) == 'watch': return 'watch', routes[-1].get('RouteId')
     return (kind if kind in task_kinds.TRIAGE else ('task' if t else '')), (routes[-1].get('RouteId') if routes else None)
 
 
@@ -410,6 +416,8 @@ def correction_for(store, op: dict) -> dict | None:
     except ValueError: params = {}
     change, verdict = _change(op['Kind'], params), str(op.get('Verdict') or '')
     if not change or not verdict or change == verdict or frozenset((change, verdict)) in SAME: return None
+    # Stop watching corrects only a watch triage set: on the owner's own Watch it it undoes their press, not triage's reading
+    if op['Kind'] == 'task.watching' and params.get('off') and verdict != 'watch': return None
     if op['TargetKind'] == 'message':
         m = store.get_message(op['TargetId']) or {}
         try: tid = (json.loads(op['OutcomeJson']) if op.get('OutcomeJson') else {}).get('taskId') or m.get('TaskId')

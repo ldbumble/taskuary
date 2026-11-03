@@ -1,6 +1,6 @@
 """What a message IS, in one word - the tag on every Timeline row.
 
-Triage's verdict (task / reply_only / fyi) plus where the message ended up (a task, the list,
+Triage's verdict (task / reply_only / watch / fyi) plus where the message ended up (a task, the list,
 filed, ignored) collapses to one category, so a row can be read at a glance and the same word
 means the same thing in the feed, the digest and the task page:
 
@@ -36,17 +36,18 @@ SENDER_CLASSES = ('person', 'automated', 'bulk')
 from .kinds import worker as agent_word   # kinds.json's `worker`: 'the coding agent', or 'the assistant'
 
 def route_head(intent, kind='', repo='') -> str:
-    "'nothing to do' | 'needs a reply' | 'work for the coding agent in org/app' | 'work for the assistant' | 'yours to do'."
+    "'nothing to do' | 'needs a reply' | 'watching' | 'work for the coding agent in org/app' | 'work for the assistant' | 'yours to do'."
     if intent == 'fyi': return 'nothing to do'
+    if intent == 'watch': return 'watching'        # someone else's to handle, kept under Watching (watch.py, the owner 2026-11-03)
     if intent == 'reply_only': return 'needs a reply'
     if kind in kinds.AGENT: return f'work for {agent_word(kind)}' + (f' in {repo}' if repo and kind == 'coding' else '')
     return 'yours to do'
 
-_HEAD = re.compile(r'triage: (task|reply_only|fyi|yours to do|work for |needs a reply|nothing to do)')
-_HEAD_INTENT = {'yours to do': 'task', 'work for ': 'task', 'needs a reply': 'reply_only', 'nothing to do': 'fyi'}
+_HEAD = re.compile(r'triage: (task|reply_only|fyi|watching|watch|yours to do|work for |needs a reply|nothing to do)')
+_HEAD_INTENT = {'yours to do': 'task', 'work for ': 'task', 'needs a reply': 'reply_only', 'nothing to do': 'fyi', 'watching': 'watch'}
 
 def route_intent(reason) -> str:
-    "'task' | 'reply_only' | 'fyi' | '' - the verdict a route reason records, in either wording."
+    "'task' | 'reply_only' | 'watch' | 'fyi' | '' - the verdict a route reason records, in either wording."
     m = _HEAD.search(str(reason or ''))
     return _HEAD_INTENT.get(m.group(1), m.group(1)) if m else ''
 

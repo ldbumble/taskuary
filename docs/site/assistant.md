@@ -79,6 +79,8 @@ Assistant the same thing — "bring TQ-0123 back in two weeks" — and it brings
 Beside it, **Watch it** is for a task that is not yours to do but that you want to see through. Nothing is sent. The task stays
 open under **Watching** at the foot of Tasks, and stays on the walk, which reaches it after Tasks. It goes back to Tasks when anybody else writes on it -
 with **Mark done** lit when triage reads the new message as handled - or after a quiet week, with **Chase them** and **Let it go**.
+Triage puts a task there by itself when it reads a thread as yours to care about and somebody else's to handle; its reason names who.
+**Stop watching** on one of those puts it back in Tasks, and triage learns from it.
 
 ## Everything the task page can do
 

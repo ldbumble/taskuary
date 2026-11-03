@@ -746,6 +746,9 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     return intent, fail
 
 
+QUIET = ('fyi', 'watch')     # the verdicts that ask nothing of the owner now: a line that joins existing work on either is kept for the chain
+
+
 def _stored_verdict(intent: dict | None) -> dict | None:
     """The usable structured triage answer, without failure-only transport fields."""
     if not intent or intent.get('degraded'): return None
@@ -958,10 +961,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # nothing to do, and filed it would leave the task waiting on an answer it already has
         from . import waiton
         awaited = waiton.is_them(waiton.waiting(store.get_task(tid)), msg)
-        if follow and (follow.get('intent') == 'fyi' or kept) and not follow.get('degraded') and not awaited:
+        # ...and a WATCH on a line that joins its thread (the owner, 2026-11-03) asks nothing of the owner either: kept for the chain like an fyi
+        if follow and (follow.get('intent') in QUIET or kept) and not follow.get('degraded') and not awaited:
             mid = _land(store, msg, tid, 'filed')
             said = (f"{follow.get('intent')} on {task_ref(tid)}, which is closed - nothing new to do on it, so it stays closed" if kept
-                    else f"fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain")
+                    else f"{route_head('watch') if follow['intent'] == 'watch' else 'fyi'} - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain")
             store.add_route(mid, tid, 'attach', r.get('score'), f"triage: {said}", [], 'triage', verdict=_stored_verdict(follow))
             store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - "
                               + ('no new work, it stays closed' if kept else 'fyi, nothing to do'))
@@ -1144,6 +1148,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                             f"triage: {route_head('fyi')} - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage',
                             verdict=_stored_verdict(intent))
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
+        # WATCH (the owner, 2026-11-03: "a task you care about but you don't have to take care of"): a task on the owner's list with
+        # nothing working it, put straight under Watching (watch.py) - walked after Tasks, back when its thread moves
+        watching = intent['intent'] == 'watch'
         # A MAIL THAT STARTS A WORKFLOW (the owner, 2026-10-21): triage named a workflow whose "start when a mail like this arrives"
         # this is - its run IS the mail's task, by the one road every run takes (workflows.run), approvals as they always are
         if intent['intent'] == 'task' and intent.get('workflow'):
@@ -1202,6 +1209,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                      **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
                                      **({'Assignee': f'agent:{role}'} if role else {})}, actor)
             store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
+            if watching:
+                watch.watch(store, tid, 'triage')
+                store.add_comment(tid, 'triage', 'agent', f"Watching for you - {intent.get('why') or 'somebody else is expected to handle it'}")
             # ...and why it is important, said where the owner reads the task (the verdict text says why - the owner, 2026-10-25)
             if f['priority'] == 'important': store.add_comment(tid, actor, 'agent', f"Marked important - triage: {_priority_why(intent)}")
             if msg.get('_workflow_held'): store.add_comment(tid, 'triage', 'agent', msg['_workflow_held'] + '. It was not started on its own.')
@@ -1299,6 +1309,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # ...and the tail says what is TRUE when it is written: the start was only spawned, so it says the agent was set
         # going, never that it started - a queued or a failed start writes its own line on the task
         act = (('a reply draft goes to the task for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
+               else f"under {words.name('watching')} - nothing asked of you until the thread moves" if watching
                else 'on your list - no agent works it' if f['kind'] == 'task'
                else f'{HELD} {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
                else f'{HELD} items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.' if msg.get('no_auto')
@@ -1545,7 +1556,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
     closed = t.get('Status') == 'done'
     ref = task_ref(tid)
     # a closed task comes back only with new work or a question to the owner (see ingest_message): a comment on it is kept, it stays closed
-    if intent.get('intent') == 'fyi' or (closed and not owes_owner(intent)):
+    if intent.get('intent') in QUIET or (closed and not owes_owner(intent)):
         mid = _land(store, msg, tid, 'filed')
         store.add_route(mid, tid, 'attach', 1.0, f"triage: {route_head(intent.get('intent'), t.get('Kind') or '')}, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it"
                         + (', which stays closed' if closed else '') + notes_note,
@@ -1583,7 +1594,7 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
     tid, ref, k = (step or {}).get('tid') or sv['task'], task_ref(sv['task']), [x['id'] for x in store.goal_steps(sv['task'])].index(sv['step']) + 1
     # a finished step comes back only with new work for it or a question to the owner; a comment is kept on it (see ingest_message)
     shut = tid != sv['task'] and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped')
-    work = owes_owner(intent) if shut else intent.get('intent') != 'fyi'
+    work = owes_owner(intent) if shut else intent.get('intent') not in QUIET
     mid = _land(store, msg, tid, 'routed' if work else 'filed')
     # ...and what same_as does for the task it joins (the review, 2026-10-12): the sender's escalation, triage's urgency, and - on the
     # step's own task only - the day it names; a step's day never moves the goal's date. A follow-up on a finished step reopens it.

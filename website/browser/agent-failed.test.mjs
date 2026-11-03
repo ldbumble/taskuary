@@ -20,7 +20,7 @@ const hasButton = (page, label) => page.waitForFunction((label) =>
     throw new Error(`no "${label}" button - shown: ${shown.slice(0, 600)}`);
   });
 
-test("a general agent that could not start says Failed, offers Try again and Connect an AI, and is never waiting on you",
+test("a general agent with no AI to run it is refused, offers Connect an AI, and is never waiting on you",
   { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true });
   t.after(() => harness.close());
@@ -53,50 +53,36 @@ test("a general agent that could not start says Failed, offers Try again and Con
     "the sheet stayed open with the words");
   assert.equal(JSON.stringify((await api("/api/tasks")).data).includes("compare three payroll vendors"), before.includes("compare three payroll vendors"),
     "nothing was filed for a start that could not happen");
+  // ...and its Connect an AI opens Connections at the AI cards
+  await page.click("[data-tq-connect-ai]");
+  await page.waitForFunction(() => decodeURIComponent(location.hash).includes("connections=AI"), { timeout: 10000 });
 
-  // THE TASK'S AGENT STEP: a start whose first turn failed reads Failed, never "waiting on you"
+  // THE TASK'S AGENT STEP: a start with no AI is refused before anything changes (no AI, no start: server._brainless, the owner,
+  // 2026-11-03) - it used to "start" and fail a second later. Nothing is filed under an agent waiting on you
   const made = (await api("/api/tasks", { Title: "Compare three payroll vendors on price", Summary: "Compare three payroll vendors on price", Kind: "general" })).data;
   assert.ok(made?.taskId, `task not created: ${JSON.stringify(made)}`);
   const sent = await api(`/api/tasks/${made.taskId}/dispatch`, { kind: "general" });
-  await page.waitForFunction(async (id) => {
-    const r = await fetch(`/api/tasks/${id}`, { headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token") } });
-    const d = await r.json(); return d?.agentStory?.kind === "failed";
-  }, { timeout: 20000, polling: 500 }, made.taskId).catch(async () => {
-    const d = (await api(`/api/tasks/${made.taskId}`)).data;
-    throw new Error(`no failed story: dispatch ${JSON.stringify(sent).slice(0, 300)} story ${JSON.stringify(d?.agentStory)} ended ${d?.runEnded}`);
-  });
+  assert.equal(sent.status, 422, JSON.stringify(sent));
+  assert.match(String(sent.data?.detail || ""), /No AI is connected to run this agent/);
+  assert.ok(!["working", "failed"].includes((await api(`/api/tasks/${made.taskId}`)).data?.agentStory?.kind), "a refused start left an agent story");
   const rows = (await api("/api/tasks")).data;
   const row = (Array.isArray(rows) ? rows : rows?.data || []).find((x) => x.TaskId === made.taskId);
   assert.ok(row, "the task is on the list");
-  assert.notEqual(row.State, "blocked", "a failed start is never filed under an agent waiting on you");
+  assert.notEqual(row.State, "blocked", "a refused start is never filed under an agent waiting on you");
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
-  await page.waitForFunction(() => /Failed - No AI is connected/.test(document.body.innerText), { timeout: 20000 });
+  await page.waitForFunction(() => /Compare three payroll/.test(document.body.innerText), { timeout: 20000 });
   const text = await page.evaluate(() => document.body.innerText);
-  assert.doesNotMatch(text, /Not started yet|Agent answered|agent waiting on you|CLI agent or an AI provider/);
-  await hasButton(page, "Connect an AI");
-  // ...and the task is still on the rail, with the dock row's moves under it: a failed run is never a page with nothing to press
+  assert.doesNotMatch(text, /Agent answered|agent waiting on you|CLI agent or an AI provider/);
+  // ...its Send to agent is greyed, the reason its hover - never pressable into the refusal (the owner, 2026-10-22)
+  await hasButton(page, "Send to agent");
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.offsetParent && b.textContent.trim() === "Send to agent"
+    && b.disabled && /No AI is connected/.test(b.title || b.closest("[title]")?.title || ""))), "Send to agent is greyed, saying why");
+  // ...and the task is still on the rail, with the dock row's moves under it: a refused start is never a page with nothing to press
   await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].some((r) => r.offsetParent && /Compare three payroll/.test(r.textContent)),
-    { timeout: 15000 }).catch(() => { throw new Error("the failed task has no row on the rail"); });
+    { timeout: 15000 }).catch(() => { throw new Error("the task has no row on the rail"); });
   await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-row] button, :is([data-tq-spine-moves], [data-tq-pane-moves]) button")].some((b) => b.offsetParent && b.textContent.trim() === "Mark done"),
     { timeout: 15000 }).catch(() => { throw new Error("the dock row has no Mark done"); });
   if (process.env.TQ_SHOT) await page.screenshot({ path: process.env.TQ_SHOT });
-  // Try again with still no AI is greyed, the reason its hover - never pressable into the same failure (the owner, 2026-10-22). On the row,
-  // or in its ▾: Close folds last (the owner, 2026-10-27), so on a narrower row the Agent group's greyed Try again folds before Mark done
-  const greyed = () => page.evaluate(() => [...document.querySelectorAll('button, [role="menuitem"]')].some((b) => b.textContent.trim().startsWith("Try again")
-    && b.offsetParent && (b.disabled || b.getAttribute("aria-disabled") === "true") && /No AI is connected/.test(b.title || b.closest("[title]")?.title || "")));
-  // ...read once the task has drawn whole: the failure's own fix (Connect an AI) can land a beat before the row's Try again
-  let seen = false;
-  for (let i = 0; i < 20 && !(seen = await greyed()); i += 1) await new Promise((r) => setTimeout(r, 500));
-  for (const m of seen ? [] : await page.$$eval("[data-tq-row] [data-tq-more]", (e) => e.map((x) => x.dataset.tqMore))) {
-    await page.evaluate((m) => document.querySelector(`[data-tq-row] [data-tq-more="${m}"]`)?.click(), m); await new Promise((r) => setTimeout(r, 500));
-    if ((seen = await greyed())) break;
-    await page.keyboard.press("Escape"); await new Promise((r) => setTimeout(r, 300));
-  }
-  assert.ok(seen, "Try again is greyed, saying why");
-  await page.keyboard.press("Escape"); await new Promise((r) => setTimeout(r, 300));
-  // ...and Connect an AI opens Connections at the AI cards
-  assert.ok(await press(page, "Connect an AI"));
-  await page.waitForFunction(() => decodeURIComponent(location.hash).includes("connections=AI"), { timeout: 10000 });
   assert.deepEqual(errors, []);
 });

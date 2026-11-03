@@ -57,6 +57,7 @@ def install(app) -> bool:
     terminal.start_on_task = start
     general.start_session = start
     agents.coding_ready = lambda *a, **kw: NOW['fault'] in START     # the coding agent is offered only where its start is the test
+    agents.cli_ready = lambda *a, **kw: NOW['fault'] in START        # ...and its CLI counts as connected, past server._brainless
     for m in (llm, advisor): m.build_llm = lambda *a, **kw: None     # no AI: the walk never calls a real model
     concierge.brain = lambda *a, **kw: None
 

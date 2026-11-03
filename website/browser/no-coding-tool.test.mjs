@@ -40,7 +40,8 @@ test("with no coding tool the live session says pick one, Send to coding agent s
   const made = (await api("/api/tasks", { Title: "Fix the export", Summary: "Fix the export", Kind: "coding" })).data;
   const out = await api(`/api/tasks/${made.taskId}/dispatch`, { agent: null });
   assert.equal(out.status, 422, JSON.stringify(out.data));
-  assert.match(String(out.data?.detail || ""), /Pick a coding tool first/);
+  // ...in the no-AI gate's words since every start road asks it first (server._brainless, 2026-11-03)
+  assert.match(String(out.data?.detail || ""), /No AI is connected that can run a coding agent/);
   assert.equal(((await api("/api/terminals")).data?.data || []).length, 0, "nothing was started");
 
   // Connect one opens the coding tools

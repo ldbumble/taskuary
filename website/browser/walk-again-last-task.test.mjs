@@ -25,7 +25,7 @@ const row = (page) => page.evaluate(() => [...document.querySelectorAll(".tq-ass
 const said = (page) => page.$$eval(".tq-msg .body", (els) => els.map((e) => e.textContent.trim()));
 const until = async (f, ms = 15000) => { for (const t0 = Date.now(); Date.now() - t0 < ms; await sleep(250)) if (await f()) return true; return false; };
 
-test("the end of a walk with one task left, waiting on someone else, offers Walk me through my tasks again - and that task, the last, has no Next", { timeout: 300000 }, async (t) => {
+test("the end of a walk with one task left, waiting on someone else, offers Walk me through my tasks again - and that task, the last, has no Back", { timeout: 300000 }, async (t) => {
   const h = await startHarness();
   t.after(() => h.close());
   const pile = await request(h, "/api/funnel/pile");
@@ -52,6 +52,7 @@ test("the end of a walk with one task left, waiting on someone else, offers Walk
   assert.ok(await until(async () => (await row(page)).length > 1), "the task's own row is up");
   await sleep(2500);
   const last = await row(page);
-  assert.ok(!last.includes("Next") && !last.includes("Back"), `the only thing left: no Next below it, no Back above it: ${JSON.stringify(last)}`);
+  // ...but Next stays live on it (the owner, 2026-11-02: "You can't mark read on the final FYI?"): it ends the walk (next-on-the-last)
+  assert.ok(last.includes("Next") && !last.includes("Back"), `the only thing left: Next ends the walk, no Back above it: ${JSON.stringify(last)}`);
   assert.deepEqual(errors, []);
 });

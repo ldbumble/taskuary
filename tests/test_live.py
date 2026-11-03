@@ -176,6 +176,21 @@ class LiveSocketTests(unittest.TestCase):
         finally:
             live.detach(dummy)
 
+    def test_advice_for_several_items_in_one_window_names_each(self):
+        """The item on the table and the two read ahead of it answered in one window: the last key alone lost the table's own read."""
+        dummy = object()
+        live.attach(dummy)
+        try:
+            live.emit(live.ADVICE, key='processing:pi_1', target_kind='task', target_id=9)
+            live.emit(live.ADVICE, key='processing:pi_2', target_kind='message', target_id=9)
+            got = live._pending[live.ADVICE]
+            self.assertEqual(got['key'], 'processing:pi_2')
+            self.assertEqual(got['items'], [{'key': 'processing:pi_1', 'target_kind': 'task', 'target_id': 9},
+                                            {'key': 'processing:pi_2', 'target_kind': 'message', 'target_id': 9}])
+            live.flush()
+        finally:
+            live.detach(dummy)
+
     def test_no_listeners_means_no_timer(self):
         """A poll writing forty rows must not spawn forty Timers when nobody has the UI open."""
         live.emit('feed-changed', message_id=1)

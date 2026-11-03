@@ -7,6 +7,8 @@
    the two. Returns the table's key, or null when the event is about something else. */
 import { sameTarget } from "./tableState.js";
 export function adviceKeyFor(ev, cur) {
+  // ...and an event for several reads (live._merged `items`: the table's and the two read ahead, in one window) is about each of them
+  if (ev?.items?.length) return ev.items.map((x) => adviceKeyFor(x, cur)).find(Boolean) || null;
   const k = ev?.key;
   if (!k || !cur) return null;
   if (typeof cur === "string") return k === cur ? cur : null;

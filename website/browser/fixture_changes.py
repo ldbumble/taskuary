@@ -47,7 +47,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/group-chat',
         '/api/fixture/task/workstreams',
         '/api/fixture/advisor/report-idea',
-        '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys',
+        '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys', '/api/fixture/walk/big',
         '/api/fixture/day/away',
     })
 
@@ -669,6 +669,64 @@ def install_processing_changes(app, store):
             from taskuary import live
             live.emit(live.CHAT, thinking=False, channel='telegram')
         return walk_keys()
+
+    # THE STRESS WALK'S WORLD (browser/stress-walk-*): the demo's rail cleared and laid out big - or as one row - from invented people, so
+    # Next, Back and the row clicks can be hammered over a long rail. Mixed kinds: reply drafts, agent tasks, goals, plain asks, meetings,
+    # reports, FYI in batches and Advisor ideas.
+    @app.post('/api/fixture/walk/big')
+    def walk_big(body: dict):
+        n = {k: body.get(k, d) for k, d in (('tasks', 100), ('reports', 15), ('fyi', 30), ('ideas', 4), ('meetings', 3))}
+        if set(body) - set(n) or not all(type(v) is int and 0 <= v <= 200 for v in n.values()): raise HTTPException(422, 'tasks, reports, fyi, ideas, meetings: 0-200')
+        from taskuary import assistant, funnel, railwalk
+        from taskuary.testing import Factory
+        walkworld.clear(store)
+        world.clear()
+        f, now = Factory(store), datetime.now()
+        f.actor = 'triage'
+        at = lambda m: (now - timedelta(minutes=m)).strftime('%Y-%m-%d %H:%M:%S')
+        people = [('Erin Blake', 'erin'), ('Gail Moreno', 'gail'), ('Paula Vance', 'paula'), ('Ray Colton', 'ray'), ('Marcus Reed', 'marcus'), ('Omar Keller', 'omar')]
+        asks = ['the June variance', 'the Payworth export', 'badges for the new starters', 'the Trainly seats', 'the Spendly card feed', 'the portal upgrade',
+                'the PhishGuard dates', 'the fixed asset register', 'the AP ageing', 'the vendor form']
+        span = max(1, n['tasks'] + n['reports'] + n['fyi'] + n['ideas'])
+        tids = []
+        for i in range(n['tasks']):
+            who, user = people[i % len(people)]
+            kind = ('reply', 'general', 'goal', 'general')[i % 4]
+            title = f"{('Reply about', 'Look into', 'Goal: finish', 'Sort out')[i % 4]} {asks[i % len(asks)]} #{i + 1}"
+            status = 'in_progress' if i % 4 == 1 and i % 8 == 1 else 'open'
+            tid = f.task(title=title, status=status, kind=kind)
+            mid = f.message(task_id=tid, subject=title, from_name=who, from_email=f'{user}@northwind.example', sent_at=at(3 * span - i),
+                            body=f'{title} - can you take a look?', conversation_id=f'stress:T{i}')
+            f.route(mid, tid, 'create', 'real work')
+            store._exec('UPDATE task SET CreatedAt=? WHERE TaskId=?', (at(3 * span - i), tid))
+            if kind == 'reply': f.review(tid, mid, draft='Thanks - I will have it to you by Friday.')
+            elif kind == 'goal': store.set_task_checklist(tid, ['Gather the numbers', 'Check with the site', 'Send the summary'], 'triage')
+            elif status == 'in_progress': f.run(tid, agent='general')
+            tids.append(tid)
+        if n['meetings']:
+            start = now.replace(second=0, microsecond=0)
+            assistant._AGENDA.update(days=7, at=now.timestamp() + 10 ** 9, events=[{
+                'start': (start + timedelta(minutes=20 + 45 * k)).strftime('%Y-%m-%d %H:%M'), 'end': (start + timedelta(minutes=50 + 45 * k)).strftime('%Y-%m-%d %H:%M'),
+                'subject': f'Northwind check-in {k + 1}', 'all_day': False, 'status': 'busy', 'where': '', 'mailbox': 'demo', 'organizer': 'Gail Moreno',
+                'who': ['Gail Moreno'], 'about': '', 'join': '', 'link': ''} for k in range(n['meetings'])])
+        else: assistant._AGENDA.update(days=7, at=now.timestamp() + 10 ** 9, events=[])
+        for i in range(n['reports']):
+            r = f.report_row(title=f'Northwind report {i + 1}')
+            store._exec('UPDATE message SET SentAt=? WHERE MessageId=?', (at(2 * span - i), r.mid))
+        for i in range(n['ideas']):
+            idea = store.upsert_idea({'key': f'idea:stress-{i}', 'kind': 'idea', 'sig': f'stress-{i}', 'text': f'Payworth renewal idea {i + 1}: nobody has asked for the terms.',
+                                      'action': {'type': 'note', 'whose': 'the owner', 'suggest': 'Ask Payworth for the renewal terms.'}}, at(span - i))
+            store._exec('UPDATE idea SET FirstSeen=?, LastSaid=? WHERE IdeaId=?', (at(span - i), at(span - i), idea['IdeaId']))
+            store.set_idea_action(idea['IdeaId'], {'type': 'note', 'whose': 'the owner', 'suggest': 'Ask Payworth for the renewal terms.',
+                                                   'triage': {'intent': 'fyi', 'kind': None, 'why': 'a note for you', 'sig': idea.get('Sig') or '',
+                                                              'at': at(span - i), 'linked_task': None, 'error': None}})
+        for i in range(n['fyi']):
+            mid = f.message(task_id=None, status='filed', subject=f'Northwind floor notice {i + 1}', from_name='Paula Vance', from_email='paula@northwind.example',
+                            sent_at=at(span - n['ideas'] - i), body=f'Floor notice {i + 1}: nothing to do.', conversation_id=f'stress:F{i}')
+            f.route(mid, None, 'file', 'information, nothing to do')
+        store.set_setting('fyi_batch', '4', 'owner')
+        walkworld.reconcile(store); railwalk.reset(store); funnel.invalidate(); store._poke('feed-changed')
+        return {'tasks': tids, 'pile': [i['key'] for i in funnel.pile(store, force=True)['items']]}
 
     @app.post('/api/fixture/day/away')
     def day_away(body: dict):

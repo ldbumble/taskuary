@@ -657,7 +657,7 @@ def json_of(raw: str) -> dict:
         try: o = json.loads(t)
         except ValueError: continue
         if isinstance(o, dict): return o
-        raise ValueError('a JSON list, not an object')
+        raise ValueError(f'a JSON {type(o).__name__}, not an object')
     if (i := s.find('{')) >= 0:
         o, _end = json.JSONDecoder().raw_decode(s[i:])
         if isinstance(o, dict): return o

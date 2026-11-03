@@ -126,7 +126,10 @@ _AI_ERRS = ((r'not found on path|no such file|is not recognized|cannot find the 
 
 def plain_ai_error(raw: str) -> str:
     low = str(raw or '').lower()
-    return next((said for pat, said in _AI_ERRS if re.search(pat, low)), 'it stopped answering') if low.strip() else ''
+    said = next((said for pat, said in _AI_ERRS if re.search(pat, low)), 'it stopped answering') if low.strip() else ''
+    # ...and an answer it could not read says what came back (llm.unreadable): "a form Taskuary can't read" alone left nothing to go on
+    came = re.search(r'the AI (sent back|answered) [^()]*', str(raw or ''))
+    return f"{said}: {came.group(0).strip()}" if came and said == _AI_ERRS[1][1] else said
 
 
 def _ai_error(store) -> str:
@@ -440,18 +443,39 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
         return {'ok': False, 'why': f"That key didn't work ({said}). Copy all of it again and press Connect."}
     was = _brains(store)
     _everywhere(store, f"connector:{c['ConnectorId']}")
-    if (why := _prove(store)):
-        _restore(store, was)
-        return {'ok': False, 'why': f"The key works, but {why.split(' - ')[0]}. Pick another AI, or another model on its card.", 'detail': why}
+    # THE TEST EMAIL IS SORTED ON THE MODEL THAT WILL SORT THE MAIL: the gateway's quickest model took triage only after the test, on
+    # the card's own model, had passed - so the mail went to a model nobody had tried (2026-11-03). One that cannot sort it gives the
+    # jobs back to the card's own model, tried the same way.
+    m, kept = {'fast': ''}, _models(store, c['ConnectorId'])
     if typ == 'hipaa_ai':
         from . import config as config_mod
         m = models_by_job(store, config_mod.load(), c['ConnectorId'])
+    why = _prove(store)
+    if why and m['fast']: _models(store, c['ConnectorId'], kept); m, why = {'fast': ''}, _prove(store)
+    if why:
+        _restore(store, was); _models(store, c['ConnectorId'], kept)
+        return {'ok': False, 'why': f"The key works, but {why.split(' - ')[0]}. Pick another AI, or another model on its card.", 'detail': why}
+    if typ == 'hipaa_ai':
         if m['fast']:
             # the jobs said, not the model names behind them - Settings has those for whoever wants them
             return {'ok': True, 'why': "Your access code works - a quick model sorts what comes in and runs the Assistant"
                                        + (', a stronger one does the agent work.' if m['agent'] else '.')}
     name = c.get('Name') or typ.capitalize()
     return {'ok': True, 'why': f"Your {name} key works - it will sort what comes in." if secret else f"{name} works - it will sort what comes in."}
+
+
+MODEL_SETTINGS = ('assistant_model', 'concierge_model')
+
+
+def _models(store, cid: int, put: dict = None) -> dict:
+    """The models an AI card's jobs run on - its own model box, the Assistant's and the general agent's - read, or put back."""
+    if put is None: return {'card': (store.get_connector(cid) or {}).get('ConfigJson') or '{}', **{k: store.get_setting(k) or '' for k in MODEL_SETTINGS}}
+    if (store.get_connector(cid) or {}).get('ConfigJson') != put['card']:
+        try: store.set_connector_config(cid, json.loads(put['card']))
+        except ValueError: pass
+    for k in MODEL_SETTINGS:
+        if (store.get_setting(k) or '') != put[k]: store.set_setting(k, put[k], 'owner')
+    return put
 
 
 def choose_connector(store, cid: int) -> dict:

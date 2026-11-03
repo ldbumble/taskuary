@@ -28,4 +28,12 @@ def test_asks_list_applies_limit(value, expected):
 def test_timeline_search_applies_limit(value, expected):
     with mock.patch.object(concierge, 'search_timeline', return_value=[]) as search:
         assert concierge.read_op(mock.Mock(), 'timeline.search', {'limit': value}) == 'Nothing in the history matches that.'
-    assert search.call_args.args[2] == expected
+    assert search.call_args.args[2] == expected + 1      # one more than shown, to tell a cut list from a whole one
+
+def test_timeline_search_says_when_it_cut_the_list():
+    # "anything from Gail this week?" read 12 of her 18 and was answered "twelve times ... nothing else from her" (2026-11-03)
+    hit = lambda i: dict(mid=i, ref=f'TQ-{i:04d}', when='2026-11-03 09:00', who='Gail Moreno', title=f'Ask {i}')
+    with mock.patch.object(concierge, 'search_timeline', side_effect=lambda st, sel, n: [hit(i) for i in range(1, min(n, 18) + 1)]):
+        cut, whole = (concierge.read_op(mock.Mock(), 'timeline.search', {'sender': 'gail', 'limit': n}) for n in (12, 40))
+    assert sum(l.startswith('m') for l in cut.splitlines()) == 12 and 'more match than these 12' in cut
+    assert sum(l.startswith('m') for l in whole.splitlines()) == 18 and 'more match' not in whole

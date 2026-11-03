@@ -3116,9 +3116,13 @@ def read_op(store, kind: str, params: dict) -> str:
         if sel.get('select'): sel = sel['select']
         from .lookups import _limit
         limit = _limit(p, 12, 40)
-        hits = search_timeline(store, sel, limit)
+        # ...one more than shown, so a cut list says it was cut: "anything from Gail this week?" read 12 of her 18 and was answered "twelve
+        # times ... nothing else from her" (the Assistant stress run, 2026-11-03) - as tasks.list already says
+        hits = search_timeline(store, sel, limit + 1)
         if not hits: return 'Nothing in the history matches that.'
-        return NEWLINE.join(f"m{h['mid']} {h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits)
+        more = [f'…and more match than these {limit} - CALL it again with a bigger `limit` (up to 40) or narrower words before you count them or '
+                'say that is all.'] if len(hits) > limit else []
+        return NEWLINE.join([f"m{h['mid']} {h['ref'] or '-'} {h['when'][:16]} {h['who']}: {_cut(h['title'], 120)}" for h in hits[:limit]] + more)
     from . import lookups
     return lookups.read(store, kind, p)
 

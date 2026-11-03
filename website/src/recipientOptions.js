@@ -50,3 +50,12 @@ export function emailRecipientOptions(options, query) {
   }
   return [q, ...matches];
 }
+
+// SEND SOMETHING ALREADY ADDRESSED (a People hit's Message them; the Assistant's "write to the team WhatsApp group"): the channel it was
+// opened on, when this install can send there, and its recipient in the field that channel takes - email's list or a chat's one id.
+// A recipient with no channel it can go on is dropped, never put in another channel's box.
+export function sendPrefill(targets, channel, to) {
+  const ch = channel && (targets || []).some((t) => t.channel === channel) ? channel : "";
+  const who = ch ? String(to || "").trim() : "";
+  return { channel: ch, to: ch !== "email" ? who : "", emailTo: ch === "email" && who ? [who] : [] };
+}

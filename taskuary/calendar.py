@@ -311,11 +311,29 @@ def today(store) -> dict:
     return data
 
 
-def render_today(t: dict) -> list:
-    """One line per meeting, the way the digest prompt reads it: time, title, who, what it is about."""
-    out = []
-    for e in t.get('events') or []:
-        when = 'all day' if e.get('all_day') else span(e['start'], e.get('end') or '')
+def state(e: dict, now: datetime) -> str:
+    """'done', 'in progress' or 'upcoming' at `now` (naive, the calendar's own clock) - all day is in progress all day."""
+    if e.get('all_day'): return 'in progress'
+    try: st = datetime.fromisoformat(e['start'][:16]); en = datetime.fromisoformat(e['end'][:16]) if e.get('end') else st
+    except Exception: return 'upcoming'
+    return 'done' if en <= now else 'in progress' if st <= now else 'upcoming'
+
+
+def render_today(t: dict, now: datetime = None, tomorrow: dict = None) -> list:
+    """One line per meeting, the way the digest prompt reads it: time, title, who, what it is about - and, given `now`,
+    only the ones still ahead or under way, each with its state. A digest written at 22:12 listed the 10:00 and the 16:00
+    as if they were coming (2026-11-02): what already happened is one count line, never a meeting to prepare for, and
+    with nothing left today the line says so and names `tomorrow`'s first meeting when one is known."""
+    out, evs = [], t.get('events') or []
+    if now is not None:
+        done = [e for e in evs if state(e, now) == 'done']
+        evs = [e for e in evs if state(e, now) != 'done']
+        if done: out.append(f"  ALREADY HAPPENED (not ahead - leave them out): {len(done)} meeting(s) earlier today")
+        if not evs:
+            out.append('  NOTHING STILL AHEAD TODAY' + (f" - tomorrow's first: {span(tomorrow['start'], tomorrow.get('end') or '')}"
+                                                        f" · {tomorrow['subject']}" if tomorrow else ''))
+    for e in evs:
+        when = ('all day' if e.get('all_day') else span(e['start'], e.get('end') or '')) + (f" [{state(e, now)}]" if now is not None else '')
         who = ', '.join(e.get('who') or [])
         out.append(f"  {when} · {e['subject']}" + (f" · with {who}" if who else '') + (f" · where: {e['where']}" if e.get('where') else '')
                    + (f" · about: {e['about']}" if e.get('about') else '') + (' · online' if e.get('join') else ''))

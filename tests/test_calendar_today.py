@@ -63,7 +63,7 @@ class TodayTests(unittest.TestCase):
             self.assertEqual(ag.call_args[1]['start'].hour, 0)                             # read from midnight, not from now
             lines = cal.render_today(t)
             self.assertEqual(lines, ['  9:00-9:30 AM · Standup · with Sam, Priya · online'])       # the owner's clock, not the server's
-            text = digest.gather(s, 1)
+            with mock.patch.object(cal, 'state', return_value='upcoming'): text = digest.gather(s, 1)   # the clock is PastMeetingsTests'
         self.assertEqual(text.splitlines()[2], 'MEETINGS TODAY:')             # internal prompt explanation stays hidden
         self.assertNotIn("'with' = the other people", text)
         self.assertIn('Standup · with Sam, Priya', text)
@@ -106,3 +106,27 @@ def test_an_unreachable_calendar_says_so_in_words():
                      "(Caused by NameResolutionError(\"Failed to resolve 'login.example'\"))")
     why = cal.unreadable(e)
     assert 'offline' in why and 'HTTPSConnectionPool' not in why
+
+class PastMeetingsTests(unittest.TestCase):
+    """A digest written at 22:12 listed the 10:00 and the 16:00 as if still coming (2026-11-02)."""
+    evs = [{'start': '2026-11-02 10:00', 'end': '2026-11-02 10:30', 'subject': 'Budget review', 'all_day': False, 'who': ['Erin'], 'about': '', 'join': ''},
+           {'start': '2026-11-02 16:00', 'end': '2026-11-02 17:00', 'subject': 'Vendor call', 'all_day': False, 'who': ['Gail'], 'about': '', 'join': ''}]
+
+    def test_late_evening_carries_them_as_done_and_none_ahead(self):
+        now = datetime(2026, 11, 2, 22, 12)
+        self.assertEqual([cal.state(e, now) for e in self.evs], ['done', 'done'])
+        lines = cal.render_today({'events': self.evs}, now)
+        self.assertFalse(any('Budget review' in l or 'Vendor call' in l for l in lines))
+        self.assertIn('2 meeting(s) earlier today', lines[0]); self.assertIn('NOTHING STILL AHEAD TODAY', lines[1])
+        tmr = {'start': '2026-11-03 09:00', 'end': '2026-11-03 09:30', 'subject': 'Standup'}
+        self.assertIn("tomorrow's first: 9:00-9:30 AM · Standup", cal.render_today({'events': self.evs}, now, tmr)[1])
+
+    def test_morning_has_both_ahead_and_midday_one_in_progress(self):
+        lines = cal.render_today({'events': self.evs}, datetime(2026, 11, 2, 9, 0))
+        self.assertEqual(len(lines), 2); self.assertTrue(all('[upcoming]' in l for l in lines))
+        self.assertIn('[in progress]', cal.render_today({'events': self.evs}, datetime(2026, 11, 2, 10, 15))[0])
+
+    def test_the_prompt_asks_only_for_what_is_ahead_and_the_old_one_upgrades(self):
+        self.assertIn('still ahead or in progress at NOW', digest.PROMPT)
+        self.assertIn(digest._PROMPT_2026_10_09, digest.OLD_PROMPTS)
+

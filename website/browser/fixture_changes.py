@@ -36,7 +36,7 @@ def install_processing_changes(app, store):
         '/api/fixture/browser/view',
         '/api/fixture/processing/arrive-during-next', '/api/fixture/processing/rerun',
         '/api/fixture/task/closed-elsewhere', '/api/fixture/task/live-agent',
-        '/api/fixture/task/agent-draft',
+        '/api/fixture/task/agent-draft', '/api/fixture/task/agent-word',
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
         '/api/fixture/intake/arrive',
@@ -823,6 +823,26 @@ def install_processing_changes(app, store):
                                'SentAt': (datetime.now() + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')})
         funnel.invalidate()
         return {'reviewId': out['review_id']}
+
+    @app.post('/api/fixture/task/agent-word')
+    def agent_word(body: dict):
+        """The live agent's own word changes mid-run (agent-draft-popup): `working` again, a pause the run reports as `input_needed`, or `ended` -
+        and the task-changed poke a running agent's page re-reads on, as the server sends it every few seconds while an agent works."""
+        if set(body) != {'task_id', 'word'} or type(body['task_id']) is not int or body['word'] not in ('working', 'input_needed', 'ended'):
+            raise HTTPException(422, 'exact task_id and word (working | input_needed | ended) are required')
+        from taskuary import funnel, live, terminal, workerstate as ws
+        tid = body['task_id']
+        pane = next((p for p in terminal.SESSIONS.values() if getattr(p, 'task_id', None) == tid and p.alive), None)
+        if pane is None: raise HTTPException(404, 'no live agent on that task')
+        if body['word'] == 'ended':                                         # ...or the agent stops: the session closes, as a CLI that exits
+            pane.close()
+            for loop, q in list(getattr(pane, 'subs', [])): loop.call_soon_threadsafe(q.put_nowait, None)
+            funnel.invalidate(); live.emit('task-changed', task_id=tid)
+            return {'taskId': tid, 'word': 'ended'}
+        if hasattr(pane, 'busy'): pane.busy = body['word'] == 'working'   # a general agent's conversation: its turn in flight, or answered
+        ws.record(store, tid, str(pane.sid), body['word'], text='Should I also file the receipt?' if body['word'] == 'input_needed' else '', source='hook')
+        funnel.invalidate(); live.emit('task-changed', task_id=tid)
+        return {'taskId': tid, 'word': body['word']}
 
     @app.post('/api/fixture/processing/ordering')
     def ordering_arrivals(body: dict):

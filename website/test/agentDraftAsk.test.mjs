@@ -59,18 +59,24 @@ test("the notice lies over the terminal and opens Close out; the draft is drawn 
   assert.equal(page.match(/<ReviewDecision review=\{pendingReview\}/g).length, 1, "one card for the draft: Close out's");
 });
 
-test("the reply opens beside an agent that is not working, once per draft and view, never again once the owner closed it", () => {
-  const at = { draft: mine, canPair: true, view: "7|true" };
-  assert.equal(autoPair(at), true, "waiting, stopped or finished: Agent | Close out");
-  assert.equal(autoPair({ ...at, working: true }), false, "a working terminal is never squeezed - its notice's press pairs them");
+test("the reply opens beside an agent once it stopped running, once per draft, never again once the owner closed it", () => {
+  const at = { draft: mine, canPair: true };
+  assert.equal(autoPair(at), true, "stopped or finished: Agent | Close out");
+  // the owner, 2026-11-03: "every 10 seconds it opens the response tab ??? stop opening that until the agent stopped running"
+  assert.equal(autoPair({ ...at, running: true }), false, "a live agent, working or waiting on you, is never squeezed - its notice's press pairs them");
   assert.equal(autoPair({ ...at, canPair: false }), false, "a work area too narrow for two halves: Close out on its own, as today");
   assert.equal(autoPair({ ...at, paired: true }), false);
   assert.equal(autoPair({ ...at, draft: null }), false);
   assert.equal(autoPair({ ...at, shut: new Set([draftKey(mine)]) }), false, "closed for this draft stays closed");
   assert.equal(autoPair({ ...at, shut: new Set([draftKey({ ...mine, DraftText: "older words" })]) }), true, "a new letter from the agent is a new draft");
-  assert.equal(autoPair({ ...at, done: new Set([`${draftKey(mine)}|7|true`]) }), false, "once in this view");
-  assert.equal(autoPair({ ...at, view: "7|false", done: new Set([`${draftKey(mine)}|7|true`]) }), true, "the agent stopped: a new view, paired again");
+  assert.equal(autoPair({ ...at, done: new Set([draftKey(mine)]) }), false, "once per draft - a view the page reads again is not a new one");
+  // a running agent's re-reads, one every few seconds, its word flipping between working and waiting: it opens at most once, after it stops
+  const done = new Set(), shut = new Set();
+  const opened = [true, true, true, true, false, false, false].filter((running) => autoPair({ ...at, running, done, shut }) && done.add(draftKey(mine))).length;
+  assert.equal(opened, 1);
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /autoPair\(\{ draft: agentDraft, running: \(liveSession && !answered\) \|\| !!liveRun,/, "running: a live session (not a general chat that answered) or a run - not the working word");
+  assert.match(page, /^const PAIR_DONE = new Set\(\), PAIR_SHUT = new Set\(\);/m, "held for the app's life, not a page drawn again");
   assert.match(page, /const canPair = pairRoom && \(!liveSession \|\| !!agentDraft \|\| \(pairPick\.key === pickKey && !!pairPick\.draft\)\)/,
     "side by side over a live agent only for its draft, and kept once it is sent");
 });

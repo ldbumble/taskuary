@@ -6,8 +6,9 @@ import { startHarness } from "./harness.mjs";
 
 /* THE AGENT'S DRAFT IS SAID WHERE THE AGENT IS AND SENT FROM CLOSE OUT (the owner, 2026-11-02: "in agent we should just say 'agent drafted a
    message' and take you to the Close out screen"), and "if the agent makes a reply, bring out the reply (Close out) tab side by side". An
-   agent no longer working gets Agent | Close out on its own, on the draft, once per draft - closed, it stays closed; a working one only a
-   small notice in its terminal's corner, the terminal's size untouched, whose press pairs them. The draft is drawn in Close out alone. A
+   agent that has stopped running gets Agent | Close out on its own, on the draft, once per draft - closed, it stays closed; a running one,
+   working or waiting on you, only a small notice in its terminal's corner, the terminal's size untouched, whose press pairs them (the owner,
+   2026-11-03: "every 10 seconds it opens the response tab ??? stop opening that until the agent stopped running"). The draft is drawn in Close out alone. A
    general agent's notice stands at the foot of its chat; and a draft the owner already answered says so in Close out, its Send a second
    reply. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -50,14 +51,28 @@ async function cliTask(t, working) {
     return made.reviewId;
   };
   const pair = () => page.evaluate((sel) => document.querySelector(`${sel} [data-tq-task-body]`)?.dataset.tqPair || "", pageSel);
+  // the running agent's word changes and the page re-reads it, as a live run's pokes have it do every few seconds; `ended` stops it
+  const word = async (w) => assert.equal((await api("/api/fixture/task/agent-word", { task_id: inv.TaskId, word: w })).status, 200, `the agent ${w}`);
+  // ...a few rounds of them, Close out never opening by itself meanwhile: the pair as it was, and no Close out open on its own
+  const pokes = async (want, why) => {
+    for (const w of ["input_needed", "working", "input_needed", "working"]) {
+      await word(w);
+      for (let i = 0; i < 3; i++) { await sleep(400); assert.equal(await pair(), want, `${why} (after the agent's "${w}")`); }
+    }
+  };
   const draftShown = () => page.evaluate((sel, w) => [...document.querySelectorAll(`${sel} [data-tq-closeout] textarea`)].some((x) => x.offsetParent && x.value.includes(w)), pageSel, WORDS);
-  return { page, errors, decided, pageSel, draft, pair, draftShown, note: `${pageSel} [data-tq-agent-notice=popup]` };
+  return { page, errors, decided, pageSel, draft, pair, draftShown, word, pokes, note: `${pageSel} [data-tq-agent-notice=popup]` };
 }
 
-test("an agent waiting on you drafts a reply: Close out opens beside it on the draft; closed, it stays closed; its Send keeps the pair", { timeout: 300000 }, async (t) => {
-  const { page, errors, decided, pageSel, draft, pair, draftShown, note } = await cliTask(t, false);
+test("an agent waiting on you drafts a reply: only its notice while it runs; opened, it stays open; closed, it stays closed; its Send keeps the pair", { timeout: 300000 }, async (t) => {
+  const { page, errors, decided, pageSel, draft, pair, draftShown, pokes, note } = await cliTask(t, false);
   const rid = await draft();
+  await page.waitForSelector(note, { timeout: 20000 });
+  await pokes("", "Close out opened by itself over a running agent");
+  // the owner opens it by hand: it stays open through the agent's pokes
+  await page.$eval(`${note} button`, (b) => b.click());
   await page.waitForFunction(PAIRED, { timeout: 20000 }, pageSel).catch(async () => assert.fail(`not side by side: "${await pair()}"`));
+  await pokes("agent+close", "the pair the owner opened went");
   await page.waitForFunction((sel, w) => [...document.querySelectorAll(`${sel} [data-tq-closeout] textarea`)].some((x) => x.offsetParent && x.value.includes(w)),
     { timeout: 10000 }, pageSel, WORDS);
   if (process.env.TASKUARY_SHOTS) { await sleep(600); await page.screenshot({ path: path.join(process.env.TASKUARY_SHOTS, "agent-draft-paired.png") }); }
@@ -66,7 +81,7 @@ test("an agent waiting on you drafts a reply: Close out opens beside it on the d
   // the owner closes the pair: it stays closed for this draft, and the notice is back
   await page.click(`${pageSel} [data-tq-pane-strip=agent] [data-tq-strip-pair]`);
   await page.waitForSelector(note, { timeout: 10000 });
-  for (let i = 0; i < 8; i++) { await sleep(500); assert.equal(await pair(), "", `the closed pair came back (${i * 0.5 + 0.5}s)`); }
+  await pokes("", "the pair the owner closed came back");
   // ...its press pairs them again, and Close out's Send sends it - the pair stays as it is
   await page.$eval(`${note} button`, (b) => b.click());
   await page.waitForFunction(PAIRED, { timeout: 10000 }, pageSel);
@@ -156,5 +171,22 @@ test("a general agent's draft opens Close out beside its chat, saying the owner 
   assert.equal(got.boxes, 0, "no draft in the chat");
   assert.ok(got.last, "at the foot of the conversation");
   assert.equal(await page.$(`${pageSel} [data-tq-agent-notice=popup]`), null, "no corner notice over a chat");
+  assert.deepEqual(errors, []);
+});
+
+test("a running agent's pokes never open Close out over it; once it stops, Close out opens beside it once, and closed it stays closed", { timeout: 300000 }, async (t) => {
+  const { page, errors, pageSel, draft, pair, draftShown, word, pokes, note } = await cliTask(t, true);
+  await draft();
+  await page.waitForSelector(note, { timeout: 20000 });
+  await pokes("", "Close out opened by itself over a running agent");
+  assert.ok(await page.$(note), "its notice still says the draft");
+  // the agent stops: Agent | Close out, on the draft - once
+  await word("ended");
+  await page.waitForFunction(PAIRED, { timeout: 20000 }, pageSel).catch(async () => assert.fail(`not side by side once it stopped: "${await pair()}"`));
+  await page.waitForFunction((sel, w) => [...document.querySelectorAll(`${sel} [data-tq-closeout] textarea`)].some((x) => x.offsetParent && x.value.includes(w)),
+    { timeout: 10000 }, pageSel, WORDS);
+  assert.ok(await draftShown());
+  await page.click(`${pageSel} [data-tq-pane-strip=agent] [data-tq-strip-pair]`);
+  for (let i = 0; i < 12; i++) { await sleep(500); assert.equal(await pair(), "", `the pair the owner closed came back (${i * 0.5 + 0.5}s)`); }
   assert.deepEqual(errors, []);
 });

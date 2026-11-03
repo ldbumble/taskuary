@@ -312,6 +312,8 @@ export const tabW = (w) => (w > 0 ? Math.round(Math.min(TAB_W, Math.max(TAB_MIN,
 // and the email it drafted), Came from beside Agent (the ask and the work). Only where two halves stay readable - a work area of 960px leaves
 // each about 400 beside the closed spine; a 1440 screen's is ~1014 - and never over a live agent: it keeps the most room
 export const PAIR_OF = { from: "agent", agent: "close", close: "agent" }, PAIR_MIN = 960;
+// ...the agent drafts the pair was opened for on their own (autoPair `done`), and those whose pair the owner closed (`shut`): draftKeys
+const PAIR_DONE = new Set(), PAIR_SHUT = new Set();
 // ...which section a press belongs to, by its verb id (a draft's own are "<review>:<verb>", all Close out's)
 const VERB_SECTION = { close: new Set(["reply", "done", "close-note", "hand", "accept_invite", "decline_invite", "propose_time", "find_time"]),
   agent: new Set(["continue", "run-another", "send-general", "start-agent", "save-end", "diff", "fix", "strong-again"]) };
@@ -1763,12 +1765,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const isOpen = (k) => section === k || (paired && PAIR_OF[section] === k);
   // ...a press that opens a section already open beside the other keeps the pair as it stands
   const openSection = (s) => { if (!(paired && isOpen(s))) setSecPick({ key: pickKey, sec: s }); };
-  // ...and the pair the owner closes over the agent's draft stays closed for that draft (autoPair's `shut`)
-  const pairShut = useRef(new Set()), pairDone = useRef(new Set());
-  const pairFlip = (k) => () => { if (paired && agentDraft) pairShut.current.add(draftKey(agentDraft)); setSecPick({ key: pickKey, sec: k }); setPairPick({ key: pickKey, on: !paired, draft: pairPick.key === pickKey && pairPick.draft }); };
+  // ...and the pair the owner closes over the agent's draft stays closed for that draft (autoPair's `shut`) - held for the app's life, not the
+  // page's, so a page drawn again over the same task never opens it a second time
+  const pairFlip = (k) => () => { if (paired && agentDraft) PAIR_SHUT.add(draftKey(agentDraft)); setSecPick({ key: pickKey, sec: k }); setPairPick({ key: pickKey, on: !paired, draft: pairPick.key === pickKey && pairPick.draft }); };
   const seeDraft = () => requestAnimationFrame(() => requestAnimationFrame(() => closeOutRef.current?.querySelector("[data-tq-draft-box]")?.scrollIntoView({ block: "nearest", behavior: "smooth" })));
-  const pairDraft = (r) => { pairDone.current.add(`${draftKey(r)}|${pickKey}`); setSecPick({ key: pickKey, sec: "agent" }); setPairPick({ key: pickKey, on: true, draft: true }); seeDraft(); };
-  useEffect(() => { if (autoPair({ draft: agentDraft, working: agentState === AGENT.working, canPair: pairRoom, paired, shut: pairShut.current, done: pairDone.current, view: pickKey })) pairDraft(agentDraft); });
+  const pairDraft = (r) => { PAIR_DONE.add(draftKey(r)); setSecPick({ key: pickKey, sec: "agent" }); setPairPick({ key: pickKey, on: true, draft: true }); seeDraft(); };
+  useEffect(() => { if (autoPair({ draft: agentDraft, running: (liveSession && !answered) || !!liveRun, canPair: pairRoom, paired, shut: PAIR_SHUT, done: PAIR_DONE })) pairDraft(agentDraft); });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
   const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : tabW(bodyW));
@@ -2691,7 +2693,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and no notice while Close out is open beside it, the draft in plain sight
   const askAt = askWhere(workspaceMode), noticeOn = agentDrafts.length > 0 && !(threeUp && isOpen("close"));
   const openDraft = (r) => {
-    if (pairRoom && r) { pairShut.current.delete(draftKey(r)); return pairDraft(r); }
+    if (pairRoom && r) { PAIR_SHUT.delete(draftKey(r)); return pairDraft(r); }
     setOpenStage("reply"); if (threeUp) openSection("close"); else if (sessionView) setPeek(true);
     requestAnimationFrame(() => requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("[data-tq-draft-box]")?.scrollIntoView({ block: "center", behavior: "smooth" })));
   };

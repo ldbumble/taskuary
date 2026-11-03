@@ -3450,12 +3450,29 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const chatTid = state?.task?.TaskId ?? null;
   const isMini = !!mini && (chatTid == null || mini.tid == null || mini.tid === chatTid);
   useEffect(() => { if (mini && chatTid != null && mini.tid != null && mini.tid !== chatTid) keepMini(null); }, [chatTid]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const openBox = () => { setBoxOpen(true); if (mini) keepMini(null); };
+  const openBox = () => { setBoxOpen(true); setAway(false); if (mini) keepMini(null); };
+  // ...BUT A MOVE TO ANOTHER TASK PUTS IT AWAY (the owner, 2026-11-03): open, it stood over the next task's Close out - Close with a note, Hand it
+  // to a person, Share, Draft reply. The owner's own move - Next, Back, another row on the rail - shuts it as its × would, and keeps everything
+  // it held: the lines (a question the Assistant asked among them, with its answers on the bar), what is typed, a picture added (`away`
+  // holds those shut). An answer that opens a task never shuts it (only its × and Esc, 2026-10-28): it is no press of the owner's
+  const [away, setAway] = useState(false);
+  const moveRef = useRef(null); moveRef.current = { on: onTable, aliases: currentItem?.aliases || [] };
+  useEffect(() => {
+    const MOVES = "[data-tq-next], [data-tq-walk-back], [data-tq-rail] .tq-pile-row[data-tq-key]";
+    const f = (e) => { const el = e.target?.closest?.(MOVES); if (!el || el.closest(".tq-chat-pop")) return;
+      const k = el.getAttribute("data-tq-key"), { on, aliases } = moveRef.current;
+      if (k && (k === on || aliases.includes(k))) return;    // the row already on the table: no move
+      setBoxOpen(false); setAway(true); setEmojiEl(null); if (document.activeElement === composeRef.current) composeRef.current?.blur(); };
+    document.addEventListener("click", f, true);
+    return () => document.removeEventListener("click", f, true);
+  }, []);
+  const picsN = useRef(0);
+  useEffect(() => { if (pics.imgs.length > picsN.current) setAway(false); picsN.current = pics.imgs.length; }, [pics.imgs.length]);
   const [dictating, setDictating] = useState(false);   // the box's mic listening or transcribing: the window stays open for it (MicButton)
   // ...and ONCE OPEN IT STAYS OPEN (the owner, 2026-10-27: "it gets smaller and bigger at random times ... when you click in, it stays open
-  // until you do X or something"): not shut by a click elsewhere, a look away, an answer coming up or the next task - only its × or Esc.
+  // until you do X or something"): not shut by a click elsewhere, a look away or an answer coming up - only its ×, Esc or a move (`away`).
   // The box open IS the window open: one panel, the conversation over the box
-  const boxWide = boxOpen || dictating || !!pics.imgs.length || !!emojiEl, popOpen = winOn && boxWide;
+  const boxWide = boxOpen || dictating || (!away && !!pics.imgs.length) || !!emojiEl, popOpen = winOn && boxWide;
   const setPopOpen = (v) => { if (v) openBox(); else setBoxOpen(false); };
   // ...ONLY ITS × AND ESC SHUT IT (the owner, 2026-10-28: "it randomly closes ... it closed when it responded. Make sure that never happens"):
   // the box's blur and a press on the row used to shut it unless a style read at that instant said the box stood over the canvas - one

@@ -142,6 +142,10 @@ test("an answer goes into the chat window on a task and on a report, never into 
   // the address was still to come, that write landed after the name's and the page sat on task 4 with the address of the row (2026-10-28)
   await page.waitForFunction(() => { const v = document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page");
     return !!v && v !== "4" && location.hash === `#task=${v}`; }, { timeout: 20000 });
+  // ...the row pressed was a move to another task: the chat shut (the owner, 2026-11-03), and the pill brings the same conversation back
+  await page.waitForSelector("[data-tq-chat-win][hidden]", { timeout: 15000 });
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
   await press(page, "[data-tq-chat-win] .tq-chat-pop-body [data-tq-task-link='4']");
   await page.waitForFunction(() => document.querySelector("[data-tq-task-page]")?.getAttribute("data-tq-task-page") === "4", { timeout: 20000 });
   await railOn4();
@@ -175,10 +179,10 @@ test("on a phone the chat window is a bottom sheet", { timeout: 300000 }, async 
 
 /* ONCE OPEN, ONLY ITS × AND ESC SHUT IT (the owner, 2026-10-28: "when we were chatting with the Taskuary chat that pops up it randomly closes
    ... it closed when it responded. Make sure that never happens" - and "it's too small, it should get a little taller"): an answer, an
-   answer that opens a task or acts on the row, a feed rebuild pushed by the server, Next, a click on the canvas, a rail row and an Esc
-   aimed at the canvas all leave it open; × and Esc in it shut it. Its minimize puts it away to a pill that says it can be continued -
+   answer that opens a task or acts on the row, a feed rebuild pushed by the server, a click on the canvas and an Esc aimed at the canvas all
+   leave it open; × and Esc in it shut it - and the owner's move to another task, Next or a row (2026-11-03), the conversation kept. Its minimize puts it away to a pill that says it can be continued -
    over a reload too - and opens on the same conversation. */
-test("the chat window stays open through answers, acts, feed rebuilds and Next; only × and Esc in it shut it; minimize continues it", { timeout: 400000 }, async (t) => {
+test("the chat window stays open through answers, acts and feed rebuilds; only ×, Esc and a move to another task shut it; minimize continues it", { timeout: 400000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -229,18 +233,26 @@ test("the chat window stays open through answers, acts, feed rebuilds and Next; 
   await page.waitForFunction((n) => document.querySelectorAll("[data-tq-rail] .tq-pile-row").length > n, { timeout: 20000 }, rows);
   await sleep(1500); await stays("a feed rebuild");
 
-  await during("Next"); const was = await page.evaluate(() => location.hash);
+  // ...but NEXT IS A MOVE TO ANOTHER TASK, and shuts it (the owner, 2026-11-03: it stood over the next task's Close out) - the conversation kept
+  await page.evaluate(() => { window.__watch = false; });
+  const before = await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent), was = await page.evaluate(() => location.hash);
   await press(page, "[data-tq-next]");
   await page.waitForFunction((h) => location.hash !== h, { timeout: 20000 }, was);
-  await sleep(1500); await stays("Next");
+  await sleep(1500);
+  assert.equal(await isOpen(), false, "Next shuts it");
+  await press(page, ".tq-compose-box textarea");
+  await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 });
+  assert.ok((await page.$eval("[data-tq-chat-win] .tq-chat-pop-body", (e) => e.textContent)).startsWith(before.slice(0, 200)), "reopened after Next, the same conversation");
 
   await during("a click on the canvas and an Esc aimed at it");
   await press(page, ".tq-chat-body"); await page.keyboard.press("Escape"); await sleep(500);
   await stays("a click on the canvas and an Esc aimed at it");
-  await during("a rail row");
-  await press(page, "[data-tq-rail] .tq-pile-row .card", 1); await sleep(2000);
-  await stays("a rail row");
   await page.evaluate(() => { window.__watch = false; });
+  // ...and so is another row on the rail; the pill brings it back
+  const was2 = await page.evaluate(() => location.hash);
+  await press(page, "[data-tq-rail] .tq-pile-row .card", 1); await sleep(2000);
+  if (await page.evaluate((h) => location.hash !== h, was2)) assert.equal(await isOpen(), false, "another row shuts it");
+  if (!(await isOpen())) { await press(page, ".tq-compose-box textarea"); await page.waitForSelector("[data-tq-chat-win]:not([hidden])", { timeout: 15000 }); }
 
   // × shuts it; the pill opens it; Esc in it shuts it
   await press(page, "[data-tq-chat-win] [aria-label='Close the chat']");

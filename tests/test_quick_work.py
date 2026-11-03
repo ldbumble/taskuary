@@ -198,6 +198,30 @@ def test_read_takes_every_marker_out_of_every_field():
     assert quickwork._unmark('Plain [[link]] text') == 'Plain [[link]] text'        # only Taskuary's own tags come out
     assert quickwork._unmark('Go <TASKUARY-HUB>{"title": "t",\n "x": 1}</TASKUARY-HUB> Friday') == 'Go  Friday'   # the Hub's JSON goes with its tags
 
+class StreamingBrain(Brain):
+    "A CLI brain: what it writes streams to the trace as text before it returns - narration, a web search, then the JSON in a fence."
+    def __call__(self, system, user, **k):
+        self.calls.append((system, user, k)); out = f'```json\n{json.dumps(self.said, indent=2)}\n```'
+        for step in (('progress', 'text', 'Checking the partner day agenda.'), ('tool_call', 'WebSearch', {'args': {'query': 'partner day'}}),
+                     ('progress', 'thinking', 'Erin presents at 10.'), ('progress', 'text', out)): llm._saw(*step)
+        return out
+
+def test_the_answers_json_is_not_kept_as_its_working():
+    """The agent pane drew the quick answer's raw object - `{ "report": "...\\n\\n1) **...", "draft": ...` - above the report it was filed as
+    (the owner, 2026-11-03): the CLI's streamed text was kept as a step. Its tool calls, thinking and narration stay; the object does not."""
+    s = home(); tid, _ = arrived(s)
+    steps, b = [], StreamingBrain({**ANSWER, 'report': 'Worth going:\n\n1) **Erin** presents at 10.'})
+    with mock.patch.object(llm, 'build_llm', return_value=b): out = quickwork.ask(s, tid, ASK, steps)     # llm.watching hands _saw the steps
+    assert out.report.startswith('Worth going') and [x[:2] for x in steps] == [('progress', 'text'), ('tool_call', 'WebSearch'), ('progress', 'thinking')]
+    assert not any('"report"' in str(x[2]) for x in steps)
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        ses = opened(s, tid); ses.file_quick(ASK, out, steps)
+        assert not any('"report"' in str(e.get('detail')) for e in ses.info()['trace'])
+
+def test_raw_answers_are_told_from_text():
+    assert all(quickwork.is_raw(t) for t in ('{"report": "x"}', '```json\n{\n  "report": "Worth', '  { "draft": null, "report": "x"'))
+    assert not any(quickwork.is_raw(t) for t in ('Worth going.', '{"title": "t"}', 'The report says {"report": 1}'))
+
 def test_a_quick_session_takes_no_desk():
     from taskuary import blackboard as bb
     s = home(); tid, _ = arrived(s)

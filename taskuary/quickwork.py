@@ -84,6 +84,18 @@ def read(data) -> 'QuickAnswer | None':
     a = QuickAnswer(r, d, q, data.get('done') is True and not q, data.get('escalate') is True, _clean(data.get('why')))
     return a if a.report or a.escalate else None
 
+# THE ANSWER IS NOT ITS WORKING (the owner, 2026-11-03: the agent pane drew `{ "report": "...\n\n1) **...", "draft": ...` raw, and the report
+# again under it): a CLI streams the reply it writes as `text` progress, and here that reply IS the JSON object - kept as a step, it showed
+# verbatim above the report it was filed as. What the call said is its fields (as_reply); its working is its tool calls, its thinking and
+# any text that is not the answer
+RAW = re.compile(r'^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:', re.I)
+def is_raw(text) -> bool: return bool(RAW.match(str(text or '')))
+def answer_text(step, raw: str = '') -> bool:
+    "True for a (kind, name, detail) step that is the call's answer streamed as text - the JSON object, whole or a piece of it."
+    kind, name, d = step
+    d = str(d or '').strip()
+    return kind == 'progress' and name in ('text', 'agent_message') and bool(d) and (is_raw(d) or d in str(raw or ''))
+
 def as_reply(out: QuickAnswer) -> str:
     "The answer as the markers a general turn writes, so GeneralSession._file reads it exactly as it reads one."
     return '\n\n'.join(x for x in (out.report, out.draft and f'[[TASKUARY-REPLY]]{out.draft}[[/TASKUARY-REPLY]]',
@@ -109,6 +121,7 @@ def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer |
     lookups = bool(getattr(brain, 'looks_up', web))
     system, user = prompt(store, tid, ask, lookups)
     with llm.watching(trace): got = llm.ask_json(brain, system, user, want=None if web else QUICK_WANT, max_tokens=QUICK_TOKENS, **({'web': True} if web else {}))
+    if steps is not None: steps[:] = [x for x in steps if not answer_text(x, got.raw)]
     return read(got.data)
 
 

@@ -141,7 +141,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>new</strong></td>
 <td>new work with no task yet</td>
-<td>task.create_from_text(kind, text), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text)</td>
+<td>task.create_from_text(kind, text, channel?, to?), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text)</td>
 </tr>
 <tr>
 <td><strong>pipe</strong></td>
@@ -151,7 +151,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>reports</strong></td>
 <td>reports and workflows</td>
-<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete</td>
+<td>report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete, advisor.ideas</td>
 </tr>
 <tr>
 <td><strong>app</strong></td>
@@ -343,10 +343,10 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>ref</code> (optional) - the task (TQ-0123) when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-handoff"><code>task.handoff</code><a class="anchor" href="#task-handoff" aria-label="Link to this section">#</a></h3>
-<p>Hand a task to a PERSON.</p>
+<p>Hand a task to a PERSON (send, forward or pass it on) - Hand it to a person comes up filled in for the owner&#39;s Send, nothing is sent from the chat.</p>
 <ul>
-<li><code>who</code> - a name or address that has written here</li>
-<li><code>note</code> (optional) - writes the forward for the owner&#39;s yes, nothing is sent from this card</li>
+<li><code>who</code> - any email address, or the name of someone who has written here</li>
+<li><code>note</code> (optional) - a line for them</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-clarify"><code>task.clarify</code><a class="anchor" href="#task-clarify" aria-label="Link to this section">#</a></h3>
@@ -427,6 +427,8 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>kind</code> - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, to someone - <code>channel</code>: email | whatsapp | telegram | teams | slack, the one they said; <code>to</code>: the name of the person, chat or group as they said it (never the channel word), or an address; drafted in their voice for their Send, never sent from here) | goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date)</li>
 <li><code>text</code></li>
+<li><code>channel</code> (optional)</li>
+<li><code>to</code> (optional)</li>
 <li><code>recurs</code> - {schedule (when</li>
 <li><code>title</code></li>
 </ul>
@@ -559,7 +561,9 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>title</code> - kept 30 days under Recently deleted</li>
 </ul>
-<p class="runs">Brings up its button for you to press.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h3 id="advisor-ideas"><code>advisor.ideas</code><a class="anchor" href="#advisor-ideas" aria-label="Link to this section">#</a></h3>
+<p>The Advisor&#39;s pass for ideas for the owner&#39;s job, run now instead of waiting for its day - &quot;look for ideas for my job now&quot;, &quot;run the advisor ideas&quot;. It starts at once and says here how many ideas it raised, under Advisor. With two of its ideas already waiting, or no AI connected, nothing starts and the line says why.</p>
+<p class="runs">Runs at once and says what it changed.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
 <p>Settings, connections, scripts, memory, rules, bell, Hub, Board, Search.</p>
 <h3 id="setting-set"><code>setting.set</code><a class="anchor" href="#setting-set" aria-label="Link to this section">#</a></h3>
 <p>Change one setting; the schema says what it takes.</p>

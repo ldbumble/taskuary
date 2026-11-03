@@ -301,12 +301,20 @@ export async function startHarness({ fresh = false, bin = "", tour = false } = {
     const close = async () => {
       await browser?.close().catch(() => {});
       await stopProcess(frontend);
-      await stopProcess(backend);
+      await stopProcess(backend);   // ...the one running now, after a restart
       const prefix = path.join(os.tmpdir(), "taskuary-phase0-browser-");
       if (path.resolve(home).startsWith(path.resolve(prefix))) await rm(home, { recursive: true, force: true }).catch(() => {});
     };
 
-    return { backendPort, frontendPort, fixtureApi, ui, home, token, backend, frontend, newPage, close };
+    // the server stopped and started again on the same home and port - an update, a crash - while the page stays open (stress-mixed-reload)
+    const restart = async ({ down = 0 } = {}) => {
+      await stopProcess(backend);
+      if (down) await delay(down);
+      backend = loggedProcess(pythonExe, [path.join(here, "fixture_server.py")], { cwd: repository, env: backendEnv, stdio: ["ignore", "pipe", "pipe"] });
+      await waitHttp(`${fixtureApi}/api/health`, backend, { "X-Taskuary-Token": token });
+    };
+
+    return { backendPort, frontendPort, fixtureApi, ui, home, token, backend, frontend, newPage, close, restart };
   } catch (error) {
     await browser?.close().catch(() => {});
     await stopProcess(frontend);

@@ -601,6 +601,15 @@ def no_stop_carryover():
     workerstate.STOP.clear(); yield; workerstate.STOP.clear()
 
 
+@pytest.fixture(autouse=True)
+def an_ai_is_connected(request):
+    """The suite's agent starts mock the session, not a connected AI - server._brainless (no AI, no start) would refuse every one.
+    A module that tests the refusal itself sets REAL_BRAIN_GATE = True."""
+    srv = sys.modules.get('taskuary.server')
+    if getattr(request.module, 'REAL_BRAIN_GATE', False) or srv is None: yield; return
+    with mock.patch.object(srv, '_brainless', lambda coding: ''): yield
+
+
 @pytest.fixture
 def fx():
     """A MemoryStore wrapped in the picture factory. Named pictures (pending_draft,

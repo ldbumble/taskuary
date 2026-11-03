@@ -964,6 +964,13 @@
 .tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow .tq-arow-verbs { justify-content: flex-start; width: auto; }
 /* ...held at the bar's left edge, never centred past both of its ends: a line wider than the bar (2026-11-02, a 900px window) hid Back whole */
 .tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow { align-items: flex-start; }
+/* ...and BACK AND NEXT WHOLE AT 900 (the owner, 2026-11-03: the bar is Back and Next alone at every desk width): beside the rail the ask bar's
+   floor (360px) leaves the bar ~120px, and the short Nav ran ~16px past its end - Next cut under the dock's edge. A tighter gap and bar padding */
+@media (max-width: 1099.95px) {
+  .tq-compose[data-tq-desk-chat] { gap: 8px; }
+  .tq-compose[data-tq-desk-chat] .tq-dock { max-width: calc(100% - var(--tq-ask-w) - 8px); }
+  .tq-compose[data-tq-desk-chat] .tq-dock .tq-dock-line > .tq-arow { padding-left: 6px; padding-right: 4px; }
+}
 /* ...a bar with nothing on it (the day's opener) is no bar at all: the pill stands alone */
 .tq-compose[data-tq-desk-chat] .tq-dock:not(:has(.tq-arow)):not(:has(> :not(.tq-dock-line, [hidden]))) { display: none; }
 .tq-chat-unit { position: relative; z-index: 7; flex: 0 0 var(--tq-ask-w); width: var(--tq-ask-w); min-width: 0; margin-left: auto; display: flex; flex-direction: column; align-items: stretch; }

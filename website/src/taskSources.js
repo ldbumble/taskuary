@@ -25,6 +25,20 @@ export const byLine = (...parts) => parts.filter((p, i) => p && parts.findIndex(
 // ...and WHERE is the sender's address on mail: a mail's SourceName is the owner's own mailbox it arrived in, and "Omar Keller ·
 // alex@northwind.example" read as Omar's address (the email walk, 2026-10-29). A chat or a report keeps its own name.
 export const cameFromWhere = (m) => String(m?.SourceName || "").includes("@") ? (m?.FromEmail || channelName(m?.Channel)) : (m?.SourceName || channelName(m?.Channel));
+// ...and WHOM IT WENT TO, by name (the server's message.Recipients, the owner "you"): Came from showed only the sender, and a mail to the
+// owner and a colleague who would take it read as the owner's alone (the owner, 2026-11-03: "we should be able to see who else was on
+// email"). "to you, Gail Moreno · cc Ray Colton" - `short` the first `max` names and how many more, `full` all of them; "" for nobody else.
+export const toLine = (rec, max = 4) => {
+  const lines = [["to", rec?.to || []], ["cc", rec?.cc || []]].filter(([, xs]) => xs.length);
+  const all = lines.reduce((n, [, xs]) => n + xs.length, 0), rest = Math.max(0, (rec?.n || 0) - all);
+  const said = (cut) => {
+    let left = cut;
+    return lines.map(([k, xs]) => { const ys = xs.slice(0, Math.max(left, 0)); left -= ys.length; return ys.length ? `${k} ${ys.join(", ")}` : ""; })
+      .filter(Boolean).join(" · ");
+  };
+  const more = (n) => (n > 0 ? ` and ${n} more` : "");
+  return all ? { short: said(max) + more(rest + Math.max(0, all - max)), full: said(all) + more(rest) } : { short: "", full: "" };
+};
 // "RE: Fwd: the export" and "the export" are one email thread when the mail carries no thread id
 const bareSubject = (s) => oneLine(s).replace(/^((re|fw|fwd|aw|sv)\s*:\s*)+/i, "").toLowerCase();
 

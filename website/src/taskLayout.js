@@ -104,8 +104,9 @@ const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
 // ...never more than a spine can hold, though (TAB_MOST): a 1,500-line chat drew 1,500 lines into the tab to measure and hide all but a dozen,
 // a second of the click that opened it (the owner, 2026-11-01: "this still happens")
 export const TAB_MOST = 40;
-export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "" } = {}) => ({
-  lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made,
+// ...and under the first line whom it went to, when anyone but the owner was on it (`to`, taskSources.toLine - the owner, 2026-11-03)
+export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "", to = "" } = {}) => ({
+  lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),
   foot: sorted ? `✓ ${sorted}` : "" });
 // ...the Agent: its profile and where it stands, what it did in a line, what it made - and at its foot its state and the Advisor's next move

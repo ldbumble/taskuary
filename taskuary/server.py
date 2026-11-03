@@ -9920,6 +9920,27 @@ def report_pass(startup: bool = False) -> int | None:
     finally: _REPORTS_BUSY.release()
 
 
+ADVISOR_TICK = 15 * 60          # seconds between looks at the Advisor's own passes - each is daily or weekly and says when it is due
+_ADVISOR_BUSY, _ADVISOR_AT = threading.Lock(), [0.0]
+
+
+def advisor_pass(now: float = None) -> bool:
+    """The Advisor's own passes - the job ideas (lookout.tick) and the workstreams kept current (wsboot.tick) - on the reports' clock,
+    on a thread of their own: two model calls must never hold the reports' lock. They lived in a branch of assistant.run the scheduler
+    never takes, and the job-ideas pass had never run on a live home (2026-11-03). True when a pass started."""
+    now = time.monotonic() if now is None else now
+    if demo.enabled() or now - _ADVISOR_AT[0] < ADVISOR_TICK or not _ADVISOR_BUSY.acquire(blocking=False): return False
+    _ADVISOR_AT[0] = now
+    def go():
+        try:
+            from . import assistant
+            assistant.clock(store)
+        except Exception as e: logger.warning(f"the Advisor's own pass failed: {e}")
+        finally: _ADVISOR_BUSY.release()
+    threading.Thread(target=go, daemon=True, name='advisor-clock').start()
+    return True
+
+
 def reports_forever():
     """The reports' clock. The first pass is the startup one (catch_up_on_startup runs it behind the
     mail), so this waits a tick before its first look."""
@@ -9927,6 +9948,8 @@ def reports_forever():
         time.sleep(REPORT_TICK)
         try: report_pass()
         except Exception as e: logger.warning(f'scheduled report pass failed: {e}')   # a bad pass must not end the loop
+        try: advisor_pass()
+        except Exception as e: logger.warning(f"the Advisor's clock failed: {e}")
 
 
 @app.post('/api/reports/due')

@@ -1821,20 +1821,28 @@ def run(store, llm=None, force: bool = False, instruction: str = None, *,
     # own lists, including empty lists, so one Assistant report can never borrow another's sources.
     if report_id is None and watch_source_ids is None and watch_sources is None:
         watch_source_ids, watch_sources = _watch(store)
-    # ...THE ADVISOR NOTICES A NEW HAT (the owner, 2026-11-01): a connector or GitHub project whose traffic no workstream places is judged
-    # here, added when sure, else an Advisor card - and each section kept current once a week (wsboot.tick; cheap when nothing is new)
-    if report_id is None:
-        from . import wsboot, lookout
-        wsboot.tick(store)
-        # ...and LOOKING OUT FOR THE OWNER'S JOB, once a week (the owner, 2026-11-02): credit they are owed, a pain of others they could
-        # fix, money left on the table, a problem developing - at most two ideas, each past a second look (lookout.py)
-        if lookout.CLOCK: lookout.tick(store)
     # its reads - minutes of them over the whole mail history - go to a reader connection, never the writer's lock every request
     # queues on (store.reads_off_writer, 2026-10-23); what it writes still goes through the writer
     with _LOCK, (store.reads_off_writer() if hasattr(store, 'reads_off_writer') else contextlib.nullcontext()):
         retry_stuck_ideas(store, report_id, report_title)
         return _run(store, llm, instruction, watch_source_ids or [], watch_sources or [],
                     systems_only, report_id, report_title, always_post, blocks, judge)
+
+
+def clock(store):
+    """THE ADVISOR'S OWN CLOCK (2026-11-03). Both passes below sat in run() under `if report_id is None:` - a branch only a direct call
+    took, and the live app makes none: the Reports scheduler runs the Advisor WITH its report_id (reports.run_report_source), so the
+    daily job-ideas pass had never once run on a live home, and wsboot's new-source check ran only at launch. server.advisor_pass calls
+    this on the reports' clock, off any request; each tick is cheap until it is due. Switching the Advisor report off stops both."""
+    src = source(store)
+    if not (src and src.get('Active')): return
+    from . import wsboot, lookout
+    # ...THE ADVISOR NOTICES A NEW HAT (the owner, 2026-11-01): a connector or GitHub project whose traffic no workstream places is judged,
+    # added when sure, else an Advisor card - and each section kept current once a week (cheap when nothing is new)
+    wsboot.tick(store)
+    # ...and LOOKING OUT FOR THE OWNER'S JOB, once a day (the owner, 2026-11-02/03): credit they are owed, a pain of others they could
+    # fix, money left on the table, a problem developing - at most two ideas, each past a second look (lookout.py)
+    if lookout.CLOCK: lookout.tick(store)
 
 
 def seeded_source(store) -> dict | None:

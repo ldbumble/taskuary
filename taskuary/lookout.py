@@ -5,8 +5,9 @@ that for your job ... a real proactive thinker looking out for you, trying to ge
 others, or seeing real issues developing").
 
 Once every EVERY_DAYS - a day (the owner, 2026-11-03: "once a week is too inoften ... once a day, but if you said something yesterday
-don't say it again": BEFORE carries every recent idea, and the check holds a repeat) - the Advisor's clock calls `tick` each run; it is
-cheap until due - two model calls. CALLS caps it at three, as ask_json re-asks once for an answer that was not JSON:
+don't say it again": BEFORE carries every recent idea, and the check holds a repeat) - the Advisor's clock calls `tick` every 15 minutes
+(server.advisor_pass -> assistant.clock, on the reports' clock); it is cheap until due - two model calls. The Assistant's advisor.ideas
+starts one now (`start`). CALLS caps it at three, as ask_json re-asks once for an answer that was not JSON:
 
   1. PROPOSE   the model reads JOB.md, SOUL.md, the window - the last DAYS of mail, chat, tasks and reports, COUNTED and grouped (each group
                with ids it can cite), the weekly pattern of the people the owner writes to most - and what it raised before and how the owner
@@ -22,7 +23,7 @@ What passes lands as the Advisor's ordinary idea row (Key idea:lookout-<slug>, K
 builds the fix, Make a task, Remind me, Not ours, No more ideas like this - the verbs every idea has. The owner's verdicts
 (assistant.verdicts) and how each earlier idea graded (ideagrade) are the next pass's evidence, and each family is held to the same 80%
 bar as the Advisor's own kinds (ideagrade.quiet_kinds)."""
-import json, re
+import json, re, threading
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from loguru import logger
@@ -44,6 +45,7 @@ TASKS_SHOWN, GIST, WINDOW_CHARS = 25, 200, 22000
 PROPOSE_TOKENS, CHECK_TOKENS = 1800, 700
 LAST_KEY, TRIED_KEY, HELD_KEY, HELD_CAP = 'lookout_last_run', 'lookout_tried_at', 'lookout_held', 20
 CLOCK = True               # the suite turns this off (tests/conftest.py): a bare store's Advisor run is not about this pass
+_BUSY = threading.Lock()   # one pass at a time: the clock's and one the owner asked for never both pay for the same day
 _ID = re.compile(r'^(msg|task)(\d+)$')
 
 
@@ -319,16 +321,24 @@ def _hold(store, held_: list):
     store.set_setting(HELD_KEY, json.dumps((rows + held(store))[:HELD_CAP]), 'advisor')
 
 
+def brain(store):
+    """The Advisor's brain, or None: no AI chosen at first run, or none connected - a pass never runs without one."""
+    try:
+        from .firstrun import unchosen
+        if unchosen(store): return None
+        from .llm import build_llm
+        return build_llm(store, job='advisor')
+    except Exception as e:
+        logger.info(f'lookout: no brain - {e}'); return None
+
+
 def tick(store, llm=None, force: bool = False) -> dict:
     """One pass when due (or `force`): {ran, raised: [idea ids], held: [titles], calls}. At most CALLS model calls. Never raises."""
     out = {'ran': False, 'raised': [], 'held': [], 'calls': 0}
+    if not _BUSY.acquire(blocking=False): return out
     try:
         if not force and not due(store): return out
-        if llm is None:
-            from .firstrun import unchosen
-            if unchosen(store): return out
-            from .llm import build_llm
-            llm = build_llm(store, job='advisor')
+        if llm is None: llm = brain(store)
         if llm is None: return out
         n = [0]
         def counted(system, user, **kw):
@@ -352,3 +362,38 @@ def tick(store, llm=None, force: bool = False) -> dict:
         return out | {'raised': [r['IdeaId'] for r in rows], 'held': [x['title'] for x, _ in held_], 'calls': n[0]}
     except Exception as e:
         logger.warning(f'lookout: the pass failed - {e}'); return out
+    finally: _BUSY.release()
+
+
+# ── NOW, WHEN THE OWNER ASKS ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+# "look for ideas for my job now" (the owner, 2026-11-03: the daily pass had never run, and they wanted a way to start one) - the
+# Assistant's advisor.ideas. Every guard but the day still holds: two waiting, no AI, one pass at a time.
+def start(store, said) -> tuple:
+    """(started, the line said at once). Started, the pass runs on a thread of its own and `said(line)` is handed what it raised."""
+    from .words import name
+    from . import demo
+    if demo.enabled(): return False, "Nothing started: the demo world runs no Advisor passes - in your own Taskuary this starts one."
+    n = len(open_ideas(store))
+    if n >= MAX_OPEN:
+        return False, (f"Nothing started: {n} ideas for your job already wait under Advisor, and it keeps at most {MAX_OPEN} at once. "
+                       "Answer one of them and ask again.")
+    if _BUSY.locked(): return False, 'Nothing started: a pass for ideas for your job is already running - what it raises lands under Advisor.'
+    llm = brain(store)
+    if llm is None: return False, f"Nothing started: no AI is connected. Connect one under {name('ai')} and ask again."
+    def go():
+        before = store.get_setting(LAST_KEY) or ''
+        out = tick(store, llm, force=True)
+        try: said(outcome(out, (store.get_setting(LAST_KEY) or '') != before))
+        except Exception as e: logger.warning(f'lookout: the outcome was not said - {e}')
+    threading.Thread(target=go, daemon=True, name='lookout-now').start()
+    return True, 'Started a pass for ideas for your job - I will say here what it raised.'
+
+
+def outcome(out: dict, answered: bool) -> str:
+    "What a pass the owner asked for came to, in one line."
+    if not out.get('ran'): return 'The pass for ideas for your job did not run - nothing raised.'
+    if not answered: return 'The pass for ideas for your job got no answer from the AI - nothing raised. Ask again in a while.'
+    k, h = len(out.get('raised') or []), len(out.get('held') or [])
+    held_ = f", {h} held back by the second look" if h else ''
+    if not k: return f"The pass for ideas for your job raised nothing{held_} - nothing cleared the bar today."
+    return f"The pass for ideas for your job raised {k} idea{'s' if k > 1 else ''}{held_} - under Advisor."

@@ -1259,6 +1259,10 @@ AREA_LIVE = [
     Q('task', 'send it', None, c('approve'), 'light:approve', view=TASK4V, freq=4, note='lit, never sent'),
     Q('reports', 'run the end of day report', None, c('report.run', name='End of day checkup'), 'open:#report=', freq=4),
     Q('reports', 'delete the headcount report', None, c('report.delete', ref='Headcount by site, nightly'), 'open:#report=', freq=1),
+    # ...the Advisor's job-ideas pass, NOW (lookout.start, the owner 2026-11-03): started off the chat's thread and said - here no AI, said so
+    Q('reports', 'look for ideas for my job now', None, c('advisor.ideas'), 'did:advisor.ideas', freq=2),
+    Q('reports', 'run the advisor ideas', None, c('advisor.ideas'), 'did:advisor.ideas', freq=2),
+    Q('phone', 'any ideas for my job? run the advisor now', None, c('advisor.ideas'), 'did:advisor.ideas', freq=1, phone=True),
     Q('help', "what's new in this version?", None,
       ['<invoke name="docs.search">\n<parameter name="query">what changed</parameter>\n</invoke>', 'The newest release adds the Watch it button.'],
       'read:docs.search', tools=('docs.search',), freq=3, note="a CLI brain's own tool markup is its CALL, and never shown"),
@@ -1337,7 +1341,7 @@ def _guards(stack, sort=None, live=None, agenda=None):
 # bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
 ACTS = ('Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
         'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ', 'Remembered ', 'Filed ', 'Put on ', 'Blocked', 'Stopped ', 'Triage already ', 'Org chart: ',
-        'Nothing went', 'Saved ', 'Adopted ', 'Kept ', 'Told ', 'Pressed ')
+        'Nothing went', 'Saved ', 'Adopted ', 'Kept ', 'Told ', 'Pressed ', 'Started ', 'Nothing started')
 def said_what(say: str, got: list, q) -> bool:
     acted = [g for g in got if g.split(':')[0] in ('open', 'new', 'next', 'draft', 'cleared', 'did')]
     # ...and a lit button or a press speaks for itself - the filled button, the card's badge - and says no line (the owner, 2026-10-23)

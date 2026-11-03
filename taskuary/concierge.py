@@ -1465,6 +1465,14 @@ def _bell(store, tid: int, p: dict, actor: str) -> dict:
     return _did(store, tid, f'Put down {said}. It comes back if it fails again after working.', 'problems.dismiss')
 
 
+def _lookout(store, tid: int) -> dict:
+    """advisor.ideas, run: the job-ideas pass started off this thread (lookout.start) and said - or why it did not start (two ideas waiting,
+    no AI, one already running). What it raised is said in this conversation when it lands; the ideas are the Advisor's ordinary rows."""
+    from . import lookout
+    started, said = lookout.start(store, lambda line: record(store, tid, 'assistant', line))
+    return _did(store, tid, said, 'advisor.ideas') | {'started': started}
+
+
 def _memory(store, tid: int, kind: str, p: dict) -> dict:
     """memory.remember (a fact about how the owner works) and memory.wrong, run: the memory changed and said in one line, with the words
     of the line - or a miss the model fixes (no such line; Wrong on the owner's own line)."""
@@ -3291,6 +3299,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # ...and THE BELL'S OWN DISMISS (the owner, 2026-11-02: "clear the error on the bell"): reading it changes nothing outside, so the words
     # are the press, with the bell open or shut - and it comes back if the same thing fails again after working (problems.signature)
     if kind == 'problems.dismiss': return _bell(store, tid, params, actor)
+    # ...and THE ADVISOR'S JOB-IDEAS PASS, NOW (the owner, 2026-11-03): its words are the press, and the pass runs off this thread
+    if kind == 'advisor.ideas': return _lookout(store, tid)
     # ...and HOW THE OWNER WORKS WITH THEM, said in the chat (slice 7, approved 2026-10-25: "Gail moved to Ops", "forget that Ray does
     # payroll"): kept at once, the same way - written where the memory's readers read it, the line it makes untrue closed as history
     # ...and EVERY fact, not only one naming a person or a section (the owner, 2026-10-27: "it should be anything I add to memory, like 'this

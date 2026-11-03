@@ -8,8 +8,8 @@ import { startHarness } from "./harness.mjs";
    buttons load then go gray then reload"). Every frame and every mutation from the press, the dock's row as drawn - hidden or not, each
    button's label and whether it is off - through Reopen, Next, a rail click, a deep link, Mark done and a reload. The distinct states it
    goes through are the old row and the new one, nothing between: no empty or hidden row, no all-greyed one, no third set swapping in.
-   The pressed button's own busy word ("Reopening…") is the press answering, and counts as the old row; a Next held steady (data-tq-steady,
-   drawn as it was) is not off. */
+   The pressed button's own busy word ("Reopening…") is the press answering, and counts as the old row; the walk's Back and Next greying
+   while a move is out is theirs (one move at a time, 2026-11-03), not the row redrawing. */
 
 const WATCH_MS = 3500;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -19,7 +19,7 @@ const RECORD = () => {
   const note = () => {
     const row = document.querySelector(".tq-dock [data-tq-row]");
     const hidden = !!row && getComputedStyle(row).visibility === "hidden";
-    const btns = row ? [...row.querySelectorAll(".tq-arow-verbs button")].map((b) => `${b.textContent.trim()}${b.disabled && !b.hasAttribute("data-tq-steady") ? "[off]" : ""}`) : [];
+    const btns = row ? [...row.querySelectorAll(".tq-arow-verbs button")].map((b) => `${b.textContent.trim()}${b.disabled && !b.closest('[data-tq-type="nav"]') ? "[off]" : ""}`) : [];
     const s = !row ? "" : hidden ? `HIDDEN(${btns.join("|")})` : btns.join("|");
     if (s !== last) { last = s; log.push({ t: Math.round(performance.now() - t0), s }); }
   };

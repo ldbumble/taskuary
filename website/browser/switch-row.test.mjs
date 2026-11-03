@@ -7,8 +7,8 @@ import { startHarness } from "./harness.mjs";
    another item on the table, and the row still wore the old one's buttons after it was up, Next went grey for the ~300 ms the pull took,
    and only then did the new one's buttons settle. Since 2026-10-27 (row-draws-once) the old row may stand whole until the new one is
    ready, and is then replaced in one step - never mixed with it. Sampled every frame and every mutation from the press: the row's buttons
-   (data-tq-for) are all the old item's or all the new one's, the old never back after the new, Next is never greyed - not disabled at all on a rail
-   click, and on its own press held but drawn as it was - and the new item's own buttons come up. */
+   (data-tq-for) are all the old item's or all the new one's, the old never back after the new, Next never leaves the row - greyed only while the move is
+   out (one move at a time, 2026-11-03) and live once it lands - and the new item's own buttons come up. */
 
 const WATCH_MS = 3000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -50,8 +50,7 @@ const assertStraight = (rec, what, rail) => {
   const fors = rec.slice(p).filter((s) => !s.press).map((s) => s.for);
   assert.ok(fors.every((f) => f === a || f === b), msg("the row mixed the two items' buttons, or drew neither's"));
   assert.ok(fors.indexOf(b) < 0 || fors.slice(fors.indexOf(b)).every((f) => f === b), msg("the old item's buttons came back after the new one's"));
-  assert.ok(log.every((s) => nextOf(s) && !nextOf(s).includes("[grey]")), msg("Next greyed or left the row during the switch"));
-  if (rail) assert.ok(log.every((s) => !nextOf(s).includes("[off]")), msg("Next was disabled by a rail click"));
+  assert.ok(log.every((s) => nextOf(s)), msg("Next left the row during the switch"));
   const end = log[log.length - 1];
   assert.ok(end.for === b && end.btns.split("|").length > 1 && nextOf(end) === "Next", msg("B's own buttons came up"));
 };

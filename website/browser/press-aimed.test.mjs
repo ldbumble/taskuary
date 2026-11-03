@@ -83,12 +83,16 @@ test("a double-click on Close with a note closes one task", { timeout: 180000 },
   assert.deepEqual(errors, []);
 });
 
-test("Next on the task a slow Mark done drew up walks on, and the task keeps its Next badge through a reload", { timeout: 180000 }, async (t) => {
+test("Next on the task a slow Mark done drew up walks on once the close is in, and the task keeps its Next badge through a reload", { timeout: 180000 }, async (t) => {
   const { page, errors, tasks } = await start(t, { slow: 2500 });
   assert.ok(await doVerb(page, "done"));
   await page.waitForFunction((k) => document.querySelector(".tq-pile-row.current")?.getAttribute("data-tq-key") === k, { timeout: 5000 }, tasks[1].key);
   await sleep(600);                                        // past one press, and long before the close answers
   assert.equal(await onTable(page), tasks[1].key, "the close's receipt took the next task off the table before its answer");
+  // ...Next greyed until the close is in (one move at a time, 2026-11-03), then live on the task it drew
+  assert.equal(await pressNext(page), false, "Next was live while the close was out");
+  await page.waitForFunction(() => { const b = document.querySelector("[data-tq-row] [data-tq-next]"); return b && !b.disabled; }, { timeout: 15000 })
+    .catch(() => assert.fail("no Next on the task the close drew up, once the close was in"));
   assert.ok(await pressNext(page), "no Next on the task the close drew up");
   await page.waitForFunction((k) => document.querySelector(".tq-pile-row.current")?.getAttribute("data-tq-key") === k, { timeout: 15000 }, tasks[2].key)
     .catch(async () => assert.fail(`Next went to ${await ringedKey(page)}, not the third task`));

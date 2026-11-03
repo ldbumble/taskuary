@@ -2,11 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { boot, clickRow, pressNext, sleep } from "./walkdriver.mjs";
 
-/* NEXT ON THE ROW A PRESS DREW, WHILE THAT PRESS IS STILL OUT (the owner, 2026-11-02: "still when you hit next the one you are on, task or
-   report, does not disappear right away"). Next draws the row below at its press, but a second Next on that row was held until the first
-   answer landed - the row sat on the table, ringed (and a report on the rail), for as long as the server took. Every walk answer is held
-   2.5 s here, as a real home's can be: the second press puts its row down and draws the one after at once, a report leaves the rail at
-   once, and when both answers are in the walk stands where the page does. */
+/* NEXT ON THE ROW A PRESS DREW (the owner, 2026-11-02: "still when you hit next the one you are on, task or report, does not disappear right
+   away"; 2026-11-03: one move at a time). Every walk answer is held 2.5 s here, as a real home's can be: Next draws the row below at its press,
+   and stands greyed until that answer is in - a click then is no press, never a second move queued. Once it is live again the second press
+   puts its row down and draws the one after at once, a report leaves the rail at once, and the walk stands where the page does. */
 const HOLD = 2500, AT_ONCE = 300;
 const ring = (page) => page.evaluate(() => document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") || "");
 const table = (page) => page.evaluate(() => [...document.querySelectorAll(".tq-canvas-live [data-tq-canvas-item]")].filter((x) => x.getBoundingClientRect().height > 0).pop()?.getAttribute("data-tq-canvas-item") || "");
@@ -21,15 +20,15 @@ async function twoNexts(t, pick) {
   await clickRow(page, from); await until(async () => (await ring(page)) === from, 15000); await sleep(2500);
   assert.ok(await pressNext(page), "the first Next");
   assert.ok(await until(async () => (await ring(page)) === line[0], AT_ONCE) >= 0, `the first Next drew ${await ring(page)}, not ${line[0]}`);
-  await sleep(400);
-  assert.ok(await pressNext(page), "a second Next, the first still out");
+  assert.equal(await pressNext(page), false, "a second Next was taken while the first was out");
+  assert.ok(await until(() => pressNext(page), HOLD + 3000) >= 0, "Next never came back once the first was in");
   const took = await until(async () => (await ring(page)) === line[1], AT_ONCE);
   assert.ok(took >= 0, `the row passed stayed: the ring is on ${await ring(page)}, not ${line[1]}, ${AT_ONCE} ms after the second Next`);
   assert.notEqual(await table(page), line[0], "the row passed is still on the table");
   return { page, errors };
 }
 
-test("a second Next on a task the first drew moves on at its press", { timeout: 300000 }, async (t) => {
+test("a second Next on a task the first drew waits greyed for the first, then moves on at its press", { timeout: 300000 }, async (t) => {
   const { page, errors } = await twoNexts(t, (tasks) => [tasks.at(-4), tasks.slice(-3)]);
   await sleep(2 * HOLD + 1500);
   const tasks = await run(page, "task");
@@ -39,7 +38,7 @@ test("a second Next on a task the first drew moves on at its press", { timeout: 
   assert.deepEqual(errors, []);
 });
 
-test("a second Next on a report the first drew takes it off the rail at its press", { timeout: 300000 }, async (t) => {
+test("a second Next on a report the first drew takes it off the rail at its press, once the first is in", { timeout: 300000 }, async (t) => {
   let r0 = null;
   const { page, errors } = await twoNexts(t, (tasks, reports) => { r0 = reports[0]; return [tasks.at(-1), reports.slice(0, 2)]; });
   assert.ok(!(await run(page, "reports")).includes(r0), "the report passed is still on the rail");

@@ -27,8 +27,8 @@ async function matrix(t, world, kinds, modes) {
         const r = await press(w, kind, b, mode);
         const s = shape(r.delta || {});
         if (mode === "once") one = s;
-        // ...Next is the walk's own: a second press while the first is out is held and walks one more row (AssistantView holdMove)
-        else if (b.id !== "next" && JSON.stringify(s) !== JSON.stringify(one)) r.problems.push(`wrote other than one press: ${JSON.stringify(one)} vs ${JSON.stringify(s)}`);
+        // ...Next too: greyed while its move is out, a second press fast is no press (one move at a time, 2026-11-03)
+        else if (JSON.stringify(s) !== JSON.stringify(one)) r.problems.push(`wrote other than one press: ${JSON.stringify(one)} vs ${JSON.stringify(s)}`);
         if (CLOSERS.has(b.id) && !(kind === "watched" && b.id === "watch") && (mode === "once" || b.id !== "next")) {
           if (r.card) r.problems.push("the card stayed after a close");
           if (world.only && r.on) r.problems.push(`the only item went and the walk stands on ${r.on}`);

@@ -4,6 +4,10 @@
     "_": "Where work comes in: the groups whose working cards are a source of incoming work - mail, chat and task systems. Setup's Connect your main source offers them (email first, the usual one) and is done once one of them is connected and passes its test.",
     "groups": ["Messaging", "Email", "Project management", "Developer"]
   },
+  "own_systems": {
+    "_": "Systems the owner signs into that hold their own records - their databases and their books. A report source on one of these groups' cards is marked 'my own system' unless the owner turns it off, and a report run whose every source is marked is trusted (reports.is_own, origin.report_rests_on). Everything else - news, the web, social timelines, a free REST URL - starts unmarked.",
+    "groups": ["Databases", "Corporate systems"]
+  },
   "cards": [
     {
       "type": "outlook",

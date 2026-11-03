@@ -24,6 +24,11 @@ def source_types() -> tuple:
     return tuple(c['type'] for c in cards() if c.get('group') in gs and not c.get('planned'))
 
 
+def own_groups() -> tuple:
+    "The groups whose cards sign into the owner's own systems (the catalogue's `own_systems`): a report source on one is theirs by default."
+    return tuple(_raw().get('own_systems', {}).get('groups') or ())
+
+
 def by_type(t: str) -> dict | None: return next((c for c in cards() if c['type'] == t), None)
 
 

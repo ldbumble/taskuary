@@ -6598,7 +6598,9 @@ def report_run(rid: int):
 def report_types():
     legacy = {'handbook_search', 'handbook_write', 'handbook_vote'}
     from .flow import writes          # a workflow step of this type changes something (the editor's "this only reads" check)
-    return {'data': [{'type': t, 'status': 'legacy' if t in legacy else ('planned' if t in PLANNED else 'builtin'), 'writes': writes(t)}
+    from .reports import own_default, STORE_BACKED  # the card's "my own system" switch starts here (origin.report_rests_on)
+    return {'data': [{'type': t, 'status': 'legacy' if t in legacy else ('planned' if t in PLANNED else 'builtin'), 'writes': writes(t), 'own': own_default(t),
+                      'ownable': t not in STORE_BACKED}
                      for t in REGISTRY]}
 
 @app.get('/api/problems')

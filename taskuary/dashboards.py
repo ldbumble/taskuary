@@ -384,7 +384,7 @@ def last(store, sid) -> dict | None:
 def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     """One run: re-read the sources, keep the rows, and put ONE row under Reports saying it is fresh (the previous run's row
     is retired, as a report's is). Nothing is triaged, summarised, sent or alerted - a dashboard is looked at."""
-    from .reports import expire_previous_runs
+    from .reports import expire_previous_runs, built_from
     title = cfg.get('title') or src.get('Address') or 'Dashboard'
     data = collect(store, cfg)
     srcs = data['sources'].values()
@@ -406,7 +406,8 @@ def file_run(store, src: dict, cfg: dict, trigger: str = 'schedule') -> dict:
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     mid = store.add_message({'TaskId': None, 'ExternalId': f"report:{src['SourceId']}:{stamp}:dashboard", 'ConversationId': f"report:{src['SourceId']}",
                              'Channel': 'report', 'SourceName': title, 'Subject': f'{title} — {head}', 'FromName': title, 'SentAt': stamp,
-                             'BodyText': text, 'SourceLink': f"#report={src['SourceId']}", 'Status': 'feed'})
+                             'BodyText': text, 'SourceLink': f"#report={src['SourceId']}", 'Status': 'feed',
+                             'MailMetaJson': json.dumps({'built_from': built_from(cfg)})})
     expire_previous_runs(store, src, cfg, mid)
     store.audit('message', mid, 'report', 'report', 'agent', title)
     logger.info(f'dashboard {title}: {head} ({trigger})')

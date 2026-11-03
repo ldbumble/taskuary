@@ -1227,6 +1227,26 @@ def source_label(sub: dict, i: int) -> str:
     return (sub.get('label') or '').strip() or f"{sub.get('type', 'rest')} #{i}"
 
 
+# ── WHOSE SYSTEM A SOURCE READS (the owner, 2026-11-03) ─────────────────────────────────────────────────────────────────────────────
+# A report built only from the owner's own systems - their database, their books - is trusted; one that read anything from outside is
+# a stranger's (origin.report_rests_on). Each source carries `own_system`, the switch on its card; unset, the catalogue's group decides
+# (connectorcatalog.json `own_systems`). Taskuary's own tables are never one: they hold everyone's mail.
+def own_default(t) -> bool:
+    from .connectorcatalog import by_type, own_groups
+    return t not in STORE_BACKED and (by_type(card_of(t)) or {}).get('group') in own_groups()
+
+def is_own(sub: dict) -> bool:
+    "Is this source marked as the owner's own system - the switch when they set it, else its card's default."
+    v = sub.get('own_system')
+    if sub.get('type') in STORE_BACKED: return False
+    return own_default(sub.get('type')) if v is None or v == '' else v is True or str(v).lower() in ('1', 'true', 'on', 'yes')
+
+def built_from(cfg: dict) -> list:
+    "[{type, label, own}] - the sources one run reads, as render_report picks them, recorded on its row so its trust is provenance."
+    subs = [s for s in (cfg.get('sources') or []) if s.get('type')] or [cfg]
+    return [{'type': s.get('type') or 'rest', 'label': source_label(s, i), 'own': is_own(s)} for i, s in enumerate(subs, 1)]
+
+
 # the sources that put files on a run as they read (`_files`, render_report) - only these are handed the list, so no other
 # executor ever sees a key it might pass along upstream
 FETCHES_FILES = frozenset({'amazon_business_transactions'})
@@ -1903,14 +1923,15 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     out = {} if is_digest or not d['triage'] else ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
                                      'subject': subject, 'body': text, 'from_name': title,
                                      'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
-                                     'source_link': cfg.get('link'), 'source_name': title,
+                                     'source_link': cfg.get('link'), 'source_name': title, 'mail_meta': {'built_from': built_from(cfg)},
                                      'watch_for': work_brief(cfg) or None}, llm=llm,
                          # no brain to triage with is a plain row under Reports, never "triage failed" on every run
                          file_only=llm is None)
     mid = out.get('message_id') or store.add_message({'TaskId': None, 'ExternalId': f'report:{src["SourceId"]}:{stamp}:feed',
                                                       'ConversationId': f'report:{src["SourceId"]}', 'Channel': 'report',
                                                       'SourceName': title, 'Subject': subject, 'FromName': title, 'SentAt': stamp,
-                                                      'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed'})
+                                                      'BodyText': text, 'SourceLink': cfg.get('link'), 'Status': 'feed',
+                                                      'MailMetaJson': json.dumps({'built_from': built_from(cfg)})})
     # the rows are the report: hand back the spreadsheet to open and the chart to look at
     try:
         from .artifacts import attach_report_output, attach_files

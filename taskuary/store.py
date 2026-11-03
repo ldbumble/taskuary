@@ -6084,7 +6084,7 @@ class SQLiteStore:
     NEEDS_YOU = NEEDS_YOU_T.replace('{answered}', ANSWERED_AT).replace('{theirs}', THEIR_TURN)
 
     def feed(self, limit=100, days=14, pending_only=False, channel=None, offset=0, source=None,
-             live_state=_LIVE_UNSET, ids=None, task_id=None, sent=False):
+             live_state=_LIVE_UNSET, ids=None, task_id=None, sent=False, every=False):
         # The newest route/review, the attachment count and the chain size are looked up per output row on their
         # indexes. They were derived tables over the WHOLE route/review/attachment/message tables (GROUP BY, then
         # `RouteId IN (12k MAXes)`), which every output row walked: ~1-2 ms a row, 1.5 s for 500, 14 s for the
@@ -6111,7 +6111,8 @@ class SQLiteStore:
                 WHERE m.CreatedAt >= datetime('now', 'localtime', ?) AND (m.Status NOT IN ('context', 'history', 'skipped')'''
         # `sent`: the owner's own mail too - read in from Sent as thread context ('context', Direction out), so no list shows it,
         # but a SEARCH must find it: "did I answer the invite" had no row to land on (2026-10-26)
-        q += " OR (m.Direction='out' AND m.Status='context')) " if sent else ') '
+        # `every`: whatever its status - a message asked for by its own id (a Search pick) is that message, skipped at the first sync or not
+        q += " OR (m.Direction='out' AND m.Status='context')) " if sent else ' OR 1) ' if every else ') '
         p = [f'-{int(days)} days']
         if pending_only: q += f' AND {self.NEEDS_YOU}=1'
         # channel accepts a csv so the UI can filter by a CATEGORY (messages = email,

@@ -1889,6 +1889,23 @@ def item_for_key(store, key: str) -> dict | None:
     return shut(_present_one(store, it))
 
 
+def message_item(store, key: str) -> dict | None:
+    """A MESSAGE NAMED BY ITS OWN ID IS THAT MESSAGE (a colleague, 2026-11-03: a Search hit clicked put "…" on the canvas, then nothing, and
+    "I can't find that one" in the chat): Search lists every message whatever became of it - skipped at the first sync, ignored, answered,
+    sent, on a closed task - and item_for_key knows only the rows a Timeline would show. Those first, as they are; past them, the row read
+    whatever its status and worded as itself, never judged against the rail's rules for what is news."""
+    if (it := item_for_key(store, key)) or not (m := re.match(r'^(msg|report):(\d+)$', key or '')): return it
+    mid = int(m[2])
+    row = next(iter(store.feed(limit=1, days=36500, ids=[mid], every=True)), None)
+    if not row: return None
+    it = next((i for i in from_feed(store, [row], canonical=True) if i.get('mid') == mid), None)
+    if it is None: return None
+    if row.get('Direction') == 'out': it = it | {'lane': 'fyi', 'why': 'you sent this'}
+    elif it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']}
+    if row.get('TaskStatus') in ('done', 'dropped'): it = it | {'closed': True}
+    return _present_one(store, it)
+
+
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')
 
 

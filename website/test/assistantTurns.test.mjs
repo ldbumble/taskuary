@@ -249,3 +249,17 @@ test("the page keeps every line it says an act did, and says it opened only once
   assert.doesNotMatch(src, /Brought up \$\{/, "an open is said as Opened");
   assert.match(src, /openAppLink\(page\);\s*const name = linkName\(data\.say, page\);/, "said after the page is opened");
 });
+
+// A MISS IS SAID ONCE (a colleague, 2026-11-03: a Search pick that opened nothing put "I can't find that one ..." in the chat three times):
+// the same card-less line again, straight after itself, is that line - not a second copy under it
+test("the same card-less line twice in a row stands once", async () => {
+  const { placeLine } = await import("../src/assistantTurns.js");
+  const say = "That message is no longer in Taskuary, so it can't be opened.";
+  let m = placeLine([], { id: "a1", role: "assistant", text: say, card: null });
+  m = placeLine(m, { id: "a2", role: "assistant", text: say, card: null });
+  assert.deepEqual(m.map((x) => x.text), [say]);
+  assert.ok(m[0].id === "a2" && m[0].alias.includes("a1"), "the old line's id rides as an alias, so the server's copy is known");
+  m = placeLine(m, { id: "a3", role: "assistant", text: "Opened TQ-0004.", card: null });
+  m = placeLine(m, { id: "a4", role: "assistant", text: say, card: null });
+  assert.equal(m.length, 3, "said again after something else, it is a new line");
+});

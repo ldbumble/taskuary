@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.25 - 2026-11-03
+
+- A run cut off while asking the owner reads as still asking, not stopped
+- Continue on a run that ended asking reads Answer it and shows the question
+- An agent a restart cut off while it asked the owner is back at its question
+- Triage is told who answered the like of an ask before, when colleagues share the mail
+- Came from shows whom a mail went to
+- A chat read never puts an item's old walk line after the table's own
+- A press on the grown chat pill's middle opens it
+- Draft reply spins until its draft lands, and always drafts
+- Triage gets a fourth verdict, watch: a thread the owner cares about that someone else will handle
+- An FYI batch reads the thread under every row, not only the first
+
 ## 0.3.10.24 - 2026-11-03
 
 - Send's hover says what it does where it is: Close out's Send closes the task, a Send anywhere else leaves it open

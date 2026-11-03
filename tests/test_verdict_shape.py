@@ -192,7 +192,7 @@ class TriageUsesItTests(unittest.TestCase):
         brain.takes_want = True
         out = triage.classify_intent(MSG, llm=brain, system='My own rules. Answer JSON only.')
         self.assertEqual(seen['want']['name'], 'triage_verdict')
-        self.assertEqual(seen['want']['schema']['properties']['intent']['enum'], ['task', 'reply_only', 'fyi'])
+        self.assertEqual(seen['want']['schema']['properties']['intent']['enum'], ['task', 'reply_only', 'watch', 'fyi'])
         self.assertEqual(out['title'], 'Send Ray the budgets link')
         self.assertEqual(len(asks), 1)
 

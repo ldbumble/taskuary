@@ -26,8 +26,9 @@ test("each walk button hammered ten times", { timeout: 3 * 60 * 60 * 1000 }, asy
       return { metrics: { moved: at0 - at1 } };
     } },
     { id: "allread-x10", run: async ({ page, why, record }) => {
-      // the FYI heading walks its section: a batch of four on the table, its Next "All read, next"
+      // the FYI heading walks its section from its first row, and Next from it brings a batch of four - its Next "All read, next"
       await page.evaluate(() => document.querySelector(`[data-tq-section-head="fyi"]`)?.click()); await settle(page);
+      await next(page); await settle(page);
       const n0 = (await look(page)).heads.fyi;
       await record(); await ten(page, next); await settle(page);
       const n1 = (await look(page)).heads.fyi || 0;

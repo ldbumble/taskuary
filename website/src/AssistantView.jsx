@@ -1031,7 +1031,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   if (live && canvas && m.card && showsTask(c, kind) && !foldedNow) return (
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
-        onNext={() => actions.next()} busy={actions.busy} picking={actions.picking} onFold={() => canvas.fold(c.key)} onWalkLeave={(how, x) => actions.leave(c.key, how, x)}
+        onNext={() => actions.next()} busy={actions.busy} holds={actions.holds} onFold={() => canvas.fold(c.key)} onWalkLeave={(how, x) => actions.leave(c.key, how, x)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
         onListChanged={actions.reload} onChanged={actions.changed} onOpenTask={actions.openTask} lit={canvas.lit} advice={canvas.advice}
         onPropose={actions.pressAdvice} />
@@ -1048,7 +1048,7 @@ function Line({ m, lastBrief = false, live, last, further = false, actions, fres
   const moved = !!m.card && (!live || foldedNow) && !m.sent;
   const strip = moved ? chips.filter((c) => c.verb === "next") : inCard ? chips.filter((c) => !c.verb) : chips;
   const nextChip = verbs.find((c) => c.verb === "next");
-  const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
+  const nav = { busy: actions.busy && !actions.holds, items: actions.items, surface: actions.surface, row: live && last && !!canvas, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
     // ...and whether this card is still the item on the table, a line said under it or not: a report's Share went from the row the moment
     // the demo's "switched off" line landed under it, while its Pause and Put it on my list stayed (the 2026-10-28 flow walk)
     table: live && !!canvas,
@@ -1181,7 +1181,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ~300 ms its pull took, on a row that had just drawn the new task. While a pick (a row, a name, a link) is in flight Next stays
   // pressable, and a press then is held and runs once the pick lands - on the item the owner was looking at, as a press always does.
   // `flight`: the walk move under way - a pick or not, and the item it is leaving, whose verbs leave the row at once (actionRow.leaveRow)
-  const [flight, setFlight] = useState(null), nextHeld = useRef(false), picking = !!flight?.pick;
+  const [flight, setFlight] = useState(null), nextHeld = useRef(false);
   // ...and what that held press already put down and drew (holdMove): { how, from, fromItem, ahead: {id, key} | null, gone, coming }
   const heldRef = useRef(null), [held, setHeld] = useState(null);
   // a card was let go and the next one is on its way: the settle and the deferred pick run BEFORE
@@ -1726,7 +1726,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       const b = e.target?.closest?.("button, [role=button], [role=menuitem]");
       if (!b || b.closest("[data-tq-rail]") || !b.closest(".tq-asst-col, [role=menu], .MuiPopover-paper")) return;
       const item = b.closest("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item") || currentRef.current?.key || "";
-      if (!aimed(item, e)) { e.stopPropagation(); e.preventDefault(); }
+      // ...but the bar's Back and Next are walk moves, on no item: one pressed within a press of the last is the owner's next press - Back
+      // straight after a Next drew its row was swallowed here as Next's hand still moving (the stress walk, 2026-11-02: N,B,N,B... drifted
+      // rows down the rail). Only a double-click's second click (detail 2) is still one press; the walk holds one pressed over a move in flight
+      const walkPress = b.matches("[data-tq-walk-back], [data-tq-row] [data-tq-next]") && Number(e.detail) < 2;
+      if (!aimed(item, e) && !walkPress) { e.stopPropagation(); e.preventDefault(); }
     };
     window.addEventListener("click", gate, true);
     return () => window.removeEventListener("click", gate, true);
@@ -2614,7 +2618,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c, anchor) => {
-    if (c?.verb === "next" && busy && flight?.drawn && !resetting) { holdMove("next"); return; }   // ...held, as actions.next holds it
+    if (c?.verb === "next" && busy && !resetting) { holdMove("next"); return; }   // ...held, as actions.next holds it
     if (busy || resetting || !c) return;
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
@@ -2733,6 +2737,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     try { await settleDone(pressed); } finally { doneFor.current = null; }
   };
   const settleDone = async (pressed) => {
+    // ...a batch drawn on the table while the move that brings it is still out: its "All read, next" is Next (it reads the batch), held
+    if (busy && !resetting && String(current || "").startsWith("fyis:")) { holdMove("next"); return; }
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
     setMsgs((m) => { const i = interactiveCardIndex(m);
       return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, ...(pressed ? { pressed } : {}) } : x)); });
@@ -3042,7 +3048,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const goBack = () => {
     if (resetting) return undefined;
     if (busy || turnFlight.current) { holdMove("back"); return undefined; }
-    if (!walkOf(pileRef.current)?.above) { cancelHeld(); return undefined; }
+    if (!backTo) { cancelHeld(); return undefined; }   // ...the bar's own word for it (backTo, below): the walk's, or a rail row under the top whose walk is catching up
     navHow.current = "replace";
     setRailOpen(false); if (old) setOld(null); browseDown();
     return surface(null, null, heldRef.current?.how === "back" ? heldRef.current.from : null, false, "back");
@@ -3171,7 +3177,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     // ...Next on a row a press drew up while that press is still out is held, then runs from it (rule 7: the owner never presses twice)
-    next: () => { if ((picking || flight?.drawn) && busy) holdMove("next"); else runChip({ verb: "next" }); }, picking: picking && !resetting, leave, reload: () => loadPile(true), changed: onChanged,
+    // ...and over ANY move or turn still out - a batch on its way, a typed "next", a pick - never greyed and never dropped (the stress walk,
+    // 2026-11-02: four Nexts over an FYI batch coming in did nothing at all): held, it runs once that one is in (`holds`, CanvasItem)
+    next: () => { if (busy && !resetting) holdMove("next"); else runChip({ verb: "next" }); }, holds: !resetting, leave, reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
     reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
@@ -3270,8 +3278,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and on the row a press drew up before its answer, Back stays as it stood on the row the press left until the answer says (a press of it
   // is held): a close takes that row off the line, so it is not the row above. On a row a Next or a Back drew, the walk's word for the row
   // above it (heldStep `back`), greyed at the top
-  const backTo = table.speaks && !firstRun && !old && !walk && (onWalk ? walkNow.above : !flight?.drawn ? null
-    : heldStep(walkNow, currentItem?.key, true, flight.how).then || (flight.how !== "back" && walkNow?.on === flight.from ? walkNow.above : null));
+  // ...AND NEVER GREYED FOR A MOMENT ON A RAIL ROW BELOW THE TOP while the walk's word catches up - a Back drawn two rows up, the answer in and
+  // its rail not yet (the stress walk, 2026-11-02: Back pressed every 150 ms greyed between moves, the presses in that moment were lost, and
+  // Back to the top stopped halfway). Pressed then it goes as any Back does - held over a move in flight - and the server says the row above
+  const underTop = !!currentItem && items.some((i) => i.key === currentItem.key) && items[0]?.key !== currentItem.key;
+  const backTo = table.speaks && !firstRun && !old && !walk && (onWalk ? walkNow.above
+    : (flight?.drawn && (heldStep(walkNow, currentItem?.key, true, flight.how).then || (flight.how !== "back" && walkNow?.on === flight.from ? walkNow.above : null)))
+      || (underTop ? "above" : null));
   // ...and on a desk Back is ALWAYS on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29: the bar is Back and Next)
   useVerbs("nav", [{ id: BACK, group: "back", label: btn("back"), title: btnHint("back"), disabled: !backTo, why: "nothing above this one",
     run: () => backTo && goBack() }], !!backTo || (deskChat && !firstRun));

@@ -99,7 +99,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, picking = false, onFold, onWalkLeave, onLeave, onStay, onListChanged, onChanged, onOpenTask, onReminded, phone = false, lit = null, advice = null, onPropose = null }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, holds = false, onFold, onWalkLeave, onLeave, onStay, onListChanged, onChanged, onOpenTask, onReminded, phone = false, lit = null, advice = null, onPropose = null }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -125,9 +125,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   const held = useHeldHeight(box, card.key);
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
-  // ...pressable while a pick (a rail row, a link) is on its way - AssistantView holds that press (`picking`); greyed only by a Next in
-  // flight, and drawn as it was then (`steady`): it flashed grey for the ~300 ms of every switch (the owner, 2026-10-26)
-  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy && !picking, steady: true, run: () => onNext(), title: btnHint("next") }]);
+  // ...pressable while any move is on its way - AssistantView holds that press (`holds`); greyed only while a new chat resets, and drawn as
+  // it was then (`steady`): it flashed grey for the ~300 ms of every switch (the owner, 2026-10-26)
+  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy && !holds, steady: true, run: () => onNext(), title: btnHint("next") }]);
   // ...and while a phone's own read is on its way the desk's decision for this item lights its row: a window narrowed to a phone dropped the
   // lit Reply for the length of the read, and the row looked as if the move had folded away (row-one-line, walk item 2 @390, 2026-10-28)
   const own = useItemAdvice(card, phone);

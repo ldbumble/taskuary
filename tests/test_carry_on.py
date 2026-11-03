@@ -103,8 +103,9 @@ class CarryOnTests(unittest.TestCase):
             ingest._continue_general(s, tid)
         self.assertEqual(start.call_args.kwargs.get('actor'), 'router')
         args, kw = ses.send_prompt.call_args
-        self.assertEqual(args[0], continuity.RESUME_PROMPT)
-        self.assertEqual((kw['as_owner'], kw['delivery_instructions']), (False, 'NEW SINCE YOUR LAST TURN: one message'))
+        # the news IS the turn, ahead of Resume's words, filed as Taskuary's brief (2026-11-03) - never only behind it in the instructions
+        self.assertEqual(args[0], 'NEW SINCE YOUR LAST TURN: one message\n\n' + continuity.RESUME_PROMPT)
+        self.assertEqual((kw.get('brief'), 'delivery_instructions' in kw), (True, False))
         self.assertNotIn(tid, general.OPENING)
 
 
@@ -164,7 +165,7 @@ class PassInTests(unittest.TestCase):
             ingest._pass_general(s, tid, mail(**AGAIN))
         args, kw = ses.send_prompt.call_args
         self.assertIn('price the second site', args[0]); self.assertIn("not the owner's", args[0])
-        self.assertEqual((kw['as_owner'], kw['echo']), (False, False))
+        self.assertTrue(kw.get('brief'))                                # Taskuary's brief: the chat shows the line it was handed
         self.assertTrue(any("Passed Erin Blake's new message to the agent" in c['Body'] for c in s.list_comments(tid)))
 
     def test_a_line_during_a_carried_on_turn_waits_for_that_turn_then_follows_it(self):

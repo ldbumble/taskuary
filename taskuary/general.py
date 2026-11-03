@@ -1200,7 +1200,7 @@ class GeneralSession:
             if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
-                user = _turn_only(self.store, self.task_id, text) if as_owner else text
+                user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'
             # Paths are harmless context to an API brain and essential if its CLI backup takes

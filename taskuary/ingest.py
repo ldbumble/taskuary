@@ -2088,8 +2088,9 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
                       + ('coding agent reopens its own session' if coding else 'assistant carries on its conversation') + ' here by itself.')
     store.audit('task', tid, 'auto_continue', actor, 'agent', {'message_id': mid, 'kind': 'coding' if coding else 'general', 'quick': quick})
-    if quick: _spawn(quickwork.start, store, tid, _pass_turn(msg), False)
-    else: _spawn(_continue_coding if coding else _continue_general, store, tid)
+    if quick: _spawn(quickwork.start, store, tid, _pass_turn(msg))         # filed as Taskuary's brief: the chat shows what it was handed
+    elif coding: _spawn(_continue_coding, store, tid)
+    else: _spawn(_continue_general, store, tid, msg, mid)
     return True
 
 
@@ -2294,7 +2295,7 @@ def _pass_general(store, tid, msg: dict):
     try:
         # a session of quick answers re-decides on the task's depth now: still quick, one more call on it; else the turn runs the agent
         if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, _pass_turn(msg))
-        else: ses.send_prompt(_pass_turn(msg), as_owner=False, echo=False)
+        else: ses.send_prompt(_pass_turn(msg), brief=True)      # Taskuary's brief, shown in the chat as coding's typed line is
     except Exception as e:
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - Continue picks it up.")
@@ -2317,12 +2318,22 @@ def _pass_coding(store, tid, msg: dict):
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the coding session ended - Continue picks it up.")
 
 
-def _continue_general(store, tid):
-    from . import continuity, general
+# THE NEW ASK IS THE TURN, NOT A NOTE BEHIND IT (the owner, 2026-11-03: "I don't see it gets the most recent question. coding does").
+# A resumed CLI is handed the turn alone, so the news rode only as instructions appended to its system prompt, under a turn that said
+# "the owner chose Resume ... restate that one question and wait" - and nothing on the task showed it had been told. Now the turn
+# leads with what came in, as coding's seed does (terminal.resume_seed), filed as Taskuary's brief so the chat shows the line it got.
+def carry_on_turn(store, tid, msg: dict = None, mid=None) -> str:
+    "A carried-on turn: the mail since its last turn, the line that woke it when that read missed it, then Resume's own words."
+    from . import continuity
+    news = continuity.news_block(store, tid)
+    missed = msg and mid not in {m['MessageId'] for m in continuity.mail_since(store, tid)}
+    return '\n\n'.join(x for x in [news, _pass_turn(msg) if missed else '', continuity.RESUME_PROMPT] if x)
+
+
+def _continue_general(store, tid, msg: dict = None, mid=None):
+    from . import general
     try:
-        news = continuity.news_block(store, tid)
-        general.start_session(store, tid, actor='router').send_prompt(
-            continuity.RESUME_PROMPT, as_owner=False, echo=False, **({'delivery_instructions': news} if news else {}))
+        general.start_session(store, tid, actor='router').send_prompt(carry_on_turn(store, tid, msg, mid), brief=True)
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
         logger.warning(f'assistant carry-on failed for task {tid}: {e}')

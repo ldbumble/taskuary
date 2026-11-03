@@ -912,9 +912,6 @@
 .tq-ab:disabled { opacity: .5; cursor: default; }
 /* the draft's Send keeps its place on the bar, empty: its button is under the draft (the owner, 2026-10-22), and the row must not shift */
 .tq-ab.p:disabled { background: #b9c1c8; border-color: #b9c1c8; opacity: 1; }   /* a greyed decision reads as off, not as a fainter blue */
-/* ...but NEXT, held while its own press is in flight, is drawn as it was: it flashed grey on every switch (the owner, 2026-10-26) */
-.tq-ab.next[data-tq-steady]:disabled { opacity: 1; cursor: progress; }
-.tq-ab.p.next[data-tq-steady]:disabled { background: #55697a; border-color: #55697a; }
 .tq-ab.next::after { content: "\2192"; margin-left: 6px; }   /* the arrow is drawn, so the button's text stays exactly "Next" */
 /* setup's Back takes the same slot and points the way it goes (FirstRun: setup:back) */
 .tq-ab.next[data-tq-back]::after { content: none; }

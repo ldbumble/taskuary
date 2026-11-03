@@ -174,7 +174,8 @@ class CodexTests(Base):
         said = 'Found the cap.\n[[TASKUARY-ASK]] Which branch? | main | release\n[[TASKUARY-ASK]] Backfill September? | Yes | No'
         hooks.receive({'hook_event_name': 'Stop', 'session_id': 'sess-1', 'cwd': CWD, 'last_assistant_message': said}, cli='codex')
         qs = ws.question_group(self.s, self.t)
-        self.assertEqual([(q['text'], q['choices']) for q in qs], [('Which branch?', ['main', 'release']), ('Backfill September?', ['Yes', 'No'])])
+        # ...as plain questions: a marker's words are no chooser, so no chips (the owner, 2026-11-03)
+        self.assertEqual([(q['text'], q['choices']) for q in qs], [('Which branch?', []), ('Backfill September?', [])])
         turn = [e for e in ws.events(self.s, self.tid, 'run1') if e['Kind'] == 'turn_end'][-1]
         self.assertEqual(turn['Text'], 'Found the cap.', 'the marker never reaches the card as text')
 

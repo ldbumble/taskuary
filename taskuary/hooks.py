@@ -481,10 +481,11 @@ def _events(t, p: dict) -> None:
                 if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks and signing is None and turn is None:
                     advisor.notice(st, 'agent.stopped', 'task', tid)
             except Exception as e: logger.debug(f'task {tid}: the stop was not ledgered - {e}')
+            # ...as plain questions: a marker's words are no chooser, so they carry no chips (the owner, 2026-11-03)
             g = ws.group_key('|'.join(q for q, _ in asks)) if len(asks) > 1 else None
-            for i, (q, choices) in enumerate(asks, 1):
+            for i, (q, _) in enumerate(asks, 1):
                 ws.record(st, tid, sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
-                          text=q, choices=choices, source='hook')
+                          text=q, source='hook')
             # ...and a turn that asked only in PROSE is the model's to read, in the background - never a word list's
             if not asks and signing is None and turn is None and said.strip() and not ws.open_requests(ws.events(st, tid, sid)): judge_turn(st, tid, sid, said)
             # the response ended, the WORK did not: a shell, a monitor or a subagent it left running and will be woken by

@@ -38,8 +38,22 @@ class ApiWorkerSignals(unittest.TestCase):
         sess, reply = self.turn('Two options.\n[[TASKUARY-ASK]] Which vendor? | Acme | Globex')
         self.assertNotIn('TASKUARY-ASK', reply)
         st = ws.status(self.s, self.tid)
-        self.assertEqual(st['state'], 'input_needed'); self.assertEqual(st['requests'][0]['choices'], ['Acme', 'Globex'])
+        self.assertEqual(st['state'], 'input_needed'); self.assertEqual(st['requests'][0]['text'], 'Which vendor?')
         self.assertEqual([e['Kind'] for e in ws.events(self.s, self.tid, sess.sid)], ['working', 'turn_end', 'input_needed'])
+
+    def test_a_general_agents_question_carries_no_chips_on_the_desktop_or_the_phone(self):
+        """Chips are only a CLI question tool's or its on-screen chooser's (the owner, 2026-11-03): a general agent's question is
+        plain words, answered in the box under it - choices written on its line anyway stay in its text, never as presses."""
+        sess, reply = self.turn('Two options.\n[[TASKUARY-ASK]] Which vendor? | Acme | Globex')
+        req =ws.asking_of(self.s, sess)
+        self.assertEqual((req['text'], req['choices']), ('Which vendor?', []))
+        self.assertIn('Which vendor? (Acme / Globex)', reply, 'the words it offered are still read, as words')
+        from taskuary import remote_assistant as ra
+        item = {'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': self.tid, 'ref': 'TQ-0001', 'title': 'Compare vendors',
+                'who': 'general', 'agent': 'general', 'choices': req['choices'], 'questions': [req]}
+        self.assertEqual(ra.agent_answers(item), [], 'no phone buttons for its words')
+        text = ra.turn_text({'say': 'general asked you something.', 'item': item, 'chips': []})
+        self.assertIn('Type your answer - it goes straight in.', text); self.assertNotIn('Pick an answer below', text)
 
     def test_the_question_stays_in_the_answer_the_chat_shows(self):
         """The marker line IS the question; cutting the marker cut the question, and with no question card in the chat any
@@ -98,6 +112,7 @@ class ApiWorkerSignals(unittest.TestCase):
         def brain(system, user, **kw): seen['system'] = system; return 'ok'
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=brain): sess.send_prompt('hi')
         self.assertIn(selfclose.ASK_MARKER, seen['system'])
+        self.assertNotIn('choice', selfclose.ASK_LINE.lower(), 'the agent is no longer invited to offer its own options')
 
     def test_a_turn_that_died_is_not_a_turn_still_working(self):
         """A turn whose brain raised left `working` as the last word anybody had. The task wore

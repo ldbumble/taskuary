@@ -150,6 +150,8 @@ async function openTask(t, kind) {
   await page.setViewport({ width: 1600, height: 810 });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // a coding agent is a developer's: Developer mode ships off, and off, every job is a general agent's (2026-11-02)
+  if (kind === "coding") await w.api("/api/settings", { name: "developer_mode", value: "1" }, "PATCH");
   await page.goto(w.ui, { waitUntil: "domcontentloaded" });
   const made = kind === "general"
     ? await w.api("/api/tasks", { Title: "Compare payroll vendors", Summary: "Compare three payroll vendors on price for Northwind", Kind: "general" })

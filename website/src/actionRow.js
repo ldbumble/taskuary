@@ -428,6 +428,11 @@ export function fitRow(row, m, avail, phone = false, extra = 0) {
   return { ...at(last), tight: true };
 }
 const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray letter
+// A DESK BAR SQUEEZED UNDER ITS NAV (the mixed-use stress, 2026-11-02): from 900 to ~1100 wide the ask bar's fixed width (--tq-ask-w) leaves
+// the bar ~120-250px, and even its narrowest layout with the Nav pill's label and a worded Back ran past it - Back was cut off whole. Where that
+// layout would not fit, the bar takes the phone's short Nav: no label, Back its arrow alone (`backShort`, measured off the same hidden copy)
+export const navShort = (row, m, avail) => !!m && avail > 0 && rowWidth(foldsOf(row).at(-1), navOf(row), m) > avail;
+export const shortParts = (m) => ({ ...m, back: m.backShort ?? m.back, label: { ...m.label, nav: 0 } });
 
 // THE STAGE MOVES RIDE ON THEIR PANE (the owner, 2026-10-29, after three mockups). The bar keeps what acts on the whole task - Back and
 // Next, Mark done, Change, Share, Close with a note, Attach a file. The moves that take the task a STAGE on belong to their pane: Send to

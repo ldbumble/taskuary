@@ -25,7 +25,7 @@ test("a phone's row is the one lit move with everything else behind one ▾ - an
 test("the row draws the phone's one group under 600px, and a group's chips stay on its one line", () => {
   const row = read("ActionRow.jsx");
   assert.match(row, /const phone = useMediaQuery\("\(max-width:600px\)"\);/);
-  assert.match(row, /const fit = fitRow\(row, m, avail, phone, extra\);/);
+  assert.match(row, /const fit = fitRow\(row, short && !phone \? shortParts\(m\) : m, avail, phone, extra\);/);
   assert.match(read("actionRow.js"), /const all = foldsOf\(row\), last = all\.length - 1/);
   assert.match(read("actionRow.js"), /export const phoneRow = \(row\) => foldsOf\(row\)\.at\(-1\)\?\.\[0\]/, "the narrowest layout is the phone's");
   assert.match(read("assistantView.css"), /\.tq-cl-b \{ display: flex; flex-wrap: nowrap; justify-content: center;/);

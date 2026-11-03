@@ -3,7 +3,7 @@
 // ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Menu, MenuItem, useMediaQuery } from "@mui/material";
-import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, press, putSpineVerbs, rowOf, lightOnCard, sameRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { label } from "./buttons.js";
 import { CONNECT_AI } from "./ConnectAi.jsx";
@@ -141,7 +141,9 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // ...and if the drawn line still runs past its box (a width the parts did not add up to), one more group folds - until the parts are
   // measured again: an overflow drawn off a measure taken before the fonts landed folded a row that fit, and kept it folded
   const sig = `${parts}|${avail}|${phone}|${JSON.stringify(m)}`, extra = over.at === sig ? over.n : 0;
-  const fit = fitRow(row, m, avail, phone, extra);
+  // ...and a desk bar too narrow for even its narrowest layout with the worded Nav draws the phone's short one (actionRow.navShort)
+  const short = phone || navShort(row, m, avail);
+  const fit = fitRow(row, short && !phone ? shortParts(m) : m, avail, phone, extra);
   useLayoutEffect(() => { if (box && fit.level < fit.last && box.scrollWidth > box.clientWidth + 1) setOver({ at: sig, n: extra + 1 }); });
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next && !back) return null;
@@ -157,12 +159,12 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
       <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
         {/* NAV, ONE PILL (the owner, 2026-10-27): the walk's Back (up the line) and Next (down it), labelled like the types - never folded */}
         {(next || back) && <div className="tq-cl tq-cl-next" role="group" aria-label={NAV} data-tq-type="nav">
-          {/* ...on a phone the pill keeps the row its words (pill-leaves-room): no label, and Back is its arrow alone, its name on it for a reader */}
-          {!phone && <span className="tq-cl-h" aria-hidden="true">{NAV}</span>}
+          {/* ...on a phone the pill keeps the row its words (pill-leaves-room): no label, and Back is its arrow alone, its name on it for a reader - and on a squeezed desk bar (navShort) */}
+          {!short && <span className="tq-cl-h" aria-hidden="true">{NAV}</span>}
           <div className="tq-cl-b">
-            {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={phone ? "" : undefined}
+            {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={short ? "" : undefined}
               aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
-              onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{phone ? "" : back.label}</button>}
+              onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{short ? "" : back.label}</button>}
             {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
               onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{next.label}</button>}</div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}
@@ -175,6 +177,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
           <div className="tq-cl-b">
             {next && <span className={`tq-ab ${next.tone} next`} data-tq-wn="">{next.label}</span>}
             {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbk="" data-tq-short={phone ? "" : undefined}>{phone ? "" : back.label}</span>}
+            {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbs="" data-tq-short=""></span>}
             {[...decide, ...agent, ...more].map((v) => <span key={v.id} className={`tq-ab ${v.tone}`} data-tq-w={v.id}>{v.label}</span>)}
             <span className="tq-ab s tq-cl-more" data-tq-wm="">▾</span>
           </div>
@@ -190,6 +193,6 @@ function measure(ghost, box) {
   const cl = ghost.querySelector(".tq-cl"), b = ghost.querySelector(".tq-cl-b"), btn = {}, label = {};
   ghost.querySelectorAll("[data-tq-w]").forEach((el) => { btn[el.dataset.tqW] = w(el); });
   ghost.querySelectorAll("[data-tq-wl]").forEach((el) => { label[el.dataset.tqWl] = w(el); });
-  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")), back: w(ghost.querySelector("[data-tq-wbk]")),
+  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")), back: w(ghost.querySelector("[data-tq-wbk]")), backShort: w(ghost.querySelector("[data-tq-wbs]")),
     pad: px(cl, "paddingLeft") + px(cl, "paddingRight"), clGap: px(cl, "columnGap"), bGap: px(b, "columnGap"), rowGap: px(box, "columnGap") };
 }

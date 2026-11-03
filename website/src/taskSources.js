@@ -162,7 +162,7 @@ export function askLine(text, max = 220) {
 // WHAT TRIAGE DECIDED, as facts you read - never a control (the owner, 2026-10-16: "why are there dropdowns by the triage results?
 // you can't change it"). The task row is the live answer for who, profile, repository and priority; the verdict names the intent.
 // in plain words: "Who does it: an agent · general" was the app's own bookkeeping read out to a finance user (2026-10-17 audit)
-const INTENT = { task: "task", reply_only: "reply", fyi: "fyi" };   // TaskPage.sortedLine reads these ids into its own words
+const INTENT = { task: "task", reply_only: "reply", watch: "watch", fyi: "fyi" };   // TaskPage.sortedLine reads these ids into its own words
 const WHO = { general: "an agent", coding: "a coding agent" };
 export const repoTag = (tags, name = "repo") => (String(tags || "").match(new RegExp(`(?:^|[\\s,])${name}:([^\\s,]+)`)) || [])[1] || "";
 // A WORKFLOW RUN has no message behind it and nobody triaged it (workflows.run): what started it is on the task as a tag, and the
@@ -229,6 +229,7 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
 const factOf = (facts, k) => facts.pills.find((p) => p.key === k && p.tone !== "alert")?.value || "";
 const whatOf = (facts, kind) => { const intent = factOf(facts, "intent");
   return intent === "reply" || kind === "reply" ? "a reply to send" : intent === "fyi" ? "for your information"
+    : intent === "watch" ? "someone else's to handle - watching"
     : `a task ${{ general: "for an assistant", coding: "for your coding tool" }[kind] || "for you"}`; };
 export const sortedLine = (facts, kind) => {
   const what = whatOf(facts, kind), repo = factOf(facts, "repo");
@@ -244,9 +245,10 @@ export const triageSays = (facts, kind, why = "") => [sortedLine(facts, kind), o
 export function routeHead(reason, { intent = "", kind = "", repo = "" } = {}) {
   const m = /^triage:\s*([^·]*?)\s-\s/.exec(String(reason || ""));
   const said = m ? m[1].trim() : "";
-  if (/^(yours to do|work for |needs a reply|nothing to do)/i.test(said)) return said;
+  if (/^(yours to do|work for |needs a reply|nothing to do|watching)/i.test(said)) return said;
   const i = intent || routeIntent(reason);
   if (i === "fyi") return "nothing to do";
+  if (i === "watch") return "watching";
   if (i === "reply_only") return "needs a reply";
   if (kind === "coding") return `work for a coding agent${repo ? ` in ${repo}` : ""}`;
   if (kind === "general") return "work for an agent";

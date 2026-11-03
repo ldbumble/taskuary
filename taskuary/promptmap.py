@@ -117,7 +117,7 @@ def render(store, message_id: int = None, task_id: int = None, width: int = 96) 
     if msg:
         full = store.get_message(msg['MessageId'])
         section(f"1. triage - is message {full['MessageId']} work?",
-                f"asked once per inbound message. Verdict: task / reply_only / fyi.\n"
+                f"asked once per inbound message. Verdict: task / reply_only / watch / fyi.\n"
                 f"the message: \"{(full.get('Subject') or '')[:70]}\" from {full.get('FromEmail')}",
                 _blocks_triage(store, full, full['MessageId']))
     else:

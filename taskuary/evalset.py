@@ -33,7 +33,7 @@ from .routing import norm_subject
 from .triage import addressed_to_you
 from .categories import route_intent
 
-LABELS = ('task', 'reply_only', 'fyi')
+LABELS = ('task', 'reply_only', 'watch', 'fyi')
 RETRIES = 2                  # a model call that fails or garbles is retried this often before it counts as unusable
 ACCEPT_AFTER_DAYS = 3        # an untouched triage call this old is taken as accepted (weakly)
 
@@ -67,6 +67,10 @@ def _labels(store, mine=()) -> dict:
     for r in q("SELECT r.MessageId, t.Kind FROM route r LEFT JOIN task t ON t.TaskId=r.TaskId "
                "WHERE r.RoutedBy='owner' AND r.Decision='create' ORDER BY r.RouteId"):
         out[r['MessageId']] = ('reply_only' if r['Kind'] == 'reply' else 'task', 'owner:promoted', False)
+    # ...and Watch it / Stop watching against triage's reading (operations.correction_for, 2026-11-03): watch is a label like the others
+    for c in q("SELECT MessageId, Verdict, Change FROM correction WHERE MessageId IS NOT NULL AND (Change='watch' OR Verdict='watch') ORDER BY Id"):
+        if c['Change'] == 'watch': out[c['MessageId']] = ('watch', 'owner:watch', False)
+        elif c['Change'] == 'task': out[c['MessageId']] = ('task', 'owner:unwatch', False)
     for r in q("SELECT MessageId, Status FROM review WHERE DecidedBy='owner' AND MessageId IS NOT NULL "
                "AND Status IN ('approved','edited','no_reply') ORDER BY ReviewId"):
         if r['Status'] == 'no_reply':

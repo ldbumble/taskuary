@@ -1718,7 +1718,8 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
         a['triage'] = {'intent': intent.get('intent'), 'kind': intent.get('kind'), 'why': str(intent.get('why') or '')[:200],
                        'sig': i.get('Sig') or '', 'at': now, 'linked_task': tid, 'error': None}
         if tid: a['tid'] = tid
-        if intent.get('intent') in ('task', 'reply_only') and not tid:
+        # ...and a watch opens its task too, under Watching (ingest, 2026-11-03): an idea about somebody else's open thread is kept an eye on
+        if intent.get('intent') in ('task', 'reply_only', 'watch') and not tid:
             try:
                 out = ingest_message(store, {**msg, '_verdict': (intent, {})}, actor='assistant', llm=llm)
                 if out.get('task_id'):

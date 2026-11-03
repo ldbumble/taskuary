@@ -1,7 +1,8 @@
 // THE ROUTE RECORD LEADS WITH WHOSE IT IS (categories.route_head): "triage: work for the assistant - ...". Rows written
 // before say "triage: task - ...", so the verdict is read in either wording - here, and nowhere else by regex.
-const HEAD = /^triage:\s*(task|reply_only|fyi|yours to do|work for |needs a reply|nothing to do)/i;
-const HEAD_INTENT = { "yours to do": "task", "work for ": "task", "needs a reply": "reply_only", "nothing to do": "fyi" };
+// ...and "watching": triage's fourth verdict, someone else's to handle and kept under Watching (the owner, 2026-11-03)
+const HEAD = /^triage:\s*(task|reply_only|fyi|watching|watch|yours to do|work for |needs a reply|nothing to do)/i;
+const HEAD_INTENT = { "yours to do": "task", "work for ": "task", "needs a reply": "reply_only", "nothing to do": "fyi", watching: "watch" };
 export const routeIntent = (reason) => {
   const m = HEAD.exec(String(reason || ""));
   return m ? HEAD_INTENT[m[1].toLowerCase()] || m[1].toLowerCase() : "";
@@ -59,6 +60,7 @@ export const legacyTriageVerdict = ({ routeReason = "", routes = [], task = {}, 
 export const intentLabel = (intent) => ({
   task: "Task",
   reply_only: "Reply needed",
+  watch: "Watching",
   fyi: "FYI",
 }[intent] || String(intent || "Unspecified"));
 

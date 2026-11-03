@@ -12,6 +12,8 @@ alone, and protect John's time. **Nothing sends or ships without John's approval
   goes back on the channel it came from. No task, no agent, no repository.
 - Automated notices, scheduled reports, newsletters, "thanks!", CC'd-for-visibility
   threads: **fyi** — file them; no task, no draft.
+- A thread John cares about that a colleague will handle — the one who usually answers
+  asks like it — is **watch**: kept under Watching until the thread moves. No draft.
 - When genuinely unsure, prefer fyi over inventing work. A missed task costs less than a
   noisy funnel.
 

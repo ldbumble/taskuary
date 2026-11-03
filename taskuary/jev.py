@@ -61,7 +61,7 @@ def ask(key: str, state: str, questions: dict, timeout: int = 20) -> dict:
     return out
 
 
-# One boolean per verdict, argmax'd: `noul` answers yes/no, triage has three intents and three kinds. Every question is asked
+# One boolean per verdict, argmax'd: `noul` answers yes/no, triage has four intents and three kinds. Every question is asked
 # OF THE OWNER'S OWN JUDGEMENT - the state carries their profile (SOUL), what was learned from their past verdicts (LEARNED) and
 # the verdicts on related mail (PAST VERDICTS) - so "would you make this a task" is answered the way they would, not in general.
 _OF = ' Judge as this owner would, using OWNER PROFILE, LEARNED and PAST VERDICTS in the state above: where a past verdict plainly fits, follow it.'
@@ -70,6 +70,8 @@ TRIAGE = {
                    'Something must be done beyond writing back - a system to change, something to produce, chase or look up that takes more than a sentence - and the owner is the one it falls to.'),
     'reply_only': ('Would the owner answer this with a short reply and nothing more?' + _OF,
                    'The message asks the owner a question or a favour that one sentence from them settles - a yes, a no, a time, a name, a go-ahead - and nothing has to be looked up, changed or produced behind it.'),
+    'watch':      ('Would the owner keep an eye on this while someone else handles it?' + _OF,
+                   'Somebody else - a colleague on the mail, the person who usually answers asks like this - is the one to act, and the owner would still want to see how it ends.'),
     'fyi':        ('Would the owner file this as informational, with no action?' + _OF,
                    'The owner would file it without acting: a notice, report, thanks or thread between others, or something their past verdicts say is not theirs.'),
     'urgent':     ('Would the owner call this urgent?',
@@ -90,6 +92,6 @@ def triage(key: str, state: str, timeout: int = 20) -> dict:
     """{intent, kind, urgent, p} - a verdict with NO reason; the words are not this model's to write. `kind` is None unless intent is task."""
     got = ask(key, state, {**TRIAGE, **KIND}, timeout)
     p = {k: v[1] for k, v in got.items()}
-    intent = max(('task', 'reply_only', 'fyi'), key=p.get)
+    intent = max(('task', 'reply_only', 'watch', 'fyi'), key=p.get)
     kind = max(('coding', 'general', 'manual'), key=p.get) if intent == 'task' else None
     return {'intent': intent, 'kind': {'manual': 'task'}.get(kind, kind), 'urgent': got['urgent'][0], 'p': p}

@@ -13,7 +13,8 @@ Timing (seconds, env, defaults measured against claude 2.1 on the owner's machin
   FAKE_CLAUDE_PREFILL per 10K characters of input the provider has not seen in this session 0.25
   FAKE_CLAUDE_TPS    output tokens a second (a token ~4 characters)                        70
 What it SAYS comes from FAKE_CLAUDE_SCRIPT, a JSON list of {"when": regex, "first": text, "then": text}: the owner's words are
-found where the Assistant puts them ("The owner says: " on a first round, "The owner asked: " on a look-up's second round), the
+found where the Assistant puts them ("The owner says: " on a first round, "The owner asked: " on a look-up's second round,
+"FROM THE OWNER: " in a Continue's turn - server.continue_work), the
 first rule whose regex matches answers - `first` on a first round, `then` once it has looked something up, or `exit` with that code
 mid-turn (a CLI that dies). No rule: "Ok."
 FAKE_CLAUDE_LOG, when set, gets one JSON line per event ({pid, ev, t, ...}) for the latency breakdown."""
@@ -42,7 +43,7 @@ def out(j): sys.stdout.write(json.dumps(j) + '\n'); sys.stdout.flush()
 
 def answer(prompt: str) -> str:
     then = 'You looked up ' in prompt or 'You asked Taskuary for ' in prompt
-    m = re.search(r'^The owner (?:says|asked): (.*)$', prompt, re.M)
+    m = re.search(r'^(?:The owner (?:says|asked)|FROM THE OWNER): (.*)$', prompt, re.M)
     said = m.group(1).strip() if m else prompt.strip().splitlines()[-1] if prompt.strip() else ''
     for r in script:
         if not re.search(r['when'], said, re.I): continue

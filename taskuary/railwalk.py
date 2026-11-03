@@ -144,7 +144,8 @@ def place_of(store, key: str, st: dict = None, rows: list = None):
 def _lookup(store, key: str) -> dict | None:
     """The item a key names, read or not, on the rail or not - never the whole rail rebuilt for it (funnel.next_item's keyed build)."""
     if str(key).startswith('fyis:'): return funnel.batch_item(store, key)
-    try: return funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
+    # ...and a message by its own id whatever became of it: a Search pick, a #msg= link (funnel.message_item)
+    try: return funnel.next_item(store, key, include_surfaced=True) or funnel.message_item(store, key)
     except Exception as e:
         logger.debug(f'railwalk: {key} could not be looked up - {e}'); return None
 

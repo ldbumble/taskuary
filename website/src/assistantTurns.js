@@ -100,7 +100,9 @@ export const itemKey = (m) => (m?.role === "assistant" && m.card?.key && !m.prop
 const ids = (m) => [m.id, m.commentId, ...(m.alias || [])].filter((v) => v != null);
 export function placeLine(messages = [], line) {
   const key = itemKey(line);
-  const at = key ? messages.map(itemKey).lastIndexOf(key) : -1;
+  // ...and a card-less line said again straight after itself is that line (a miss said once - concierge.missing_turn)
+  const last = messages[messages.length - 1], again = !key && line?.role === "assistant" && !line.card && last?.role === "assistant" && !last.card && last.text === line.text;
+  const at = key ? messages.map(itemKey).lastIndexOf(key) : again ? messages.length - 1 : -1;
   if (at < 0) return [...messages, line];
   const old = messages[at];
   return [...messages.slice(0, at), ...messages.slice(at + 1), { ...line, alias: [...new Set([...ids(old).filter((v) => v !== line.id), ...(line.alias || [])])] }];

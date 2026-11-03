@@ -4357,12 +4357,15 @@ def end_turn(store, line: list, actor: str = 'owner', write: bool = True) -> dic
 
 
 def missing_turn(store, key: str, actor: str = 'owner') -> dict:
-    """A name or a link that names nothing on the rail or off it - a REMOVED task said as removed (trust audit S4, 2026-10-28)."""
+    """A name or a link that names nothing on the rail or off it - a REMOVED task said as removed (trust audit S4, 2026-10-28).
+    ...and said as what it is, ONCE (a colleague, 2026-11-03): a key names a row by its id, so a miss is a row no longer in Taskuary - never
+    "older than what I keep", a guess about a message Search had just listed - and a second miss in a row adds no second line."""
     tid = general.dock_task(store, actor)[0]['TaskId']
     gone = removed_task(store, key)
-    say = ("That task was removed - it's in Recently deleted." if gone
-           else "I can't find that one - it may be older than what I keep, or it went out under another subject.")
-    record(store, tid, 'assistant', say)
+    what = 'message' if re.match(r'^(msg|report):', str(key or '')) else 'task' if str(key or '').startswith('task:') else 'item'
+    say = "That task was removed - it's in Recently deleted." if gone else f"That {what} is no longer in Taskuary, so it can't be opened."
+    last = (history(store, tid) or [{}])[-1]
+    if (last.get('role'), last.get('text')) != ('assistant', say): record(store, tid, 'assistant', say)
     return {'item': None, 'say': say, 'options': [], 'chips': [], 'left': 0, 'over': False, **({'gone': True} if gone else {})}
 
 

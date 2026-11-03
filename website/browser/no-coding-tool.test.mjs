@@ -18,6 +18,10 @@ test("with no coding tool the live session says pick one, Send to coding agent s
     return { status: r.status, data: await r.json().catch(() => null) };
   }, { path, body });
   assert.equal((await api("/api/setup/dismiss", { dismissed: true })).status, 200);
+  // ...a developer's home with no tool yet: Developer mode off, a coding task is a general agent's and nothing here is refused (2026-11-02)
+  const dev = await page.evaluate(() => fetch("/api/settings", { method: "PATCH", headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"),
+    "Content-Type": "application/json" }, body: JSON.stringify({ name: "developer_mode", value: "1" }) }).then((r) => r.status));
+  assert.equal(dev, 200);
   await page.reload({ waitUntil: "domcontentloaded" });
 
   await page.evaluate(() => { window.location.hash = "new-task"; });

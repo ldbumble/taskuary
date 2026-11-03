@@ -295,3 +295,29 @@ class WhyNoAgentWasMeantTests(unittest.TestCase):
         self.assertIsNone(funnel.agent_story(s, g))
         d = s.create_task({'Title': 'Move the budget review', 'Kind': 'task', 'Status': 'done'}, 'triage')
         self.assertIsNone(funnel.agent_story(s, d))
+
+
+class LiveSession:
+    def __init__(self, tid, busy): self.task_id, self.alive, self.started, self.sid, self.busy = tid, True, 1.0, f'live-{tid}', busy
+    def waiting(self): return not self.busy
+
+
+class LiveIsNotIdleTests(unittest.TestCase):
+    """A parked agent's folded Agent pane said "needs you" beside "Not started yet. Nothing has started the assistant on this." (the
+    stress test, 2026-11-02): a general session leaves no run row and no transcript while it lives, so idle_state found nothing and fell
+    through to its last line. A live session is the state: waiting on you, or working."""
+    def story(self, busy):
+        s = MemoryStore(); t = handed(s, 'Brief me on Payworth', 'agent:general', Kind='general')
+        with mock.patch.dict(terminal.SESSIONS, {f'live-{t}': LiveSession(t, busy)}):
+            return funnel.idle_state(s, t), funnel.agent_story(s, t)
+
+    def test_a_parked_session_waits_on_you(self):
+        st, story = self.story(busy=False)
+        self.assertEqual(st['kind'], 'live')
+        self.assertTrue(st['line'].startswith('Waiting for you.'), st)
+        self.assertNotIn('Not started', story['line']); self.assertEqual(story['kind'], 'live')
+
+    def test_a_working_session_says_it_is_working(self):
+        st, story = self.story(busy=True)
+        self.assertEqual(st['kind'], 'live'); self.assertIn('working on this', st['line'])
+        self.assertNotIn('Not started', story['line'])

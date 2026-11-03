@@ -589,6 +589,10 @@ def idle_state(store, tid) -> dict:
     tags = str(t.get('Tags') or '')
     old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
     out = lambda kind, line, row='': {'kind': kind, 'line': line, 'row': row}
+    # A LIVE SESSION IS THE STATE (the stress test, 2026-11-02): a general session leaves no run row and no transcript while it lives, so a
+    # parked one fell through every fact below to "Not started yet. Nothing has started the assistant on this." - beside "needs you"
+    live = live_state(tid, agent)
+    if live: return out('live', *live)
     news = news_since_agent(store, tid)
     if news: return out('news', news_line(store, tid, news))
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
@@ -675,6 +679,18 @@ def idle_state(store, tid) -> dict:
 def not_started_why(store, tid) -> str: return idle_state(store, tid)['line']
 
 
+def live_state(tid, agent: str = 'the agent') -> tuple | None:
+    "(line, row) for the session live on this task - parked waiting on you, or working - or None when none is."
+    from . import terminal
+    try:
+        s = terminal.session_for(tid)
+        if not (s and getattr(s, 'alive', False)): return None
+        waiting = bool(s.waiting()) if callable(getattr(s, 'waiting', None)) else getattr(s, 'busy', True) is False
+    except Exception: return None
+    return (f'Waiting for you. {_cap(agent)} finished its turn and waits on you.', 'waiting on you') if waiting \
+        else (f'{_cap(agent)} is working on this.', 'working')
+
+
 # the worker's own events in the owner's words - one line each on the agent step's timeline
 _EVENT_SAYS = {'turn_end': 'Finished a turn', 'input_needed': 'Asked you something', 'approval_needed': 'Asked for your approval',
                'answered': 'Got your answer', 'background': 'Kept working in the background', 'stalled': 'Stalled',
@@ -700,6 +716,7 @@ def agent_story(store, tid) -> dict | None:
     if not t or t.get('Status') in ('done', 'dropped'): return None
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
     who = agent_word(t.get('Kind'))
+    if (live := live_state(tid, who)): return {'kind': 'live', 'line': live[0]}      # ...and the folded pane reads it beside "needs you"
     if news_since_agent(store, tid): return {'kind': 'news', 'line': news_line(store, tid)}
     left, q, st = agent_left(store, tid), store.get_dispatch(tid), idle_state(store, tid)
     held, why = st['kind'] == 'held', st['line']

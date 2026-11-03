@@ -3938,7 +3938,7 @@ def _kept(store, tid, actor, e):
     raise KeptOpen(f"It is still open - the agent's work could not be saved first: {why}") from e
 
 
-def close_task(store, tid: int, actor: str = 'owner') -> bool:
+def close_task(store, tid: int, actor: str = 'owner', save: bool = True) -> bool:
     """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
     leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
     # ...and a write-up running for this task (writeup.py) finishes first: a close from anywhere - the task page, the chat, an
@@ -3952,8 +3952,9 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     if closed and not rv: return False
     # ...and A LIVE AGENT IS SAVED BEFORE THE CLOSE (the owner, 2026-11-02: Mark done "will save the result and move on"): working or
     # parked waiting on you, its session is written up as Stop and save writes it - then the close. The chat's, the phone's and the walk's
-    # close killed the pty with nothing kept. A save that fails keeps the task open and says why (KeptOpen)
-    if not closed and not writeup.in_job(): save_live(store, tid, actor); rv = store.pending_review(tid, live_only=False)
+    # close killed the pty with nothing kept. A save that fails keeps the task open and says why (KeptOpen). `save=False`: a filing (Not ours,
+    # a message filed away) archives the task, and an agent's write-up never holds that up
+    if save and not closed and not writeup.in_job(): save_live(store, tid, actor); rv = store.pending_review(tid, live_only=False)
     # A READY REPLY PUT DOWN UNSENT is said on the task, once - Mark done threw it away without a word, and the task kept saying a
     # reply was owed (walk 2026-10-29). No confirm: closing is the owner's decision; the draft stays on its review
     dropped = False

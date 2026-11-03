@@ -34,7 +34,7 @@
     "elsewhere":       {"label": "They answered elsewhere", "hint": "Say where they answered - the step closes as done", "row": []},
     "test_connection": {"label": "Test it", "hint": "Asks the connection again, here", "row": []},
     "next":            {"label": "Next", "hint": "Puts this one down - still yours - and brings the next", "row": [],
-                        "states": {"batch": "All read, next", "read": "Read"},
+                        "states": {"batch": "All read, next", "batch_short": "All read", "read": "Read"},
                         "state_hints": {"batch": "Marks every notice on the card read - search finds them later - and brings the next",
                                         "read": "Marks this one read - search finds it later - and brings the next"}},
     "back":            {"label": "Back", "hint": "Brings back the one above this in your list - this one stays where it is", "row": []},

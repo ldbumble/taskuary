@@ -42,7 +42,7 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
   const openW = (k) => Math.max(OPEN_MIN, w - sections.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === sections[0].key ? 0 : 1));
   const at = (k) => sections.findIndex((s) => s.key === k);
   // ON A PHONE THEY STACK, as a task's sections do under STACK_BELOW (trust audit R1, 2026-10-28): slim side tabs left a report 240px wide
-  // ...and on a desk window only under DESK_STACK_BELOW (TaskPage.useStackBelow): stacked, its moves went back on the bar
+  // ...and wider than a phone only under DESK_STACK_BELOW (TaskPage.useStackBelow): stacked, its moves went back on the bar
   const stackBelow = useStackBelow(), stacked = w > 0 && w < stackBelow, keys = sections.map((s) => s.key), kq = keys.join(" ");
   const laid = React.useMemo(() => (lays && w > 0 && !stacked ? { all: about, keys: kq.split(" ") } : null), [lays, w > 0, stacked, about, kq]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { layTable(itemKey, laid); return () => layTable(itemKey, null); }, [itemKey, laid]);

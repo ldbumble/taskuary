@@ -265,9 +265,10 @@ const FROM_SIDE = { position: "absolute", top: 0, left: 0, bottom: 0, width: "mi
 // to a ~700px work column whose failure reason sat out of sight. A phone (the body under 760px) keeps its stacked page.
 export const STACK_BELOW = 760;
 // ...BUT NEVER ON THE DESK (the owner, 2026-11-03: "stage moves belong on the task's spine, never on the bottom bar"): from 900 to ~1100 wide the
-// rail and the canvas left a task ~490-700px, under 760, and it stacked - its moves went back on the bar. On a desk window (the rail's 900px)
-// the table keeps its three sections, spines and all, down to DESK_STACK_BELOW; a phone and a narrow window keep their stacked page
-export const DESK_W = 900, DESK_STACK_BELOW = 440, OPEN_MIN = 180;
+// rail and the canvas left a task ~490-700px, under 760, and it stacked - its moves went back on the bar. Any window wider than a phone's
+// (DESK_W: 601px up - the 601-810 band with no rail too, the owner the same day) keeps the table's three sections, spines and all, down to
+// DESK_STACK_BELOW; a phone (ActionRow's 600px) keeps its stacked page and its own row
+export const DESK_W = 601, DESK_STACK_BELOW = 440, OPEN_MIN = 180;
 export const useStackBelow = (table = true) => (useMediaQuery(`(min-width:${DESK_W}px)`) && table ? DESK_STACK_BELOW : STACK_BELOW);
 const TODO_SHOWN = 6;   // open to-dos shown before "Show N more"
 const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from

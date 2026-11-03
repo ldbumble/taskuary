@@ -13,12 +13,14 @@ import { label } from "./buttons.js";
 // `onPress` fires AT THE PRESS, before the server answers, so the rail can ring the row's icon at once;
 // `onFail(error)` if it could not continue
 // `initial`: words the box opens holding - the owner's notes when the Assistant lit Continue with them ("rerun it with these notes: ...")
-export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "" }) {
+// `asked`: the question the run was still asking when it ended (workerstate.left_asking) - the box is its answer, and says so
+export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "", asked = "" }) {
   const [note, setNote] = useState(initial || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const pics = usePromptImages();
   const said = note.trim() || pics.imgs.length;
+  const word = label(asked ? "answer_agent" : "continue");
   // ...once: a double press (or Ctrl+Enter then a click) posted /continue-work twice before `busy` was drawn (the agents walk, 2026-10-26)
   const flight = useRef(false);
   const go = async () => {
@@ -34,8 +36,9 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{label("continue")}{taskRef ? ` · ${taskRef}` : ""}</Typography>
-      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="Anything to tell it as it picks up? (optional) - paste or drop a picture too"
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{word}{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      {asked && <Typography data-tq-left-asking sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>{asked}</Typography>}
+      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder={asked ? "Your answer - it goes to the agent as it picks up" : "Anything to tell it as it picks up? (optional) - paste or drop a picture too"}
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} {...pics.drop}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}
         InputProps={{ endAdornment: (
@@ -47,7 +50,7 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
       <ImageTray pics={pics} />
       <Box sx={{ display: "flex", gap: 0.75 }}>
         <Button size="small" variant="contained" disableElevation disabled={busy || pics.busy} onClick={go}>
-          {busy ? "Continuing…" : label("continue")}</Button>
+          {busy ? "Continuing…" : word}</Button>
         <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
       </Box>
       {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}

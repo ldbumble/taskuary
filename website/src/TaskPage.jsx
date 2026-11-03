@@ -2242,7 +2242,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || "It could not start again."; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: tryAgain }); }
     } finally { endStart(id); }
   };
-  const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
+  // A RUN THAT ENDED ASKING THE OWNER (workerstate.left_asking - a restart cut it off at "go ahead?"): its Continue IS the answer - the box
+  // shows the question and what is typed goes to the agent as it picks up (the owner, 2026-11-03: "it's asking me question but the ai closed
+  // the agent why?"). The same button and box, said as what they are
+  const leftAsking = (!term?.alive && detail?.leftAsking?.[0]) || "";
+  const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : leftAsking ? btn("answer_agent") : labelOfRow("continue");
   // WHAT THE OPEN AGENT PANE ALREADY DRAWS, so its heading's stage moves (PaneMoves) never say a press twice: the start box stands open
   // (RunForm) and its own button is the start; a failed general run's Try again stands under its reason (data-tq-failed-fix) - unless
   // its fix (Connect an AI) stands there instead
@@ -2260,7 +2264,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     {runFormOpen
       && <Box data-tq-run-form="">{nextRunForm}</Box>}
     {continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane="" sx={{ mt: 1.25 }}>
-      <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} onClose={() => setContinueCard(null)}
+      <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} asked={leftAsking} onClose={() => setContinueCard(null)}
         onPress={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: selected } }))}
         onFail={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: null } }))}
         onDone={() => { setContinueCard(null); continued(); }} /></Box>}
@@ -3733,7 +3737,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {shareMenu}
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
-      {t && <ContinueBox task={t} anchor={continueAt} onClose={() => setContinueAt(null)} onDone={continued} />}
+      {t && <ContinueBox task={t} anchor={continueAt} asked={leftAsking} onClose={() => setContinueAt(null)} onDone={continued} />}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession}
         said={remindSaid} />}

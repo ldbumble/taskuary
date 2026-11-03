@@ -23,7 +23,8 @@ export const SOURCE_KEYS = ["type", "label", "connector_id", "query", "script", 
   "object", "fields", "filters", "order",          // Intacct - missing here is why a composed report arrived with only its title
   "agent", "skill", "prompt", "cwd", "model",      // the AI-agent source
   "num", "domains", "since", "depth", "time_range", "topic", "answer", "main", "chars",
-  "card", "done_days", "quiet_days", "floor"];      // a Taskuary card and its numbers (days/hours are above)
+  "card", "done_days", "quiet_days", "floor",       // a Taskuary card and its numbers (days/hours are above)
+  "own_system"];                                    // the card's "my own system" switch (origin.report_rests_on)
 
 // "WHENDUE <= 08/31/2026" -> ["WHENDUE", "<=", "08/31/2026"]. The operator is whatever sits
 // between the field and the value.

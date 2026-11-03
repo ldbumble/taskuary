@@ -47,6 +47,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/group-chat',
         '/api/fixture/task/workstreams',
         '/api/fixture/advisor/report-idea',
+        '/api/fixture/stress/seed', '/api/fixture/stress/clear',
         '/api/fixture/walk/world', '/api/fixture/walk/do', '/api/fixture/walk/keys', '/api/fixture/walk/big',
         '/api/fixture/day/away',
     })
@@ -1289,3 +1290,124 @@ def install_processing_changes(app, store):
                 out.append({**{k: r.get(k) for k in ('status', 'task_id', 'message_id')}, 'ms': round((time.perf_counter() - t) * 1000, 1), 'calls': len(calls)})
         store.reconcile_processing_membership()
         return {'out': out}
+
+    # ── THE BUTTON STRESS (the owner, 2026-11-02: "hitting all the buttons - reply, mark done, continue and everything - still looks smooth
+    # and no crazy stuff"): a fresh copy of any item kind for each press, the world emptied to one item, and what a press wrote, counted ──
+    stress_n = [0]
+
+    @app.post('/api/fixture/stress/seed')
+    def stress_seed(body: dict):
+        """{kind}: one fresh item of that kind, titled with its own number, so every press lands on an item nobody pressed before.
+        Returns {taskId, title} - a rail row's words are its title. Invented people only."""
+        import json
+        from taskuary import artifacts, calwrite, funnel, testing
+        kind = body.get('kind')
+        stress_n[0] += 1
+        n, f = stress_n[0], testing.Factory(store)
+        f._n, f.actor = 10_000 * n, 'triage'
+        def mail(tid, who, email, subject, words, **kw):
+            return f.message(task_id=tid, subject=subject, body=words, from_name=who, from_email=email, conversation_id=f'email:stress-{n}', sent_at=f.ago(minutes=30), **kw)
+        title = None
+        if kind in MATRIX or kind in ('failed', 'saved', 'coding_saved'):
+            tid = (matrix_state({'state': kind}) if kind in MATRIX else {'failed': playbook_failed, 'saved': chat_saved, 'coding_saved': coding_saved}[kind]({}))['taskId']
+            # ...its own number on its title: the states share theirs, and a row is found by its words
+            if tid: title = f"{(store.get_task(tid) or {}).get('Title')} ({n})"; store._exec('UPDATE task SET Title=? WHERE TaskId=?', (title, tid))
+        elif kind == 'general':
+            title = f'Payroll export mismatch, batch {n}'
+            tid = f.task(title=title, kind='general')
+            f.route(mail(tid, 'Ray Colton', 'ray@northwind.example', title, 'Two rows came through with the old ids - can the export map them?'), tid, 'create', 'a concrete ask')
+        elif kind == 'owed':
+            title = f'Which cost centre for order {n}?'
+            tid = f.task(title=title, kind='reply')
+            f.route(mail(tid, 'Omar Keller', 'omar@northwind.example', title, 'Which cost centre should this order go on?'), tid, 'create', 'a question for you')
+        elif kind == 'draft':
+            title = f'Invoice {88000 + n} - past due'
+            tid = f.task(title=title, kind='reply')
+            mid = mail(tid, 'Paula Vance', 'paula@vendor.example', title, 'This invoice is 46 days past due. Please advise.')
+            f.route(mid, tid, 'create', 'a vendor chasing payment')
+            f.review(tid, mid, draft="Thanks Paula - it goes out in Friday's payment run.")
+        elif kind == 'blocked':
+            title = f'org/app#{500 + n} import stops on a blank site'
+            tid = f.task(title=title, kind='coding', status='in_progress', source='github', Assignee='agent:coding', Tags='repo:org/app')
+            f.route(mail(tid, 'Marcus Reed', None, title, 'The import aborts when a site has no manager.', channel='github'), tid, 'create', 'an issue')
+            live_agent({'task_id': tid})
+        elif kind == 'goal':
+            title = f'Move the payroll export to the new ledger ({n})'
+            tid = f.task(title=title, kind='task', DoneWhen='the payroll export lands in the new ledger', DueAt=(datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
+            store.set_task_checklist(tid, [f'List the export fields {n}', f'Map them to the ledger {n}', f'Gail: sign-off {n}'], 'owner')
+            wait = f.task(title=f'Gail: sign-off {n}', status='waiting', kind='task', ParentId=tid, Assignee='person:gail@northwind.example',
+                          DueAt=(datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d'))
+            store.link_step(tid, store.checklist_id(f'Gail: sign-off {n}'), wait, 'owner')
+        elif kind == 'invite':
+            d1 = _demo._workdays(1)[0]
+            subject = f'Ledger cutover rehearsal {n}'
+            c = {'kind': 'request', 'provider': 'outlook', 'mailbox': 'demo', 'event_id': f'stress-event-{n}', 'ical_uid': f'stress-uid-{n}', 'update': False,
+                 'answered': False, 'asks': True, 'subject': subject, 'start': f'{d1} 10:00', 'end': f'{d1} 11:00', 'all_day': False,
+                 'organizer': 'Erin Blake', 'organizer_email': 'erin@northwind.example', 'attendees': ['erin@northwind.example', 'alex@northwind.example']}
+            title = f'Invite: {subject}'
+            tid = f.task(title=title, kind='reply', Summary=f"Erin Blake invited you to {subject}, {calwrite.when(c['start'], c['end'])}. Accept, decline or propose a new time.")
+            mid = mail(tid, 'Erin Blake', 'erin@northwind.example', f'Invitation: {subject}', 'A rehearsal of the ledger cutover.', MailMetaJson=json.dumps({'invite': True, 'cal': c}))
+            f.route(mid, tid, 'create', 'Erin invited you')
+        elif kind == 'meet':
+            d2 = _demo._workdays(2)[1]
+            title = f'Half an hour on the vendor list ({n})'
+            tid = f.task(title=title, kind='reply')
+            mid = mail(tid, 'Gail Moreno', 'gail@northwind.example', f'Vendor list - 30 minutes? ({n})', f"Can we find 30 minutes {d2:%A} to go through the vendor list?",
+                       MeetJson=json.dumps({'minutes': 30, 'from': str(d2), 'to': str(d2)}))
+            f.route(mid, tid, 'create', 'she asks for half an hour')
+            f.review(tid, mid, draft=f"Yes - {d2:%A} works. I'll send an invite.")
+        elif kind == 'report':
+            title = f'Badge swipes by site {n}'
+            pic = f.report_row(title=title)
+            rows = [{'site': 'Lakeview', 'swipes': 112 + n}, {'site': 'Riverside', 'swipes': 98}, {'site': 'Fairhaven', 'swipes': 143}]
+            text = '\n'.join(json.dumps(r) for r in rows)
+            store._exec('UPDATE message SET BodyText=?, Subject=? WHERE MessageId=?', (text, f'{title} - {len(rows)} rows', pic.mid))
+            artifacts.attach_report_output(store, pic.mid, title, text)
+            tid = None
+        elif kind == 'fyi':
+            title = f'Platform digest, week {n}'
+            mid = f.message(task_id=None, status='filed', subject=title, from_email='digest@vendor.example', from_name='Payworth Updates',
+                            body="An automated summary of this week's changes. Nothing is asked.", sent_at=f.ago(minutes=20))
+            f.route(mid, None, 'file', 'automated/informational')
+            tid = None
+        elif kind == 'watched':
+            from taskuary import watch
+            title = f'Paula sorts the Trainly seats ({n})'
+            tid = f.task(title=title, kind='general')
+            f.route(mail(tid, 'Paula Vance', 'paula@northwind.example', title, 'I will sort the Trainly seats this week.'), tid, 'create', 'a heads-up')
+            watch.watch(store, tid, 'owner')
+        else: raise HTTPException(422, f'unknown kind {kind!r}')
+        store.reconcile_processing_membership(); funnel.invalidate(); store._poke('feed-changed')
+        return {'taskId': tid, 'title': title, 'kind': kind}
+
+    @app.post('/api/fixture/stress/clear')
+    def stress_clear(body: dict):
+        """Every rail item put away without a word to anyone: open tasks closed in the database, everything else settled done - the world
+        the next seed is the one item of."""
+        from taskuary import funnel, railwalk
+        store._exec("UPDATE task SET Status='done', WatchedAt=NULL WHERE Status NOT IN ('done', 'dropped', 'cancelled')", ())
+        funnel.invalidate()
+        for it in funnel.pile(store, force=True).get('items', []):
+            k = str(it.get('key') or '')
+            if k and not k.startswith('task:'):
+                try: funnel.settle(store, k, 'done', 'fixture')
+                except Exception: pass
+        store.reconcile_processing_membership(); railwalk.reset(store); funnel.invalidate(); store._poke('feed-changed')
+        return {'left': [i.get('key') for i in funnel.pile(store, force=True).get('items', [])]}
+
+    @app.get('/api/fixture/stress/count')
+    def stress_count(task_id: int = 0):
+        """What the presses wrote: on the task (its status, watch, comments, reviews, its audit and its operations by kind) and everywhere
+        (every operation by kind and status) - a press counted twice shows as one more row than a single press leaves."""
+        from collections import Counter
+        ops = store._rows('SELECT Kind, Status, TargetKind, TargetId FROM operation')
+        out = {'ops': dict(Counter(f"{o['Kind']}/{o['Status']}" for o in ops if o['Status'] != 'proposed'))}
+        if task_id:
+            t = store.get_task(task_id) or {}
+            out['task'] = {k: t.get(k) for k in ('Status', 'WatchedAt', 'Assignee', 'Priority', 'Kind')}
+            cs = store.list_comments(task_id)
+            out['comments'], out['said'] = len(cs), [f"{c.get('Actor')}: {(c.get('Body') or '')[:160]}" for c in cs[-2:]]
+            out['reviews'] = [f"{r['ReviewId']}:{r['Status']}" for r in store._rows('SELECT ReviewId, Status FROM review WHERE TaskId=?', (task_id,))]
+            out['audit'] = dict(Counter(a['Action'] for a in store._rows("SELECT Action FROM audit WHERE EntityType='task' AND EntityId=?", (task_id,))))
+            out['taskOps'] = dict(Counter(f"{o['Kind']}/{o['Status']}" for o in ops if o['TargetKind'] == 'task' and o['TargetId'] == task_id and o['Status'] != 'proposed'))
+        return out

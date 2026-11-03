@@ -121,7 +121,13 @@ export const announce = (id) => pressing.forEach((f) => { try { f(id); } catch {
 // a double-click on Accept drafted the calendar's answer twice - the verb's own handler had no busy of its own. A verb whose run is still
 // answering is not run again for the same card; a run that never answers lets go after FLIGHT_MS. Next keeps the walk's own rules
 // for a press over a press
-const flying = new Map(), FLIGHT_MS = 30000;
+// ...AND A DOUBLE OR TRIPLE CLICK IS ONE PRESS even when the first one's run has answered already (the button stress, 2026-11-02): on a fast
+// box Should be a task made the task inside a triple-click's 140ms, the third click landed on the same button before its card swapped, and
+// it proposed the task again - "TQ-0119 is already a task on your list" stood in red. A press of the same verb of the same card within
+// REPEAT_MS of the last is that press's own click (secondClick.js's grace, for the button itself). Next and Back keep their own rules
+const flying = new Map(), FLIGHT_MS = 30000, lastAt = new Map(), REPEAT_MS = 450;
+// ...the same window for a card's own button that runs without the row (the draft's Redraft): true when this click is the last one's repeat
+export const repeatClick = (k, e) => { if (!e?.isTrusted) return false; const at = lastAt.get(k) ?? -Infinity, now = Date.now(); if (now - at < REPEAT_MS) return true; lastAt.set(k, now); return false; };
 export const press = (id, e, anchor, of = null) => {
   // ...the verb of THAT card: one put down a moment ago may still be mounted, registering the same id after it (rowTable) - and the
   // code's own press runs the one the row draws, not the one put down
@@ -130,6 +136,10 @@ export const press = (id, e, anchor, of = null) => {
   if (of && !v) return undefined;
   const k = `${by || ""}|${id}`;
   if (Date.now() - (flying.get(k) ?? -Infinity) < FLIGHT_MS) return undefined;
+  // ...a hand's click only (isTrusted): the page's and a test's own click() of a verb are presses each
+  const hand = !!e?.isTrusted && !(v?.group === "next" || v?.group === "back");
+  if (hand && Date.now() - (lastAt.get(k) ?? -Infinity) < REPEAT_MS) return undefined;
+  if (hand) lastAt.set(k, Date.now());
   announce(id);
   const out = v?.run?.(e, anchor);
   // ...and Back the same as Next (2026-11-02): a second Back while the first is out was dropped here, never reaching the walk's own hold

@@ -15,7 +15,7 @@ import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
-import { acted, announce, useLit, useVerbs } from "./actionRow.js";
+import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
@@ -290,8 +290,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     setBusy(false);
   };
 
-  const redraft = async () => {
-    if (delivery.frozen) return;
+  const redraft = async (e) => {
+    // ...a double-click is ONE Redraft (the button stress, 2026-11-02): a draft written inside the double-click's 70ms was asked for again
+    if (delivery.frozen || redrafting || repeatClick(no("redraft"), e)) return;
     announce(no("redraft"));
     setRedrafting(true);
     try { await api.post(`/api/reviews/${r.ReviewId}/draft`); setText(null); onChanged?.(); }

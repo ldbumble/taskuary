@@ -3002,12 +3002,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                {!codeRun && <Box ref={agentHead} data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
+                {!codeRun && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : shows("agent") ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
                   flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap",
+                  /* ...the chat's Full screen keeps its icon alone where the heading has no room for its word (a half beside Close out, the owner
+                     2026-11-03): the title is read first; the press, its tooltip and its name stay */
+                  ...(liveSession && inRow ? { containerType: "inline-size", "@container (max-width: 620px)": { "& [data-tq-full-word]": HIDDEN_WORDS,
+                    "& [data-tq-head-tools] .MuiButton-startIcon": { mr: 0 } } } : {}),
                   ...(focus === "agent" ? { ...FOCUS, ...(chatBelow ? { borderBottom: 0, borderRadius: "10px 10px 0 0", pb: 0.5 } : {}) } : {}) }}>
                   <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
                     {/* the agent by NAME, not by which binary is running: "Agent running · <CLI>
@@ -3031,7 +3035,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                        there 2 buttons for full results?"): the heading neither folds nor says "Result" there */
                     {...(threeUp && !sessionView && resultShown ? { onToggle: null, folded: false, sub: "" } : {})}
                     tools={inRow && workspaceMode === "general" && liveSession
-                      ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
+                      ? <Box ref={setChatTools} data-tq-head-tools="" sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "nowrap", minWidth: 0 }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
@@ -3785,11 +3789,14 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
         {sec.name}
         {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 16, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
       </Typography>
-    </Box> : <Box sx={{ minWidth: 0, flex: 1 }}>
+    </Box> : <Box sx={{ minWidth: tools ? 72 : 0, flex: tools ? "1 1 auto" : 1 }}>
       {/* A FOLDED SECTION IS A HEADING OF THE WORK, not a row to press (the owner, 2026-10-27: "on the task there is a Close out button, but
           I thought it's a sidebar thing that pulls out?"): faded, with its arrow at the far edge, folded Close out read as a stray button
           under the Result. It wears the open heading's own weight now, its fold mark beside its name */}
-      <Typography sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 0.25 }}>
+      {/* ...beside the chat's own controls it is one line that ends in … (the owner, 2026-11-03: "Tasku… / answ…" under the brain picker): the
+          controls give way first (GeneralWorkspace), and nothing beside it folds */}
+      <Typography data-tq-head-title="" sx={{ color: quiet ? DIM : INK, fontSize: quiet ? 12.5 : 14, fontWeight: 600, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 0.25,
+        ...(tools ? { display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } : {}) }}>
         {title}
         {onToggle && <ExpandMoreIcon data-tq-fold-mark="" sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s, color .15s" }} />}
       </Typography>
@@ -3798,6 +3805,6 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
     {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
     {tools && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 1, minWidth: 0 }}>{tools}</Box>}
-    {chip}
+    {chip && <Box data-tq-head-chip="" sx={{ display: "flex", flexShrink: 0 }}>{chip}</Box>}
   </Box>
 );

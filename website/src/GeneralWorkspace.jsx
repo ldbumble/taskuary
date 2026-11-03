@@ -849,21 +849,32 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     </OutputsCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
+  /* CHIP-SIZED, AND THEY GIVE WAY (the owner, 2026-11-03, Agent beside Close out: "this ui looks weird when split? make the model choice
+     smaller"): a 220px brain picker and a 150px model box that never shrank sat on the heading's title - "Tasku… / answ…" - in a ~500px
+     half. Each is a small chip now that ends in … before the title does, the model the CLI's own list (as the dock's) where it has one,
+     and Full screen keeps its icon alone where its word has no room (TaskPage's agent heading) */
+  const brainNow = (data?.providers || []).find((p) => String(p.id) === String(connectorId));
+  const chipSx = { height: 24, fontSize: 11, bgcolor: PANEL2, minWidth: 64, flexShrink: 1, "& .MuiSelect-select": { py: 0, pl: 1, pr: "22px !important" },
+    "& .MuiSelect-icon": { fontSize: 17, right: 2 } };
   const tools = (<>
-    <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
+    <Select size="small" value={connectorId} displayEmpty inputProps={{ "aria-label": "Agent" }} title={brainNow?.label || undefined} onChange={(e) => {
       const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
       updateProvider(e.target.value, provider?.model || "");
     }}
-      sx={{ height: 27, fontSize: 11.5, minWidth: 96, maxWidth: 220, bgcolor: PANEL2, flexShrink: 1 }}>
+      sx={{ ...chipSx, maxWidth: 150 }}>
       {!data?.providers?.length && <MenuItem value="">No agent connected</MenuItem>}
       {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>{p.label}</MenuItem>)}
     </Select>
-    <TextField size="small" value={model} placeholder="provider default" onChange={(e) => setModel(e.target.value)}
-      onBlur={() => connectorId && updateProvider(connectorId, model)} sx={{ width: 150, flexShrink: 0, "& input": { py: 0.55, fontSize: 11.5 } }} />
-    <Button size="small" onClick={toggleFull} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}
+    {brainNow?.models?.length
+      ? <ModelSelect model={model} size={24} empty="provider default" info={{ models: brainNow.models }} sx={{ ...chipSx, maxWidth: 120 }}
+          onModel={(m) => { setModel(m); if (connectorId) updateProvider(connectorId, m); }} />
+      : <TextField size="small" value={model} placeholder="provider default" inputProps={{ "aria-label": "Model" }} onChange={(e) => setModel(e.target.value)}
+          onBlur={() => connectorId && updateProvider(connectorId, model)}
+          sx={{ width: 110, minWidth: 64, flexShrink: 1, "& .MuiInputBase-root": { height: 24, bgcolor: PANEL2 }, "& input": { py: 0, px: 1, fontSize: 11, textOverflow: "ellipsis" } }} />}
+    <Button size="small" onClick={toggleFull} aria-label={full ? "Exit full screen" : "Full screen"} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0, whiteSpace: "nowrap" }}
       title={full ? "Back to the page (Esc)" : "Give this conversation and its browser the whole window"}
       startIcon={full ? <CloseFullscreenIcon sx={{ fontSize: 13 }} /> : <OpenInFullIcon sx={{ fontSize: 13 }} />}>
-      {full ? "Exit full screen" : "Full screen"}
+      <span data-tq-full-word="">{full ? "Exit full screen" : "Full screen"}</span>
     </Button>
   </>);
   return (

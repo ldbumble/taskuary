@@ -215,7 +215,7 @@ Take over to drive it yourself; close the session to close it."
           onChange={(e) => setTyped(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") go(); if (e.key === "Escape") setTyped(""); e.stopPropagation(); }}
           placeholder={shortUrl(url) || "type an address to open a page"}
-          title={url ? `${url}\n\ntype an address and press Enter to go somewhere else` : "type an address and press Enter to open a page"}
+          title={url ? `${/^file:/i.test(url) ? shortUrl(url, 200) : url}\n\ntype an address and press Enter to go somewhere else` : "type an address and press Enter to open a page"}
           sx={{ ...mono, fontSize: 11, color: "#c9c3b9", flex: 1, minWidth: 0, bgcolor: "transparent",
             border: "1px solid transparent", borderRadius: 1, px: 0.75, py: 0.25, outline: "none",
             "&::placeholder": { color: "#a8a196", opacity: 1 },
@@ -399,7 +399,7 @@ export function LastView({ taskId, sid = "", narrow = false }) {
           {`browser · where the agent last was${last.url ? ` · ${shortUrl(last.url, 48)}` : ""}`}</Box>
         <Box component="span" sx={{ flexShrink: 0 }}>{shown ? "Hide" : "Show"}</Box>
       </Box>
-      {shown && <Box component="img" src={last.src} alt={`The agent's browser, last on ${last.url || "a page"}`}
+      {shown && <Box component="img" src={last.src} alt={`The agent's browser, last on ${shortUrl(last.url, 200) || "a page"}`}
         sx={{ display: "block", width: "100%", maxHeight: "min(46vh, 480px)", objectFit: "contain", bgcolor: "#101010" }} />}
     </Box>
   );

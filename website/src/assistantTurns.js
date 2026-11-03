@@ -25,7 +25,7 @@ export function mergeDurableTurns(local = [], durable = [], { append = true } = 
   // a turn that had already been reconciled.
   const ids = new Set(messages.flatMap((m) => [m.id, m.commentId, ...(m.alias || [])]).filter((v) => v != null));
   const claimed = new Set();
-  const added = [];
+  const added = [], held = [];
   let at2 = -1;
   for (const turn of durable || []) {
     if (ids.has(turn.id)) {
@@ -69,12 +69,23 @@ export function mergeDurableTurns(local = [], durable = [], { append = true } = 
       // The older line claimed the bubble just now; the newer is the same bubble too - pushed at the end, it stood a live card over the
       // page opened since (the search walk: Enter on Gmail, the reopened task back over its card a read later, 2026-10-31)
       messages[at2] = { ...messages[at2], alias: [...new Set([...(messages[at2].alias || []), turn.id])] };
-    } else if (!append) continue;
+    } else if (cardOf(turn) && messages.some((m) => itemKey(m) === cardOf(turn))) { held.push(turn); continue; }
+    else if (!append) continue;
     else {
       messages.push(turn);
       added.push(turn);
     }
     ids.add(turn.id);
+  }
+  // ...AND AN ITEM'S LINE THE PAGE DREW AGAIN BEFORE ANY READ MATCHED IT (placeLine: Back opened it, Next came back over it, both between two
+  // 30 s reads): its server id was never learned, and pushed at the end a read later, oneCopy kept that old turn as the item's newest line -
+  // after the fyi batch on the table, the bar offering the task's Back and Next over it and at the walk's end (flow-walk, 2026-11-03). Older
+  // than a turn the page holds, it is that line's past; newer (the phone opened it again), it still comes to the end
+  const newest = Math.max(0, ...[...ids].filter(Number.isInteger));
+  for (const turn of held) {
+    const at = turn.id < newest ? messages.findLastIndex((m) => itemKey(m) === cardOf(turn)) : -1;
+    if (at >= 0) messages[at] = { ...messages[at], alias: [...new Set([...(messages[at].alias || []), turn.id])] };
+    else if (append) { messages.push(turn); added.push(turn); }
   }
   return { messages: oneCopy(messages), added };
 }

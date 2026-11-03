@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.22 - 2026-11-02
+
+- Send something written by the Assistant opens on the channel asked, to the chat named
+- FYI fills the rail before reports, and a scrolling rail draws a screenful of it
+- Next on the last row reads it and ends the walk, instead of standing greyed
+- Digest lists only meetings still ahead, and is named by when it was written
+- FYI shows a fixed 6 rows on a big window and 4 on a small one
+
 ## 0.3.10.21 - 2026-11-02
 
 - The Assistant gives a file an agent made by its link, never a path on disk

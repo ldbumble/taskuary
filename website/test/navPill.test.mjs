@@ -57,7 +57,7 @@ test("the view registers Back beside the floor and asks the walk for the row abo
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   // ...and on a desk Back is always there, greyed where there is nowhere to go back to (the owner, 2026-10-29)
   assert.match(view, /useVerbs\("nav", \[\{ id: BACK, group: "back", label: btn\("back"\), title: btnHint\("back"\), disabled: !backTo, why: "nothing above this one",\s+run: \(\) => backTo && goBack\(\) \}\], !!backTo \|\| \(deskChat && !firstRun\)\);/);
-  assert.match(view, /if \(!backTo\) \{ cancelHeld\(\); return undefined; \}/, "nothing above: nothing happens");
+  assert.match(view, /if \(!walkOf\(pileRef\.current\)\?\.above && !backTo\) \{ cancelHeld\(\); return undefined; \}/, "nothing above: nothing happens");
   assert.match(view, /return surface\(null, null, heldRef\.current\?\.how === "back" \? heldRef\.current\.from : null, false, "back"\);/,
     "the walk's own Back: the row above, from the server - from the row a held Back left");
   // ...on a row a press drew, the walk's word for the row above it (heldStep `back`, nextHeldDraws.test.mjs)

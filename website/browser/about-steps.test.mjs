@@ -72,16 +72,16 @@ test("About your work: Skip lands on the sources step, which cannot be skipped a
   assert.ok(await press(page, "Skip these questions"));
   await onStep(page, "mailboxes");
   assert.equal(await button(page, "Skip these questions"), null, "the mailbox step has no Skip");
-  assert.deepEqual(await button(page, "That's all my sources"), { off: true }, "with no source it cannot move on");
+  assert.deepEqual(await button(page, "Next"), { off: true }, "with no source it cannot move on");
   assert.match(await line(page), /Connect your email, chat or task system with its card/);
   assert.ok(await page.$("[data-tq-firstrun] [data-tq-card]"), "the main source step's own cards are on it");
   // a mailbox connected (the card's own setup, read back on the next poll): listed, and the step moves on
   world.boxes = [{ address: "alex@northwind.example", type: "imap", title: "Email" }];
   await until(page, () => /alex@northwind\.example/.test(document.querySelector("[data-tq-mailboxes]")?.innerText || ""), null, 20000);
-  await until(page, () => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "That's all my sources" && !b.disabled));
-  assert.match(await line(page), /One source is connected\. .*Then press That's all my sources\./);
+  await until(page, () => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "Next" && !b.disabled));
+  assert.match(await line(page), /One source is connected\. .*Then press Next\./);
   await shot(page, "about-mailboxes");
-  assert.ok(await press(page, "That's all my sources"));
+  assert.ok(await press(page, "Next"));
   await onStep(page, "job");
   // passing it writes the job from every mailbox in - Skip went past the title, so this is the first time it is written
   assert.equal(sent["/api/setup/first-run/about/learn"], 1);
@@ -107,15 +107,17 @@ test("About your work: the job, how you write and who you are are drafts to acce
   assert.ok(await press(page, "Skip these questions"));
   await onStep(page, "mailboxes");
   assert.match(await line(page), /2 sources are connected\./);
-  assert.ok(await press(page, "That's all my sources"));
+  assert.ok(await press(page, "Next"));
   await onStep(page, "job");
   assert.deepEqual(world.asked, [["job", "workstreams", "style", "soul"]], "every draft is written once every mailbox is in");
   // the job: read as a document, a section per organisation, and accepted as it is
   await until(page, () => document.querySelectorAll("[data-tq-job-read] h2").length === 2);
   assert.match(await page.evaluate(() => document.body.innerText), /About your work · 7 of 10/);
-  assert.match(await line(page), /This is your job as your email describes it/);
+  assert.match(await line(page), /This is your job as your email describes it.*then press Next\./);
+  // ...and the corner says Next on every step, never a word of the step's own (the owner, 2026-11-03)
+  for (const w of ["Looks right", "That's all my sources", "Save"]) assert.equal(await button(page, w), null, `no ${w} in the corner`);
   await shot(page, "about-job");
-  assert.ok(await press(page, "Looks right"));
+  assert.ok(await press(page, "Next"));
   await onStep(page, "workstreams");
   // what you work on: one row each, the personal one ticked and said so; leaving one out is the answer that goes back
   await until(page, () => document.querySelectorAll("[data-tq-workstream-row]").length === 2);
@@ -126,11 +128,11 @@ test("About your work: the job, how you write and who you are are drafts to acce
   for (const [w, h] of [[1440, 900], [390, 844], [1280, 600]]) {
     await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
     await until(page, (vh) => { const b = document.querySelector('.tq-dock [data-tq-type="nav"] [data-tq-next]'); const r = b?.getBoundingClientRect();
-      return !!r && r.width > 0 && r.bottom <= vh && r.top >= 0 && b.innerText.trim() === "Looks right"; }, h, 10000);
+      return !!r && r.width > 0 && r.bottom <= vh && r.top >= 0 && b.innerText.trim() === "Next"; }, h, 10000);
   }
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await shot(page, "about-workstreams");
-  assert.ok(await press(page, "Looks right"));
+  assert.ok(await press(page, "Next"));
   await onStep(page, "style");
   assert.deepEqual(world.accepted, ["job", "workstreams"]);
   // how you write failed: said plainly on the canvas and on the line, with Write it again lit - Next never pretends it worked
@@ -143,18 +145,18 @@ test("About your work: the job, how you write and who you are are drafts to acce
   assert.ok(await press(page, "Write it again"));
   await until(page, () => /answer first/.test(document.querySelector("[data-tq-job-read]")?.innerText || ""));
   assert.deepEqual(world.asked.at(-1), ["style"], "only that draft is written again");
-  assert.ok(await press(page, "Looks right"));
+  assert.ok(await press(page, "Next"));
   await onStep(page, "soul");
   // who you are, still being written: said, and the step waits for it; then it arrives on the next read
   assert.match(await page.evaluate(() => document.body.innerText), /Describing how you like to work…/);
-  assert.deepEqual(await button(page, "Save"), { off: true }, "the last step waits on its draft");
+  assert.deepEqual(await button(page, "Next"), { off: true }, "the last step waits on its draft");
   world.drafts.soul = DRAFT("### How I like to work\n- I settle a question the same day.");
   await until(page, () => /same day/.test(document.querySelector("[data-tq-job-read]")?.innerText || ""), null, 20000);
   assert.match(await line(page), /This is how you like to work, from your mail and your answers/);
   await shot(page, "about-soul");
-  assert.ok(await press(page, "Looks right"));
+  assert.ok(await press(page, "Next"));
   for (let i = 0; i < 100 && !sent["/api/setup/first-run/about"]; i++) await new Promise((r) => setTimeout(r, 100));
-  assert.equal(sent["/api/setup/first-run/about"], 1, "the last Looks right saves the answers");
+  assert.equal(sent["/api/setup/first-run/about"], 1, "the last Next saves the answers");
   assert.deepEqual(world.accepted, ["job", "workstreams", "style", "soul"]);
   assert.deepEqual(errors, []);
 });

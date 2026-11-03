@@ -22,7 +22,9 @@ test("the job is written once the title is answered, and the last press saves wh
   assert.match(src, /\.\.\.boxes\.map\(\(b\) => b\.address\.toLowerCase\(\)\)\.sort\(\)/);
   assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", \{ \.\.\.x, docs \}\)/);
   assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/drafts"\)/);
-  assert.match(src, /const nextLabel = busy === "save" \? "Saving…" : draft \? \(draft\.state === "ready" \? "Looks right" : last \? "Save" : "Next"\)/);
+  // ...and its corner button says Next on every step (the owner, 2026-11-03) - never a word of its own per step
+  assert.match(src, /const nextLabel = busy === "save" \? "Saving…" : "Next";/);
+  assert.doesNotMatch(src.replace(/^\s*\/\/.*$/gm, ""), /"Looks right"|"That's all my sources"|"Save"|press Looks right/);
   assert.match(src, /if \(step === "soul"\) return save\(\);/);
 });
 
@@ -55,9 +57,8 @@ test("the mailbox step comes right before the job, and Skip lands on it instead 
   assert.match(src, /const skipper = !again && canSkip\(step\);/);
   assert.match(src, /\{skipper && <Button size="small" disabled=\{!!busy\} onClick=\{skip\}/);
   assert.match(src, /if \(to !== null\) return setAt\(to\);/);
-  // "That's all my sources" moves on only with one connected - any source, not only a mailbox - and the cards are the main source step's own
+  // Next moves on only with one connected - any source, not only a mailbox - and the cards are the main source step's own
   assert.match(src, /\(step !== "mailboxes" \|\| boxes > 0\)/);
-  assert.match(src, /step === "mailboxes" \? "That's all my sources" : "Next"/);
   assert.match(read("FirstRun.jsx"), /mailboxes=\{st\.sources \|\| \[\]\} mailShelf=\{mailAbout && <Shelf cards=\{mail\} more="More chat and task"/);
   // ...and the main source's cards are the server's list (firstrun.source_types: the catalogue's, email first), never a name list here
   assert.match(read("FirstRun.jsx"), /const mail = byType\(st\.source_types \|\| MAIL_TYPES\)/);

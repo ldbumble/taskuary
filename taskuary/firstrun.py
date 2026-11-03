@@ -251,7 +251,7 @@ def rail(st: dict) -> dict:
            'mail': ('connected - nothing new yet' if st.get('empty') else 'connected - sorting what came in') if step == 'reading' else 'connected' if mail else '',
            'about': 'saved' if about_done else '', 'dev': 'on' if dev else 'off - every job goes to a general agent',
            'github': 'connected' if gh else 'optional - a coding agent runs without it', 'other': f'{more} connected' if more else 'optional',
-           'finish': 'ready - Finish setup is below' if ready else 'after AI, your main source and About your work'}
+           'finish': 'ready - All ready is below' if ready else 'after AI, your main source and About your work'}
     need = {k: n for k, _l, n in RAIL}
     rows = [{'key': k, 'label': l, 'done': done[k], 'open': opens[k], 'optional': k in OPTIONAL, 'need': n,
              'sub': sub[k] if opens[k] or done[k] or k == 'finish' else f'waits - {need[PREV[k]]}'} for k, l, n in RAIL if k != 'github' or dev]

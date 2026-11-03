@@ -26,8 +26,10 @@ test("on the first item no Back; on the last Next stays live and says it ends th
   // ...live, never greyed (the owner, 2026-11-02: "You can't mark read on the final FYI?"): Next there reads it and ends the walk
   assert.equal(last.next.id, "next", "the last one: Next stands"); assert.equal(last.next.disabled, false, "...live"); assert.match(last.next.title, /ends the walk/);
   assert.equal(last.back.id, BACK);
-  const setup = rowOf({ ref: "", list: [v("setup:back", "next", { label: "Back" }), v("setup:next", "decide", { tone: "p" })], end: true });
-  assert.equal(setup.next.id, "setup:back", "setup's step back is not the walk's Next");
+  // setup's Back and Next take the pill's own slots (the owner, 2026-11-03), and the walk's last-item rule leaves setup's Next alone
+  const setup = rowOf({ ref: "", list: [v("setup:back", "back", { label: "Back", disabled: true }), v("setup:next", "next", { label: "Next" })], end: true });
+  assert.equal(setup.back.id, "setup:back"); assert.equal(setup.back.disabled, true, "greyed on the first step");
+  assert.equal(setup.next.id, "setup:next"); assert.doesNotMatch(setup.next.title, /ends the walk/);
 });
 
 test("Nav never folds, at any width, desk or phone - and the widths add it up as one pill", () => {

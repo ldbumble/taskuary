@@ -3808,7 +3808,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
             onDone={() => loadPile(true)} />
           {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
-          <div className="tq-dock">
+          <div className={firstRun && !setupCard ? "tq-dock tq-setup-dock" : "tq-dock"}>
           {/* ...setup's own line only while setup is in view: a task opened over it speaks for itself (tableOf's `over`, 2026-10-26) */}
           {firstRun && !setupCard && <SetupLine />}
           {/* NO STRIP OVER THE ROW (the owner, 2026-10-26: "maybe keep the box but remove the advisor? not sure the advisor is really

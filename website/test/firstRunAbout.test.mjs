@@ -68,7 +68,10 @@ test("a failed email sign-in is the Advisor's line, with what to do", () => {
 
 test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is the Advisor's line", () => {
   const fr = read("FirstRun.jsx");
-  assert.match(fr, /view === "about" \? nav\.filter\(\(m\) => m\.id === "finish"\) : nav;/);
+  assert.match(fr, /const navShown = \["done", "about"\]\.includes\(view\) \? \[\] : nav;/);
+  // ...and About's own Back and Next are the Nav pill's, as every step's (the owner, 2026-11-03)
+  const about = read("FirstRunAbout.jsx");
+  assert.match(about, /id: "about:back", group: "back"/); assert.match(about, /id: "about:next", group: "next"/);
   assert.match(fr, /<FirstRunAbout again=\{!!st\.about_done\} onBack=\{\(\) => go\("mail"\)\} onLine=\{setAboutLine\}/);
   assert.match(fr, /about: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : aboutLine \|\|/);
 });
@@ -90,7 +93,7 @@ test("the first time About your work is saved, setup is complete: confetti and o
   assert.match(fr, /go\(!s \? "other" : !requiredDone\(s\) \? frontierOf\(s\) : first \? "dev" : "other"\);/);
   assert.match(fr, /go\(firstPass\.current && n === "other" \? "done" : n\)/);
   assert.match(fr, /\{q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\}\s+aiError=\{aiErr\} onChangeAi=\{\(\) => go\("ai"\)\} \/><\/Box>\}/);
-  assert.match(fr, /const navShown = view === "done" \? \[\] :/);
+  assert.match(fr, /const navShown = \["done", "about"\]\.includes\(view\) \? \[\] :/);
   assert.match(done, />Setup complete</); assert.match(done, /size="large" onClick=\{onDay\}/); assert.match(done, />Go to my day</);
   assert.match(done, /prefers-reduced-motion: reduce/);
   // the AI failing on the mail is not complete: the problem, and Change AI as the one big button

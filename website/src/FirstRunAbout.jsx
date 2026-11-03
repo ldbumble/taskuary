@@ -164,8 +164,9 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   const nextLabel = busy === "save" ? "Saving…" : draft ? (draft.state === "ready" ? "Looks right" : last ? "Save" : "Next")
     : step === "mailboxes" ? "That's all my sources" : "Next";
   useVerbs("setup-about", a ? [
-    { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your main source", run: back },
-    { id: "about:next", group: "decide", tone: writeLit ? "s" : "p", disabled: !ready || !!busy,
+    // ...in the walk's Nav pill, Back and Next in their own slots, as every setup step's (FirstRun, the owner 2026-11-03)
+    { id: "about:back", group: "back", tone: "s", label: "Back", title: at ? "The question before" : "Your main source", run: back },
+    { id: "about:next", group: "next", tone: writeLit ? "s" : "p", disabled: !ready || !!busy,
       why: draft ? `${LABEL[step].toLowerCase()} is still being written` : step === "mailboxes" ? "connect a source first" : "",
       label: nextLabel,
       title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : step === "mailboxes" ? "Every place your work comes in is connected"

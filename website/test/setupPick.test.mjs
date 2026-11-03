@@ -66,7 +66,7 @@ test("the line names the lit control by the words the screen draws on it", () =>
 
 test("About your work lights its own move - Next, or Write it while there is no description - and the dock lights about:next", () => {
   const about = read("FirstRunAbout.jsx");
-  assert.match(about, /id: "about:next", group: "decide", tone: writeLit \? "s" : "p"/);
+  assert.match(about, /id: "about:next", group: "next", tone: writeLit \? "s" : "p"/);
   assert.match(about, /data-tq-setup-lit=\{writeLit \? "about" : undefined\}/);
   assert.match(about, /Then press \$\{nextLabel\}\./);
   assert.match(read("AssistantView.jsx"), /\/\^\(setup\|about\):\/\.test\(String\(x\.id\)\) && x\.tone === "p" && !x\.disabled/);
@@ -75,7 +75,12 @@ test("About your work lights its own move - Next, or Write it while there is no 
 test("the dock fills the setup verb it is told and nothing else", async () => {
   const { rowOf } = await import("../src/actionRow.js");
   const v = (id, extra = {}) => ({ id, group: "decide", tone: "s", label: id, ...extra });
-  const list = [v("setup:back", { group: "next" }), v("setup:next", { tone: "p", label: "Next" })];
-  assert.deepEqual([...rowOf({ ref: "", list }, { id: "setup:next" }).decide].filter((x) => x.tone === "p").map((x) => x.id), ["setup:next"]);
-  assert.deepEqual([...rowOf({ ref: "", list }).decide].filter((x) => x.tone === "p"), [], "nothing named: nothing lit");
+  // ...in the Nav pill now: Back and Next in their own slots (the owner, 2026-11-03), and a fix (Install) on the row beside it
+  const list = [v("setup:back", { group: "back" }), v("setup:next", { group: "next", tone: "p", label: "Next" }), v("setup:install", { tone: "p" })];
+  const named = rowOf({ ref: "", list }, { id: "setup:next" });
+  assert.equal(named.next.tone, "p"); assert.equal(named.back.tone, "s"); assert.deepEqual(named.decide.filter((x) => x.tone === "p"), []);
+  assert.deepEqual(rowOf({ ref: "", list }, { id: "setup:install" }).decide.filter((x) => x.tone === "p").map((x) => x.id), ["setup:install"]);
+  assert.equal(rowOf({ ref: "", list }, { id: "setup:install" }).next.tone, "s");
+  const none = rowOf({ ref: "", list });
+  assert.deepEqual([...none.decide, none.next].filter((x) => x.tone === "p"), [], "nothing named: nothing lit");
 });

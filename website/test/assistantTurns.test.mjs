@@ -154,6 +154,29 @@ test("an item opened twice before one read is one line, and the page opened afte
   assert.deepEqual(mergeDurableTurns(messages, durable).messages.map((x) => x.id), ["a2", "a3", "b1"], "and on every read after");
 });
 
+// AN ITEM'S LINE DRAWN AGAIN BEFORE ANY READ MATCHED IT (flow-walk, 2026-11-03): Back opened TQ-0001 ("Opened TQ-0001."), Next came back
+// over it ("Next up: TQ-0001.") and walked on into the fyi, all between two 30 s reads. The page's first line was replaced before a read
+// gave it its server id, so the next read found that turn unknown and pushed it at the end - oneCopy kept it as the task's newest line, after
+// the batch on the table, and the bar offered the task's Back and Next over the batch and at the walk's end
+test("an item's older line the page drew again before a read stays its past, never the last line", async () => {
+  const { placeLine } = await import("../src/assistantTurns.js");
+  const task = { key: "processing:t1", kind: "todo" }, batch = { key: "fyis:processing:f1,processing:f2", kind: "fyis" };
+  let m = [{ id: "a1", role: "assistant", text: "Opened TQ-0001.", card: task }];
+  m = placeLine(m, { id: "a2", role: "assistant", text: "Next up: TQ-0001.", card: task });
+  m = placeLine(m, { id: "a3", role: "assistant", text: "Next up: 2 FYIs.", card: batch });
+  const durable = [{ id: 20, role: "assistant", text: "Opened TQ-0001.", card: task }, { id: 22, role: "assistant", text: "Next up: TQ-0001.", card: task },
+    { id: 24, role: "assistant", text: "Next up: 2 FYIs.", card: batch }];
+  for (let read = 0; read < 3; read++) {
+    const { messages, added } = mergeDurableTurns(m, durable);
+    assert.deepEqual(messages.map((x) => x.id), ["a2", "a3"], `the batch on the table stays the last line (read ${read + 1})`);
+    assert.deepEqual(added, []);
+    m = messages;
+  }
+  // ...while a line about an item the page has, newer than anything it knows (the phone opened it again), still comes to the end
+  const { messages } = mergeDurableTurns(m, [...durable, { id: 30, role: "assistant", text: "Opened TQ-0001.", card: task }]);
+  assert.deepEqual(messages.map((x) => x.id), ["a3", 30]);
+});
+
 // On the desk an item comes up under a few words naming only its kind: three reports in a row each say "Next up: a report.", and the
 // second's durable turn matched the first's bubble - its card replaced the first's, and the report the walk left had no line (RECEIPT)
 test("two lines with the same words but different items are two turns", () => {

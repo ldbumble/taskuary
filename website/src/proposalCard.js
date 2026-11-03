@@ -97,7 +97,10 @@ export const followUps = (p, out) => (out?.status === "done" && p?.verb === "not
 export function afterConfirm(p, out, current) {
   if (out?.handoff && out.tid) return "watch";
   // PUT IT ON MY LIST on the row on the table: the new task takes its place on the table - no move (the walk has one owner, 2026-10-30)
-  if (out?.status === "done" && p.kind === "task.create_from_message" && out.tid && p.key && p.key === current) return "keep";
+  // ...an Advisor idea's Put it on my list the same (the button stress, 2026-11-02): it walked on instead - to the mail the idea was about,
+  // which the new task then took off the rail, and the walk ended with that task left on it
+  const made = p.kind === "task.create_from_message" || (p.kind === "idea.act" && p.params?.verb === "task");
+  if (out?.status === "done" && made && out.tid && p.key && p.key === current) return "keep";
   if (!(out?.settle && p.key && p.key === current)) return "reload";
   if (p.kind === "pipe.clear") return "offer";
   return p.kind === "item.settle" || out.handoff ? "advance" : "settle";

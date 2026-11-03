@@ -65,3 +65,11 @@ test("an agent started from the owner's own words opens its new task too (2026-1
   assert.equal(afterConfirm(fromWords, out, "task:912"), "watch");
   assert.equal(isHandoff({ ...fromWords, params: { kind: "task" } }), false, "a plain to-do is not a hand-off");
 });
+
+// PUT IT ON MY LIST ON AN ADVISOR IDEA keeps the new task at the idea's place, as on a report (the button stress, 2026-11-02)
+test("an idea's Put it on my list keeps the task it made on the table; its Not ours settles", () => {
+  const idea = { kind: "idea.act", key: "idea:7", params: { verb: "task" } };
+  assert.equal(afterConfirm(idea, { status: "done", settle: true, tid: 41 }, "idea:7"), "keep");
+  assert.equal(afterConfirm({ ...idea, params: { verb: "dismiss" } }, { status: "done", settle: true }, "idea:7"), "settle");
+  assert.equal(afterConfirm(idea, { status: "done", settle: true, tid: 41 }, "task:3"), "reload", "off the table it is not kept there");
+});

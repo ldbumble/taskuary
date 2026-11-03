@@ -280,9 +280,22 @@ _BAD = set('<>:"/\\|?*')
 LOOPBACK = {'127.0.0.1', 'localhost', '::1'}
 
 
+def _known_downloads():
+    "The Downloads folder as Explorer itself resolves it (SHGetKnownFolderPath): a redirected or moved folder included, None if it says none."
+    import ctypes, uuid
+    g, p = (ctypes.c_ubyte * 16).from_buffer_copy(uuid.UUID('374DE290-123F-4565-9164-39C4925E467B').bytes_le), ctypes.c_wchar_p()
+    if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(p)) != 0: return None
+    try: return Path(p.value) if p.value else None
+    finally: ctypes.windll.ole32.CoTaskMemFree(p)
+
+
 def downloads_dir() -> Path:
-    "The Downloads folder Windows knows (it can be moved off the profile), else ~/Downloads."
+    """The Downloads folder Windows knows (it can be moved off the profile), else ~/Downloads. The shell is asked first: the registry's
+    raw value can be a path that is not the one Explorer opens (a redirected folder), and a file saved there was 'saved' where nobody looks."""
     if sys.platform == 'win32':
+        try:
+            if (p := _known_downloads()) and p.is_dir(): return p
+        except Exception as e: logger.debug(f'downloads: the shell did not say - {e}')
         try:
             import winreg
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') as k:
@@ -326,9 +339,10 @@ def save_download(url: str, folder: Path = None) -> dict:
         with opener.open(url, timeout=60) as r:
             name = _disposition_name(r.headers.get('Content-Disposition')) or urllib.parse.unquote(u.path.rsplit('/', 1)[-1])
             p = free_name(folder, name)
+            n = 0
             try:
                 with open(p, 'xb') as f:
-                    while chunk := r.read(1 << 16): f.write(chunk)
+                    while chunk := r.read(1 << 16): n += f.write(chunk)
             except BaseException:
                 p.unlink(missing_ok=True); raise
     except uerr.HTTPError as e:
@@ -338,8 +352,15 @@ def save_download(url: str, folder: Path = None) -> dict:
     except OSError as e:
         logger.warning(f'downloads: {u.path} was not saved - {e}')
         return {'error': 'This file could not be saved - try again.'}
+    # "Saved" only once it is there, whole - a write the system took back (antivirus, a sync client) must not read as saved
+    try: there = p.stat().st_size == n
+    except OSError: there = False
+    if not there:
+        logger.warning(f'downloads: {p} was written but is not there whole')
+        return {'error': f'This file did not stay in {folder} - try again.'}
     logger.info(f'downloads: saved {p.name} in {folder}')
-    return {'name': p.name, 'folder': folder.name or str(folder), 'path': str(p)}
+    # the whole folder, not its last name: "Downloads" alone could not say WHICH one when it was not where the owner looked (TQ-1292)
+    return {'name': p.name, 'folder': str(folder), 'path': str(p)}
 
 
 def downloads_to_folder() -> bool:

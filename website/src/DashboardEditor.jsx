@@ -265,7 +265,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
       {/* ── what it reads: a report's own source cards, laid out as a report lays them (ReportsView.SourceCard) ── */}
       <Section title={DASH.sources} hint={DASH.sources_hint}>
         {srcs.map((s, i) => (
-          <SourceCard key={s.key || i} src={s} index={i} count={srcs.length} typeOptions={typeOptions} connectors={connectors}
+          <SourceCard key={s.key || i} src={s} index={i} count={srcs.length} typeOptions={typeOptions} connectors={connectors} ownSwitch
             dragging={drag?.what === "sources" && drag.i === i} onDragStart={() => setDrag({ what: "sources", i })} onDragEnd={() => setDrag(null)}
             onDropHere={() => move("sources", setSrcs, i)}
             onChange={(patch) => setSrcs((cur) => cur.map((x, k) => (k === i ? { ...x, ...patch } : x)))}

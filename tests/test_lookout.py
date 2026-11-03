@@ -159,3 +159,24 @@ def test_each_family_is_held_to_the_advisors_eighty_percent_bar_and_send_to_agen
     out = assistant.act(s, iid, 'agent', 'owner')
     assert out['taskId'] and 'The one line for the owner\'s boss: I caught a double invoice' in briefs[0]
     assert f'msg{a} - ' in briefs[0] and 'The next step it suggested: Draft the per-approver list' in briefs[0]
+
+
+@pytest.mark.parametrize('canonical', [False, True])
+def test_an_idea_lands_under_the_advisor_never_in_fyi_and_says_its_family(canonical):
+    """The owner, 2026-11-02 evening: a lookout idea sits in the rail's Advisor section with the other Advisor ideas, named for its family,
+    its pitch on a line of its own - on the old pile and the shared one alike."""
+    from taskuary import funnel, lanes
+    s, ids = world()
+    a, b = ids['dup']
+    if canonical:
+        n = ago(); s.reconcile_processing_membership(fixed_now=n); s.activate_processing_reads(fixed_now=n, live_state=[])
+    llm = brain({'ideas': [idea('money', 'Vendor billing sent invoice 4471 twice', [f'msg{a}', f'msg{b}'], pitch='I caught a double invoice')]}, {'keep': [1]})
+    iid = lookout.tick(s, llm, force=True)['raised'][0]
+    if canonical: s.reconcile_processing_membership(fixed_now=ago())
+    funnel.invalidate()
+    row = next(x for x in funnel.pile(s, force=True, quiet=True)['items'] if x.get('idea') == iid)
+    assert (row['kind'], lanes.level_of(row)) == ('idea', 'ideas'), row
+    assert {f: lanes.idea_word(f) for f in lookout.FAMILIES} == {'credit': 'credit', 'pitch': 'pain → fix', 'money': 'money left on the table',
+                                                              'early_warning': 'early warning', 'leverage': 'leverage'}
+    assert all(lanes.idea_section(f) == 'ideas' for f in lookout.FAMILIES)
+    assert json.loads(s.get_idea(iid)['ActionJson'])['suggest'].endswith('\nPitch: "I caught a double invoice"')

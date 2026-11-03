@@ -316,6 +316,11 @@
     "report": { "word": "worth reporting", "counted": "worth reporting", "section": "ideas" },
     "unjudged": { "word": "couldn't sort this", "counted": "couldn't be sorted", "section": "ideas" },
     "unanswered": { "word": "no answer yet", "counted": "unanswered", "section": "loose" },
-    "loose": { "word": "no next step", "counted": "loose end", "section": "loose" }
+    "loose": { "word": "no next step", "counted": "loose end", "section": "loose" },
+    "credit": { "word": "credit", "counted": "credit", "section": "ideas" },
+    "pitch": { "word": "pain → fix", "counted": "pain to fix", "section": "ideas" },
+    "money": { "word": "money left on the table", "counted": "money left on the table", "section": "ideas" },
+    "early_warning": { "word": "early warning", "counted": "early warning", "section": "ideas" },
+    "leverage": { "word": "leverage", "counted": "leverage", "section": "ideas" }
   }
 }

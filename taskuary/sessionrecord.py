@@ -324,6 +324,7 @@ def mark_briefs(tid: int, steps: list) -> list:
 
 def general_steps(store, tid: int) -> list:
     from .general import ASSISTANT_TYPE, chat_rows, is_brief
+    from .quickwork import is_raw
     p, by = _gen_path(tid), {}
     if p.is_file():
         for line in p.read_text(encoding='utf-8', errors='replace').splitlines():
@@ -345,7 +346,8 @@ def general_steps(store, tid: int) -> list:
     for c in chat_rows(store, tid):
         mine = c.get('ActorType') == ASSISTANT_TYPE
         # a turn's own working comes BEFORE its reply - and the reply is the said step, so a streamed copy of it is not said twice
-        if mine: out += [s for s in by.get(c['CommentId'], []) if not (s['k'] == 'said' and s['text'].strip() == str(c.get('Body') or '').strip())]
+        # ...nor a quick answer's raw JSON, kept as its working before quickwork.answer_text took it out (cut at SAID_N, it never parses)
+        if mine: out += [s for s in by.get(c['CommentId'], []) if not (s['k'] == 'said' and (s['text'].strip() == str(c.get('Body') or '').strip() or is_raw(s['text'])))]
         out.append({'k': ('said' if turn(c) else 'note') if mine else 'brief' if is_brief(c) else 'you', 'text': _cut(c.get('Body'), SAID_N if mine else YOU_N), 'at': c.get('CreatedAt')})
     return out
 

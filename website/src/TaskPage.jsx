@@ -1846,9 +1846,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun }),
       // ...a path into the task's outputs as the file's name, and no markdown marks mid-line: the folded spine read
-      // "**C:\\Users\\<you>\\.taskuary\\scratch\\outputs\\TQ-n\\..." (stress test 2026-11-02)
+      // "**C:\\Users\\<you>\\.taskuary\\scratch\\outputs\\TQ-n\\..." (stress test 2026-11-02). \x60, not a bare backtick:
+      // test/scope.test.mjs strips literals by regex and reads one as a template, swallowing the component's setters
       said: outputRefs(cleanText(detail?.closedWhy || detail?.agentStory?.said || reportLine(report?.Body) || (hasRecord ? detail?.agentStory?.line : "") || ""), t.TaskId)
-        .text.replace(/\*\*|__|`/g, "").replace(/^[#>*\s-]+/, "").slice(0, 240),
+        .text.replace(/\*\*|__|\x60/g, "").replace(/^[#>*\s-]+/, "").slice(0, 240),
       made: (() => { const p = recordProps.pages || []; const n = p[0]?.title || p[0]?.name || String(p[0]?.path || "").split(/[\\/]/).pop();
         return n ? `${n}${p.length > 1 ? ` +${p.length - 1}` : ""}` : ""; })(),
       advisor: adviceIn === "agent" ? warn?.advice?.label || "" : "" }),

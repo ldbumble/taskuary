@@ -3050,7 +3050,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const goBack = () => {
     if (resetting) return undefined;
     if (busy || turnFlight.current) { holdMove("back"); return undefined; }
-    if (!backTo) { cancelHeld(); return undefined; }   // ...the bar's own word for it (backTo, below): the walk's, or a rail row under the top whose walk is catching up
+    // ...the walk's word for it, or the bar's (backTo, below: a rail row under the top whose walk is catching up). Not the bar's alone: a Back
+    // held over a Back drew the top row already, and the walk - still on the row under it - is the one that knows there is a row above
+    if (!walkOf(pileRef.current)?.above && !backTo) { cancelHeld(); return undefined; }
     navHow.current = "replace";
     setRailOpen(false); if (old) setOld(null); browseDown();
     return surface(null, null, heldRef.current?.how === "back" ? heldRef.current.from : null, false, "back");

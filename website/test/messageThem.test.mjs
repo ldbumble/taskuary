@@ -23,7 +23,8 @@ test("the pick opens New's Send something addressed, through the link New alread
   assert.deepEqual(canvasRequestFromHash(link, 3), { kind: "new", n: 3, state: { kind: "send", channel: "email", to: "erin@northwind.example", name: "Erin Blake" } });
   assert.deepEqual(canvasRequestFromHash("#new-task", 1), { kind: "new", n: 1 }, "the bare link is as it was");
   assert.match(src("CanvasBrowse.jsx"), /initialChannel=\{state\?\.channel \|\| ""\} initialTo=\{state\?\.to \|\| ""\}/);
-  assert.match(src("NewSheet.jsx"), /if \(asked && initialTo\) \{ if \(asked === "email"\) setEmailTo\(\[initialTo\]\); else setTo\(initialTo\); \}/);
+  assert.match(src("NewSheet.jsx"), /const asked = sendPrefill\(list, initialChannel, initialTo\);/);
+  assert.match(src("NewSheet.jsx"), /if \(asked\.emailTo\.length\) setEmailTo\(asked\.emailTo\); else if \(asked\.to\) setTo\(asked\.to\);/);
   // ...and a person with nothing on record keeps the line saying so, with Message them under it
   assert.match(src("SearchEverything.jsx"), /\{nothingYet\(aloneAs\(res\)\)\}\n\s+<MessageThem person=\{hits\[0\]\} onGo=\{message\}/);
 });

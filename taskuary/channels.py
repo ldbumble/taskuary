@@ -551,16 +551,53 @@ def _keep_doc_link(m):
     return f' {inner} ({href}) ' if href not in unescape(inner) and is_doc_link(href) else f' {inner} '   # spaced, as the tag strip spaced it
 
 
-def _clean(html):
+def mail_links(html, cap: int = 40) -> list:
+    """[[words, address]] for the links a mail's HTML puts behind words ("View report"), kept in MailMetaJson `links` for the screens to
+    make those words a link again (the owner, 2026-11-03: "hyper links in fyi email like view report are not coming thru"). Never in the
+    body's text: what the text names, linkdocs reads for triage, and a GET on a tracker or an unsubscribe address is a click on it
+    (test_an_html_mail_keeps_the_address_of_its_open_button). Web and mail addresses only; a document's is already in the text."""
+    from .linkdocs import is_doc_link
+    out = []
+    for m in _A.finditer(_DROP.sub(' ', html or '')):
+        href, words = unescape(m.group(1)).strip(), ' '.join(unescape(re.sub(r'<[^>]+>', ' ', m.group(2))).split())
+        if not words or href in words or len(href) > 2048 or not re.match(r'(?i)(https?://|mailto:)', href) or is_doc_link(href): continue
+        if [words[:200], href] not in out: out.append([words[:200], href])
+    return out[:cap]
+
+
+# A MAIL THAT IS ONLY A PICTURE had no words, so it was stored, triaged and shown as nothing (the owner, 2026-11-03: "in a fyi email where
+# entire email was a image it showed nothing"). Its pictures become stand-ins - what the alt says, else the file's name - so triage reads
+# something and the screens know what to draw: "[image: ...]" is a picture carried with the mail (cid:, drawn from its attachments),
+# "[remote image: ...]" one on the sender's site, which nothing here loads. A 1x1 is a tracking pixel, never a picture.
+_IMG = re.compile(r'(?is)<img\b[^>]*>')
+_PIXEL = re.compile(r'^\s*[01](?:px)?\s*$')
+
+def _attr(tag, k):
+    m = re.search(rf'''(?is)\s{k}\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))''', tag)
+    return ' '.join(unescape(next(g for g in m.groups() if g is not None)).split()) if m else ''
+
+def _picture(m) -> str:
+    t = m.group(0); src = _attr(t, 'src')
+    if not src or _PIXEL.match(_attr(t, 'width')) or _PIXEL.match(_attr(t, 'height')): return ' '
+    file = '' if src.lower().startswith('data:') else re.sub(r'(?i)^cid:|@.*$', '', src.split('?')[0].rstrip('/').rsplit('/', 1)[-1])
+    name, kind = (_attr(t, 'alt') or _attr(t, 'title') or file)[:120], 'remote image' if re.match(r'(?i)(https?:)?//', src) else 'image'
+    return f' [{kind}: {name}] ' if name else f' [{kind}] '
+
+
+def _clean(html, pics=False):
     """HTML mail -> readable text. Block ends become NEWLINES: collapsing every whitespace
     run (the old behaviour) mashed the reply and the quoted 'From:/Sent:/To:' history into
-    one wall of text, which no reader - human or model - could take apart."""
+    one wall of text, which no reader - human or model - could take apart.
+    `pics`: its pictures as stand-ins (_picture) - taken only when the words alone come to nothing."""
     from html import unescape
-    txt = _A.sub(_keep_doc_link, _DROP.sub(' ', html or ''))
+    src = _DROP.sub(' ', html or '')
+    txt = _A.sub(_keep_doc_link, src)
+    if pics: txt = _IMG.sub(_picture, txt)
     txt = _BLOCK.sub('\n', txt)
     txt = unescape(re.sub(r'<[^>]+>', ' ', txt))
     txt = re.sub(r'[^\S\n]+', ' ', txt.replace('\xa0', ' '))
-    return re.sub(r'\n{3,}', '\n\n', re.sub(r' ?\n ?', '\n', txt)).strip()
+    txt = re.sub(r'\n{3,}', '\n\n', re.sub(r' ?\n ?', '\n', txt)).strip()
+    return txt if txt or pics or not _IMG.search(src) else _clean(html, True)
 
 def _header_marks(m: dict) -> dict:
     """What a Graph message's own headers say: an auto-reply (never triaged) and who sent it before a model has read it."""
@@ -1987,7 +2024,8 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             **_header_marks(m),
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
-                                          'invite': inv, **({'cal': cal_} if cal_ else {})}}, llm=llm)
+                                          'invite': inv, **({'cal': cal_} if cal_ else {}),
+                                          **({'links': ln} if (ln := mail_links((m.get('body') or {}).get('content'))) else {})}}, llm=llm)
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
                             except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")

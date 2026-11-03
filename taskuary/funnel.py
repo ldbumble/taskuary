@@ -252,6 +252,15 @@ def thread_speaker(rows: list) -> dict:
     return {group: mid for group, (_rank, mid) in best.items()}
 
 
+def _preview(store, r: dict):
+    """A row's line of words - and a mail with none says what came with it ("Attached: October.xlsx"), never an empty line on its card
+    (the owner, 2026-11-03: a picture-only mail "showed nothing"). Asked only of a wordless row, so a day of mail costs no extra read."""
+    if str(r.get('Preview') or '').strip() or not r.get('MessageId'): return r.get('Preview')
+    try: names = [a['Name'] for a in store.list_attachments(r['MessageId']) if a.get('Name')]
+    except Exception: names = []
+    return f"Attached: {', '.join(names[:3])}{f' and {len(names) - 3} more' if len(names) > 3 else ''}" if names else r.get('Preview')
+
+
 def from_feed(store, rows: list, *, canonical=False) -> list:
     out, agents, reviews, threads = [], set(), set(), {}
     speaks, more = thread_speaker(rows), {}
@@ -276,7 +285,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # (timelineState.roadOf; the owner, 2026-09-07: "once the ai decides it should show what the
         # ai decided. Same in work and timeline tabs")
         base = dict(who=who, when=r.get('SentAt'), mid=r['MessageId'], tid=r.get('TaskId'), channel=r.get('Channel') or '',
-                    category=r.get('Category') or '', preview=r.get('Preview'), cid=cid, email=r.get('FromEmail') or '',
+                    category=r.get('Category') or '', preview=_preview(store, r), cid=cid, email=r.get('FromEmail') or '',
                     priority=r.get('Priority'), route=r.get('RouteReason') or '', task_kind=r.get('TaskKind') or '',
                     # the mail's own subject beside triage's title, and the danger triage read in it (message.Danger) - shown, never a gate
                     subject=_short(r.get('Subject') or '', 140), danger=_short(r.get('Danger') or '', 200) or None,

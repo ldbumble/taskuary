@@ -3335,8 +3335,16 @@ def _readable(m: dict, verdict=False) -> dict:
     from .triage import read_text, wrapper_of
     try:
         v = store.message_verdict(m['MessageId']) if m and verdict is False else verdict
-        return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'), wrapper_of(v))} if m else m
+        return m | {'ReadText': read_text(m.get('BodyText') or '', m.get('OwnText'), wrapper_of(v)), 'Links': _links(m)} if m else m
     except Exception: return m
+
+
+def _links(m: dict) -> list:
+    """The mail's own links behind words ([[words, address]], channels.mail_links) for the screens to draw as links - web and mail
+    addresses only, read again here so nothing else stored there ever becomes one (mailLinks.js opens them in the system browser)."""
+    try: got = (json.loads(m.get('MailMetaJson') or '{}') or {}).get('links') or []
+    except (ValueError, TypeError, AttributeError): return []
+    return [[str(w), str(h)] for w, h in (x for x in got if isinstance(x, list) and len(x) == 2) if re.match(r'(?i)(https?://|mailto:)', str(h))]
 
 
 @app.get('/api/messages/{mid}')

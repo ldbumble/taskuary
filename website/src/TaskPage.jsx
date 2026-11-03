@@ -64,6 +64,7 @@ import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { WorkstreamSelect } from "./Workstream.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
+import { remotePicture, wordsOnly } from "./mailLinks.js";
 import ChatThread from "./ChatThread.jsx";
 import { ChannelIcon, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, LinkedText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, DraftField, assignedAgent } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
@@ -172,6 +173,8 @@ const CONV_KEEP = 5;
 // again in full under it, its subject under the conversation's own): the row keeps who and when, the letter keeps the words, and a
 // subject that is the conversation's (`subject`) is not said again
 // ...and `newest`: the row Came from's conversation ends on, marked - it is what came in (the one flow, 2026-10-28)
+// ...and a letter's words leave its pictures' stand-ins out (mailLinks.STANDIN): a picture-only mail is said by Attachments `bare`, never blank
+const letterText = (m) => wordsOnly(cleanText(m.Channel === "report" ? m.BodyText : (m.ReadText ?? m.BodyText)));
 function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false, subject = "", newest = null }) {
   return rows.map((r, ri) => r.older ? (
     <Box key={`older${ri}`} component="button" type="button" data-tq-show-older={r.older} onClick={onExpand} title={`Older messages from ${r.names}`}
@@ -224,10 +227,11 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
               scrollbar (the owner, 2026-10-26, three in one column on a laptop: "you can't see anything") */}
           <Box data-tq-letter-body="" sx={{ mt: 0.5, minWidth: 0, overflowWrap: "anywhere" }}>
             {r.m.Channel === "report" && looksMd(r.m.BodyText) ? <Md text={cleanText(r.m.BodyText)} />
-              : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                  <LinkedText text={cleanText(r.m.Channel === "report" ? r.m.BodyText : (r.m.ReadText ?? r.m.BodyText))} /></Typography>}
+              : letterText(r.m) && <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                  <LinkedText text={letterText(r.m)} links={r.m.Links} /></Typography>}
           </Box>
-          <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense original={r.m.SourceLink} />
+          <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense original={r.m.SourceLink}
+            bare={r.m.Channel !== "report" && !letterText(r.m) ? { remote: remotePicture(r.m.BodyText) } : null} />
         </Box>
       )}
     </React.Fragment>

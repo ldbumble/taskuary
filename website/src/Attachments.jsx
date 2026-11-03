@@ -7,6 +7,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import DownloadIcon from "@mui/icons-material/Download";
 import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 import api from "./api";
+import { bareLine } from "./mailLinks.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 // An <img src> carries no headers, so the token rides in the query string (see token_gate).
@@ -103,7 +104,9 @@ const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: $
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
 
 // `asFiles`: the images the page already draws itself (a report's chart, drawn live from its rows - ReportRows) are chips, not pictures
-export const Attachments = ({ messageId, canFetch, dense, original, asFiles = null }) => {
+// `bare`: { remote } when the message has no words of its own (mailLinks.bareLine) - a picture-only mail. Its pictures are the message, so
+// a small inline one is drawn, not chipped as a signature's logo; and the panel says what it is, never a blank
+export const Attachments = ({ messageId, canFetch, dense, original, asFiles = null, bare = null }) => {
   const [items, setItems] = useState(null);
   const [big, setBig] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -123,7 +126,8 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
     setBusy(false);
   };
   if (items === null) return null;
-  if (!items.length) return canFetch ? (
+  const say = (line) => line ? <Typography variant="body2" data-tq-bare="" sx={{ color: DIM, lineHeight: 1.55 }}>{line}</Typography> : null;
+  if (!items.length) return <>{bare && say(bareLine({ remote: bare.remote }))}{canFetch ? (
     <Typography variant="caption" component="button" type="button" disabled={busy} onClick={fetchNow}
       // slate, 11.5px and a real target: the sage at 10.5px read 3.8:1 on the card and its hit box was 17px tall (the 2026-10-07
       // design pass)
@@ -134,13 +138,14 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
       {busy ? <CircularProgress size={10} /> : <AttachFileIcon sx={{ fontSize: 12 }} />}
       {err || "look for attachments on this mail"}
     </Typography>
-  ) : null;
-  const drawn = (a) => drawable(a) && !asFiles?.(a);
+  ) : null}</>;
+  const drawn = (a) => (bare ? !!a.is_image && ownImage(a.url) : drawable(a)) && !asFiles?.(a);
   const imgs = items.filter(drawn);
   const clips = items.filter((a) => !drawn(a) && playable(a));
   const files = items.filter((a) => !drawn(a) && !playable(a));
   return (
     <Box sx={{ mt: 1 }}>
+      {bare && say(bareLine({ drawn: imgs.length, files: clips.length + files.length, remote: bare.remote }))}
       {/* images are PART of the message ("see below" mail IS the screenshot, a report's chart
           IS the result) - drawn inline at reading size, not parked behind an attachment chip.
           Only non-image files get the Attached row. */}

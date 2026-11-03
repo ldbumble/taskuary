@@ -15,7 +15,9 @@ test("where a task came from shows the whole message, not three lines of it", ()
   assert.match(card, /data-tq-letter-body=""/);
   assert.doesNotMatch(card, /maxHeight|overflowY/);
   assert.doesNotMatch(card, /WebkitLineClamp/);
-  assert.match(card, /r\.m\.ReadText \?\? r\.m\.BodyText/, "an email still shows its own words, not the quoted chain");
+  assert.match(card, /letterText\(r\.m\)/);
+  assert.match(page, /const letterText = \(m\) => wordsOnly\(cleanText\(m\.Channel === "report" \? m\.BodyText : \(m\.ReadText \?\? m\.BodyText\)\)\);/,
+    "an email still shows its own words, not the quoted chain");
   assert.match(page, /onClick=\{\(\) => onOpen\(/, "a row in Came from opens its message in full under it");
   // ...and a task that came from ONE message reads it whole from the start (the redesign, 2026-10-21) - unless the ask under the title
   // is that message's own words, which are then read once (the task-view cleanup, owner-approved 2026-10-25)

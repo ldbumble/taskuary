@@ -256,6 +256,10 @@ def retoken_doc(text: str, old_name: str, old_email: str = '') -> str:
 # numbering read as skipping.
 INTERNAL_TASK_BASE = 1_000_000_000
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
+# the mails an Advisor line names in its words ("Erin mid 41 vs Gail mid 42"): Came from (idea_sources) and what its trust rests on
+# (origin.idea_rests_on) read them the same way - every one, uncapped, for the trust
+MID_CITE = re.compile(r'\bmids?[\s#:=]*(\d+(?:\s*(?:,|/|&|and)\s*#?\d+)*)')
+def cited_mids(text) -> list: return [int(n) for g in MID_CITE.findall(str(text or '')) for n in re.findall(r'\d+', g)]
 def by_sentence(s, n: int = 1200) -> str:
     """`s` whole when it fits, else cut after its last full sentence inside `n` - a reason cut at a character count ended mid-word
     on the card (walk 2026-10-29). No sentence end inside: the words up to `n`, never a broken one."""
@@ -2720,8 +2724,7 @@ class SQLiteStore:
         if not i: return []
         try: a = json.loads(i.get('ActionJson') or '{}') or {}
         except (ValueError, TypeError): a = {}
-        cited = [int(n) for g in re.findall(r'\bmids?[\s#:=]*(\d+(?:\s*(?:,|/|&|and)\s*#?\d+)*)', str(a.get('why') or ''))
-                 for n in re.findall(r'\d+', g)]
+        cited = cited_mids(a.get('why'))
         out = []
         for x in [a.get('mid'), *cited[:4], i.get('MessageId')]:
             try: x = int(x)

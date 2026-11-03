@@ -202,13 +202,21 @@ class FileRoutesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             dl = Path(d) / 'Downloads'
             got = desktop.save_download(f'{base}/api/task-outputs/7/chart.png?download=true&token=t', folder=dl)
-            self.assertEqual((got['name'], got['folder']), ('chart.png', 'Downloads'))
+            self.assertEqual((got['name'], got['folder']), ('chart.png', str(dl)))      # the whole folder: "Downloads" alone said not which
             self.assertEqual((dl / 'chart.png').read_bytes(), b'png-bytes')
             self.assertEqual(desktop.save_download(f'{base}/api/task-outputs/7/chart.png', folder=dl)['name'], 'chart (1).png')
             self.assertEqual(sorted(p.name for p in Path(d).rglob('*') if p.is_file()), ['chart (1).png', 'chart.png'])
             self.assertEqual(desktop.save_download(f'{base}/api/task-outputs/7/gone.png', folder=dl), {'error': 'That file is not in this task any more.'})
             self.assertIn('error', desktop.save_download('https://files.example/chart.png', folder=dl))      # only this machine's server
             self.assertIn('error', desktop.save_download('file:///etc/passwd', folder=dl))
+            # a file something took back the moment it was written (antivirus, a sync client) is not "saved" (TQ-1292)
+            import builtins, contextlib
+            @contextlib.contextmanager
+            def taken_back(p, *a, **k):
+                with builtins.open(p, *a, **k) as fh: yield fh
+                Path(p).unlink()
+            with mock.patch.object(desktop, 'open', taken_back, create=True):
+                self.assertIn('did not stay', desktop.save_download(f'{base}/api/task-outputs/7/chart.png', folder=dl).get('error', ''))
         self.assertEqual(desktop.safe_name('..\\..\\x:y.txt'), 'x_y.txt')
         self.assertEqual((desktop.safe_name('..'), desktop.safe_name('')), ('download', 'download'))
 

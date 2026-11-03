@@ -15,7 +15,7 @@ const ring = async (page) => (await rail(page)).find((r) => r.cur)?.key || "";
 const nav = (page) => page.evaluate(() => {
   const g = document.querySelector(".tq-dock [data-tq-row] [data-tq-type=nav]");
   // ...on a desk Back is always on the bar, greyed where there is nowhere to go back to (the owner, 2026-10-29): a greyed Back is no Back
-  return { label: g?.querySelector(".tq-cl-h")?.textContent || "", back: !!g?.querySelector("[data-tq-walk-back]:not([disabled])"), next: !!g?.querySelector("[data-tq-next]:not([disabled])"), nextGreyed: !!g?.querySelector("[data-tq-next][disabled]"),
+  return { label: g?.querySelector(".tq-cl-h")?.textContent || "", back: !!g?.querySelector("[data-tq-walk-back]:not([disabled])"), next: !!g?.querySelector("[data-tq-next]:not([disabled])"), nextGreyed: !!g?.querySelector("[data-tq-next][disabled]"), nextTitle: g?.querySelector("[data-tq-next]")?.getAttribute("title") || "",
     greyed: !!g?.querySelector("[data-tq-walk-back][disabled]"), words: [...(g?.querySelectorAll("button:not([disabled][data-tq-walk-back])") || [])].map((b) => b.textContent.trim()) };
 });
 const pressBack = (page) => page.evaluate(() => { const b = document.querySelector(".tq-dock [data-tq-row] [data-tq-walk-back]"); if (b && !b.disabled) { b.click(); return true; } return false; });
@@ -85,7 +85,7 @@ test("Back walks up the line: the row above, across sections, past what a close 
   assert.deepEqual(errors, []);
 });
 
-test("the last row has no Next and keeps its Back; the first has no Back", { timeout: 240000 }, async (t) => {
+test("the last row keeps a live Next that ends the walk, and its Back; the first has no Back", { timeout: 240000 }, async (t) => {
   const { h, page, errors } = await boot(t, { width: 1440, height: 900 });
   // a rail of tasks alone: every report and fyi read, so the bottom task is the walk's last
   const api = (path, method = "GET", body) => fetch(`${h.fixtureApi}${path}`, { method, headers: { "X-Taskuary-Token": h.token, "Content-Type": "application/json" },
@@ -96,10 +96,11 @@ test("the last row has no Next and keeps its Back; the first has no Back", { tim
   const rows = (await line(page)).map((r) => r.key);
   assert.ok(rows.length >= 2, `tasks left on the rail: ${rows}`);
   await clickRow(page, rows.at(-1)); await settle(page);
-  assert.ok(await until(async () => !(await nav(page)).next, 8000), `the last one has no Next: ${JSON.stringify(await nav(page))}`);
+  // ...Next stays live there, its hover saying it ends the walk (the owner, 2026-11-02: "The last one - Next ends the walk"); greyed (2026-10-30)
+  // it read nothing and ended nothing
+  assert.ok(await until(async () => /ends the walk/.test((await nav(page)).nextTitle), 8000), `the last one's Next ends the walk: ${JSON.stringify(await nav(page))}`);
+  assert.ok((await nav(page)).next && !(await nav(page)).nextGreyed, `...live, not greyed: ${JSON.stringify(await nav(page))}`);
   assert.ok((await nav(page)).back, "...and its Back");
-  // ...its Next greyed, never gone (the owner, 2026-10-30)
-  assert.ok((await nav(page)).nextGreyed, `the last one's Next stands greyed: ${JSON.stringify(await nav(page))}`);
   assert.ok(await pressBack(page));
   assert.ok(await until(async () => (await on(page)) === rows.at(-2)));
   await settle(page);

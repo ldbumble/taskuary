@@ -1542,7 +1542,12 @@ export const shownSubject = (item) => (item?.subject && item.subject !== item.ti
 // on the owner said as one, its reason on hover (`aim`, the owner 2026-10-30)
 const DangerNote = ({ danger, aim = null }) => (danger ? <div className="tq-card-note" data-tq-danger="" title={aim === "owner" ? danger : undefined}
   style={{ color: ALERT, overflowWrap: "anywhere" }}>{dangerLine(danger, aim)}</div> : null);
-export function FyiMessage({ item, onHead = null, open: held = null, children }) {
+// ...a line Should be a task made a task stays, wearing where it went - its ref the way to the task (movedFyi.js, the owner 2026-11-03)
+export const MovedLine = ({ moved, onRef, className = "tq-item-msg-g" }) => !moved ? null : (
+  <div className={`${className} tq-moved`} data-tq-moved={moved.ref}>Moved to Tasks · <button type="button" className="tq-ref-link"
+    onClick={() => onRef?.(moved.tid)} title={`Open ${moved.ref}`}>{moved.ref}</button></div>);
+
+export function FyiMessage({ item, onHead = null, open: held = null, moved = null, onRef = null, children }) {
   const [mine, setMine] = useState(false);
   const open = held ?? mine, gist = gistFor(item);
   return (
@@ -1555,6 +1560,7 @@ export function FyiMessage({ item, onHead = null, open: held = null, children })
         <span className="chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
       <DangerNote danger={item.danger} aim={item.danger_aim} />
+      <MovedLine moved={moved} onRef={onRef} />
       {!open && gist && <div className="tq-item-msg-g">{gist}</div>}
       {open && item.title && <div className="tq-item-msg-t">{item.title}</div>}
       {open && shownSubject(item) && <div className="tq-item-msg-g" data-tq-subject="">Subject: {shownSubject(item)}</div>}
@@ -1596,7 +1602,7 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
 // how many fyi a card can show whole before every line folds to one (FyisCard)
 const FOLD_AT = 6;
 
-export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAgent, table = null }) {
+export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAgent, table = null, movedTo = {}, onOpenRef = null }) {
   const caps = useCapabilities(), canCode = caps.coding;      // no coding tool connected: no Coding agent (capabilities.js)
   const noAi = cannotStart(caps);                              // ...and no AI: Send to agent greyed, saying why (trust audit F3)
   const [open, setOpen] = useState(null);
@@ -1606,7 +1612,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
   // SEND TO AGENT ON ONE LINE opens the agent box under that line (RunForm.AgentAsk) - what about it is the issue, which agent - and
   // only its Start hands it over (the owner, 2026-10-23); { key, coding }
   const [asking, setAsking] = useState(null);
-  const items = card.items || [];
+  const items = (card.items || []).map((i) => (movedTo[i.key] && !i.tid ? { ...i, tid: movedTo[i.key].tid } : i));
   // A batch of four is read whole: every line carries its gist and its two doors, and you never
   // open anything. A batch of ten drawn the same way is a card you scroll past, with twenty doors
   // on the one thing whose whole point is that none of it needs you (the owner, 2026-09-16: "when
@@ -1660,7 +1666,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
   if (table != null) return (
     <FyiSections card={card} table={table} items={items} err={err} foot={foot} next={{ label: btn("next", "batch"), title: btnHint("next", "batch") }}
       msgs={items.map((i) => (
-        <FyiMessage key={i.key} item={i} open={open === i.key} onHead={() => setOpen((o) => (o === i.key ? null : i.key))}>
+        <FyiMessage key={i.key} item={i} open={open === i.key} onHead={() => setOpen((o) => (o === i.key ? null : i.key))} moved={movedTo[i.key]} onRef={onOpenRef}>
           {i.mid ? <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} /> : gistFor(i) && <div className="tq-card-full">{gistFor(i)}</div>}
           {open === i.key && actsOf(i)}
         </FyiMessage>))} />
@@ -1685,6 +1691,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
             {(i.since || i.when) && <span className="at">{fmtDateTime(i.since || i.when)}</span>}
             <span className="chev">{open === i.key ? "\u25be" : "\u25b8"}</span>
           </button>
+          <MovedLine moved={movedTo[i.key]} onRef={onOpenRef} className="tq-fyi-gist" />
           {open !== i.key && !folded && gistFor(i) && <div className="tq-fyi-gist">{gistFor(i)}</div>}
           {open === i.key && i.mid && <FullText mid={i.mid} revision={i.presentation_revision || card.presentation_revision} />}
           {/* ...and acting on it belongs to the ONE you opened, through the same proposal road the words

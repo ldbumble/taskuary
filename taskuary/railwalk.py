@@ -314,12 +314,13 @@ def _effect(store, st, rows, frm, actor, dock):
     held = frm == st.get('on') or frm in (st.get('members') or ())
     keys = (st.get('members') or members_of(frm)) if held else members_of(frm)
     kind = st.get('kind') if held else kind_of(find(rows, frm))
-    read = []
+    read, batch = [], len(keys) > 1 or str(frm).startswith('fyis:')
     if kind == 'reads':
         with store.one_poke() if hasattr(store, 'one_poke') else _null():
             for k in keys:
                 row = find(rows, k)
-                if row is None: continue
+                # ...a member made a task by Should be a task is that task now, under Tasks: the batch's read is not its read (2026-11-03)
+                if row is None or (batch and not batchable(row)): continue
                 # ...with the mails folded under it, from the row in hand: the rail's cache is gone after the first member's settle
                 try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True, thread=row.get('thread') or []); read.append(row['key'])
                 except Exception as e: logger.debug(f'railwalk: {k} was not read - {e}')
@@ -450,6 +451,14 @@ def _badge(store, op, actor):
     except Exception as e: logger.debug(f'railwalk: no badge for {op.get("id")} - {e}')
 
 
+def _settle_unmoved(store, item: dict, actor: str):
+    """A card's Done on the row on screen. On an FYI batch, only the members still in FYI: one made a task since by Should be a task is that
+    task now, under Tasks (the owner, 2026-11-03) - the batch's All read never marks it a second time."""
+    if item.get('kind') != 'fyis': return funnel.settle(store, item['key'], 'done', actor)
+    moved = {k for i in item.get('items') or () if not batchable(i) for k in (i['key'], *(i.get('aliases') or ()))}
+    if ks := [k for k in members_of(item['key']) if k not in moved]: funnel.settle(store, 'fyis:' + ','.join(ks), 'done', actor)
+
+
 def _act(store, item: dict, how: str, actor: str, note: str = None, until: str = None) -> dict:
     """The act `how` names, through the existing operation (3.6) - the same road the page's buttons take, so the demo runs it locally."""
     from . import concierge, operations
@@ -462,7 +471,7 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
     # and the row closed exactly when it has left the line - so a kept-open row is re-presented, never walked past
     if how == 'left': return {'closed': not find(line(_rows(store)), item['key'])}
     # ...a card's own Done (an FYI batch's All read, a reply sent from its card): the row settled, nothing behind it closed
-    if how == 'settle': funnel.settle(store, item['key'], 'done', actor); return {'closed': True}
+    if how == 'settle': _settle_unmoved(store, item, actor); return {'closed': True}
     # ...Remind me through the picker's own road (remind.set_reminder): its agent-open refusal and its receipt stay the same
     if how == 'remind' and item.get('tid'):
         from . import remind
@@ -470,7 +479,7 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
         _badge(store, operations.record_direct(store, 'task.defer', int(item['tid']), {'until': until or 'none'}, actor, out), actor)
         return {'closed': True, 'outcome': out}
     if how == 'done' and item.get('kind') in ('agentdone', 'report', 'fyis') or (how == 'done' and not item.get('tid')):
-        funnel.settle(store, item['key'], 'done', actor); return {'closed': True}
+        _settle_unmoved(store, item, actor); return {'closed': True}
     kind = HOW.get(how)
     if not kind: raise ValueError(f'unknown leave: {how}')
     target = item.get('mid') if kind in ('message.file', 'task.create_from_message') else item.get('tid')

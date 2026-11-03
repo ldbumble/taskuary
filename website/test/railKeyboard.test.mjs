@@ -9,7 +9,7 @@ const view = src("AssistantView.jsx"), css = src("assistantView.css");
 
 test("the rail is a listbox whose rows are options, exactly one of them in the Tab order", () => {
   assert.match(view, /className="tq-pile" data-tq-keep ref=\{wrapRef\} role="listbox" aria-label="Your list" onKeyDown=\{railKey\}/);
-  assert.match(view, /<div className="card" role="option" aria-selected=\{isCur\} aria-disabled=\{i\.settling \? true : undefined\}\s+tabIndex=\{i\.key === tabKey \? 0 : -1\}/);
+  assert.match(view, /<div className="card" role="option" aria-selected=\{isCur\} aria-disabled=\{i\.settling \? true : undefined\}\s+tabIndex=\{i\.key === tabKey(?: && !twin\(i\))? \? 0 : -1\}/);
   // the stop is the row the keyboard was last on, else the row on the table, else the first row drawn
   assert.match(view, /const tabKey = stops\.includes\(kbdKey\) \? kbdKey : stops\.includes\(curKey\) \? curKey : stops\[0\];/);
   assert.match(view, /const stops = bands\.flatMap\(\(\{ level, items: rows \}\) => shownIn\(level, rows\)\)\.filter\(\(i\) => !i\.settling\)/,

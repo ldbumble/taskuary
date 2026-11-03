@@ -35,6 +35,7 @@ import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
 import { DASH, placeName } from "./words.js";
+import { useCapabilities } from "./capabilities.js";
 import DashboardEditor from "./DashboardEditor.jsx";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
@@ -1280,7 +1281,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const mssqlOk = mssqlConn?.LastSyncAt && !mssqlConn?.LastError;
   const winrmConn = connectors.find((c) => c.Type === "winrm");
   const winrmOk = winrmConn?.LastSyncAt && !winrmConn?.LastError;
-  const aiActive = connectors.some((c) => ["anthropic", "openai", "azure_openai"].includes(c.Type) && c.Active && c.HasSecret);
+  // any AI that answers - a CLI, ChatGPT, an OpenAI-compatible card - not three vendors' keys: the server's one answer (capabilities.js)
+  const aiActive = useCapabilities().ai !== false;
 
   const bodyCfg = () => {
     const c = { ...cfg };

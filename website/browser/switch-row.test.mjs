@@ -5,14 +5,15 @@ import { startHarness } from "./harness.mjs";
 
 /* SWITCHING TASKS, THE ROW GOES STRAIGHT ACROSS (the owner, 2026-10-26: "fix switching tasks thing of course"). A rail click or Next put
    another item on the table, and the row still wore the old one's buttons after it was up, Next went grey for the ~300 ms the pull took,
-   and only then did the new one's buttons settle. Since 2026-10-27 (row-draws-once) the old row may stand whole until the new one is
-   ready, and is then replaced in one step - never mixed with it. Sampled every frame and every mutation from the press: the row's buttons
-   (data-tq-for) are all the old item's or all the new one's, the old never back after the new, Next never leaves the row - greyed only while the move is
-   out (one move at a time, 2026-11-03) and live once it lands - and the new item's own buttons come up. */
+   and only then did the new one's buttons settle. Since the moves left the bar for the spine (2026-10-29; at every width over 600px,
+   2026-11-03) the bottom bar is Back and Next alone, and an item's moves ride on its own page, so they come and go with it. Sampled every
+   frame and every mutation from the press: the bar never carries another button, Next never leaves it - greyed only while the move is out
+   (one move at a time, 2026-11-03) and live once it lands - the table goes from the old item to the new one once, and the moves shown are
+   only ever the item's on the table, the new one's own coming up. */
 
 const WATCH_MS = 3000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// the item on the table, the items the row's buttons were registered for, and its buttons: [off] disabled, [grey] drawn as off
+// the item on the table, the bar's buttons ([off] disabled, [grey] drawn as off), and the items whose page shows moves
 const record = (page) => page.evaluate(() => {
   const log = [], t0 = performance.now();
   let last = "";
@@ -21,8 +22,9 @@ const record = (page) => page.evaluate(() => {
     const row = document.querySelector(".tq-dock [data-tq-row]");
     const grey = (b) => { const s = getComputedStyle(b); return Number(s.opacity) < 1 || s.backgroundColor === "rgb(185, 193, 200)"; };
     const btns = row ? [...row.querySelectorAll(".tq-arow-verbs button")].map((b) => `${b.textContent.trim()}${b.disabled ? "[off]" : ""}${grey(b) ? "[grey]" : ""}`) : [];
-    const s = { table: table?.getAttribute("data-tq-canvas-item") || null, for: [...new Set([...(row?.querySelectorAll(".tq-arow-verbs [data-tq-for]") || [])]
-      .map((b) => b.getAttribute("data-tq-for")))].join(","), btns: btns.join("|") };
+    const moves = [...document.querySelectorAll(":is([data-tq-spine-moves], [data-tq-pane-moves], [data-tq-pane-strip]) button")].filter((b) => b.getBoundingClientRect().height > 0);
+    const s = { table: table?.getAttribute("data-tq-canvas-item") || null, for: [...new Set(moves.map((b) => b.closest("[data-tq-canvas-item]")
+      ?.getAttribute("data-tq-canvas-item")))].join(","), btns: btns.join("|") };
     const sig = JSON.stringify(s);
     if (sig !== last) { last = sig; log.push({ t: Math.round(performance.now() - t0), ...s }); }
   };
@@ -35,24 +37,20 @@ const record = (page) => page.evaluate(() => {
 });
 
 const nextOf = (s) => s.btns.split("|").find((b) => b.startsWith("Next")) || "";
-// from the press on: nothing on the row is A's - while A is still up for the pull, and once B is - and Next never looks off (on a rail
-// click it is never off at all); B comes up and stays
-const assertStraight = (rec, what, rail) => {
+// from the press on: the bar is Back and Next alone and Next never leaves it; the table goes A -> B once; the moves shown are only the
+// table's item's - A's never once B is up - and B's own come up with Next live
+const assertStraight = (rec, what) => {
   const msg = (why) => `${what}: ${why}: ${JSON.stringify(rec)}`, p = rec.findIndex((s) => s.press), log = rec.filter((s) => !s.press);
   assert.ok(p > 0, msg("the press is in the log"));
   const a = log[0].table, at = log.findIndex((s) => s.table && s.table !== a);
   assert.ok(a && at > 0, msg("another item came up"));
   const b = log[at].table, after = log.slice(at);
   assert.ok(after.every((s) => s.table === b), msg("the table stayed on B"));
-  assert.ok(log[0].for === a, msg("A's buttons were drawn for A"));
-  // ...THE ROW DRAWS ONCE (the owner, 2026-10-27: "not to load then reload"): A's row may stand, as it was, until B's is whole - then B's,
-  // in one step. Never the two mixed, never a lone Next between them, and A's never back once B's is up
-  const fors = rec.slice(p).filter((s) => !s.press).map((s) => s.for);
-  assert.ok(fors.every((f) => f === a || f === b), msg("the row mixed the two items' buttons, or drew neither's"));
-  assert.ok(fors.indexOf(b) < 0 || fors.slice(fors.indexOf(b)).every((f) => f === b), msg("the old item's buttons came back after the new one's"));
+  assert.ok(log.every((s) => s.btns.split("|").every((x) => /^(Back|Next)(\[off\])?(\[grey\])?$/.test(x))), msg("the bar carried more than Back and Next"));
   assert.ok(log.every((s) => nextOf(s)), msg("Next left the row during the switch"));
+  assert.ok(log.every((s) => !s.for || s.for === s.table), msg("moves were shown for an item not on the table"));
   const end = log[log.length - 1];
-  assert.ok(end.for === b && end.btns.split("|").length > 1 && nextOf(end) === "Next", msg("B's own buttons came up"));
+  assert.ok(end.for === b && nextOf(end) === "Next", msg("B's own moves came up, Next live"));
 };
 
 test("switching tasks: the old item's buttons leave at the switch and Next stays as it was", { timeout: 300000 }, async (t) => {
@@ -70,7 +68,7 @@ test("switching tasks: the old item's buttons leave at the switch and Next stays
   const clickRow = (k) => page.evaluate((k) => { window.__tqPress?.(); document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .card`).click(); }, k);
   const settled = async (k) => {
     await page.waitForFunction((k) => document.querySelector(".tq-pile-row.current")?.getAttribute("data-tq-key") === k
-      && document.querySelectorAll(".tq-dock [data-tq-row] .tq-arow-verbs button").length > 1, { timeout: 20000 }, k);
+      && [...document.querySelectorAll(":is([data-tq-spine-moves], [data-tq-pane-moves], [data-tq-pane-strip]) button")].some((b) => b.getBoundingClientRect().height > 0), { timeout: 20000 }, k);
     await sleep(1500);                                  // its reads, its advice and the rail behind it land
   };
 
@@ -81,7 +79,7 @@ test("switching tasks: the old item's buttons leave at the switch and Next stays
     await sleep(WATCH_MS);
     const log = await page.evaluate(() => window.__tqStop());
     if (process.env.TQ_PROBE) console.log(`rail ${i + 1}`, JSON.stringify(log));
-    assertStraight(log, `rail ${i + 1}`, true);
+    assertStraight(log, `rail ${i + 1}`);
   });
 
   // ...and between two tasks opened by name (a link, Search, the Assistant's Open): the task view's own verbs - a draft's Send and
@@ -94,17 +92,17 @@ test("switching tasks: the old item's buttons leave at the switch and Next stays
     await openTask(a);
     await page.waitForFunction((id) => {
       const item = document.querySelector(`.tq-canvas-live [data-tq-task-page="${id}"]`)?.closest("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item");
-      return !!item && !!document.querySelector(`.tq-dock [data-tq-row] [data-tq-for="${item}"]`);
+      return !!item && !!document.querySelector(`[data-tq-canvas-item="${item}"] :is([data-tq-spine-moves], [data-tq-pane-moves], [data-tq-pane-strip]) button`);
     }, { timeout: 20000 }, a).catch(async (e) => { throw new Error(`${e.message}: ${await page.evaluate(() => JSON.stringify({ hash: location.hash,
       items: [...document.querySelectorAll("[data-tq-canvas-item]")].map((x) => x.getAttribute("data-tq-canvas-item")),
-      fors: [...document.querySelectorAll("[data-tq-for]")].map((x) => x.getAttribute("data-tq-for")) }))}`); });
+      moves: [...document.querySelectorAll("[data-tq-spine-moves], [data-tq-pane-moves], [data-tq-pane-strip]")].length }))}`); });
     await sleep(1500);
     await record(page);
     await openTask(b);
     await sleep(WATCH_MS);
     const log = await page.evaluate(() => window.__tqStop());
     if (process.env.TQ_PROBE) console.log(`link ${i + 1}`, JSON.stringify(log));
-    assertStraight(log, `link ${i + 1}`, true);
+    assertStraight(log, `link ${i + 1}`);
   });
 
   for (let i = 1; i <= 2; i += 1) await t.test(`Next ${i}`, async () => {
@@ -114,7 +112,7 @@ test("switching tasks: the old item's buttons leave at the switch and Next stays
     await sleep(WATCH_MS);
     const log = await page.evaluate(() => window.__tqStop());
     if (process.env.TQ_PROBE) console.log(`next ${i}`, JSON.stringify(log));
-    assertStraight(log, `next ${i}`, false);
+    assertStraight(log, `next ${i}`);
   });
   assert.deepEqual(errors, []);
 });

@@ -8,7 +8,9 @@ import { startHarness } from "./harness.mjs";
    - a rail re-read that clears the table under the press (its task closed somewhere else while Next waited on that read): the press
      captured for a scope that no longer stood, stopped, and asked for another;
    - the server's 409 when the row the ring named left the rail before the press reached it: "The list changed while you pressed Next".
-   Either way one press must reach the server, walk on, and say nothing. */
+   Either way one press must reach the server, walk on, and say nothing. Since 2026-10-30 a walk move is one POST to /api/walk/* (railwalk),
+   which walks from the row the press left - the server's rail, not the page's - and since 2026-11-03 nothing is held: one move at a time,
+   sent at the press. */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ASKED_AGAIN = /list moved while that was loading|list changed while you pressed|press it again|press Next again|still refreshing/i;
@@ -40,7 +42,7 @@ const open = async (t) => {
   });
   page.on("response", (res) => {
     const u = new URL(res.url());
-    if (res.request().method() === "POST" && u.pathname === "/api/concierge/stream") s.streams.push(res.status());
+    if (res.request().method() === "POST" && /^\/api\/walk\/(next|open)$/.test(u.pathname)) s.streams.push(res.status());
   });
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
@@ -75,7 +77,6 @@ test("Next pressed while the rail read clears the table under it walks on in one
   const pressedAt = s.streams.length;
   await clickNext(page);
   await sleep(800);
-  assert.equal(s.streams.length, pressedAt, "the press waits on the rail read before it is sent");
   // the held read lands saying the table's item is gone, as the server does for an item that left (funnel.next_item -> null)
   s.hold = false;
   for (const req of s.held.splice(0)) {
@@ -109,7 +110,7 @@ test("Next whose named row left the rail before the press reached the server tak
   s.hold = false;
   for (const req of s.held.splice(0)) page.fixtureRequestGuard(req);
   await sleep(2000);
-  assert.deepEqual(s.streams.slice(pressedAt), [409, 200], "refused once, taken again at once with the fresh pick - one move");
+  assert.deepEqual(s.streams.slice(pressedAt), [200], "one press, one move - the server walks past the row that left");
   assert.equal(await ring(page), after, `Next walked on past the row that left (${below})`);
   await saidNothing(s);
 });

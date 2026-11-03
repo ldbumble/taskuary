@@ -1882,7 +1882,9 @@ def item_for_key(store, key: str) -> dict | None:
     if not m: return None
     mid = int(m.group(2))
     row = next(iter(store.feed(limit=1, days=3650, ids=[mid])), None)   # any age: a Recent row older than a week is still that row
-    if not row: return None
+    if not row:                                  # a message the feed hides opens its thread's row, or its task (TQ-1293)
+        shown, tid = store.shown_message_of(mid), (store.get_message(mid) or {}).get('TaskId')
+        return item_for_key(store, f'msg:{shown}') if shown and shown != mid else item_for_key(store, f'task:{tid}') if tid else None
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)
     if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']}

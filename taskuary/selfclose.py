@@ -103,7 +103,7 @@ def blocked(store, tid: int, term=None) -> str:
         # 2026-10-30: "it should be able to close task" - two --done refused by a hold the agent had already moved on from). It lets go
         # here, and the close goes on; a question asked in an API agent's own answer can ride the same turn as its close, and still refuses
         if ws.held_for(tid): ws.release(tid)
-        if req and req['kind'] == 'input_needed' and req.get('source') == 'api':
+        if req and req['kind'] == 'input_needed' and req.get('source') in ('api', ws.RESUMED):
             return f'a question to you is still open: {req["text"][:160]}'
     return ''
 

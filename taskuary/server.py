@@ -189,6 +189,8 @@ async def _lifespan(_app):
     # No interactive or headless worker survives into this process. Repair any persisted
     # in-progress/running flags before the Board and funnel get their first read.
     hub_term.recover_after_restart(store)
+    # ...and an agent the restart cut off while it asked the owner is back at its question (resume_asking) - off the window's path
+    threading.Thread(target=resume_asking, daemon=True, name='resume-asking').start()
     # ...and a batch whose close waited on a turn the restart ended (batch.TAG) closes now, its report from the saved transcript
     from . import batch as _batch
     try: _batch.recover_later(store)
@@ -2634,19 +2636,64 @@ def continue_session(task_id: int, body: CodeBody = None):
     # tab rather than having an agent run invisibly behind a done row (the owner, 2026-09-15)
     if task.get('Status') not in ('open', 'waiting', 'in_progress'):
         store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
-    try:
-        session = hub_term.start_on_task(store, task_id, row['Agent'], (body.model if body else None),
-                                         (body.instruction if body else None), ACTOR,
-                                         cwd=row['Cwd'], resume=row['ExtId'],
-                                         # the id belongs to the CLI that made it: resuming a codex conversation on the default
-                                         # brain ran `claude --resume <codex id>` - "No conversation found with session ID"
-                                         brain=row.get('Brain') or None)
+    try: session = _reopen(task_id, row, (body.model if body else None), (body.instruction if body else None))
     except (ValueError, RuntimeError, FileNotFoundError) as e:
         raise HTTPException(422, str(e))
     store.audit('task', task_id, 'continue-session', ACTOR, detail={'agent': row['Agent'], 'fromSid': row['Sid']})
     from . import outcomes                           # the ledger: the owner's next move after a stop, in their words
     outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=(body.instruction if body else None) or '', facts={'door': 'continue-session'})
     return {'resumed': row['ExtId'], 'agent': row['Agent'], 'fromSession': row['Sid'], 'session': session}
+
+
+def _reopen(task_id: int, row: dict, model=None, instruction=None, actor=ACTOR, quiet=False) -> dict:
+    "The agent's own conversation (`_resumable`'s row) reopened in a pane - Continue's road, and a restart's (resume_asking)."
+    return hub_term.start_on_task(store, task_id, row['Agent'], model, instruction, actor, cwd=row['Cwd'], resume=row['ExtId'],
+                                  # the id belongs to the CLI that made it: resuming a codex conversation on the default
+                                  # brain ran `claude --resume <codex id>` - "No conversation found with session ID"
+                                  brain=row.get('Brain') or None, quiet=quiet)
+
+
+# AN AGENT WAITING ON THE OWNER IS STILL WAITING AFTER A RESTART (the owner, 2026-11-03): an update or a quit and start cut off an agent
+# that had asked "go ahead?", and nothing restarts by itself (PW-262), so the question sat on a dead run. Such an agent - and only such an
+# one: its run's last word the restart's cut, a question of its own open (workerstate.left_asking), the task still open - gets its own
+# conversation back, with NOTHING typed or sent: a coding agent's CLI reopened on its id (Continue's road, `quiet`), a general agent's
+# chat opened on its saved turns. Its questions are carried onto the new run, so it reads live and asking and an answer reaches it.
+# ONCE: a question carried over is marked (workerstate.RESUMED) and never brought back again; a resume that fails leaves the task
+# interrupted, its ended run offering Answer it as before. An agent that was WORKING stays interrupted - that one is the owner's call.
+RESTARTED = 'Taskuary restarted while the agent was waiting on you. Its conversation is back - still waiting on your answer.'
+
+def resume_asking(actor: str = 'startup') -> list:
+    "Every agent a restart cut off while it asked the owner, back at its question - [task ids resumed]."
+    from . import general, workerstate as ws
+    out = []
+    for t in store.list_tasks(active_only=True):
+        tid = int(t['TaskId'])
+        if hub_term.INTERRUPTED not in re.split(r'[\s,]+', str(t.get('Tags') or '')) or t.get('Status') not in ('open', 'waiting'): continue
+        last, qs = store.last_worker_event(tid, skip=ws.NOTES), ws.left_asking(store, tid)
+        # cut by the restart, not stopped by the owner; asking, not answered; never one already brought back
+        if not (qs and last and last['Kind'] == 'disconnected' and last.get('Source') in hub_term.INTERRUPTING): continue
+        if any(q['source'] == ws.RESUMED for q in qs): continue
+        is_gen = general.handles(t)
+        try:
+            if why := _brainless(not is_gen): raise RuntimeError(why)
+            if is_gen:
+                if not general.provider_options(store): raise RuntimeError(f"no AI connected under {words.name('ai')}")
+                sid = general.start_session(store, tid, actor=actor).sid
+            else:
+                row, why = _resumable(tid)
+                if not row: raise RuntimeError(why)
+                sid = _reopen(tid, row, actor=actor, quiet=True)['sid']
+            # a coding pane is answered in words: its chooser did not survive the restart, so its options ride the question
+            for q in qs: ws.record(store, tid, sid, 'input_needed', request_id=q['request_id'], source=ws.RESUMED, choices=q['choices'] if is_gen else None,
+                                   text=q['text'] if is_gen or not q['choices'] else f"{q['text']} ({' / '.join(q['choices'])})")
+            store.add_comment(tid, actor, 'agent', RESTARTED)
+            store.audit('task', tid, 'resume-asking', actor, 'system', detail={'sid': sid, 'fromSid': last['Sid'], 'questions': [q['request_id'] for q in qs]})
+            out.append(tid)
+        except Exception as e:
+            logger.warning(f'task {tid}: the agent waiting on the owner was not brought back after the restart - {e}')
+            store.tag_task(tid, hub_term.INTERRUPTED, True, actor)        # a start that got as far as clearing it: still interrupted
+            store.audit('task', tid, 'resume-asking', actor, 'system', detail={'fromSid': last['Sid'], 'failed': str(e)[:300]})
+    return out
 
 
 class ContinueBody(BaseModel):

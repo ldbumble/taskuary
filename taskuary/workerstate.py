@@ -234,9 +234,11 @@ ENDINGS = ('finished', *TERMINAL)
 
 # A QUESTION THE AGENT ITSELF ASKED, as its run recorded it: its question tool's (q:<group>:<n>), a chooser read off its screen, an API
 # agent's ask, or the model's read of the prose that ended its turn (hooks.judge_turn) - never the CLI's bare idle notice, which follows
-# every quiet turn whether or not anything was asked
+# every quiet turn whether or not anything was asked. RESUMED is one of those carried onto the session a restart reopened (server.resume_asking):
+# still the agent's question, and the mark that it was brought back once already
+RESUMED = 'resumed'
 def own_question(r: dict) -> bool:
-    return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('judge', 'screen', 'api') or bool(group_of(r.get('request_id'))))
+    return r.get('kind') == 'input_needed' and bool(r.get('text')) and (r.get('source') in ('judge', 'screen', 'api', RESUMED) or bool(group_of(r.get('request_id'))))
 
 
 def left_asking(store, tid) -> list:

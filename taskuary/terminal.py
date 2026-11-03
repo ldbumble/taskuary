@@ -2321,9 +2321,12 @@ NO_CODING_TOOL = 'Pick a coding tool first - connect one under Connections, then
 
 def start_on_task(store, tid: int, agent: str = '', model: str = None, instruction: str = None,
                   actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None,
-                  brain: str = None, instruction_theirs: bool = False) -> dict:
+                  brain: str = None, instruction_theirs: bool = False, quiet: bool = False) -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
-    agent you cannot watch, interrupt or answer is the thing this app exists to replace."""
+    agent you cannot watch, interrupt or answer is the thing this app exists to replace.
+
+    `quiet` reopens a `resume`d conversation with nothing typed into it: the agent is back where it stopped, at its prompt
+    (server.resume_asking - an agent a restart cut off while it asked the owner gets back to waiting, and does nothing new)."""
     import json
     t = store.get_task(tid)
     if not t: raise ValueError(f'no task {tid}')
@@ -2399,7 +2402,7 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
             term = open_session(store, agent, tid, repo, continued_cwd, 0, 0, actor,
                                 model if i == 0 else None, resume=resume,
                                 brain=candidate or None,
-                                seed_fn=(lambda here: resume_seed(instruction, store, tid)) if resume else
+                                seed_fn=(None if quiet else lambda here: resume_seed(instruction, store, tid)) if resume else
                                         (lambda here, r=repo, c=candidate: seed_text(store, tid, instruction, r, here, instruction_theirs,
                                                                             cli=c or cli_named(json.loads(row.get('Config') or '{}')))))
             chosen = candidate or cli_named(json.loads(row.get('Config') or '{}'))

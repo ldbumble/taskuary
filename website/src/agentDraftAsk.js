@@ -40,8 +40,11 @@ export function alreadyAnswered({ draft, sent = [], against = null, ms = (s) => 
 export const answeredLine = (a, when = (s) => s) => (a ? `You already answered ${a.who} at ${when(a.at)}: "${a.words}"` : "");
 
 // THE REPLY BESIDE THE AGENT (the owner, 2026-11-02: "if the agent makes a reply, bring out the reply (Close out) tab side by side"): the task
-// view pairs Agent | Close out on its own for the agent's draft - once the agent is not working (a working terminal is never squeezed: its
-// notice's press pairs them), where the work area holds two halves, and once per draft and view (`done`: `${draftKey}|${view}`); never again
-// for a draft whose pair the owner closed (`shut`: draftKeys)
-export const autoPair = ({ draft, working = false, canPair = false, paired = false, shut = new Set(), done = new Set(), view = "" } = {}) =>
-  !!draft && !working && canPair && !paired && !shut.has(draftKey(draft)) && !done.has(`${draftKey(draft)}|${view}`);
+// view pairs Agent | Close out on its own for the agent's draft - once the agent has STOPPED RUNNING, where the work area holds two halves,
+// and once per draft (`done`: draftKeys); never again for a draft whose pair the owner closed (`shut`: draftKeys). `running`: a live session,
+// working or waiting on you, or a run in flight - its notice's press pairs them (a general agent's chat that answered is not running). It
+// was "not working", once per draft AND view: a live agent's word flips between working and waiting as it goes, and a re-read that read it
+// waiting opened Close out over it (the owner, 2026-11-03: "every 10 seconds it opens the response tab ??? stop opening that until the agent
+// stopped running")
+export const autoPair = ({ draft, running = false, canPair = false, paired = false, shut = new Set(), done = new Set() } = {}) =>
+  !!draft && !running && canPair && !paired && !shut.has(draftKey(draft)) && !done.has(draftKey(draft));

@@ -2,6 +2,16 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.23 - 2026-11-03
+
+- A double or triple click is one press, and never presses what the first click drew
+- The demo's refusal of Hand it to a person is said as the demo, not in red
+- A walk press is never lost: Back and Next pressed fast, over a move or a typed ask, are held, not dropped
+- A Next pressed just after a typed "next" is the second move, not lost behind it
+- An Advisor idea's Put it on my list and Not ours run again
+- An Advisor idea's Put it on my list keeps the task it made on the table, as a report's does
+- Back held over a Back that drew the top row goes up, instead of snapping back down
+
 ## 0.3.10.22 - 2026-11-02
 
 - Send something written by the Assistant opens on the channel asked, to the chat named

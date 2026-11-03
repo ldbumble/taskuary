@@ -21,7 +21,8 @@ test("Next pressed through the whole big world, then Walk me through again", { t
       await record(page);
       let presses = 0, missed = 0;
       const t0 = Date.now();
-      for (; presses + missed < 900; ) {
+      // ...until the end, however many presses it takes: one held over each move, the walk goes as fast as its moves answer (8 minutes at most)
+      for (; Date.now() - t0 < 8 * 60000; ) {
         const s = await look(page);
         if (s.end) break;
         if (await next(page)) presses++; else missed++;

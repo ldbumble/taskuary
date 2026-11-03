@@ -1492,6 +1492,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // belong to the conversation that scheduled them: New chat must cancel them, or the archived
   // walk starts advancing inside the new blank conversation without the owner asking anything.
   const deferredChat = useRef(new Set());
+  // ...and when one has run, a Back or Next held behind it goes (the held effects below wait for it)
+  const [chatMoved, setChatMoved] = useState(0);
   const deferInChat = useCallback((fn, delay) => {
     // Auto-advance is one intention, not a queue. A card callback and a live pile event can both
     // notice the same transition; retaining both timers makes two /next calls and persists the
@@ -1506,7 +1508,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       deferredChat.current.delete(timer);
       // ...but not where it found the walk already at work (a close's own surface in flight): that walk ends the dots itself (surface), and
       // clearing them here blinked them off and on between the put-down and the next item
-      try { if (epoch === chatEpoch.current && !resettingRef.current) await fn(); } finally { if (!turnFlight.current) setNextComing(false); }
+      try { if (epoch === chatEpoch.current && !resettingRef.current) await fn(); } finally { if (!turnFlight.current) setNextComing(false); setChatMoved((n) => n + 1); }
     }, delay);
     deferredChat.current.add(timer);
     return timer;
@@ -2618,7 +2620,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c, anchor) => {
-    if (c?.verb === "next" && busy && !resetting) { holdMove("next"); return; }   // ...held, as actions.next holds it
+    if (c?.verb === "next" && (busy || deferredChat.current.size) && !resetting) { holdMove("next"); return; }   // ...held, as actions.next holds it
     if (busy || resetting || !c) return;
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
@@ -3177,9 +3179,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const actions = { noAi: cannotStart(caps), openRef: (n) => pressRowRef.current?.(n), done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     // ...Next on a row a press drew up while that press is still out is held, then runs from it (rule 7: the owner never presses twice)
-    // ...and over ANY move or turn still out - a batch on its way, a typed "next", a pick - never greyed and never dropped (the stress walk,
-    // 2026-11-02: four Nexts over an FYI batch coming in did nothing at all): held, it runs once that one is in (`holds`, CanvasItem)
-    next: () => { if (busy && !resetting) holdMove("next"); else runChip({ verb: "next" }); }, holds: !resetting, leave, reload: () => loadPile(true), changed: onChanged,
+    // ...and over ANY move or turn still out - a batch on its way, a typed "next", a pick, the move a typed ask put off a moment (deferInChat) -
+    // never greyed and never dropped (the stress walk, 2026-11-02: four Nexts over an FYI batch coming in did nothing at all; a Next pressed
+    // just after a typed "next" ran first and the typed one was refused): held, it runs once that one is in (`holds`, CanvasItem)
+    next: () => { if ((busy || deferredChat.current.size) && !resetting) holdMove("next"); else runChip({ verb: "next" }); }, holds: !resetting, leave, reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
     reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
@@ -3197,10 +3200,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     } };
   // ...the Next held over a pick runs the moment it lands (or is dropped with it, by a reset)
   // ...from the row it put down when it put one down (holdMove)
-  useEffect(() => { if (busy || !nextHeld.current) return; nextHeld.current = false;
-    if (resetting) cancelHeld(false); else runChip({ verb: "next" }); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...AND AFTER THE MOVE A TYPED ASK SCHEDULED (deferInChat): a typed "next" answers, then puts its row up a moment later - a Next pressed
+  // while it was out ran in that moment, went to the same row, and the typed one was refused behind it (the mixed stress walk, 2026-11-02:
+  // a typed next and a pressed Next moved one row). Held until that move is in, it goes on from the row it brought: two rows, one each
+  useEffect(() => { if (busy || !nextHeld.current || deferredChat.current.size) return; nextHeld.current = false;
+    if (resetting) cancelHeld(false); else runChip({ verb: "next" }); }, [busy, chatMoved]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...and Back the same: pressed while a move is landing it runs once that move is in, from the item it brought
-  useEffect(() => { if (busy || !backHeld.current) return; backHeld.current = false; if (resetting) cancelHeld(false); else goBack(); }, [busy]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (busy || !backHeld.current || deferredChat.current.size) return; backHeld.current = false; if (resetting) cancelHeld(false); else goBack(); }, [busy, chatMoved]);   // eslint-disable-line react-hooks/exhaustive-deps
   // THE DAY'S OPENER IS THE TOP OF THE CONVERSATION (the owner, 2026-11-01: "let's move the greeting all the way to the top always"):
   // welcome.arrive records it into the same chat, under yesterday's walk, and a folded task card stood over "Good morning". The lines
   // before the last opener are the record of an earlier day - kept on the server, never drawn above the greeting

@@ -167,8 +167,8 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
       }
       const onRail = (sym) => after.rail.some(([, k]) => k === keys()[sym]);
       for (const s of c.read || []) if (onRail(s)) why.push(`${s} should have been read off the rail`);
-      for (const s of c.rail?.has || []) if (!onRail(s)) why.push(`${s} should be on the rail`);
-      for (const s of c.rail?.not || []) if (onRail(s)) why.push(`${s} should be off the rail`);
+      for (const s of (b.rail || c.rail)?.has || []) if (!onRail(s)) why.push(`${s} should be on the rail`);
+      for (const s of (b.rail || c.rail)?.not || []) if (onRail(s)) why.push(`${s} should be off the rail`);
       for (const s of c.later || []) if (!after.rail.some(([run, k]) => run === "later" && k === keys()[s])) why.push(`${s} should be under For later`);
       if ("back" in c && want !== "END" && after.back !== null && after.back !== c.back) why.push(`Back ${after.back ? "on" : "off"}, wanted ${c.back ? "on" : "off"}`);
       if (watched && frames.length) {

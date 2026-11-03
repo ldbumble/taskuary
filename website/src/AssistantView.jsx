@@ -73,8 +73,8 @@ import { ASK_MEETING, ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, railScrolls, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, heldStep, latestLine, pileRows, rowKeys, sameKey, sameRow, sentChips } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, fyiCap, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, heldStep, latestLine, pileRows, rowKeys, sameKey, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -516,9 +516,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   const base = fillCaps(room - (curKey ? CUR_H - ROW_H : 0), bands);
   // how many rows the capped bands could still give back before they are at their floor. Past that
   // the rail genuinely does not fit and scrolls: tasks are never trimmed.
-  // ...and none once it scrolls anyway: each band's screenful is then meant (fillCaps), not an estimate overshooting
-  const headroom = railScrolls(room - (curKey ? CUR_H - ROW_H : 0), bands) ? 0 : CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
+  const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
+  // ...and FYI is a fixed count by window height, not a fit (fyiCap); the rest wait behind "N more fyi". `room` follows a resize, so this does too
+  const fyiN = bands.find((b) => b.level === "fyi")?.items.length;
+  if (fyiN != null) caps.fyi = Math.min(fyiN, fyiCap(typeof window === "undefined" ? 900 : window.innerHeight));
   // ...and the FYI band asks for its next page while the rail has room for it (fyiHasRoom), not only once it is opened by hand - once
   // per count it has, so a page that brings nothing new is never asked for again
   const fyiHave = bands.find((b) => b.level === "fyi")?.items.length ?? 0, fyiAsked = useRef(-1);

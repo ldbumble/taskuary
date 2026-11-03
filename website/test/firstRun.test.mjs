@@ -28,7 +28,9 @@ test("three questions on the Advisor's line, each answered on the Connections pa
   // ...and nothing while it waits hidden under a page opened during setup (W2)
   assert.match(fr, /useEffect\(\(\) => \{ writeSetupLine\(hidden \? "" : lineRef\.current\); \}\);/);
   assert.match(fr, /className="tq-next"/, "in the Advisor's own line, not a box of our own");
-  assert.match(fr, /import \{ CardGrid, ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);
+  // ...the catalogue's own cards, in a grid that fits the shelf's width rather than the window's (the owner, 2026-11-03)
+  assert.match(fr, /import \{ ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);
+  assert.match(fr, /gridTemplateColumns: `repeat\(auto-fill, minmax\(min\(100%, \$\{COL\}px\), 1fr\)\)`/);
   assert.match(cv, /export const ConnCard = /); assert.match(cv, /export const connCardOf = /);
   assert.doesNotMatch(fr, /function Card\(|borderRadius: "12px"|<TextField/, "no card or form of our own");
   assert.match(fr, /const FIRST = 4;/, "four cards, then More");

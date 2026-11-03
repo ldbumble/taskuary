@@ -137,7 +137,8 @@ export const press = (id, e, anchor, of = null) => {
   const k = `${by || ""}|${id}`;
   if (Date.now() - (flying.get(k) ?? -Infinity) < FLIGHT_MS) return undefined;
   // ...a hand's click only (isTrusted): the page's and a test's own click() of a verb are presses each
-  const hand = !!e?.isTrusted && !(v?.group === "next" || v?.group === "back");
+  // ...setup's Back and Next keep the double-click guard: they sit in the Nav pill now, but a second click there would skip a step
+  const hand = !!e?.isTrusted && (!(v?.group === "next" || v?.group === "back") || /^(setup|about):/.test(String(id)));
   if (hand && Date.now() - (lastAt.get(k) ?? -Infinity) < REPEAT_MS) return undefined;
   if (hand) lastAt.set(k, Date.now());
   announce(id);
@@ -311,7 +312,9 @@ export function rowOf({ list, ref, end: last = false, off = "" }, pick = null) {
     back = greyed(by("back")[0] || null);
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
-  return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && !next.disabled ? "p" : "s" },
+  // ...and setup's own Next or All ready named by its id (setupLit) fills where it stands, in the Nav pill
+  return { ref, decide, agent, more, primary, lit: advised?.card ? advised.id : "",
+    next: next && { ...next, tone: (pick?.verb === "next" || (!!pick?.id && pick.id === next.id)) && !next.disabled ? "p" : "s" },
     back: back && { ...back, tone: "s" },
     why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }

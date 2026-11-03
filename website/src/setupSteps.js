@@ -43,19 +43,13 @@ export const reachable = (st, v) => rowOf(st, v)?.open ?? true;
 // [{id, disabled, why}] for the row: Back from any step but the first; Next while there is a next; on the last, Walk and Finish
 export const navMoves = (st, view, reopened = false) => {
   if (!st || !view) return [];
-  const out = [];
-  if (view !== ORDER[0]) out.push({ id: "back" });
-  if (view !== "other") {
-    out.push({ id: "next", disabled: !doneOf(st, view), why: rowOf(st, view)?.need || "" });
-    // reopened from the top bar to change one thing: the way back to the day is on every step, not only the last
-    if (reopened) out.push({ id: "finish" });
-  }
-  else {
-    // Finish setup alone: Walk me through my tasks is the day's own move once setup is finished (the owner, 2026-10-15)
-    const ready = requiredDone(st) || reopened;
-    out.push({ id: "finish", disabled: !ready, why: ready ? "" : "AI, your main source and About your work come first" });
-  }
-  return out;
+  // BACK, NEXT, ALL READY - THE WALK'S NAV AND NOTHING ELSE (the owner, 2026-11-03: "it should just be back, all ready, next in corner like
+  // in actual app"): Back greys on the first step, All ready takes Next's place on the last, and a reopened setup's "Back to my day" on
+  // every step is gone - the sidebar and All ready are the ways out
+  const back = view === ORDER[0] ? { id: "back", disabled: true, why: "This is the first step" } : { id: "back" };
+  if (view !== "other") return [back, { id: "next", disabled: !doneOf(st, view), why: rowOf(st, view)?.need || "" }];
+  const ready = requiredDone(st) || reopened;
+  return [back, { id: "finish", disabled: !ready, why: ready ? "" : "AI, your main source and About your work come first" }];
 };
 // THE STEP'S CARD IS THE LIT MOVE (the owner, 2026-10-19: the Advisor lights the REAL control - the card itself - never a button of its
 // own on the row): of the cards the shelf shows, one failing first (its fix is on it), then one already connected here, then - for the

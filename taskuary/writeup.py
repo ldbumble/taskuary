@@ -6,8 +6,9 @@ Now the press starts ONE job the server owns and returns at once. The job harves
 agent's last word, before anything may close the pty - saves that harvest, then runs the same ending (wrapup.wrap) and, for a
 close, the same close every surface takes (the task.complete operation). It survives the page going away. A close pressed
 anywhere while a job runs for its task waits here for the job (wait_for) - it never ends the session before it is harvested.
-A job cut short by a restart is finished from its saved harvest at startup (resume). A write-up that fails still closes when
-the press was a close, and says why on the task.
+A job cut short by a restart is finished from its saved harvest at startup (resume). A write-up that fails KEEPS THE TASK OPEN
+and says why on it (the owner, 2026-11-02: Mark done "will save the result and move on" - a close that lost the result is no
+close; it used to close regardless).
 
 WHAT IT IS DOING NOW IS SAID (the owner, 2026-10-21: "open the Close out right away and show the reply is being created"): the job
 names its stage as it reaches it - reading the session, writing the report, drafting the reply - and the task page's Close out
@@ -17,6 +18,7 @@ from loguru import logger
 
 PREFIX = 'writeup_job:'                 # setting name per task: the job's record, until it is done
 FAILED = 'The write-up of this session did not finish'
+KEPT = 'so the task is still open - press Mark done again to close it'
 _JOBS: dict = {}                        # task id -> threading.Event, set when that task's job is done
 _LOCK = threading.Lock()
 _HERE = threading.local()               # set on a job's own thread: its own close must not wait for itself
@@ -121,8 +123,8 @@ def _run(store, tid, record, harvested: dict = None, harvest_done=None, job: str
     finally:
         if harvest_done: harvest_done.set()
     try:
-        if close: stage(tid, 'closing'); _close(store, tid, actor, failed)
-        elif failed: store.add_comment(tid, actor, 'human', f'{FAILED}: {failed}')
+        if close and not failed: stage(tid, 'closing'); _close(store, tid, actor, failed)
+        elif failed: store.add_comment(tid, actor, 'human', f'{FAILED}: {failed}' + (f' - {KEPT}.' if close else ''))
     finally:
         store.set_setting(PREFIX + str(int(tid)), '', actor)
         if job: _set(tid, job, running=False, stage='failed' if failed else 'done', error=failed)
@@ -144,8 +146,8 @@ def _close(store, tid, actor, failed):
 
 
 def resume(store) -> int:
-    """At startup: every job a restart cut short is finished from its saved harvest - or, harvested never, noted and (for a close)
-    closed, since the session it would have read is gone."""
+    """At startup: every job a restart cut short is finished from its saved harvest - or, harvested never, noted on the task, which
+    stays open: the session it would have read is gone, and a close without its result is no close."""
     n = 0
     for name, value in (store.settings_like(PREFIX) if hasattr(store, 'settings_like') else _settings_like(store)):
         if not value: continue
@@ -165,8 +167,7 @@ def resume(store) -> int:
                     _HERE.on = True
                     actor = record.get('actor') or 'owner'
                     why = 'Taskuary restarted before the session was read'
-                    if record.get('close'): _close(store, tid, actor, why)
-                    else: store.add_comment(tid, actor, 'human', f'{FAILED}: {why}')
+                    store.add_comment(tid, actor, 'human', f'{FAILED}: {why}' + (f' - {KEPT}.' if record.get('close') else ''))
                     store.set_setting(PREFIX + str(tid), '', actor)
                     _set(tid, job, running=False, stage='failed', error=why)
             finally: done.set()

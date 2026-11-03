@@ -3910,6 +3910,34 @@ def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -
                      'draft': True, 'why': 'a hand-off waits for your yes', 'when': _ts(datetime.now())}}
 
 
+class KeptOpen(ValueError):
+    "A close that could not save the live agent's work first: the task stays open, and this says why."
+
+
+def save_live(store, tid: int, actor: str = 'owner') -> bool:
+    """Write up the agent live on this task - working or parked - the way Stop and save does (wrapup.wrap, no reply: the close
+    dismisses drafts), so a close never ends a session it has not kept. False when nothing is live. Raises KeptOpen when the save fails."""
+    from . import terminal, wrapup
+    try: s = terminal.session_for(tid)
+    except Exception: s = None
+    if not (s and getattr(s, 'alive', False)): return False
+    try: wrapup.wrap(store, tid, close=False, actor=actor, sid=getattr(s, 'sid', None), no_reply=True)
+    except ValueError as e:
+        if not str(e).startswith('nothing to wrap up'): return _kept(store, tid, actor, e)
+        return False                   # ...a session that wrote nothing has nothing to lose: the close stops it as before
+    except Exception as e: return _kept(store, tid, actor, e)
+    return True
+
+
+def _kept(store, tid, actor, e):
+    "The save failed: said on the task, and the close refused (KeptOpen)."
+    from . import writeup
+    why = str(e) or type(e).__name__
+    logger.warning(f'concierge: the agent on {task_ref(tid)} was not saved, so it stays open - {why}')
+    store.add_comment(tid, actor, 'human', f'{writeup.FAILED}: {why} - {writeup.KEPT}.')
+    raise KeptOpen(f"It is still open - the agent's work could not be saved first: {why}") from e
+
+
 def close_task(store, tid: int, actor: str = 'owner') -> bool:
     """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
     leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
@@ -3922,6 +3950,10 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     closed = t.get('Status') in ('done', 'dropped')
     rv = store.pending_review(tid, live_only=False)
     if closed and not rv: return False
+    # ...and A LIVE AGENT IS SAVED BEFORE THE CLOSE (the owner, 2026-11-02: Mark done "will save the result and move on"): working or
+    # parked waiting on you, its session is written up as Stop and save writes it - then the close. The chat's, the phone's and the walk's
+    # close killed the pty with nothing kept. A save that fails keeps the task open and says why (KeptOpen)
+    if not closed and not writeup.in_job(): save_live(store, tid, actor); rv = store.pending_review(tid, live_only=False)
     # A READY REPLY PUT DOWN UNSENT is said on the task, once - Mark done threw it away without a word, and the task kept saying a
     # reply was owed (walk 2026-10-29). No confirm: closing is the owner's decision; the draft stays on its review
     dropped = False

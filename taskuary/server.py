@@ -2493,7 +2493,8 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
         store.audit('task', task_id, 'priority', ACTOR, detail={'from': level(t.get('Priority')), 'to': fields['Priority']})
     if closing:
         from . import concierge
-        concierge.close_task(store, task_id, ACTOR)
+        try: concierge.close_task(store, task_id, ACTOR)
+        except concierge.KeptOpen as e: raise HTTPException(409, str(e))      # the live agent's save failed: still open, and why
     if t.get('Status') in ('done', 'dropped') and fields.get('Status') in ('open', 'in_progress', 'waiting'):
         # A self-close is remembered in-process to prevent duplicate hooks. Reopening is a new
         # lifecycle, so a later automated run must be allowed to settle again.

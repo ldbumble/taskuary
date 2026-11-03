@@ -99,14 +99,16 @@ def test_a_close_pressed_during_the_write_up_waits_for_it_and_the_task_ends_clos
     wrapup.forget(tid)
 
 
-def test_a_write_up_that_fails_still_closes_and_says_so_on_the_task(world):
+# A CLOSE THAT LOST THE RESULT IS NO CLOSE (the owner, 2026-11-02: Mark done "will save the result and move on"): it used to close anyway
+def test_a_write_up_that_fails_keeps_the_task_open_and_says_why_on_it(world):
     make, _ = world
     s, tid = make(); c = TestClient(server.app)
     with mock.patch('taskuary.session_artifacts.coding', side_effect=RuntimeError('disk full')):
         c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'no_reply': True, 'background': True, 'then_close': True})
         assert writeup.wait_for(tid, 30)
-    assert (s.get_task(tid) or {}).get('Status') == 'done'
-    assert any(str(x.get('Body') or '').startswith(writeup.FAILED) and 'disk full' in x['Body'] for x in s.list_comments(tid))
+    assert (s.get_task(tid) or {}).get('Status') not in ('done', 'dropped')
+    said = [x['Body'] for x in s.list_comments(tid) if str(x.get('Body') or '').startswith(writeup.FAILED)]
+    assert said and 'disk full' in said[-1] and 'still open' in said[-1], said
     wrapup.forget(tid)
 
 
@@ -203,4 +205,36 @@ def test_stop_pressed_twice_from_two_places_runs_one_write_up(world, monkeypatch
     assert b.get('already') and a['job'] == b['job'], 'the second press joined the first job'
     assert calls == [tid], 'one wrap-up ran'
     assert sum(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid)) == 1, 'one report filed'
+    wrapup.forget(tid)
+
+
+# MARK DONE ON A LIVE AGENT, FROM ANYWHERE (the owner, 2026-11-02): the chat's, the phone's and the walk's close - the task.complete
+# operation - killed the pty with nothing kept. Now the live session is saved as Stop and save saves it, and only then closed
+class Live:
+    alive, sid, mode, task_id = True, 'sid-live', '', None
+
+
+def test_a_close_on_a_live_agent_saves_its_work_first(world):
+    make, order = world
+    s, tid = make(); c = TestClient(server.app)
+    with mock.patch('taskuary.terminal.session_for', lambda t: None if 'close' in order else Live()):
+        op = c.post('/api/operations', json={'kind': 'task.complete', 'target': tid, 'params': {}}).json()
+        r = c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']}).json()
+    assert r['status'] == 'done', r
+    assert order.index('harvest') < order.index('close'), 'harvested before the session was ended'
+    assert (s.get_task(tid) or {}).get('Status') == 'done'
+    assert any(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid)), 'the report was kept'
+    wrapup.forget(tid)
+
+
+def test_a_close_whose_save_fails_keeps_the_task_open_and_says_why(world):
+    make, _ = world
+    s, tid = make(); c = TestClient(server.app)
+    with mock.patch('taskuary.terminal.session_for', lambda t: Live()), \
+         mock.patch('taskuary.session_artifacts.coding', side_effect=RuntimeError('disk full')):
+        op = c.post('/api/operations', json={'kind': 'task.complete', 'target': tid, 'params': {}}).json()
+        r = c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']}).json()
+    assert r['status'] == 'error' and 'disk full' in str(r.get('error')), r
+    assert (s.get_task(tid) or {}).get('Status') not in ('done', 'dropped')
+    assert any(str(x.get('Body') or '').startswith(writeup.FAILED) and 'still open' in x['Body'] for x in s.list_comments(tid))
     wrapup.forget(tid)

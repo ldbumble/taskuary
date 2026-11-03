@@ -1743,7 +1743,8 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if t == 'close' and act.get('tid'):             # Mark done under a send's receipt: the one close, then the walk goes on
             tid_ = int(act['tid'])
             from .store import task_ref
-            said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
+            try: said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
+            except concierge.KeptOpen as e: return stuck(store, f'{task_ref(tid_)}: {e}')
             here = (item or {}).get('key')
             return _on(store, actor, [said], done_with=here)
         if t == 'redraft':

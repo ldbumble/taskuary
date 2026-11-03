@@ -325,6 +325,26 @@ def _disposition_name(cd: str) -> str:
     return m.get_filename() or ''
 
 
+class _Changed(Exception): "The file changed on the server while it was being saved: what arrived is neither the old file nor the new one."
+
+
+def _etag(opener, url: str):
+    "The file's ETag as the server has it NOW (HEAD), None when it will not say."
+    import urllib.request as ureq
+    try:
+        with opener.open(ureq.Request(url, method='HEAD'), timeout=15) as h: return h.headers.get('ETag')
+    except Exception: return None
+
+
+def _claim(folder: Path, name: str):
+    "A free name, opened for writing - two presses at once take '(1)' and '(2)', never the same name with one of them refused."
+    for _ in range(100):
+        p = free_name(folder, name)
+        try: return p, open(p, 'xb')
+        except FileExistsError: continue
+    raise FileExistsError(f'no free name for {name} in {folder}')
+
+
 def save_download(url: str, folder: Path = None) -> dict:
     """Fetch one of this app's own files and save it in Downloads: {'name', 'folder', 'path'}, or {'error'} in the server's words.
     Only this machine's server is asked - the page's address for the file, which carries the owner token it was shown with."""
@@ -335,23 +355,35 @@ def save_download(url: str, folder: Path = None) -> dict:
     try: folder.mkdir(parents=True, exist_ok=True)
     except OSError as e: return {'error': f'The Downloads folder could not be opened - {e.strerror or e}.'}
     opener = ureq.build_opener(ureq.ProxyHandler({}))       # loopback: a system proxy must not see the token
+    name = urllib.parse.unquote(u.path.rsplit('/', 1)[-1])
     try:
         with opener.open(url, timeout=60) as r:
-            name = _disposition_name(r.headers.get('Content-Disposition')) or urllib.parse.unquote(u.path.rsplit('/', 1)[-1])
-            p = free_name(folder, name)
-            n = 0
+            name = _disposition_name(r.headers.get('Content-Disposition')) or name
+            want, tag = r.headers.get('Content-Length'), r.headers.get('ETag')
+            (p, f), n = _claim(folder, name), 0
             try:
-                with open(p, 'xb') as f:
-                    while chunk := r.read(1 << 16): n += f.write(chunk)
+                with f as out:
+                    while chunk := r.read(1 << 16): n += out.write(chunk)
+                # A FILE ITS AGENT WAS STILL WRITING is not saved (the owner, 2026-11-03: "download button not working when generating
+                # artifacts"): the server declares the size it had and streams what is there as it reads - rewritten shorter, the answer
+                # is cut short and http.client reads that as a clean end; rewritten as it went, the bytes are half of each. Either way
+                # the file on disk was neither version, under "Saved". Its length must be the one declared and its ETag unchanged.
+                if want and want.isdigit() and int(want) != n: raise _Changed(f'{n} of {want} bytes')
+                if tag and (now := _etag(opener, url)) and now != tag: raise _Changed('its ETag moved')
             except BaseException:
                 p.unlink(missing_ok=True); raise
+    except _Changed as e:
+        logger.warning(f'downloads: {u.path} changed while it was saved ({e}) - nothing kept')
+        return {'error': f'{safe_name(name)} changed while it was being saved - it is still being written. Try again once it is finished.'}
     except uerr.HTTPError as e:
         try: why = json.loads(e.read() or b'{}').get('detail')
         except Exception: why = None
         return {'error': why if isinstance(why, str) and why else 'This file was moved or deleted.' if e.code == 404 else 'This file could not be saved - try again.'}
-    except OSError as e:
+    except (OSError, http.client.HTTPException) as e:
         logger.warning(f'downloads: {u.path} was not saved - {e}')
-        return {'error': 'This file could not be saved - try again.'}
+        # WHY, plainly: the server's answer broke off, or this computer would not take the file (a full disk, a folder it may not write)
+        if isinstance(e, (uerr.URLError, http.client.HTTPException, ConnectionError, TimeoutError)): return {'error': 'The file did not come through whole from Taskuary - try again.'}
+        return {'error': f'{safe_name(name)} could not be written to {folder} - {e.strerror or e}.'}
     # "Saved" only once it is there, whole - a write the system took back (antivirus, a sync client) must not read as saved
     try: there = p.stat().st_size == n
     except OSError: there = False

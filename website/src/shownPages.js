@@ -13,6 +13,16 @@ export const lockDown = (html) => {
   const m = /^\s*<!doctype[^>]*>/i.exec(html || "");
   return m ? m[0] + meta + html.slice(m[0].length) : meta + (html || "");
 };
+// A WIDE PICTURE FITS ITS FRAME (the stress test, 2026-11-02): an SVG goes through the page frame (PublishedPages.isPicture) and drew at its
+// own width - 1600 across a 600 frame scrolled sideways. Shrunk to the frame's width, its height following; a fixed width and height with no
+// viewBox would only crop, so they become its viewBox. The file's own prolog (<?xml ?>, its DOCTYPE) is dropped for the page's
+export const fitSvg = (svg) => {
+  const s = String(svg || "").replace(/^\s*(?:<\?xml[^>]*\?>\s*|<!doctype[^>]*>\s*|<!--[\s\S]*?-->\s*)*/i, "");
+  const num = (a, k) => (new RegExp(`\\s${k}\\s*=\\s*["']?\\s*([\\d.]+)(?:px)?\\s*["']?(?=[\\s/]|$)`, "i").exec(a) || [])[1];
+  const fit = s.replace(/<svg\b([^>]*)>/i, (m, a) => (/\sviewBox\s*=/i.test(a) || !num(a, "width") || !num(a, "height") ? m
+    : `<svg viewBox="0 0 ${num(a, "width")} ${num(a, "height")}"${a}>`));
+  return `<!doctype html><style>html,body{margin:0;overflow-x:hidden}svg{display:block;max-width:100%;height:auto;margin:0 auto}</style>${fit}`;
+};
 // a CSV the agent made, as a table: quoted fields, doubled quotes, commas and newlines inside quotes
 export function csvRows(text) {
   const rows = [[]];

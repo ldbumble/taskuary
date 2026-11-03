@@ -84,7 +84,7 @@ import { actReceipt, lineKeys, mergeDurableTurns, nextBadge, pickLine, placeLine
 import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js";
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
-import { canGoBack, firstAppLink, onStep, openAppLink, recordPlace } from "./appLinks.js";
+import { canGoBack, firstAppLink, linkName, onStep, openAppLink, recordPlace } from "./appLinks.js";
 import { BOARD, hashFor } from "./canvasLinks.js";
 import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
@@ -2199,6 +2199,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // `how.react`: WHAT THE OWNER JUST DID ON THE PAGE, inside a conversation they started about it (pageView.onReact - the owner, 2026-10-30:
   // "it will know if you change something in the screen ... say i see you changed this"): no line of theirs is drawn, nothing they are
   // typing is touched, the window is not opened - a shut one counts the answer on its pill. Dropped, never held, while a turn is running
+  // A LINE THE PAGE SAYS ONCE THE ACT HAPPENED, KEPT (the owner, 2026-11-03: the reply lines vanished on a reload): drawn here, and kept in the
+  // conversation as the receipt it is (concierge.keep_line) - a reload draws it again, the next turn's model reads what was done, and the read
+  // after this one knows it by its words (mergeDurableTurns)
+  const receipt = (text, status = "done") => {
+    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status, text }]);
+    api.post("/api/concierge/line", { text, status }).catch(() => {});
+  };
   const send = async (line, held = false, how = {}) => {
     const react = how.react || "";
     // a picture alone is a line too: "what is this?" is what it means
@@ -2255,8 +2262,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (data.item) {
         landed(data, rowsDrawn.current !== drawn0);      // the words pointed at something: it is on the table now (unless a row was drawn since)
         // ...and the chat window says so: its words ride the card on the canvas, and the owner's line stood alone in the window
+        // ...said as done, once it is (the owner, 2026-11-03: "if it opens it, it should say open"), and kept (receipt)
         const it = data.item;
-        if (winOnRef.current) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "warn", text: `Brought up ${[it.ref, it.title].filter(Boolean).join(" - ") || "it"} on the canvas.` }]);
+        if (winOnRef.current) receipt(`Opened ${[it.ref, it.title].filter(Boolean).join(" - ") || "it"}.`);
       }
       else {
         // THE ASSISTANT ROUTES (the owner, 2026-10-19: "it should just surface the correct button"): an act comes back as the row's own button
@@ -2268,11 +2276,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say || "", options: data.options || [], chips: data.chips || [], steps: data.steps || [] }]);
         // ...but IN THE CHAT POP-UP a turn that only acted still ends on words (actReceipt): there is no card in it to wear the badge, and the
         // owner's line stood alone over the task (2026-10-27). A drafted reply (`decision`) writes its own receipt
-        else if (winOnRef.current && !data.context_update && !data.decision) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...actReceipt(data, tableKey || current) }]);
+        else if (winOnRef.current && !data.context_update && !data.decision) { const r = actReceipt(data, tableKey || current); receipt(r.text, r.status); }
         // WHAT IT DOES ON THE PAGE, run there through the page's own buttons (pageView.run): each act a step on this answer as it lands - a
         // send lit for the owner, never pressed; the owner's own hand on the page drops the rest. What the page answered (a Test) is heard next
         if (ops.length) {
-          const { result } = await pageView.run(ops, (steps) => setMsgs((m) => m.map((x) => (x.id === aid ? { ...x, steps } : x))));
+          const { result, steps } = await pageView.run(ops, (steps) => setMsgs((m) => m.map((x) => (x.id === aid ? { ...x, steps } : x))));
+          // ...and the steps are kept on the answer's own line, so a reload draws them again (concierge.keep_line)
+          if (steps.length) api.post("/api/concierge/line", { text: data.say || "", steps }).catch(() => {});
           const s = pageView.sessionNow();
           if (result && s && s.auto < 3) setTimeout(() => reactRef.current?.({ kind: "result", text: `${result.action} ${result.ok ? "passed" : "failed"}${result.detail ? `: ${result.detail}` : ""}` }), 300);
         }
@@ -2305,8 +2315,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (opens) {
           const n = Number(opens[1]), row = (pile?.items || []).find((i) => Number(i.tid) === n);
           pressRowRef.current?.(n);
-          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "done", text: `Opened ${row?.ref || `TQ-${String(n).padStart(4, "0")}`}${row?.title ? ` - ${row.title}` : ""}.` }]);
-        } else if (page) openAppLink(page);
+          receipt(`Opened ${row?.ref || `TQ-${String(n).padStart(4, "0")}`}${row?.title ? ` - ${row.title}` : ""}.`);
+        } else if (page) {
+          // ...and any other page or report it opens is said the same way, once it is open - by the name the answer linked it with
+          openAppLink(page);
+          const name = linkName(data.say, page);
+          if (name && !String(data.say || "").trim().startsWith("Opened ")) receipt(`Opened ${name}.`);
+        }
         // ...its line rides with it (`aid`): the card's Send to agent says it again as what it started (concierge.said_started)
         if (data.new) browseRef.current?.("new", { ...data.new, aid });
         const l = lightOf(data.light);

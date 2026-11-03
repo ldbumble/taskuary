@@ -64,7 +64,7 @@ ALLOWED_WRITES = (
     r'^/api/terminals/\d+/resize$',
     # the Assistant page: the pipe's own memory, the concierge's turns and the greeting when the visitor sits down
     # (arrive) - the demo's database, the demo's canned brain, nothing real behind either (funnel.py, concierge.py, welcome.py)
-    r'^/api/(funnel/settle|concierge/(open|next|say|act|stream|ai|setup|arrive)|assistant/dock(/new)?)$',
+    r'^/api/(funnel/settle|concierge/(open|next|say|act|stream|ai|setup|arrive|line)|assistant/dock(/new)?)$',
     r'^/api/walk/(start|next|back|open|leave)$',     # the walk's own moves (railwalk): the demo's rail, the demo's closes (LOCAL_OPS)
     # THE CARD'S OWN BUTTONS (U8, 2026-10-17): Mark done, Remind me and a draft were all refused, with "Report this bug" under
     # them - the demo could not show its own walk. A proposal is a row in the demo's database; running one is gated by its

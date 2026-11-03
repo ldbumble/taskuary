@@ -140,7 +140,7 @@ export function actReceipt(data = {}, tableKey = null) {
   const said = String(act?.line || data.receipt || "").trim();
   if (said) return { text: said, status: data.pressed ? "done" : "warn" };
   if (!act) return { text: "No answer came back on that - nothing was changed.", status: "warn" };
-  if (!act.label) return { text: `Brought up ${where}.`, status: "warn" };
+  if (!act.label) return { text: `Opened ${where}.`, status: "warn" };
   return data.pressed ? { text: `${act.label} - ${where}${act.note ? `: ${act.note}` : ""}.`, status: "done" }
     // ...with the day the words named (trust audit F4, 2026-10-28): "remind me Monday" said only "Remind me is ready", the day lost
     : { text: `${act.label}${act.day?.day ? ` (${act.day.day})` : ""} is ready on the row for ${where} - yours to press.`, status: "warn" };

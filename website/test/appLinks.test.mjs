@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { appLink, firstAppLink, inApp, linkRoad, ownPath } from "../src/appLinks.js";
+import { appLink, firstAppLink, inApp, linkName, linkRoad, ownPath } from "../src/appLinks.js";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
@@ -57,9 +57,9 @@ test("a reply opens the page it names - else the one task it points at, never on
 });
 
 test("the chat opens it on a fresh reply, and a link in the text opens it in place", () => {
-  assert.match(read("AssistantView.jsx"), /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);\n[^]*?\} else if \(page\) openAppLink\(page\);/);
+  assert.match(read("AssistantView.jsx"), /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);\n[^]*?\} else if \(page\) \{[^]*?openAppLink\(page\);/);
   // ...a task it opens is a press of its rail row (the owner, 2026-10-28), said in the chat window
-  assert.match(read("AssistantView.jsx"), /const opens = \/\^#\?task=\(\\d\+\)\$\/\.exec\(page \|\| ""\);\n\s*if \(opens\) \{\n[^\n]*\n\s*pressRowRef\.current\?\.\(n\);\n\s*setMsgs\(\(m\) => \[\.\.\.m, \{ id: `r\$\{Date\.now\(\)\}`, role: "receipt", status: "done", text: `Opened /);
+  assert.match(read("AssistantView.jsx"), /const opens = \/\^#\?task=\(\\d\+\)\$\/\.exec\(page \|\| ""\);\n\s*if \(opens\) \{\n[^\n]*\n\s*pressRowRef\.current\?\.\(n\);\n\s*receipt\(`Opened /);
   assert.match(read("md.jsx"), /else if \(page\) \{ e\.preventDefault\(\); openAppLink\(page\); \}/);
   assert.match(read("ChatThread.jsx"), /\{hasFiles && <Attachments messageId=\{m\.MessageId\} \/>\}/);    // pictures at reading size
 });
@@ -104,4 +104,13 @@ test("a link's road: the web leaves for the system browser; the app's pages, tas
   assert.equal(ownPath("http://127.0.0.1:8765/api/task-artifacts/3/7?x=1", here), "/api/task-artifacts/3/7?x=1");
   // ...and the reply's link draws by that road: a new tab for the web alone
   assert.match(read("md.jsx"), /target=\{road === "outside" \? "_blank" : undefined\}/);
+});
+
+test("a report's run linked by an answer opens on the table as a Search pick does, and is named by the words it was linked with", () => {
+  // the owner, 2026-11-03: "open the report should open the report like search" - search.places links a report's newest run as #msg=N
+  assert.equal(firstAppLink("Here: [AP ageing over 30 days, weekly](#msg=10)."), "#msg=10");
+  assert.equal(firstAppLink("[AP ageing](#msg=10) or [Headcount](#msg=9)?"), null, "two runs: the owner picks");
+  assert.equal(firstAppLink("That is [TQ-0012](#task=12), from [the run](#msg=10)."), "#task=12", "a task named still opens");
+  assert.equal(linkName("Here: [AP ageing over 30 days, weekly](#msg=10).", "#msg=10"), "AP ageing over 30 days, weekly");
+  assert.equal(linkName("Here: [Settings](#settings=config).", "#msg=10"), "");
 });

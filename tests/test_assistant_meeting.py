@@ -67,7 +67,7 @@ class OnTheDesk(unittest.TestCase):
     def test_with_no_such_task_it_brings_up_new_meeting_never_an_agent(self):
         s = outlook_store()
         out, spawn = say(s, ASK, None, call(who='Gail', about='the Q3 budget'))
-        self.assertTrue(out['say'].startswith('Brought up New → Meeting with Gail'), out['say'])
+        self.assertTrue(out['say'].startswith('Opened New → Meeting with Gail'), out['say'])
         self.assertEqual((out['new']['kind'], out['new']['text'], out['new']['meeting']['unplaced']), ('meeting', 'the Q3 budget', ['Gail']))
         spawn.assert_not_called()
         self.assertEqual([r for r in s._rows('SELECT * FROM review')], [])

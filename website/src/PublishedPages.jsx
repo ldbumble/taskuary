@@ -10,7 +10,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api.js";
 import { attUrl, fileError, useSave } from "./Attachments.jsx";
 import { Md } from "./md.jsx";
-import { csvRows, lockDown } from "./shownPages.js";
+import { csvRows, fitSvg, lockDown } from "./shownPages.js";
 import { deliverables } from "./taskOutputs.js";
 import "./publishedPages.css";
 
@@ -128,7 +128,7 @@ function Preview({ page }) {
     );
   }
   return isHtml(page)
-    ? <iframe className="tq-published-frame" title={page.name} sandbox={SANDBOX} srcDoc={lockDown(body)} />
+    ? <iframe className="tq-published-frame" title={page.name} sandbox={SANDBOX} srcDoc={lockDown(isImage(page) ? fitSvg(body) : body)} />
     : <div className="tq-published-md"><Md text={body} /></div>;
 }
 

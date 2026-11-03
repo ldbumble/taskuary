@@ -33,6 +33,8 @@ test("one gesture is one press: a second click, or a press within one press, on 
 test("the canvas holds every press to its item, on the window before any card hears it - and never the rail's", () => {
   const view = fs.readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   assert.match(view, /if \(!b \|\| b\.closest\("\[data-tq-rail\]"\) \|\| !b\.closest\("\.tq-asst-col, \[role=menu\], \.MuiPopover-paper"\)\) return;/);
-  assert.match(view, /if \(!aimed\(item, e\)\) \{ e\.stopPropagation\(\); e\.preventDefault\(\); \}/);
+  assert.match(view, /if \(!aimed\(item, e\) && !walkPress\) \{ e\.stopPropagation\(\); e\.preventDefault\(\); \}/);
+  // ...all but the bar's Back and Next, walk moves on no item - one pressed straight after another is the next press, a double-click still one
+  assert.match(view, /const walkPress = b\.matches\("\[data-tq-walk-back\], \[data-tq-row\] \[data-tq-next\]"\) && Number\(e\.detail\) < 2;/);
   assert.match(view, /window\.addEventListener\("click", gate, true\);/);
 });

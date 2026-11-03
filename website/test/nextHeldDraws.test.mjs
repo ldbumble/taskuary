@@ -37,8 +37,8 @@ test("the walk's word one step up: Back from a Back's row, from a Next's, and Ne
 });
 
 test("a held Next draws at its press, its press runs from the row it put down, and the first answer never puts that row back", () => {
-  assert.match(view, /next: \(\) => \{ if \(\(picking \|\| flight\?\.drawn\) && busy\) holdMove\("next"\);/);
-  assert.match(view, /if \(c\?\.verb === "next" && busy && flight\?\.drawn && !resetting\) \{ holdMove\("next"\); return; \}/);
+  assert.match(view, /next: \(\) => \{ if \(busy && !resetting\) holdMove\("next"\);/);
+  assert.match(view, /if \(c\?\.verb === "next" && busy && !resetting\) \{ holdMove\("next"\); return; \}/);
   assert.match(view, /if \(c\.verb === "next"\) \{ surface\(null, null, heldRef\.current\?\.from \|\| key, !item\); return; \}/);
   assert.match(view, /if \(h && card\?\.key === h\.from\) \{/, "the first answer fills the passed row's line, not the table");
   // ...and a failed press under it gives back what it took; a Next and a Back held over one press take each other back

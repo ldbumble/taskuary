@@ -91,8 +91,13 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // the pick lands (AssistantView) - never the item being left's own
   // ...and a held button of the item STILL ON THE TABLE acts too (2026-10-27, Run another agent on a general agent did nothing): while its
   // write-up ran the row kept re-drawing and stayed held, and every press of the item's own verbs fell through to nothing
-  const liveOf = (id) => { const at = verbs.list.find((x) => x.id === id)?.at; return now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at))); };
-  const act = verbs === now ? press : (id, e, a) => { const v = liveOf(id); return v ? press(id, e, a, v.of) : undefined; };
+  // ...and a held Back or Next is the live row's own Back or Next, whatever name the item drawn under it gives it: a batch coming in registers
+  // its Next as its line's (chat:next), and the held "next" found nothing and every Next pressed while it came did nothing (the stress walk,
+  // 2026-11-02) - the walk itself holds a move pressed over a move
+  const liveOf = (id) => { const h = verbs.list.find((x) => x.id === id), at = h?.at;
+    return now.list.find((x) => x.id === id && (!x.at || (!!at && x.at === at)))
+      || (h && (h.group === "next" || h.group === "back") ? now.list.find((x) => x.group === h.group && !x.disabled) : undefined); };
+  const act = verbs === now ? press : (id, e, a) => { const v = liveOf(id); return v ? press(v.id, e, a, v.of) : undefined; };
   // a "none" answer lights its one move: no AI lights the row's own Connect an AI where the row has one (a failure's fix named after
   // its place) - it lit nothing, a move named "ai" no button carries (the design, phase A) - and any other none lights Next
   const move = advised?.none ? adviceNone(advised.none).move : "";

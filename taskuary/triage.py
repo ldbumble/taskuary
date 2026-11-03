@@ -720,6 +720,10 @@ def relationship_of(j: dict, candidates: list, room=()) -> dict:
     return {'relationship': rel, 'related_message_ids': related, 'existing_task_id': task, 'same_problem': same}
 
 
+class Unreadable(ValueError):
+    "An answer with no JSON object in it: its message is llm.unreadable's plain words, kept as they are."
+
+
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
@@ -912,7 +916,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
-            if j is None: raise ValueError(answer.error or 'the response was not JSON')
+            if j is None: raise Unreadable(answer.error or 'the response was not JSON')
             if j.get('intent') in INTENTS:
                 # `kind` is the model's SECOND verdict and it ROUTES the task to one of three
                 # places: coding starts an agent, general opens the assistant's chat, task goes on
@@ -1028,6 +1032,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 if wr: out['wrapper'] = wr
                 return out
             parse_error = f"invalid intent {j.get('intent')!r}; expected task, reply_only, watch, or fyi"
+        except Unreadable as e: parse_error = str(e)          # already says what came back, in plain words (llm.unreadable)
         except Exception as e:
             parse_error = f'{type(e).__name__}: {e}'
     # No model, or a model whose answer was not usable (bad JSON, an intent outside the contract): either way

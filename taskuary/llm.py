@@ -630,8 +630,8 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     """
     def ask(text):
         raw = str(brain(system, text, **kw) or '')
-        try: return JsonAnswer(json.loads(re.sub(r'^```(json)?|```$', '', raw.strip(), flags=re.M)), raw, '')
-        except ValueError as e: return JsonAnswer(None, raw, f'{type(e).__name__}: {e}')
+        try: return JsonAnswer(json_of(raw), raw, '')
+        except ValueError: return JsonAnswer(None, raw, unreadable(raw))
 
     carries = getattr(brain, 'takes_want', None)
     if want is not None and carries: kw['want'] = want
@@ -644,6 +644,36 @@ def ask_json(brain, system: str, user: str, want: dict = None, need=(), **kw) ->
     second = ask(user + again)
     out = second if second.data is not None and not short(second) else (second if second.data is not None else first)
     return _stepped(brain, system, user, want, need, kw, out)
+
+
+_FENCE = re.compile(r'```[a-zA-Z]*\s*\n?(.*?)```', re.S)
+
+
+def json_of(raw: str) -> dict:
+    """The JSON object in a model's answer, however it came wrapped: bare, in a code fence (any language tag, prose around it), or
+    after a sentence of its own - a proxy in front of another model hands back all three. ValueError when there is none."""
+    s = str(raw or '').strip().lstrip('﻿')
+    for t in (s, *(m.strip() for m in _FENCE.findall(s))):
+        try: o = json.loads(t)
+        except ValueError: continue
+        if isinstance(o, dict): return o
+        raise ValueError('a JSON list, not an object')
+    if (i := s.find('{')) >= 0:
+        o, _end = json.JSONDecoder().raw_decode(s[i:])
+        if isinstance(o, dict): return o
+    raise ValueError('no JSON object')
+
+
+def unreadable(raw: str) -> str:
+    """What came back instead of a JSON object, in words a person can act on - "JSONDecodeError: Expecting value" was all a
+    first run's failed test email said (2026-11-03)."""
+    s = ' '.join(str(raw or '').split())
+    if not s: return 'the AI sent back an empty answer'
+    q = f'"{s[:160]}{"…" if len(s) > 160 else ""}"'
+    if s.lower().startswith(('<!doctype', '<html')): return f'the AI sent back a web page, not an answer: {q}'
+    if s.startswith('['): return f'the AI sent back a list, not the JSON object it was asked for: {q}'
+    if '{' not in s: return f'the AI answered in plain words instead of the JSON it was asked for: {q}'
+    return f'the AI sent back JSON that was cut off or broken: {q}'
 
 
 def _stepped(brain, system, user, want, need, kw, out: JsonAnswer) -> JsonAnswer:
@@ -775,6 +805,27 @@ def _list_models(t, cfg: dict, key: str) -> list:
     return sorted({m.get('id') for m in (r.json().get(k) or []) if m.get('id')})
 
 
+# AN OPENAI-COMPATIBLE PROXY IN FRONT OF ANOTHER MODEL (an access-code card, any proxy that routes to several models) speaks the schema loosely: it
+# may refuse json_schema with a 422 or a 500 of its own rather than a 400, hand `content` back as a list of parts, or turn the schema
+# into a forced tool call and answer in its arguments. A first run's test email failed on that as "wrong format" (2026-11-03).
+_FORMAT_FROM = {}          # (url, model) -> the first of json_schema, json_object, prompt-only that the endpoint has not refused
+_FORMAT_WORDS = re.compile(r'response_format|json_schema|json_object|structured output|response.?schema|strict', re.I)
+
+
+def refused_format(r) -> bool:
+    "Did the endpoint turn the response_format down, rather than the call? A 400-class answer, or any error that names the format."
+    return r.status_code in (400, 415, 422) or bool(_FORMAT_WORDS.search(str(getattr(r, 'text', '') or '')))
+
+
+def said_text(msg: dict) -> str:
+    "A chat-completions message as text: its content, the text of its parts when content is a list, else a tool call's arguments."
+    c = msg.get('content')
+    if isinstance(c, list): c = ''.join(p.get('text') or '' if isinstance(p, dict) else str(p) for p in c)
+    if str(c or '').strip(): return str(c)
+    calls = msg.get('tool_calls') or ([{'function': msg['function_call']}] if msg.get('function_call') else [])
+    return next((str((x.get('function') or {}).get('arguments') or '') for x in calls if (x.get('function') or {}).get('arguments')), '')
+
+
 def make_llm(t, cfg: dict, key: str):
     if t == 'chatgpt': return _chatgpt_llm(cfg, key)
     if not key and t != 'ollama': raise RuntimeError('no API key saved - paste one under Credentials')
@@ -886,24 +937,30 @@ def make_llm(t, cfg: dict, key: str):
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
                         ch = (r.json().get('choices') or [{}])[0]
-                        said = ((ch.get('message') or {}).get('content') or '')
-                        if str(said).strip(): return said
+                        said = said_text(ch.get('message') or {})
+                        if said.strip(): return said
                         raise _Empty(ch.get('finish_reason') or 'none given')
                     last = r
                     if r.status_code == 404: break                      # wrong surface -> next url
-                    if r.status_code == 400 and fmt: return None        # cannot carry a schema -> ask without one
-                    if not (r.status_code == 400 and 'max_completion_tokens' in r.text):
-                        raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
+                    if r.status_code == 400 and 'max_completion_tokens' in r.text: continue
+                    if fmt and refused_format(r): return None           # cannot carry this format -> ask with the next one
+                    raise RuntimeError(f'{t} error {r.status_code} at {url.split("?")[0]}{tried(r)}: {r.text[:300]}')
             return None
 
         # `want` is a JSON schema the answer MUST fit, and the strongest form is worth asking for:
         # a strict schema is obeyed even when the prose contract in the prompt says something
-        # narrower (verified against gpt-5.4, TQ-0665). An old model or a route that cannot carry
-        # it answers 400, and then the prompt is all there is - which is where we were before.
+        # narrower (verified against gpt-5.4, TQ-0665). A route that cannot carry it may still take
+        # json_object - valid JSON, any shape - and below that the prompt is all there is. Where an
+        # endpoint refused a format is remembered, so every mail after the first asks only what it takes.
+        fmts = [{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}, {'type': 'json_object'}] if want else []
+        where = (urls[0], model)
         def ask():
-            for fmt in ([{'type': 'json_schema', 'json_schema': {**want, 'strict': True}}] if want else []) + [None]:
+            for i, fmt in enumerate(fmts + [None]):
+                if fmt and i < _FORMAT_FROM.get(where, 0): continue
                 out = once(fmt)
-                if out is not None: return out
+                if out is not None:
+                    if fmt or want: _FORMAT_FROM[where] = i
+                    return out
             raise RuntimeError(f'{t} error {last.status_code} at {urls[-1].split("?")[0]}{tried(last)}: {last.text[:300]}')
         try: return ask()
         except _Empty as e:

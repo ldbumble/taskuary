@@ -3246,7 +3246,7 @@ def _file_task(tid: int, why: str) -> str:
     if not lost:
         _drop_task(tid); return 'deleted'
     from . import concierge
-    concierge.close_task(store, tid, ACTOR)                     # the work is kept; Mark done stops the agent
+    concierge.close_task(store, tid, ACTOR, save=False)         # the work is kept; Mark done stops the agent
     store.add_comment(tid, ACTOR, 'human', f'Archived, not deleted - {why}. Kept because {lost}.')
     store.audit('task', tid, 'archived_not_deleted', ACTOR, detail={'why': why, 'kept': lost})
     return 'archived'

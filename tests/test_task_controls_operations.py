@@ -3,7 +3,7 @@ assistant's confirmation card - no false success, no duplicate start, a stale cl
 import unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import concierge, server, terminal
+from taskuary import concierge, server, terminal, wrapup
 from taskuary.store import MemoryStore
 
 
@@ -24,11 +24,14 @@ class TaskControls(unittest.TestCase):
     def test_mark_task_done_closes_the_task_and_ends_its_live_session(self):
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')
         live = Live()
-        with mock.patch.object(terminal, 'session_for', return_value=live), mock.patch.object(terminal, 'close', return_value=True) as close:
+        # ...its work saved first, as Stop and save saves it (the owner, 2026-11-02): the write-up ends the session it read
+        def saved(store, t, **kw): terminal.close('s1'); live.alive = False; return {'wrap': 'done'}
+        with mock.patch.object(terminal, 'session_for', return_value=live), mock.patch.object(terminal, 'close', return_value=True) as close, \
+             mock.patch.object(wrapup, 'wrap', side_effect=saved) as wrap:
             _, r = self.run_op('task.complete', tid)
         self.assertEqual(r.status_code, 200); self.assertEqual(r.json()['status'], 'done')
         self.assertEqual(self.s.get_task(tid)['Status'], 'done')
-        close.assert_called_once_with('s1')
+        close.assert_called_once_with('s1'); wrap.assert_called_once()
 
     def test_reopen_changes_status_only_and_starts_no_worker(self):
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')

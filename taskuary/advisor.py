@@ -814,6 +814,13 @@ def agent_kind(store, item: dict) -> str:
     return 'coding' if k == 'coding' else 'general'
 
 
+def _coding(store, item: dict) -> bool:
+    "Whether the item's agent is a coding one: its card's kind, or - on the task's own row, its agent cut off - the task's."
+    if agent_kind(store, item) == 'coding': return True
+    try: return bool((item or {}).get('tid')) and str((store.get_task(int(item['tid'])) or {}).get('Kind') or '').lower() == 'coding'
+    except (TypeError, ValueError): return False
+
+
 def is_goal(t) -> bool:
     from .store import is_goal as g
     return g(t)
@@ -1387,7 +1394,9 @@ def checked(store, item: dict, verbs: list, d: dict) -> dict:
     # ...and the one that stays of a duplicate pair is never folded into its own twin: following it would drop the ask
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     # ...and a coding agent asking to go further is the owner's call in its pane, never closed under it (the owner, 2026-11-02)
-    elif d.get('state') == 'agent_asking' and verb in ('close', 'stop_agent') and agent_kind(store, item) == 'coding': why = "a coding agent's ask is the owner's"
+    # - nothing lit over it but its own answer: Continue and "Reply to the sender" stood over a coding agent's "go ahead?" (the owner,
+    # 2026-11-03), on its card while it asked and on the task's row once a restart had cut it off asking
+    elif d.get('state') == 'agent_asking' and verb != 'answer_agent' and _coding(store, item): why = "a coding agent's ask is the owner's"
     if not why: return {**d, 'kind': kind}
     logger.info(f"advisor: {d['key']} {verb} refused ({why}) - nothing lit instead")
     return {**d, 'verb': None, 'kind': kind, 'checked': why, **({} if kind in GAPS else {'line': '', 'evidence': []})}

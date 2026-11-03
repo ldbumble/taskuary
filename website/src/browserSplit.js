@@ -113,8 +113,15 @@ export const viewportMoved = (was, now, tol = 32) =>
   !!now && (!was || Math.abs(was.w - now.w) > tol || Math.abs(was.h - now.h) > tol);
 
 // A page address as the toolbar shows it: scheme and trailing slash dropped, long paths cut in the middle
+// ...and a page the agent opened from disk is its FILE'S NAME, never the path to it (the stress test, 2026-11-02: the chip read
+// "browser · file:///C:/Users/<you>/...") - the last part of the path, decoded, with no query or anchor
 export const shortUrl = (u, max = 64) => {
   if (!u) return "";
+  if (/^file:/i.test(String(u).trim())) {
+    const p = String(u).trim().replace(/[?#].*$/, "").split(/[\\/]+/).filter(Boolean).pop() || "";
+    let n = p; try { n = decodeURIComponent(p); } catch { /* the name as it was */ }
+    return `file · ${n.length <= max ? n : `${n.slice(0, Math.ceil(max * 0.6))}…${n.slice(-Math.floor(max * 0.35))}`}`;
+  }
   const s = String(u).replace(/^https?:\/\//, "").replace(/\/$/, "");
   return s.length <= max ? s : `${s.slice(0, Math.ceil(max * 0.6))}…${s.slice(-Math.floor(max * 0.35))}`;
 };

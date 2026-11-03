@@ -595,6 +595,16 @@ def no_token_carryover():
 
 
 @pytest.fixture(autouse=True)
+def no_ended_session_carryover():
+    """terminal.SESSIONS is process-wide and keeps a session after it ends (terminal.session_for reads one for wrapping up): a test
+    that closed its task's conversation left it there, and the next file's task of the same id read as having a session (2026-11-03)."""
+    from taskuary import terminal
+    had = set(terminal.SESSIONS); yield
+    for k, t in list(terminal.SESSIONS.items()):
+        if k not in had and not getattr(t, 'alive', True): terminal.SESSIONS.pop(k, None)
+
+
+@pytest.fixture(autouse=True)
 def no_stop_carryover():
     """workerstate.STOP is process-wide and set by a server told to exit (desktop.Server): a test that started and stopped
     a real one left every later held wait letting go at once, as if Taskuary were closing."""

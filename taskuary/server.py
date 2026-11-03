@@ -1582,7 +1582,9 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with
         # a follow-up on it); the person is its `who_email`, the ledger's key. A chase is a draft for your yes, never a send.
         import json as _json
-        from . import assistant, funnel, outcomes
+        # ...never `assistant` here: imported in this function it is a local name of all of it, and every Advisor idea's own words
+        # (idea.act, above) answered "local variable 'assistant' referenced before assignment" (the button stress, 2026-11-02)
+        from . import funnel, outcomes
         key = str(p.get('key') or ''); item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
         if not item: raise HTTPException(404, 'that one is not on the rail any more')
         # ...and only while it IS slipped: pressed after they wrote back, or on a card that never slipped, nothing is changed

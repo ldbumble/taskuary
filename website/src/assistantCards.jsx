@@ -1041,6 +1041,16 @@ function HabitList({ card, onDone }) {
   );
 }
 
+// the ids a lookout idea rests on (lookout.land: [{ref: "msg12" | "task7", label}]) as links into the app: #msg=N puts that mail's card up,
+// #task=N opens the task (canvasLinks.canvasRequestFromHash); null with none
+export const citeHref = (ref) => { const m = /^(msg|task)(\d+)$/.exec(String(ref || "")); return m ? `#${m[1]}=${m[2]}` : null; };
+function citesOf(evidence) {
+  const xs = (Array.isArray(evidence) ? evidence : []).map((e) => ({ ...e, href: citeHref(e?.ref) })).filter((e) => e.href);
+  return xs.length ? <span data-tq-idea-cites="">{xs.map((e) => (
+    <a key={e.ref} className="tq-card-link" href={e.href} style={{ display: "block" }} data-tq-cite={e.ref}
+      onClick={(ev) => { ev.preventDefault(); openAppLink(e.href); }}>{e.label || e.ref} ↗</a>))}</span> : null;
+}
+
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, table = null }) {
   const a = card.action || {};
@@ -1073,7 +1083,12 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   const mid = a.mid || card.mid, why = a.why || card.why, who = a.who || (card.who !== "Advisor" ? card.who : "");
   const from = mid ? <a className="tq-card-link" href={`#msg=${mid}`} onClick={(e) => { e.preventDefault(); onTimeline?.(mid); }}>{who ? `${who}'s message` : "the message"} ↗</a>
     : a.source?.label ? <span>{a.source.label}</span> : null;
-  const facts = [["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", why && <>{from}{from && ": "}{why}</>]].filter(([, v]) => v);
+  // LOOKING OUT FOR YOU (lookout.py; the owner, 2026-11-02): its next step and the pitch for the boss stand apart, and each message or task
+  // it rests on opens in the app - the canvas's own link road (canvasLinks), never a new window
+  const look = a.type === "lookout", cites = look ? citesOf(a.evidence) : null;
+  const rows = [["Whose move", a.whose], ["Suggestion", look ? a.next_step || a.suggest : a.suggest], ["Pitch", look && a.pitch],
+    ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>], ["Rests on", cites]];
+  const facts = rows.filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";
   const foot = (
       <Foot
@@ -1103,7 +1118,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // should go in the coming from tab like fyi's"): what the Advisor noticed opens in Came from - the idea, its suggestion and the mail it is
   // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
   if (table != null) return (
-    <ItemSections kind="idea" itemKey={card.key} label="Advisor" height={table} about="from" lays title={card.title}
+    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays title={card.title}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
       sections={[
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
@@ -1112,7 +1127,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
             {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason; the
                 habits row lists its habits instead, with no Whose move or Suggestion */}
             {habits ? <HabitList card={card} onDone={onDone} />
-              : <Facts rows={[["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>]]} />}
+              : <Facts rows={rows} />}
           </ItemPart><CardErr err={err} /></> },
         { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
           body: <ItemPart data-tq-idea-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>

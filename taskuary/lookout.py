@@ -293,8 +293,9 @@ def land(store, x: dict) -> dict | None:
     k = key_of(x)
     if store._one('SELECT 1 x FROM idea WHERE Key=?', (k,)): return None
     ev = [{'ref': r, 'label': ref_line(store, r)} for r in x['refs']]
+    # ...the pitch on a line of its own, apart from the next step (the owner, 2026-11-02)
     act = {'type': 'lookout', 'family': x['family'], 'title': x['title'], 'whose': 'yours - nobody asked for it',
-           'suggest': f"{x['next_step']} Pitch: \"{x['pitch']}\"", 'why': f"{x['evidence']} {x['why']}", 'next_step': x['next_step'],
+           'suggest': f"{x['next_step']}\nPitch: \"{x['pitch']}\"", 'why': f"{x['evidence']} {x['why']}", 'next_step': x['next_step'],
            'pitch': x['pitch'], 'evidence': ev}
     r = store.upsert_idea({'key': k, 'kind': x['family'], 'text': x['title'], 'sig': k, 'action': act}, _ts(_now()))
     store.audit('idea', r['IdeaId'], 'lookout_raised', 'advisor', 'agent', {'family': x['family'], 'refs': x['refs']})

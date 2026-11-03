@@ -87,14 +87,40 @@ class CompanyPolicy(RuntimeError):
     fewer scopes helps, but the same admin link is what IT acts on, so the server attaches it like AdminConsent's."""
 
 
+# THE BROWSER SIGN-IN comes back here. Entra ignores the port of an http://localhost redirect on a public client, so the one
+# URI registered on the app - http://localhost/api/ms/callback - matches whatever port this install listens on. The admin-consent
+# link sends exactly that registered URI, no port (ADMIN_REDIRECT): it is what the registration lists, and the port rule is the
+# sign-in's - so after Accept the browser tries port 80, and a Taskuary on another port is simply not there (the approval stands).
+REDIRECT_PATH = '/api/ms/callback'
+ADMIN_REDIRECT, ADMIN_STATE = f'http://localhost{REDIRECT_PATH}', 'admin-consent'
+
+
 def admin_consent_url(cfg: dict, scope: str = SCOPES) -> str:
     """The link the user forwards to their Microsoft 365 admin. One click + Accept grants the
     delegated scopes for the whole organisation - a consent grant on OUR app id, so nobody on
-    their side registers anything. The redirect is the public-client stock URI every such
-    registration carries; the admin lands on a blank page saying admin_consent=True."""
+    their side registers anything. The redirect is the one URI Taskuary's registration lists, exactly as listed
+    (ADMIN_REDIRECT): one it does not list ends on Microsoft's page with AADSTS900971 "No reply address provided" -
+    the stock nativeclient URI did, for a customer's admin. After Accept the admin's browser goes to localhost:
+    on the machine Taskuary runs on, /api/ms/callback says it is approved (admin_return); anywhere else the page
+    does not load, and the approval stands all the same. ADMIN_STATE tells that return from a sign-in's."""
     t = tenant(cfg); t = 'organizations' if t == 'common' else t     # personal accounts have no admin
     return (f'{AUTH}/{t}/v2.0/adminconsent?client_id={_need_client(cfg)}&scope={quote(scope)}'
-            f'&redirect_uri={quote(f"{AUTH}/common/oauth2/nativeclient", safe="")}')
+            f'&redirect_uri={quote(ADMIN_REDIRECT, safe="")}&state={ADMIN_STATE}')
+
+
+def admin_return(consented: str = None, error: str = None, desc: str = '') -> tuple:
+    "What the admin-consent return says, as (ok, head, line) for a plain page - the admin is not signing in, so never a broken sign-in."
+    if not error and str(consented or '').lower() == 'true':
+        return True, 'Approved', 'Everyone in your organisation can now sign in to Taskuary. You can close this tab.'
+    d = f'{error or ""}: {desc or ""}'
+    if 'AADSTS90094' in d or 'AADSTS90008' in d or 'administrator' in d.lower() and 'role' in d.lower():
+        return False, 'Not approved', ('This account cannot approve apps for the organisation - it takes a Microsoft 365 admin '
+                                       '(Global, Cloud Application or Application Administrator). Sign in as one and press Accept.')
+    if error == 'access_denied' and not _policy(d) or 'AADSTS65004' in d:
+        return False, 'Not approved', 'The approval was cancelled, so nothing changed. Open the link again and press Accept to approve Taskuary.'
+    if 'AADSTS900971' in d: return False, 'Not approved', ('Microsoft did not accept where this link returns to - it was made by an older '
+                                                           'Taskuary. Get a fresh link from the Outlook or Teams card and open that one.')
+    return False, 'Not approved', f'Microsoft did not record the approval: {(desc or error or "no reason given")[:300]}'
 
 
 def _need_client(cfg):
@@ -105,9 +131,6 @@ def _need_client(cfg):
     return cid
 
 
-# THE BROWSER SIGN-IN comes back here. Entra ignores the port of an http://localhost redirect on a public client, so the one
-# URI registered on the app - http://localhost/api/ms/callback - matches whatever port this install listens on.
-REDIRECT_PATH = '/api/ms/callback'
 def redirect_uri(port) -> str: return f'http://localhost:{int(port or 7787)}{REDIRECT_PATH}'
 def _challenge(verifier: str) -> str: return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
 

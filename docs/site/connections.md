@@ -72,8 +72,11 @@ box. It shows a code to type at microsoft.com/devicelogin. It is never used unle
 **Microsoft shows "Need admin approval" or error AADSTS900971 ("No reply address provided")?** Your
 company lets only an IT admin approve a new app, so the sign-in stops on Microsoft's page and never
 comes back - after a minute and a half the card says so and shows the approval link. Your IT admin
-opens that link once, signs in and clicks Accept; nothing is registered in your tenant. Then press
-Sign in with Microsoft again. The same link answers AADSTS65001, AADSTS90094, AADSTS50105 (the app
+opens that link once, signs in and clicks Accept; nothing is registered in your tenant and there is
+nothing to set up in Azure. After Accept their browser goes to `http://localhost/api/ms/callback`:
+if the page says it can't connect, that is expected - the approval is done. Then press Sign in with
+Microsoft again. An admin who saw AADSTS900971 on the approval link itself had one from an older
+Taskuary; the card's *Get the admin link* gives a fresh one. The same link answers AADSTS65001, AADSTS90094, AADSTS50105 (the app
 is limited to people IT assigned) and AADSTS53003 (a Conditional Access policy).
 
 :::note For an IT admin approving Taskuary
@@ -83,7 +86,9 @@ is limited to people IT assigned) and AADSTS53003 (a Conditional Access policy).
 - **Redirect URI:** `http://localhost/api/ms/callback`, on the *Mobile and desktop applications*
   platform. Entra ignores the port of a `localhost` redirect for a public client, so this one
   entry covers whatever port Taskuary listens on (7787 unless changed). The admin-approval link
-  uses `https://login.microsoftonline.com/common/oauth2/nativeclient`.
+  returns to the same `http://localhost/api/ms/callback`, exactly as registered: on the computer
+  Taskuary runs on it shows *Approved*; anywhere else the page does not load, and the approval
+  stands all the same.
   Missing, Microsoft's own page stops with error **AADSTS50011** (the redirect URI does not match) and never returns to
   Taskuary - the card says so while it waits.
 - **Delegated permissions (Microsoft Graph)**, all a user's own consent:

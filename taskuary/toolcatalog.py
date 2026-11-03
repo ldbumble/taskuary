@@ -68,6 +68,10 @@ PURPOSE = {
                                  'agent at work nobody hears it: say so'),
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which. Several at once is agents.stop",
     'report.rerun':             'run that report again',
+    # THE JOB-IDEAS PASS, NOW (the owner, 2026-11-03: "how do I trigger it now"): the daily pass, started at once off the chat's thread
+    'advisor.ideas':            ("the Advisor's pass for ideas for the owner's job, run now instead of waiting for its day - \"look for ideas for "
+                                 'my job now", "run the advisor ideas". It starts at once and says here how many ideas it raised, under Advisor. '
+                                 'With two of its ideas already waiting, or no AI connected, nothing starts and the line says why'),
     # THE ASSISTANT EDITS THE MEMORY (slice 7, approved by the owner 2026-10-25): "Gail moved to Ops" is a fact about how the owner works,
     # written into LEARNED.md where every reader of its section has it, and the line it makes untrue is closed - kept as history
     # ...and EVERY fact, said in the owner's words, lands in LEARNED.md where triage, the report gate, the Advisor and agents read it - a
@@ -251,7 +255,7 @@ PURPOSE = {
 # (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
 # ...and a fact about the owner's own world with no button and no page to bring up: kept at once and said (concierge._relate)
 # ...and how the owner works with them (slice 7, 2026-10-25): a line taken out of the memory is kept and said the same way (concierge._memory)
-KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss', 'agent.tell'})
+KEPT = frozenset({'people.relate', 'memory.wrong', 'memory.remember', 'problems.dismiss', 'agent.tell', 'advisor.ideas'})
 # ...and a SET named in the owner's words, whose words are the press (pipe.clear's ruling, 2026-10-20; bulk.py 2026-10-28) - a phone asks yes or no
 SETS = frozenset({'pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'agents.stop'})
 # ...and a tool whose press is not one thing: an agent's job written into New is started by the card's own Send to agent at once (concierge._new
@@ -361,14 +365,14 @@ def block(store=None) -> str:
         # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
         'A CALL that presses or lights a button - an action word, a put-down, a reminder - is the CALL line',
         'alone, no words before it: the button is the whole answer.',
-        'Answer in plain words. To look something up or to do anything, end with ONE line:',
+        'Answer in plain words. To look something up or do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
         # ...save the one press made for them: New's card presses its own Send to agent (concierge._new `start`), and "where is it?" was
         # answered "waiting in New, not started" over an agent at work on its own task (2026-11-02)
         'A look-up runs at once and answers you. A change is the owner\'s to press: Taskuary brings up its button, lit, or',
         "its page - never say it is done. Only an agent's job in New starts at once (YOUR OPEN ASKS). When two different",
         'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
-        'Never both, never a tool that is not listed. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
+        'Never both, never an unlisted tool. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
@@ -546,7 +550,7 @@ BUCKETS = (
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'pipe.remove', 'pipe.block', 'pipe.mine', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
-                                          'report.route', 'report.edit', 'report.delete')),
+                                          'report.route', 'report.edit', 'report.delete', 'advisor.ideas')),
     ('app', 'settings, connections, scripts, memory, rules, bell, Hub, Board, Search', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
                                                              'connection.resume', 'app.repair', 'issue.draft', 'script.start', 'memory.remember', 'memory.wrong', 'people.relate',
                                                              'rule.change', 'deleted.restore', 'hub.publish', 'hub.comment', 'hub.vote', 'page.open', 'problems.dismiss')),

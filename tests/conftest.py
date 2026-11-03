@@ -543,8 +543,8 @@ def agents_can_start():
 
 @pytest.fixture(autouse=True, scope='session')
 def no_lookout_on_the_advisors_clock():
-    """The Advisor's run calls the weekly looking-out-for-you pass (lookout.tick) - two more model calls a scripted brain counting its calls
-    would see. tests/test_lookout.py calls the pass itself."""
+    """The Advisor's clock (assistant.clock) calls the daily looking-out-for-you pass (lookout.tick) - two more model calls a scripted brain
+    counting its calls would see. tests/test_lookout.py calls the pass itself."""
     from taskuary import lookout
     lookout.CLOCK = False; yield; lookout.CLOCK = True
 

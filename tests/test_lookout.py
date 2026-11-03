@@ -190,3 +190,86 @@ def test_a_daily_pass_never_says_yesterdays_idea_again_the_check_reads_what_was_
     out = lookout.tick(s, llm, force=True)
     assert out['raised'] == [] and 'ALREADY RAISED' in llm.seen[1][1] and 'Invoice 4471 billed twice' in llm.seen[1][1], 'the check sees it'
     assert lookout.EVERY_DAYS == 1, 'once a day (the owner, 2026-11-03)'
+
+
+# ── ITS OWN CLOCK, AND NOW WHEN ASKED (2026-11-03) ────────────────────────────────────────────────────────────────────────────────────
+def test_the_pass_runs_on_the_advisors_own_clock_never_inside_a_report_run(monkeypatch):
+    """The root cause: the pass sat in assistant.run under `if report_id is None:`, and the scheduler always runs the Advisor with its
+    report_id - so it had never run on a live home. It is the clock's now (assistant.clock), and the Advisor report's off switch stops it."""
+    import inspect
+    from taskuary import wsboot
+    assert 'lookout' not in inspect.getsource(assistant.run) and 'wsboot' not in inspect.getsource(assistant.run)
+    s, _ = world()
+    ran = []
+    monkeypatch.setattr(lookout, 'tick', lambda store, *a, **k: ran.append('lookout'))
+    monkeypatch.setattr(wsboot, 'tick', lambda store, *a, **k: ran.append('wsboot'))
+    monkeypatch.setattr(lookout, 'CLOCK', True)
+    src = assistant.source(s)
+    assert src and src.get('Active'), 'the seeded Advisor report is on'
+    assistant.clock(s)
+    assert ran == ['wsboot', 'lookout']
+    s.save_source({**{k: v for k, v in src.items() if k != 'cfg'}, 'Active': 0}, 'owner')
+    ran.clear(); assistant.clock(s)
+    assert ran == [], 'the Advisor switched off: neither pass'
+
+
+def test_the_server_clock_runs_it_off_the_reports_lock_at_most_every_fifteen_minutes(monkeypatch):
+    import threading
+    from taskuary import demo, server
+    done, calls = threading.Event(), []
+    monkeypatch.setattr(assistant, 'clock', lambda store: (calls.append(1), done.set()))
+    monkeypatch.setattr(demo, 'enabled', lambda: False)
+    monkeypatch.setattr(server, '_ADVISOR_AT', [0.0])
+    t0 = 10_000.0
+    assert server.advisor_pass(t0) is True and done.wait(5)
+    assert server.advisor_pass(t0 + 60) is False, 'a tick a minute later does not look again'
+    assert server._ADVISOR_BUSY.acquire(timeout=5); server._ADVISOR_BUSY.release()
+    done.clear(); assert server.advisor_pass(t0 + server.ADVISOR_TICK) is True and done.wait(5) and calls == [1, 1]
+    monkeypatch.setattr(demo, 'enabled', lambda: True)
+    assert server.advisor_pass(t0 + 3 * server.ADVISOR_TICK) is False, 'the demo world runs nothing on a clock'
+
+
+def asked(s, monkeypatch, llm):
+    """The Assistant's advisor.ideas through the chat's own road: (the line said at once, the line said when the pass ends or None)."""
+    import threading
+    from taskuary import concierge
+    monkeypatch.setattr(lookout, 'brain', lambda store: llm)
+    got, done = [], threading.Event()
+    real = concierge.record
+    def record(store, tid, role, text, *a, **k):
+        if text.startswith('The pass for ideas'): got.append(text); done.set()
+        return real(store, tid, role, text, *a, **k)
+    monkeypatch.setattr(concierge, 'record', record)
+    out = concierge.call_turn(s, 0, {'kind': 'advisor.ideas', 'params': {}}, None, 'look for ideas for my job now')
+    assert out['did'] == 'advisor.ideas'
+    if out['started']: assert done.wait(10)
+    return out['say'], (got or [None])[0]
+
+
+def test_asking_the_assistant_starts_a_pass_now_and_says_how_many_ideas_it_raised(monkeypatch):
+    from taskuary import toolcatalog
+    assert 'advisor.ideas' in {k for _, _, ks in toolcatalog.BUCKETS for k in ks} and 'runs at once, said' in toolcatalog.describe('advisor.ideas')
+    assert toolcatalog.valid('advisor.ideas', {}) == '' and len(toolcatalog.block()) < 7950
+    s, ids = world()
+    a, b = ids['dup']
+    s.set_setting(lookout.LAST_KEY, ago(hours=1), 't')                  # it ran an hour ago: the day is not up, the owner's ask still runs it
+    llm = brain({'ideas': [idea('money', 'Vendor billing sent invoice 4471 twice', [f'msg{a}', f'msg{b}']),
+                           idea('pitch', 'Communicate more with the approvers', [f"msg{ids['backlog'][0]}"])]},
+                {'keep': [1], 'why': {'2': 'generic'}})
+    now, later = asked(s, monkeypatch, llm)
+    assert now.startswith('Started a pass for ideas for your job'), now
+    assert later == 'The pass for ideas for your job raised 1 idea, 1 held back by the second look - under Advisor.', later
+    assert [r['Key'] for r in lookout.open_ideas(s)] == ['idea:lookout-vendor-billing-sent-invoice-4471-twice'], 'an ordinary Advisor idea row'
+
+
+def test_an_asked_pass_still_keeps_two_waiting_at_most_and_needs_an_ai(monkeypatch):
+    s, ids = world()
+    for n in range(lookout.MAX_OPEN): s.upsert_idea({'key': f'{lookout.KEY}old-{n}', 'kind': 'money', 'text': f'Old {n}', 'action': {'type': 'lookout'}}, ago(days=1))
+    never = brain()                                                         # any call would fail: nothing may be asked
+    now, later = asked(s, monkeypatch, never)
+    assert now.startswith('Nothing started: 2 ideas for your job already wait under Advisor') and later is None and not never.seen
+    s2, _ = world()
+    now, later = asked(s2, monkeypatch, None)
+    assert now.startswith('Nothing started: no AI is connected') and later is None and not s2.get_setting(lookout.TRIED_KEY)
+    now, later = asked(s2, monkeypatch, lambda system, user, **k: 'I would rather chat')
+    assert later == 'The pass for ideas for your job got no answer from the AI - nothing raised. Ask again in a while.'

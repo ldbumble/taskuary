@@ -4,8 +4,9 @@ for a consumer assistant that checks anything you bought recently, sees if the p
 that for your job ... a real proactive thinker looking out for you, trying to get you more credit for your work, solving pain points for
 others, or seeing real issues developing").
 
-Once every EVERY_DAYS (the Advisor's clock calls `tick` each run; it is cheap until due), two model calls - CALLS caps it at three, as
-ask_json re-asks once for an answer that was not JSON:
+Once every EVERY_DAYS - a day (the owner, 2026-11-03: "once a week is too inoften ... once a day, but if you said something yesterday
+don't say it again": BEFORE carries every recent idea, and the check holds a repeat) - the Advisor's clock calls `tick` each run; it is
+cheap until due - two model calls. CALLS caps it at three, as ask_json re-asks once for an answer that was not JSON:
 
   1. PROPOSE   the model reads JOB.md, SOUL.md, the window - the last DAYS of mail, chat, tasks and reports, COUNTED and grouped (each group
                with ids it can cite), the weekly pattern of the people the owner writes to most - and what it raised before and how the owner
@@ -36,7 +37,7 @@ FAMILIES = {
                      "risk, a report that stopped arriving, a colleague whose pattern changed sharply",
     'leverage': "who depends on the owner, who to loop in, an introduction that would unblock something"}
 KEY = 'idea:lookout-'
-EVERY_DAYS, RETRY_H = 7, 24          # a week between passes (setting lookout_every_days); a pass that got no answer tries again a day later
+EVERY_DAYS, RETRY_H = 1, 6           # a day between passes (setting lookout_every_days); a pass that got no answer tries again in 6 hours
 DAYS, MAX_IDEAS, MAX_OPEN, CALLS = 30, 2, 2, 3     # CALLS: the two, and one re-ask of an answer that was not JSON (llm.ask_json)
 GROUPS, OWN_GROUPS, PEOPLE, WEEKS = 40, 20, 12, 6
 TASKS_SHOWN, GIST, WINDOW_CHARS = 25, 200, 22000
@@ -83,7 +84,7 @@ CHECK = (
     "Keep an idea only when ALL of these hold: (1) SPECIFIC - it names counts, dates or items, not a general practice; (2) SUPPORTED - the "
     "cited lines really show what it claims, nothing is invented or stretched; (3) NON-OBVIOUS - the owner could not see it from one "
     "message, and their own sent words do not show them already on it; (4) WORTH A BOSS'S TIME - money, time, risk or credit at a scale "
-    "that matters; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life. Reject anything generic "
+    "that matters; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since. Reject anything generic "
     "('communicate more', 'hold a meeting', 'document it', 'monitor more') however well it is worded. "
     'Answer JSON only: {"keep": [<numbers of the ideas to keep>], "why": {"<number>": "<one line: why it was rejected>"}}')
 CHECK_WANT = {'name': 'lookout_check', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['keep', 'why'], 'properties': {
@@ -98,7 +99,7 @@ def open_ideas(store) -> list: return store._rows("SELECT * FROM idea WHERE Key 
 
 
 def due(store) -> bool:
-    """A week (lookout_every_days) since the last pass that got an answer, a day since one that did not, and room on the rail: never more
+    """A day (lookout_every_days) since the last pass that got an answer, RETRY_H since one that did not, and room on the rail: never more
     than MAX_OPEN of these waiting at once."""
     if len(open_ideas(store)) >= MAX_OPEN: return False
     last, tried = store.get_setting(LAST_KEY) or '', store.get_setting(TRIED_KEY) or ''
@@ -196,7 +197,7 @@ def before(store) -> list:
     v, now = _verdicts(store), _ts(_now())
     word = {'taken': 'took it up', 'handled': 'handled it', 'wrong': 'turned it down', 'walked': 'walked past it', 'pending': 'not answered yet'}
     out = []
-    for i in store._rows('SELECT * FROM idea WHERE Key LIKE ? ORDER BY IdeaId DESC LIMIT 20', (KEY + '%',)):
+    for i in store._rows('SELECT * FROM idea WHERE Key LIKE ? ORDER BY IdeaId DESC LIMIT 60', (KEY + '%',)):
         said = VERDICT_WORD.get((v.get(i['Key']) or {}).get('verdict')) or word.get(ideagrade.grade(store._rows, i, now), 'not answered yet')
         out.append(f"- [{i.get('Kind')}] {_one(i.get('Text'), 140)} - the owner: {said}")
     out += [f"- [{h.get('family')}] {_one(h.get('title'), 140)} - held by the check: {_one(h.get('why'), 120)}" for h in held(store)]
@@ -270,6 +271,8 @@ def check(store, llm, ideas: list) -> tuple:
     user = '\n\n'.join(f"IDEA {n} [{x['family']}]: {x['title']}\nevidence: {x['evidence']}\nwhy: {x['why']}\nnext step: {x['next_step']}\n"
                        f"pitch: {x['pitch']}\nwhat it cites:\n" + '\n'.join(f"  {r}: {ref_line(store, r)}" for r in x['refs'])
                        for n, x in enumerate(ideas, 1))
+    said = before(store)
+    if said: user += '\n\nALREADY RAISED (and how the owner answered):\n' + '\n'.join(said)
     try:
         got = ask_json(llm, CHECK, user, want=CHECK_WANT, max_tokens=CHECK_TOKENS)
         if not isinstance(got.data, dict): raise ValueError(got.error or 'no answer')

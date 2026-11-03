@@ -1,7 +1,7 @@
 The Advisor is the one of Taskuary's three models that thinks about your work as a whole. Triage
 judges each arrival and the assistant moves things on a turn; the Advisor reads everything, on a
 clock, and says what should happen next: what is late, what nobody followed up, which step a mail
-served, what worked, which system is worth connecting - and, once a week, what would make a
+served, what worked, which system is worth connecting - and, once a day, what would make a
 difference to your job itself (below: *Looking out for you*). It never acts. It leaves a line, an
 idea row or a proposal, and you or the assistant do the rest. `COUNSEL.md` is its voice and the
 assistant's both.
@@ -67,7 +67,7 @@ fix, and a task with words from someone you have not vouched for is never read. 
 raised once, and **Not ours** keeps it down
 ([Troubleshooting](troubleshooting#report-a-bug)).
 
-**Looking out for you.** Once a week the Advisor stops thinking about the app and thinks about your
+**Looking out for you.** Once a day the Advisor stops thinking about the app and thinks about your
 job, the way a sharp chief of staff would: what could you tell your boss - "I see this pain, and
 here is the fix"? It reads `JOB.md` and `SOUL.md`, the last 30 days of mail, chat, tasks and reports
 counted and grouped (a report that comes every Monday, a question asked again and again, a notice
@@ -95,9 +95,9 @@ personal workstream.
 What passes is an ordinary idea row: **Send to agent** has an agent draft the pitch or build the fix
 (its brief carries the next step, the pitch and the messages to read first), **Make a task**,
 **Remind me**, **Not ours**, and **No more ideas like this**, which stops that whole family. What you
-did with each idea, and what the second look held back, is what the next week's pass reads first;
+did with each idea, and what the second look held back, is what the next day's pass reads first - it never raises again what it said before;
 each family is held to the same 80% bar as the Advisor's other kinds of line. It costs two calls on
-the Advisor's model a week (three at most, when an answer has to be asked for again), it does not look
+the Advisor's model a day (three at most, when an answer has to be asked for again), it does not look
 again while two of its ideas still wait on you, and the setting `lookout_every_days` changes how often it
 looks.
 

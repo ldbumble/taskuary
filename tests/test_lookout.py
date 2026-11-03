@@ -110,7 +110,7 @@ def test_what_the_owner_and_the_check_turned_down_comes_back_as_evidence():
     assert '[early_warning] Gail went quiet - held by the check: one message, no pattern' in user
 
 
-def test_the_cost_is_two_calls_a_week_capped_at_three_and_never_more_than_two_ideas_waiting():
+def test_the_cost_is_two_calls_a_day_capped_at_three_and_never_more_than_two_ideas_waiting():
     s, ids = world()
     a, b = ids['dup']
     llm = brain({'ideas': [idea('money', f'Idea {n}', [f'msg{a}']) for n in range(5)]}, {'keep': [1, 2, 3, 4]})
@@ -118,8 +118,8 @@ def test_the_cost_is_two_calls_a_week_capped_at_three_and_never_more_than_two_id
     assert out['calls'] == 2 and len(out['raised']) == lookout.MAX_IDEAS == 2, 'at most two proposed, checked in one call'
     assert lookout.due(s) is False and lookout.tick(s, brain())['ran'] is False, 'two waiting: no pass, no call'
     for r in lookout.open_ideas(s): s.set_idea_status(r['IdeaId'], 'done', 'owner')
-    assert lookout.due(s) is False, 'and a week between passes'
-    s.set_setting(lookout.LAST_KEY, ago(days=8), 't'); s.set_setting(lookout.TRIED_KEY, ago(days=8), 't')
+    assert lookout.due(s) is False, 'and a day between passes'
+    s.set_setting(lookout.LAST_KEY, ago(days=2), 't'); s.set_setting(lookout.TRIED_KEY, ago(days=2), 't')
     assert lookout.due(s) is True
     # a check whose answer is not the shape raises nothing
     odd = brain({'ideas': [idea('pitch', 'Fix the export again', [f'msg{b}'])]}, 'not an object')
@@ -138,12 +138,12 @@ def test_the_cost_is_two_calls_a_week_capped_at_three_and_never_more_than_two_id
     assert len(calls) == out['calls'] == 3 and out['raised'] == [] and out['held'] == ['Invoice 4471 twice'], 'the check would be a fourth call: held'
 
 
-def test_a_model_that_did_not_answer_is_tried_again_in_a_day_not_a_week():
+def test_a_model_that_did_not_answer_is_tried_again_within_hours_not_a_day():
     s, _ = world()
     out = lookout.tick(s, lambda system, user, **k: 'I cannot help with that')
     assert out == {'ran': True, 'raised': [], 'held': [], 'calls': 2}, 'asked, and re-asked once for the JSON'
     assert not s.get_setting(lookout.LAST_KEY) and s.get_setting(lookout.TRIED_KEY) and lookout.due(s) is False
-    s.set_setting(lookout.TRIED_KEY, ago(hours=25), 't')
+    s.set_setting(lookout.TRIED_KEY, ago(hours=7), 't')
     assert lookout.due(s) is True
 
 
@@ -180,3 +180,13 @@ def test_an_idea_lands_under_the_advisor_never_in_fyi_and_says_its_family(canoni
                                                               'early_warning': 'early warning', 'leverage': 'leverage'}
     assert all(lanes.idea_section(f) == 'ideas' for f in lookout.FAMILIES)
     assert json.loads(s.get_idea(iid)['ActionJson'])['suggest'].endswith('\nPitch: "I caught a double invoice"')
+
+
+def test_a_daily_pass_never_says_yesterdays_idea_again_the_check_reads_what_was_raised():
+    s, ids = world()
+    a, _b = ids['dup']
+    lookout.tick(s, brain({'ideas': [idea('money', 'Invoice 4471 billed twice', [f'msg{a}'])]}, {'keep': [1]}), force=True)
+    llm = brain({'ideas': [idea('money', 'Payworth charged invoice 4471 two times', [f'msg{a}'])]}, {'keep': [], 'why': {'1': 'already raised'}})
+    out = lookout.tick(s, llm, force=True)
+    assert out['raised'] == [] and 'ALREADY RAISED' in llm.seen[1][1] and 'Invoice 4471 billed twice' in llm.seen[1][1], 'the check sees it'
+    assert lookout.EVERY_DAYS == 1, 'once a day (the owner, 2026-11-03)'

@@ -29,6 +29,9 @@ FIELDS = {
     'addressed_to': "addressed_to is the To line by name, the owner as \"you\" - who the mail is put to; copied is the Cc line the "
                     "same way. A name the message opens with or puts its question to is matched against them.",
     'copied': "copied is the Cc line by name, the owner as \"you\" - who is only watching.",
+    'answered_before': "answered_before is earlier mail (other threads) that had one of this mail's other recipients on it, this "
+                       "sender's first: when, from whom, its subject, which of these colleagues were on it (with), and who answered it "
+                       "first (answered_by: \"you\", a colleague, or null when no reply reached the owner).",
     'last_on_thread_is_you': "last_on_thread_is_you is true when the owner's own reply was the last thing said on the thread before "
                              "this message - what they said is their \"you\" line in the exchange.",
     'others_replied': "others_replied names people other than the owner and the sender who have SENT a message on this thread; "

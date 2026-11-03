@@ -564,7 +564,9 @@ ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended.
                 'writes to it. Decide one thing: did it END WITHOUT DELIVERING what it was asked for, because it says it is still waiting '
                 'on work of its own - something it started in the background, a sub-agent, a job still running - or promises to come '
                 'back with the result later? An answer that delivers the work, a question to the owner, or a plain statement that '
-                'something cannot be done is not that. Reply with JSON only: {"unfinished": true or false, "why": "what it is still '
+                'something cannot be done is not that - and neither is waiting on a PERSON: the owner, the sender, or someone a reply '
+                'it drafted asks for more (their output, their notes, their answer). That turn delivered its step; the next one comes '
+                'when they write back. Reply with JSON only: {"unfinished": true or false, "why": "what it is still '
                 'waiting on, in a few plain words; empty when unfinished is false"}')
 ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}, 'why': {'type': 'string'}}, 'required': ['unfinished']}
 _ENDED = {}
@@ -573,6 +575,7 @@ BACKGROUND = True          # the suite turns the read off its own thread (tests/
 
 def ended_short(why: str) -> str:
     "The failure's reason, as R2's step reads it: \"Failed - It ended its turn still waiting on ...\" (funnel.run_failed), Try again under it."
+    why = re.sub(r'^\s*(still\s+)?waiting\s+(on|for)\s+', '', str(why or ''), flags=re.I)   # the model's why may begin "waiting for ..." itself
     return f"it ended its turn still waiting on {why or 'work of its own'}"
 
 

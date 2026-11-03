@@ -63,7 +63,7 @@ SYSTEM = (
     "\nTHE BAR. An idea rests on specific evidence in the window - counts, dates, the same thing again and again - and joins things the "
     "owner could not see from any single message. Generic advice is worthless here: 'communicate more', 'document the process', 'hold a "
     "meeting', 'improve monitoring', 'automate it' - unless the evidence makes it specific and new (what exactly, from which counts, saving "
-    "what). Never restate one message, never raise what the owner is visibly already doing, never repeat or rephrase an idea under BEFORE. "
+    "what). Never restate one message, never raise what the owner is visibly already doing, never repeat or rephrase an idea under BEFORE. Before naming a person, look for signs they have left - a departure notice, a removed account, mail that stops after bounces - and say nothing about someone who has gone. "
     "Think like the assistant that notices a price dropped and asks for the refund: what is owed, wasted, at risk or uncredited, in numbers.\n"
     "ABOUT A PERSON: only the observed pattern (counts, dates, what changed), never a diagnosis, motive, blame or a guess about health, "
     "family or private life; the next step is private and kind - a check-in, an offer of help - and nothing that would embarrass them.\n"
@@ -84,7 +84,7 @@ CHECK = (
     "Keep an idea only when ALL of these hold: (1) SPECIFIC - it names counts, dates or items, not a general practice; (2) SUPPORTED - the "
     "cited lines really show what it claims, nothing is invented or stretched; (3) NON-OBVIOUS - the owner could not see it from one "
     "message, and their own sent words do not show them already on it; (4) WORTH A BOSS'S TIME - money, time, risk or credit at a scale "
-    "that matters; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since. Reject anything generic "
+    "that matters; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since; (7) STILL TRUE TODAY - a person it names still works with the owner (the window has no departure notice, account removal or 'no longer with' reply, and they still write or are written to), and a process it names still runs. Reject anything generic "
     "('communicate more', 'hold a meeting', 'document it', 'monitor more') however well it is worded. "
     'Answer JSON only: {"keep": [<numbers of the ideas to keep>], "why": {"<number>": "<one line: why it was rejected>"}}')
 CHECK_WANT = {'name': 'lookout_check', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['keep', 'why'], 'properties': {

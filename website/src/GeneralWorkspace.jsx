@@ -359,13 +359,15 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   );
 }
 
-// WHAT THE AGENT ASKED, AND THE BOX THAT ANSWERS IT (the UI audit's W6): the question in its own words, the answers it named as one
-// press each, and a box for anything else. `onAnswer(text)` delivers it - a reply in this conversation, or the worker's own answer road -
-// and throws with the reason when it could not; the card stays with the words still in it.
+// WHAT THE AGENT ASKED (the UI audit's W6): the question in its own words, and the answers it named as one press each - only the ones
+// the agent itself offered (its ask line's choices, its CLI's own chooser). ONE BOX TYPES AN ANSWER (the owner, 2026-11-03: "i hate this
+// double ui. we don't need question box if we have way to answer on the bottom"): the card's own field and Answer button went - what is
+// typed in the composer while a question is open is its answer (AssistantThread's answerTyped). `onAnswer(text)` delivers either - a
+// reply in this conversation, or the worker's own answer road - and throws with the reason when it could not.
 // A SIGN-IN it waits on (request id `signin:<site>`, signin.py) also offers the one-time fill page: Taskuary types it into the browser,
 // the agent never sees it. Taking over the browser beside it and pressing Signed in is the other way, as before.
 export function AgentAsks({ asking, name, onAnswer, taskId }) {
-  const [text, setText] = useState(""), [going, setGoing] = useState(false), [err, setErr] = useState("");
+  const [going, setGoing] = useState(false), [err, setErr] = useState("");
   const site = String(asking.request_id || "").startsWith("signin:") ? asking.request_id.slice(7) : "";
   // ...and its Signed in is a press on EVERY agent's ask (2026-10-25): a terminal CLI's had only the box and a line saying to type it.
   // The server tells either kind the same words (signin.signed_in), never a chooser's number.
@@ -378,12 +380,11 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
       if (!app) window.open(data.url, "_blank", "noopener");
     } catch (e) { setErr(errText(e)); }
   };
-  useEffect(() => { setText(""); setErr(""); setGoing(false); }, [asking?.request_id]);
-  const send = async (words) => {
-    const w = String(words || "").trim();
-    if (!w || going) return;
+  useEffect(() => { setErr(""); setGoing(false); }, [asking?.request_id]);
+  const send = async (w) => {
+    if (going) return;
     setGoing(true); setErr("");
-    try { await onAnswer?.(w); setText(""); } catch (e) { setErr(errText(e)); } finally { setGoing(false); }
+    try { await onAnswer?.(w); } catch (e) { setErr(errText(e)); } finally { setGoing(false); }
   };
   return (
     <div className="tq-aui-asking" data-tq-asking={asking.request_id}>
@@ -399,11 +400,6 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
           title={`A one-time page to type the ${site} sign-in - Taskuary fills it into the browser and the agent never sees it`}>Sign in here</Button>}
         {choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
       </div>}
-      <form className="tq-aui-asking-box" onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <TextField size="small" fullWidth value={text} disabled={going} onChange={(e) => setText(e.target.value)}
-          placeholder={site ? "Message the agent - never your password" : "Type your answer"} inputProps={{ "aria-label": `Your answer to ${name}` }} />
-        <Button type="submit" size="small" variant="contained" disableElevation disabled={going || !text.trim()}>{going ? "Sending…" : "Answer"}</Button>
-      </form>
       {err && <span className="tq-aui-asking-err" role="alert">{err}</span>}
     </div>
   );
@@ -530,6 +526,20 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     return () => { ids.forEach(clearTimeout); own.forEach((e) => v?.removeEventListener(e, mine)); };
   }, [dock, said, serverBusy, runtime]);
   const closedChat = !dock && ["done", "dropped"].includes(String(task?.Status || ""));
+  /* WHILE A QUESTION IS OPEN THE COMPOSER ANSWERS IT (the owner, 2026-11-03: the card had a box of its own, and the answer was typed here
+     anyway): its words take the road the card's Answer took (onAnswer) - this conversation's next message, or the asking terminal's answer -
+     so the card and the "waiting on you" chip clear the same way. A typed answer to a multiple-choice question goes as typed. */
+  const [askErr, setAskErr] = useState(""), answering = useRef(false);
+  useEffect(() => { setAskErr(""); }, [asking?.request_id]);
+  const answerTyped = (e) => {
+    if (dock || !asking) return;
+    e.preventDefault();
+    const c = runtime.thread.composer, w = c.getState().text.trim();
+    if (!w || answering.current) return;
+    answering.current = true; setAskErr(""); c.setText("");
+    Promise.resolve(onAnswer?.(w)).catch((x) => { c.setText(w); setAskErr(errText(x)); }).finally(() => { answering.current = false; });
+  };
+  const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : `Answer ${name}'s question…`;
   const atWork = dock || work?.steps?.length ? <Thinking provider={dock ? provider : name} />
     : <AgentBand name={name} provider={provider} work={work} since={since} starting={starting} />;
   return (
@@ -559,10 +569,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               reopened - and the poll is what tells us so */}
           {serverBusy && atWork}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
-          {/* THE QUESTION IS ON THE AGENT'S OWN CANVAS, with its answer box (owner-approved, the UI audit's W6, 2026-10-21): the
+          {/* THE QUESTION IS ON THE AGENT'S OWN CANVAS (owner-approved, the UI audit's W6, 2026-10-21): the
               card said "Agent asked you something" over a pane that never showed what - the question lived only in the rail row's
               hover. It was taken out on 2026-10-19 as a repeat of the answer above; an agent asking from a terminal has no answer
-              above at all, and an answer needs a box beside the question it answers. */}
+              above at all. Its answer is typed in the composer below (2026-11-03), its own presses on the card. */}
           {!dock && asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} taskId={task.TaskId} />}
           {!dock && <PublishedPages pages={published} deliver />}
           {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
@@ -606,14 +616,14 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                 continue it has a space to type into the agent? coding agents don't have that"). `noComposer` is that Continue (TaskPage). */}
             {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
               This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : noComposer ? null : <>
-            <ComposerPrimitive.Root className="tq-aui-composer">
+            <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
               <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
               </IconButton>
               <ComposerPrimitive.Input
                 className="tq-aui-input"
                 /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
-                placeholder={working ? "Add something for it to pick up…" : `Tell ${dock ? "Taskuary" : name} what to do next…`}
+                placeholder={askWords || (working ? "Add something for it to pick up…" : `Tell ${dock ? "Taskuary" : name} what to do next…`)}
               />
               {/* the one mic, dictating into the box - every other composer had it and this one did not (the owner,
                   2026-09-29: "where is mic to ask it question?") */}
@@ -625,8 +635,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                   to stop the run; abandoning the tab just detaches from it (server.py). */}
               <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response"
                 onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
-              <ComposerPrimitive.Send className="tq-aui-send" aria-label="Send"><SendIcon fontSize="small" /></ComposerPrimitive.Send>
+              <ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>
             </ComposerPrimitive.Root>
+            {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}
             <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste or attach an image</div></>}
           </div>
       </ThreadPrimitive.Root>

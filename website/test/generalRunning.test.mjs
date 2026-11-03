@@ -61,12 +61,30 @@ test("the picker names the brain that is actually answering, not the one it open
 // THE QUESTION IS ON THE AGENT'S CANVAS WITH ITS ANSWER BOX (owner-approved, the UI audit's W6, 2026-10-21): "Agent asked you something"
 // stood over a pane that never showed what, the question only in the rail row's hover. The conversation's own agent takes the answer as
 // its next message; an agent asking from a terminal on the task gets it through the worker's answer road
-test("the general agent's question is drawn in its canvas with a box that answers it", () => {
+test("the general agent's question is drawn in its canvas, answered by its presses or the composer", () => {
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /\{!dock && asking && <AgentAsks asking=\{asking\} name=\{name\} onAnswer=\{onAnswer\} taskId=\{task\.TaskId\} \/>\}/);
   assert.match(view, /setOwnPrompt\(\{ id: `ask:\$\{req\.request_id\}`, text \}\)/);
   assert.match(view, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/worker\/answer`, \{ request_id: req\.request_id, text \}\)/);
   assert.match(view, /data\.asking\.request_id !== answered/, "answered here, it goes at once - the snapshot still carries it");
+});
+
+// ONE BOX TYPES THE ANSWER (the owner, 2026-11-03: "i hate this double ui. we don't need question box if we have way to answer on the
+// bottom"): the card keeps the question and the agent's own choices, and the composer below is where an answer is typed
+test("the question card has no box of its own - the composer answers an open question", () => {
+  const view = read("GeneralWorkspace.jsx");
+  const card = view.slice(view.indexOf("export function AgentAsks"), view.indexOf("function AssistantThread("));
+  assert.doesNotMatch(card, /<TextField|<form|>Answer<|"Answer"|placeholder=/, "no field and no Answer button on the card");
+  assert.match(card, /choices\.map\(\(c\) => <Button key=\{c\}[^>]*onClick=\{\(\) => send\(c\)\}>/, "a choice still answers at a press");
+  // the composer's Enter (the form's submit) and its Send both take an open question's road, never a fresh turn beside it
+  assert.match(view, /<ComposerPrimitive\.Root className="tq-aui-composer" onSubmit=\{answerTyped\}>/);
+  assert.match(view, /<ComposerPrimitive\.Send [^>]*onClick=\{answerTyped\}>/);
+  const typed = view.slice(view.indexOf("const answerTyped"), view.indexOf("const askWords"));
+  assert.match(typed, /if \(dock \|\| !asking\) return;\s*e\.preventDefault\(\);/, "only while a question is open; otherwise the composer sends as ever");
+  assert.match(typed, /onAnswer\?\.\(w\)/, "the same road the card's presses take - so the card and the waiting chip clear the same way");
+  assert.match(typed, /\.catch\(\(x\) => \{ c\.setText\(w\); setAskErr\(errText\(x\)\); \}\)/, "a refused answer keeps its words");
+  assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\) \? "Message the agent - never your password" : `Answer \$\{name\}'s question…`;/);
+  assert.doesNotMatch(read("generalWorkspace.css"), /tq-aui-asking-box/);
 });
 
 // A SIGN-IN THE AGENT WAITS ON (signin.py) offers the one-time fill page beside its answers: minted by the owner's press, opened in a

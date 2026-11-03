@@ -3,14 +3,14 @@ import test from "node:test";
 
 import { startHarness } from "./harness.mjs";
 
-/* THE QUESTION IS ON THE AGENT'S CANVAS, WITH ITS ANSWER BOX (owner-approved, the UI audit's W6, 2026-10-21). The card said
-   "Agent asked you something" over a pane that never showed what - the question lived only in the rail row's hover. Now the
-   question and the answers it named are drawn in the Agent work pane with a box under them; an answer that cannot be delivered
-   says why and keeps the words, and one that is delivered takes the card away.
+/* THE QUESTION IS ON THE AGENT'S CANVAS (owner-approved, the UI audit's W6, 2026-10-21), AND THE COMPOSER ANSWERS IT (the owner,
+   2026-11-03: "i hate this double ui. we don't need question box if we have way to answer on the bottom"). The question and the
+   answers the agent named are drawn in the Agent work pane with no box of their own; what is typed in the composer while it is open
+   goes to the agent as its answer. One that cannot be delivered says why and keeps the words; one that is delivered takes the card away.
 
    The fixture is the raised hand of an agent asking from a terminal on the task: /assistant answers with `asking` and no
    conversation session, exactly as the server does, so the answer goes by the worker's answer road. */
-test("the agent's question is drawn in its canvas with an answer box, and answering it clears it", { timeout: 180000 }, async (t) => {
+test("the agent's question is drawn in its canvas, the composer answers it, and answering clears it", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
 
@@ -27,11 +27,12 @@ test("the agent's question is drawn in its canvas with an answer box, and answer
   });
   assert.ok(made.taskId, `task not created: ${JSON.stringify(made)}`);
 
-  const answers = [];
+  const answers = [], turns = [];
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (req) => {
     const at = new URL(req.url()).pathname;
     if (at === `/api/tasks/${made.taskId}/assistant`) {
+      if (req.method() === "POST") turns.push(req.postData());
       return void req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({
         messages: [{ id: "m1", role: "assistant", content: [{ type: "text", text: "The login page is open. Have you signed in successfully?" }] }],
         asking: { request_id: "r1", kind: "input_needed", text: "Have you signed in successfully?", choices: ["Signed in", "Login failed"], sid: "p1" },
@@ -49,21 +50,65 @@ test("the agent's question is drawn in its canvas with an answer box, and answer
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
   await page.waitForSelector('[data-tq-asking="r1"]', { visible: true, timeout: 20000 });  const card = await page.$eval('[data-tq-asking="r1"]', (el) => ({ text: el.innerText,
-    choices: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()), box: !!el.querySelector("input") }));
+    choices: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()), box: !!el.querySelector("input, textarea, form") }));
   assert.match(card.text, /Have you signed in successfully\?/, "the question itself is on the canvas");
   assert.deepEqual(card.choices.filter((c) => ["Signed in", "Login failed"].includes(c)), ["Signed in", "Login failed"]);
-  assert.ok(card.box, "an answer box under the question");
+  assert.equal(card.box, false, "no box of the card's own - the composer below is the one box");
+  assert.equal((await page.$$(".tq-aui-input")).length, 1, "one box to type in");
+  assert.match(await page.$eval(".tq-aui-input", (i) => i.placeholder), /question/, "the composer says it answers the question");
 
-  // the failure: typed, sent, refused - the reason is said and the words stay
-  await page.type('[data-tq-asking="r1"] input', "Signed in on the second try");
-  await page.click('[data-tq-asking="r1"] button[type="submit"]');
-  await page.waitForFunction(() => document.querySelector('[data-tq-asking="r1"] [role="alert"]')?.innerText.includes("no live worker"), { timeout: 10000 });
-  assert.equal(await page.$eval('[data-tq-asking="r1"] input', (i) => i.value), "Signed in on the second try");
+  // the failure: typed in the composer, sent, refused - the reason is said and the words stay
+  await page.type(".tq-aui-input", "Signed in on the second try");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelector('.tq-aui-footer [role="alert"]')?.innerText.includes("no live worker"), { timeout: 10000 });
+  assert.equal(await page.$eval(".tq-aui-input", (i) => i.value), "Signed in on the second try");
+  assert.ok(await page.$('[data-tq-asking="r1"]'), "a refused answer leaves the question open");
 
   // ...and a press on one of its answers is delivered, and the card goes
   await page.evaluate(() => [...document.querySelectorAll('[data-tq-asking="r1"] button')].find((b) => b.textContent.trim() === "Signed in").click());
   await page.waitForFunction(() => !document.querySelector('[data-tq-asking="r1"]'), { timeout: 10000 });
   assert.deepEqual(answers, [{ request_id: "r1", text: "Signed in on the second try" }, { request_id: "r1", text: "Signed in" }]);
+  assert.deepEqual(turns, [], "the typed answer went by the answer road, never as a new turn beside the question");
+  assert.deepEqual(errors, []);
+});
+
+/* A TYPED ANSWER, DELIVERED, CLEARS THE QUESTION as a press does - by the Send button as well as Enter, and words that are none of
+   a multiple-choice question's choices go as typed */
+test("a typed answer sent from the composer clears the question", { timeout: 180000 }, async (t) => {
+  const harness = await startHarness();
+  t.after(() => harness.close());
+  const page = await harness.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+  const made = await page.evaluate(async () => {
+    const headers = { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" };
+    return (await fetch("/api/tasks", { method: "POST", headers, body: JSON.stringify({
+      Title: "Pick the Northwind report format", Summary: "Ask Gail Moreno which format", Kind: "general", Tags: "ask:assistant" }) })).json();
+  });
+  const answers = [];
+  page.off("request", page.fixtureRequestGuard);
+  page.on("request", (req) => {
+    const at = new URL(req.url()).pathname;
+    if (at === `/api/tasks/${made.taskId}/assistant`) {
+      return void req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({
+        messages: [{ id: "m1", role: "assistant", content: [{ type: "text", text: "The data is ready. Which format?" }] }],
+        asking: { request_id: "r2", kind: "input_needed", text: "Which format?", choices: ["One workbook", "Single CSV"], sid: "p1" },
+        session: null, starting: false, providers: [{ id: 1, label: "Test CLI", model: "" }] }) });
+    }
+    if (at === `/api/tasks/${made.taskId}/worker/answer` && req.method() === "POST") {
+      answers.push(JSON.parse(req.postData() || "{}"));
+      return void req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ delivered: true, state: "delivered", sid: "p1" }) });
+    }
+    page.fixtureRequestGuard(req);
+  });
+  await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
+  await page.waitForSelector('[data-tq-asking="r2"]', { visible: true, timeout: 20000 });
+  await page.type(".tq-aui-input", "Both, the workbook first");
+  await page.click(".tq-aui-send");
+  await page.waitForFunction(() => !document.querySelector('[data-tq-asking="r2"]'), { timeout: 10000 });
+  assert.deepEqual(answers, [{ request_id: "r2", text: "Both, the workbook first" }]);
+  assert.equal(await page.$eval(".tq-aui-input", (i) => i.value), "", "the box empties once it went");
   assert.deepEqual(errors, []);
 });
 

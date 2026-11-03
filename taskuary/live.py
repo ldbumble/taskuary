@@ -91,6 +91,11 @@ def _merged(prev: dict, payload: dict) -> dict:
         if 'seq' in prev and 'seq' in payload: msg['seq'] = max(prev['seq'], payload['seq'])
         else: msg.pop('seq', None)
         if prev.get('by') != payload.get('by'): msg.pop('by', None)
+        # ...nor for WHICH ITEMS the Advisor read (ADVICE): the item on the table and the two read ahead of it answered in one 50 ms window,
+        # the event named only the last, and the table's own light never came - its read was over and nothing said so (CI, 2026-11-02)
+        if 'key' in payload:
+            one = lambda d: {k: d[k] for k in ('key', 'target_kind', 'target_id') if k in d}
+            msg['items'] = [*(prev.get('items') or ([one(prev)] if 'key' in prev else [])), one(payload)]
     if not prev or 'task_id' not in msg: return msg
     a = prev.get('task_ids') or ([prev['task_id']] if prev.get('task_id') is not None else None)
     b = [payload['task_id']] if payload.get('task_id') is not None else None

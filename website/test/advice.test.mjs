@@ -29,6 +29,10 @@ test("an advice event is about the item on the table when it names its key or on
   assert.equal(adviceKeyFor({ key: "task:1" }, "task:1"), "task:1");               // a bare key still works
   assert.equal(adviceKeyFor({ key: "task:1" }, null), null);
   assert.equal(adviceKeyFor({}, cur), null);
+  // ...and one event for several reads in one window (live._merged `items`) is about each - the last key alone lost the table's own read
+  const ev = { key: "processing:pi_9", items: [{ key: "processing:pi_1", target_kind: "task", target_id: 1 }, { key: "processing:pi_9" }] };
+  assert.equal(adviceKeyFor(ev, cur), "processing:pi_1");
+  assert.equal(adviceKeyFor({ ...ev, items: [{ key: "processing:pi_9" }] }, cur), null);
 });
 
 // WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "not while waiting or walking through things"): only the decision read for the

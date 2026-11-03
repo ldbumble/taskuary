@@ -402,7 +402,8 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
     // a Foot's move acts on the WHOLE item on the table - a batch's "All read, next", a report's, a message's - so it rides the row with
     // the task's verbs (the owner, 2026-10-06: "all read next should be on bottom no as it relates to the whole lot?"); what acts on a
     // PIECE of it (a draft under a task, YourMove's send) stays on the piece. Mark done is never behind More.
-    ...movesOf(verb, moves ? "next" : "decide", "v"),
+    // ...greyed, as the walk's Next is, while a move is out (one move at a time, 2026-11-03)
+    ...movesOf(verb, moves ? "next" : "decide", "v").map((v) => (moves && nav.busy ? { ...v, disabled: true } : v)),
     ...(lifted ? [{ ...asVerb(lifted, "decide"), tone: "p" }] : []),
     // ...save Pause this report, which waits behind More for the Advisor to light it - a lit button is always in view (rowOf)
     ...words.map((a, i) => asVerb(a, (i < 3 && !QUIET.has(a.verb)) || a.verb === "close" ? "decide" : "more")),

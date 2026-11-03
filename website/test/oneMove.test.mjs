@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 // ONE MOVE AT A TIME (the owner, 2026-11-03): Next and Back grey from a press until its answer lands - ten fast clicks are one move, never a
 // queue of held presses. The press still draws what the walk already knows at once (walk.below, walk.above); a rail row clicked over a move
 // is drawn at once from its own row, and the move's answer never takes the table back from it.
+import { mergeDurableTurns } from "../src/assistantTurns.js";
 const read = (n) => readFileSync(fileURLToPath(new URL(`../src/${n}`, import.meta.url)), "utf8");
 const view = read("AssistantView.jsx");
 
@@ -35,10 +36,16 @@ test("a rail row clicked over a move draws at once, and that move's answer fills
 });
 
 test("a chat read never merges lines over a move: the table stays where it was drawn", () => {
-  assert.match(view, /if \(!mid && !turnFlight\.current && moves === tableMoves\.current\) setMsgs\(\(m\) => mergeDurableTurns\(m, st\.messages \|\| \[\]\)\.messages\);/);
+  assert.match(view, /mergeDurableTurns\(m, st\.messages \|\| \[\], \{ append: !mid && !turnFlight\.current && moves === tableMoves\.current \}\)/);
+  const was = [{ id: "a1", role: "assistant", text: "Up next.", card: { key: "task:1" } }];
+  const { messages } = mergeDurableTurns(was, [{ id: 7, role: "assistant", text: "Up next.", card: { key: "task:1", pressed: "Next" } },
+    { id: 8, role: "assistant", text: "Then this.", card: { key: "task:2" } }], { append: false });
+  assert.deepEqual(messages.map((m) => m.id), ["a1"], "no line pushed under the table over a move");
 });
 
-test("Back draws the row above at its press", () => {
-  assert.match(view, /: how === "back" && fromKey && walkNow\?\.on === fromKey && walkNow\.above && !walkNow\.above\.startsWith\("fyis:"\) \? walkNow\.above/);
+test("Back draws the row above at its press, and Next or Back an FYI batch from its rows", () => {
+  assert.match(view, /: how === "back" && fromKey && walkNow\?\.on === fromKey && walkNow\.above \? walkNow\.above/);
+  assert.match(view, /const below = onIt && walkNow\.below \? walkNow\.below/);
+  assert.match(view, /fyis\.every\(Boolean\) \? \{ key: below, kind: "fyis",/, "a batch drawn at the press as railwalk.as_item draws it");
   assert.match(view, /if \(how === "back" && !data\.item && data\.top\) \{ undraw\(\);/, "the top after all: the row drawn comes down");
 });

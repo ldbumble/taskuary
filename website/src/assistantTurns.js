@@ -17,7 +17,8 @@ const cardOf = (m) => (m?.card?.key && !NOT_ITEM.has(m.card.kind) ? m.card.key :
 const sameTurn = (a, b) => (a?.role === b?.role || (a?.role === "receipt" && b?.role === "assistant" && (!b?.card || b.card.kind === "words")))
   && words(a?.text) === words(b?.text) && (!cardOf(a) || !cardOf(b) || cardOf(a) === cardOf(b));
 
-export function mergeDurableTurns(local = [], durable = []) {
+// `append`: false over a walk move - a line the page has not drawn yet waits for the next read (AssistantView readChat); known ones still update
+export function mergeDurableTurns(local = [], durable = [], { append = true } = {}) {
   const messages = [...local];
   // A reconciled bubble answers to BOTH names: the optimistic id it is keyed by on screen, and the
   // comment id the server gave it. Tracking only the visible one made every freshness read re-match
@@ -68,7 +69,8 @@ export function mergeDurableTurns(local = [], durable = []) {
       // The older line claimed the bubble just now; the newer is the same bubble too - pushed at the end, it stood a live card over the
       // page opened since (the search walk: Enter on Gmail, the reopened task back over its card a read later, 2026-10-31)
       messages[at2] = { ...messages[at2], alias: [...new Set([...(messages[at2].alias || []), turn.id])] };
-    } else {
+    } else if (!append) continue;
+    else {
       messages.push(turn);
       added.push(turn);
     }

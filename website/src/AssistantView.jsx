@@ -1528,9 +1528,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const turns = turnsBegun.current, moves = tableMoves.current, mid = turnFlight.current;
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
-    // ...but never over a move: read before its answer, the server's line for it is not the line drawn at its press - pushed under it, the
-    // table scrolled out of view for a moment (the stress walk's blank canvas, ~1 in 100 presses). The next read, at rest, brings them
-    if (!mid && !turnFlight.current && moves === tableMoves.current) setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
+    // ...but never a new line over a move: read before its answer, the server's line for it is not the line drawn at its press - pushed under
+    // it, the table scrolled out of view for a moment (the stress walk's blank canvas, ~1 in 100 presses). The next read, at rest, brings them
+    setMsgs((m) => mergeDurableTurns(m, st.messages || [], { append: !mid && !turnFlight.current && moves === tableMoves.current }).messages);
     // WHERE THE WALK IS, from the same answer: a hand-off started or ended somewhere else (a second tab, the phone's own
     // "stop") - kept as state only; it locks nothing here (2026-10-23)
     setState((s) => (s && (s.handoff?.at || null) !== (st.handoff?.at || null) ? { ...s, handoff: st.handoff || null } : s));
@@ -2053,19 +2053,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       return m.map((x, j) => (j !== i ? x : on ? { ...x, pressed: word } : (({ pressed, ...rest }) => rest)(x))); });
     if (worn) wear(true);
     // RULE 7, THE NEXT ITEM DRAWS AT ONCE: the rail's own row for the one below (walk.below - railwalk.peek, the same line `next` walks) is
-    // put up at the press, and the answer fills that line in place (landed) or takes it down for the row it brought. A batch has no rail
-    // row of its own: the dots stand for it. Without it Next and Mark done waited a whole round trip (400-600 ms against ~100 before)
+    // put up at the press, and the answer fills that line in place (landed) or takes it down for the row it brought. Without it Next and Mark
+    // done waited a whole round trip (400-600 ms against ~100 before)
     // ...the walk's row and the one put down are ONE ROW by key or alias (sameKey): a report that re-ran on the table has a new key
     const walkNow = walkOf(pileRef.current), railNow = pileRef.current?.items || [];
     const onIt = !!putDown && sameKey(railNow, walkNow?.on, putDown, currentRef.current);
-    const below = onIt && walkNow.below && !walkNow.below.startsWith("fyis:") ? walkNow.below
+    const below = onIt && walkNow.below ? walkNow.below
       // ...AND BACK THE SAME WAY, the row above (walk.above) at its press (the owner, 2026-11-02: "the Back button takes way too long, not like
       // the Next button"): it waited the whole round trip, the server's rail build with it, before the table moved
-      : how === "back" && fromKey && walkNow?.on === fromKey && walkNow.above && !walkNow.above.startsWith("fyis:") ? walkNow.above
+      : how === "back" && fromKey && walkNow?.on === fromKey && walkNow.above ? walkNow.above
       // ...AND A RAIL ROW PRESSED IS DRAWN AT ITS PRESS the same way, its task read since the pointer came down (taskDetail.js): the move's
       // answer waited on the server's whole rail build, and a big task's row put nothing on the table for seconds (the owner, 2026-11-01)
       : key && how === "next" && key !== currentRef.current?.key && !key.startsWith("fyis:") ? key : null;
-    const belowItem = below ? (pileRef.current?.items || []).find((i) => i.key === below && !i.settling) || null : null;
+    // ...AN FYI BATCH TOO, from its rows (railwalk.as_item's shape): it stood as dots for the whole round trip, Next from the last task into
+    // FYI slow where task to task was not (the owner, 2026-11-03: "next between task going into fyi still takes a while")
+    const fyis = below?.startsWith("fyis:") ? below.slice(5).split(",").map((k) => railNow.find((r) => answersTo(r, k) && !r.settling)) : null;
+    const belowItem = !below ? null : !fyis ? railNow.find((i) => i.key === below && !i.settling) || null : fyis.every(Boolean) ? { key: below, kind: "fyis",
+      lane: "fyi", title: `${fyis.length} fyi`, who: "", when: fyis[0].when, since: fyis[0].since, channel: fyis[0].channel, why: "people told you things; nothing to do",
+      items: fyis, members: fyis.map((r) => r.key) } : null;
     const was = currentRef.current, off = () => rowsDrawn.current !== drawn0;
     // ...a row a rail click drew over the move before this one (pull) is this press's own line: filled in place, never drawn twice
     const pre = key ? [...msgsRef.current].reverse().find((x) => x.ahead && x.card?.key === key) : null;

@@ -121,10 +121,10 @@ def test_the_cost_is_two_calls_a_day_capped_at_three_and_never_more_than_two_ide
     assert lookout.due(s) is False, 'and a day between passes'
     s.set_setting(lookout.LAST_KEY, ago(days=2), 't'); s.set_setting(lookout.TRIED_KEY, ago(days=2), 't')
     assert lookout.due(s) is True
-    # a check whose answer is not the shape raises nothing
+    # a check whose answer is not an object raises nothing - ask_json re-asks it once (llm.json_of), the third and last call
     odd = brain({'ideas': [idea('pitch', 'Fix the export again', [f'msg{b}'])]}, 'not an object')
     out = lookout.tick(s, odd, force=True)
-    assert out['raised'] == [] and out['calls'] == 2 and out['held'] == ['Fix the export again']
+    assert out['raised'] == [] and out['calls'] == lookout.CALLS == 3 and out['held'] == ['Fix the export again']
     # ...and a brain that never answers in JSON is asked three times at most, whatever ask_json would try next
     calls = []
     def prose(system, user, **k): calls.append(1); return 'I would rather chat'

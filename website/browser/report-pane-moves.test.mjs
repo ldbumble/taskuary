@@ -63,7 +63,10 @@ test("a dashboard and an FYI lay their moves on the pane each is about; Close ou
   assert.deepEqual(await bar(page), ["Back", "Next"]);
   // ...and Send to agent, a stage move, on the folded Agent's spine as on a task's (the owner, 2026-10-31) - its press opens Agent
   assert.deepEqual(await seen(page, '[data-tq-section-tab="agent"] [data-tq-spine-moves] button'), ["Send to agent"], "the Agent spine carries Send to agent");
-  assert.equal(await page.$eval('[data-tq-slot="agent"]', (e) => Math.round(e.getBoundingClientRect().width)), 156, "a full spine, as a task's");
+  // ...a full spine, as a task's: a tenth of the work area, 128 to 156px (TaskPage.tabW - the owner, 2026-11-01, TQ-1251), not a fixed 156
+  const spineW = await page.evaluate(() => { const w = document.querySelector("[data-tq-item-sections] [data-tq-item-body]").getBoundingClientRect().width;
+    return { slot: Math.round(document.querySelector('[data-tq-slot="agent"]').getBoundingClientRect().width), want: Math.round(Math.min(156, Math.max(128, w * 0.1))) }; });
+  assert.equal(spineW.slot, spineW.want, `a full spine, as a task's ${JSON.stringify(spineW)}`);
   await page.click('[data-tq-section-tab="agent"] [data-tq-spine-moves] button'); await sleep(1500);
   assert.equal(await page.$eval("[data-tq-item-sections] [data-tq-sections]", (e) => e.dataset.tqMain), "agent", "the press opened Agent");
   await page.keyboard.press("Escape"); await sleep(300);

@@ -187,6 +187,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // Mark done and Remind me put the task down AT THE PRESS, as Next does; a failure puts it back with the reason
         // ...and the day the owner typed with Remind me ("remind me Monday"), its picker's first button (assistantLight's light.day)
         saidDay={lit?.verb === "defer" ? lit.day || null : null}
+        // ...and the person and note typed with Hand it to a person ("send this to gail@..."): its form comes up filled in (light.hand)
+        saidHand={lit?.verb === "forward" ? lit.hand || null : null}
         onLeave={onLeave} onStay={onStay} note={note} litMove={phone ? pick?.verb || pick?.id || "" : ""} />
       </TableVerbs>
       </Box>

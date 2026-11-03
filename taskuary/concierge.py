@@ -710,6 +710,12 @@ def parse_call(text: str) -> tuple[str, dict | None]:
     # matched. The model names the set with pipe.clear `select` - handed that tool's description, it calls again
     if kind == 'clear': return text[:m.start()].strip(), {'kind': 'tools.describe', 'params': {'kind': 'pipe.clear', 'why': 'clearing names its set: pipe.clear with `select`'}}
     if canon_verb(kind) in toolcatalog.DECISIONS: return (text or '').strip(), None     # a decision: parse_decision's
+    # A ROW BUTTON CALLED BY ITS ID (2026-11-03): the canvas lists each button by its id and the turn guide says a CALL of the id presses it,
+    # but an id that is no decision - forward, watch, share_result - was no tool either, and the turn dropped it with nothing said. It is the
+    # tool its row runs (CHIP_TOOL, PICKER_TOOL), else button.light on it
+    if kind in buttons.VERBS and kind not in toolcatalog.PURPOSE and not toolcatalog.runs_now(kind):
+        tool = CHIP_TOOL.get(kind) or PICKER_TOOL.get(kind)
+        kind, params = (tool, params) if tool else ('button.light', {**params, 'button': kind})
     why = toolcatalog.valid(kind, params)
     if why:
         logger.info(f'concierge: refusing that CALL - {why}')
@@ -1256,17 +1262,19 @@ def said_day(until) -> dict:
     return {'until': at[:16], 'day': remind.when(at)} if at else {}
 
 
-def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '', day: dict | None = None) -> dict:
+def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '', day: dict | None = None, hand: dict | None = None) -> dict:
     """The item's own button for `verb`, lit - the item brought up first when it is not the one on the table (the page pulls `light.key`,
     the rail's road). Nothing runs. A button the row does not draw is a miss the model answers in words (CallMiss), never a line naming it.
     THE LIT BUTTON IS THE WHOLE ANSWER (the owner, 2026-10-23: "what the heck is Lit" - "buttons do the talking", "I hate free text"): no
     "Lit Mark done on TQ-0026." in the chat and no "Press it when you're sure." over the row - the filled button says it all."""
     b = BUTTON_OF.get(verb, verb)
     label = _label_on(store, it, b)
-    # `note`: the owner's words for the press to carry - Continue's box opens holding them; `day`: Remind me's said day (said_day)
+    # `note`: the owner's words for the press to carry - Continue's box opens holding them; `day`: Remind me's said day (said_day);
+    # `hand`: Hand it to a person's To and note, the form brought up filled in
     return {'say': '', 'options': [], 'chips': [], 'decision': None,
             'light': {'verb': b, 'label': label, 'line': '', 'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or '',
-                      **({'note': note} if note else {}), **({'day': day} if day and b == 'defer' else {})}}
+                      **({'note': note} if note else {}), **({'day': day} if day and b == 'defer' else {}),
+                      **({'hand': hand} if hand and b == 'forward' else {})}}
 
 
 def _label_on(store, it: dict, b: str) -> str:
@@ -3500,8 +3508,17 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         if kind in toolcatalog.ATTACH_AGENT and not ref and not resumes:
             raise CallMiss(f"{kind} puts an agent on a task that already exists - name it (its TQ ref, the one on the table "
                            "included). A new job is task.create_from_text. Nothing was started.")
-        t = int(ref.group(1)) if ref else it.get('tid')
-        if not t or not store.get_task(t): raise CallMiss('Name the task (TQ-0123), or open it first - nothing was changed.')
+        # ...the table's task - or its mail's, made since the row was read (Should be a task, pressed a moment ago) - or the task page on screen
+        vi = ((_TURN.get() or {}).get('view') or {}).get('item') or {}
+        seen = re.search(r'(\d+)', str(vi.get('ref') or '')) if vi.get('kind') == 'task' and not it else None
+        t = int(ref.group(1)) if ref else it.get('tid') or _task_of_mail(store, it.get('mid')) or (int(seen.group(1)) if seen else None)
+        # ...and A MAIL WITH NO TASK, HANDED TO A PERSON on the desk (the owner, 2026-11-03): Hand it to a person lives on a task, so "send this to
+        # Gail" over an FYI makes its task first - on the owner's list, nothing taught, nothing sent - and its form comes up filled in
+        if not t and not ref and kind == 'task.handoff' and routes() and it.get('mid') and not it.get('tid'):
+            from . import ingest
+            t = ingest.task_from_message(store, int(it['mid']), actor, 'task', 'owner'); funnel.invalidate()
+            if _TURN.get() is not None: _TURN.get()['made'] = t
+        if not t or not store.get_task(t): raise CallMiss(_no_task(store, tid, it, kind))
         if tk == 'review':
             rv = (store.get_review(it['rid']) if not ref and it.get('rid') else None) or store.pending_review(t)
             if not rv: raise CallMiss(f'{task_ref(t)} has no draft waiting - nothing to {kind.split(".")[1]}.')
@@ -3865,7 +3882,13 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         if kind in ('dispatch.prepare', 'task.create_from_message') and b in AGENT_PRESS and on is table:
             v = b if kind != 'dispatch.prepare' else 'coding_agent' if str(params.get('kind')) == 'coding' else 'regular_agent'
             return _start_agent(store, tid, table, on, v, str(params.get('instructions') or params.get('text') or '').strip(), actor)
-        return _lit(store, tid, table, on, b, note=note, day=said_day(params.get('until')) if b == 'defer' else None)
+        # ...and HAND IT TO A PERSON comes up filled in (the owner, 2026-11-03): the address they typed in its To and their words as its note,
+        # for their Send - the lit button alone left the form to be filled again from the chat above it
+        hand = {k: v for k, v in (('to', str(params.get('who') or '').strip()[:200]), ('note', str(params.get('note') or '').strip()[:2000])) if v} \
+            if b == 'forward' else None
+        out = _lit(store, tid, table, on, b, note=note, day=said_day(params.get('until')) if b == 'defer' else None, hand=hand)
+        # ...a task made for it just now (call_turn): the page reads the rail again, so the row draws as its task with the button on it
+        return {**out, 'decision': {'verb': 'setting'}} if (_TURN.get() or {}).get('made') else out
     if on and kind in ON_TASK:
         said = f"Opened {_where(on) or 'it'} - {ON_TASK[kind]}."
         record(store, tid, 'assistant', said)
@@ -4533,6 +4556,35 @@ def _where(it: dict) -> str:
     title = str(it.get('title') or '')
     who = it.get('who') if it.get('who') and not title.lower().startswith(str(it['who']).lower()) else ''   # "Assistant - Assistant idea"
     return f"{who + ' - ' if who else ''}{title}{' (' + it['ref'] + ')' if it.get('ref') else ''}".strip()
+
+
+def _task_of_mail(store, mid) -> int | None:
+    "The open task a mail on the table became - a row read before its Should be a task went through still says it has none."
+    t = int((store.get_message(int(mid)) or {}).get('TaskId') or 0) if mid else 0
+    return t if t and (store.get_task(t) or {}).get('Status') not in (None, 'done', 'dropped') else None
+
+
+def _last_task(store, tid: int) -> str:
+    "The open task this chat's newest lines made or brought up (a press's receipt, an opened card) - its ref, or ''."
+    for c in reversed(general.chat_rows(store, tid)[-8:]):
+        card = _card_of(c) or {}
+        m = re.search(r'TQ-?0*(\d+)', str(card.get('ref') or ''), re.I)
+        n = card.get('tid') or (m and m.group(1))
+        if n and (store.get_task(int(n)) or {}).get('Status') not in (None, 'done', 'dropped'): return task_ref(int(n))
+    return ''
+
+
+# NO TASK TO ACT ON, SAID WITH WHAT IS REAL (the owner, 2026-11-03: "it did nothing and responded nothing"): "this should be sent to <an address>"
+# right after Should be a task missed twice on "Name the task (TQ-0123), or open it first", and the last pass told the owner to forward it
+# from their own mail. The miss names the task the chat just made, or the row's own buttons, so the next CALL can land
+def _no_task(store, tid: int, it: dict, kind: str) -> str:
+    last = _last_task(store, tid)
+    row = ', '.join(f"{b['label']} ({b['verb']})" for b in row_buttons(store, it)) if it.get('key') else ''
+    return ((f"{_where(it) or 'The item on the table'} is a message with no task behind it, so {kind} has nothing to act on - its row has {row}. "
+             if row else f'Nothing on the table is a task, so {kind} has nothing to act on. ')
+            + (f"The task this chat last made or brought up is {last}: if that is the one they mean, CALL {kind} again with ref {last}. "
+               if last else 'CALL it again with the ref of the task they mean (TQ-0123), or ask which one. ')
+            + 'Nothing was changed.')
 
 
 AGENT_PICKS = ('agent', 'brain', 'pick', 'model')     # what the agent box chose besides the words (operations params, DispatchBody fields)
@@ -5829,7 +5881,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                     return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
                 ask = (f"{table}\n\nYou asked Taskuary for {call['kind']} {json.dumps(call.get('params') or {}, default=str)[:400]} and it "
                        f"answered: {miss}\n\nThe owner asked: {text}\nFix it yourself: CALL a look-up for the right name, then the "
-                       'action again - or answer them in plain words. Never pass that answer on to them.')
+                       'action again - or answer them in plain words. Never pass that answer on to them, and never send them to do it '
+                       'outside Taskuary (their own mail, another app).')
             try:
                 raw = _view_lines(str(llm(system, ask, max_tokens=MAX_TOKENS) or '').strip())
             except Exception as e:
@@ -5845,7 +5898,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             # what happened, in their words. The filler around a dropped call is never kept - it promises a card that is not there.
             why = miss or 'the look-ups ran out before it was found'
             ask = (f"{table}\n\nThe owner asked: {text}\nYou could not do it - Taskuary answered: {why}\nThat answer is for you, not them. "
-                   'Answer them now in your own plain words: what happened, that nothing changed, and what they can do. No CALL.')
+                   'Answer them now in one plain line: why it could not be done, and the button here that does it. Never send them to do '
+                   'it outside Taskuary - their own mail, another app. No CALL.')
             try: raw = _view_lines(str(llm(system, ask, max_tokens=MAX_TOKENS) or '').strip())
             except Exception as e: logger.warning(f'concierge: the last pass failed - {e}'); raw = ''
             raw, call = parse_call(raw)

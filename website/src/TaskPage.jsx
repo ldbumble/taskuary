@@ -750,7 +750,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, walkLeave = null, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
-  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null, litMove = "" }) {
+  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null, saidHand = null, litMove = "" }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
   const [detail, setDetail] = useState(() => heldTask(selected));
@@ -1128,7 +1128,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // was pushed below the fold (the owner, 2026-10-13: "the coding agent should be the main view"). One click opens them.
   const [itemsOpen, setItemsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
+  // HAND IT TO A PERSON, ASKED FOR IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" did nothing): the Assistant's light
+  // carries who and a note, and the form comes up with them in it - kept while it is open, so the light going out never empties what is typed
+  const [handSaid, setHandSaid] = useState(null);
+  useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
+  useEffect(() => { if (saidHand?.to) { setHandSaid({ to: saidHand.to, note: saidHand.note || "" }); setHandoff(true); } }, [saidHand?.to, saidHand?.note]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   // ...in the scope ON SCREEN: with no dependencies this kept the first render's scope, so Refresh always went back to
@@ -3385,7 +3389,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, flex: 1 }}>Hand this to a person</Typography>
                       <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
                     </Box>
-                    <Handoff taskId={selected} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
+                    <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
                       onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />
                   </Box>}
                   {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
@@ -3727,7 +3731,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
         </Typography>
-        {handoff && !handInPane && <Handoff taskId={selected} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
+        {handoff && !handInPane && <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
           onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />}
       </Drawer>
 

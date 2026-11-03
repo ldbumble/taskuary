@@ -107,3 +107,22 @@ test("the day typed with Remind me rides the light into the picker as its first 
   assert.match(src("RemindMe.jsx"), /\{said\?\.until && said\?\.day && !away && \(/, "the said day leads the picker, before the learned day");
   assert.match(src("AssistantView.jsx"), /live: agentOpen\(item\), said: litDayRef\.current \}\); return; \}/, "the walk's own picker too");
 });
+
+// HAND IT TO A PERSON, ASKED FOR IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" did nothing): the light carries who
+// and a note, the task view opens the form with them in it, and the form drafts the forward at once - Send is still the owner's press.
+test("the person and note typed with Hand it to a person ride the light into its form", () => {
+  const hand = { to: "gail@vendor.example", note: "Yours from here." };
+  const l = lightOf({ verb: "forward", label: "Hand it to a person", key: "msg:5", tid: 31, hand });
+  assert.deepEqual(l.hand, hand);
+  assert.deepEqual(litPick(l, { key: "msg:5", tid: 31 }).hand, hand, "the row's pick carries it");
+  assert.equal(lightOf({ verb: "close", key: "msg:5", tid: 31, hand }).hand, undefined, "only Hand it to a person carries one");
+  assert.equal(lightOf({ verb: "forward", key: "msg:5", tid: 31, hand: { note: "x" } }).hand, undefined, "no person, nothing to fill");
+  assert.match(src("CanvasItem.jsx"), /saidHand=\{lit\?\.verb === "forward" \? lit\.hand \|\| null : null\}/);
+  assert.match(src("TaskPage.jsx"), /if \(saidHand\?\.to\) \{ setHandSaid\(\{ to: saidHand\.to, note: saidHand\.note \|\| "" \}\); setHandoff\(true\); \}/);
+  assert.equal((src("TaskPage.jsx").match(/<Handoff key=\{handSaid \? [^\n]+? taskId=\{selected\} said=\{handSaid\} /g) || []).length, 2, "both of its places");
+  const form = src("Handoff.jsx");
+  assert.match(form, /useState\(said\?\.to \|\| ""\)/);
+  assert.match(form, /useEffect\(\(\) => \{ if \(said\?\.to\) draft\(said\.to\); \}, \[\]\);/, "drafted when it opens");
+  const opens = form.slice(form.indexOf("const draft = async"), form.indexOf("const send = async"));
+  assert.match(opens, /draft_only: true/); assert.doesNotMatch(opens, /send\(/, "never sent by itself");
+});

@@ -344,10 +344,10 @@ Remind me: put an open task away until a day and bring it back then - calendar o
 
 ### `task.handoff`
 
-Hand a task to a PERSON.
+Hand a task to a PERSON (send, forward or pass it on) - Hand it to a person comes up filled in for the owner's Send, nothing is sent from the chat.
 
-- `who` - a name or address that has written here
-- `note` (optional) - writes the forward for the owner's yes, nothing is sent from this card
+- `who` - any email address, or the name of someone who has written here
+- `note` (optional) - a line for them
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>

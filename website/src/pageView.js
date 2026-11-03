@@ -265,7 +265,10 @@ async function waitRoot(area, knob) {
   }
   return currentRoot();
 }
-const step = (n, summary, status = "done", kind = "run") => ({ id: `view-${Date.now()}-${n}`, kind, summary, status });
+// ...a page's frame label is written for the model (CanvasBrowse: "the Reports page - nothing opened on it yet"); the owner's step names the
+// page only - "Opened the Reports page, Reports section - nothing opened on it yet" was a step in the chat (the Assistant stress run, 2026-11-03)
+export const shownTitle = (t) => String(t || "").replace(/ - nothing opened on it yet$/, "");
+const step = (n, summary, status = "done", kind = "run") =>({ id: `view-${Date.now()}-${n}`, kind, summary, status });
 const cut = (s, n = 60) => { s = String(s ?? ""); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 
 // one op, on the live page, checked again here: still there, still enabled, a send never pressed, a secret never set
@@ -280,7 +283,7 @@ async function runOne(op, n) {
     // ...Search's hits land a beat after its words: what follows presses one, so wait for the answer to those words
     for (let i = 0; area === "search" && state.query && i < 40 && !r?.querySelector('[data-tq-search-settled="true"]'); i++) await wait(100);
     await wait(150);                              // ...its frame names what is open once the card has drawn
-    return step(n, `Opened ${(r && readView(r)?.title) || area}`, "done", "read");
+    return step(n, `Opened ${shownTitle(r && readView(r)?.title) || area}`, "done", "read");
   }
   const v = readView();
   if (!v) return step(n, "Nothing is open to work on", "error");

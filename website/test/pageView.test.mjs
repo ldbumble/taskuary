@@ -83,3 +83,10 @@ test("a Hub post removed is under Recently deleted on the Hub, read again after 
   assert.match(hub, /const changed = \(\) => \{ load\(\); setBin\(\(n\) => n \+ 1\); \};/);
   assert.match(read("Removed.jsx"), /d\.kind === "hub post" \? "off this list" : "gone for good"/);
 });
+
+test("a page opened for the owner is named in the step without the model's note on what is open", async () => {
+  const { shownTitle } = await import("../src/pageView.js");
+  assert.equal(shownTitle("the Reports page, Reports section - nothing opened on it yet"), "the Reports page, Reports section");
+  assert.equal(shownTitle("Badge swipes by site 9"), "Badge swipes by site 9");
+  assert.equal(shownTitle(undefined), "");
+});

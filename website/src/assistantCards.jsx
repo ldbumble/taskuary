@@ -46,6 +46,7 @@ import { progressLine } from "./checklist.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 import { AgentAsk } from "./RunForm.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
+import { remotePicture } from "./mailLinks.js";
 import { useCliSetup, SetupButton, CliPane, canSetup } from "./cliSetup.jsx";
 import OwnerForm from "./OwnerForm.jsx";
 import { FirstSync } from "./SetupWizard.jsx";
@@ -491,11 +492,13 @@ function FullText({ mid, revision, report = null }) {
   // ...a report's table sits in a panel its own width (the owner, 2026-10-28): full width, a two-column table left it 3/4 empty
   const rows = !morning && jsonRows(text);
   if (report && rows) return <ReportRows rows={rows} name={report.name} mid={none ? null : mid} />;
+  // ...and a message with no words of its own (a picture-only mail) is said by its pictures and files, never "(empty)" (Attachments `bare`)
+  const bare = !none && !morning && !text.trim() ? { remote: remotePicture(raw) } : null;
   return (
     <div className={rows ? "tq-card-full fit" : report && !morning ? "tq-card-full report" : "tq-card-full"}>
-      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : rows ? <RowsTable rows={rows} /> : looksMd(text) ? <Md text={text} /> : text ? <LinkedText text={text} /> : "(empty)"}
+      {morning ? <DigestText text={text} sourceId={/^report:(\d+)/.exec(doc.ConversationId || "")?.[1] ?? null} /> : rows ? <RowsTable rows={rows} /> : looksMd(text) ? <Md text={text} /> : text.trim() ? <LinkedText text={text} links={doc.Links} /> : bare ? null : "(empty)"}
       {/* ...and the pictures pasted into it, drawn - the screenshot is often the whole ask */}
-      {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense />}
+      {!none && !morning && <Attachments messageId={mid} canFetch={String(doc.Channel || "") === "email" && mentionsPicture(doc.BodyText)} dense bare={bare} />}
       {read !== raw && <button type="button" className="tq-card-more" onClick={() => setWhole((v) => !v)}>{whole ? "Just what they wrote" : "Show the whole email"}</button>}
       {doc.SourceLink && <div className="tq-card-note"><a href={doc.SourceLink} target="_blank" rel="noreferrer" style={{ color: "#55697a" }}>open the original</a></div>}
     </div>
@@ -515,7 +518,7 @@ function FullText({ mid, revision, report = null }) {
 export const noImages = (text) => String(text || "")
   .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
   .replace(/<img\b[^>]*>/gi, "")
-  .replace(/\[(?:image|cid|inline image)[^\]]*\]/gi, "")
+  .replace(/\[(?:remote image|image|cid|inline image)[^\]]*\]/gi, "")
   .replace(/\n{3,}/g, "\n\n");
 
 function CombinedTaskText({ card, list = true }) {
@@ -582,8 +585,9 @@ function CombinedTaskText({ card, list = true }) {
             <div className="tq-card-note" style={{ marginBottom: 3 }}>
               {m.Direction === "out" ? "You" : (m.FromName || m.FromEmail || "Someone")}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
             </div>
-            {looksMd(body) ? <Md text={body} /> : body ? <LinkedText text={body} /> : "(empty)"}
-            {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email" && mentionsPicture(m.BodyText)} dense />}
+            {looksMd(body) ? <Md text={body} /> : body.trim() ? <LinkedText text={body} links={m.Links} /> : m.MessageId ? null : "(empty)"}
+            {m.MessageId && <Attachments messageId={m.MessageId} canFetch={String(m.Channel || "") === "email" && mentionsPicture(m.BodyText)} dense
+              bare={body.trim() ? null : { remote: remotePicture(m.BodyText) }} />}
           </div>
         );
       })}

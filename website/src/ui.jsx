@@ -1180,8 +1180,9 @@ export const PROVENANCE = /^\s*\[(?:pull request|issue) by [^\]\n]*\]\s*|^\s*\[(
 export const cleanText = (s) => keepAddresses(s).replace(PROVENANCE, "").replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
   .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#\d+;|&\w+;/g, " ")
   .replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-// a mail's text with its addresses as links (mailLinks.js), each opened in a new tab
-export const LinkedText = ({ text }) => linkParts(text).map((p, i) => p.href
+// a mail's text with its addresses as links (mailLinks.js), each opened in a new tab - the system browser, from the desktop window - and
+// `links`, the words its HTML put a link behind (message.Links)
+export const LinkedText = ({ text, links }) => linkParts(text, links).map((p, i) => p.href
   ? <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" style={{ color: "#55697a", overflowWrap: "anywhere" }}>{p.text}</a>
   : <React.Fragment key={i}>{p.text}</React.Fragment>);
 

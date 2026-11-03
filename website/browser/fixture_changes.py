@@ -43,6 +43,7 @@ def install_processing_changes(app, store):
         '/api/fixture/task/matrix',
         '/api/fixture/task/advisor-raised',
         '/api/fixture/task/long-chat',
+        '/api/fixture/task/picture-mail',
         '/api/fixture/task/big-chat',
         '/api/fixture/task/group-chat',
         '/api/fixture/task/workstreams',
@@ -284,6 +285,34 @@ def install_processing_changes(app, store):
         todo = [{'id': f't{i}', 'text': f'Move step {i + 1}: ' + ('label the crates' if i % 2 else 'book the lift'), 'done': i < 6} for i in range(22)]
         store._exec('UPDATE task SET Checklist=? WHERE TaskId=?', (json.dumps(todo), tid))
         return {'taskId': tid}
+
+    @app.post('/api/fixture/task/picture-mail')
+    def picture_mail(body: dict):
+        """Three mails on one task: one that is only a pasted picture (cid:, a tiny PNG made here), one that is only a picture on the
+        sender's site, and one whose "View report" button is a link (the owner, 2026-11-03: "entire email was a image it showed nothing",
+        "hyper links in fyi email like view report are not coming thru"). Invented sender and addresses."""
+        if body: raise HTTPException(422, 'this fixed fixture accepts only an empty object')
+        import json, struct, zlib
+        from taskuary.artifacts import attachment_dir
+        chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+        png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 2, 2, 8, 2, 0, 0, 0)) + \
+            chunk(b'IDAT', zlib.compress(b'\x00' + b'\xff\x00\x00' * 2 + b'\x00' + b'\x00\x00\xff' * 2)) + chunk(b'IEND', b'')
+        tid = store.create_task({'Title': 'October numbers from Vendor', 'Kind': 'task', 'Status': 'open', 'Source': 'email',
+                                 'Summary': 'The October numbers came in.'}, 'router')
+        start, mids = datetime.now() - timedelta(hours=1), []
+        for i, (subj, text, meta) in enumerate([('October numbers', '[image: October numbers]', None),
+                                                ('October banner', '[remote image: banner.png]', None),
+                                                ('October report', 'Your October report is ready.\nView report',
+                                                 {'links': [['View report', 'https://reports.vendor.example/r/9?u=alex']]})]):
+            mids.append(store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'fixture-pic-{tid}-{i}', 'FromName': 'Reports at Vendor',
+                                           'FromEmail': 'reports@vendor.example', 'Subject': subj, 'BodyText': text, 'Status': 'routed',
+                                           'MailMetaJson': json.dumps(meta) if meta else None,
+                                           'SentAt': (start + timedelta(minutes=5 * i)).isoformat(' ', 'seconds')}))
+        f = attachment_dir(mids[0]) / '0-image001.png'
+        f.write_bytes(png)
+        store.add_attachment({'MessageId': mids[0], 'ExternalId': f'fixture-pic-att-{tid}', 'Name': 'image001.png', 'ContentType': 'image/png',
+                              'Size': len(png), 'ContentId': 'image001.png@01DB', 'Inline': 1, 'Path': str(f)})
+        return {'taskId': tid, 'mids': mids}
 
     @app.post('/api/fixture/task/big-chat')
     def big_chat(body: dict):

@@ -45,7 +45,7 @@ test("the files pill opens the message they came with and brings its letter's fo
   assert.match(pill, /setShowAll\(true\)/, "a message folded under Show older is shown first");
   assert.match(rowsFn, /data-tq-letter=\{r\.m\.MessageId\}/);
   assert.match(page, /querySelector\(`\[data-tq-letter="\$\{seekLetter\}"\]`\)\?\.scrollIntoView\(\{ block: "end"/);
-  assert.match(rowsFn, /mentionsPicture\(r\.m\.BodyText\)\} dense original=\{r\.m\.SourceLink\} \/>/, "the open letter's files reach the original too");
+  assert.match(rowsFn, /mentionsPicture\(r\.m\.BodyText\)\} dense original=\{r\.m\.SourceLink\}\s/, "the open letter's files reach the original too");
 });
 
 test("a voice note named by the bridge's hash is called a voice note; a named file keeps its name", () => {

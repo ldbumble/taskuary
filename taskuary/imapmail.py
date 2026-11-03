@@ -218,6 +218,14 @@ def _body_and_attachments(msg) -> tuple:
     return (text or _clean(html) or '').strip(), atts
 
 
+def html_links(msg) -> dict:
+    "{'links': [[words, address]]} of the mail's HTML part (channels.mail_links), {} when it has none."
+    from .channels import mail_links
+    part = next((p for p in msg.walk() if not p.is_multipart() and p.get_content_type() == 'text/html' and not p.get_filename()), None)
+    links = mail_links(_decode(part.get_payload(decode=True) or b'', part)) if part else []
+    return {'links': links} if links else {}
+
+
 def _decode(payload: bytes, part) -> str:
     """The declared charset when Python has a codec for it. 'replace' covers bad BYTES, not a codec
     name Python does not know (iso-8859-8-i, x-unknown): that raised LookupError, and one such
@@ -792,7 +800,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     'sent_at': sent_at, 'source_name': user}
                 from .calendar import tz_of
                 incoming.update(protocol_marks(msg, me=(user,), tz=tz_of(store)))
-                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid)}
+                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid), **html_links(msg)}
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             # ...and the thread a mail already here files under wins over the header root. Outside the decode guard:

@@ -6,6 +6,7 @@ import { Menu, MenuItem, useMediaQuery } from "@mui/material";
 import { NAV, ROW_HOLD_MS, ROW_STUCK_MS, TYPES, advisedAny, fitRow, navShort, press, shortParts, putSpineVerbs, rowOf, lightOnCard, sameRow, splitRow, laidOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { adviceNone } from "./words.js";
 import { label } from "./buttons.js";
+const shortNext = (w) => (w === label("next", "batch") ? label("next", "batch_short") : w);   // a squeezed desk bar's word for a batch's Next
 import { CONNECT_AI } from "./ConnectAi.jsx";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
@@ -124,14 +125,19 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const narrow = useMediaQuery("(max-width:1099px)");   // the row's own breakpoint (assistantView.css): pills lose their min-width
   const parts = JSON.stringify([next?.label || "", back?.label || "", [...decide, ...agent, ...more].map((v) => [v.id, v.label, v.tone])]);
   useEffect(() => { let on = true; document.fonts?.ready?.then(() => on && setFonts((n) => n + 1)); return () => { on = false; }; }, []);
-  useLayoutEffect(() => { if (box && ghost.current) setM(measure(ghost.current, box)); }, [box, parts, narrow, phone, fonts]);
+  // ...and again where the chat leaves the bar for its corner (760px, AssistantView deskChat): the pills' looks change there, and a measure
+  // taken at 640 kept a 1024 bar on its short Nav once the same task stayed on the table through the resize
+  const cornered = useMediaQuery("(min-width:760px)");
+  useLayoutEffect(() => { if (box && ghost.current) setM(measure(ghost.current, box)); }, [box, parts, narrow, phone, cornered, fonts]);
   useLayoutEffect(() => {
     if (!box) return undefined;
     // ...ON A DESK THE BAR IS AS WIDE AS WHAT IT HOLDS (the owner, 2026-10-29: the room it frees goes to the chat): its own box then says only
     // what it drew, so the room is the dock's lane - the composer's width, less its sides, the ask bar's own fixed width (--tq-ask-w, read
     // off the drawn unit: it is a clamp) and the gap, and the bar's own edges - and the bar folds into ▾ against that, as it did against its own width
-    const lane = box.closest(".tq-compose[data-tq-desk-chat]");
+    // ...read at each measure: a window grown past 760 with the same task on the table puts the chat in its corner under a bar measured without it
+    const comp = box.closest(".tq-compose");
     const f = () => {
+      const lane = box.closest(".tq-compose[data-tq-desk-chat]");
       if (!lane) { setAvail(box.clientWidth); return; }
       const cs = getComputedStyle(lane), dock = box.closest(".tq-dock") || box;
       const ask = lane.querySelector(":scope > .tq-chat-unit")?.offsetWidth || 0, gap = parseFloat(cs.columnGap) || 0;
@@ -140,7 +146,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
     f();
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(f);
-    ro.observe(box); if (lane) ro.observe(lane);
+    ro.observe(box); if (comp) ro.observe(comp);
     return () => ro.disconnect();
   }, [box]);
   // ...and if the drawn line still runs past its box (a width the parts did not add up to), one more group folds - until the parts are
@@ -149,6 +155,8 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   // ...and a desk bar too narrow for even its narrowest layout with the worded Nav draws the phone's short one (actionRow.navShort)
   const short = phone || navShort(row, m, avail);
   const fit = fitRow(row, short && !phone ? shortParts(m) : m, avail, phone, extra);
+  // ...and there an FYI batch's "All read, next" says "All read", its arrow left off (the owner, 2026-11-03): at 900-960 it ran ~20px past the bar's end
+  const nextWord = next && short && !phone ? shortNext(next.label) : next?.label;
   useLayoutEffect(() => { if (box && fit.level < fit.last && box.scrollWidth > box.clientWidth + 1) setOver({ at: sig, n: extra + 1 }); });
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next && !back) return null;
@@ -170,8 +178,8 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
             {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={short ? "" : undefined}
               aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
               onClick={(e) => act(back.id, e, e.currentTarget, back.of)}>{short ? "" : back.label}</button>}
-            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
-              onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{next.label}</button>}</div></div>}
+            {next && <button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" data-tq-bare={nextWord !== next.label ? "" : undefined} {...(String(next.id).endsWith(":back") ? { "data-tq-back": "" } : {})} data-tq-steady={next.steady ? "" : undefined} title={next.title || undefined} disabled={next.disabled}
+              onClick={(e) => act(next.id, e, e.currentTarget, next.of)}>{nextWord}</button>}</div></div>}
         {fit.groups.map((g) => <Cluster key={g.type} g={g} btn={btn} act={act} />)}
       </div>
       {why && <div className="tq-arow-why" role="status" data-tq-row-why="">{why}</div>}
@@ -181,6 +189,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
           {[...TYPES, ...(phone ? [] : [["nav", NAV]])].map(([t, l]) => <span key={t} className="tq-cl-h" data-tq-wl={t}>{l}</span>)}
           <div className="tq-cl-b">
             {next && <span className={`tq-ab ${next.tone} next`} data-tq-wn="">{next.label}</span>}
+            {next && <span className={`tq-ab ${next.tone} next`} data-tq-wns="" data-tq-bare={shortNext(next.label) !== next.label ? "" : undefined}>{shortNext(next.label)}</span>}
             {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbk="" data-tq-short={phone ? "" : undefined}>{phone ? "" : back.label}</span>}
             {back && <span className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-wbs="" data-tq-short=""></span>}
             {[...decide, ...agent, ...more].map((v) => <span key={v.id} className={`tq-ab ${v.tone}`} data-tq-w={v.id}>{v.label}</span>)}
@@ -198,6 +207,6 @@ function measure(ghost, box) {
   const cl = ghost.querySelector(".tq-cl"), b = ghost.querySelector(".tq-cl-b"), btn = {}, label = {};
   ghost.querySelectorAll("[data-tq-w]").forEach((el) => { btn[el.dataset.tqW] = w(el); });
   ghost.querySelectorAll("[data-tq-wl]").forEach((el) => { label[el.dataset.tqWl] = w(el); });
-  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")), back: w(ghost.querySelector("[data-tq-wbk]")), backShort: w(ghost.querySelector("[data-tq-wbs]")),
+  return { btn, label, more: w(ghost.querySelector("[data-tq-wm]")), next: w(ghost.querySelector("[data-tq-wn]")), nextShort: w(ghost.querySelector("[data-tq-wns]")), back: w(ghost.querySelector("[data-tq-wbk]")), backShort: w(ghost.querySelector("[data-tq-wbs]")),
     pad: px(cl, "paddingLeft") + px(cl, "paddingRight"), clGap: px(cl, "columnGap"), bGap: px(b, "columnGap"), rowGap: px(box, "columnGap") };
 }

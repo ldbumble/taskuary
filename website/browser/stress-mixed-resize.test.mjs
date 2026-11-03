@@ -56,7 +56,10 @@ test("the FYI batch on the table is 6 on a big window, and the next one 4 once i
     const batch = await page.$$eval("[data-tq-rail] .tq-pile-row.inbatch, [data-tq-rail] .tq-pile-row.current", (e) => e.length);
     if (batch !== n) await shot(page, `fyi-batch-${sz.join("x")}`);
     assert.equal(batch, n, `${sz.join("x")}: the FYI batch is ${batch}, not ${n}`);
-    oneLine(await rowLook(page), `fyi batch @${sz.join("x")}`);
+    // ...its Next whole on the bar: "All read" on the 900px bar the ask bar squeezes (the owner, 2026-11-03), "All read, next" with room
+    const word = await page.$eval("[data-tq-row] [data-tq-next]", (b) => b.textContent.trim());
+    assert.equal(word, sz[0] < 960 ? "All read" : "All read, next", `${sz.join("x")}: the batch's Next says ${word}`);
+    try { oneLine(await rowLook(page), `fyi batch @${sz.join("x")}`); } catch (e) { await shot(page, `fyi-line-${sz.join("x")}`); throw e; }
     clean(errors, `fyi @${sz.join("x")}`);
   }
 });
@@ -64,7 +67,7 @@ test("the FYI batch on the table is 6 on a big window, and the next one 4 once i
 /* THE BAR IS BACK AND NEXT AT EVERY DESK WIDTH, THE STAGE MOVES ON THE SPINE (the owner, 2026-11-03: "stage moves belong on the task's spine,
    never on the bottom bar"). From 900 to ~1100 wide the rail and the canvas left a task under 760px and it stacked, its Mark done and Reply back
    on a bar of ~120-250px squeezed against the ask bar (found 2026-11-02, then a todo here). On a desk window the task keeps its three sections
-   (TaskPage.useStackBelow): Mark done on Close out's spine, the bar Back and Next alone and both whole, nothing over anything. */
+   (TaskPage.useStackBelow), and so does a window from 601 up with no rail: Mark done on Close out's spine, the bar Back and Next alone and both whole, nothing over anything. */
 const onTable = async (page, api, title) => {
   const t = (await api("/api/tasks")).data.find((x) => x.Title.startsWith(title));
   const key = await page.evaluate((title) => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")].find((r) => r.innerText.includes(title))?.getAttribute("data-tq-key"), title);
@@ -72,10 +75,11 @@ const onTable = async (page, api, title) => {
   await still(page); return t;
 };
 const spineMoves = (page) => page.$$eval("[data-tq-spine-moves] button, [data-tq-pane-moves] button", (bs) => bs.filter((b) => b.offsetParent).map((b) => b.textContent.trim()));
-test("the bar is Back and Next alone and the stage moves stay on the spine at 900, 1024, 1100, 1280 and 1440 wide", { timeout: 300000 }, async (t) => {
+test("the bar is Back and Next alone and the stage moves stay on the spine from 640 to 1440 wide", { timeout: 420000 }, async (t) => {
   const { page, errors, api } = await bootMixed(t, { width: 1440, height: 900 });
   await onTable(page, api, "New starter on Monday");
-  for (const sz of [[900, 700], [1024, 768], [1100, 800], [1280, 800], [1440, 900], [900, 700]]) {
+  // ...the 601-810 band with no rail too (the owner, 2026-11-03): only a phone (600 and under) keeps its stacked page and its own row
+  for (const sz of [[900, 700], [640, 800], [760, 800], [810, 800], [1024, 768], [1100, 800], [1280, 800], [1440, 900], [900, 700]]) {
     await size(page, sz); await settled(page); await sleep(900);
     const rows = await rowLook(page), at = `New starter @${sz.join("x")}`, spine = await spineMoves(page);
     try {

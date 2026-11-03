@@ -442,7 +442,7 @@ const MOVE_MIN = 72;   // a few words and the ellipsis: less reads as a stray le
 // the bar ~120-250px, and even its narrowest layout with the Nav pill's label and a worded Back ran past it - Back was cut off whole. Where that
 // layout would not fit, the bar takes the phone's short Nav: no label, Back its arrow alone (`backShort`, measured off the same hidden copy)
 export const navShort = (row, m, avail) => !!m && avail > 0 && rowWidth(foldsOf(row).at(-1), navOf(row), m) > avail;
-export const shortParts = (m) => ({ ...m, back: m.backShort ?? m.back, label: { ...m.label, nav: 0 } });
+export const shortParts = (m) => ({ ...m, back: m.backShort ?? m.back, next: m.nextShort ?? m.next, label: { ...m.label, nav: 0 } });
 
 // THE STAGE MOVES RIDE ON THEIR PANE (the owner, 2026-10-29, after three mockups). The bar keeps what acts on the whole task - Back and
 // Next, Mark done, Change, Share, Close with a note, Attach a file. The moves that take the task a STAGE on belong to their pane: Send to

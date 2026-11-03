@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { fitRow, foldsOf, leadOf, phoneRow, rowOf, rowWidth } from "../src/actionRow.js";
+import { fitRow, foldsOf, leadOf, navOf, navShort, phoneRow, rowOf, rowWidth, shortParts } from "../src/actionRow.js";
 import { barFolds } from "../src/foldBar.js";
 import { labelOfRow } from "../src/buttons.js";
 
@@ -193,9 +193,26 @@ test("the CSS never wraps the row or a group, and a label never breaks inside it
   assert.match(rule(".tq-ab"), /white-space: nowrap/); assert.match(rule(".tq-cl-b .tq-ab"), /white-space: nowrap;/);
   assert.match(rule(".tq-arow-verbs > .tq-cl"), /flex: 0 0 auto/, "a group keeps its width, so an overflow folds instead of squeezing");
   const row = fs.readFileSync(new URL("../src/ActionRow.jsx", import.meta.url), "utf8");
-  assert.match(row, /const fit = fitRow\(row, m, avail, phone, extra\);/);
+  assert.match(row, /const fit = fitRow\(row, short && !phone \? shortParts\(m\) : m, avail, phone, extra\);/);
   assert.match(row, /new ResizeObserver\(f\)/, "a resize re-fits the row");
   assert.match(row, /\{fit\.groups\.map\(\(g\) => <Cluster key=\{g\.type\} g=\{g\} btn=\{btn\} act=\{act\} \/>\)\}/);
+  // ...and a desk bar wider than its room is held at its left edge, never centred past both ends (Back was cut off whole, 2026-11-02)
+  assert.match(css, /^\.tq-compose\[data-tq-desk-chat\] \.tq-dock \.tq-dock-line > \.tq-arow \{ align-items: flex-start; \}$/m);
+});
+
+// A DESK BAR SQUEEZED UNDER ITS NAV (the mixed-use stress, 2026-11-02): from 900 to ~1100 wide the ask bar's fixed width left the bar ~120-250px,
+// less than its narrowest layout with the worded Nav - and Back was cut off whole. There the bar takes the phone's short Nav: no label, Back its arrow
+test("a desk bar too narrow for its worded Nav takes the short one, and only then", () => {
+  const row = rowOf({ ref: "TQ-1", list: [v("done", "more"), v("reply", "decide", { tone: "p" }), v("remind", "more"), v("back", "back", { label: "Back" }), next] });
+  const m = { ...model(1024, row), label: { reply: 53, agent: 53, close: 53, task: 53, nav: 44 }, back: 75, backShort: 35 };
+  const narrowest = rowWidth(foldsOf(row).at(-1), navOf(row), m);
+  assert.equal(navShort(row, m, narrowest), false, "it fits worded: worded");
+  assert.equal(navShort(row, m, narrowest - 1), true, "a pixel short: the short Nav");
+  assert.equal(navShort(row, null, 100), false, "nothing measured yet: as drawn");
+  const s = shortParts(m);
+  assert.equal(s.back, 35); assert.equal(s.label.nav, 0); assert.equal(m.label.nav, 44, "the measure itself is left alone");
+  assert.equal(rowWidth([], navOf(row), m) - rowWidth([], navOf(row), s), 44 + m.clGap + 40, "the short Nav is the label, its gap and Back's words narrower");
+  assert.ok(rowWidth(foldsOf(row).at(-1), navOf(row), s) < narrowest);
 });
 
 // ...A MOVE SQUEEZED TO A LETTER FOLDS (the 2026-10-27 sweep): a phone's report put Back, Next and the chat pill beside "Put it on my list",

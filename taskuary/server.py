@@ -2746,6 +2746,11 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # a session, read "nothing running" and never looked again - Continue and Try again left the new turn unseen (the agents walk,
         # 2026-10-26)
         general.OPENING.add(task_id)
+        # ...and a reply an earlier session drafted is out of sight from this answer on, not from the new session's start a beat later - the
+        # page reloads at once (wrapup.stale_draft, the owner 2026-11-03). A live session carries on: its own draft is still the latest
+        if not general.session_for(task_id):
+            from . import wrapup
+            wrapup.hold_stale(store, task_id)
         threading.Thread(target=go, daemon=True, name=f'continue-{task_id}').start()
         store.audit('task', task_id, 'continue-work', ACTOR, detail={'kind': 'general', 'note': bool(note)})
         from . import outcomes
@@ -4597,14 +4602,16 @@ async def review_attach(rid: int, request: Request, name: str = ''):
     waiting room's images); `name` is what the recipient will see it called."""
     from . import verdicts
     data = await request.body()
-    try: return await run_in_threadpool(verdicts.attach, store, rid, name or 'attachment', data, ACTOR)      # it writes: off the loop
+    try: out = await run_in_threadpool(verdicts.attach, store, rid, name or 'attachment', data, ACTOR)      # it writes: off the loop
     except ValueError as e: raise HTTPException(422, str(e))
+    _owners(rid); return out
 
 @app.delete('/api/reviews/{rid}/attachment')
 def review_detach(rid: int, name: str):
     from . import verdicts
-    try: return verdicts.detach(store, rid, name, ACTOR)
+    try: out = verdicts.detach(store, rid, name, ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
+    _owners(rid); return out
 
 @app.post('/api/reviews/{rid}/decide')
 def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
@@ -4615,6 +4622,10 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
     from .verdicts import VERB2STATUS, context_moved, decide as land
     if body.verb not in VERB2STATUS: raise HTTPException(422, 'bad verb')
     if body.verb == 'close_unsent' and rv.get('Kind') == 'action': raise HTTPException(422, 'a proposal is rejected, not closed without sending')
+    # ...and an earlier agent session's draft, held out of sight while a newer one works, never goes out on a press made before it was held
+    from .wrapup import STALE_HOLD
+    if body.verb in ('approve', 'edit') and rv.get('Status') == 'held' and rv.get('Reason') == STALE_HOLD:
+        raise HTTPException(409, "That draft is from an earlier session of the agent - the session working now writes the reply.")
     # An uncertain attempt must be reconciled using its saved payload first. Refreshing
     # the draft here would prevent that check (or replace text that may already be sent).
     if (body.verb in ('approve', 'edit') and rv.get('Kind') != 'action'
@@ -6379,9 +6390,14 @@ def set_review_envelope(rid: int, body: EnvelopeBody):
     # ...and whoever moved up to To leaves CC: the back office readdressed to stayed copied as well (2026-10-29)
     env['cc'] = [a for a in (clean(body.cc) if body.cc is not None else env.get('cc') or []) if a not in env.get('to', [])]
     if not env.get('to'): raise HTTPException(422, 'a reply needs at least one recipient')
-    store.set_review_envelope(rid, env)
+    store.set_review_envelope(rid, env); _owners(rid)
     store.audit('review', rid, 'envelope', ACTOR, detail={'mode': env.get('mode'), 'to': env.get('to'), 'cc': env.get('cc')})
     return env
+
+def _owners(rid: int):
+    "The owner's hand is on this draft (an edit, a readdress, a file): theirs now, never held as an earlier agent session's (wrapup.stale_draft)."
+    from .wrapup import OWNER_SID
+    store.set_review_sid(rid, OWNER_SID)
 
 @app.patch('/api/reviews/{rid}')
 def save_review_text(rid: int, body: TextBody):
@@ -6395,7 +6411,7 @@ def save_review_text(rid: int, body: TextBody):
     m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
     if m and str(m.get('Channel') or '').lower() == 'email' and text.strip():
         text = responder.with_signature(text, responder.signature_for(store, outbound.sending_mailbox(store, rv, m)))
-    store.save_review_draft(rid, text)
+    store.save_review_draft(rid, text); _owners(rid)
     store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
     return {'ok': True, 'draft': text}
 

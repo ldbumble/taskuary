@@ -2911,14 +2911,21 @@ def release_held(store, task_id, actor='terminal') -> int:
     """A reply held while the agent worked (open_session) comes back when the session is over, whatever ended it -
     it stayed held and invisible for good after a stop, a crash or a restart (A6, 2026-09-25). Unless the agent wrote a
     newer reply meanwhile: that one is the answer, and the old draft is closed as superseded."""
-    rows = store._rows('SELECT ReviewId, Status FROM review WHERE TaskId=?', (task_id,))
+    rows = store._rows('SELECT * FROM review WHERE TaskId=?', (task_id,))
     held = [r for r in rows if r.get('Status') == 'held']
     if not held: return 0
+    n = len(held)
+    # ...but an EARLIER agent session's draft, held while a newer one worked, is not brought back over it: closed as superseded, its words
+    # kept to read and bring back (wrapup.stale_draft, the owner 2026-11-03)
+    from . import wrapup, workerstate as ws
+    if (sid := ws.current_sid(store, task_id)):
+        for h in [h for h in held if wrapup.stale_draft(store, h, sid)]: wrapup.supersede(store, h, actor); held.remove(h)
+    if not held: return n
     newer = [r for r in rows if r.get('Status') == 'pending' and r['ReviewId'] > max(h['ReviewId'] for h in held)]
     for h in held:
         if newer: store.decide_review(h['ReviewId'], 'closed_unsent', None, actor, note="superseded by the agent's newer reply")
         else: store.unhold_review(h['ReviewId'], 'the agent session ended - the reply is back for your yes')
-    return len(held)
+    return n
 
 
 INTERRUPTED = 'interrupted'      # Taskuary closed (or restarted) while a worker had this; the owner decides what continues (PW-262)

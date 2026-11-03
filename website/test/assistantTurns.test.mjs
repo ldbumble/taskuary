@@ -207,7 +207,7 @@ test("an act-only turn gets one receipt read off the act", () => {
   assert.deepEqual(actReceipt({ pressed: { label: "Mark done", key: "msg:4", ref: "TQ-0004", note: "paid Friday" } }, "msg:9"),
     { text: "Mark done - TQ-0004: paid Friday.", status: "done" });
   assert.equal(actReceipt({ light: { ...light, line: "Remind me is lit for Monday." } }).text, "Remind me is lit for Monday.");
-  assert.match(actReceipt({ light: { ...light, label: "" } }, "msg:4").text, /^Brought up this task/);
+  assert.match(actReceipt({ light: { ...light, label: "" } }, "msg:4").text, /^Opened this task/);
   assert.equal(actReceipt({}).status, "warn");
   assert.ok(actReceipt({}).text, "even nothing back is said");
 });
@@ -230,4 +230,22 @@ test("a line is keyed by its item, so placeLine moving it under a new id keeps i
   const ahead = [...before, { id: "a5", role: "assistant", text: "", card: card("task:8"), ahead: true }];
   const filled = placeLine(ahead.filter((m) => m.id !== "a5"), { id: "a5", role: "assistant", text: "Next up", card: card("task:8") });
   assert.equal(lineKeys(ahead).get("a5"), lineKeys(filled).get("a5"), "the card drawn at once is not remounted");
+});
+
+test("a receipt kept by the server comes back as the line drawn at the act, never a second copy, and stands after a reload", () => {
+  // the owner, 2026-11-03: the Assistant's reply lines vanished on a reload - each is kept (concierge.keep_line) and read back a receipt
+  const local = [{ id: "u1", role: "user", text: "open the invoice task" }, { id: "r2", role: "receipt", status: "done", text: "Opened TQ-0004 - Payworth invoice." }];
+  const durable = [{ id: 11, role: "user", text: "open the invoice task" }, { id: 12, role: "receipt", status: "done", text: "Opened TQ-0004 - Payworth invoice.", card: null }];
+  const { messages } = mergeDurableTurns(local, durable);
+  assert.deepEqual(messages.map((m) => [m.id, m.role, m.commentId]), [["u1", "user", 11], ["r2", "receipt", 12]]);
+  const reloaded = mergeDurableTurns([], durable).messages;
+  assert.deepEqual(reloaded.map((m) => [m.role, m.status, m.text]), [["user", undefined, "open the invoice task"], ["receipt", "done", "Opened TQ-0004 - Payworth invoice."]]);
+});
+
+test("the page keeps every line it says an act did, and says it opened only once it has", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
+  assert.match(src, /api\.post\("\/api\/concierge\/line", \{ text, status \}\)/);
+  assert.match(src, /api\.post\("\/api\/concierge\/line", \{ text: data\.say \|\| "", steps \}\)/);
+  assert.doesNotMatch(src, /Brought up \$\{/, "an open is said as Opened");
+  assert.match(src, /openAppLink\(page\);\s*const name = linkName\(data\.say, page\);/, "said after the page is opened");
 });

@@ -1688,7 +1688,7 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
 # no such screen, so it says where scheduling lives.
 NO_CALENDAR = 'No calendar is connected, so I cannot set up a meeting yet - connect one and ask again.'
 MEETING_NO_THREAD = "Scheduling works from a task's Find a time, on a thread that asks for a time - nothing here does."
-MEETING_OPENED = 'Brought up New → Meeting{with_} - Find times there offers the free times, and nothing goes out before your {send}.'
+MEETING_OPENED = 'Opened New → Meeting{with_} - Find times there offers the free times, and nothing goes out before your {send}.'
 
 def meeting_prefill(store, named: list, params: dict) -> dict:
     """What New → Meeting opens with from the ask: the addresses the names were placed at (calwrite.people_of - the pickers' search), the
@@ -2210,7 +2210,21 @@ def _handoff_brief(store, tid: int, text: str) -> str:
 
 def _turns(store, tid: int, n: int = TURNS) -> str:
     rows = general.chat_rows(store, tid)[-n:]
-    return '\n'.join(f"{'YOU' if c.get('ActorType') == general.ASSISTANT_TYPE else 'OWNER'}: {_cut(_MARK.sub('', c.get('Body') or ''), 500)}" for c in rows)
+    return '\n'.join(f"{'YOU' if c.get('ActorType') == general.ASSISTANT_TYPE else 'OWNER'}: {_cut(_MARK.sub('', c.get('Body') or ''), 500)}{_card_said(c.get('Body'))}"
+                     for c in rows)
+
+
+def _card_said(body: str) -> str:
+    """THE ITEM A LINE BROUGHT UP, by its handle (the Assistant stress run, 2026-11-03: "and the other one?" picked the wrong row). A card's
+    line reads "Next up: a report." or "Opened TQ-0004." - its card, which says WHICH, was cut off with the marker, so the conversation the
+    model read never said what had been opened, and "the other one" was a guess. Each item a card holds is named as the rail names it."""
+    m = _MARK.search(str(body or ''))
+    try: card = json.loads(m.group(1)) if m else None
+    except ValueError: card = None
+    if not isinstance(card, dict) or card.get('kind') in ('words', 'brief', 'setup_questions', 'walk', 'firstrun'): return ''
+    its = [i for i in (card.get('items') if card.get('kind') == 'fyis' else [card]) or [] if isinstance(i, dict) and (i.get('key') or i.get('title'))]
+    named = '; '.join(' · '.join(x for x in (handle_of(i), i.get('who'), _cut(str(i.get('title') or ''), 90)) if x) for i in its[:6])
+    return f" [{'its card' if card.get('kind') == 'proposal' else 'brought up'}: {named}]" if named else ''
 
 
 def _system(store, llm=None) -> str:
@@ -2396,6 +2410,31 @@ def record(store, tid: int, role: str, text: str, card: dict = None, phone: bool
     return add(tid, actor, actor_type, body)
 
 
+RECEIPT_STATUS = ('done', 'warn', 'error')
+
+def keep_line(store, text: str, status: str = '', steps: list | None = None, actor: str = 'owner') -> dict:
+    """WHAT THE PAGE SAID IT DID, KEPT (the owner, 2026-11-03: the Assistant's reply lines vanished on a reload). An answer's act is drawn by
+    the page once it happened - "Opened TQ-0004 - ...", "Remind me is ready on the row ...", the steps it took on a page - and those lines
+    lived in the page alone: a reload left the owner's question standing with nothing under it, and the next turn's model never read what
+    was done. `status`: a receipt's line, kept in the dock as one (history gives it back a receipt, mergeDurableTurns knows it by its words);
+    `steps`: what an answer did on the page, put on that answer's own line - the newest of its words - or on a line of their own."""
+    text, status = ' '.join(str(text or '').split())[:600], str(status or '').strip().lower()
+    steps = [{k: str(s.get(k) or '')[:300] for k in ('id', 'kind', 'summary', 'status')} for s in (steps or [])[:20] if isinstance(s, dict) and s.get('summary')]
+    if not text and not steps: raise ValueError('nothing to keep')
+    tid = general.dock_task(store, actor)[0]['TaskId']
+    if not steps: return {'id': record(store, tid, 'assistant', text, {'kind': 'words', 'key': None, 'receipt': status if status in RECEIPT_STATUS else 'done'})}
+    for c in reversed(general.chat_rows(store, tid)[-12:] if text else []):
+        if c.get('ActorType') != general.ASSISTANT_TYPE: continue
+        body = c.get('Body') or ''
+        m = _MARK.search(body)
+        try: card = json.loads(m.group(1)) if m else None
+        except ValueError: card = None
+        if ' '.join(parse_options(_MARK.sub('', body))[0].split()) != text or (card and card.get('kind') != 'words'): continue
+        rewrite(store, c['CommentId'], _MARK.sub('', body), {**(card or {'kind': 'words', 'key': None}), 'steps': steps})
+        return {'id': c['CommentId']}
+    return {'id': record(store, tid, 'assistant', text, {'kind': 'words', 'key': None, 'steps': steps})}
+
+
 def rewrite(store, cid: int, text: str, card: dict = None):
     """An assistant turn said again in its own place - the day's opener, drawn before the mail was in (welcome.arrive)."""
     store.set_comment_body(cid, redact(text).strip() + (f"\n\n{MARK}{json.dumps(card, default=str)} -->" if card else ''))
@@ -2488,6 +2527,8 @@ def history(store, tid: int) -> list:
         text, options = parse_options(_MARK.sub('', body))
         turn = {'id': c['CommentId'], 'role': 'assistant' if c.get('ActorType') == general.ASSISTANT_TYPE else 'user',
                 'text': text, 'options': options, 'card': card, 'at': c.get('CreatedAt')}
+        # ...a receipt the page drew and kept (keep_line) comes back a receipt, as it was drawn
+        if (card or {}).get('receipt') and turn['role'] == 'assistant': turn.update(role='receipt', status=card['receipt'], card=None)
         # Heal legacy races at the read boundary too. Existing databases may already contain two
         # adjacent copies written before record() became atomic; do not keep rendering them forever.
         # A real repeated message remains when an intervening turn separates it.
@@ -3044,7 +3085,10 @@ def read_op(store, kind: str, params: dict) -> str:
         # ...and on a phone no link opens: the screen is named, at the desk (phone_screens)
         say = (lambda h: f"no link opens on a phone - name it, at their desk: {h.get('where') + ' → ' if h['type'] == 'setting' and h.get('where') else ''}"
                f"{h['title']}") if DELIVERY.get() == PHONE else (lambda h: f"link it as [{h['title']}]({h['href']})")
-        out = [f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): {say(h)}" for h in hits]
+        # ...a report's link is its newest run, opened as Search opens it; its page - schedule, route, switch - is said beside it
+        page = lambda h: (f" (its newest run, as Search opens it; its page to edit or pause: {h['page']})"
+                          if h.get('page') and h['page'] != h['href'] and DELIVERY.get() != PHONE else '')
+        out = [f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): {say(h)}{page(h)}" for h in hits]
         # ...and Updates with what is known about a newer release (the owner, 2026-10-25: "is there an update" answered, its button lit -
         # never installed from the chat)
         if any(h.get('href') == places.href('updates') for h in hits):
@@ -3823,7 +3867,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
             return _start_agent(store, tid, table, on, v, str(params.get('instructions') or params.get('text') or '').strip(), actor)
         return _lit(store, tid, table, on, b, note=note, day=said_day(params.get('until')) if b == 'defer' else None)
     if on and kind in ON_TASK:
-        said = f"Brought up {_where(on) or 'it'} - {ON_TASK[kind]}."
+        said = f"Opened {_where(on) or 'it'} - {ON_TASK[kind]}."
         record(store, tid, 'assistant', said)
         return {'say': said, 'options': [], 'chips': [], 'decision': None,
                 'light': {'verb': '', 'label': '', 'key': on.get('key') or '', 'tid': on.get('tid'), 'ref': on.get('ref') or ''}}

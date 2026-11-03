@@ -110,8 +110,11 @@ GUIDE = ('WHAT IS ON THE SCREEN IS YOURS TO WORK, as the owner would - only beca
          'title)\nA dialog open over the page (Search, the Hub\'s Write one, the bell) is the page while it is open.\nThey run in order, on the page, through '
          'its own buttons, and the owner sees each one in the chat. Never press a button that SENDS something out (Send, Approve, an email, '
          'a chat message) or installs Taskuary\'s update (Update to v...): point at it - the owner presses it. Never set a secret (a password, a key, a token): tell them to paste it into '
-         'its box. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Say in '
-         'one short line what you did or what you need; a VIEW line is never shown to the owner.')
+         'its box. Work that needs this computer (listing channels with a token, a script) is the general agent\'s: hand it to it. Your words '
+         # ...are drawn BEFORE the acts run, each act its own step once it is done (the owner, 2026-11-03: "if it opens it, it should say open")
+         'are shown before the acts run, and each act says itself as a step once it is done ("Opened ...", "Pressed Save") - so never '
+         'narrate them ("Opening ...", "I\'ll open ..."): one short line of what you need from them, or no words at all. A VIEW line is never '
+         'shown to the owner.')
 
 
 def block(view: dict | None, react: str = '') -> str:

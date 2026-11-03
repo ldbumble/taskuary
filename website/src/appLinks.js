@@ -56,8 +56,15 @@ export const firstAppLink = (text) => {
   const links = [...new Set([...String(text || "").matchAll(/\]\((#[^)\s]+)\)/g)].map((m) => m[1]))];
   const pages = links.map(appLink).filter(Boolean);
   if (pages.length) return pages.length === 1 && pages[0] !== SETUP ? pages[0] : null;
-  const tasks = [...new Set(links.filter((h) => /^#task=\d+$/.test(h)))];
-  return tasks.length === 1 ? tasks[0] : null;
+  // ...and a report's run (#msg=N, search.places): opened on the table as a Search pick opens it (the owner, 2026-11-03: "open the report
+  // should open the report like search") - one item, as one task is
+  const tasks = [...new Set(links.filter((h) => /^#task=\d+$/.test(h)))], runs = [...new Set(links.filter((h) => /^#msg=\d+$/.test(h)))];
+  return tasks.length ? (tasks.length === 1 ? tasks[0] : null) : runs.length === 1 ? runs[0] : null;
+};
+// the words an answer linked a page with - "[AP ageing](#msg=10)" names "AP ageing" - for the line that says it was opened
+export const linkName = (text, href) => {
+  const m = [...String(text || "").matchAll(/\[([^\]]+)\]\((#[^)\s]+)\)/g)].find((x) => x[2] === href);
+  return m ? m[1].trim() : "";
 };
 
 // A TASK OPENED ON ITS "WHICH CODE IS THIS ABOUT?" PICKER (failures.pick_repo_href, B24): the link opens the task as #task=N does and

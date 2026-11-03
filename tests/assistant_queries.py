@@ -41,12 +41,20 @@ class Q:
         self.tools = tuple(kinds[:1]) if tools is None else tuple(tools)
 
 
+def find(query, title_hint=''):
+    """The good answer to "bring X up": app.find, then the candidate it lists first, linked - the deterministic part is the index's ranking."""
+    def pick(user):
+        m = re.search(r'link it as (\[[^\]]+\]\(#[^)]+\))', user)
+        return f'Here: {m.group(1)}' if m else 'I could not find it.'
+    return [c('app.find', query=query), pick]
+
+
 T1, T4, T6, T12 = 'TQ-0001', 'TQ-0004', 'TQ-0006', 'TQ-0012'
 CASES = [
     # ── navigation: a page, a report, a task by ref or by name ──
     Q('navigation', 'open settings', None, 'Here: [Settings](#settings=config).', 'link:#settings', tools=('pages',), freq=4),
     Q('navigation', 'show me my connections', None, 'They are here: [Connections](#connector=).', 'link:#connector', tools=('connections.list', 'pages'), freq=3),
-    Q('navigation', 'take me to the AP ageing report', None, 'Here it is: [AP ageing over 30 days, weekly](#report=5).', 'link:#report', tools=('pages',), freq=3),
+    Q('navigation', 'take me to the AP ageing report', None, find('AP ageing report'), 'link:#msg=10', freq=3),
     Q('navigation', f'open {T4}', 'todo', f'Here: [{T4}](#task=4).', 'link:#task=4', tools=('pages',), freq=5),
     Q('navigation', 'open the invoice 88213 task', 'todo', [c('tasks.list', contains='invoice 88213'), f'That is [{T4}](#task=4).'], 'read:tasks.list', freq=4),
     Q('navigation', "pull up Marcus's month-end close", None, [c('tasks.list', contains='month-end close'), f'That is [{T1}](#task=1).'], 'read:tasks.list', freq=4),
@@ -232,14 +240,6 @@ CASES = [
     Q('short', 'done.', 'todo', c('close'), 'pressed:close', freq=4),
 ]
 
-def find(query, title_hint=''):
-    """The good answer to "bring X up": app.find, then the candidate it lists first, linked - the deterministic part is the index's ranking."""
-    def pick(user):
-        m = re.search(r'link it as (\[[^\]]+\]\(#[^)]+\))', user)
-        return f'Here: {m.group(1)}' if m else 'I could not find it.'
-    return [c('app.find', query=query), pick]
-
-
 BRING_UP = [
     ('turn off the sound', 'sound', '#settings=config&group=Notifications&key=hand_sound'),
     ('where do I change my signature', 'signature', '#settings=config&group=Replies&key=email_signature'),
@@ -260,9 +260,12 @@ BRING_UP = [
     ('the Jira card', 'jira', '#connector=jira'),
     ('the voice AI section', 'voice', '#connections=AI%20%E2%80%94%20voice'),
     ('my email connections', 'email connections', '#connections=Email'),
-    ('the AP ageing report', 'AP ageing', '#report=5'),
+    # ...a report by its newest run, as a Search pick opens it - read or not (the owner, 2026-11-03: "open the report should open the report like
+    # search"); one that never ran, by its page
+    ('the AP ageing report', 'AP ageing', '#msg=10'),
     ('the end of day report', 'end of day', '#report=2'),
-    ('the headcount report', 'headcount', '#report=4'),
+    ('the headcount report', 'headcount', '#msg=9'),
+    ('open the report about Kesler Medical', 'Kesler Medical', '#msg=10'),
     ('my routines', 'routines', '#report=workflows'),   # the shelf's name since 2026-10-29
     ('my SOUL doc', 'soul', '#settings=docs&doc=soul'),
     ('what it learned', 'learned', '#settings=docs&doc=learned'),
@@ -609,7 +612,7 @@ AREA_RAIL = [
     Q('rail', 'why is this one at the top?', 'todo', [c('docs.search', query='work rail'), 'Rows sit in the order they arrived.'], 'read:docs.search', freq=2),
     Q('rail', 'what is the habits row', None, [c('docs.search', query='habits row'), 'One row for every habit the Advisor learned.'], 'read:docs.search', freq=1),
     Q('rail', 'my rail is empty, where did everything go?', None, [c('activity.list', days=1), 'You cleared them this morning.'], 'read:activity.list', freq=2),
-    Q('rail', 'open the headcount report', None, 'Here: [Headcount by site](#report=9).', 'link:#report=', tools=('pages',), freq=2),
+    Q('rail', 'open the headcount report', None, find('headcount report'), 'link:#msg=9', freq=2),
     Q('rail', 'collapse the FYI section', None, 'The FYI heading folds with its own arrow - that press is yours.', 'words', tools=('words',), freq=1,
       note='folding a section is the page\'s own press; said honestly'),
 ]
@@ -968,6 +971,9 @@ AREA_NEW = [
     Q('new', 'write to the Northwind team WhatsApp group that the installer is ready to go', None,
       c('task.create_from_text', kind='send', channel='whatsapp', to='Northwind team', text='I have updated everything and the installer is ready to go'),
       'new:send', freq=3, seed=wa_group),
+    Q('new', 'send this on WhatsApp to the Northwind team: the ledger is closed for October', None,
+      c('task.create_from_text', kind='send', channel='whatsapp', to='Northwind team', text='the ledger is closed for October'),
+      f'to:whatsapp:{TEAM_GROUP}', freq=3, seed=wa_group, note='New, filled in, for their Send (2026-11-03) - nothing pasted, nothing sent'),
     Q('new', 'set a goal: books closed by the 5th', None, c('task.create_from_text', kind='goal', text='books closed by the 5th'), 'new:goal', freq=2),
     Q('new', 'note to self: call the bank', None, c('task.create_from_text', kind='task', text='call the bank'), 'new:note', freq=3),
     Q('new', 'new dashbaord of open tasks by person', None, c('task.create_from_text', kind='dashboard', text='open tasks by person'), 'new:dashboard', freq=2,

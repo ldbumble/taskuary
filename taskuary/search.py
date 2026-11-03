@@ -278,12 +278,21 @@ def _app_rows(store) -> list:
     rows += [{'type': 'connector', 'title': str(c.get('Name') or c.get('Type')), 'where': f"Connections · your {c.get('Type')} card", 'boost': True,
               'sub': 'connected' if c.get('Active') else 'off', 'rest': f"{c.get('Type')} {c.get('Account') or ''} {c.get('Scope') or ''}",
               'href': f"#connector={quote(str(c.get('Type') or ''), safe='')}"} for c in mine if c.get('Name')]
+    # A REPORT OPENS AS SEARCH OPENS IT (the owner, 2026-11-03: "open the report should open the report like search"): its newest run, the
+    # report itself (#msg=, the card a Search pick puts on the table - read or not, on the rail or off it), its page only when it never ran.
+    # The run's own words are part of what finds it, so "the report about overdue invoices" finds the one that says so
+    runs = {r['ConversationId']: r for r in store._rows("SELECT m.MessageId, m.ConversationId, m.Subject, m.BodyText, m.SentAt FROM message m JOIN "
+                                                         "(SELECT ConversationId c, MAX(MessageId) n FROM message WHERE Channel='report' GROUP BY ConversationId) x "
+                                                         "ON m.MessageId = x.n")} if hasattr(store, '_rows') else {}
     for s in store.list_sources():
         if s.get('Channel') != 'report': continue
         try: cfg = json.loads(s.get('ConfigJson') or '{}') or {}
         except ValueError: cfg = {}
-        rows.append({'type': 'report', 'title': cfg.get('title') or s.get('Address') or 'report', 'where': 'Reports', 'rest': f"report workflow {cfg.get('type') or ''}",
-                     'href': f"#report={s['SourceId']}"})
+        run = runs.get(f"report:{s['SourceId']}")
+        rows.append({'type': 'report', 'title': cfg.get('title') or s.get('Address') or 'report', 'where': 'Reports',
+                     'rest': f"report workflow {cfg.get('type') or ''} {(run or {}).get('Subject') or ''} {str((run or {}).get('BodyText') or '')[:400]}",
+                     'href': f"#msg={run['MessageId']}" if run else f"#report={s['SourceId']}", 'page': f"#report={s['SourceId']}",
+                     **({'sub': f"last run {str(run.get('SentAt') or '')[:16]}"} if run else {})})
     try: docs = store.doc_names()
     except Exception: docs = []
     rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': places.name('docs'), 'rest': f'{d} document doc', 'key': d,

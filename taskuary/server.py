@@ -6024,6 +6024,16 @@ def concierge_say(body: ConciergeSayBody):
                              view=body.view, react=body.react)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class ConciergeLineBody(BaseModel): text: str = ''; status: str = ''; steps: list[dict] = []
+
+@app.post('/api/concierge/line')
+def concierge_line(body: ConciergeLineBody):
+    """A line the page drew once the act it names had happened - a receipt, or an answer's steps on the page - kept in the conversation
+    (concierge.keep_line), so a reload draws it again and the next turn reads it."""
+    from . import concierge
+    try: return concierge.keep_line(store, body.text, body.status, body.steps, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 @app.get('/api/concierge/chips')
 def concierge_chips(key: str):
     """The action words one item carries - chips_for, read only. The Assistant Game offers an item the same

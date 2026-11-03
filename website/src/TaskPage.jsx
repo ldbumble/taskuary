@@ -3320,7 +3320,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" sec={threeUp ? SECTIONS[2] : null} here={hereSec === "close"} title="Close out"
                     description={term?.alive
-                      ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
+                      // ...Mark done is here beside a live agent too (actionRow.splitRow): it stops it, saves what it did, then closes
+                      ? (replyMessage ? "Mark done stops the agent, saves what it did with the task, and closes it." : "No inbound sender is attached to this task. Mark done stops the agent, saves what it did and closes it.")
                       : closeoutRv
                         ? (replyMessage ? "Your reply to the sender and the last act on GitHub - once the reply has gone, the task closes." : "The last act on GitHub - approving it runs only that; Mark done closes the task.")
                       : ended && !pendingReview ? "It ended upstream, so no reply is owed. What already went out is below."
@@ -3552,7 +3553,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>
                   ) : (
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.9 }}>
-                      Nothing is waiting on you here, and no inbound sender is attached to this task.
+                      {/* ...never "Nothing is waiting on you" over the Mark done it offers (the owner, 2026-11-02) */}
+                      {"No inbound sender is attached to this task."}
+                      {notDone && (liveSession ? " Mark done stops the agent, saves what it did and closes it." : " Mark done closes it.")}
                     </Typography>
                   ))}
                   {/* ...and the Advisor's line here when its move is Close out's (advice `section`): beside the Mark done it is the reason for */}

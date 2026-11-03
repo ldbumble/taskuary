@@ -36,13 +36,15 @@ test("a draft's Redraft stands for it on the spine, lit when it is the pick; Rep
   assert.deepEqual(by.close.map((x) => [x.label, x.tone]), [["Redraft", "p"], ["hand", "s"]]);
 });
 
-test("a live agent's bar is Back and Next; its Stop and save is on its pane's strip", () => {
+test("a live agent's bar is Back and Next; its Stop and save is on its pane's strip, and Mark done stays on Close out", () => {
   const list = [v("save-end", "agent", { label: "Stop and save" }), v("diff", "agent"), v("run-another", "agent"), v("done", "more", { beside: true }), v("next", "next")];
   const { row, by } = splitRow(rowOf({ ref: "TQ-1", list }), { live: true, open: "agent" }, list);
   assert.deepEqual(ids(row), []);
   assert.ok(row.next);
-  assert.deepEqual(Object.keys(by), ["live"]);
+  assert.deepEqual(Object.keys(by).sort(), ["head", "live"]);
   assert.deepEqual(by.live.map((x) => x.id), ["save-end"]);
+  // MARK DONE ALWAYS SHOWS ON CLOSE OUT (the owner, 2026-11-02): a parked or working agent's task offered only Stop and save
+  assert.deepEqual(by.head.map((x) => x.id), ["done"], "Mark done, and only Mark done, of the task's own moves");
 });
 
 test("where no panes are laid (a phone, the Tasks tab) the row is as it was", () => {

@@ -35,7 +35,9 @@ PROMPT = (
     'Focus for tomorrow\n\n'
     'One bullet per item the data supports - at most five for today and three for tomorrow, never padded. '
     'Never state a number of items the data does not show. Use exactly this bullet shape: '
-    '[Who or where] — Subject — one-line gist. Begin completed items with ✅, priorities with 🔍, and meeting '
+    '<src mark> Who — what it is about — one-line gist, where the src mark is the one given on the row (never a '
+    '[bracketed] source name), and a row without a subject is named by its chat or group or its gist, never '
+    '"(no subject)". Begin completed items with ✅, priorities with 🔍, and meeting '
     'invites with 📅 (an invite may use 📅 with ✅ or 🔍). Rank tomorrow by urgency and importance.\n\n'
     'Exclude bulk and marketing mail, system notifications, receipts, and anything suppressed by a blocked '
     'sender or keyword rule. Include meeting invites and flagged messages when the supplied data identifies them. '
@@ -48,6 +50,26 @@ PROMPT = (
 
 # shipped instructions an unedited report still runs - store.py moves it to PROMPT; an owner-edited one is never touched
 OLD_PROMPTS = (
+    # until 2026-11-02: its '[Who or where]' bullet came back as '[Outlook mail]' and '[WhatsApp] — (no subject)'
+    'Give me an executive and concise end-of-day brief over the last 8 hours: what came in and what I did '
+    'across every source in the data, and my own Taskuary tasks and agent work.\n\n'
+    'Start with exactly two one-sentence roll-ups:\n'
+    'Done today: the main themes completed today, and the number of meeting invites handled when there were any.\n'
+    'Tomorrow: the most urgent and important open items, at most three.\n\n'
+    'Then use these groups in this order, omitting a group entirely when its data has no items:\n'
+    'What I accomplished today\n'
+    'Focus for tomorrow\n\n'
+    'One bullet per item the data supports - at most five for today and three for tomorrow, never padded. '
+    'Never state a number of items the data does not show. Use exactly this bullet shape: '
+    '[Who or where] — Subject — one-line gist. Begin completed items with ✅, priorities with 🔍, and meeting '
+    'invites with 📅 (an invite may use 📅 with ✅ or 🔍). Rank tomorrow by urgency and importance.\n\n'
+    'Exclude bulk and marketing mail, system notifications, receipts, and anything suppressed by a blocked '
+    'sender or keyword rule. Include meeting invites and flagged messages when the supplied data identifies them. '
+    'Do not infer that an item was completed, flagged, deleted, archived, or still open unless the data says so. '
+    'Do not mention excluded items or missing groups. When the data says a source could not be read, say so in '
+    'one short line first and never say nothing came in from it. '
+    'End with one short, plain closing sentence that the data bears out: speak of progress only when something '
+    'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.',
     # the Inbox-and-Sent-only instruction until 2026-10-21: it read nothing but email
     'Give me an executive and concise evening Inbox Brief for emails in my Inbox (Focused and Other) '
     'and Sent from the last 8 hours only.\n\n'
@@ -130,13 +152,17 @@ def _mail_meta(row: dict) -> dict:
 
 
 def _row_line(row: dict, state: str) -> str:
+    from .channels import ch_icon
     who = 'You' if state == 'sent' else (row.get('FromName') or row.get('FromEmail') or 'Unknown sender')
     bits = [
         f"state={state}",
         f"sender={_one_line(who, 80)}",
-        f"subject={_one_line(row.get('Subject') or '(no subject)', 140)}",
+        f"src={ch_icon(row.get('Channel'))}",
         f"at={str(row.get('SentAt') or '')[:16]}",
     ]
+    # a chat has no subject: its chat or group name, else triage's line, else none and the gist says it
+    about = row.get('Subject') or (row.get('SourceName') if row.get('Channel') not in (None, '', 'email') else '') or row.get('TriageTitle')
+    if about: bits.insert(3, f"subject={_one_line(about, 140)}")
     if row.get('Channel') and row['Channel'] != 'email': bits.append(f"where={row['Channel']}")
     if _invite(row): bits.append('invite=yes')
     meta = _mail_meta(row)
@@ -248,9 +274,9 @@ def collect(store, hours: int = HOURS) -> dict:
     runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
                        "WHERE COALESCE(r.FinishedAt, r.UpdatedAt, r.StartedAt)>=? ORDER BY r.RunId DESC LIMIT 80", (since,))
     def task_line(t, state):
-        return f"state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
+        return f"src=📌 | state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={level(t.get('Priority'))}"
     def run_line(r):
-        bits = [f"agent={_one_line(r.get('AgentName'), 60)}", f"status={r.get('Status') or 'running'}"]
+        bits = ['src=🤖', f"agent={_one_line(r.get('AgentName'), 60)}", f"status={r.get('Status') or 'running'}"]
         if r.get('TaskId'): bits.append(f"task={task_ref(r['TaskId'])} {_one_line(r.get('Title'), 120)}")
         if r.get('LastError'): bits.append(f"error={_one_line(r['LastError'], 160)}")
         return ' | '.join(bits)

@@ -107,3 +107,26 @@ class StaleConnectorErrorTests(unittest.TestCase):
         with mock.patch.object(channels, '_poll_jobs', return_value=jobs):
             got = {x['label']: x['ok'] for x in evening.sources(MemoryStore())}
         self.assertEqual(got, {'Outlook mail': True, 'Gmail': False})
+
+
+class SourceMarkTests(unittest.TestCase):
+    """The owner, 2026-11-02, of '[Outlook mail] - RE: ...' and '[WhatsApp] - (no subject) - ...': "these should be emojis?" """
+    def test_a_row_carries_its_source_mark_and_a_chat_is_named_not_no_subject(self):
+        s = MemoryStore()
+        mid = _mail(s, 'm1', 'RE: Budgets dashboard fix', 'erin@northwind.example')
+        s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (s.create_task({'Title': 'Budgets fix', 'Kind': 'task'}, 'test'), mid))
+        cid = s.add_message({'ExternalId': 'w1', 'Channel': 'whatsapp', 'SourceName': 'Ops crew', 'Subject': '', 'FromName': 'Gail Moreno',
+                             'FromEmail': '', 'SentAt': _ago(1), 'BodyText': 'Can you look at the rota?', 'Status': 'filed'})
+        s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (s.create_task({'Title': 'Rota', 'Kind': 'task'}, 'test'), cid))
+        text = evening.gather(s, 8)
+        self.assertNotIn('(no subject)', text)
+        self.assertIn('src=✉️', text)
+        self.assertIn('sender=Gail Moreno | src=\U0001f4ac | subject=Ops crew', text)
+        self.assertIn('src=\U0001f4cc', text)
+
+    def test_the_prompt_asks_for_the_mark_never_a_bracketed_label(self):
+        from taskuary.channels import ch_icon
+        self.assertNotIn('[Who or where]', evening.PROMPT)
+        self.assertIn('src mark', evening.PROMPT)
+        self.assertIn('[Who or where]', evening.OLD_PROMPTS[0])       # the stock one before it migrates (store.py)
+        self.assertEqual((ch_icon('email'), ch_icon('teams'), ch_icon('nothing-known')), ('✉️', '\U0001f465', '\U0001f517'))

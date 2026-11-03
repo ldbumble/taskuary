@@ -41,6 +41,7 @@ TTL, NOTE_TTL = 6 * 3600, 600
 FILE_EXTS = ('pdf', 'docx', 'xlsx', 'pptx', 'csv', 'tsv', 'txt', 'md', 'json')
 TABLE_EXTS = ('csv', 'tsv', 'xlsx')
 _SKIP_EXTS = ('png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'css', 'js')
+QBO_INVOICE_HOSTS = ('connect.intuit.com', 'ipn.intuit.com', 'payments.intuit.com')   # where QuickBooks' invoice buttons point
 _URL = re.compile(r'https?://[^\s<>"\'`]+', re.I)
 SHEETS, DRIVE = 'https://sheets.googleapis.com/v4/spreadsheets', 'https://www.googleapis.com/drive/v3'
 GRAPH, GH = 'https://graph.microsoft.com/v1.0', 'https://api.github.com'
@@ -104,6 +105,9 @@ def classify(url: str) -> dict | None:
         return doc(kind, f"{'OneDrive' if one else 'SharePoint'} {word}", 'graph', name=_fname(path) if _ext(path) else '')
     if host in ('www.dropbox.com', 'dropbox.com') and re.match(r'/(s|scl|sh)/', path): return doc('file', 'Dropbox file', None, name=_fname(path))
     if (host == 'box.com' or host.endswith('.box.com')) and re.match(r'/s/', path): return doc('file', 'Box file', None)
+    # the "View invoice" button of an invoice QuickBooks mails (TQ-1291): as a plain page the body lost its address and the task
+    # showed the PDF with nothing leading to the invoice online. Listed, never fetched - it is a pay portal and opening it says read
+    if host in QBO_INVOICE_HOSTS: return doc('invoice', 'QuickBooks invoice', None)
     if host == 'github.com' and (m := re.match(r'/([\w.-]+/[\w.-]+)/(issues|pull)/(\d+)', path)):
         kind = 'issue' if m.group(2) == 'issues' else 'pull'
         return doc(kind, 'GitHub issue' if kind == 'issue' else 'GitHub pull request', 'github', f'{m.group(1)}#{m.group(3)}',

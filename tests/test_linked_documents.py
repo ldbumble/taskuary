@@ -182,6 +182,20 @@ def test_an_html_mail_keeps_the_address_of_its_open_button():
     assert [d['url'] for d in linkdocs.find(text)] == [SHEET]
 
 
+def test_a_quickbooks_invoice_mail_keeps_its_view_invoice_button():
+    """TQ-1291: an invoice QuickBooks mails carries the PDF AND a "View invoice" button to the invoice online. The button's address
+    read as a plain page, so the body lost it and Linked never listed it - the task showed the file and nothing led to the invoice."""
+    inv = 'https://connect.intuit.com/t/scs-v1-0f3a9c2e7b?cta=viewinvoicenow&locale=en_US'
+    html = (f'<p>Dear Alex, here is invoice 1042 from Payworth.</p><a href="{inv.replace("&", "&amp;")}">View invoice</a>'
+            '<a href="https://www.intuit.com/privacy/">Privacy</a> <a href="https://quickbooks.intuit.com/">QuickBooks</a>')
+    text = channels._clean(html)
+    assert f'View invoice ({inv})' in text and 'intuit.com/privacy' not in text
+    d, = linkdocs.find(text)
+    assert (d['url'], d['kind'], d['label'], d['source']) == (inv, 'invoice', 'QuickBooks invoice', None)   # listed, opened where it lives
+    pay = 'https://ipn.intuit.com/app/payment?id=abc123'
+    assert linkdocs.classify(pay)['label'] == 'QuickBooks invoice' and linkdocs.classify('https://www.intuit.com/privacy/')['kind'] == 'page'
+
+
 # ── the bills, end to end ─────────────────────────────────────────────────────────────────────────
 def test_the_bills_sheet_reaches_triage_as_rows_then_the_agent_reads_every_row(world):
     s, calls = world

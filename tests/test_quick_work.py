@@ -180,9 +180,11 @@ def test_done_closes_through_the_agents_own_close():
         ses = opened(s, tid); ses.quick = True
         ses.file_quick(ASK, quickwork.read({**ANSWER, 'draft': None, 'done': True, 'why': 'Answered: worth going.'}), [])
         end = time.time() + 10
-        while time.time() < end and s.get_task(tid)['Status'] not in ('done', 'waiting'): time.sleep(.05)
+        said = lambda: any('The agent closed this itself: Answered: worth going.' in c['Body'] for c in s.list_comments(tid))
+        # ...the note is filed AFTER the close (selfclose.declare), so a loaded run read the status before the note was written
+        while time.time() < end and not (s.get_task(tid)['Status'] in ('done', 'waiting') and said()): time.sleep(.05)
     assert s.get_task(tid)['Status'] == 'waiting'          # closed, as wrapup closes one whose sender is owed a reply: it waits on the draft
-    assert any('The agent closed this itself: Answered: worth going.' in c['Body'] for c in s.list_comments(tid))
+    assert said()
 
 def test_markers_in_the_models_fields_do_nothing():
     s = home(); tid, _ = arrived(s)

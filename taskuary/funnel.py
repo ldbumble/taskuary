@@ -1928,21 +1928,26 @@ SETTLE_TRIES = 3          # a settle the census lag refused, reconciled and trie
 
 
 def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, note: str = None, *, expected_context=None, read: bool = False,
-           shown=None) -> dict:
+           shown=None, thread=None) -> dict:
     """The owner's word on one item. done: gone for good. later: back in `hours` (LATER_HOURS by
     default). skip: back tomorrow morning. surfaced: shown in this walk - and, with `read`, READ: once
     it has been put in the chat it leaves Unread (the owner, 2026-09-06). ack: an alert was seen.
 
     `shown` ({key: view_revision}) is the card the press was made on: its receipts cover what that card showed, and a
-    message that landed after it was drawn stays unread. Without it, the card the rail last drew."""
+    message that landed after it was drawn stays unread. Without it, the card the rail last drew. `thread`: the mails folded under the row
+    (its `thread`), from a caller holding it - else the rail's cache, which every settle empties (thread_of)."""
     if shown is None: shown = _SHOWING.get()
     if verb not in VERBS: raise ValueError(f'unknown verb: {verb}')
     if key.startswith('fyis:'):                                   # a batch: the verb lands on every member
         # ...and wakes the tabs ONCE. Each settle empties the pile cache and fires the live event
         # every open Assistant answers with a forced rebuild, so four fyi settled together set four
         # rebuilds of a 60-item pile racing each other in front of the Next that follows.
+        # ...each member's folded thread taken BEFORE the first settle empties the cache it is read from: from the second row on, the mails
+        # under it stayed unread and a "+3" row came back after the walk said it was done (2026-11-03)
+        ks = [k for k in key[5:].split(',') if k]
+        threads = {k: thread_of(store, k) for k in ks}
         with store.one_poke():
-            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown) for k in key[5:].split(',') if k]
+            out = [settle(store, k, verb, by, hours, note, expected_context=expected_context, read=read, shown=shown, thread=threads[k]) for k in ks]
         return {'key': key, 'verb': verb, 'until': (out[0] if out else {}).get('until')}
     # A MEETING IS WALKED LIKE A TASK (Q3, 2026-10-30): Next on it writes nothing and it leaves the rail by itself after its grace
     # minutes - it was held `later` until its start (2026-09-28), a row the walk skipped
@@ -1972,7 +1977,7 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
             store.reconcile_processing_membership()
     if verb == 'done': _idea_done(store, key, by)
     # ...and an FYI row that speaks for its whole email thread settles the mails folded under it (processing_unread.fold_fyi_threads)
-    for k in thread_of(store, key):
+    for k in (thread_of(store, key) if thread is None else thread):
         try: settle(store, k, verb, by, hours, note, read=read)
         except Exception as e: logger.debug(f'funnel: {k} under {key} not settled - {e}')
     invalidate()

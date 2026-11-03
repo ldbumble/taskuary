@@ -320,7 +320,8 @@ def _effect(store, st, rows, frm, actor, dock):
             for k in keys:
                 row = find(rows, k)
                 if row is None: continue
-                try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True); read.append(row['key'])
+                # ...with the mails folded under it, from the row in hand: the rail's cache is gone after the first member's settle
+                try: funnel.settle(store, row['key'], 'surfaced', actor, note=row.get('sig'), read=True, thread=row.get('thread') or []); read.append(row['key'])
                 except Exception as e: logger.debug(f'railwalk: {k} was not read - {e}')
     try: concierge._stamp_next(store, dock, st.get('on') if held else frm)
     except Exception as e: logger.debug(f'railwalk: no badge for {frm} - {e}')
@@ -352,7 +353,7 @@ def next(store, from_key: str = None, actor: str = 'owner', press: str = None, r
         for k in read or ():
             row = find(rows, k)
             if row is not None:
-                try: funnel.settle(store, row['key'], 'surfaced', actor, read=True); gone.append(row['key'])
+                try: funnel.settle(store, row['key'], 'surfaced', actor, read=True, thread=row.get('thread') or []); gone.append(row['key'])
                 except Exception as e: logger.debug(f'railwalk: {k} on the page over the table was not read - {e}')
         # ...what was read has left the rail: taken off the rows in hand, never the whole rail rebuilt to see it gone
         if gone: rows = [r for r in rows if r['key'] not in set(gone)]

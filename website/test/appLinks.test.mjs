@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { appLink, firstAppLink, inApp } from "../src/appLinks.js";
+import { appLink, firstAppLink, inApp, linkRoad, ownPath } from "../src/appLinks.js";
 
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
@@ -86,4 +86,22 @@ test("#search= opens Search with its words; #board is the Board's own address", 
 test("every #hash a reply links is followed in the app window, never a new browser tab (TQ-1251: #new-task opened the browser)", () => {
   for (const h of ["#new-task", "#new-task&kind=agent", "#msg=12", "#settings=docs"]) assert.equal(inApp(h), true, h);
   for (const h of ["https://example.com", "/api/task-outputs/3/x.png", "#", "", null]) assert.equal(inApp(h), false, String(h));
+});
+
+// OUTSIDE LINKS GO TO THE SYSTEM BROWSER, THE APP'S OWN STAY IN THE WINDOW (the owner, 2026-11-02). A new tab (target=_blank) is what the
+// desktop window hands to the system browser - so only the web gets one. The app's own address written out whole
+// (http://127.0.0.1:<port>/#settings), an /api/ file and a path of the app's got a new tab too, and left the window
+test("a link's road: the web leaves for the system browser; the app's pages, tasks and files stay in the window", () => {
+  const here = { origin: "http://127.0.0.1:8765" };
+  const road = (h) => linkRoad(h, here);
+  for (const h of ["https://vendor.example/pricing", "http://docs.example/x#top", "mailto:erin@northwind.example", "http://127.0.0.1:9999/"])
+    assert.equal(road(h), "outside", h);
+  assert.equal(road("#task=12"), "task"); assert.equal(road("http://127.0.0.1:8765/#task=12"), "task");
+  assert.equal(road("#connector=intacct"), "page"); assert.equal(road("http://127.0.0.1:8765/#settings=policies"), "page"); assert.equal(road("/#new-task"), "page");
+  for (const h of ["/api/task-outputs/3/x.png", "/api/attachments/7", "http://127.0.0.1:8765/api/task-artifacts/3/7", "/assets/chart.png"]) assert.equal(road(h), "file", h);
+  for (const h of ["/", "http://127.0.0.1:8765/?view=board", "http://127.0.0.1:8765"]) assert.equal(road(h), "app", h);
+  assert.equal(road("//vendor.example/x"), "outside", "a scheme-relative address is another site");
+  assert.equal(ownPath("http://127.0.0.1:8765/api/task-artifacts/3/7?x=1", here), "/api/task-artifacts/3/7?x=1");
+  // ...and the reply's link draws by that road: a new tab for the web alone
+  assert.match(read("md.jsx"), /target=\{road === "outside" \? "_blank" : undefined\}/);
 });

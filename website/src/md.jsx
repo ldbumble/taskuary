@@ -8,7 +8,7 @@ import { Box } from "@mui/material";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { linkRefs, looksMd, refParts } from "./mdText.js";
-import { appLink, inApp, openAppLink } from "./appLinks.js";
+import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
 import { plainCitations } from "./taskOutputs.js";
 import { attUrl, saveFile } from "./Attachments.jsx";
 export { looksMd };
@@ -16,17 +16,20 @@ export { looksMd };
 const TASK_LINK = /#task=(\d+)/;
 // `onTask` (the chat's): a task link opens it as a press of its rail row does, and a bare ref keeps its own words
 const A = ({ href, children, onTask }) => {
-  const m = TASK_LINK.exec(href || ""), bare = !!m && /^TQ-\d+$/.test(String(React.Children.toArray(children).join("")));
+  // ...BY ITS ROAD (appLinks.linkRoad, the owner 2026-11-02): the web alone opens a new tab - the system browser, from the desktop window -
+  // and the app's own address, written out whole or as a path, stays in the window like its #links
+  const road = linkRoad(href), own = ownPath(href) || "", hash = own.includes("#") ? own.slice(own.indexOf("#")) : href;
+  const m = road === "task" ? TASK_LINK.exec(hash || "") : null, bare = !!m && /^TQ-\d+$/.test(String(React.Children.toArray(children).join("")));
   // ...and a page of the app itself (appLinks.js): opened on the canvas here, never a new browser tab
-  const page = m ? null : appLink(href) || (inApp(href) ? String(href).trim() : null);
+  const page = road === "page" ? appLink(hash) || String(hash).trim() : null;
   // ...and a file an agent made, as the Assistant links it (lookups.outputs_find): the Result's own Download - one tap saves it
-  const file = !m && !page && /^\/api\/task-(?:outputs|artifacts)\/\d+/.test(href || "");
+  const file = road === "file";
   // ...SAVED where it is (Attachments.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file
   // moved or deleted since the link was written opened a raw 404 there - now it is a line beside the link
-  const [err, setErr] = React.useState(""), [saved, setSaved] = React.useState(""), raw = href;
-  if (file) href = attUrl({ url: href }, true);
+  const [err, setErr] = React.useState(""), [saved, setSaved] = React.useState(""), raw = file ? own : href;
+  if (file) href = attUrl({ url: own }, true);
   return (<>
-    <a href={href} target={m || page || file ? undefined : "_blank"} data-tq-file-link={file ? "" : undefined} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
       onClick={(e) => {
         if (m) { e.preventDefault(); if (onTask) onTask(Number(m[1])); else openAppLink(`task=${m[1]}`); }

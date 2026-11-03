@@ -25,6 +25,28 @@ export const appLink = (href) => {
 // to the browser. A hash never leaves the window: it is followed in place, and the canvas opens what it knows
 export const inApp = (href) => /^#\S/.test(String(href || "").trim());
 
+// OUTSIDE LINKS GO TO THE SYSTEM BROWSER, THE APP'S OWN STAY IN THE WINDOW (the owner, 2026-11-02). The desktop window hands a new tab
+// (target=_blank) to the system browser, so the web alone gets one. `ownPath`: a link to this app - a path of its own, or its address
+// written out whole (http://127.0.0.1:<port>/#settings) - as the path, query and hash; null for anything else
+const loc = () => (typeof window === "undefined" ? null : window.location);
+export const ownPath = (href, here = loc()) => {
+  const h = String(href || "").trim();
+  if (/^\/(?!\/)/.test(h)) return h;
+  if (!here?.origin || !/^https?:\/\//i.test(h)) return null;
+  try { const u = new URL(h); return u.origin === here.origin ? `${u.pathname}${u.search}${u.hash}` : null; } catch { return null; }
+};
+// ...and the road a reply's link takes: `task` (opens it), `page` (the canvas opens it), `app` (the app itself, reloaded in the window),
+// `file` (any other path of ours - an /api/ file: saved where it is, never a raw page the window has no Back from) or `outside` (the
+// system browser)
+export const linkRoad = (href, here = loc()) => {
+  const h = String(href || "").trim(), own = ownPath(h, here), root = /^\/?(?:\?[^#]*)?$/;
+  const at = own ? own.indexOf("#") : -1, hash = own ? (at >= 0 && root.test(own.slice(0, at)) ? own.slice(at) : "") : h;
+  if (/^#task=\d+/.test(hash)) return "task";
+  if (appLink(hash) || inApp(hash)) return "page";
+  if (own === null) return "outside";
+  return root.test(at >= 0 ? own.slice(0, at) : own) ? "app" : "file";
+};
+
 // the page a reply names, as written: [Open the Sage Intacct connection](#connector=intacct) - else the ONE task it points at
 // ([TQ-0123](#task=123)); a reply that mentions several tasks in passing opens none of them
 // ...and the same for pages (2026-10-19 UI walk): the model is asked for ONE link, and a reply with two opened the first. Setup is

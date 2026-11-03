@@ -1,5 +1,10 @@
 {
-  "remind me Monday": "CALL: {\"kind\": \"task.defer\", \"params\": {\"until\": \"Monday\"}}",
+  "next": "CALL: {\"kind\": \"next\", \"params\": {}}",
+  "mark it done": "CALL: {\"kind\": \"close\", \"params\": {}}",
+  "remind me friday": "CALL: {\"kind\": \"task.defer\", \"params\": {\"until\": \"Friday\"}}",
+  "open the reports": "Here: [Reports](#report=reports).",
+  "what's on my plate": "Here is what waits on you: {list}",
+  "remind me Monday":"CALL: {\"kind\": \"task.defer\", \"params\": {\"until\": \"Monday\"}}",
   "mark this done": "CALL: {\"kind\": \"close\", \"params\": {}}",
   "done": "CALL: {\"kind\": \"close\", \"params\": {}}",
   "open TQ-0001": "Here: [TQ-0001](#task=1).",

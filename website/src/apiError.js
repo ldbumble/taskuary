@@ -25,7 +25,12 @@ export const plainError = (e, fallback = "That didn't save. Try again in a momen
   return fallback;
 };
 
+// THE DEMO SAYING NO, HEARD WHEREVER IT IS SAID (the button stress, 2026-11-02): the chat posts a refusal as a plain line of the demo's
+// (AssistantView setErr), but knew only the ones that reached it through its own error reader - Hand it to a person's refusal came back
+// through the card's own catch and stood in red with "Report this bug" under it. Every refusal is noted here, as it is answered.
+export const DEMO_SAID = new Set();
 export function keepDetail(e) {
+  if (e?.response?.status === 403 && e.response.data?.demo && typeof e.response.data.detail === "string") DEMO_SAID.add(e.response.data.detail);
   const d = e?.response?.data?.detail;
   if (d && typeof d !== "string") { e.detail = d; e.response.data.detail = detailText(d); }
   return e;

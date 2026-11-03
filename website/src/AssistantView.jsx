@@ -24,6 +24,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
+import { DEMO_SAID } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
 import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
@@ -168,8 +169,8 @@ const errText = (e) => {
   return (typeof detail === "string" ? detail : null) || e?.message || "Taskuary could not answer.";
 };
 // THE DEMO SAYING NO (U8, 2026-10-17): a refusal is the demo speaking, so it is posted as a plain line of its own - it came in
-// red with "Report this bug" under it, as if the app had broken. setErr below routes any sentence in this set to the chat.
-const DEMO_SAID = new Set();
+// red with "Report this bug" under it, as if the app had broken. setErr below routes any sentence in this set to the chat - the set every
+// refusal lands in as it is answered (apiError.DEMO_SAID), so a card's own catch passing one on is the demo's line too.
 const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 // what an empty rail offers: the same doors as the welcome block (runChip knows these three)
 const IDLE_CHIPS = [{ verb: "newtask", label: btn("new_task") }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Change my setup" }];   // not a second "set up" beside "Set something up" (U14)

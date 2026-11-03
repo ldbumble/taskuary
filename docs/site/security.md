@@ -155,8 +155,15 @@ session with full permissions still runs as your Windows user and has a shell.
 
 Every task knows **where its words came from**: you, a trusted sender, or a stranger. The least trusted
 text on it decides, and a stranger who writes on your colleague's thread makes it a stranger's task.
-Advisor ideas and reports count as a stranger's too, since they carry what they read. Only you raise a
-task: **Trust this task** on its card. Pressing Start does not.
+Only you raise a task: **Trust this task** on its card. Pressing Start does not.
+
+A task Taskuary wrote itself, from an Advisor idea, is as trusted as the least trusted thing it was built
+from. Taskuary reads the messages and tasks the idea names: if every one is yours, a trusted sender's,
+or a report from your own systems that came in as mail from them, the task is trusted. If one is a
+stranger's, so is the task. A summary that mixes everyone's mail, like the morning digest, counts only
+through the messages the idea names, never as a whole. An idea that names nothing Taskuary can find, or
+rests on what Taskuary learned rather than on a message, is a stranger's. A report's own task, and a
+report an idea names as a whole, are a stranger's too, since they carry what they read.
 
 A stranger's task runs differently from yours:
 

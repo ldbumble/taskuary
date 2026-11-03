@@ -2577,6 +2577,7 @@ def continue_task(task_id: int, body: CodeBody):
     if not task: raise HTTPException(404, 'task not found')
     instruction = str(body.instruction or '').strip()
     if not instruction: raise HTTPException(422, 'say what code changes you want next')
+    if why := _brainless(True): raise HTTPException(422, why)
     _refresh_chat_context(task_id=task_id)
     previous = store.last_transcript(task_id) or {}
     if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live coding session')
@@ -2621,6 +2622,7 @@ def continue_session(task_id: int, body: CodeBody = None):
     # ...a Stop and save still writing up closes its session only once the result is saved (wrapup._wrap_session): the page offers
     # Continue from the Result, and a press in that gap was refused "this task already has a live session" (browser/agent-presses).
     # It waits for that write-up - the session it is about to close is not a live one
+    if why := _brainless(True): raise HTTPException(422, why)
     _after_writeup(task_id)
     if hub_term.for_task(task_id): raise HTTPException(409, 'this task already has a live session')
     row, why = _resumable(task_id)
@@ -2655,6 +2657,8 @@ def continue_work(task_id: int, body: ContinueBody = None):
     agents? Maybe add a new prompt inside that continue session"). A regular agent resumes its saved conversation; a
     coding agent reopens its own CLI session by the id its CLI gave it, or - where there is none to reopen - a fresh
     one seeded with the handover. The owner's note, when there is one, is the first thing it hears."""
+    from . import general as _g
+    if (t := store.get_task(task_id)) and (why := _brainless(not _g.handles(t))): raise HTTPException(422, why)
     from . import asks
     asks.mark(store, task_id)          # the owner picked it up again: it reports back like an ask
     from . import continuity, general
@@ -2810,6 +2814,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         from . import general
         return {'dispatch': 'assistant' if general.handles(task) else 'session', 'started': False, 'existing': True, 'taskId': task_id,
                 'ref': task_ref(task_id)}
+    if why := _no_brain(task, body): raise HTTPException(422, why)
     from . import asks
     asks.mark(store, task_id)          # the owner started it - the button or the assistant: it reports back like an ask
     try:
@@ -3997,6 +4002,26 @@ def start_session(store_, tid: int, agent: str = None, model: str = None, instru
 _STARTING, _STARTED, _STARTING_LOCK = {}, {}, threading.Lock()
 
 
+# NO AI, NO START (the owner, 2026-11-03): a coding start with no coding tool connected opened a session with nothing to run it. Every road -
+# Start, Send to agent, Run another agent, Continue, the Assistant, the phone - is refused here, BEFORE the task, its kind or a session
+# changes, with what is missing and where to connect it. A general agent needs any AI (capabilities.has_ai); a coding one a CLI here.
+def _brainless(coding: bool) -> str:
+    from . import demo, capabilities
+    if demo.enabled(): return ''
+    where = words.name('ai')
+    if coding and not hub_agents.cli_ready(store):
+        return f'{hub_agents.NO_AI} that can run a coding agent - connect a command-line AI (Claude Code, Codex) under {where}, then start it again'
+    if not coding and not capabilities.has_ai(store): return f'{hub_agents.NO_AI} to run this agent - connect one under {where}, then start it again'
+    return ''
+
+def _no_brain(task: dict | None, body: DispatchBody, kind: str = '') -> str:
+    "The refusal for a dispatch of `body` on `task` (None: a message not yet a task, going to `kind`) - the kind _dispatch_one would start."
+    from . import general
+    req = str(body.kind or kind or '').lower()
+    if req == 'coding' and str((task or {}).get('Kind') or '').lower() != 'coding' and not hub_agents.developer_mode(store): req = 'general'
+    return _brainless(req == 'coding' if req else not (task and general.handles(task)))
+
+
 def _dispatch_task_to_its_agent(tid: int, body: DispatchBody, background: BackgroundTasks) -> dict:
     with _STARTING_LOCK: gate = _STARTING.setdefault(int(tid), threading.Lock())
     waited = not gate.acquire(blocking=False)
@@ -4034,6 +4059,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         raise HTTPException(422, 'kind must be general or coding')
     # DEVELOPER MODE OFF, a coding hand-off is a general agent's (the owner, 2026-11-02) - a task already coding keeps its kind
     if requested == 'coding' and task_kind != 'coding' and not hub_agents.developer_mode(store): requested = 'general'
+    if why := _no_brain(task, body): raise HTTPException(422, why)
 
     # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue
     # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
@@ -4113,6 +4139,7 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     # ...a coding one with developer mode off is a general agent's (_dispatch_one says the same for a task that is not already coding)
     want = requested if requested in task_kinds.AGENT else 'coding'
     if want == 'coding' and not hub_agents.developer_mode(store): want = 'general'
+    if why := _no_brain(store.get_task(m['TaskId']) if m.get('TaskId') else None, body, want): raise HTTPException(422, why)
     tid = m.get('TaskId') or task_from_message(store, mid, ACTOR, want)
     try:
         out = _dispatch_task_to_its_agent(tid, body, background)

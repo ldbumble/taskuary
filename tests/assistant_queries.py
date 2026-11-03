@@ -530,6 +530,12 @@ T2 = 'TQ-0002'
 def watched(s):
     from taskuary import funnel, watch
     watch.watch(s, 2); funnel.invalidate()
+TEAM_GROUP = '120363000000000001@g.us'
+def wa_group(s):
+    "A connected WhatsApp with the team's group on its roster (wanames), never a chat Taskuary reads."
+    from taskuary import wanames
+    s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1}, 't')
+    s.set_setting(wanames.KEY, json.dumps({TEAM_GROUP: 'Northwind team'}), 't')
 def habits_row(s):
     "Two habits on the one row: one the Advisor adopted, one it asks about (habits.tick, as tests/test_habits_row.py builds it)."
     from datetime import datetime
@@ -958,6 +964,10 @@ AREA_NEW = [
     Q('new', 'get a coding agent to fix the nightly export', None,
       c('task.create_from_text', kind='coding', text='fix the nightly export', title='Nightly export fix'), 'new:agent:terminal', freq=4),
     Q('new', 'write to Erin about the Q3 numbers', None, c('task.create_from_text', kind='send', text='the Q3 numbers', to='Erin Blake'), 'new:send', freq=3),
+    # ...and on the channel named, to the chat found by its name (the owner, 2026-11-02: it opened on email with To empty)
+    Q('new', 'write to the Northwind team WhatsApp group that the installer is ready to go', None,
+      c('task.create_from_text', kind='send', channel='whatsapp', to='Northwind team', text='I have updated everything and the installer is ready to go'),
+      'new:send', freq=3, seed=wa_group),
     Q('new', 'set a goal: books closed by the 5th', None, c('task.create_from_text', kind='goal', text='books closed by the 5th'), 'new:goal', freq=2),
     Q('new', 'note to self: call the bank', None, c('task.create_from_text', kind='task', text='call the bank'), 'new:note', freq=3),
     Q('new', 'new dashbaord of open tasks by person', None, c('task.create_from_text', kind='dashboard', text='open tasks by person'), 'new:dashboard', freq=2,
@@ -1325,6 +1335,7 @@ def outcomes(out: dict, reads: list) -> list:
     if (p := out.get('pressed')) is not None: o.append(f"pressed:{p.get('verb') or ''}")
     if out.get('open'): o.append(f"open:{out['open']}")
     if out.get('new'): o.append(f"new:{out['new'].get('kind')}" + (f":{out['new'].get('how')}" if out['new'].get('how') else ''))
+    if (n := out.get('new') or {}).get('channel'): o.append(f"to:{n['channel']}:{n.get('to') or ''}")  # ...Send something's channel and To
     if (out.get('new') or {}).get('start'): o.append('press:new')               # ...and its own Send to agent pressed by the page (NewSheet `start`)
     d = (out.get('decision') or {}).get('verb')
     if d == 'next': o.append('next')

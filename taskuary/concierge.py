@@ -1625,7 +1625,36 @@ def routine_prefill(recurs: dict, text: str = '') -> tuple:
     return words, {'coding': bool(r.get('repo') or r.get('skill')), 'repo': r.get('repo') or '', 'skill': r.get('skill') or ''}
 
 
-def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '') -> dict:
+# WHO SEND SOMETHING GOES TO, AND ON WHAT (the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened New on email with
+# To empty - "did it wrong. it should be on whatsapp?"). The tool took no channel, so the card had none and dropped the `to` with it
+# (NewSheet applies a recipient only on a channel it was told), and a chat is sent to by its id, never the name the owner said. The
+# model names the channel and who; the name is found among the chats this install knows - a group's own name from the WhatsApp roster
+# too - and never guessed: two that fit, or none, leave To empty and say so.
+def send_to(store, channel: str, who: str) -> tuple:
+    "(channel, the id Send something's To takes, '' - or what kept To empty)."
+    from . import outbound, peoplesearch as ps, wanames
+    w, ch = ' '.join(str(who or '').split()), str(channel or '').strip().lower() or ('email' if str(who or '').strip() else '')
+    if not w: return ch, '', ''
+    if ch == 'email':
+        addr, miss = route_to(store, w)
+        return ch, addr, f'{miss}, so To is empty - pick them there.' if miss else ''
+    name = ch.title() if ch != 'whatsapp' else 'WhatsApp'
+    if ch not in outbound.send_channels(store): return ch, '', f'No {name} is connected to send from, so To is empty.'
+    rows = {r['to']: r.get('name') or '' for r in ps.known(store, ch)}
+    if ch == 'whatsapp': rows |= {j: n for j, n in wanames.names(store).items() if wanames.is_jid(j) and not wanames.bare(n, j)}
+    if w in rows: return ch, w, ''
+    words = ps._words(w)
+    hits = sorted(((s, j, n) for j, n in rows.items() if words and (s := ps.score(words, {'to': j, 'name': n}))), key=lambda x: -x[0])
+    exact = [(j, n) for _, j, n in hits if ps._words(n) == words]
+    top = exact or [(j, n) for s, j, n in hits if s == hits[0][0]]
+    if not top: return ch, '', f'No {name} chat or group called {w} is known here, so To is empty - pick it there.'
+    if len(top) > 1: return ch, '', f"{w} could be {' or '.join(n for _, n in top[:3])} on {name}, so To is empty - pick one there."
+    if outbound.refuse_input_chat(store, ch, top[0][0]): return ch, '', f'{top[0][1]} is a chat Taskuary reads, never one it writes to, so To is empty.'
+    return ch, top[0][0], ''
+
+
+def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = '', recurs: dict | None = None, lead: str = '',
+         channel: str = '') -> dict:
     # A JOB THAT REPEATS IS A ROUTINE (the owner, 2026-10-29): the model's `recurs` brings up New → Routine filled in - its clock, its job,
     # its repository and skill - and Set up with AI, then Save, are the owner's presses; nothing is saved from here
     if recurs: want, (text, runs) = 'workflow', routine_prefill(recurs, text)
@@ -1637,14 +1666,15 @@ def _new(store, tid: int, table: dict | None, want: str, text: str, to: str = ''
     # ...AND AN AGENT'S JOB IS PRESSED (the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"): its Send to agent is
     # the card's own press, made by the page once the card is filled (`start`, NewSheet) - every other tab still waits for the owner's
     start = kind == 'agent' and bool(str(text or '').strip())
-    said = (f"Wrote it into New and pressed {press}." if start else f"Wrote it into New - {press} there starts it.") + (f' {lead}' if lead else '')
+    ch, to, miss = send_to(store, channel, to) if kind == 'send' else ('', '', '')
+    said = (f"Wrote it into New and pressed {press}." if start else f"Wrote it into New - {press} there starts it.") + (f' {miss}' if miss else '') + (f' {lead}' if lead else '')
     # `line`: this line's id, which the card's press says again as what it started (said_started)
     line = record(store, tid, 'assistant', said)
-    # ...and Send something's recipient, as its own field takes it (NewSheet initialTo) - nothing goes before its Send
+    # ...and Send something's channel and recipient, as its own fields take them (NewSheet initialChannel, initialTo) - nothing goes before its Send
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
             'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line, **({'start': True} if start else {}),
                     **({'routine': runs} if recurs else {}),
-                    **({'to': str(to).strip()[:300]} if kind == 'send' and str(to or '').strip() else {})}}
+                    **({'channel': ch} if ch else {}), **({'to': to[:300]} if to else {})}}
 
 
 # A MEETING IS THE CALENDAR'S (the owner, 2026-10-28: "schedule a meeting" brought up Give an agent a job - "is that what we want?"). The one
@@ -3212,7 +3242,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if routes() and kind in ('task.create_from_text', 'task.setup'):
         want = str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general'
         return _new(store, tid, item, want if want in NEW_TAB else 'general', str(params.get('text') or text or '').strip(), str(params.get('to') or ''),
-                    recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None))
+                    channel=str(params.get('channel') or ''), recurs=recurs or (recurs_of({'objective': params.get('text') or text}) if want == 'routine' else None))
     if recurs or (kind == 'task.create_from_text' and params.get('kind') == 'routine'):
         say_ = f"A routine is set up on the desk, under {places.name('workflows')} - nothing was started."
         record(store, tid, 'assistant', say_); return {'say': say_, 'options': [], 'chips': [], 'decision': None}

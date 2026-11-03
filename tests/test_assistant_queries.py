@@ -103,6 +103,12 @@ class EverydayAsks(unittest.TestCase):
                     self.assertIn('press:new', r['ideal']['got'])
                 else: self.assertEqual(r['ideal']['say'], f"Wrote it into New - {drawn[r['q'].expect[4:]]} there starts it.")
 
+    def test_a_message_on_whatsapp_comes_up_on_whatsapp_to_the_group_named(self):
+        # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened Send something on email with To empty
+        from tests.assistant_queries import TEAM_GROUP
+        r = next(r for r in self.rows if r['q'].text.startswith('write to the Northwind team WhatsApp group'))
+        self.assertIn(f'to:whatsapp:{TEAM_GROUP}', r['ideal']['got']); self.assertNotIn('press:new', r['ideal']['got'])
+
     def test_the_assistant_starts_an_agent_and_tells_one_at_work_but_never_sends(self):
         # the owner, 2026-11-02: "it itself should not be the agent" - "start it" presses Send to agent, "tell the agent ..." reaches the
         # session as its next prompt, and a send in words still only lights (the page's Send, the row's Send)

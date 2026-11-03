@@ -26,7 +26,9 @@ PURPOSE = {
     'task.create_from_message': 'hand this message to an agent or put it on the list - `kind`: coding | general | task',
     'task.create_from_text':    ('a new job with no message behind it - `kind`: task (a to-do or reminder the owner does '
                                  'themselves, no agent) | general (a regular agent) | coding | send (a new message the owner starts, '
-                                 'to someone - `to`: their name or address; drafted in their voice for their Send, never sent from here) | '
+                                 'to someone - `channel`: email | whatsapp | telegram | teams | slack, the one they said; `to`: the name of '
+                                 'the person, chat or group as they said it (never the channel word), '
+                                 'or an address; drafted in their voice for their Send, never sent from here) | '
                                  'goal (an outcome with a date, its steps tasks) | dashboard (a page of numbers kept up to date), `text`. '
                                  # "generate an image for me" was drawn by the chat's own brain and said "created", with nothing shown (TQ-1251)
                                  'MAKING something - a picture, a flyer, a document, a spreadsheet - is a job for a general agent: write it '

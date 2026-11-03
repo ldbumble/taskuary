@@ -295,11 +295,31 @@ class EveryRoadIsOffered(unittest.TestCase):
 
     def test_new_send_something_comes_up_addressed(self):
         s = store()
+        notice(s, 0, 'Gail Moreno', 'gail@northwind.example', 'May close', 'Numbers attached.')
         out = call(s, 'task.create_from_text', kind='send', text='the May numbers', to='Gail Moreno')
-        self.assertEqual((out['new']['kind'], out['new']['to']), ('send', 'Gail Moreno'))
+        self.assertEqual((out['new']['kind'], out['new']['channel'], out['new']['to']), ('send', 'email', 'gail@northwind.example'))
         self.assertIn('Draft it', out['say'])
         for k in ('goal', 'dashboard'): self.assertEqual(call(s, 'task.create_from_text', kind=k, text='x')['new']['kind'], k)
         with concierge.delivering(concierge.PHONE), self.assertRaises(concierge.CallMiss): call(s, 'task.create_from_text', kind='send', text='x')
+
+    def test_send_something_on_whatsapp_comes_up_on_whatsapp_to_the_group(self):
+        # the owner, 2026-11-02: "write to the team WhatsApp group that ..." opened New on email with To empty - the tool took no channel,
+        # so the card had none and dropped the name with it; a chat is sent to by its id, found from its name, never guessed
+        from taskuary import wanames
+        s, grp = store(), '120363000000000001@g.us'
+        s.save_connector({'Type': 'whatsapp', 'Name': 'WhatsApp', 'Active': 1}, 't')
+        s.set_setting(wanames.KEY, json.dumps({grp: 'Northwind team', '120363000000000002@g.us': 'Northwind night shift'}), 't')
+        out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='everything is updated and the installer is ready', to='Northwind team')
+        self.assertEqual((out['new']['kind'], out['new']['channel'], out['new']['to']), ('send', 'whatsapp', grp))
+        self.assertEqual(out['say'], 'Wrote it into New - Draft it there starts it.')
+        self.assertNotIn('start', out['new'])                                                     # its Draft it stays the owner's press
+        # ...a group nobody knows opens on WhatsApp with To empty, and the line says it was not found
+        out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='x', to='Payworth billing')
+        self.assertEqual((out['new']['channel'], 'to' in out['new']), ('whatsapp', False))
+        self.assertIn('No WhatsApp chat or group called Payworth billing', out['say'])
+        # ...and two that fit equally are both named, neither picked
+        out = call(s, 'task.create_from_text', kind='send', channel='whatsapp', text='x', to='Northwind')
+        self.assertNotIn('to', out['new']); self.assertIn('Northwind team or Northwind night shift', out['say'])
 
     def test_page_only_buttons_bring_their_page_up(self):
         s = store()

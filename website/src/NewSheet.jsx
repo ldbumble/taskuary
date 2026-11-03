@@ -23,7 +23,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, firstPressOf, planTask, withDesktop } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
-import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
+import { emailRecipientOptions, normalizeEmails, recipientId, recipientLabel, recipientOptions, sendPrefill, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import SetupWithAi, { NEW_HASH } from "./SetupWithAi.jsx";
@@ -256,9 +256,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     api.get("/api/send-targets").then(({ data }) => {
       const list = data.data || [];
       setTargets(list); setTargetsRead(true);
-      const asked = initialChannel && list.some((t) => t.channel === initialChannel) ? initialChannel : "";
-      setChannel((c) => asked || c || list[0]?.channel || "");
-      if (asked && initialTo) { if (asked === "email") setEmailTo([initialTo]); else setTo(initialTo); }
+      const asked = sendPrefill(list, initialChannel, initialTo);
+      setChannel((c) => asked.channel || c || list[0]?.channel || "");
+      if (asked.emailTo.length) setEmailTo(asked.emailTo); else if (asked.to) setTo(asked.to);
       // NOTHING CAN SEND: New opened on Send something anyway, a whole form to fill that could only fail (the walk click-through,
       // 2026-10-17). It opens on the next tab that works; Send something stays one click away and says what it needs.
       if (!list.length) setKind((k) => (k === "send" && initialKind === "send" ? "agent" : k));

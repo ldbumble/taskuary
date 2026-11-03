@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions, validEmail,
+  emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions, sendPrefill, validEmail,
 } from "../src/recipientOptions.js";
 
 const options = Array.from({ length: 12 }, (_, i) => ({
@@ -36,4 +36,14 @@ test("email recipients can be selected, typed, pasted as a list, and deduplicate
 test("a typed address is offered alongside searchable known contacts", () => {
   assert.equal(emailRecipientOptions(options, "outside@example.com")[0], "outside@example.com");
   assert.deepEqual(emailRecipientOptions(options, "Northwind").map((x) => x.to), ["chat-10"]);
+});
+
+// the owner, 2026-11-02: the Assistant's "write to the team WhatsApp group" opened Send something on email with To empty
+test("Send something opens on the channel it was asked for, its chat in To", () => {
+  const grp = "120363000000000001@g.us", targets = [{ channel: "email", to: [] }, { channel: "whatsapp", to: [{ to: grp, name: "Northwind team" }] }];
+  assert.deepEqual(sendPrefill(targets, "whatsapp", grp), { channel: "whatsapp", to: grp, emailTo: [] });
+  assert.deepEqual(sendPrefill(targets, "whatsapp", ""), { channel: "whatsapp", to: "", emailTo: [] });
+  assert.deepEqual(sendPrefill(targets, "email", "gail@northwind.example"), { channel: "email", to: "", emailTo: ["gail@northwind.example"] });
+  // ...a channel this install cannot send on keeps the card's own default, and its recipient goes in no other box
+  assert.deepEqual(sendPrefill(targets, "telegram", "@erin"), { channel: "", to: "", emailTo: [] });
 });

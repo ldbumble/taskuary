@@ -5,7 +5,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import buttons, concierge, messengers, remote_assistant as ra, server
+from taskuary import buttons, concierge, continuity, messengers, remote_assistant as ra, server
 from taskuary.store import MemoryStore
 
 JID = '15550001234@s.whatsapp.net'
@@ -48,7 +48,10 @@ class OneRoadTests(unittest.TestCase):
              mock.patch('threading.Thread', side_effect=lambda target, **k: mock.Mock(start=target)):
             out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'use the new letterhead'}).json()
         self.assertEqual(out['kind'], 'general')
-        self.assertEqual(session.send_prompt.call_args[0][0], 'use the new letterhead')
+        # the note leads what Taskuary adds (nothing came in since, so no news): the owner's words, then Resume's (2026-11-03)
+        args, kw = session.send_prompt.call_args
+        self.assertEqual(args[0], 'FROM THE OWNER: use the new letterhead\n\n' + continuity.RESUME_PROMPT)
+        self.assertEqual((kw['brief'], kw['kept']), (True, True))
 
     def test_a_general_continue_says_a_turn_is_coming_until_its_thread_has_run(self):
         """The page reloads /assistant as soon as /continue-work answers - before the thread has a session - and polls only while

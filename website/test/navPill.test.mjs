@@ -20,11 +20,12 @@ test("Back and Next are the Nav pill: Back is the row's own, never a type, and t
   assert.ok(walkMove(BACK) && walkMove("next") && walkMove("floor:next") && !walkMove("setup:back") && !walkMove("done"));
 });
 
-test("on the first item no Back; on the last Next greyed - the walk's Next only (setup's own Back and Next stay)", () => {
+test("on the first item no Back; on the last Next stays live and says it ends the walk (setup's own Back and Next stay)", () => {
   assert.equal(rowOf({ ref: "", list: [...task, next] }).back, null, "nothing above: no Back registered, none drawn");
   const last = rowOf({ ref: "", list: [...task, back, next], end: true });
-  // ...greyed, never gone (the owner, 2026-10-30: "always keep the back and next button but grey them out if not applicable")
-  assert.equal(last.next.id, "next", "the last one: Next stands"); assert.equal(last.next.disabled, true, "...greyed"); assert.equal(last.back.id, BACK);
+  // ...live, never greyed (the owner, 2026-11-02: "You can't mark read on the final FYI?"): Next there reads it and ends the walk
+  assert.equal(last.next.id, "next", "the last one: Next stands"); assert.equal(last.next.disabled, false, "...live"); assert.match(last.next.title, /ends the walk/);
+  assert.equal(last.back.id, BACK);
   const setup = rowOf({ ref: "", list: [v("setup:back", "next", { label: "Back" }), v("setup:next", "decide", { tone: "p" })], end: true });
   assert.equal(setup.next.id, "setup:back", "setup's step back is not the walk's Next");
 });

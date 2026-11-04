@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.26 - 2026-11-04
+
+- The owner's exact words go under YOU; what the Assistant adds is Taskuary's, folded
+- A sign-in form that also asks for a third box says so, instead of calling the saved password wrong
+- The vault keeps the other boxes a sign-in form asks for, and fills them by their label
+- An approved click the page refuses tells the agent and ends the held act, instead of a raw refusal under Approve
+- A sign-in answered by Taskuary itself clears from the open task without a reload
+- Two poll tests follow the read made while the agent waits on the page; the new browser test joins the list
+
 ## 0.3.10.25 - 2026-11-03
 
 - A run cut off while asking the owner reads as still asking, not stopped

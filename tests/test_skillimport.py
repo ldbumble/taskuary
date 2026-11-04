@@ -303,22 +303,6 @@ class SavingTests(unittest.TestCase):
         self.assertEqual(row['Kind'], 'analysis')
         self.assertIn('indemnity clause', s.get_doc(agents.profile_document(s, 'nda-triage')) or '')
 
-    def test_ticked_reaches_the_roster_as_ONE_line(self):
-        from taskuary import agents
-        s = MemoryStore()
-        skillimport.save(s, self._got(), enabled=True)
-        roster = agents.roster(s)
-        self.assertIn('nda-triage', roster)
-        self.assertEqual(len([l for l in roster.splitlines() if 'nda-triage' in l]), 1)
-        self.assertIn('signed as-is', roster)
-
-    def test_unticked_is_saved_and_never_offered_to_triage(self):
-        from taskuary import agents
-        s = MemoryStore()
-        skillimport.save(s, self._got(), enabled=False)
-        self.assertTrue(s.get_agent('nda-triage'))          # imported
-        self.assertNotIn('nda-triage', agents.roster(s))    # not offered
-
     def test_importing_twice_does_not_make_two(self):
         s = MemoryStore()
         skillimport.save(s, self._got(), enabled=True)
@@ -333,21 +317,11 @@ class SavingTests(unittest.TestCase):
         skillimport.save(MemoryStore(), self._got(), enabled=True)
         self.assertEqual(len(playbooks.list_all()), before)
 
-    def test_a_verbose_purpose_does_not_eat_half_the_roster(self):
-        """A carry-forward from Task 3's review: with no model, `purpose` is the skill's raw
-        `description`, which can be a multi-sentence folded block. The 2000-char roster cap
-        (triage.py) is a budget shared by every worker, so one import must not crowd the rest
-        out - bounded at roster-ASSEMBLY time (agents.roster), not at save, since save has no
-        idea how many other workers are competing for that budget."""
-        from taskuary import agents
+    def test_a_verbose_purpose_is_saved_whole(self):
+        """With no model, `purpose` is the skill's raw `description`, which can be a multi-sentence folded block:
+        save keeps it whole, so a profile editor or the starter doc can still show it."""
         s = MemoryStore()
         skillimport.save(s, self._got(purpose='x' * 900), enabled=True)
-        s.upsert_agent('another-worker', 'general', 'cli', '{"purpose": "handles the mail", "triage_enabled": true}')
-        roster = agents.roster(s)
-        self.assertLess(len(roster), 1000)
-        self.assertIn('another-worker', roster)             # still visible, not crowded off the end
-        # the full purpose is not lost - only the roster line is bounded - so a profile editor or
-        # the starter doc can still show it whole
         row = s.get_agent('nda-triage')
         prof = __import__('json').loads(row['Config'])
         self.assertEqual(len(prof['purpose']), 900)
@@ -412,55 +386,6 @@ class OrdinaryProfileTests(unittest.TestCase):
             resp = TestClient(server.app).post('/api/skills/import', json={'skills': [{**self.GOT, 'name': 'triage'}]})
         self.assertEqual(resp.json()['clashed'][0]['doc'], 'triage')
         self.assertEqual(cfg['agents'], {}); self.assertFalse(saved.called)
-
-
-class WhatTriageSeesTests(unittest.TestCase):
-    """The router reads ONE LINE per worker; the session it picks receives the whole document. The
-    Docs page shows that line, or the reason there is none, from the SAME function roster() is built
-    from - the chip used to count `triage_enabled` in JSX and called CODING.md "on the roster"."""
-    def _rows(self):
-        s = MemoryStore()
-        s.upsert_agent('coding', 'coding', 'cli', '{}')
-        s.upsert_agent('quiet', 'general', 'cli', '{"purpose": "handles the mail", "triage_enabled": false}')
-        s.upsert_agent('blank', 'general', 'cli', '{"purpose": ""}')
-        s.upsert_agent('loud', 'general', 'cli', json.dumps({'purpose': 'x' * 500}))
-        skillimport.save(s, {'name': 'nda-triage', 'purpose': 'signs NDAs', 'body': 'b', 'kind': 'analysis'}, enabled=True)
-        return s, {a['Name']: a for a in s.list_agents()}
-
-    def test_each_reason_is_named_and_a_seen_worker_has_its_exact_line(self):
-        from taskuary import agents
-        s, rows = self._rows()
-        line, why, _ = agents.roster_line(s, rows['nda-triage'])
-        self.assertEqual((line, why), ('- nda-triage: signs NDAs', ''))
-        for name, word in (('coding', 'coding'), ('quiet', 'Can be given new work'), ('blank', 'no purpose')):
-            line, why, _ = agents.roster_line(s, rows[name])
-            self.assertEqual(line, '', name); self.assertIn(word, why, name)
-        line, why, _ = agents.roster_line(s, {**rows['nda-triage'], 'Active': 0})
-        self.assertEqual((line, why), ('', 'switched off'))
-
-    def test_the_shown_line_is_the_truncated_one_the_router_gets(self):
-        from taskuary import agents
-        s, rows = self._rows()
-        line, _, _c = agents.roster_line(s, rows['loud'])
-        self.assertTrue(line.endswith('…')); self.assertLess(len(line), 230)
-        self.assertIn(line, agents.roster(s))                  # byte for byte what the router reads
-
-    def test_roster_is_exactly_the_lines_this_gives(self):
-        from taskuary import agents
-        s, rows = self._rows()
-        lines = [l for l, *_ in (agents.roster_line(s, a) for a in s.list_agents()) if l]
-        self.assertEqual(agents.roster(s), '\n'.join(lines))
-        self.assertEqual(len(lines), 2)                        # loud and nda-triage; not coding, quiet or blank
-
-    def test_the_agents_endpoint_carries_it(self):
-        s, rows = self._rows()
-        with mock.patch.object(server, 'store', s):
-            data = TestClient(server.app).get('/api/agents').json()['data']
-        by = {r['Name']: r['roster'] for r in data}
-        self.assertEqual(by['nda-triage'], {'line': '- nda-triage: signs NDAs', 'reason': '', 'code': ''})
-        self.assertEqual(by['coding']['line'], ''); self.assertIn('coding', by['coding']['reason'])
-        # the word a chip can switch on: "not routed" was wrong for exactly this row
-        self.assertEqual(by['coding']['code'], 'coding')
 
 
 class FetchByLinkTests(unittest.TestCase):

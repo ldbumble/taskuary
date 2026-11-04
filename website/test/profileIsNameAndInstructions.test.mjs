@@ -9,8 +9,7 @@ const pageOf = panel.slice(panel.indexOf("export const AgentsPage"));
 
 test("the profile editor has no provider or model field, and sends neither", () => {
   assert.doesNotMatch(pageOf, /Model provider|Model name|Autocomplete|providerLabel|modelOptions|draft\.provider|draft\.model/);
-  assert.match(panel, /const BLANK_PROFILE = \{ name: "", purpose: "", kind: "general", rulesDoc: "", triageEnabled: true \};/);
-  assert.match(pageOf, /triage_enabled: draft\.triageEnabled \};/);
+  assert.match(panel, /const BLANK_PROFILE = \{ name: "", purpose: "", kind: "general", rulesDoc: "" \};/);
 });
 
 test("Save needs only a new name and a purpose", () => {

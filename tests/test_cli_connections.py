@@ -75,7 +75,6 @@ def test_connection_edits_reach_all_profiles_and_provider_switch_is_independent(
     assert 'light_model' not in research
     assert json.loads(store.get_agent('analyst')['Config'])['model'] == 'opus'
     assert json.loads(store.get_agent('coding')['Config'])['cmd'] == 'claude'
-    assert '- researcher:' in agents.roster(store)
 
 
 def test_settings_model_edit_keeps_shared_command_reference():

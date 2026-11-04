@@ -38,7 +38,6 @@ class RoleTests(unittest.TestCase):
         self.assertNotIn('cmd', cfg['agents']['ap'])                    # a profile carries no CLI...
         self.assertEqual(json.loads(a['Config'])['cmd'], 'claude')      # ...its row runs on the default brain: runnable on day one
         self.assertIn('vendor asks where their money is', s.get_doc('ap'))
-        self.assertNotIn('- ap:', agents.roster(s))
         self.assertEqual(sorted(r['playbooks_added']), ['portal-bill-approvals', 'vendor-payment-inquiry'])
         self.assertEqual(s.get_setting('default_profile') or '', '')
         for k in ('default_profile', 'default_was', 'mail_routed', 'on_roster'): self.assertNotIn(k, r)
@@ -243,7 +242,7 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         r = self.run_card(s, cfg, p)
         self.assertEqual(r['status'], 'done')
         self.assertFalse(json.loads(s.get_agent('ap')['Config'])['triage_enabled'])
-        self.assertNotIn('- ap:', agents.roster(s)); self.assertEqual(s.get_setting('default_profile') or '', '')
+        self.assertEqual(s.get_setting('default_profile') or '', '')
         self.assertIn('https://portal.example', json.loads(s.get_source(r['outcome']['workflow_id'])['ConfigJson'])['prompt'])
         from taskuary import concierge
         said = concierge._outcome_line('role.apply', p['params'], r['outcome'])
@@ -257,7 +256,6 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         self.assertNotIn('route_mail', p['params']); self.assertNotIn('Your mail', p['say'])
         self.assertEqual(self.run_card(s, cfg, p)['status'], 'done')
         self.assertEqual(s.get_setting('default_profile') or '', '')
-        self.assertNotIn('- ap:', agents.roster(s))
 
     def test_a_role_nobody_ships_is_answered_with_the_ones_there_are(self):
         s, _ = setup()

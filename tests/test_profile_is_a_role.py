@@ -23,24 +23,6 @@ def store():
     return s
 
 
-def named(roster: str) -> list:
-    return [ln.split(':')[0][2:] for ln in roster.splitlines() if ln.startswith('- ')]
-
-
-class TheRosterTests(unittest.TestCase):
-    def test_roster_offers_no_coding_profile(self):
-        for cli in ('coding', 'codex', 'copilot'):
-            self.assertNotIn(cli, named(hub_agents.roster(store())), f'{cli} is a coding role and must not be a triage choice')
-
-    def test_roster_offers_every_general_role(self):
-        self.assertEqual(sorted(named(hub_agents.roster(store()))), ['analyst', 'researcher', 'trader'])
-
-    def test_legacy_cli_kind_is_coding_too(self):
-        s = store()
-        s.upsert_agent('opencode', 'cli', 'cli', json.dumps({'cmd': 'opencode', 'purpose': 'Write code.'}))
-        self.assertNotIn('opencode', hub_agents.roster(s))
-
-
 class WhichRoleTests(unittest.TestCase):
     def test_coding_always_takes_the_coding_role(self):
         """Written, not left implied: the `agent:` prefix is what puts the row in the pipe's

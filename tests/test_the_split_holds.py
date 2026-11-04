@@ -41,13 +41,6 @@ CFG = {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'
 
 
 class TriageOnlyEverNamesARole(unittest.TestCase):
-    def test_no_brain_can_reach_the_roster(self):
-        """Structural, not validated after the fact: the wrong answer is not in the menu."""
-        s = store()
-        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
-        offered = [l.split(':')[0][2:] for l in hub_agents.roster(s).splitlines() if l.startswith('- ')]
-        self.assertEqual(sorted(offered), ['analyst', 'researcher'])
-
     def test_a_coding_verdict_lands_on_the_coding_role_whatever_it_named(self):
         s = store()
         for named in ('copilot', 'analyst', 'codex', ''):

@@ -2258,6 +2258,8 @@ def _assistant_payload(task_id: int, session=None):
             # by Stop and save - which closed the agent's browser, and then Approve said "the agent's browser is closed"
             'browserActs': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
                                                    "ORDER BY ReviewId", (task_id,)) if _proposals._action(r) in _proposals.HELD_ACTS],
+            # triage's reading of the thread (who asks what, the owner's part, the mails aside): None before the first verdict
+            'thread': store.task_thread(task_id),
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')

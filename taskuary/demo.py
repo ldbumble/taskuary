@@ -729,6 +729,9 @@ def seed(store) -> int:
         store.add_comment(gl, OWNER.split()[0] if role == 'user' else 'assistant',
                           general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE, body)
     refs['gl'] = gl
+    store._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({
+        'asking': f'{marcus[0]} wants the August export reconciled against the bank feed before Thursday', 'your_part': 'Review what the agent flags',
+        'others': [], 'asks': [{'mid': gm, 'about': 'reconcile and flag mismatches'}], 'aside': [], 'on_you': ['Decide how to treat the inter-company transfers']}), gl))
     # ONE GOAL (spec 2026-10-12): an outcome with a date, its steps tasks of their own - one done by a coding agent, one waiting
     # on a person past its day, the rest not started. Dana's census migration.
     g = f.task(title='Migrate the census export off the old portal', status='open', kind='task',
@@ -767,6 +770,15 @@ def seed(store) -> int:
         m = f.message(task_id=audit, subject=subject, body=body, from_name=priya[0], from_email=priya[1],
                       sent_at=f.ago(hours=hours), conversation_id='email:year-end-audit')
         f.route(m, audit, 'create' if n == 0 else 'attach', 'a request with a list and a date' if n == 0 else 'same conversation thread')
+        audit_mids = [*(audit_mids if n else []), m]
+    # triage's reading of the thread, as the verdict's `thread` leaves it on the task (what Came from and the agent's chat open with)
+    store._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({
+        'asking': f'{priya[0]} wants three documents for the auditors by the 15th', 'your_part': 'Gather the bank reconciliations, the AP ageing and the asset register',
+        'others': [{'who': priya[0], 'did': 'added the fixed asset register'}], 'asks': [{'mid': audit_mids[2], 'about': 'all of it by the 15th'}],
+        'aside': [{'mid': audit_mids[1], 'why': 'an addition to the list'}], 'on_you': ['Send the pack before the 15th']}), audit))
+    store._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({
+        'asking': f'{ruth[0]} asks whether AP still moves over on Thursday', 'your_part': 'Confirm the date', 'others': [], 'aside': [],
+        'asks': [], 'on_you': ['Answer so she can tell the team']}), refs['cutover']))
     f.filed_fyi(subject='Vendor portal maintenance window, Sunday 02:00-04:00')
     # the code lane: GitHub is a source like any other - an issue is an ask, a PR is a notice
     gh = f.task(title='northwind/importers#214 - census sync fails when a site has no manager',

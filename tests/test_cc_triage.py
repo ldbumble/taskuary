@@ -111,7 +111,8 @@ class AddressingTests(unittest.TestCase):
         # they are not sent a second time on their own. "Is it coding, first" was a code-written block here until
         # 2026-10-09; it is the guide's section 4 now, so nothing else may be added - but the watch verdict's own bullet, which
         # defines an answer the schema offers and a document written before it never names (2026-11-03)
-        self.assertEqual(added, '\n\n' + triage.WATCH + '\n\n' + triage.TASK_FIELDS)
+        # ...and the thread reading's bullet, which defines a field every verdict carries and weighs nothing (2026-11-04)
+        self.assertEqual(added, '\n\n' + triage.THREAD + '\n\n' + triage.WATCH + '\n\n' + triage.TASK_FIELDS)
         self.assertEqual(seen['system'].count(triage.URGENT), 1)
         self.assertNotIn('KIND, DECIDED FIRST', seen['system'])
         for judgement in ('prefer fyi', 'escalate', 'addressed_to_you'):

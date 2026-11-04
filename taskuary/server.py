@@ -2218,7 +2218,7 @@ def _assistant_payload(task_id: int, session=None):
     if not general.handles(task):
         raise HTTPException(422, 'assistant view is available for general, research, marketing, and triage tasks')
     session = session or general.session_for(task_id)
-    messages = general.history(store, task_id)
+    messages = general.shown_history(store, task_id)
     # each page or picture belongs to the answer that made it: the turn files its answer after what it published or showed,
     # so it is the first answer stamped at or after it (both stamps are store._now()); one with none yet waits at the foot
     answers = [(str(m.get('createdAt') or ''), m['id']) for m in messages if m['role'] == 'assistant']

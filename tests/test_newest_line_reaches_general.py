@@ -62,6 +62,11 @@ def ended(tid):
     general.drop_session(tid)
 
 
+def before_first_turn(s, tid):
+    "The first mail came, and joined the task, before the first turn (worked() dates the turns 2026-11-02)."
+    for t in ('message', 'route'): s._exec(f"UPDATE {t} SET CreatedAt='2026-11-02 18:01' WHERE TaskId=?", (tid,))
+
+
 class NextTurn(unittest.TestCase):
     def setUp(self):
         self.brain, own = Brain(), general.start_session      # the router's start is a process boundary in tests: the same start, as the owner's
@@ -110,6 +115,32 @@ class NextTurn(unittest.TestCase):
         ingest._pass_general(s, tid, {**mail(**AGAIN), 'message_id': 9})
         self.assertIn(ASK, self.brain.turn)
         self.assertTrue(any(general.is_brief(c) and ASK in c['Body'] for c in s.list_comments(tid)))
+
+    def test_the_pane_shows_the_new_mail_in_its_senders_words(self):
+        "The overnight run, 2026-11-03: the second mail of a thread was readable only inside the folded 'Taskuary's instructions'."
+        s = store(); tid = worked(s)
+        before_first_turn(s, tid)
+        self.carried_on(s, tid)
+        shown = general.shown_history(s, tid)
+        first, carried = [m for m in shown if m.get('brief')][0], [m for m in shown if m.get('brief')][-1]
+        self.assertNotIn('mail', first)                                         # the opening brief's mail is Came from's
+        self.assertEqual([(x['who'], x['words']) for x in carried['mail']], [('Gail Moreno', ASK)])
+        self.assertEqual([m['content'] for m in shown], [m['content'] for m in general.history(s, tid)])      # the turns themselves unchanged
+
+    def test_a_mail_read_in_while_the_agent_worked_shows_on_the_turn_it_joined(self):
+        "Stored at 18:03, mid-turn, it waited for triage and was put on the task after the 18:05 answer - the turn it carried on is its."
+        s = store(); tid = worked(s)
+        before_first_turn(s, tid)
+        self.carried_on(s, tid)
+        s._exec("UPDATE message SET CreatedAt='2026-11-02 18:03' WHERE TaskId=? AND BodyText=?", (tid, ASK))
+        self.assertEqual([x['words'] for x in general.shown_history(s, tid)[-1]['mail']], [ASK])
+
+    def test_the_live_pane_shows_the_passed_in_mail_too(self):
+        s = store(); tid = worked(s)
+        general.start_session(s, tid, actor='router')
+        self.addCleanup(ended, tid)
+        ingest._pass_general(s, tid, {**mail(**AGAIN), 'message_id': 9})
+        self.assertEqual([x['who'] for x in general.shown_history(s, tid)[-1]['mail']], ['Gail Moreno'])
 
     def test_a_quick_conversation_is_asked_the_new_ask(self):
         s = store(); tid = worked(s)

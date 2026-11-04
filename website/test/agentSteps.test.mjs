@@ -32,6 +32,12 @@ test("a folder the shell fills in ($d) is never shown as its name: the agent's o
   assert.equal(describeCall("Bash", { command: "ls -la ~/Downloads/notes.zip", description: "Locate the zip in Downloads" }).summary, "Locate the zip in Downloads");
 });
 
+test("browser looks the agent described in its own words never read as 'Read 2 pages ()' (the browser-agent walk, 2026-11-03)", () => {
+  const call = (id, description) => ({ type: "tool_call", name: "Bash", detail: { tool_call_id: id, args: { command: "agent-browser snapshot -i", description } } });
+  const said = stepsOf([call("b1", "Look at the sign-in page"), call("b2", "Check the page again")], { keepStart: false }).filter(isWork).map((s) => s.summary);
+  assert.ok(said.length && said.every((s) => !/\(\s*\)/.test(s)), JSON.stringify(said));
+});
+
 const DIR = new URL("../../tests/fixtures/agent_steps/", import.meta.url);
 const trace = (b) => JSON.parse(fs.readFileSync(new URL(`${b}.trace.json`, DIR), "utf8"));
 const ANSWER = "The budget review is waiting on Gail Moreno's sign-off: TQ-1142 holds the thread, and the status board reads approvedTotal "

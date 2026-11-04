@@ -688,6 +688,7 @@ class SigninAddBody(BaseModel):
     user: str = ''
     password: str
     key: str = ''
+    fields: dict[str, str] = {}      # the other boxes its form asks for, by their label (a "Customer ID")
 
 
 # A SIGN-IN SAVED AHEAD OF TIME (the owner, 2026-11-03: "we probably should have space on connector to fill out what the system requires"):
@@ -699,7 +700,7 @@ def signin_add(body: SigninAddBody, request: Request):
     _owner_only(request, "the saved sign-ins are the owner's")
     site = signin.site_from(body.site)
     if not site: raise HTTPException(400, 'that is not a site a sign-in can be kept for - type its address, like portal.example.com')
-    try: signin.save(store, site, body.user.strip(), body.password, ACTOR, key=body.key.strip() or None)
+    try: signin.save(store, site, body.user.strip(), body.password, ACTOR, key=body.key.strip() or None, extra=body.fields or None)
     except ValueError as e: raise HTTPException(400, str(e))
     return {'ok': True, 'site': site}
 

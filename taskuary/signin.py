@@ -141,20 +141,32 @@ def _tables(store):
         # the authenticator key (2026-10-25) came a release after the table: a 0.3.9.34 home gains the column, its rows untouched
         if 'Totp' not in {r[1] for r in store.cx.execute('PRAGMA table_info(signin_vault)')}:
             store.cx.execute('ALTER TABLE signin_vault ADD COLUMN Totp TEXT')
+        # ...and the other boxes a site's form asks for (2026-11-04: a "Customer ID" beside the email and password), sealed as one JSON
+        if 'Extra' not in {r[1] for r in store.cx.execute('PRAGMA table_info(signin_vault)')}:
+            store.cx.execute('ALTER TABLE signin_vault ADD COLUMN Extra TEXT')
         store.cx.commit()
 
 
 def saved(store, site) -> dict | None:
     _tables(store)
-    return store._one('SELECT Site, User, Secret, Totp, SavedAt, LastUsed FROM signin_vault WHERE Site=?', (str(site or '').lower(),))
+    return store._one('SELECT Site, User, Secret, Totp, Extra, SavedAt, LastUsed FROM signin_vault WHERE Site=?', (str(site or '').lower(),))
 
 
 def listing(store) -> list:
     """Settings -> Saved sign-ins: the site, when it was saved, when it was last used, whether a code key is kept. Never the user
     name, the secret or the key."""
     _tables(store)
-    return [{'site': r['Site'], 'saved': r['SavedAt'], 'used': r['LastUsed'], 'code': bool(r['Totp'])}
-            for r in store._rows('SELECT Site, SavedAt, LastUsed, Totp FROM signin_vault ORDER BY Site')]
+    return [{'site': r['Site'], 'saved': r['SavedAt'], 'used': r['LastUsed'], 'code': bool(r['Totp']), 'fields': sorted(extra_of(r))}
+            for r in store._rows('SELECT Site, SavedAt, LastUsed, Totp, Extra FROM signin_vault ORDER BY Site')]
+
+
+def extra_of(row) -> dict:
+    "The other boxes a saved sign-in fills, {label: value}, opened from its seal - {} when it keeps none or it will not open here."
+    from . import vault
+    raw = vault.unseal((row or {}).get('Extra') or '') if (row or {}).get('Extra') else ''
+    try: d = json.loads(raw) if raw else {}
+    except ValueError: d = {}
+    return {str(k): str(v) for k, v in d.items() if str(k).strip() and str(v)} if isinstance(d, dict) else {}
 
 
 def _seal_key(key) -> str:
@@ -165,22 +177,26 @@ def _seal_key(key) -> str:
     return k
 
 
-def save(store, site, user, pw, by='owner', key=None):
+def save(store, site, user, pw, by='owner', key=None, extra=None):
     """Keep a sign-in for `site`, sealed. The site is the one the owner saw on the fill page - pinned there, at save time. `key`: an
-    authenticator key to keep with it; None keeps the one already saved (a changed password is not a new authenticator)."""
+    authenticator key to keep with it; None keeps the one already saved (a changed password is not a new authenticator). `extra`: the
+    other boxes its form asks for, {label: value} (a "Customer ID"); None keeps the ones already saved."""
     from . import vault
     site = str(site or '').lower()
     if not site or registrable(site) != site: raise ValueError('that is not a site a sign-in can be kept for')
     if not pw: raise ValueError('there is no password to keep')
     k = _seal_key(key) if key else None
+    ex = {str(a).strip()[:60]: str(b)[:256] for a, b in (extra or {}).items() if str(a).strip() and str(b)} if extra is not None else None
+    x = vault.seal(json.dumps(ex)) if ex else None
+    if x and not vault.sealed(x): raise ValueError('this computer has no keychain to seal it in, so it was not saved')
     u, p = vault.seal(user or '') if user else '', vault.seal(pw)
     # sealed or not at all: a password vault that falls back to plain text in the database is worse than none
     if not vault.sealed(p): raise ValueError('this computer has no keychain to seal it in, so it was not saved')
     _tables(store)
     old = saved(store, site) or {}
-    store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, Totp, SavedAt, SavedBy, LastUsed) VALUES (?,?,?,?,?,?,?)',
-                (site, u, p, k or old.get('Totp'), _now(), by, None))
-    for v in old.get('User'), old.get('Secret'), (old.get('Totp') if k else None): vault.forget(v)
+    store._exec('INSERT OR REPLACE INTO signin_vault (Site, User, Secret, Totp, Extra, SavedAt, SavedBy, LastUsed) VALUES (?,?,?,?,?,?,?,?)',
+                (site, u, p, k or old.get('Totp'), x if ex is not None else old.get('Extra'), _now(), by, None))
+    for v in old.get('User'), old.get('Secret'), (old.get('Totp') if k else None), (old.get('Extra') if ex is not None else None): vault.forget(v)
     store.audit('signin', 0, 'signin_saved', by, detail={'site': site, **({'code': True} if k else {})})
 
 
@@ -355,7 +371,8 @@ def _auto(store, tid, sid, site, rid, fill):
         user, pw = vault.unseal(row.get('User') or '') or '', vault.unseal(row.get('Secret') or '')
         if not pw: raise SignInError('the saved password could not be opened on this computer')
         code = _code_of(row.get('Totp'))
-        got = fill(sid, site, user, pw, **({'code': code} if code else {})) or {}
+        ex = extra_of(row)
+        got = fill(sid, site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
         _used(store, site)
         _audit(store, tid, site, 'vault', True, code=bool(got.get('code')) if code else None)
         _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
@@ -396,7 +413,8 @@ def by_owner(store, tok, user, pw, keep: bool, fill=None, key: str = '') -> dict
     tid, site = r['TaskId'], r['Site']
     if not pw: raise ValueError('type the password')
     code = _code_of(key or (saved(store, site) or {}).get('Totp'))
-    try: got = (fill or type_in)(r['Sid'], site, user, pw, **({'code': code} if code else {})) or {}
+    ex = extra_of(saved(store, site))            # the other boxes the site's saved sign-in keeps, filled with what is typed here
+    try: got = (fill or type_in)(r['Sid'], site, user, pw, **({'code': code} if code else {}), **({'extra': ex} if ex else {})) or {}
     except NotAccepted as e:
         # nothing saved, nobody told "signed in" - the ask stays, and the form comes back on a fresh link with the reason
         _audit(store, tid, site, 'typed', False, str(e))
@@ -484,7 +502,11 @@ CAPTURE = r'''(() => {
     const before = pw ? ins.slice(0, ins.indexOf(pw)) : ins;
     const user = before.filter((e) => texty(e) && e.value).pop();
     if ((!pw && !user) || typeof __tqSignin !== 'function') return;
-    try { __tqSignin(JSON.stringify({ u: user ? user.value : '', p: pw ? pw.value : '', href: location.href })); } catch (_) {}
+    // ...and the form's other boxes the owner filled (a "Customer ID"), by their label - kept with the sign-in, filled by it next time
+    const labelOf = (e) => { const r = e.getRootNode(), h = r && r.host, l = e.labels && e.labels[0];
+      return String((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || (h && (h.getAttribute('label') || h.getAttribute('aria-label'))) || e.name || '').trim().slice(0, 40); };
+    const o = {}; for (const e of before) if (texty(e) && e !== user && e.value && labelOf(e)) o[labelOf(e)] = e.value;
+    try { __tqSignin(JSON.stringify({ u: user ? user.value : '', p: pw ? pw.value : '', o, href: location.href })); } catch (_) {}
   };
   document.addEventListener('submit', grab, true);
   // composedPath: a key or a press inside a component's shadow root reaches the document retargeted to its host
@@ -507,6 +529,8 @@ def heard(tid, site: str, raw) -> bool:
     if cur.get('site') != site: cur.update(site=site, user='', pw='')
     if d.get('u'): cur['user'] = str(d['u'])[:256]
     if d.get('p'): cur['pw'] = str(d['p'])[:512]
+    if isinstance(d.get('o'), dict) and d['o']:
+        cur['extra'] = {str(k)[:60]: str(v)[:256] for k, v in list(d['o'].items())[:5] if str(k).strip() and str(v)}
     return True
 
 
@@ -520,7 +544,7 @@ def keep_typed(store, tid, site) -> bool:
     "The sign-in is past: seal what the owner typed for the site, and say so in one line. False when no password was typed."
     t = _TYPED.pop(tid, None) or {}
     if t.get('site') != site or not t.get('pw'): return False
-    try: save(store, site, t.get('user') or '', t['pw'], by='owner')
+    try: save(store, site, t.get('user') or '', t['pw'], by='owner', extra=t.get('extra') or None)
     except ValueError as e:
         store.add_comment(tid, 'taskuary', 'agent', f'Your {site} sign-in was not saved: {e}.'); return False
     store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site, where=words.name('agent_permissions')))
@@ -595,13 +619,14 @@ FIELDS = r'''(want) => {
     .test(words(e).trim());
   const otp = ins.find((e) => e.autocomplete === 'one-time-code') || (!pw && ins.find((e) => e !== user
     && ['text', 'tel', 'number', ''].includes(e.type) && !(e.maxLength > 0 && e.maxLength < 4) && coded(e))) || null;
-  const el = want === 'password' ? pw : want === 'user' ? user : want === 'otp' ? otp : null;
-  if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
-  if (el && want === 'otp') el.setAttribute('data-tq-code', '');
-  // ...AND WHAT ELSE THE FORM ASKS: a box beside the user name and password left empty - a "Customer ID", a company code. Taskuary keeps
-  // only the two, so a form that needs a third was refused and the saved password blamed (the browser-agent walk, 2026-11-04)
+  // ...AND WHAT ELSE THE FORM ASKS: a box beside the user name and password - a "Customer ID", a company code - named by its label. The
+  // vault fills the ones it keeps (`other:<label>`); one left empty is named when the form stays up, never the password blamed (2026-11-04)
   const labelOf = (e) => { const h = hostOf(e), l = e.labels && e.labels[0];
     return String((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || (h && (h.getAttribute('label') || h.getAttribute('aria-label'))) || e.name || '').trim().slice(0, 40); };
+  const otherEl = String(want).startsWith('other:') ? ins.find((e) => texty(e) && e !== user && labelOf(e).toLowerCase() === String(want).slice(6).toLowerCase()) : null;
+  const el = want === 'password' ? pw : want === 'user' ? user : want === 'otp' ? otp : otherEl;
+  if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
+  if (el && want === 'otp') el.setAttribute('data-tq-code', '');
   const others = pw ? ins.filter((e) => texty(e) && e !== user && e !== otp && !e.value).map(labelOf).filter(Boolean) : [];
   return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others,
            focused: !!el && deepActive() === el };
@@ -709,7 +734,8 @@ def _guard(c: Cdp, site: str, want: str) -> dict:
     if not f.get('top') or not on_site(f.get('href'), site):
         raise SignInError(f'the page is no longer on {site} - nothing was typed')
     if want and not f.get('focused'):
-        raise SignInError(f'the {({"password": "password", "otp": "code"}).get(want, "user name")} box on {site} could not be found')
+        what = want[6:] if want.startswith('other:') else ({"password": "password", "otp": "code"}).get(want, "user name")
+        raise SignInError(f'the {what} box on {site} could not be found')
     return f
 
 
@@ -735,9 +761,21 @@ def _await_code(c: Cdp, site: str, code, wait: float) -> bool:
     return False
 
 
-def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, code=None, code_wait: float = CODE_WAIT) -> dict:
+def _fill_others(c: Cdp, site: str, f: dict, extra: dict) -> list:
+    "Type the saved other boxes the page shows (by label, case aside); the labels of the ones it shows that none was saved for."
+    keep = {str(k).strip().lower(): v for k, v in (extra or {}).items()}
+    left = []
+    for label in f.get('others') or []:
+        v = keep.get(str(label).strip().lower())
+        if v is None: left.append(label); continue
+        _guard(c, site, f'other:{label}'); c.type(v)
+    return left
+
+
+def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, code=None, code_wait: float = CODE_WAIT, extra=None) -> dict:
     """Type a sign-in into the page `c` is on - the whole of the checking lives here, so a test drives it with a stand-in page.
-    `code`: makes the authenticator code, when one is kept. {'code': whether one was typed}."""
+    `code`: makes the authenticator code, when one is kept. `extra`: the other boxes the site's form asks for, {label: value}.
+    {'code': whether one was typed, 'others': the boxes it asked for that were left empty}."""
     f = _guard(c, site, '')
     # ONLY A CODE PROMPT: the session was signed in and the site asks for its second factor again - the code alone goes in
     if code and f.get('otp') and not f.get('password'): return {'code': _type_code(c, site, code)}
@@ -747,6 +785,7 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
         other = [o for o in f.get('frames') or [] if str(o).startswith(('http://', 'https://')) and not on_site(o, site)]
         raise SignInError(f'the sign-in form is inside a frame from another site ({registrable(urlsplit(other[0]).hostname) or "unknown"}) - '
                           'sign in yourself in the pane' if other else f'there is no sign-in form on the {site} page')
+    left = _fill_others(c, site, f, extra)
     if f.get('user') and user:
         _guard(c, site, 'user'); c.type(user)
         if not f.get('password'):                            # a two-step sign-in: the user name first, then its own password page
@@ -760,12 +799,15 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
                     if 'no longer on' in str(e): raise SignInError(f'{site} sent the sign-in to another site - sign in yourself in the pane')
                     f = {}
     elif not f.get('password'): raise SignInError(f'the {site} page asks for a user name and none is saved')
-    _guard(c, site, 'password')
+    pf = _guard(c, site, 'password')
+    if pf.get('others') and set(map(str.lower, pf['others'])) - set(map(str.lower, left)):
+        left = left + _fill_others(c, site, {'others': [o for o in pf['others'] if o not in left]}, extra)   # a password page's own
+        _guard(c, site, 'password')                          # ...and the password box focused again before its last look
     s = c.js(STILL) or {}                                    # the last look, with the box focused: still this site, still a password box
     if not s.get('password') or not on_site(s.get('href'), site): raise SignInError('the page changed under the sign-in - nothing was typed')
     c.type(pw)
     c.enter()
-    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': list(f.get('others') or [])}
+    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': left}
 
 
 REJECT_WAIT = 4.0               # after SETTLE: how long a site is given to take its password box away before the password is called refused
@@ -792,13 +834,13 @@ def refused(site: str, others=None) -> str:
     return f'{site} did not accept that password'
 
 
-def type_in(sid: str, site: str, user: str, pw: str, code=None) -> dict:
+def type_in(sid: str, site: str, user: str, pw: str, code=None, extra=None) -> dict:
     """Sign the session's browser in on `site`: the screencast held while it types, the socket closed after."""
     from . import browserview
     with browserview.filling(sid):
         c = connect(sid)
         try:
-            out = fill_page(c, site, user, pw, code=code)
+            out = fill_page(c, site, user, pw, code=code, extra=extra)
             # THE PASSWORD DOES NOT STAY IN THE PAGE for the agent to read back (`agent-browser eval` on the box) when the site keeps
             # the form up - a wrong password, a captcha, a page that submits by script. Whatever box still holds it is emptied.
             time.sleep(SETTLE)

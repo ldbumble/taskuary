@@ -111,3 +111,23 @@ def test_no_reading_no_change():
     s, tid, ids = thread()
     rid = drafted(s, tid, ids, 'Hi Ray - done.'); r = s.get_review(rid)
     assert r['AnswersMid'] is None and not r['DraftWhy'] and r['MessageId'] == ids[2]
+
+
+def test_no_reading_outbound_last_keeps_the_prompt_from_the_last_message():
+    from taskuary import responder
+    s, tid, ids = thread()
+    s.add_message({'TaskId': tid, 'ExternalId': 'e9', 'ConversationId': 'conv-1', 'Channel': 'email', 'SourceName': 'alex@northwind.example', 'Direction': 'out',
+                   'Subject': 'Export', 'FromName': 'Alex Doyle', 'FromEmail': 'alex@northwind.example', 'SentAt': '2026-11-04 09:30:00', 'BodyText': 'On it.',
+                   'Status': 'routed', 'RecipientsJson': json.dumps({'to': ['ray@northwind.example']})})
+    seen = []
+    responder.draft_reply(s, tid, llm=lambda sys, user, **k: seen.append(user) or 'Done.')
+    assert 'From: Alex Doyle <alex@northwind.example>' in seen[0]
+
+
+def test_a_wrapped_why_is_all_taken_off():
+    from taskuary import responder
+    nl = chr(10)
+    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'WHY: he asked' + nl + 'for a date.', 's', 'u', 10) == ('Hi.', None, 'he asked for a date.')
+    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'FILES PROMISED: a.pdf' + nl + 'WHY: one' + nl + 'two', 's', 'u', 10) == ('Hi.', ['a.pdf'], 'one two')
+    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'WHY: one' + nl + 'two' + nl + 'FILES PROMISED: a.pdf', 's', 'u', 10) == ('Hi.', ['a.pdf'], 'one two')
+    assert responder._answer(lambda *a, **k: 'NO REPLY' + nl + 'WHY: nothing owed' + nl + 'to them.', 's', 'u', 10) == ('NO REPLY', None, 'nothing owed to them.')

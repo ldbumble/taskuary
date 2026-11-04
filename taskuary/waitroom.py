@@ -23,6 +23,19 @@ WATCH_EVERY = 10          # seconds between looks - delivery lands within IDLE_W
 MAX_BATCH = 6000          # chars typed in one go; a TUI paste past this is asking for dropped frames
 
 
+# A NOTE THE ASSISTANT PASSED ON keeps the owner's own words and what the Assistant added, apart (general.relayed): one row, so the drip
+# never splits them across two stops
+SEP = '\x1f'
+def parts(note) -> tuple:
+    "(the owner's words, what the Assistant added - '' when nothing)"
+    o, _, extra = str(note or '').partition(SEP)
+    return o.strip(), extra.strip()
+def said(note) -> str:
+    "A note as one line for the agent: the owner's words, then what the Assistant added."
+    o, extra = parts(note)
+    return f'{o} ({extra})' if extra else o
+
+
 def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: bool = True) -> str:
     """The notes as one typed message. Flattened to one line: in a TUI a newline is Enter.
     `remaining` = notes still waiting behind these (the drip): the agent is told the next one
@@ -36,8 +49,14 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: b
             'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
     tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
             'finish this and stop, do not ask for it.)' if remaining else '')
-    said = ' '.join(f'({i}) {str(x.get("Note") or "").strip()}' for i, x in enumerate(notes, 1)) if words else ''
-    return ' '.join((head + ' ' + said + tail).split())[:MAX_BATCH]
+    each = ' '.join(f'({i}) {said(x.get("Note"))}' for i, x in enumerate(notes, 1)) if words else ''
+    extra = '' if words else ' '.join(f'{general_relay()} ({i}) {e}' for i, x in enumerate(notes, 1) if (e := parts(x.get('Note'))[1]))
+    return ' '.join((head + ' ' + each + extra + tail).split())[:MAX_BATCH]
+
+
+def general_relay() -> str:
+    from .general import RELAY
+    return RELAY
 
 
 # A GENERAL AGENT'S CHAT SAYS WHO SAID WHAT (the overnight run, 2026-11-03): the batch typed into its conversation was filed whole as the
@@ -48,7 +67,7 @@ def to_general(store, tid, session, notes: list, after_restart: bool = False, re
     store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, batch(notes, after_restart, remaining, words=False))
     for x in notes:
         store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') != 'router' else general.BRIEF_ACTOR, general.USER_TYPE,
-                          str(x.get('Note') or '').strip())
+                          parts(x.get('Note'))[0])
     threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining),), kwargs={'kept': True, 'brief': True},
                      daemon=True).start()
 
@@ -123,10 +142,12 @@ def state(store, tid: int) -> tuple:
     return ('asking' if req or term.chooser_in(_screen(t)) else 'parked'), t
 
 
-def add(store, tid: int, note: str, actor: str = 'owner') -> dict:
+def add(store, tid: int, note: str, actor: str = 'owner', owner: str = None) -> dict:
     """Queue one note on a task. An agent already parked gets it at once; otherwise it waits."""
     note = (note or '').strip()
     if not note: raise ValueError('empty note')
+    from .general import relayed
+    if (extra := relayed(owner, note)): note = f"{' '.join(str(owner).split())}{SEP}{extra}"     # the owner's words kept as typed
     if not store.get_task(tid): raise ValueError(f'no task {tid}')
     wid = store.add_waiting(tid, note, actor)
     store.audit('task', tid, 'waitroom_add', actor, detail={'wid': wid, 'chars': len(note)})
@@ -178,9 +199,10 @@ def deliver(store, tid: int) -> dict:
         # where it did not. They used to queue behind the question and never arrive at all - the card
         # said "Told the agent" over a session still parked on its own words (2026-09-07 live check).
         from . import workerstate as ws
-        text = notes[0]['Note'] if len(notes) == 1 else batch(notes, remaining=left)
+        own, extra = parts(notes[0]['Note']) if len(notes) == 1 else ('', '')
+        text = (extra or own) if len(notes) == 1 else batch(notes, remaining=left)
         who = notes[0].get('CreatedBy') or 'owner'
-        out = ws.answer_open(store, tid, text, who)
+        out = ws.answer_open(store, tid, text, who, owner=own if extra else None)
         # ...words that name none of a chooser's options are not typed into it: Enter would submit whatever is
         # highlighted (B12). The note keeps its place and the owner is told why; it waits for the chooser to go.
         if out.get('state') == 'not_a_choice':

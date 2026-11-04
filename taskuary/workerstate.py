@@ -435,7 +435,7 @@ def split_answers(text: str, qs: list) -> dict:
     return {q['request_id']: got.get(q['request_id'], words) for q in qs}
 
 
-def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') -> dict:
+def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', owner: str = None) -> dict:
     """Deliver the owner's answer to ONE outstanding request of the run that asked it (PW-139/141): once,
     to that run, and say what happened - delivered, resolved already, stale (the run changed),
     disconnected (no live worker: open the workspace), or failed."""
@@ -481,14 +481,18 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner') ->
                            + ' - or answer it in the terminal'}
         send = str(pick)
     try:
-        if hasattr(sess, 'send_prompt'): sess.send_prompt(send)
+        # ...a chat is handed the owner's own words, with what the Assistant added to them folded as Taskuary's (general.say_relayed)
+        if hasattr(sess, 'send_prompt'):
+            from . import general
+            general.say_relayed(sess, owner or send, send) if owner else sess.send_prompt(send)
         elif words and term.queue_codex(sess, send): pass
         else: term.type_into(sess, send)
     except Exception as e:
         store.add_comment(tid, actor, 'human', f'Answer to "{req["text"][:160]}": {text[:500]} - could not be delivered to {who}: {str(e)[:200]}')
         return {'delivered': False, 'state': 'failed', 'why': str(e)[:200]}
-    record(store, tid, sess.sid, 'answered', request_id=request_id, text=text, source='owner')
-    store.add_comment(tid, actor, 'human', f'Answered "{req["text"][:160]}": {text[:500]} - delivered to {who} (run {sess.sid}).')
+    words = ' '.join(str(owner or text).split())          # the record reads what the owner said, not the Assistant's version
+    record(store, tid, sess.sid, 'answered', request_id=request_id, text=words, source='owner')
+    store.add_comment(tid, actor, 'human', f'Answered "{req["text"][:160]}": {words[:500]} - delivered to {who} (run {sess.sid}).')
     store.audit('task', tid, 'worker_answer', actor, detail={'request_id': request_id, 'sid': sess.sid})
     return {'delivered': True, 'state': 'delivered', 'sid': sess.sid}
 
@@ -523,7 +527,7 @@ def delivery_path(sess) -> str | None:
     return 'api' if hasattr(sess, 'send_prompt') else 'pty'
 
 
-def answer_open(store, tid: int, text: str, actor: str = 'owner') -> dict:
+def answer_open(store, tid: int, text: str, actor: str = 'owner', owner: str = None) -> dict:
     """The chat's answer, bound to the newest open request of the run that has the task - an approval first
     (PW-138). No open request from a live run is `no_request`: the caller's waiting room takes the words."""
     sess = _live(tid)
@@ -532,7 +536,7 @@ def answer_open(store, tid: int, text: str, actor: str = 'owner') -> dict:
     qs = question_group(store, sess)
     if len(qs) > 1 and req.get('kind') != 'approval_needed':
         return {**answer_group(store, tid, split_answers(text, qs), actor), 'path': delivery_path(sess), 'request_id': qs[0]['request_id']}
-    return {**answer(store, tid, req['request_id'], text, actor), 'path': delivery_path(sess), 'request_id': req['request_id']}
+    return {**answer(store, tid, req['request_id'], text, actor, owner=owner), 'path': delivery_path(sess), 'request_id': req['request_id']}
 
 
 def waiting_of(store, t):

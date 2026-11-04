@@ -1545,7 +1545,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or ''), message_id=int(p['message_id']) if str(p.get('message_id') or '').isdigit() else None))
     # the owner vouching for a stranger's task (origin.raise_to) - a page press only: not in toolcatalog.PURPOSE, so no chat can vouch
     if kind == 'task.trust': return task_trust(tid, str(p.get('scope') or ''))
-    if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None))
+    if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None, context=str(p.get('context') or '') or None))
     if kind == 'review.reject': return decide(tid, DecideBody(verb='reject'), background)
     if kind == 'hub.publish':
         from . import handbook
@@ -1715,8 +1715,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # prompt as yes, and "which branch?" as the word yes
         said = ' '.join(str(p.get('text') or '').split())
         if not said: raise ValueError('say what to tell the agent')
-        out = ws.answer_open(store, tid, said, ACTOR)
-        if out['state'] == 'no_request': return waitroom_add(tid, {'text': said})
+        out = ws.answer_open(store, tid, said, ACTOR, owner=p.get('owner') or None)
+        if out['state'] == 'no_request': return waitroom_add(tid, {'text': said, 'owner': p.get('owner')})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
         return out
     # THE OWNER'S NEXT PROMPT TO AN AGENT AT WORK (the owner, 2026-11-02: "send a new prompt into the general/coding agent"): the page's
@@ -1724,7 +1724,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'agent.tell':
         said = ' '.join(str(p.get('text') or '').split())
         if not said: raise ValueError('say what to tell the agent')
-        return waitroom_add(tid, {'text': said})
+        return waitroom_add(tid, {'text': said, 'owner': p.get('owner')})
     # the page's "Stop and save" (TasksView.wrapUp posts close=False): the agent ends, the task stays
     if kind == 'agent.stop': return _wrap_task(tid, False) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun':
@@ -2737,6 +2737,7 @@ HANDED_OVER = ("THE OWNER HANDED THIS TO YOU: triage first read it as the owner'
 
 class ContinueBody(BaseModel):
     note: str | None = None          # what to tell it as it picks up - optional
+    context: str | None = None       # ...and what the Assistant added to the owner's words, Taskuary's own (general.relayed)
     images: list[str] = []           # pictures to go with it (/api/prompt-image)
 
 
@@ -2768,10 +2769,11 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # THE TURN LEADS WITH WHAT CAME IN (2026-11-03, as ingest.carry_on_turn): the news, then the owner's note, then Resume's words. A resumed
         # CLI is handed the turn alone, so the news behind it in the instructions sat under "restate that one question and wait", shown nowhere.
         # Taskuary's part is filed as its brief (the chat's grey line) and the note as the owner's own, in that order
-        brief = '\n\n'.join(x for x in [news, '' if note else continuity.RESUME_PROMPT] if x)
+        extra = general.relayed(note, (body.context if body else '') or '')
+        brief = '\n\n'.join(x for x in [news, f'{general.RELAY} {extra}' if extra else '', '' if note else continuity.RESUME_PROMPT] if x)
         if brief: store.add_comment(task_id, general.BRIEF_ACTOR, general.USER_TYPE, brief)
         if note: store.add_comment(task_id, 'owner', general.USER_TYPE, note)
-        turn = '\n\n'.join(x for x in [news, f'FROM THE OWNER: {note}' if note else '', continuity.RESUME_PROMPT] if x)
+        turn = '\n\n'.join(x for x in [news, f'FROM THE OWNER: {note}' if note else '', f'{general.RELAY} {extra}' if extra else '', continuity.RESUME_PROMPT] if x)
         def go():
             try: general.start_session(store, task_id, actor=ACTOR).send_prompt(turn, imgs or None, brief=True, kept=True)
             except general.Stopped: pass       # the owner stopped it again: nothing to say
@@ -6233,7 +6235,7 @@ def waitroom_list(tid: int):
 def waitroom_add(tid: int, body: dict):
     """Queue a note for this task's agent. It is typed in the moment the agent parks at its
     prompt - and at once, as the answer, when it is already parked on a question for you."""
-    try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR)
+    try: return waitroom.add(store, tid, str((body or {}).get('text') or ''), ACTOR, owner=(body or {}).get('owner') or None)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.post('/api/tasks/{tid}/waitroom/bulk')

@@ -263,8 +263,16 @@ class DeskRoutes(unittest.TestCase):
                  mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
                 out, _ = say(s, 'carry on with it, but skip the mail search', item['key'], model)
             go.assert_called_once()
-            self.assertEqual((go.call_args[0][0], go.call_args[0][1].note), (tid, 'carry on, but skip the mail search'), model)
+            # ...the owner's own words as the note, the Assistant's version of them folded as Taskuary's (the owner, 2026-11-04)
+            self.assertEqual((go.call_args[0][0], go.call_args[0][1].note, go.call_args[0][1].context),
+                             (tid, 'carry on with it, but skip the mail search', 'carry on, but skip the mail search'), model)
             self.assertNotIn('nothing would hear', out['say'])
+        # ...and the row's own Continue, which a general agent's row does not draw: "get the agent going again on this" was answered "I can't
+        # start it from this item" (the re-check, 2026-11-04) - it picks up, the owner's words its note
+        with mock.patch.object(concierge, '_agent_running', return_value=False), \
+             mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
+            out, _ = say(s, 'get the agent going again on this', item['key'], 'CALL: {"kind": "continue", "params": {}}')
+        self.assertEqual(go.call_args[0][1].note, 'get the agent going again on this', out['say'])
         # ...and a continue called with no note carries the owner's own words (the re-check: "skip the zip file" was lost)
         with mock.patch.object(concierge, '_agent_running', return_value=False), \
              mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
@@ -302,7 +310,8 @@ class DeskRoutes(unittest.TestCase):
             with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)):
                 out, _ = say(s, 'tell the agent to use the main branch', item['key'], model)
             self.assertEqual(out['say'], f'Told the agent on TQ-{tid:04d}: “use the main branch” - they go in when it stops at its prompt.', model)
-            self.assertEqual([n['Note'] for n in s.waiting_notes(tid)], ['use the main branch'])
+            # ...the note keeps the owner's own words and the Assistant's version apart (waitroom.parts, the owner 2026-11-04)
+            self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', 'use the main branch')])
             self.assertNotIn('nothing on it is waiting', out['say'])
         # ...and parked at its prompt it has them at once, typed into the live session (one under the reviewer: the task's sender is outside -
         # a full-tools session there holds them for the owner's Continue, waitroom.full_on_stranger)

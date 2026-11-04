@@ -29,6 +29,26 @@ BRIEF_ACTOR = 'taskuary'
 class Stopped(RuntimeError):
     "A turn the owner stopped - the start that ran it is done, not failed (ingest._start_general)."
 def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor') == BRIEF_ACTOR
+# THE OWNER'S WORDS AS THEY TYPED THEM (the owner, 2026-11-04): answered through the Assistant, the agent's chat showed the Assistant's rewording
+# ("Option B: book the 3-year renewal at 6,000.") under YOU for "Go with option B, three years." Their words go under YOU exactly; what the
+# Assistant adds to them - its context, its rephrase - is Taskuary's, folded with its other instructions
+RELAY = 'TASKUARY, PASSING IT ON FROM THE ASSISTANT:'
+def relayed(owner, relay) -> str:
+    "What the Assistant's version adds to the owner's own words - '' when it is the same words, or there are no owner's words to keep."
+    o, r = ' '.join(str(owner or '').split()), ' '.join(str(relay or '').split())
+    return '' if not o or not r or r.casefold() == o.casefold() else r
+def relay_turn(owner, relay) -> str:
+    "The turn the agent is handed: the owner's words, then what the Assistant added."
+    extra = relayed(owner, relay)
+    return f'FROM THE OWNER: {owner}\n\n{RELAY} {extra}' if extra else str(owner or relay)
+def say_relayed(session, owner, relay, **kw):
+    """A live general session handed the owner's words with what the Assistant added: the words filed as the owner's, exactly as typed, and
+    the addition as Taskuary's brief, then the two as one turn. Without an addition it is the owner's turn as it always was."""
+    extra = relayed(owner, relay)
+    if not extra: return session.send_prompt(str(owner or relay), **kw)
+    session.store.add_comment(session.task_id, 'owner', USER_TYPE, ' '.join(str(owner).split()))
+    session.store.add_comment(session.task_id, BRIEF_ACTOR, USER_TYPE, f'{RELAY} {extra}')
+    return session.send_prompt(relay_turn(owner, relay), kept=True, brief=True, **kw)
 # ``assistant`` was briefly written by Timeline discussions before those tasks were normalized
 # to ``general``. Keep it as a read-compatible alias so existing discussions still open in the
 # Assistant workspace without a data migration.

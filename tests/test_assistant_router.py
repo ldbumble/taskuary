@@ -248,6 +248,17 @@ class DeskRoutes(unittest.TestCase):
             out, _ = say(s, 'start it', item['key'], 'CALL: {"kind": "regular_agent", "params": {}}')
         self.assertTrue(out['say'].startswith('Not done'), out['say']); self.assertNotIn('on it now', out['say'])
 
+    def test_an_answer_that_went_in_is_said_as_what_happened(self):
+        "The overnight run, 2026-11-03: \"Go with option B\" to an agent that asked came back as \"Done - Answer it · TQ-0004.\" - a button's name."
+        from taskuary import general
+        s = store(); tid, item = on_table(s); dock = general.dock_task(s, 'owner')[0]['TaskId']
+        with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'done', 'outcome': {'delivered': True}}):
+            out = concierge._answer_now(s, dock, None, tid, 'Option B,  three years.', 'owner')
+        self.assertEqual(out['say'], f'Answered the agent on TQ-{tid:04d}: “Option B, three years.”.')
+        with mock.patch.object(concierge, 'run_proposal', return_value={'status': 'error', 'error': 'the agent has gone', 'outcome': {}, 'kind': 'agent.answer', 'id': 'x', 'version': 1}):
+            out = concierge._answer_now(s, dock, None, tid, 'Option B', 'owner')
+        self.assertTrue(out['say'].startswith('Not done'), out['say'])
+
     def test_a_note_for_a_working_agent_reaches_its_session(self):
         """The owner, 2026-11-02: "it should be able to, like send a new prompt into the general/coding agent". With an agent WORKING (not
         asking) on the task, "tell the agent to use the main branch" is the page's Tell the agent (waitroom.add): held while it works,

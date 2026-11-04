@@ -1777,7 +1777,12 @@ def said_started(store, cid, out: dict) -> str:
 def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str) -> dict:
     """Words to the agent that asked ARE its answer - the box's own purpose, as Answer it says (2026-10-02): they go in, with a receipt."""
     op = operations.propose(store, 'agent.answer', int(target), {'text': said}, actor)
-    turn = receipt_turn(store, run_proposal(store, op, actor), actor, table=True)
+    r = run_proposal(store, op, actor)
+    # ...said as what happened, as Tell the agent is: "Done - Answer it · TQ-0004." was the button's name read out (the overnight run, 2026-11-03)
+    if r.get('status') == 'done' and (r.get('outcome') or {}).get('delivered'):
+        return {**_did(store, tid, f"Answered the agent on {task_ref(target)}: “{_title_cut(' '.join(str(said or '').split()), 120)}”.", 'agent.answer'),
+                'chips': chips_for(store, table)}
+    turn = receipt_turn(store, r, actor, table=True)
     return {'say': turn['say'], 'options': [], 'chips': turn['chips'] or chips_for(store, table), 'decision': None}
 
 

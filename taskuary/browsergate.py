@@ -332,7 +332,18 @@ def _perform(store, tid: int, p: dict, run=None) -> dict:
         raise RuntimeError(f"the agent's browser has moved on from the page this was held on ({p.get('site') or 'its site'}) - nothing was done. {AGAIN}")
     rc, said = (run or (lambda s, a: _run(s, a, 60, 'act')))(sid, args)
     said = ' '.join(str(said or '').split())[-600:]
-    if rc != 0: raise RuntimeError(f"the browser refused it: {said[-300:] or 'agent-browser failed'}")
+    if rc != 0:
+        # THE OWNER SAID YES AND THE PAGE SAID NO (the browser-agent walk, 2026-11-04: a click held for a yes landed under a menu the page
+        # laid over it). The raw refusal stood under Approve - agent-browser's own words, selectors and all - Approve pressable again into
+        # the same refusal, and the agent never heard. The agent is told what the browser said and goes on another way; the owner reads
+        # one plain line, and the held act is over.
+        why = 'something on the page covers that control' if 'covered by' in said else said[-200:] or 'the browser could not do it'
+        _tell(store, tid, f"The owner approved it, but the browser could not do it: {said[-300:] or 'agent-browser failed'}. Nothing was done. "
+                          "Look at the page as it is now and reach the same place another way - a menu or banner covering the control can be "
+                          "opened or closed first, or the page opened by its address - then continue.")
+        if p.get('sid'): browserview.ended_on(sid, 'failed', store, tid)
+        store.audit('task', tid, 'browser_act_refused', 'owner', 'human', {'site': p.get('site'), 'what': p.get('what')})
+        return {'performed': None, 'refused': f"{p.get('site') or 'The page'} did not take it - {why}. The agent was told and goes on another way."}
     now = str(browserview.state(sid, fresh=True).get('url') or '')
     _tell(store, tid, f"The owner approved it and Taskuary ran `{p.get('command')}` in your browser. It said: {said[-300:] or 'done'}. "
                       f"The page is now {now or 'unknown'} - look at it and continue.")

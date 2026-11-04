@@ -177,6 +177,23 @@ class TheHeldActInWords(unittest.TestCase):
         while time.time() < end and not any('could not be told' in (c.get('Body') or '') for c in s.list_comments(tid)): time.sleep(.05)
         self.assertTrue(any('could not be told' in (c.get('Body') or '') for c in s.list_comments(tid)))
 
+    def test_an_approved_click_the_page_refuses_tells_the_agent_and_says_one_plain_line(self):
+        """A click held for a yes landed under a menu the page laid over it: the owner read agent-browser's raw refusal under an Approve that
+        failed the same way every time, and the agent never heard (the browser-agent walk, 2026-11-04). Now the agent is told and goes on."""
+        s, told = MemoryStore(), []
+        tid = Factory(s).task('Count the open bills')
+        p = {'sid': 'r1', 'args': ['find', 'text', 'Bills', 'click'], 'url': 'https://app.vendor.example/home', 'site': 'vendor.example',
+             'command': 'agent-browser find text Bills click'}
+        raw = "✗ Element '[data-agent-browser-located='true']' is covered by <input#menu-holder> at its click point"
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': 'https://app.vendor.example/home'}), \
+             mock.patch.object(bg, '_tell', side_effect=lambda st, t, text, wait=False: told.append(text)):
+            out = bg.perform(s, tid, p, run=lambda sid, args: (1, raw))
+        self.assertIsNone(out['performed'])
+        self.assertEqual(out['refused'], 'vendor.example did not take it - something on the page covers that control. The agent was told and goes on another way.')
+        self.assertNotIn('data-agent-browser', out['refused'])
+        self.assertIn('covered by <input#menu-holder>', told[0]); self.assertIn('reach the same place another way', told[0])
+        browserview.ended_on('r1')
+
     def test_a_dead_approve_says_the_way_on(self):
         with mock.patch.object(browserview, 'state', return_value={'open': False}):
             with self.assertRaises(RuntimeError) as e: bg.perform(MemoryStore(), 1, {'sid': 'r1', 'args': ['click', '@e1']})

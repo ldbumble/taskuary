@@ -76,6 +76,12 @@ test("keystrokes carry text for printable keys and Enter, none for chords and sp
   assert.equal(keyMessage("keydown", { key: "Enter", code: "Enter" }).windowsVirtualKeyCode, 13);
   assert.ok(isPaste({ key: "v", ctrlKey: true }) && isPaste({ key: "V", metaKey: true }) && !isPaste({ key: "v" }));
   assert.deepEqual(pasteMessages("a\r\nb").map((m) => m.text), ["a", "\r", "b"]);
+  // a password's shifted symbols and capitals go in as typed: the character is the key's own, Shift rides only in the modifiers (2026-11-04)
+  for (const [key, code, keyCode] of [["!", "Digit1", 49], ["@", "Digit2", 50], ["&", "Digit7", 55], ["Z", "KeyZ", 90], ["~", "Backquote", 192], ['"', "Quote", 222]]) {
+    const m = keyMessage("keydown", { key, code, keyCode, shiftKey: true });
+    assert.equal(m.text, key, key); assert.equal(m.modifiers, 8); assert.equal(m.windowsVirtualKeyCode, keyCode);
+  }
+  assert.equal(pasteMessages("P@ss!w0rd#$%^&*()").map((m) => m.text).join(""), "P@ss!w0rd#$%^&*()");
   assert.equal(keyMessage("keydown", { key: "a", code: "KeyA", ctrlKey: true }).text, undefined);
   assert.equal(keyMessage("keydown", { key: "Enter", code: "Enter" }).text, "\r");
   assert.equal(keyMessage("keydown", { key: "Tab", code: "Tab" }).eventType, "rawKeyDown");

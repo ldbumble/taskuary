@@ -130,6 +130,17 @@ class Filling(unittest.TestCase):
         with self.assertRaises(signin.SignInError): signin.fill_page(p, 'bank.example', USER, PW)
         self.assertNotIn(PW, [t for _, t in p.typed])
 
+    def test_a_form_that_also_asks_for_a_third_box_says_so_instead_of_blaming_the_password(self):
+        """A portal's sign-in asked for a Customer ID beside the email and password; Taskuary keeps two, the form stayed up, and the
+        saved password was called wrong (the browser-agent walk, 2026-11-04). The box it also needs is named."""
+        p = FakePage(); f = p.fields
+        p.fields = lambda want='': {**f(want), 'others': ['Customer ID']}
+        out = signin.fill_page(p, 'bank.example', USER, PW)
+        self.assertEqual(out['others'], ['Customer ID'])
+        said = signin.refused('bank.example', out['others'])
+        self.assertIn("bank.example also asks for 'Customer ID'", said); self.assertNotIn('did not accept that password', said)
+        self.assertEqual(signin.refused('bank.example', []), 'bank.example did not accept that password')
+
     def test_a_form_inside_another_sites_frame_is_refused_and_said(self):
         p = FakePage(password=False, user=False, frames=['https://idp.evil.example/login'])
         with self.assertRaises(signin.SignInError) as e: signin.fill_page(p, 'bank.example', USER, PW)

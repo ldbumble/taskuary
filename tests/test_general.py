@@ -67,9 +67,14 @@ class SharedSessionTests(unittest.TestCase):
              mock.patch.object(general.threading, 'Thread') as thread:
             session = general.start_session(store, tid)
         self.assertEqual(session.pick, 'cli:claude')     # the saved API chat cannot drive a browser
-        self.assertIs(thread.call_args.kwargs['target'], browserview.start)
-        # ...on the page the task's browser was last on - none yet, so a blank tab (browserview.keep_page)
-        self.assertEqual(thread.call_args.kwargs['args'], (session.sid, 'about:blank'))
+        # ...on the page the task's browser was last on - none yet, so none: its first navigate launches it (browserview.on_demand)
+        self.assertFalse([c for c in thread.call_args_list if c.kwargs.get('target') is browserview.start])
+        store.update_task(tid, {'Tags': browserview.WANTS}, 'owner')
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general.threading, 'Thread') as thread, \
+             mock.patch.object(browserview, 'last_page', return_value='https://zoho.example/signin'):
+            session = general.start_session(store, tid)
+        go = [c.kwargs['args'] for c in thread.call_args_list if c.kwargs.get('target') is browserview.start]
+        self.assertEqual(go, [(session.sid, 'https://zoho.example/signin')])
 
     def test_setup_cli_gets_the_same_visible_browser_without_a_checkout(self):
         store = MemoryStore()

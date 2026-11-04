@@ -105,6 +105,17 @@ def acts(cmd: str) -> list:
     return out
 
 
+NAVS = frozenset('open goto navigate'.split())
+def opens(cmd: str) -> str:
+    "The address the first agent-browser open / goto / navigate in a shell command goes to, else '' (browserview.on_demand)."
+    if EXE not in str(cmd or '').lower(): return ''
+    for argv in _segments(cmd) or []:
+        a = _head(argv)
+        a = _own_args(a) if a is not None else []
+        if len(a) > 1 and a[0].lower() in NAVS: return a[1]
+    return ''
+
+
 def typing(act: dict) -> bool:
     "Is this act only typing into a box? By agent-browser's verb, never by its text - and text that breaks a line is not plain typing."
     a, i = act.get('args') or [], 0

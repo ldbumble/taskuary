@@ -67,7 +67,8 @@ class EveryDoorGetsTheBrowser(unittest.TestCase):
         self.assertTrue(browserview.wanted(self.s.get_task(self.tid)))
         self.assertTrue(session.browser_wanted)
         self.assertTrue(session.pick.startswith('cli:'), 'a browser task is a CLI\'s')
-        self.assertIs(thread.call_args.kwargs['target'], browserview.start)
+        # ...and its browser opens at the agent's first navigate, not on an empty tab now (browserview.on_demand, 2026-11-04)
+        self.assertFalse([c for c in thread.call_args_list if c.kwargs.get('target') is browserview.start])
         notes = [c['Body'] for c in self.s.list_comments(self.tid) if "Taskuary's browser" in c['Body']]
         self.assertEqual(len(notes), 1); self.assertIn('Approve', notes[0])
         self.assertTrue(ingest.mark_browser(self.s, self.tid))

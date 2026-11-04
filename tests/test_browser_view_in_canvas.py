@@ -62,7 +62,7 @@ class YourTurn(unittest.TestCase):
 
     def test_a_terminal_cli_gets_no_chooser_and_a_page_with_no_address_still_says_what(self):
         pty = SimpleNamespace(sid='run1', task_id=self.tid, alive=True)
-        with mock.patch.dict(terminal.SESSIONS, {'run1': pty}, clear=True), on_page('about:blank'):
+        with mock.patch.dict(terminal.SESSIONS, {'run1': pty}, clear=True), on_page('file:///receipt.html'):
             browserview.your_turn(self.s, self.tid, 'run1', '')
             req = ws.status(self.s, self.tid)['requests'][0]
         self.assertEqual(req['choices'], [])                                 # a pty is answered in words, never by typing "1"

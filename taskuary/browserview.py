@@ -420,7 +420,16 @@ def your_turn(store, tid: int, sid: str, what: str = '') -> str:
     "Record the agent's hand-over as an open request on the task. The request id - `yourturn:<hash>`."
     from urllib.parse import urlsplit
     from . import terminal as term, workerstate as ws
-    try: host = urlsplit(str(state(sid, fresh=True).get('url') or '')).hostname or ''
+    st = state(sid, fresh=True)
+    # ...ON A PAGE. With no browser, or an empty tab, there is nothing to hand over: what the agent wants is said in words and answered
+    # in the chat's box - drawn as "your turn - click the page and type" over a black about:blank it was the owner's turn on nothing
+    # (the owner, 2026-11-04, on a flight search that only asked where and when)
+    if not st.get('open') or not _page(st.get('url')):
+        text = what or 'The agent needs you to do a step on a web page, and has none open yet'
+        rid = ws.request_id_for(text)
+        ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, source='api')
+        return rid
+    try: host = urlsplit(str(st.get('url') or '')).hostname or ''
     except ValueError: host = ''
     host = host[4:] if host.startswith('www.') else host
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
@@ -487,6 +496,21 @@ def wanted(task: dict | None) -> bool:
     """Did the owner say this task needs a browser? (the tag the New task dialog writes)"""
     import re as _re
     return bool(_re.search(rf'(^|[\s,]){_re.escape(WANTS)}([\s,]|$)', str((task or {}).get('Tags') or '')))
+
+
+def _page(url) -> bool: u = str(url or '').strip(); return bool(u) and not u.lower().startswith('about:')
+
+
+# NO URL, NO BROWSER (the owner, 2026-11-04: "no browser should open if we don't have a URL"). A task marked "needs a browser" - by triage
+# reading "find flight options" as web work - had Chrome launched on about:blank with its session, and the agent, which only searched and
+# asked where and when, sat beside a black empty browser. The browser comes up at the agent's first navigate instead: its hook sees the
+# `agent-browser open <url>` before it runs and launches Taskuary's browser on that address (start - the owner's saved sign-ins restored),
+# so the agent's own open lands in it. Or on the page the task's browser was last on, which is an address too (last_page).
+def on_demand(sid: str, cmd: str) -> bool:
+    "Launch this session's browser on the address the agent's command navigates to, if it is not up yet. True when one was launched."
+    from .browsergate import opens
+    u = opens(cmd)
+    return bool(u) and _page(u) and not state(sid, fresh=True).get('open') and start(sid, u)
 
 
 def start(sid: str, url: str = 'about:blank') -> bool:
@@ -591,8 +615,9 @@ SAY_WHY = ('IF A STEP FAILS OR IS REFUSED, your answer says which step, what the
            'thing the owner can do about it (sign in on the site in the browser pane, approve the held step on the task, send another '
            'message to open the browser again) - never only that you could not. ')
 OFFER_HEAD = ('NO BROWSER IS OPEN for this task yet, but Taskuary keeps one for you: if the work needs a web page - a link in a message to '
-              'follow, a form to fill, a site to look at - run `agent-browser open <url>` and it opens beside this chat, where the owner '
-              'watches it. NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
+              'follow, a form to fill, a site to sign in to - run `agent-browser open <url>` and it opens beside this chat, where the owner '
+              'watches it. Searching and reading the web needs no browser: use your own web search and fetch for that, and open this one '
+              'only for a page you must see or act on. NEVER use --session, --headed, profile listing, or launch Chrome separately. ')
 NOT_SET_UP = ('THIS COMPUTER HAS NO BROWSER FOR AGENTS YET (agent-browser is not installed). Do not use a browser tool of your own CLI '
               'or of another app instead - Taskuary cannot show those to the owner or hold their presses, and they fail here. If the work needs a web page, do what you can without it (read the message, find the link), then tell the owner in one line: '
               '"The browser is not set up - install agent-browser under {where}, then ask me again." ')

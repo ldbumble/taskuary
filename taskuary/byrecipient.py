@@ -68,6 +68,14 @@ def block(store, to, budget: int = BUDGET) -> str:
     return '\n'.join(out)
 
 
+def keep_instruction(store, rid: int, said: str):
+    """The owner's words for a draft, kept on its review (phase B) - and the second time the same words are said for one person, they
+    are how that person is written to: a STYLE.md "By recipient" line every later draft to them reads (the owner, 2026-10-23: the
+    typed instruction is stored and remembered, the 2nd time a style line, no chips)."""
+    store.add_review_instruction(rid, said)
+    note_instruction(store, rid, said)
+
+
 def note_instruction(store, rid: int, instruction: str) -> str:
     """The owner's words for a draft are kept on its review (presses.instructions, phase B); said INSTR_AT times for one person - on
     their own drafts, any surface - they become that person's STYLE.md line, which every later draft to them reads. Returns the line

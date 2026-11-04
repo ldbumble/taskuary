@@ -44,3 +44,14 @@ def test_old_rows_have_no_reading():
     s.add_route(7, tid, 'create', None, 'x', [], 'triage', verdict={'intent': 'fyi'})
     s._exec('INSERT INTO route (MessageId,TaskId,Decision,CreatedAt,VerdictJson) VALUES (8,?,?,?,?)', (tid, 'attach', 'now', 'not json'))
     assert s.task_thread(tid) is None and s.aside_mids(tid) == set()
+
+
+def test_the_thread_task_carries_the_last_reading_and_report():
+    from taskuary import ingest
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = _task(s)
+    assert 'reading' not in ingest.thread_task(s, tid) and 'agent_said' not in ingest.thread_task(s, tid)
+    s._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Ray wants the pay date'}), tid))
+    s.add_comment(tid, 'agent', 'agent', 'AGENT REPORT\nSummary: the pay run is Friday')
+    ht = ingest.thread_task(s, tid)
+    assert ht['reading']['asking'] == 'Ray wants the pay date' and 'Friday' in ht['agent_said']

@@ -162,3 +162,74 @@ class Hook(unittest.TestCase):
         chat = SimpleNamespace(sid='g1', task_id=self.tid, mode='full')            # a general chat: no argv, no pane
         self.assertFalse(sg.asks(self.s, chat))
         self.assertEqual(sg.check(self.s, self.tid, 'g1', 'git push', ask=sg.asks(self.s, chat))['hookSpecificOutput']['permissionDecision'], 'deny')
+
+
+class Deleting(unittest.TestCase):
+    """A DELETE ON THE OWNER'S COMPUTER WAITS (the desktop stress test, 2026-11-03): asked to remove the folder it had just unzipped into
+    Downloads, a general agent ran Remove-Item -Recurse -Force at once - permanent, not in the Recycle Bin. Its own folder and temp are its."""
+    def setUp(self):
+        import os, tempfile
+        self.os, self.home = os, tempfile.mkdtemp(dir=os.path.expanduser('~'))      # never under temp: temp is the agent's to tidy
+        self.addCleanup(__import__('shutil').rmtree, self.home, True)
+        self.cwd = os.path.join(self.home, '.taskuary', 'scratch'); os.makedirs(self.cwd)
+        self.dl = os.path.join(self.home, 'Downloads', 'notes-unzipped')
+        env = mock.patch.dict(os.environ, {'USERPROFILE': self.home, 'HOME': self.home}); env.start(); self.addCleanup(env.stop)
+        self.s = MemoryStore(); self.tid = Factory(self.s).task('Unzip the notes')
+
+    def held(self, cmd): return sg.acts(cmd, self.cwd)
+
+    def test_the_stress_tests_own_line_is_held_and_named(self):
+        # the agent's PowerShell, in shape: the folder set in a variable on the same line, then removed
+        cmd = ('$dst="$env:USERPROFILE\\Downloads\\notes-unzipped"; Remove-Item $dst -Recurse -Force -Confirm:$false; '
+               '"folder exists: $(Test-Path $dst)"')
+        if self.os.name != 'nt': cmd = cmd.replace('\\', '/')
+        [a] = self.held(cmd)
+        self.assertEqual((a['what'], a['why']), ('delete notes-unzipped in Downloads', "it can't be undone"))
+
+    def test_a_delete_outside_its_folder_is_held_by_each_tools_name(self):
+        for cmd in (f'rm -rf "{self.dl}"', 'rm -rf ~/Downloads/notes-unzipped', 'rm -r $HOME/Downloads/notes-unzipped',
+                    f'Remove-Item -LiteralPath "{self.dl}" -Recurse -ErrorAction SilentlyContinue', f'if (Test-Path x) {{ Remove-Item "{self.dl}" }}',
+                    f'bash -c "rm -rf {self.dl}"', f'find "{self.dl}" -name "*.txt" -delete', 'rm -rf ../../Downloads'):
+            [a] = self.held(cmd)
+            self.assertTrue(a['what'].startswith('delete '), cmd); self.assertEqual(a['why'], "it can't be undone", cmd)
+        self.assertIn('notes-unzipped in Downloads', self.held(f'rm -rf "{self.dl}"')[0]['what'])
+
+    def test_a_cd_first_moves_where_a_relative_delete_lands(self):
+        # the stress test's second delete, word for word in shape: into Downloads, then a relative rm - it passed as the agent's own folder
+        [a] = self.held('cd ~/Downloads && find notes-unzipped | sort && rm -rf notes-unzipped && ls -d notes-unzipped 2>&1; ls -l notes.zip')
+        self.assertEqual(a['what'], 'delete notes-unzipped in Downloads')
+        self.assertTrue(self.held(f'Set-Location "{self.home}"; Remove-Item -Recurse Downloads'))
+        self.assertTrue(self.held(f'cmd /c "cd /d {self.home} && rd /s /q Downloads"'))
+        self.assertTrue(self.held('cd "$somewhere" && rm -rf notes'), 'a cd it cannot follow leaves the delete unread - held')
+        self.assertEqual(self.held('cd out && rm -rf old'), [], 'a cd within its own folder stays its own')
+
+    def test_what_it_cannot_read_is_held_never_let_through(self):
+        vb = 'Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory("C:\\x\\notes", \'OnlyErrorDialogs\', \'{}\')'
+        for cmd in ('rm -rf "$target"', 'Get-ChildItem C:/x -Filter *.tmp | Remove-Item', 'python -c "import shutil; shutil.rmtree(p)"',
+                    '[IO.Directory]::Delete($p, $true)', vb.format('DeletePermanently')):
+            [a] = self.held(cmd)
+            self.assertEqual(a['what'], 'delete files on this computer', cmd)
+        # ...while the Recycle Bin can be undone - the agent's own pick in the stress test - and passes
+        self.assertEqual(self.held(vb.format('SendToRecycleBin')), [])
+
+    def test_its_own_folder_temp_and_other_words_pass(self):
+        import tempfile
+        for cmd in ('rm -rf build', 'rm -f out/report.md', f'rm -rf "{self.os.path.join(self.cwd, "tmp")}"', 'echo term; npm run format',
+                    f'rm -rf "{self.os.path.join(tempfile.gettempdir(), "junk")}"', 'Remove-Item ./draft.txt', 'npm run rmdist', 'ls Downloads'):
+            self.assertEqual(self.held(cmd), [], cmd)
+        self.assertTrue(self.held('rm -rf .'), 'the whole folder it works in is not its to tidy')
+
+    def test_held_on_the_task_with_its_own_reason_and_the_agent_told(self):
+        d = sg.check(self.s, self.tid, 'g1', f'rm -rf "{self.dl}"', 'Bash', self.cwd)['hookSpecificOutput']
+        self.assertEqual(d['permissionDecision'], 'deny')
+        self.assertIn("delete notes-unzipped in Downloads (it can't be undone)", d['permissionDecisionReason'])
+        [rv] = self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+        p = json.loads(rv['DraftText'])
+        self.assertEqual(p['why'], "it can't be undone")
+        # the card's In is the folder it aims at, never the scratch folder it ran from - which Approve still runs in
+        self.assertEqual((p['where'], p['cwd']), (self.os.path.dirname(self.dl), self.cwd))
+        self.assertIn("delete notes-unzipped in Downloads - it can't be undone", rv['Reason'])
+        self.assertNotIn('leaves this computer', rv['Reason'])
+        # ...and where the owner can answer the CLI's own prompt, it asks there, with the same words
+        a = sg.check(self.s, self.tid, 'p1', f'rm -rf "{self.dl}"', 'Bash', self.cwd, ask=True)['hookSpecificOutput']
+        self.assertEqual(a['permissionDecision'], 'ask'); self.assertIn("(it can't be undone)", a['permissionDecisionReason'])

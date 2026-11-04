@@ -26,7 +26,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
 import { DEMO_SAID } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
-import { openReply } from "./replyDraft.js";
+import { openReply, rewriteReceipt } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
@@ -2467,9 +2467,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`;
         const there = elsewhere && cur.tid ? { tid: cur.tid, ref, chips: [{ verb: "opentask", tid: cur.tid, label: `Open ${ref}` }] } : {};
         // ...and a rewrite that did not happen is drawn as the failure it is (✗) - a receipt with no status wore the tick (2026-10-26)
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, ...(data.draft ? {} : { status: "failed" }), text: data.draft
-          ? (there.tid ? `Rewritten on ${ref} - read it there before you send it.` : "Rewritten - read it below before you send it.")
-          : `I could not rewrite it here; edit the draft on ${there.tid ? ref : "the card"} and send that.` }]);
+        // ...and one that came back empty or unchanged is one that did not happen, said with why (rewriteReceipt, 2026-11-04)
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, ...rewriteReceipt(data, there.tid ? ref : "") }]);
         if (!elsewhere) { putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();
         return;
       }

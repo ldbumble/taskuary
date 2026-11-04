@@ -38,7 +38,8 @@ HELD = 'Taskuary held this for the owner'
 HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
              "a mail from a script), is HELD for the owner's press: Taskuary refuses it with \"held for the owner\", puts it on the task, runs "
              "it once they approve and tells you what happened. So never ask the owner in words whether to delete - run the command, end your "
-             "turn when it is held, and say what waits for their Approve.")
+             "turn when it is held, and say what waits for their Approve. Draft no reply that says it is done while it waits: the reply is "
+             "written once Taskuary tells you the step ran.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
 GIT = {'push': 'push the agent\'s commits out of this computer'}

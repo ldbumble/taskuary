@@ -218,6 +218,22 @@ def same_name(store, msg: dict, names: list, people: list):
             f" - task's sender: {p['name']} {_contact(store, p['channel'], p['email'])}", s)
 
 
+# WRITTEN BETWEEN THE SAME PEOPLE (2026-11-04): a colleague asked a vendor's helpdesk for something, the owner copied, and the helpdesk's
+# "your ticket was submitted" came back to the colleague on a thread of its own - another sender, another conversation, its own wording.
+# With no embedder nothing tied it to the request the owner was watching, and it opened a second Watching row for one matter. A mail
+# FROM someone the task's mail went to, TO someone who wrote the task's mail, is the other side of that exchange - structure, never
+# words, and the owner (copied on everything) never counts as the tie. Evidence for same_as; the model says whether it is the same job.
+def _people(msg: dict) -> set: return {str(a).strip().lower() for a in [*(msg.get('to') or []), *(msg.get('cc') or [])] if a}
+
+
+def written_between(sender: str, to: set, senders: set, recips: set, own: set) -> bool:
+    "The arrival's sender was written to on the task, and it writes to one who wrote the task's mail - neither of them the owner."
+    return bool(sender and sender not in own and sender in recips and (senders & to) - own - {sender})
+
+
+BETWEEN = 'written between the same people - this comes from someone its mail went to, and goes to who wrote it'
+
+
 def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     """The OPEN work this arrival touches - the same thread, the same run or record, the same sender, or a title and summary alike
     in meaning (textsim) - so triage can say "this is TQ-x again" (same_as) instead of opening a second task for one job (the owner,
@@ -229,6 +245,10 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     near = alike(store, text, rows, NEAREST)
     names = [] if own else arrival_names(store, msg)
     people = store.task_people([t['TaskId'] for t in rows]) if names else {}
+    to = set() if own else _people(msg)
+    recips = store.task_recipients([t['TaskId'] for t in rows]) if to and sender else {}
+    from .senders import own_addresses
+    mine = own_addresses(store) if recips else set()
     for t in rows:
         convs = {c for c in str(t.get('Convs') or '').split(',') if c}
         senders = {s for s in str(t.get('Senders') or '').split(',') if s}
@@ -239,10 +259,12 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
         # meaning over that task alone, as the same person on the same job is the likelier of the two
         named = same_name(store, msg, names, people.get(t['TaskId'])) if names and (meant or not hit) else None
         if named: hit = (f'{hit[0]}; {named[0]}', hit[1] + 0.4) if meant else (named[0], 0.3 + 0.1 * named[1])
+        tied = (not hit or hit[1] < 1.0) and written_between(sender, to, senders, recips.get(t['TaskId'], set()), mine)
+        if tied: hit = (f'{hit[0]}; {BETWEEN}', hit[1] + 0.5) if hit else (BETWEEN, 0.8)
         if not hit: continue
         out.append({'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
                     'from': OWN_TASK if t.get('OriginBase') == 'owner' else _who(sender, senders),
-                    'why': hit[0], **({'about': _short(t.get('Summary'), 200)} if (meant or named) and t.get('Summary') else {}),
+                    'why': hit[0], **({'about': _short(t.get('Summary'), 200)} if (meant or named or tied) and t.get('Summary') else {}),
                     **_threads(convs), '_rank': hit[1]})
     out.sort(key=lambda r: -r['_rank'])
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]

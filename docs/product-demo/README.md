@@ -1,5 +1,38 @@
 # General assistant product demo
 
+## Dashboard and Advisor showcase
+
+`website/record-showcase.mjs` records a separate, short tour of the current static
+demo: dashboard metrics, channel/range filters, chart-to-table switching, an
+Advisor follow-up and its original email, task context, and a prepared reply.
+It uses the real interface with fictional data and synthetic narration. It never
+presses Send. The final file is `taskuary-showcase.mp4` in `TASKUARY_OUTPUTS`, with
+H.264 video, AAC narration, embedded English subtitles and chapter markers.
+The original request-to-reply recording below is preserved.
+
+From the repository root (Node 22.12+, the existing frontend dependencies, a
+Chromium browser, Windows System.Speech and `imageio_ffmpeg` are required):
+
+```powershell
+# Set TASKUARY_OUTPUTS if the task runner has not already supplied it.
+npm exec --yes --package=node@22 -- node website/record-showcase.mjs --prepare
+powershell -NoProfile -File website/product-demo-voice.ps1 -Scenes .codex-tmp/tq1299/scenes.json -OutputDirectory .codex-tmp/tq1299/audio
+Push-Location website
+npm exec --yes --package=node@22 -- node node_modules/vite/bin/vite.js build --mode demo --outDir ../.codex-tmp/tq1299/build --base=./
+Pop-Location
+npm exec --yes --package=node@22 -- node website/record-showcase.mjs --check
+npm exec --yes --package=node@22 -- node website/record-showcase.mjs
+```
+
+The check follows the actual clicks and verifies the dashboard, Advisor evidence,
+task and nonempty reply. Both modes fail on browser exceptions or attempted live
+API/external requests. Intermediate media, screenshots, the narration script and
+recording provenance stay under ignored `.codex-tmp/tq1299/`. The build is isolated
+there too; recording does not alter `site/demo` or publish anything. Subtitles
+use approximate sentence timings; the onscreen captions also summarize each step.
+
+## Existing request-to-reply recording
+
 Open `index.html` for the video, captions and chapter navigation, or play
 `taskuary-workflow.mp4` directly. The recording shows the real, rebuilt static
 application at 1920 × 1080, using invented Northwind data and a synthetic voice.

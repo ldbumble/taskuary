@@ -165,6 +165,25 @@ def test_a_quick_answer_lands_as_a_general_turn():
     assert rv and 'Yes, let us go.' in rv['DraftText'] and rv['Status'] == 'pending'          # waits for Send - never sent
     assert any(e['Kind'] == 'turn_end' and e['Source'] == 'quick' for e in ws.events(s, tid, ses.sid))
 
+LETTER = "Hi Erin,\n\nYes - let us go on Friday.\n\nBest,\nAlex Doyle"
+def test_a_report_that_writes_the_draft_out_keeps_only_its_own_words():
+    "The overnight run, 2026-11-03: the report carried the whole letter, ruled off, over the same letter in Close out."
+    s = home(); tid, _ = arrived(s)
+    said = "I drafted your yes to Erin.\n\n" + LETTER.replace('\n\nYes', '\n\n---\n\nYes').replace('\n\nBest', '\n\n---\n\nBest') + "\n\nAdd the time if you know it."
+    filed(s, tid, {**ANSWER, 'report': said, 'draft': LETTER})
+    shown = general.history(s, tid)[1]['content'][0]['text']
+    assert shown == 'I drafted your yes to Erin.\n\nAdd the time if you know it.'
+    assert 'Yes - let us go on Friday.' in s.pending_review(tid, 'draft_reply')['DraftText']       # the letter is Close out's, whole
+
+def test_a_report_that_is_only_the_draft_says_where_it_waits():
+    s = home(); tid, _ = arrived(s)
+    filed(s, tid, {**ANSWER, 'report': LETTER, 'draft': LETTER})
+    assert 'Close out' in general.history(s, tid)[1]['content'][0]['text']
+
+def test_without_draft_leaves_an_answer_that_never_quotes_it():
+    from taskuary import selfclose
+    assert selfclose.without_draft('Worth going.\n\n---\n\nSee you.', 'Yes, let us go.') == 'Worth going.\n\n---\n\nSee you.'
+
 def test_a_quick_question_waits_on_the_owner_like_a_general_one():
     s = home(); tid, _ = arrived(s)
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True):

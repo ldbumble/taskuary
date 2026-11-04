@@ -23,10 +23,10 @@ WATCH_EVERY = 10          # seconds between looks - delivery lands within IDLE_W
 MAX_BATCH = 6000          # chars typed in one go; a TUI paste past this is asking for dropped frames
 
 
-def batch(notes: list, after_restart: bool = False, remaining: int = 0) -> str:
+def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: bool = True) -> str:
     """The notes as one typed message. Flattened to one line: in a TUI a newline is Enter.
     `remaining` = notes still waiting behind these (the drip): the agent is told the next one
-    comes when it stops again, so it does not go looking for it."""
+    comes when it stops again, so it does not go looking for it. `words=False`: Taskuary's part alone, the notes left out."""
     n = len(notes)
     # ...a message relayed from someone else (terminal.say_to_task, CreatedBy 'router') is not the owner's note: it names its own sender
     who = 'the owner' if all((x.get('CreatedBy') or 'owner') != 'router' for x in notes) else 'Taskuary'
@@ -36,7 +36,21 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0) -> str:
             'after finishing the step you are on; if one conflicts with work already done, say so instead of undoing it:')
     tail = (f' ({remaining} more note{"s" if remaining > 1 else ""} wait{"" if remaining > 1 else "s"} behind this one - the next comes when you stop again; '
             'finish this and stop, do not ask for it.)' if remaining else '')
-    return ' '.join((head + ' ' + ' '.join(f'({i}) {str(x.get("Note") or "").strip()}' for i, x in enumerate(notes, 1)) + tail).split())[:MAX_BATCH]
+    said = ' '.join(f'({i}) {str(x.get("Note") or "").strip()}' for i, x in enumerate(notes, 1)) if words else ''
+    return ' '.join((head + ' ' + said + tail).split())[:MAX_BATCH]
+
+
+# A GENERAL AGENT'S CHAT SAYS WHO SAID WHAT (the overnight run, 2026-11-03): the batch typed into its conversation was filed whole as the
+# owner's, so YOU read "While you were working, the owner queued 1 note for you. Take them in order..." - Taskuary's words in the owner's
+# bubble. Taskuary's part is its brief (the grey line), each note its writer's own words, and the agent's turn is the batch, as it was
+def to_general(store, tid, session, notes: list, after_restart: bool = False, remaining: int = 0) -> None:
+    from . import general
+    store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, batch(notes, after_restart, remaining, words=False))
+    for x in notes:
+        store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') != 'router' else general.BRIEF_ACTOR, general.USER_TYPE,
+                          str(x.get('Note') or '').strip())
+    threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining),), kwargs={'kept': True, 'brief': True},
+                     daemon=True).start()
 
 
 def drip(store) -> bool:
@@ -178,7 +192,9 @@ def deliver(store, tid: int) -> dict:
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'answered', 'left': left})
         return {'delivered': len(notes), 'state': 'answered', 'left': left}
     if st == 'parked':
-        how = term.tell(t, batch(notes, remaining=left))
+        from . import general
+        if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left); how = 'typed into'
+        else: how = term.tell(t, batch(notes, remaining=left))
         store.deliver_waiting([x['WId'] for x in notes], 'typed')
         store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session once the agent stopped.'
                           + (f' {left} still waiting for its next stop.' if left else ''))
@@ -194,10 +210,7 @@ def deliver(store, tid: int) -> dict:
         from . import general
         if general.handles(task):
             if not general.provider_options(store): return {'delivered': 0, 'state': 'no_provider'}
-            session = general.start_session(store, tid, actor='router')
-            threading.Thread(target=session.send_prompt,
-                             args=(batch(notes, after_restart=True, remaining=left),),
-                             daemon=True).start()
+            to_general(store, tid, general.start_session(store, tid, actor='router'), notes, after_restart=True, remaining=left)
             how = 'assistant'
         else:
             from . import agents as hub_agents

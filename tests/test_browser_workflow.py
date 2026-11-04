@@ -216,6 +216,19 @@ class ARestartReopensTheTasksPageTests(unittest.TestCase):
         self.assertEqual((browserview.last_page(7), browserview.last_page(8), browserview.last_page(9)),
                          ('https://portal.example/bills', 'https://other.example/', ''))
 
+    def test_the_page_is_kept_with_its_query_whatever_the_state_file_says(self):
+        """agent-browser's .target keeps an address without its query; a portal's sign-in reopened from it after a restart sat on a white
+        spinner for good (the browser-agent walk, 2026-11-04). The full address is asked of the browser, and never cut back later."""
+        full = 'https://login.portal.example/signin/v1/?app=7&return=https://portal.example/home'
+        browserview.LAST.pop('s9', None)
+        with mock.patch('taskuary.browsergate._run', return_value=(0, f'✓ {full}')) as asked:
+            self.assertEqual(browserview.page_url('s9'), full)
+        self.assertEqual(asked.call_args.args[1], ['get', 'url'])
+        browserview.keep_page(7, full); browserview.keep_page(7, 'https://login.portal.example/signin/v1/')
+        self.assertEqual(browserview.last_page(7), full)
+        browserview.keep_page(7, 'https://portal.example/home')                    # a page it MOVED to is still kept
+        self.assertEqual(browserview.last_page(7), 'https://portal.example/home')
+
     def test_a_fresh_session_opens_its_browser_on_that_page(self):
         s = store()
         tid = s.create_task({'Title': 'Bills', 'Kind': 'general', 'Status': 'open', 'Tags': browserview.WANTS}, 'o')

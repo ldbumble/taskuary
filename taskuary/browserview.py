@@ -369,7 +369,10 @@ def keep_page(tid, url: str) -> None:
     if not tid or not url.startswith(('http://', 'https://')): return
     with _PAGES_LOCK:
         pages = _pages()
-        if pages.get(str(tid)) == url: return
+        had = str(pages.get(str(tid)) or '')
+        # ...never the same page with its query cut off: agent-browser's .target keeps an address without it, and a portal's sign-in
+        # reopened as https://portal.example/signin/ with no ?app=... sat on a white spinner for good (the browser-agent walk, 2026-11-04)
+        if had == url or ('?' not in url and had.split('?')[0].split('#')[0] == url.split('#')[0]): return
         pages[str(tid)] = url
         try: _pages_file().write_text(json.dumps(pages), encoding='utf-8')
         except OSError as e: logger.debug(f'could not keep the page of task {tid}: {e}')
@@ -425,6 +428,18 @@ def your_turn(store, tid: int, sid: str, what: str = '') -> str:
     chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
     ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[TURN_DONE] if chat else None, source='api')
     return rid
+
+
+def page_url(sid: str) -> str:
+    """The address the session's page is on IN FULL, or ''. agent-browser's .target (state) keeps it without its query string, which
+    is what a portal's sign-in needs to draw at all; the relay's last word on it, else the browser asked (`get url`), keeps it whole."""
+    from . import browsergate
+    u = str((LAST.get(str(sid)) or {}).get('url') or '')
+    if '?' in u: return u
+    try: rc, said = browsergate._run(sid, ['get', 'url'], 15, 'url')
+    except Exception as e: logger.debug(f'the page of {sid} could not be asked for - {e}'); return u
+    got = next((w for w in reversed(str(said or '').split()) if re.match(r'^https?://', w, re.I)), '') if rc == 0 else ''
+    return got or u
 
 
 def last_page(tid) -> str:

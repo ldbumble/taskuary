@@ -1634,7 +1634,7 @@ class GeneralSession:
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         if summ:
             self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
-            self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')
+            if 'on_you' in summ: self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
         from . import sessionrecord
         try: sessionrecord.keep_turn(self.task_id, rid, self.trace)

@@ -322,22 +322,33 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
                 f'(through [[TASKUARY-ASK]]) only when there are real ones.')
 _SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
+# ...and one that never closed: a live line is cut to 300-400 characters before it is drawn (agents.py), and a turn can end without
+# the closing tag - the opening tag through to the end goes, and so does a tag cut off part-way at the very end ("[[TASKUA")
+_SUMMARY_CUT = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\].*\Z', re.I | re.S)
+_SUMMARY_TAGS = re.compile(r'\[\[\s*/?\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I)
+_TAG_STUB = re.compile('(?:' + '|'.join(re.escape(SUMMARY_OPEN[:k]) for k in range(len(SUMMARY_OPEN) - 1, 2, -1)) + r')\s*\Z', re.I)
+def without_summary(text: str) -> str:
+    "`text` with every summary block, an unclosed one and a cut-off tag at its end taken out."
+    return _TAG_STUB.sub('', _SUMMARY_CUT.sub('', _SUMMARY_RE.sub('', str(text or ''))))
 
 
 def summary_marker(text: str, letters=()) -> tuple:
     """(text with every summary block taken out, {about, did, on_you, nothing_left}) - the dict None when it wrote none, or none that
-    reads as JSON. The block comes out either way: a broken one is Taskuary's plumbing, never words for the owner. `letters`: the
-    pending drafts' bodies, each of their lines said as SEE_DRAFT (without_letters) before the fields are cut to size."""
+    reads as JSON or says nothing. The block comes out either way, closed or not: a broken one is Taskuary's plumbing, never words for
+    the owner - unless it was all the answer said, when its words are kept without the tags. `on_you` is there only when the agent
+    gave a list: a summary without one leaves the owner's steps as they are. `letters`: the pending drafts' bodies, each of their
+    lines said as SEE_DRAFT (without_letters) before the fields are cut to size."""
     t = str(text or ''); m = _SUMMARY_RE.search(t)
-    if not m: return text, None
-    rest = _SUMMARY_RE.sub('', t).strip()
+    if not m and not _SUMMARY_CUT.search(t): return text, None
+    rest, bare = without_summary(t).strip(), lambda: (rest or _SUMMARY_TAGS.sub('', t).strip(), None)
+    if not m: return bare()
     try: j = json.loads(m.group(1).strip())
-    except ValueError: return rest, None
-    if not isinstance(j, dict): return rest, None
+    except ValueError: return bare()
+    if not isinstance(j, dict): return bare()
     flat = lambda x, n: without_letters(' '.join(str(x or '').split()), letters)[:n]
-    on = [o for o in j.get('on_you') if isinstance(o, str)] if isinstance(j.get('on_you'), list) else []
-    return rest, {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600),
-                  'on_you': list(dict.fromkeys(x for x in (flat(o, 200) for o in on) if x))[:6], 'nothing_left': j.get('nothing_left') is True}
+    out = {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600), 'nothing_left': j.get('nothing_left') is True}
+    if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, 200) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
+    return (rest, out) if out['about'] or out['did'] or out.get('on_you') else bare()
 
 
 # ...and never a second copy of the letter (the owner, 2026-11-04): what goes to the sender - a login in it above all - lives in the draft
@@ -499,7 +510,7 @@ def for_screen(text: str) -> str:
     (2026-10-15); a done line left in kept the last paragraph from matching the answer, so it was drawn twice again (walk 2026-10-29)."""
     # ...and no show line: its file is drawn under the answer, and left in it kept the answer drawn twice again (stress test 2026-11-02)
     # ...and no summary block: it is the turn's three parts, drawn under the answer from the row it is filed as (Task 3.5)
-    return show_markers(attach_markers(_DONE_LINE.sub('', _SUMMARY_RE.sub('', _REPLY_RE.sub('', without_ask(text)))))[0])[0].strip()
+    return show_markers(attach_markers(_DONE_LINE.sub('', without_summary(_REPLY_RE.sub('', without_ask(text)))))[0])[0].strip()
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)

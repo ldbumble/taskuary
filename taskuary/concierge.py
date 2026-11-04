@@ -5268,6 +5268,8 @@ def describe_op(store, op: dict) -> tuple:
         elif tk == 'review' and target:
             rv = store.get_review(int(target)) or {}
             ref = task_ref(rv['TaskId']) if rv.get('TaskId') else f'rv{target}'
+            # ...a held step the owner let run is Approve, never "Send": "Done - Send · TQ-0006." over a delete nothing sent (2026-11-03)
+            if kind == 'review.approve' and rv.get('Kind') == 'action': label = buttons.label('approve', 'action')
         elif tk == 'item': ref = task_ref(int(p['tid'])) if p.get('tid') else str(p.get('key') or '')
         elif tk == 'source' and target: ref = f'report {target}'
         elif tk == 'report': ref = str(p.get('title') or '')

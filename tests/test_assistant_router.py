@@ -248,6 +248,14 @@ class DeskRoutes(unittest.TestCase):
             out, _ = say(s, 'start it', item['key'], 'CALL: {"kind": "regular_agent", "params": {}}')
         self.assertTrue(out['say'].startswith('Not done'), out['say']); self.assertNotIn('on it now', out['say'])
 
+    def test_a_held_step_let_run_is_named_approve_not_send(self):
+        "The overnight run, 2026-11-03: Approve on a held delete came back as \"Done - Send · TQ-0006.\" - nothing was sent."
+        s = store(); tid, _ = on_table(s)
+        held = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{"action": "shell_act"}', 'Reason': 'held'})
+        draft = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Done.', 'Reason': 'drafted'})
+        label = lambda rid: concierge.describe_op(s, {'kind': 'review.approve', 'targetKind': 'review', 'target': rid, 'params': {}})[0]
+        self.assertEqual((label(held), label(draft)), (buttons.label('approve', 'action'), buttons.label('approve')))
+
     def test_an_answer_that_went_in_is_said_as_what_happened(self):
         "The overnight run, 2026-11-03: \"Go with option B\" to an agent that asked came back as \"Done - Answer it · TQ-0004.\" - a button's name."
         from taskuary import general

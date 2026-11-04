@@ -22,7 +22,7 @@ test("once open, the main view and its section are held: only a new task, its de
   // ...and a write-up starting or ending (Stop holds the Agent pane while it writes, 2026-10-29)
   // ...and the section the Advisor's decision names once it lands (advice `section`, 2026-10-29: answered outside, it opens on Close out)
   assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{liveSession \? \"live\" : t\?\.Status\}\|\$\{advisedHeld\}\|\$\{!!writingUp\}`/);
-  assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\) \};/);
+  assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : homeSection\(home, sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\)\) \};/);
   assert.match(src, /const main = mainHeld\.current\.main;/);
   // ...a tab's press opens its section, and it stays open under the owner: only another task, an agent starting or stopping, a close or
   // reopen or the width fold it - not the detail, the Advisor's pick, the write-up's end or in_progress -> open catching up (2026-11-01)

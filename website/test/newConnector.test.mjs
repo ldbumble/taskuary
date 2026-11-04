@@ -21,6 +21,13 @@ test("no card for words that only share a fragment, and none for plain work", ()
   assert.equal(connectorNamed(""), null);
 });
 
+test("a plain word the card's title writes in lower case names no card, its whole name still does", () => {
+  assert.equal(connectorNamed("unzip notes.zip in Downloads and tell me what is on my screen"), null);
+  assert.equal(connectorNamed("look through the database backups"), null);
+  assert.equal(connectorNamed("set up a strategy screen")?.type, "screen");
+  assert.equal(connectorNamed("connect teams")?.type, "teams");
+});
+
 test("New offers the card on its own row, beside the job, and the job still starts if pressed", () => {
   const src = readFileSync(new URL("../src/NewSheet.jsx", import.meta.url), "utf8");
   assert.ok(src.includes("useVerbs(`new-connect${me}`"));

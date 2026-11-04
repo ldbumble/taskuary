@@ -21,7 +21,11 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const connectorNamed = (text, cards = CATALOGUE) => {
   const t = ` ${String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
   if (!t.trim()) return null;
-  const names = (c) => [c.type.replace(/_/g, " "), c.title.toLowerCase(), ...(c.match || []).map((m) => m.toLowerCase()).filter((m) => m.includes(c.type))];
+  // ...and a bare type the card's own title writes in lower case is a plain word, not a name: "on my screen" is no Strategy screen,
+  // "the database" no Any database (a New sheet job about a screenshot offered the Strategy screen card, 2026-11-03)
+  const plain = (c, n) => n === c.type.replace(/_/g, " ") && ` ${c.title.replace(/[^A-Za-z0-9]+/g, " ")} `.includes(` ${n} `);
+  const names = (c) => [c.type.replace(/_/g, " "), c.title.toLowerCase(), ...(c.match || []).map((m) => m.toLowerCase()).filter((m) => m.includes(c.type))]
+    .filter((n) => !plain(c, n));
   const hits = cards.filter((c) => !c.planned && names(c).some((n) => new RegExp(` ${esc(n.replace(/[^a-z0-9]+/g, " ").trim())} `).test(t)));
   return hits.sort((a, b) => b.title.length - a.title.length)[0] || null;      // "azure openai" over "openai"
 };

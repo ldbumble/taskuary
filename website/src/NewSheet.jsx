@@ -218,7 +218,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages();
   // agent
-  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
+  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead, codingReady, devMode } = useAgents();
   const [agent, setAgent] = useState("");   // the coding profile, by kind; blank = the server finds it
   const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
@@ -227,7 +227,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // "terminal" = a CLI on a keyboard, "general" = a general agent with no repository. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
   // newTask.planTask exists to stop, and it will not guess for us.
-  const [how, setHow] = useState(initialHow || "terminal");
+  // ...and with Developer mode off there is no terminal to pick: every job is a general agent's (the owner, 2026-11-02 and 2026-11-03)
+  const [howPick, setHow] = useState(initialHow || "terminal"), how = devMode ? howPick : "general";
   // A session you open here is usually one you mean to sit in, so it does not end itself: the
   // judge that closes a router's task on a quiet screen would close this one while you read it.
   // note
@@ -464,7 +465,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 question you just wanted TALKED THROUGH had to be filed as a coding task and then
                 walked back - the exact mistake newTask.js was written to prevent. Both doors,
                 stated, and the choice made before anything is created. */}
-            <Box>
+            {devMode && <Box>
               <Label>Who works it</Label>
               <Box sx={{ display: "flex", gap: 1 }}>
                 <Fork on={how === "terminal"} onClick={() => { setHow("terminal"); setModel(""); }} title="A live session"
@@ -472,7 +473,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 <Fork on={how === "general"} onClick={() => { setHow("general"); setModel(""); }} title="A general agent"
                   hint="a researcher, analyst or writer on its own. It looks things up, drafts and reports back." />
               </Box>
-            </Box>
+            </Box>}
             {how === "general" && (
               <Box>
                 <Label>Agent</Label>

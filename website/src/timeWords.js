@@ -34,13 +34,13 @@ export const age = (at, now) => {
   return Math.abs(r) < 1 ? "now" : r > 0 ? span(r) : `in ${span(-r)}`;
 };
 // THE WORK RAIL's gutter: ranked, not dated, so it only answers "has this sat too long" - an exact "22m" invites arithmetic. Inside the
-// first half hour it is simply new, then hour by hour, then days (the owner, 2026-09-16: "within a half an hour say 30 min <, then per
+// first half hour it is simply new (< 5m, < 15m, < 30m - finer while fresh, the owner 2026-11-04), then hour by hour, then days (the owner, 2026-09-16: "within a half an hour say 30 min <, then per
 // hour bands of time").
 export const band = (at, now) => {
   const m = minsSince(at, now);
   if (m == null) return "";
   const r = whole(m);
-  return r < 0 ? `in ${span(-r)}` : r < 30 ? "< 30m" : r < 60 ? "< 1h" : span(r);
+  return r < 0 ? `in ${span(-r)}` : r < 5 ? "< 5m" : r < 15 ? "< 15m" : r < 30 ? "< 30m" : r < 60 ? "< 1h" : span(r);
 };
 // ...counting DOWN to a For later row's return, reading forward: "in 30m", "in 1h", "in 3h", "in 2d" - "< 30m" read as an age (the
 // owner, 2026-09-30). "" once due: the row is on its way back. timewords.back_in is its server twin.

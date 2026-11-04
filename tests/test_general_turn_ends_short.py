@@ -98,6 +98,18 @@ class AShortTurnIsAFailureTests(unittest.TestCase):
         self.assertEqual(s.last_worker_event(tid, skip=ws.NOTES)['Kind'], 'working')
         self.assertEqual(ended, [])
 
+    def test_a_turn_that_ended_on_a_held_step_waits_on_the_owner(self):
+        """The overnight run, 2026-11-03: a delete held for Approve, the agent said it was waiting for it, and the judge read the turn as
+        short - "Failed" with Try again over the held step. Another session's held step does not count."""
+        s = MemoryStore(); tid = researcher(s)
+        said = 'Nothing has changed yet, because the delete is waiting for your approval.'
+        for sid, held in (('g3', 'g3'), ('g4', 'someone-else')):
+            ws.record(s, tid, sid, 'turn_end', text=said, source='api')
+            s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps({'action': 'shell_act', 'sid': held}),
+                          'Reason': 'held before it ran'})
+            hooks.judge_ended(s, tid, sid, said, brain=verdict(True, 'waiting on Approve'), wait=True)
+            self.assertEqual(s.last_worker_event(tid, skip=ws.NOTES)['Kind'], 'turn_end' if sid == 'g3' else 'failed')
+
     def test_an_unreadable_verdict_is_no_verdict(self):
         s = MemoryStore(); tid = researcher(s)
         ws.record(s, tid, 'g2', 'turn_end', text=SHORT, source='api')

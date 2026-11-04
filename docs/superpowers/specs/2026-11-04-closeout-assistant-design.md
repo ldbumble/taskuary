@@ -148,7 +148,7 @@ per task, the **brief**:
 
 ### 5. Agents do more of the work
 
-The Valley credentials case: the login was in a project's `.env`, and the agent left it to the owner. `general.repos_block` and the
+The bank credentials case: the login was in a project's `.env`, and the agent left it to the owner. `general.repos_block` and the
 assistant template already say to read a repo's `.env` and never paste a secret. The builder must first find out from that run's
 record why it did not look (no agent ran? no repo map? the agent didn't search?), then fix that cause. The fix must not be a rule.
 It must give the agent better context: the brief's `your_part` goes into the agent's brief, plus "before leaving a step to the owner,

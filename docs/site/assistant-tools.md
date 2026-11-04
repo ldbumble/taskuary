@@ -9,8 +9,8 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
-| **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
+| **table** | decide about the item on the table | reply(text, cc?), approve, send_close, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, report_off, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, prepare, elsewhere |
+| **task** | change any task - the table's or one by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | a task's agent; where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.tell(text), agent.stop, agents.stop(refs/all), routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text, channel?, to?), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
@@ -35,7 +35,13 @@ The "Reply" button ("Draft reply" when nothing is drafted yet): write a reply to
 
 ### `approve`
 
-The "Send" button ("Approve" on an agent's proposal or a task's close-out): the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only that. It never closes the task - that is close, the owner's own Mark done, a separate step - and never continues an agent's session - that is agent.continue.
+The "Send" button ("Approve" on an agent's proposal or a task's close-out): the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only that. It never closes the task - that is send_close, or close, the owner's own Mark done - and never continues an agent's session - that is agent.continue.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `send_close`
+
+The "Send and close" button: the same send, then the task closes - unless an agent or anything else on it still waits.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -219,7 +225,7 @@ The "They answered elsewhere" button: they answered elsewhere; the step somebody
 
 ## Task
 
-Change any task - the table's, or one named by ref.
+Change any task - the table's or one by ref.
 
 ### `task.update`
 

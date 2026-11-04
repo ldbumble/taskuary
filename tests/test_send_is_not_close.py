@@ -1,6 +1,6 @@
 """SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): Send only sends, Approve runs only the agent's act, the last of a
 task's emails ticks itself - and none of them closes the task. Mark done is the one close, and it is never offered on an item
-with no task behind it."""
+with no task behind it. Close out's own Send and close (the owner, 2026-11-03) is a Send and then that close: test_send_and_close."""
 import json
 from unittest import mock
 

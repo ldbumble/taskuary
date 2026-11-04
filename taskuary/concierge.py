@@ -97,7 +97,7 @@ def _call_json(s: str) -> dict:
     if not isinstance(got, dict): raise ValueError('a CALL is one JSON object')
     return got
 # what the owner can decide about the thing on the table - each is a button the card already has
-VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
+VERBS = ('reply', 'approve', 'send_close', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
          'accept_invite', 'decline_invite', 'propose_time', 'find_time',    # the calendar's answers (calwrite.py)
          'rerun', 'report_off', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
@@ -128,7 +128,7 @@ CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # ...and Redraft is back on a draft: its choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is
 # useless - it should be redraft or close task")
 # ...and Watch it beside Remind me wherever a task carries it (watch.py, the owner, 2026-11-01)
-CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+CHIPS ={'review': ('approve', 'send_close', 'redraft', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
@@ -205,6 +205,7 @@ OPENING = (
 # what the assistant says when a decision is carried out - the fact of what happens now, never a claim
 RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so.", 'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
             'reply': "I'll draft that - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
+            'send_close': 'Sending it as drafted, then closing the task - it stays open while anything on it still waits on you.',
             'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
             'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
@@ -775,12 +776,12 @@ def assent_verb(item: dict | None) -> str | None:
 # agent to research these three tools" on a meeting - the one item kind that never has one - with "there is
 # nothing to hand to a regular agent on this one" (the owner, 2026-09-07). propose_for already builds those
 # through task.create_from_text from the item's facts and the owner's words.
-NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
+NEEDS = {'reply': 'mid', 'approve': 'rid', 'send_close': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
          'rerun': 'source_id', 'report_off': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'watch': 'tid', 'continue': 'tid',
          'chase': 'key', 'let_go': 'key', 'elsewhere': 'key',
          'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid', 'prepare': 'event'}
-SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
+SAYS_VERB = {'approve': 'approve', 'send_close': 'send and close', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'report_off': 'pause', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
              'split': 'split', 'defer': 'put away', 'watch': 'watch', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere', 'prepare': 'prepare for'}
@@ -879,6 +880,13 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # ...an agent still WORKING on it takes the words as its next prompt (agent.tell, the owner 2026-11-02)
     if verb == 'answer_agent' and item.get('kind') != 'agent' and not (item.get('tid') and _agent_running(item['tid'])):
         return f"There's nothing to answer on {what} - nothing on it is waiting for an answer."
+    # SEND AND CLOSE is Close out's other send (the owner, 2026-11-03): a reply drafted on a task - never a close-out's merge, one email of
+    # several (slots.py) or a question parked for the sender - and wherever Send itself could not go, nor can it
+    if verb == 'send_close':
+        rv = (store.get_review(int(item['rid'])) or {}) if store is not None and item.get('rid') else {}
+        if not item.get('tid') or item.get('kind') != 'review' or item.get('closeout') or rv.get('Kind') in ('slot', 'clarification', 'action'):
+            return f"There is no reply on a task to send and close on {what}."
+        return cannot(item, 'approve', store)
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
         how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
@@ -1849,7 +1857,7 @@ CANVAS_CAP, CANVAS_ROWS = 1500, 8
 def _past_of(label: str) -> str:
     "What a card's badge says happened to it, in the past tense."
     L = buttons.label
-    return {L('close'): 'marked done', L('close_note'): 'closed with a note', L('approve'): 'sent', L('defer'): 'put away until its day',
+    return {L('close'): 'marked done', L('close_note'): 'closed with a note', L('approve'): 'sent', L('send_close'): 'sent and closed', L('defer'): 'put away until its day',
             L('remove'): 'removed - not a task', L('not_ours'): 'filed - not ours', L('next', 'read'): 'read', L('next', 'batch'): 'all read',
             L('next'): 'passed - still on you'}.get(label) or f'pressed {label}'
 
@@ -4421,6 +4429,8 @@ _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('t
         # ...a send is NOT a settle (the owner, 2026-10-18: "sending and closing are two steps"): the item stays on the table with
         # its receipt, and Mark done or Next moves it - Approve on an agent's proposal runs that act alone, the same way
         'approve': ('review.approve', False),
+        # ...and Send and close, Close out's other send (the owner, 2026-11-03): the same send, then the one gate's close (close_after_send)
+        'send_close': ('review.approve', False),
         # the calendar's answers DRAFT for the owner's Send (calwrite.draft) - on the desk the words only light the row's button
         **{v: ('calendar.answer', False) for v in ('accept_invite', 'decline_invite', 'propose_time', 'find_time')},
         'answer_agent': ('agent.answer', True),
@@ -4702,6 +4712,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
         from . import proposals
         target = it.get('rid') or ((proposals.held_pending(store, it['tid']) or {}).get('rid') if it.get('tid') else None)
         label = closeout_label(it) or label         # "Send the reply" is not what a merge card's yes does
+    elif verb == 'send_close': target, params = it.get('rid'), {'close': True}     # the reply, then the task's close (server: review.approve)
     elif verb == 'answer_agent':
         # the owner's own words when the model passed none - never a "yes" nobody said (B12, 2026-10-11)
         said = d_text or (text or '').strip()

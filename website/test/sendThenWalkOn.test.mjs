@@ -13,7 +13,7 @@ test("a clean send hands over to the task page, which walks on only when the tas
   const dec = read("ReviewDecision.jsx"), page = read("TaskPage.jsx");
   assert.match(dec, /onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false/);
   // after the error checks, never instead of them: a refused or failed send keeps the card and says why
-  assert.match(dec, /else if \(data\.send_error\) setSendErr\(replySendFailure\(data\)\);(\n\s+\/\/[^\n]*)+\n\s+else if \(data\.ok && \(verb === "approve" \|\| \(verb === "close_unsent" && r\.Kind !== "slot"\)\) && onSent\) \{\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: closesIt && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\) \}\); return;/);
+  assert.match(dec, /else if \(data\.send_error\) setSendErr\(replySendFailure\(data\)\);(\n\s+\/\/[^\n]*)+\n\s+else if \(data\.ok && \(verb === "approve" \|\| \(verb === "close_unsent" && r\.Kind !== "slot"\)\) && onSent\) \{\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\) \}\); return;/);
   // ...and a chat's Mark done (close_unsent: it copies the draft and closes) walks on the same way - it stood as "task · done" (2026-10-20)
   assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && !!data\.reply\?\.ok \}\);/);   // the close-out (merge + reply) too
   assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} closeOnSend liveWork=\{liveWork\} onRemind=/);
@@ -43,7 +43,9 @@ test("a reply sent from Close out closes the task once the send succeeded; a fai
   assert.doesNotMatch(sent, /finish\("done"\)/, "never Mark done's close, which has no gate");
   assert.match(read("closeAgent.jsx"), /export const closeAfterSend = \(api, tid\) => runOperation\(api, "task\.complete", tid, \{ after_send: true \}\);/);
   // ...and NEVER WHILE WORK ON IT IS LIVE (the owner, 2026-11-01): the line under Send says it stays open
-  assert.match(dec, /stays = closesIt && liveWork \? `the task stays open while \$\{liveWork\}` : closesIt \? "then the task closes"/);
+  // ...and only Send and close closes (the owner, 2026-11-03: "send and close and send without closing"): Close out's Send says it stays open
+  assert.match(dec, /const closeThen = liveWork \? `the task stays open while \$\{liveWork\}` : "then the task closes";/);
+  assert.match(dec, /stays = `the task stays open until you \$\{btn\("close"\)\}`;/);
   assert.match(page, /const liveWork = liveSession \|\| liveRun \? "the agent is working" : "";/);
   // ...and a close the walk kept open is back on the rail too, not only the table (AssistantView surface)
   assert.match(read("AssistantView.jsx"), /if \(how === "leave" && data\?\.kept\) \{ leftKey\.current = null; setLeavingTid\(null\); \}/);

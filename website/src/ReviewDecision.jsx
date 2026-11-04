@@ -3,8 +3,8 @@
 // sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
-import React, { useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Typography, CircularProgress } from "@mui/material";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Alert, Box, Button, Typography, CircularProgress, Menu, MenuItem } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
@@ -79,6 +79,9 @@ const hold = (r, part) => {
   if (e.text == null && e.cc == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
   heard.forEach((f) => f(r.ReviewId));
 };
+// SEND AND CLOSE OUTLIVES THE PRESS (the owner, 2026-11-03): a send nobody could confirm comes back as Check delivery or Send anyway, and the
+// card may be drawn again meanwhile - which of Close out's two sends was pressed is held per draft, so the confirmed send still closes, or not
+const closing = new Set();
 
 const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose", schedule: "Invite" };
 // The times are the server's words (calwrite.when): the envelope carries them as they will be said.
@@ -121,6 +124,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const [sent, setSent] = useState(false);
   const busy = busyNow || sent;
   const sentOr = (w) => (sent ? "Sent" : w);
+  // ...said by the send that was pressed: Close out has two, and "Sending…" stood on both
+  const [pressed, setPressed] = useState("approve");
   const [err, setErr] = useState("");
   const [sendErr, setSendErr] = useState("");       // approved, but the channel refused it
   const [interrupt, setInterrupt] = useState(null); // PW-239: the click that did not send
@@ -169,18 +174,27 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // the button right there, if related to task in general then put button on bottom"): Send where this channel carries it, Mark done
   // (with the draft copied) where it cannot - and Redraft beside them. ONE NAME for the send, wherever (buttons.json), and it only
   // sends: SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18) - the task's own Mark done is the close
+  // ...and in Close out TWO SENDS (the owner, 2026-11-03: "button send and close and send without closing so task stays open on send"): Send and
+  // close is the one that closes, and the primary; Send sends and the task stays open, as it does everywhere else
   const closesIt = closeOnSend && onTask && !!onSent;
   // ...but never while work on it is live (the owner, 2026-11-01): the reply goes and the task stays open - the server keeps it so too
-  const sendWord = btn("approve"), stays = closesIt && liveWork ? `the task stays open while ${liveWork}` : closesIt ? "then the task closes" : `the task stays open until you ${btn("close")}`;
+  const sendWord = btn("approve"), closeWord = btn("send_close"), stays = `the task stays open until you ${btn("close")}`;
+  const closeThen = liveWork ? `the task stays open while ${liveWork}` : "then the task closes";
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
     && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || filesPromised(r));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
-    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}${closesIt && sendable ? ` - ${stays}` : ` - and only that; the task stays open until you ${btn("close")}`}.`
+    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}${closesIt && sendable ? ` - ${closeThen}` : ` - and only that; ${stays}`}.`
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
-    : isCal && !r.Stale ? `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`
-    : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)}${answered ? " as a second reply" : ""} - ${stays}.` : "";
+    : isCal && !r.Stale ? (closesIt ? `${closeWord} tells the calendar, with the note above if there is one - ${closeThen}; ${sendWord} tells it and ${stays}.`
+      : `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`)
+    : onTask && !r.Stale && canSendIt ? (closesIt ? `${closeWord} sends this to ${replyContext(r)}${answered ? " as a second reply" : ""} - ${closeThen}; ${sendWord} sends it and ${stays}.`
+      : `${sendWord} sends this to ${replyContext(r)}${answered ? " as a second reply" : ""} - ${stays}.`) : "";
+  // each send's hover says exactly what it does here
+  const twoSends = closesIt && !simulated && !co && !proposal && canSendIt && !r.Stale && !chatFile && !delivery.frozen;
+  const copying = ccNow.length && !isCal ? `, copying ${ccNow.length}` : "", to = isCal ? "Tells the calendar" : `Sends this to ${replyContext(r)}`;
+  const closeTitle = `${to} - ${closeThen}`, sendTitle = `${to} - ${stays}`;
   // A DRAFT THAT CANNOT LEAVE FROM HERE is copied (the owner, 2026-10-22: "buttons do the talking"): Copy beside Redraft, which
   // copies and closes nothing; why it cannot be sent is the Copy button's hover - the three lines that said so are gone
   const [copied, setCopied] = useState(false);
@@ -243,16 +257,22 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
 
   // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
-  const decide = async (verb, anyway = false) => {
+  // `close`: Close out's Send and close - the send, then the task's close once the server's receipt says it went (onSent closes). Check
+  // delivery and Send anyway pass nothing: they finish the press that froze the draft, held in `closing`
+  const decide = async (verb, anyway = false, close = undefined) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
     if (verb === "approve" && refuseBlank()) return;
-    announce(no(verb));
+    if (close !== undefined) { if (close) closing.add(r.ReviewId); else closing.delete(r.ReviewId); }
+    const shut = closing.has(r.ReviewId);
+    announce(no(verb === "approve" && shut ? "send_close" : verb));
+    setPressed(verb === "approve" && shut ? "send_close" : verb);
     setBusy(true); setErr(""); setSendErr("");
     try {
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
           cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway }, { timeout: DECIDE_TIMEOUT });
+      if (data.ok && !data.send_error && verb === "approve") closing.delete(r.ReviewId);    // the press is over: the next one says again which send
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }
       // DECIDED ALREADY - answered in the chat itself (channels.retire_draft_answered_elsewhere), or by another window - is not a
@@ -269,8 +289,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // finds it done and walks on - it stood on the table as "task · done" with no line over it (the matrix's verify, 2026-10-20)
       // ...and busy ends when the decide answers, not when that re-read does: behind a slow server "Sending…" outlived the send
       // ...and on the task page a send that went IS the close (closeOnSend, 2026-10-29): only here, after the receipt - never at the press
+      // ...and only Send and close's (`shut`, the owner 2026-11-03): Close out's plain Send leaves the task open, as every other Send does
       else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) {
-        setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && verb === "approve" && (data.reply ? !!data.reply.ok : true) }); return;
+        setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && shut && verb === "approve" && (data.reply ? !!data.reply.ok : true) }); return;
       }
       onChanged?.();
     } catch (e) {
@@ -279,7 +300,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       if (timedOut(e)) onChanged?.();
       else setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again.");
     }
-    finally { acted(no(verb)); }
+    finally { acted(no(verb === "approve" && shut ? "send_close" : verb)); }
     setBusy(false);
   };
 
@@ -322,6 +343,25 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     return () => { stop(); el?.removeAttribute("data-tq-lit"); };
   }, [lit, r.ReviewId]);
   const solid = toRow && lit !== no("approve") ? "outlined" : "contained";
+  // ...Close out's Send and close IS the primary (the owner, 2026-11-03: "make it the primary button"): filled as it stands, and it steps
+  // back only while another move on this card is lit - an advised Send or Redraft - so one button is ever filled
+  const closeVariant = lit.startsWith(`${r.ReviewId}:`) && lit !== no("send_close") ? "outlined" : "contained";
+  // THE LINE NEVER WRAPS (the owner, 2026-10-23): with two sends it holds one line, and when they do not fit Send folds into a ▾ - measured
+  // against the width it needed, so it comes back out once there is room again. An advised Send stays in view (actionRow: the lit move)
+  const [foldSend, setFoldSend] = useState(false), [sendAt, setSendAt] = useState(null), foldAt = useRef(0);
+  const folded = twoSends && foldSend && lit !== no("approve");
+  useLayoutEffect(() => {
+    const el = movesRef.current;
+    if (!twoSends || !el || typeof ResizeObserver === "undefined") return undefined;
+    const fit = () => {
+      if (!foldSend && el.scrollWidth > el.clientWidth + 1) { foldAt.current = el.scrollWidth; setFoldSend(true); }
+      else if (foldSend && el.clientWidth >= foldAt.current) setFoldSend(false);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [twoSends, foldSend]);
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
@@ -371,6 +411,12 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
       { id: no("approve"), label: busy ? sentOr("Sending…") : `${sendWord} without the file`, tone: "s", disabled: off || !words.trim(), why: words.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
+    ] : twoSends ? [
+      // Close out's two: Send and close the primary, Send beside it - the one that gives up its place when the line is tight (foldSend)
+      { id: no("send_close"), label: busy && pressed === "send_close" ? sentOr("Sending…") : `${closeWord}${copying}`, tone: "p", disabled: off || (!words.trim() && !isCal),
+        why: words.trim() || isCal ? "" : "write the reply first", run: () => decide("approve", false, true), title: closeTitle },
+      { id: no("approve"), label: busy && pressed !== "send_close" ? sentOr("Sending…") : `${sendWord}${copying}`, tone: "s", disabled: off || (!words.trim() && !isCal),
+        why: words.trim() || isCal ? "" : "write the reply first", run: () => decide("approve", false, false), title: sendTitle },
     ] : [
       { id: no("approve"), label: busy ? sentOr(simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: off || (!words.trim() && !isCal), why: words.trim() || isCal ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : isCal ? thenLine : `Sends this response to ${replyContext(r)}` },
@@ -516,7 +562,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Box>
         </Box>
       )}
-      <Box ref={movesRef} data-tq-moves="" sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
+      <Box ref={movesRef} data-tq-moves="" data-tq-two-sends={twoSends ? (folded ? "folded" : "both") : undefined}
+        sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: twoSends ? "nowrap" : "wrap", ...(twoSends ? { "& > button": { whiteSpace: "nowrap", flexShrink: 0 } } : {}) }}>
         {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies
@@ -574,6 +621,26 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             <Button size="small" variant="outlined" disabled={off || !words.trim()} onClick={() => decide("approve")}
               title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
               {busy ? sentOr("Sending…") : `${sendWord} without the file`}</Button>
+          </>
+        ) : twoSends ? (
+          /* CLOSE OUT'S TWO SENDS (the owner, 2026-11-03): Send and close first and filled, Send beside it - and on a line too tight for both,
+             Send folds into the ▾ beside Send and close, never the other way round, and the line never wraps (2026-10-23) */
+          <>
+            <Button size="small" variant={closeVariant} disableElevation disabled={off || (!words.trim() && !isCal)} onClick={() => decide("approve", false, true)}
+              title={closeTitle} data-tq-send="close">
+              {busy && pressed === "send_close" ? sentOr("Sending…") : `${closeWord}${copying}`}</Button>
+            {folded ? (<>
+              <Button size="small" variant="outlined" disabled={off || (!words.trim() && !isCal)} onClick={(e) => setSendAt(e.currentTarget)} title={sendTitle}
+                aria-label={`More - ${sendWord}`} data-tq-send-more="" sx={{ minWidth: 0, px: 1 }}>▾</Button>
+              <Menu open={!!sendAt} anchorEl={sendAt} onClose={() => setSendAt(null)}>
+                <MenuItem dense title={sendTitle} data-tq-verb={no("approve")} sx={{ fontSize: 13 }}
+                  onClick={() => { setSendAt(null); decide("approve", false, false); }}>{`${sendWord}${copying}`}</MenuItem>
+              </Menu>
+            </>) : (
+              <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || (!words.trim() && !isCal)}
+                onClick={() => decide("approve", false, false)} title={sendTitle} data-tq-send="open">
+                {busy && pressed !== "send_close" ? sentOr("Sending…") : `${sendWord}${copying}`}</Button>
+            )}
           </>
         ) : (
           // ...a calendar answer's note may be empty (verdicts: `cal`), so an invite with none still has its Send - New → Meeting's pick

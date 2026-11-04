@@ -1,5 +1,6 @@
 // SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): the button under a draft is Send and it only sends; Approve runs only the
 // agent's act; Mark done is the one close. A send leaves the item on the table, its card badged Send - Mark done and Next on the row by the prompt.
+// ...save Close out's own Send and close (the owner, 2026-11-03), the one send that closes - pinned in sendAndClose.test.mjs; Send itself never does.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

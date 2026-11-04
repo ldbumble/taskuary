@@ -344,7 +344,7 @@ def selector(store=None, live: bool = True) -> str:
               '  sender     an address or a name, matched on the sender only',
               '  contains   words that must appear in the subject',
               '  older_than_hours  a number',
-              '  everything true - every item in the pipe except an agent waiting or working; only when the owner means all',
+              '  everything true - every item in the pipe but an agent waiting or working; only when the owner means all',
               'SELECT is for a SET the owner describes ("all the reports").',
               'A category is no word of the subject: category: report, never contains: report.']
     return '\n'.join(lines)
@@ -364,7 +364,7 @@ def block(store=None) -> str:
         'Never "Opening" or a promise: the page says "Opened" once it is up.',
         # the owner, 2026-10-27: the words before a press were written, then thrown away - the lit button says nothing (2026-10-23)
         'A CALL that presses or lights a button - an action word, a put-down, a reminder - is the CALL line',
-        'alone, no words before it: the button is the whole answer.',
+        'alone, no words before it: the button is the answer.',
         'Answer in plain words. To look something up or do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
         # ...save the one press made for them: New's card presses its own Send to agent (concierge._new `start`), and "where is it?" was
@@ -376,7 +376,7 @@ def block(store=None) -> str:
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
-        'WHERE THINGS ARE - look before you guess (tool, params):',
+        'WHERE THINGS ARE - look before you guess:',
     ]
     # ...as the tool and its params, not a whole CALL line apiece: the same wrapper seventeen times was 500 characters of the index (2026-10-28)
     for said, kind, params in WHERE:
@@ -391,7 +391,7 @@ def block(store=None) -> str:
     lines.append('  look - more look-ups: ' + ', '.join(k for k in READS if k not in shown and _offered(store, k)))
     # ...ONE LABEL PER BUTTON: the names it wears in a state ("Send anyway", "All read, next") are in tools.describe - the line was a
     # seventh of the index (the owner, 2026-10-28: "keep the index at 7950 by trimming")
-    lines += ['', 'THE BUTTONS BY NAME (tool "name"; tools.describe has its other names), only these:',
+    lines += ['', 'THE BUTTONS BY NAME (tool "name"; other names: tools.describe), only these:',
               '  ' + ', '.join([f'{k} "{L(k)}"' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
                                + [f'{t} "{L(v)}"' for v, t in CHIP_TOOL.items()]),
               '', selector(store, live=False), '',
@@ -417,8 +417,10 @@ _DECIDE = {
                         "or address (\"loop Gail in and ask her\" is a reply with Gail copied, never an agent). Nothing is sent"),
     'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only "
-                        "that. It never closes the task - that is close, the owner's own Mark done, a separate step - and never continues an "
+                        "that. It never closes the task - that is send_close, or close, the owner's own Mark done - and never continues an "
                         "agent's session - that is agent.continue"),
+    # ...and Close out's other send (the owner, 2026-11-03): "send it" is approve, "send it and close it" this
+    'send_close':      'the same send, then the task closes - unless an agent or anything else on it still waits',
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to an agent that does not write code - `text`: the job; `as`: a profile from agents.list, only when one fits; '
@@ -517,7 +519,7 @@ def _has(store, v: str) -> bool:
 
 # WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.
 WHERE = (
-    ('anything in the app to BRING UP - a setting, a connector card, a page, a report', 'app.find', {'query': 'signature'}),
+    ('anything to BRING UP - a setting, a connector card, a page, a report', 'app.find', {'query': 'signature'}),
     ('what is waiting on the owner', 'pipe.list', {}),
     ("a task's story - messages, notes, agent and draft", 'task.read', {'ref': 'TQ-0123'}),
     ('mail or chat about something, however old', 'timeline.search', {'contains': 'invoice', 'days': 60}),
@@ -541,7 +543,7 @@ WHERE = (
 # detail rides the turn.
 BUCKETS = (
     ('table', 'decide about the item on the table', tuple(DECISIONS)),
-    ('task', "change any task - the table's, or one named by ref",
+    ('task', "change any task - the table's or one by ref",
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
     ('agents', "a task's agent; where work belongs",

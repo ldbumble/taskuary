@@ -43,7 +43,8 @@ test("a turn the SERVER started before this pane opened is still a turn in fligh
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /const busy = !!data\?\.session\?\.busy \|\| !!data\?\.starting;/);
   const poll = view.slice(view.indexOf("const busy ="), view.indexOf("const pasted ="));
-  assert.match(poll, /if \(!busy\) return undefined;/, "one definition of work in flight drives the poll");
+  // ...and a wait on the page, which Taskuary itself can answer (a sign-in typed from the vault, 2026-11-04)
+  assert.match(poll, /if \(!busy && !onPage\) return undefined;/, "one definition of work in flight drives the poll");
   assert.match(poll, /api\.get\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant`\)/);
 });
 

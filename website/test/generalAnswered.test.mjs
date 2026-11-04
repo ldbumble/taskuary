@@ -29,5 +29,6 @@ test("the chat's poll hands the page the session it read, so the turn's end reac
   // the page held the session the turn STARTED with (busy) - the poll refreshed only the chat, and the heading said "is working"
   // under the finished answer for as long as you looked (2026-10-15)
   const gw = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(gw, /setData\(fresh\);[\s\S]{0,240}onSession\?\.\(fresh\.session \|\| null\);/);
+  // ...and a read made only because the agent waits on the page hands it a session only when there is one (2026-11-04)
+  assert.match(gw, /setData\(fresh\);[\s\S]{0,500}if \(busy \|\| fresh\.session\) onSession\?\.\(fresh\.session \|\| null\);/);
 });

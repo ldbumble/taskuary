@@ -26,6 +26,37 @@ test("the Advisor's or the Assistant's pick lights its own send - Send never lig
     { id: "41:approve", label: "Send", group: "decide", tone: "s", card: true }, { id: "done", label: "Mark done", group: "more" }];
   assert.equal(advisedIn(list, { verb: "send_close", label: "Send and close" })?.id, "41:send_close");
   assert.equal(advisedIn(list, { verb: "approve", label: "Send" })?.id, "41:approve");
+  // ...and where the draft stands without Send and close (outside Close out, a send frozen on Check delivery) its Send is the same yes
+  const one = [{ id: "41:approve", label: "Send", group: "decide", tone: "p", card: true }, { id: "done", label: "Mark done", group: "more" }];
+  assert.equal(advisedIn(one, { verb: "send_close", label: "Send and close" })?.id, "41:approve");
+  assert.equal(advisedIn([{ id: "done", label: "Mark done", group: "more" }], { verb: "send_close", label: "Send and close" }), null);
+});
+
+test("a close-out's pair: Approve and close and Approve, on the one list, and the close-out's yes lights Approve and close", () => {
+  assert.equal(label("send_close", "closeout"), "Approve and close");
+  assert.match(hint("send_close", "closeout"), /^Runs the close-out, sends the reply, then closes the task - it stays open while an agent works on it/);
+  assert.ok(ALL_LABELS.includes("Approve and close"));
+  const list = [{ id: "41:send_close", label: "Approve and close", group: "decide", tone: "p", card: true },
+    { id: "41:approve", label: "Approve", group: "decide", tone: "s", card: true }, { id: "41:alt", label: "Decline", group: "decide", tone: "s", card: true }];
+  assert.equal(advisedIn(list, { verb: "approve", label: "Approve" })?.id, "41:send_close");
+  // ...a draft's Send stays Send: "send it" never lights Send and close
+  const sends = [{ id: "41:send_close", label: "Send and close", group: "decide", tone: "p", card: true }, { id: "41:approve", label: "Send", group: "decide", tone: "s", card: true }];
+  assert.equal(advisedIn(sends, { verb: "approve", label: "Send" })?.id, "41:approve");
+});
+
+test("the close-out card in Close out draws Approve and close first and filled, Approve beside it; only the first's receipt closes", () => {
+  assert.match(rd, /const twoApproves = !!co && !r\.Stale && closesIt && sendable && !simulated && !delivery\.frozen;/);
+  const moves = rd.slice(rd.indexOf("] : co && !r.Stale ? ["), rd.indexOf("] : proposal ? ["));
+  assert.ok(moves.indexOf('no("send_close")') < moves.indexOf('no("approve")'), "Approve and close first");
+  assert.match(moves, /id: no\("send_close"\), label: [^\n]*closeCo, tone: "p"/);
+  assert.match(moves, /tone: twoApproves \? "s" : "p"/);
+  assert.match(moves, /run: \(\) => decideBoth\("approve", true\)/);
+  assert.match(moves, /run: \(\) => decideBoth\("approve", !twoApproves\)/);
+  assert.match(rd, /await onSent\(\{ closes: closesIt && close && !!data\.reply\?\.ok \}\); return;/);
+  const jsx = rd.slice(rd.indexOf("twoApproves ? (<>"), rd.indexOf(") : proposal ? ("));
+  assert.ok(jsx.indexOf('data-tq-send="close"') < jsx.indexOf("{folded ?"), "Approve and close is never in the ▾");
+  assert.match(jsx, /onClick=\{\(\) => \{ setSendAt\(null\); decideBoth\("approve", false\); \}\}/);
+  assert.match(rd, /const folded = paired && foldSend && lit !== no\("approve"\);/);
 });
 
 test("Close out draws Send and close first and filled, Send beside it; only Send and close's receipt closes", () => {
@@ -51,8 +82,8 @@ test("a send nobody could confirm keeps which send was pressed: Check delivery a
 });
 
 test("the line never wraps: Send folds into the ▾ beside Send and close, never the other way, and an advised Send stays out", () => {
-  assert.match(rd, /flexWrap: twoSends \? "nowrap" : "wrap"/);
-  assert.match(rd, /const folded = twoSends && foldSend && lit !== no\("approve"\);/);
+  assert.match(rd, /flexWrap: paired \? "nowrap" : "wrap"/);
+  assert.match(rd, /const paired = twoSends \|\| twoApproves;/);
   const jsx = rd.slice(rd.indexOf(") : twoSends ? ("), rd.indexOf("// ...a calendar answer's note may be empty"));
   assert.ok(jsx.indexOf('data-tq-send="close"') < jsx.indexOf("{folded ?"), "Send and close is never in the ▾");
   assert.match(jsx, /data-tq-send-more=""/);

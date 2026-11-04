@@ -111,7 +111,7 @@ class Assistant(unittest.TestCase):
         item = phone.pile(s)[0]
         with concierge.delivering(concierge.PHONE):
             verbs = [c['verb'] for c in concierge.chips_for(s, item)]
-        self.assertEqual(verbs[:2], ['approve', 'send_close'])
+        self.assertEqual(verbs[:4], ['send_close', 'approve', 'redraft', 'close'], 'Send and close first, then Send, as the desk draws them')
         p = phone.say(s, 'send it and close the task', key=item['key'], model='CALL: {"kind": "send_close", "params": {}}')['proposal']
         self.assertEqual((p['kind'], p['target'], p['label'], p['params'].get('close')), ('review.approve', rv['ReviewId'], 'Send and close', True))
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open', 'nothing happens until the yes')
@@ -125,6 +125,53 @@ class Assistant(unittest.TestCase):
         p = phone.say(s, 'send it', key=phone.pile(s)[0]['key'], model='CALL: {"kind": "approve", "params": {}}')['proposal']
         self.assertNotIn('close', p['params'])
         with mock.patch('taskuary.outbound.reply_to_message', return_value=SENT): phone.run(s, p)
+        self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
+
+
+class Advisor(unittest.TestCase):
+    """THE ADVISOR'S SEND IN CLOSE OUT IS SEND AND CLOSE (the owner, 2026-11-03): a model that says send lights Send and close on a draft on a
+    task - its Close out - and Send where the row has no Send and close."""
+    def decide(self, s, item, verb, offered=None):
+        import json
+        from contextlib import nullcontext
+        from taskuary import advisor
+        llm = lambda system, user, **kw: json.dumps({'verb': verb, 'line': '', 'evidence': []})
+        with mock.patch.object(term, 'live_sessions', return_value=[]), \
+             (mock.patch.object(advisor, 'offered', lambda _s, _it: [buttons.chip(v) for v in offered]) if offered else nullcontext()):
+            tgt = advisor.target_of(s, item['key'])
+            advisor.notice(s, advisor.SHOWN, tgt[0], tgt[1], tier=2, wait=True, llm=llm, key=item['key'])
+            with mock.patch.object(advisor, 'notice'): return advisor.decide(s, item['key'], preread=False)
+
+    def test_a_draft_on_a_task_lights_send_and_close(self):
+        s = desk.store(); tid, rid, item = drafted(s)
+        d = self.decide(s, item, 'approve')
+        self.assertEqual((d['verb'], d['label']), ('send_close', 'Send and close'))
+        self.assertEqual(s.get_review(rid)['Status'], 'pending', 'lit, never pressed')
+
+    def test_where_the_row_has_no_send_and_close_it_lights_send(self):
+        s = desk.store(); tid, rid, item = drafted(s)
+        d = self.decide(s, item, 'approve', offered=('approve', 'redraft', 'close'))
+        self.assertEqual((d['verb'], d['label']), ('approve', 'Send'))
+
+    def test_a_caution_about_the_draft_lights_neither_send(self):
+        from taskuary import advisor
+        for v in ('approve', 'send_close'):
+            d = advisor.checked(None, {'key': 'task:1'}, [buttons.chip(x) for x in ('approve', 'send_close', 'redraft')],
+                                {'key': 'task:1', 'verb': v, 'line': 'It promises Friday', 'kind': 'draft_caution'})
+            self.assertIsNone(d['verb'], v)
+
+
+class PhonePin(unittest.TestCase):
+    def test_a_draft_rewritten_after_the_phone_showed_it_is_not_sent_by_send_and_close_either(self):
+        from taskuary import remote_assistant as ra
+        s = phone.store(); out = phone.arrive(s, subject='Where is the August invoice?', body='Can you send it?', llm=phone.brain('reply_only', None))
+        rv = s.pending_review(out['task_id']); s.save_review_draft(rv['ReviewId'], 'Attached.')
+        item = phone.pile(s)[0]
+        pin = ra._pinned(s, item, 'send_close')
+        self.assertIn('shown', pin)
+        s.save_review_draft(rv['ReviewId'], 'Attached - and the September one too.')
+        with mock.patch.object(concierge, 'surface', return_value={'say': '', 'item': None}):
+            self.assertIn('nothing was sent', ra._draft_moved(s, {'verb': 'send_close', 'key': item['key'], **pin}, item))
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
 
 

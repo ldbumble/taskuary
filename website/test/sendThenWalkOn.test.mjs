@@ -15,7 +15,7 @@ test("a clean send hands over to the task page, which walks on only when the tas
   // after the error checks, never instead of them: a refused or failed send keeps the card and says why
   assert.match(dec, /else if \(data\.send_error\) setSendErr\(replySendFailure\(data\)\);(\n\s+\/\/[^\n]*)+\n\s+else if \(data\.ok && \(verb === "approve" \|\| \(verb === "close_unsent" && r\.Kind !== "slot"\)\) && onSent\) \{\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: closesIt && shut && verb === "approve" && \(data\.reply \? !!data\.reply\.ok : true\) \}\); return;/);
   // ...and a chat's Mark done (close_unsent: it copies the draft and closes) walks on the same way - it stood as "task · done" (2026-10-20)
-  assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && !!data\.reply\?\.ok \}\);/);   // the close-out (merge + reply) too
+  assert.match(dec, /else if \(data\.ok && verb !== "reject" && onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && close && !!data\.reply\?\.ok \}\);/);   // the close-out (merge + reply) too - Approve and close's
   assert.match(page, /onMarkDone=\{askFinish\} onSent=\{sent\} closeOnSend liveWork=\{liveWork\} onRemind=/);
   const sent = page.slice(page.indexOf("const sent = async"), page.indexOf("// Remind me: put away"));
   assert.match(sent, /api\.get\(`\/api\/tasks\/\$\{selected\}`\)/);

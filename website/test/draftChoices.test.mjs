@@ -49,7 +49,7 @@ test("the walk's reply card offers Redraft over a draft it has", () => {
 test("Send stays off and reads Sent until the page's re-read takes the card away (the owner, 2026-10-26)", () => {
   const src = read("ReviewDecision.jsx");
   assert.match(src, /const busy = busyNow \|\| sent;/);
-  assert.match(src, /onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && !!data\.reply\?\.ok \}\); return; \}/);
+  assert.match(src, /onSent\) \{ setSent\(true\); setBusy\(false\); await onSent\(\{ closes: closesIt && close && !!data\.reply\?\.ok \}\); return; \}/);
   assert.match(src, /onSent\) \{\n\s+setSent\(verb === "approve"\); setBusy\(false\); await onSent\(\{ closes: [^\n]+\}\); return;/);
   assert.match(src, /busy \? sentOr\(simulated \? "Simulating…" : "Sending…"\)/);
   assert.match(src, /if \(delivery\.frozen\) setSent\(false\);/, "the review's own delivery line takes over");

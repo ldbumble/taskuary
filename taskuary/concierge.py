@@ -128,7 +128,8 @@ CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # ...and Redraft is back on a draft: its choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is
 # useless - it should be redraft or close task")
 # ...and Watch it beside Remind me wherever a task carries it (watch.py, the owner, 2026-11-01)
-CHIPS ={'review': ('approve', 'send_close', 'redraft', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
+# ...and Send and close first, then Send, as the desk's Close out draws them (the owner, 2026-11-03); cannot() drops it off a task
+CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch', 'not_ours', 'next'), 'action': ('approve', 'not_ours', 'next'),
          # a meeting is read and passed: Join is a link on the card, not a verb (the owner, 2026-10-02: "Meeting card should
          # only have a next button like what it has on desktop") - and Prepare beside it (the owner, 2026-10-25: "add prepare that
          # creates agent to research about person and topic through your mails")
@@ -1057,7 +1058,7 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     inv, meet = calendar_asks(store, item)
     if inv:
         rest = [v for v in verbs if v not in ('reply', 'mine')]
-        lead = [v for v in rest if v == 'approve']               # a drafted answer's Send leads; the other answers replace it
+        lead = [v for v in rest if v in ('send_close', 'approve')]      # a drafted answer's sends lead; the other answers replace them
         verbs = lead + ['accept_invite', 'decline_invite', 'propose_time'] + [v for v in rest if v not in lead]
     elif meet:
         at = next((verbs.index(v) + 1 for v in ('reply', 'redraft') if v in verbs), 0)

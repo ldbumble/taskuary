@@ -215,8 +215,11 @@ const sameAct = (v, pick) => {
   const l = String(v.label || "").trim().toLowerCase(), want = String(pick?.label || "").trim().toLowerCase(), id = String(v.id || "");
   // ADVISED SEND IS A SEND: the draft's button keeps its `approve` id while it reads Redraft, Mark done or Checking delivery…,
   // and the line said "Send" over the one that was not (the Advisor audit, 2026-10-15)
-  if (verb === "approve" && ![label("approve"), label("approve", "action")].some((w) => l === w.toLowerCase()) && !l.startsWith("send")) return false;
-  return id === verb || id.endsWith(`:${verb}`) || verbOfRow(id) === verb || (!!want && l === want);
+  const coClose = label("send_close", "closeout").toLowerCase();
+  if (verb === "approve" && ![label("approve"), label("approve", "action")].some((w) => l === w.toLowerCase()) && !l.startsWith("send") && l !== coClose) return false;
+  return id === verb || id.endsWith(`:${verb}`) || verbOfRow(id) === verb || (!!want && l === want)
+    // ...and A CLOSE-OUT'S YES IS ITS APPROVE AND CLOSE where Close out draws the pair (the owner, 2026-11-03), as a draft's is Send and close there
+    || (verb === "approve" && id.endsWith(":send_close") && l === coClose);
 };
 // ...the one on the bar before the card's own of the same act - the card's main move (it holds the bar's first slot, rowOf), then the
 // row's own, then one only the card draws: the draft's Mark done (`<rid>:done`) was found first and lit on the card, a screen down,
@@ -224,10 +227,14 @@ const sameAct = (v, pick) => {
 export const advisedIn = (list, pick) => {
   if (pick?.id) return list.find((v) => v.id === pick.id && !v.disabled) || null;     // a move named by its id (setup's own)
   const ok = (v) => !v.disabled && v.group !== "next" && v.group !== "back" && sameAct(v, pick), main = (v) => v.card && v.group === "decide" && v.tone === "p";
-  return pick?.verb ? list.find((v) => ok(v) && main(v)) || list.find((v) => ok(v) && !v.card) || list.find(ok) || null : null;
+  const got = pick?.verb ? list.find((v) => ok(v) && main(v)) || list.find((v) => ok(v) && !v.card) || list.find(ok) || null : null;
+  // SEND AND CLOSE IS CLOSE OUT'S (the owner, 2026-11-03): where the draft stands without it - outside Close out, or a send frozen on Check
+  // delivery - the same yes is the draft's Send
+  return got || (liveVerb(pick?.verb) === "send_close" ? advisedIn(list, { verb: "approve", label: label("approve") }) : null);
 };
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
-export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && v.group !== "back" && sameAct(v, pick)) || null : null);
+export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && v.group !== "back" && sameAct(v, pick))
+  || (liveVerb(pick.verb) === "send_close" ? advisedAny(list, { verb: "approve", label: label("approve") }) : null) : null);
 // THE STRIP'S "<X> is off" LINE (AdvisorNext): a move the row has and has greyed says why, in the row's own words - but NOT while a press is in
 // flight. The owner's own Send, Reply or Redraft greys the row's draft verbs while it runs (its label "Sending…", "Drafting…"), and the strip
 // read that as the advised move being unavailable: "Drafting… is off - it cannot be pressed right now." for half a second after every

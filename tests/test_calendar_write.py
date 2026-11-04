@@ -127,7 +127,7 @@ class TheOwnersMove(unittest.TestCase):
         with mock.patch.object(calwrite, 'busy', return_value=BUSY): first = calwrite.draft(s, out['message_id'], 'accept')
         rv_item = {**item, 'kind': 'review', 'rid': first['reviewId'], 'draft': True}
         verbs = [c['verb'] for c in concierge.chips_for(s, rv_item)]
-        self.assertEqual(verbs[:4], ['approve', 'accept_invite', 'decline_invite', 'propose_time']); self.assertNotIn('redraft', verbs)
+        self.assertEqual(verbs[:5], ['send_close', 'approve', 'accept_invite', 'decline_invite', 'propose_time']); self.assertNotIn('redraft', verbs)
         with mock.patch.object(calwrite, 'busy', return_value=BUSY): second = calwrite.draft(s, out['message_id'], 'decline')
         self.assertEqual(s.get_review(first['reviewId'])['Status'], 'rejected')
         pending = [r for r in s.reviews_for_message(out['message_id']) if r['Status'] == 'pending']

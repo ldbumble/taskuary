@@ -41,7 +41,7 @@ The "Send" button ("Approve" on an agent's proposal or a task's close-out): the 
 
 ### `send_close`
 
-The "Send and close" button: the same send, then the task closes - unless an agent or anything else on it still waits.
+The "Send and close" button ("Approve and close" on a task's close-out with its reply): the same send, then the task closes - unless an agent or anything else on it still waits.
 
 <p class="runs">Brings up its button for you to press.</p>
 

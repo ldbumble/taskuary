@@ -466,7 +466,7 @@ _DECIDE = {
     'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
 # ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons
-_STATES = {'action': "on an agent's proposal or a task's close-out", 'none': 'when nothing is drafted yet'}
+_STATES = {'action': "on an agent's proposal or a task's close-out", 'closeout': "on a task's close-out with its reply", 'none': 'when nothing is drafted yet'}
 def button_words(v: str) -> str:
     """'the "Send" button ("Approve" on an agent's proposal...)' - '' for a decision that is no button."""
     if v not in buttons.VERBS: return ''

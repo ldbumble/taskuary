@@ -23,10 +23,10 @@ CASES = [
     # a draft that cannot go from here: Copy lit, said by nothing - the reason is its hover (the owner, 2026-10-22)
     ('did the overnight import finish', {'copy'}, {'not_ours', 'approve'}, []),
     ('Invoice 88213', {'redraft'}, {'approve'}, ["Friday's payment run", 'ATTACHED TO THE DRAFT: nothing']),
-    ('AP cutover - Thursday?', {'approve', None}, {'not_ours'}, ['Thursday still works']),
-    ('Lease renewal for the Elm Street office', {'new_task', 'fix'}, {'redraft', 'approve'}, ['WHAT FAILED', 'no such user']),
+    ('AP cutover - Thursday?', {'send_close', None}, {'not_ours'}, ['Thursday still works']),     # Close out's send (the owner, 2026-11-03)
+    ('Lease renewal for the Elm Street office', {'new_task', 'fix'}, {'redraft', 'approve', 'send_close'}, ['WHAT FAILED', 'no such user']),
     ('Badge access for the new AP clerk', {'reply', None}, {'not_ours'}, []),
-    ('Can you resend the Q3 numbers', {'redraft'}, {'approve'}, ['Sending the Q3 pack now', 'ATTACHED TO THE DRAFT: nothing']),
+    ('Can you resend the Q3 numbers', {'redraft'}, {'approve', 'send_close'}, ['Sending the Q3 pack now', 'ATTACHED TO THE DRAFT: nothing']),
     ('Year-end audit', {'reply', 'regular_agent', None}, {'not_ours'}, ['THE LAST 3 MESSAGES']),
     ('Spendly card limits', {'mine', 'defer', 'not_ours', 'regular_agent'}, set(), []),
     ('Vendor master clean-up', {'reply', None}, {'close'}, ['A REPLY WAS ALREADY SENT']),

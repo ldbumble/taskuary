@@ -1285,9 +1285,12 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if preread: _preread(store, key)
     d = checked(store, item, verbs, {'key': key, 'state': r['state'], 'verb': verb, 'line': line, 'by': by, 'evidence': ev, 'kind': kind}) if verb else \
         {'key': key, 'state': r['state'], 'verb': None, 'line': '', 'by': by, 'evidence': [], 'kind': kind}
+    # CLOSE OUT'S SEND IS SEND AND CLOSE (the owner, 2026-11-03): a draft on a task is sent from its Close out, where the send that closes is the
+    # primary - an advised Send lights it there. Elsewhere (no task, a close-out's merge, one email of several) the row has no Send and close
+    if d['verb'] == 'approve' and not pressable(store, item, 'send_close', verbs): d = {**d, 'verb': 'send_close'}
     # ...two facts stand on the strip where the model's own line is empty: what failed, whatever is lit, and what leaves with a draft beside
     # its Send (the design rev 2: "a line on top", never a dialog) - facts said, never a light chosen
-    if d['verb'] and not d['line'] and r.get('line') and (r['state'] in rulebook.FAILED or (r['state'] == 'draft_ready' and d['verb'] == 'approve')):
+    if d['verb'] and not d['line'] and r.get('line') and (r['state'] in rulebook.FAILED or (r['state'] == 'draft_ready' and d['verb'] in SENDS)):
         d = {**d, 'line': r['line'], 'evidence': d['evidence'] or list(r.get('evidence') or [])}
     fix = fix_of(store, item, verbs, d)
     if not d['verb'] and not fix: d = {**d, 'line': '', 'evidence': []}       # a caution refused with no press that fixes it says nothing
@@ -1360,6 +1363,7 @@ def _out(store, key, item, verbs, r, rev, d, fix, check=False) -> dict:
 # a lit Try again greyed for want of an AI (nothing lit at all), "the draft promises Friday" beside a dark Send, a late line on a drafted
 # task lighting Reply over the draft's own Send, and the survivor of a duplicate pair folded into its own twin. Each refusal is logged.
 AGENT_VERBS = frozenset({'continue', 'regular_agent', 'run_another', 'strong_again'})
+SENDS = frozenset({'approve', 'send_close'})      # the draft's two sends: Send, and Close out's Send and close
 AGENT_CHECK = True       # the suite turns this off (tests/conftest.py): a bare store has no brain, and its agents' buttons are not the subject
 
 
@@ -1390,7 +1394,7 @@ def checked(store, item: dict, verbs: list, d: dict) -> dict:
     verb, kind, why = d['verb'], d.get('kind') or 'other', ''
     if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
     # ...nothing sends on a reason that says the draft is not ready to send (the Advisor audit's judge, 2026-10-26)
-    elif kind in GAPS and verb == 'approve': why = 'a caution about the draft over its Send'
+    elif kind in GAPS and verb in SENDS: why = 'a caution about the draft over its Send'
     # ...and the one that stays of a duplicate pair is never folded into its own twin: following it would drop the ask
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     # ...and a coding agent asking to go further is the owner's call in its pane, never closed under it (the owner, 2026-11-02)

@@ -13,7 +13,7 @@ across its top while open.
 |---|---|---|---|
 | **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not a task**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
 | **Agent** | One or more runs by a coding or general agent, and the Result each left | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** | Ending a session does not mark the task done or send a reply |
-| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Send** and approving never close it — the task stays open until you **Mark done** |
+| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve and close**, **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Approve and close** does the same after the merge or the issue's close; **Send** and **Approve** never close it — the task stays open until you **Mark done** |
 
 **Mark done** always comes first on Close out and is never folded away. When a strip runs out of
 room, the rest of its moves fold into a **▾** at its end. The task's title bar holds only its status,
@@ -54,10 +54,14 @@ A task an agent or a merged pull request closed stays on your work rail until yo
 ### The close-out: what finishes it where it lives
 
 Mail is answered by the reply. A pull request is merged, and an issue closed. Whatever the system, the card has the
-same three buttons - only the line under them says what they do there. None of them closes the task: **Mark done** does.
+same three buttons - only the line under them says what they do there. None of them closes the task: **Mark done** does -
+except **Approve and close**, which the task page's Close out puts first where your reply rides with the close-out: it
+approves, sends the reply, then closes the task (kept open while an agent works on it). **Approve** beside it does the
+same and leaves the task open; when the line is tight it folds into the **▾** beside **Approve and close**.
 
 | Button | What it does |
 |---|---|
+| **Approve and close** (**Send and close** on a reply alone) | Does what **Approve** does, then closes the task - in Close out, where your reply goes with it |
 | **Approve** (**Send** on a reply alone) | Does the task's last act the normal way for its system, sending your reply with it - and only that |
 | **Decline** | Closes it without doing it, where the system has that difference - a pull request closed unmerged |
 | **Not yet** | Nothing happens; the task stays open and on you (in the Assistant's walk this is **Next**) |

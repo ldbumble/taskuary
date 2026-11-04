@@ -796,6 +796,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     A message with `_mid` is one deferred() already stored and drain() is now judging: the
     checks above the judgement (dedupe, feed, policy) were made when it arrived."""
     cfg = store.get_settings()
+    starts = []      # the agent starts this message sets going - spawned once its verdict is on file (below)
     fresh = not msg.get('_mid')
     # a message seen twice is dropped on the first line - before any policy pass, before any AI
     if fresh and store.message_exists(msg.get('external_id') or ''):
@@ -1281,8 +1282,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
                     # a stranger's mail' has an answer
                     store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
-                    if f['kind'] == 'coding': _spawn(_auto_code, store, tid)
-                    else: _spawn(_auto_general, store, tid, advisor_brief(store, msg, mid))
+                    if f['kind'] == 'coding': starts.append((_auto_code, store, tid))
+                    else: starts.append((_auto_general, store, tid, advisor_brief(store, msg, mid)))
                 else:
                     held = who
                     # A stranger's first message is its own state, not just an absent session. An
@@ -1331,6 +1332,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if intent.get('invite'): reason = f"{intent['why']} · your answer goes out only when you press {buttons.label('approve')}"
     # a split is triage's own decision and recorded as one, so the correction loop and the eval replay read it like any verdict
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], 'triage' if split_from else actor, verdict=verdict)
+    # ...and only now the agent it set going: started before the verdict was on file, the start read no needs_browser, took the quick
+    # one-call path, and its session then found the verdict and opened a browser beside one call that never drives a page (2026-11-03)
+    for a in starts: _spawn(*a)
     _split_note(store, split_from, msg, {'task_id': tid})
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     if r['decision'] == 'attach':                   # the Advisor on the event (advisor.py): the task has new mail

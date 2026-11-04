@@ -3559,11 +3559,12 @@ def task_artifact(aid: int, download: bool = False):
     if not artifact: raise HTTPException(404, 'artifact not found')
     path = session_artifacts.confined(artifact.get('Path'))
     if not path: raise HTTPException(404, f'{_att_filename(artifact.get("Name"))} {GONE} - it is no longer in Taskuary\'s artifacts folder')
-    # a picture the chat SHOWED (session_artifacts.shown) is drawn by <img> as itself; anything that could run - SVG, a page -
-    # comes back as text like a Claude page below, for the sandboxed frame or the reader to draw (_NOSCRIPT)
+    # a picture the chat SHOWED (session_artifacts.shown) is drawn by <img> as itself, and a PDF by the browser's viewer (application/pdf
+    # inline, as the outputs route serves one); anything that could run - SVG, a page - comes back as text like a Claude page below, for
+    # the sandboxed frame or the reader to draw (_NOSCRIPT)
     kind = str(artifact.get('ContentType') or '')
     name = _att_filename(artifact.get('Name'))
-    if artifact.get('Kind') == 'shown' and kind.startswith('image/') and kind not in _NOSCRIPT:
+    if artifact.get('Kind') == 'shown' and (kind.startswith('image/') or kind == 'application/pdf') and kind not in _NOSCRIPT:
         response = Response(path.read_bytes(), media_type=kind)
         response.headers['Content-Disposition'] = _disposition('attachment' if download else 'inline', name)
         response.headers['X-Content-Type-Options'], response.headers['Cache-Control'] = 'nosniff', 'no-cache'

@@ -88,6 +88,15 @@ class ShownInTheChatTests(unittest.TestCase):
         self.assertTrue(page.headers['content-type'].startswith('text/plain'))      # the sandboxed frame draws it, never this origin
         self.assertEqual(page.headers['x-content-type-options'], 'nosniff')
 
+    def test_a_pdf_is_served_for_the_viewer_and_downloads_as_itself(self):
+        pdf = b'%PDF-1.4\n%%EOF'; (config.home() / 'scratch' / 'terms.pdf').write_bytes(pdf)
+        general._show_files(self.s, self.tid, [str(config.home() / 'scratch' / 'terms.pdf')], [])
+        [row] = [a for a in self.s.list_task_artifacts(self.tid) if a['Name'] == 'terms.pdf']
+        got, dl = (self.get(f"/api/task-artifacts/{row['ArtifactId']}{q}") for q in ('', '?download=true'))
+        self.assertEqual((got.headers['content-type'], got.content), ('application/pdf', pdf))
+        self.assertTrue(got.headers['content-disposition'].startswith('inline'))
+        self.assertEqual((dl.content, dl.headers['content-disposition'][:10]), (pdf, 'attachment'))
+
 
 if __name__ == '__main__':
     unittest.main()

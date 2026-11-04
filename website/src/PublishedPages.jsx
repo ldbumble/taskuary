@@ -28,7 +28,9 @@ const isOutput = (p) => p?.kind === "output";
 const OUTPUT_LABEL = { sheet: "spreadsheet", table: "table", pdf: "PDF", picture: "picture", text: "text", page: "page", document: "document" };
 // ...an SVG previews through the page frame (isPicture) but it IS a picture, and the card says so: "page" read as a broken image
 const isImage = (p) => /^image\//.test(type(p)) || /\.svg$/i.test(p?.name || "");
-const label = (p) => isImage(p) && (isOutput(p) || p.kind === "shown") ? "picture"
+// ...and a PDF - one it made or one it showed - is read in place by the browser's own viewer (Preview), never only downloaded (2026-11-04)
+const isPdf = (p) => (isOutput(p) && p.preview === "pdf") || /^application\/pdf\b/i.test(type(p));
+const label = (p) => isImage(p) && (isOutput(p) || p.kind === "shown") ? "picture" : isPdf(p) ? "PDF"
   : isOutput(p) ? (OUTPUT_LABEL[p.preview] || (/\.xlsm?$/i.test(p.name) ? "spreadsheet" : "file"))
   : (p.kind === "shown" ? (/csv/.test(type(p)) ? "table" : "page") : "published page");
 
@@ -93,7 +95,7 @@ function DocPreview({ page }) {
 
 function Preview({ page }) {
   const [body, setBody] = useState(null), [err, setErr] = useState("");
-  const sheet = isOutput(page) && page.preview === "sheet", pdf = isOutput(page) && page.preview === "pdf", doc = isOutput(page) && page.preview === "document";
+  const sheet = isOutput(page) && page.preview === "sheet", pdf = isPdf(page), doc = isOutput(page) && page.preview === "document";
   const picture = isPicture(page) || pdf, text = isOutput(page) && page.preview === "text" && !/markdown/.test(type(page));
   React.useEffect(() => {
     if (sheet || doc) return undefined;
@@ -137,12 +139,14 @@ const sizeOf = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024
 function OutputFile({ file: p, open, onToggle, verb = "" }) {
   const can = !!p.preview && !p.missing, [err, save, saved] = useSave();
   return (
-    <div className="tq-published-page" data-tq-output={p.path}>
+    <div className="tq-published-page" data-tq-output={p.path} data-tq-pdf={isPdf(p) ? "" : undefined}>
       <div className="tq-published-row">
-        <div className="tq-published-name tq-published-file">
+        {/* ...its name opens it too, as a page's does: a PDF clicked by its name was read nowhere */}
+        <button type="button" className={`tq-published-name${can ? "" : " tq-published-file"}`} disabled={!can} onClick={onToggle}
+          title={can ? (open ? "Hide it" : "Show it here") : undefined}>
           <b>{p.name}</b>
           <span>{p.missing ? "not in this task's files any more" : `${label(p)}${p.size ? ` · ${sizeOf(p.size)}` : ""}`}</span>
-        </div>
+        </button>
         {can && <Button size="small" variant={open ? "contained" : "outlined"} disableElevation onClick={onToggle}
           title={open ? "Hide the preview" : "Show it here"} data-tq-open={verb ? "" : undefined}>{open ? (verb ? "Hide" : "Hide preview") : verb || "Preview"}</Button>}
         {!p.missing && <Button size="small" href={attUrl(p, true)} title="Save a copy" data-tq-download=""
@@ -205,7 +209,7 @@ export default function PublishedPages({ pages, open: openAll = false, verb = ""
 function PageRow({ p, open, onToggle, verb }) {
   const [err, save, saved] = useSave();
   return (
-    <div className="tq-published-page">
+    <div className="tq-published-page" data-tq-pdf={isPdf(p) ? "" : undefined}>
       <div className="tq-published-row">
         <button type="button" className="tq-published-name" disabled={!p.url} onClick={onToggle}
           title={p.url ? (open ? "Hide it" : "Show it here") : "No copy was kept - open it on claude.ai"}>

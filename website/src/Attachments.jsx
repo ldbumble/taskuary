@@ -64,6 +64,39 @@ export const useSave = () => {
   return [err, (a) => { setErr(""); setSaved(""); saveFile(a).then(setSaved, (e) => setErr(e.message)); }, saved];
 };
 
+// A PDF IS READ IN PLACE (the owner, 2026-11-04: "it should display the pdf inline ... instead of downloading"): its bytes fetched with the
+// token as a blob, drawn by the browser's own PDF viewer in a frame - a blob of OUR fetch, so the file is the one the route confined, and
+// the viewer runs none of the PDF's script as the page. Download beside it saves the file itself.
+export const isPdf = (a) => /^application\/pdf/i.test(a?.content_type || "") || /\.pdf$/i.test(a?.name || "");
+export function PdfView({ file, onClose, sx }) {
+  const [src, setSrc] = useState(""), [err, setErr] = useState(""), [saveErr, save, saved] = useSave();
+  useEffect(() => {
+    let live = true, url = "";
+    setSrc(""); setErr("");
+    api.get(file.url, { responseType: "blob", headers: { "Cache-Control": "no-cache" } })
+      .then((r) => { if (live) { url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" })); setSrc(url); } })
+      .catch(async (e) => { const why = await fileError(e, "This PDF could not be read - Download it to open it."); if (live) setErr(why); });
+    return () => { live = false; if (url) URL.revokeObjectURL(url); };
+  }, [file.url]);
+  return (
+    // spans throughout: it also opens under a link inside a paragraph of an answer (md.jsx)
+    <Box component="span" data-tq-pdf-view={file.name || ""} sx={{ display: "block", mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", overflow: "hidden", ...sx }}>
+      <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.4, bgcolor: PANEL2, borderBottom: `1px solid ${BORDER}` }}>
+        <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1, minWidth: 0 }} noWrap title={file.name}>{file.name}</Typography>
+        {!!file.size && <Typography variant="caption" sx={{ color: FAINT }}>{kb(file.size)}</Typography>}
+        <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(file, true)} data-tq-download="" title="Save a copy"
+          onClick={(e) => { e.preventDefault(); save(file); }}>Download</Button>
+        {onClose && <Button size="small" onClick={onClose} title="Put it away">Hide</Button>}
+      </Box>
+      {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", px: 1, py: 0.5, color: DIM }}>{saveErr}</Typography>}
+      {saved && <Typography variant="caption" data-tq-file-saved="" sx={{ display: "block", px: 1, py: 0.5, color: DIM }}>{saved}</Typography>}
+      {err ? <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", px: 1, py: 1, color: DIM }}>{err}</Typography>
+        : src ? <Box component="iframe" src={src} title={file.name || "PDF"} sx={{ display: "block", width: "100%", height: "min(70vh, 640px)", border: 0 }} />
+        : <Box component="span" sx={{ display: "block", p: 1 }}><CircularProgress size={12} /></Box>}
+    </Box>
+  );
+}
+
 const LOGO = 48 * 1024;   // a company logo in a signature runs 20-40 KB (24 KB let a 24.4 KB one draw as a picture)
 // A cid-referenced image smaller than a logo IS a signature, not the ask, so it gets a chip like
 // any other file. SVG is exempt: nobody signs their mail in one, and Taskuary's own report charts
@@ -98,7 +131,7 @@ const SAVE_MAX = 12 * 1024 * 1024;   // channels.ATT_BYTES
 const hrefOf = (a, original) => a.link ? a.external_url : a.url ? attUrl(a, true) : original || undefined;
 const unsaved = (a) => (a.size > SAVE_MAX ? `over ${kb(SAVE_MAX)}, so not saved here` : "no copy came with the mail - a cloud file's link, or a forwarded mail");
 const titleOf = (a, original) => a.link ? `${a.kind} — ${a.note ? `not read: ${a.note}` : a.read ? (a.rows != null ? `read, ${a.rows} rows` : "read") : "opens where it lives"}`
-  : a.url ? "open it" : `${unsaved(a)} — ${original ? "opens in the original message" : "open it from the mail in your mailbox"}`;
+  : a.url ? (isPdf(a) ? "read it here" : "open it") : `${unsaved(a)} — ${original ? "opens in the original message" : "open it from the mail in your mailbox"}`;
 
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
@@ -108,13 +141,13 @@ export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test
 // a small inline one is drawn, not chipped as a signature's logo; and the panel says what it is, never a blank
 export const Attachments = ({ messageId, canFetch, dense, original, asFiles = null, bare = null }) => {
   const [items, setItems] = useState(null);
-  const [big, setBig] = useState(null);
+  const [big, setBig] = useState(null), [pdf, setPdf] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [saveErr, save, saved] = useSave();
   const load = () => api.get(`/api/messages/${messageId}/attachments`)
     .then(({ data }) => setItems(data.data || [])).catch(() => setItems([]));
-  useEffect(() => { setItems(null); setBig(null); setErr(""); load(); }, [messageId]);
+  useEffect(() => { setItems(null); setBig(null); setPdf(null); setErr(""); load(); }, [messageId]);
   // mail that arrived before Taskuary kept attachments - and the retry after a Graph hiccup
   const fetchNow = async () => {
     setBusy(true); setErr("");
@@ -193,10 +226,11 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
           </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
           {files.map((a) => (
-            <Box key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined}
+            <Box key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined} data-tq-att={a.name}
               data-tq-unsaved={!a.link && !a.url ? "" : undefined}
               target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
-              onClick={!a.link && a.url ? (e) => { e.preventDefault(); save(a); } : undefined}
+              aria-expanded={!a.link && a.url && isPdf(a) ? pdf?.id === a.id : undefined}
+              onClick={!a.link && a.url ? (e) => { e.preventDefault(); isPdf(a) ? setPdf(pdf?.id === a.id ? null : a) : save(a); } : undefined}
               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
                 border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: "min(260px, 100%)", boxSizing: "border-box",
                 cursor: hrefOf(a, original) ? "pointer" : "default", opacity: hrefOf(a, original) ? 1 : 0.6,
@@ -211,6 +245,7 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
         </Box>
         {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saveErr}</Typography>}
         {saved && <Typography variant="caption" data-tq-file-saved="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saved}</Typography>}
+        {pdf && files.some((a) => a.id === pdf.id) && <PdfView key={pdf.id} file={pdf} onClose={() => setPdf(null)} />}
         </Box>
       )}
       {/* full size, on top of everything - a screenshot of a spreadsheet is unreadable inline */}

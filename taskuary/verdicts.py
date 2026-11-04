@@ -114,21 +114,43 @@ def _attach(store, rid: int, name: str, data: bytes, actor: str = 'owner') -> di
     if rv.get('Status') not in ('pending', 'held'): raise ValueError('this reply has already been decided')
     if rv.get('DeliveryClaim') or rv.get('DeliveryState') in ('sending', 'unknown'):
         raise ValueError('the attempted attachments must be kept while delivery is in progress or unknown')
-    name = SAFE_NAME.sub('_', str(name or '').strip())[:120] or 'attachment'
+    name = _safe(name)
     if not data: raise ValueError('that file is empty')
     from . import outbound
     if len(data) > outbound.ATTACH_MAX:
         raise ValueError(f'that file is over {outbound.ATTACH_MAX // (1024 * 1024)}MB, which no mailbox will accept')
-    path = outbox_dir(rid) / name
-    path.write_bytes(data)
     env = _envelope(rv)
     files = [f for f in (env.get('attachments') or []) if f.get('name') != name]
+    # ...and one that fits alone but not beside the files already on: refused here, by its name, not at Send with the draft half-made
+    if len(data) + sum(int(f.get('size') or 0) for f in files) > outbound.ATTACH_MAX:
+        raise ValueError(f'with the files already on this reply it would come to more than {outbound.ATTACH_MAX // (1024 * 1024)}MB, '
+                         'which no mailbox will accept - send a link instead')
+    path = outbox_dir(rid) / name
+    path.write_bytes(data)
     files.append({'name': name, 'path': str(path), 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
     env['attachments'] = files
+    # ...a file said not attached earlier (refused) is attached now: its line comes off the card
+    if env.get('not_attached'): env['not_attached'] = [f for f in env['not_attached'] if _safe(f.get('name')) != name]
     if not store.set_review_deliver(int(rid), json.dumps(env)):
         raise ValueError('the reply changed before its attachment could be saved')
     store.audit('review', int(rid), 'attached', actor, detail={'name': name, 'size': len(data)})
     return {'attachments': files}
+
+
+def _safe(name) -> str: return SAFE_NAME.sub('_', str(name or '').strip())[:120] or 'attachment'
+
+
+# A FILE THAT DID NOT RIDE IS SAID ON THE CARD (2026-11-04): an agent handed over three reports with long, near-identical names; the third
+# was over the mailbox's cap and was refused - said in a comment under the agent's pane, while Close out showed two chips and nothing else,
+# under a draft that said "here are the three". The refusal is kept on the envelope beside the files, by the name the agent gave and why,
+# and the card draws it where the files are. Attaching a file of that name takes it off (_attach).
+def refused(store, rid: int, name: str, why: str) -> bool:
+    with store.review_delivery_edit(int(rid)):
+        rv = store.get_review(int(rid)) or {}
+        if rv.get('DeliveryClaim') or rv.get('DeliveryState') in ('sending', 'unknown'): return False
+        env = _envelope(rv)
+        env['not_attached'] = [f for f in (env.get('not_attached') or []) if f.get('name') != name] + [{'name': str(name), 'why': str(why)}]
+        return store.set_review_deliver(int(rid), json.dumps(env))
 
 
 def detach(store, rid: int, name: str, actor: str = 'owner') -> dict:

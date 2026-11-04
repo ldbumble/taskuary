@@ -21,7 +21,7 @@ import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { isWork, stepsOf } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
-import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
+import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, turnStart, elapsedText } from "./agentWork.js";
@@ -1046,7 +1046,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
             or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
         <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy && !streaming}
           stack={!dock} taskId={dock ? null : task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
-          onView={viewShownIs} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
+          onView={viewShownIs}>{thread}</SessionPane>
       </Box>
     </Box>
   );

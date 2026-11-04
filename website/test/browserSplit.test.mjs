@@ -176,12 +176,12 @@ test("the chat keeps a readable width whatever share the browser was dragged to"
   assert.equal(splitRatio(0.6, 400), 0.3);                                // never below the browser's own floor
 });
 
-test("a browser that was open and closed folds the pane; one still starting keeps it", () => {
-  assert.equal(showsBrowser(false, true, false), true);    // asked for, Chrome still coming up
-  assert.equal(showsBrowser(true, true, true), true);
-  assert.equal(showsBrowser(false, true, true), false);    // it was open and has gone: fold, stop knocking
-  assert.equal(showsBrowser(true, false, true), true);     // the agent opened one unasked
-  assert.equal(showsBrowser(false, false, false), false);
+test("only a browser open on a page is shown: not one still starting, nor an empty tab (2026-11-04)", () => {
+  assert.equal(showsBrowser(true, "https://fares.example/results"), true);
+  assert.equal(showsBrowser(true, "file:///receipt.html"), true);         // a local file: shown folded to its chip (isLocalPage)
+  assert.equal(showsBrowser(true, "about:blank"), false);                 // "no browser should open if we don't have a URL"
+  assert.equal(showsBrowser(true, ""), false);
+  assert.equal(showsBrowser(false, "https://fares.example/results"), false);   // closed, or still coming up
 });
 
 test("only the tab the owner is at shapes the page, so a phone tab cannot reshape the desktop's", () => {

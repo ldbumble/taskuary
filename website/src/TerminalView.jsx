@@ -731,7 +731,7 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // seen it stays on its last frame when it closes; with no browser showing, the task's kept last view (LastView). `held`, `turn`,
 // `onHandBack`, `onDecided`: what waits on the owner, drawn on the view (BrowserPane). `onView(bool)`: whether the view is on screen to
 // draw them - when it is not (a phone's chip), the conversation keeps their cards.
-export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true, expectBrowser = false,
+export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true,
                              canFull = false, yourTurn = false, idle = false, stack = false, taskId = null, held = [], turn = null,
                              onHandBack, onDecided, onView }) => {
   const slot = useRef(null);
@@ -784,11 +784,10 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
     return () => ro.disconnect();
   }, []);
   // ...and the agent's canvas keeps the view once seen, on its last frame, while the session lives (`ended`)
-  const showingBrowser = !!sid && (showsBrowser(browser.open, expectBrowser, seen) || (stack && seen));
+  // ...and an empty tab is no view and no chip: only a page the agent opened is shown (showsBrowser)
+  const showingBrowser = !!sid && (showsBrowser(browser.open, browser.url) || (stack && seen));
   const ended = stack && seen && !browser.open;
-  // ...and an empty tab folds to its chip, as a local file does, until the agent opens a page or something waits on it (isBlankPage)
-  const blank = isBlankPage(browser.url) && !held.length && !turn && !yourTurn && !browser.filling;
-  const layout = layoutFor(width, showingBrowser, folded || ((isLocalPage(browser.url) || blank) && !localOk), stack);
+  const layout = layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
   const onScreen = showingBrowser && viewOnScreen(layout);
   useEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
   const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
@@ -820,7 +819,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
           chip that named only an address (2026-10-25) */}
       {ended ? `browser · closed${lastPage.current ? ` · last on ${shortUrl(lastPage.current, 28)}` : ""}` : !browser.open ? "browser · starting…"
         : held.length ? "browser · waits for your Approve - open it" : yourTurn ? "browser · your turn - open it"
-        : isBlankPage(browser.url) ? "browser · an empty tab - show it" : `browser · ${shortUrl(browser.url, 36) || "open"}`}
+        : `browser · ${shortUrl(browser.url, 36) || "open"}`}
     </Box>
   );
   /* A BROWSER THAT WAS OPEN AND CLOSED says so, where its chip or half sat: the pane just vanished, so a crash, a close and a glitch
@@ -888,7 +887,7 @@ const TerminalPaneInner = (props) => <SessionPane {...props} />;
 const TerminalPaneOuter = (props) => <TerminalPaneInner canFull {...props} />;
 export const TerminalPane = React.memo(TerminalPaneOuter,
   (a, b) => a.sid === b.sid && a.height === b.height && a.autoFocus === b.autoFocus
-    && a.expectBrowser === b.expectBrowser && a.canFull === b.canFull);
+    && a.canFull === b.canFull);
 TerminalPane.displayName = "TerminalPane";
 
 // Taskuary's terminals default to a WHITE palette (GitHub Light), switchable per browser (top-right picker,

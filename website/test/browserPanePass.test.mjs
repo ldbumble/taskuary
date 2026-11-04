@@ -26,7 +26,7 @@ test("the socket connects only while the browser is open, and backs off", () => 
   assert.match(pane, /if \(!open\) \{ setLive\(false\); return undefined; \}/);
   assert.match(pane, /\}, \[sid, open\]\);/);
   assert.match(pane, /2000 \* 2 \*\* tries\+\+/);
-  assert.match(term, /showsBrowser\(browser\.open, expectBrowser, seen\)/);
+  assert.match(term, /showsBrowser\(browser\.open, browser\.url\)/);
   assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 3, "the stack, the split and the peek all pass it");
 });
 

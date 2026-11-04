@@ -1108,11 +1108,12 @@ def install_processing_changes(app, store):
         {step: 'hold' | 'turn' | 'close', taskId}: the hold puts its Register press on the task (browsergate's own proposal); the agent
         hands the page over for a human check (browserview.your_turn); the agent's session ends with the browser on that page.
         {step: 'blank', frame}: a general task marked as needing a browser whose agent answered without one - its Chrome on about:blank,
-        and a question for the owner asked in words (the owner's pane, 2026-11-03)."""
+        and a question for the owner asked in words (the owner's pane, 2026-11-03).
+        {step: 'asked', frame}: the same, with a page the agent opened in it - an invented fares page - and its question asked in words."""
         step = body.get('step')
-        if step not in ('open', 'hold', 'turn', 'close', 'blank') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
+        if step not in ('open', 'hold', 'turn', 'close', 'blank', 'asked') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
         from taskuary import proposals, terminal
-        if step == 'blank':
+        if step in ('blank', 'asked'):
             from taskuary import workerstate as ws
             tid = store.create_task({'Title': 'Gail Moreno asks what Taskuary costs', 'Kind': 'general', 'Status': 'in_progress',
                                      'Tags': 'needs:browser'}, 'fixture')
@@ -1120,7 +1121,8 @@ def install_processing_changes(app, store):
             store.add_comment(tid, 'assistant', _gen.ASSISTANT_TYPE, 'Gail Moreno asks what it costs.\n\nFirst month free, or a price now?')
             sess = ViewAgent(store, tid)
             terminal.SESSIONS[sess.sid] = sess; view_sid[tid] = sess.sid
-            VIEW[sess.sid] = {'open': True, 'url': 'about:blank', 'frame': str(body.get('frame') or ''), 'input': [], 'ran': []}
+            VIEW[sess.sid] = {'open': True, 'url': 'about:blank' if step == 'blank' else 'https://fares.example/results?to=DEN',
+                              'frame': str(body.get('frame') or ''), 'input': [], 'ran': []}
             ws.record(store, tid, sess.sid, 'input_needed', request_id='q-price', text='First month free, or a price now?', source='api')
             return {'taskId': tid, 'sid': sess.sid}
         if step == 'open':

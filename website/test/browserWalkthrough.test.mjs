@@ -26,24 +26,22 @@ test("an embedded terminal never steals focus and scrolls the Assistant upward",
   assert.match(terminal, /!readOnly && binding\.autoFocus/);
 });
 
-test("an expected walkthrough browser reserves the side-by-side pane while Chrome starts", () => {
+test("a browser takes room only once it is on a page - a task that asks for one reserves nothing (2026-11-04)", () => {
   const workspace = read("GeneralWorkspace.jsx");
   const terminal = read("TerminalView.jsx");
-  assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\)\}/);
-  // ...until that browser has been seen open: one that opened and closed folds (showsBrowser, 2026-10-02)
-  assert.match(terminal, /showsBrowser\(browser\.open, expectBrowser, seen\)/);
-  assert.match(terminal, /browser · starting…/);
+  // the owner: "no browser should open if we don't have a URL" - no pane held for a Chrome still coming up, nor for an empty tab
+  assert.doesNotMatch(workspace, /expectBrowser/);
+  assert.match(terminal, /showsBrowser\(browser\.open, browser\.url\) \|\| \(stack && seen\)/);
 });
 
 test("a browser comes with the task, not from a button on the chat", () => {
   // The chat's strip carried a Browser button for a week (2026-09-14 to 2026-09-22), beside
   // Assistant/Terminal/Numbers view switches; the owner wanted the general agent to be a plain
   // chat window, so the strip lost all four. needs:browser is set where the task is made - the
-  // New task dialog, a set-up walk, a workflow with `browser: true` - and the pane reserves its
-  // half whenever the task carries the mark. The endpoint that sets it afterwards still exists.
+  // New task dialog, a set-up walk, a workflow with `browser: true` - and the pane shows once the
+  // agent opens a page (2026-11-04). The endpoint that sets it afterwards still exists.
   const workspace = read("GeneralWorkspace.jsx");
   assert.doesNotMatch(workspace, /assistant\/browser|browserOn/);
-  assert.match(workspace, /expectBrowser=\{wantsBrowser\(task\)\}/);
 });
 
 test("every agent screen can take the whole window - the chat's and the terminal's alike", () => {

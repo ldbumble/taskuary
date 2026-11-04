@@ -2319,6 +2319,20 @@ class SQLiteStore:
         else: hit[0].pop('note', None)
         self._write_checklist(task_id, items, actor)
         return True
+    def set_on_you(self, task_id, texts, actor: str) -> list:
+        """The steps left on the owner (`on_you` items) as these words - from an agent's turn summary or, where no agent works, triage's
+        reading (Task 3.5). Every other box stays, and so does an On you step the owner ticked; the unticked ones are replaced, a step
+        said again keeping its id. Returns the list as written."""
+        items = self.task_checklist(task_id)
+        kept, was = [i for i in items if not i.get('on_you') or i.get('done')], {i['text']: i for i in items if i.get('on_you') and not i.get('done')}
+        have, used_ids, new = {i['text'] for i in kept}, {i.get('id') for i in kept}, []
+        for text in self.clean_checklist(texts):
+            if text in have: continue
+            digest = hashlib.sha1(text.encode()).hexdigest()
+            item_id = (was.get(text) or {}).get('id') or next((digest[:n] for n in range(8, len(digest) + 1) if digest[:n] not in used_ids), digest)
+            new.append({'id': item_id, 'text': text, 'done': False, 'on_you': True}); have.add(text); used_ids.add(item_id)
+        if kept + new != items: self._write_checklist(task_id, kept + new, actor)
+        return kept + new
     def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
         items = self.task_checklist(task_id)
         hit = [i for i in items if i['id'] == item_id]

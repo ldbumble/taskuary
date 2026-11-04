@@ -321,6 +321,34 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. When you '
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
                 f'(through [[TASKUARY-ASK]]) only when there are real ones.')
+_SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
+
+
+def summary_marker(text: str, letters=()) -> tuple:
+    """(text with every summary block taken out, {about, did, on_you, nothing_left}) - the dict None when it wrote none, or none that
+    reads as JSON. The block comes out either way: a broken one is Taskuary's plumbing, never words for the owner. `letters`: the
+    pending drafts' bodies, each of their lines said as SEE_DRAFT (without_letters) before the fields are cut to size."""
+    t = str(text or ''); m = _SUMMARY_RE.search(t)
+    if not m: return text, None
+    rest = _SUMMARY_RE.sub('', t).strip()
+    try: j = json.loads(m.group(1).strip())
+    except ValueError: return rest, None
+    if not isinstance(j, dict): return rest, None
+    flat = lambda x, n: without_letters(' '.join(str(x or '').split()), letters)[:n]
+    on = [o for o in j.get('on_you') if isinstance(o, str)] if isinstance(j.get('on_you'), list) else []
+    return rest, {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600),
+                  'on_you': list(dict.fromkeys(x for x in (flat(o, 200) for o in on) if x))[:6], 'nothing_left': j.get('nothing_left') is True}
+
+
+# ...and never a second copy of the letter (the owner, 2026-11-04): what goes to the sender - a login in it above all - lives in the draft
+# only, never kept again in the summary or the On you list. A line of a pending letter found in it is said as SEE_DRAFT. Short lines
+# ("Hi Gail,") are left alone: they carry nothing a summary could leak, and swapping them would garble its own words
+SEE_DRAFT = '(see the drafted reply)'
+def without_letters(s: str, letters=()) -> str:
+    "`s` with every line (12+ characters) of the `letters` in it said as SEE_DRAFT, longest first."
+    lines = sorted({x for l in letters or () for x in (' '.join(r.split()) for r in str(l or '').splitlines()) if len(x) >= 12}, key=len, reverse=True)
+    for x in lines: s = s.replace(x, SEE_DRAFT)
+    return s
 
 
 def reply_marker(text: str) -> tuple:
@@ -470,7 +498,8 @@ def for_screen(text: str) -> str:
     once, as the answer. A CLI's final text streams in as a progress line too, so the box drew the markers and the answer twice
     (2026-10-15); a done line left in kept the last paragraph from matching the answer, so it was drawn twice again (walk 2026-10-29)."""
     # ...and no show line: its file is drawn under the answer, and left in it kept the answer drawn twice again (stress test 2026-11-02)
-    return show_markers(attach_markers(_DONE_LINE.sub('', _REPLY_RE.sub('', without_ask(text))))[0])[0].strip()
+    # ...and no summary block: it is the turn's three parts, drawn under the answer from the row it is filed as (Task 3.5)
+    return show_markers(attach_markers(_DONE_LINE.sub('', _SUMMARY_RE.sub('', _REPLY_RE.sub('', without_ask(text)))))[0])[0].strip()
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)

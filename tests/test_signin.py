@@ -296,7 +296,7 @@ class TheOwnerSignsInOnThePage(Asking):
         row = signin.saved(self.s, 'bank.example')
         self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
         said = ' '.join(c['Body'] for c in self.s.list_comments(self.tid))
-        self.assertIn('Saved your bank.example sign-in to the vault - remove it under Settings > Agent permissions > Saved sign-ins.', said)
+        self.assertIn('Saved your bank.example sign-in to the vault - remove it under Settings → Agent permissions, Saved sign-ins.', said)
         # NOWHERE in the clear: not the comments, the events, the audit, the logs - the vault row is sealed
         self.assertNotIn(PW, self.everything_written()); self.assertNotIn(USER, json.dumps(signin.listing(self.s)))
         # ...and the next ask on the site is filled from the vault by itself

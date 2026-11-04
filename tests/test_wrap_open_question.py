@@ -59,6 +59,13 @@ class OpenQuestionAtWrap(unittest.TestCase):
         wd.assert_called_once(); self.assertTrue(out['drafting'])
         self.assertEqual(s.list_reviews('pending')[0]['Reason'], 'the agent finished the work - reply awaiting approval')
 
+    def test_a_run_stopped_mid_turn_drafts_as_stopped_not_finished(self):
+        "The overnight run, 2026-11-03: Stop and save mid-turn left a draft saying 'the agent finished the work'."
+        s = MemoryStore(); tid, mid = vendor_task(s)
+        ev(s, tid, 'working'); ev(s, tid, 'stopped', 'the agent stopped in the middle of its turn')
+        self.finish(s, tid)
+        self.assertTrue(s.list_reviews('pending')[0]['Reason'].startswith('you stopped the agent'))
+
     def test_a_question_the_owner_answered_since_is_not_still_open(self):
         s = MemoryStore(); tid, mid = vendor_task(s)
         ev(s, tid, 'input_needed', ASK, rid='q1'); ev(s, tid, 'working', 'It passed - the files came through.')

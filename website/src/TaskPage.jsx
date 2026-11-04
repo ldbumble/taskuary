@@ -1634,6 +1634,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a run that FAILED was started, whether or not its first turn got as far as the conversation: with no AI to run on it
   // never did, and the row offered Send to agent as if nothing had been tried (owner-approved, 2026-10-21: Try again)
   const failedRun = !term?.alive && (detail?.runEnded === "failed" || detail?.agentStory?.kind === "failed");
+  // ...and one the OWNER stopped - Stop and save, its story "You stopped it", its run's own last word - reads stopped, never "finished" with
+  // ✓ Done under it (the overnight run, 2026-11-03), whatever the result it left is called
+  const stoppedRun = !term?.alive && (detail?.runEnded === "stopped" || ["saved", "interrupted"].includes(detail?.agentStory?.kind));
   const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory || failedRun
     || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   // ONE BAR, THE SAME BAR. The Task and Reply cards both open with [ primary ] | [ named ]
@@ -1871,7 +1874,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ profile: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary, never the profile (kinds.js shownAgent) */
-      word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: agentState === AGENT.stopped,
+      word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: stoppedRun || agentState === AGENT.stopped,
         result: resultShown, record: hasRecord, codeRun }),
       // ...a path into the task's outputs as the file's name, and no markdown marks mid-line: the folded spine read
       // "**C:\\Users\\<you>\\.taskuary\\scratch\\outputs\\TQ-n\\..." (stress test 2026-11-02). \x60, not a bare backtick:

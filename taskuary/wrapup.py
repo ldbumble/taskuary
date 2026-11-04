@@ -627,7 +627,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     if due and due['action'] == 'close_issue': proposals.closeout(store, task_id, due, '' if mid else resolution_text(rep), actor)
     # a tracker's close-out carries the agent's result as its comment - Jira, Monday and Linear have no reply to carry it (outbound.NEVER)
     if due and due['action'] == 'close_item': proposals.closeout(store, task_id, due, resolution_text(rep), actor)
-    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh)
+    if mid: raise_reply(store, task_id, mid, run_id, rep, complete_result, fresh=fresh, stopped=keep_open and cut_short(store, task_id))
     if due and due['action'] == 'merge_pr': proposals.closeout(store, task_id, due, '' if due.get('theirs') else resolution_text(rep), actor)
     return {'drafting': bool(mid), 'message_id': mid, 'can_send': bool(mid) and can_send,
             'send_block': block if mid else '', 'freshness': fresh['state'], 'closeout': (due or {}).get('action')}
@@ -965,8 +965,14 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
             'freshness': fin.get('freshness') or 'unchecked', 'artifacts': [artifact] if artifact else [], 'asks': fin.get('asks')}
 
 
+def cut_short(store, task_id: int) -> bool:
+    "Its last run was stopped mid-turn - still working, or stopped, by its own last word - not ended on an answer."
+    from . import workerstate as ws
+    return (store.last_worker_event(task_id, skip=ws.NOTES) or {}).get('Kind') in ('working', 'stopped')
+
+
 def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
-                complete_result: str = None, fresh: dict = None) -> None:
+                complete_result: str = None, fresh: dict = None, stopped: bool = False) -> None:
     """The session reported; the responder writes what the sender actually reads. One voice for
     every reply the owner sends - and no coding CLI drafting prose from inside a repo. A draft
     that fails to write still leaves the review standing: 'Draft with AI' retries it.
@@ -976,9 +982,12 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
     rewritten from the report, so the sender gets one answer, and it is the true one."""
     from . import responder
     fresh = fresh or {}
-    why = 'the agent finished - the reply is rewritten from what it found'
-    if fresh.get('state') == 'changed': why = 'the agent finished, and the thread moved on after the work began - the reply answers the newest message; reread it before sending'
-    if fresh.get('state') == 'unresolved': why = f"the agent finished, but the conversation could not be refreshed ({fresh.get('error')}) - drafted from the saved result; refresh it before sending"
+    # ...and a run the owner STOPPED (Stop and save: the session ended, the task kept open) did not finish: its draft said "the agent finished
+    # the work" over an agent stopped mid-turn (the overnight run, 2026-11-03)
+    did = 'you stopped the agent' if stopped else 'the agent finished'
+    why = f'{did} - the reply is rewritten from what it found' + (' so far' if stopped else '')
+    if fresh.get('state') == 'changed': why = f'{did}, and the thread moved on after the work began - the reply answers the newest message; reread it before sending'
+    if fresh.get('state') == 'unresolved': why = f"{did}, but the conversation could not be refreshed ({fresh.get('error')}) - drafted from the saved result; refresh it before sending"
     # an EARLIER SESSION'S draft is not this session's answer: closed as superseded (its words kept), and the reply is drafted from this run
     if (sid := _sid_now(store, task_id)):
         for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('held','pending')", (task_id,)):
@@ -997,7 +1006,8 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         if not is_follow_up(live): store.update_review_reason(rid, why, run_id)
     else:
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending',
-                                'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'the agent finished the work - reply awaiting approval'})
+                                'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'you stopped the agent - the reply is drafted from what it did so far, awaiting approval' if stopped
+                                else 'the agent finished the work - reply awaiting approval'})
     if (held or live) and (held or live).get('MessageId') != mid: store.update_review_message(rid, mid)
     rv = store.get_review(rid) or {}
     if agent_drafted(rv):

@@ -2925,6 +2925,17 @@ class SQLiteStore:
                             "AND IFNULL(FromName,'')<>'' AND IFNULL(Status,'')<>'context' AND IFNULL(Direction,'')<>'out'", tuple(tids)):
             out.setdefault(r['TaskId'], []).append({'name': r['FromName'], 'email': r['FromEmail'] or '', 'channel': r['Channel'] or ''})
         return out
+    def task_recipients(self, tids) -> dict:
+        """{TaskId: {address}} - who each task's mail was written TO (its To and Cc lines), lower-cased: with task_people's senders,
+        what says an arrival is written between the same people (context.recent_open)."""
+        tids = [int(t) for t in tids if t][:200]
+        if not tids: return {}
+        out, rj = {}, "CASE WHEN json_valid(m.RecipientsJson) THEN m.RecipientsJson ELSE '{}' END"
+        for r in self._rows(f"SELECT DISTINCT m.TaskId, lower(trim(j.value)) a FROM message m, json_each({rj}, '$.to') j WHERE m.TaskId IN ({','.join('?' * len(tids))}) "
+                            f"UNION SELECT m.TaskId, lower(trim(j.value)) FROM message m, json_each({rj}, '$.cc') j WHERE m.TaskId IN ({','.join('?' * len(tids))})",
+                            tuple(tids) * 2):
+            if r['a']: out.setdefault(r['TaskId'], set()).add(r['a'])
+        return out
     def tasks_owner_worked(self, since: str, before: str, limit=3):
         """The OPEN tasks the owner acted on (an audit row of theirs) between two stamps, last touched first, with when.
         What they had in hand when they sent a mail of their own (context.worked_before)."""

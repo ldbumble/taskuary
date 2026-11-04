@@ -2269,7 +2269,7 @@ class SQLiteStore:
                                 if digest[:n] not in used_ids), digest)
             used_ids.add(item_id)
             items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done')),
-                          **{k: prior[k] for k in ('out', 'rid', 'tid', 'note', 'src') if k in prior}})     # a slot keeps what it sends and its draft; a step its child; a box its note and its message
+                          **{k: prior[k] for k in ('out', 'rid', 'tid', 'note', 'src', 'on_you') if k in prior}})     # a slot keeps what it sends and its draft; a step its child; a box its note and its message
         self._write_checklist(task_id, items, actor)
         return items
     def merge_task_checklist(self, task_id, texts, actor: str, src=None) -> list:
@@ -2321,24 +2321,28 @@ class SQLiteStore:
         return True
     def set_on_you(self, task_id, texts, actor: str) -> list:
         """The steps left on the owner (`on_you` items) as these words - from an agent's turn summary or, where no agent works, triage's
-        reading (Task 3.5). Every other box stays, and so does an On you step the owner ticked; the unticked ones are replaced, a step
-        said again keeping its id. Returns the list as written."""
-        items = self.task_checklist(task_id)
-        kept, was = [i for i in items if not i.get('on_you') or i.get('done')], {i['text']: i for i in items if i.get('on_you') and not i.get('done')}
-        have, used_ids, new = {i['text'] for i in kept}, {i.get('id') for i in kept}, []
-        for text in self.clean_checklist(texts):
-            if text in have: continue
-            digest = hashlib.sha1(text.encode()).hexdigest()
-            item_id = (was.get(text) or {}).get('id') or next((digest[:n] for n in range(8, len(digest) + 1) if digest[:n] not in used_ids), digest)
-            new.append({'id': item_id, 'text': text, 'done': False, 'on_you': True}); have.add(text); used_ids.add(item_id)
-        if kept + new != items: self._write_checklist(task_id, kept + new, actor)
-        return kept + new
+        reading (Task 3.5). Every other box stays, and so does an On you step the owner ticked; the unticked ones are replaced - a step
+        said again keeps its place, id, note and source, a new one goes at the end. Returns the list as written.
+        Read and written under the writer's lock, as tick_checklist_item is: an owner's tick landing between the two was lost."""
+        clean = self.clean_checklist(texts)
+        with self.lock:
+            items, want = self.task_checklist(task_id), set(clean)
+            out = [i for i in items if not (i.get('on_you') and not i.get('done') and i['text'] not in want)]
+            have, used_ids = {i['text'] for i in out}, {i.get('id') for i in out}
+            for text in clean:
+                if text in have: continue
+                digest = hashlib.sha1(text.encode()).hexdigest()
+                item_id = next((digest[:n] for n in range(8, len(digest) + 1) if digest[:n] not in used_ids), digest)
+                out.append({'id': item_id, 'text': text, 'done': False, 'on_you': True}); have.add(text); used_ids.add(item_id)
+            if out != items: self._write_checklist(task_id, out, actor)
+        return out
     def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
-        items = self.task_checklist(task_id)
-        hit = [i for i in items if i['id'] == item_id]
-        if not hit: return False
-        hit[0]['done'] = bool(done)
-        self._write_checklist(task_id, items, actor)
+        with self.lock:          # one read-and-write: a set_on_you between them lost the tick, or the tick its steps
+            items = self.task_checklist(task_id)
+            hit = [i for i in items if i['id'] == item_id]
+            if not hit: return False
+            hit[0]['done'] = bool(done)
+            self._write_checklist(task_id, items, actor)
         return True
     def checklist_markdown(self, task_id, ids: bool = False) -> str:
         """`ids`: the agent's copy - each box an agent may tick carries its id, for `taskuary --tick <id>` (the owner, 2026-10-22:

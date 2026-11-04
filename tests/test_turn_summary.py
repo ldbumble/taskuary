@@ -106,3 +106,64 @@ def test_triage_on_you_only_where_no_agent_runs():
     assert s.get_task(tid)['Kind'] == 'reply' and [i['text'] for i in on_you(s, tid)] == [STEP]
     s2 = MemoryStore(); tid2 = _ingest(s2, live='general')
     assert on_you(s2, tid2) == []
+
+
+# ── fix round 1 ──────────────────────────────────────────────────────────────────────────
+def test_a_block_cut_short_never_reaches_the_screen():
+    # a live line is cut to 300 or 400 characters before it is drawn (agents.py), so the tag can arrive with half its JSON - or half itself
+    line = ('I read the pay calendar and the AP thread. ' * 4 + block())[:300]
+    assert selfclose.SUMMARY_OPEN in line and selfclose.SUMMARY_CLOSE not in line
+    assert selfclose.for_screen(line) == ('I read the pay calendar and the AP thread. ' * 4).strip()
+    assert selfclose.for_screen('Reading the calendar.\n[[TASKUA') == 'Reading the calendar.'
+
+
+def test_a_turn_whose_block_never_closes():
+    s = MemoryStore(); tid = task(s)
+    shown, _ = turn(s, tid, f'The pay run is Friday.\n{selfclose.SUMMARY_OPEN}{{"about": "Gail wants the pay date", "did": "Read')
+    assert shown == 'The pay run is Friday.' and summaries(s, tid) == []
+
+
+def test_a_broken_block_that_was_the_whole_answer_files_its_words():
+    s = MemoryStore(); tid = task(s)
+    shown, _ = turn(s, tid, f'{selfclose.SUMMARY_OPEN}The pay run is Friday.{selfclose.SUMMARY_CLOSE}')
+    assert shown == 'The pay run is Friday.' and summaries(s, tid) == []
+
+
+def test_an_owner_tick_landing_mid_write_is_kept():
+    import threading
+    s = MemoryStore(); tid = task(s)
+    (item,) = s.set_on_you(tid, [STEP], 'assistant')
+    real, ticker = s.task_checklist, []
+    def read_then_tick(t):
+        got = real(t)
+        if not ticker:              # the owner ticks between this read and the write after it
+            ticker.append(threading.Thread(target=s.tick_checklist_item, args=(tid, item['id'], True, 'owner'))); ticker[0].start(); ticker[0].join(0.3)
+        return got
+    with mock.patch.object(s, 'task_checklist', side_effect=read_then_tick): s.set_on_you(tid, [STEP, 'reply to Gail'], 'assistant')
+    ticker[0].join(5)
+    assert {i['text']: i['done'] for i in s.task_checklist(tid)} == {STEP: True, 'reply to Gail': False}
+
+
+def test_on_you_survives_an_owner_edit():
+    s = MemoryStore(); tid = task(s)
+    s.set_task_checklist(tid, ['find the pay date'], 'triage'); s.set_on_you(tid, [STEP], 'assistant')
+    s.set_task_checklist(tid, ['find the pay date', STEP, 'call Erin'], 'owner')
+    assert [i['text'] for i in on_you(s, tid)] == [STEP]
+
+
+def test_a_summary_with_no_on_you_list_leaves_the_steps():
+    s = MemoryStore(); tid = task(s)
+    _, sess = turn(s, tid, f'Friday.\n{block()}')
+    turn(s, tid, f'Still Friday.\n{block(on_you="nothing")}', sess)
+    turn(s, tid, f'Still Friday.\n{selfclose.SUMMARY_OPEN}{{}}{selfclose.SUMMARY_CLOSE}', sess)
+    assert [i['text'] for i in on_you(s, tid)] == [STEP] and len(summaries(s, tid)) == 2
+    assert selfclose.summary_marker(f'Hi.{selfclose.SUMMARY_OPEN}{{"about": " ", "on_you": []}}{selfclose.SUMMARY_CLOSE}') == ('Hi.', None)
+
+
+def test_a_restated_step_keeps_its_place_and_note():
+    s = MemoryStore(); tid = task(s)
+    s.set_on_you(tid, [STEP], 'assistant'); s.merge_task_checklist(tid, ['find the pay date'], 'triage', src=4)
+    s.note_checklist_item(tid, on_you(s, tid)[0]['id'], 'AP said Thursday', 'owner')
+    s.set_on_you(tid, [STEP, 'reply to Gail'], 'assistant')
+    items = s.task_checklist(tid)
+    assert [i['text'] for i in items] == [STEP, 'find the pay date', 'reply to Gail'] and items[0]['note'] == 'AP said Thursday'

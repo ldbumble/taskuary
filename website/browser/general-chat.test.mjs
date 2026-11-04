@@ -29,15 +29,6 @@ test("a general task with no session opens as a usable chat and asks its questio
 
   // the pane is a chat, not an empty box: the composer takes input with nothing running
   assert.equal(await page.$eval(".tq-aui-composer textarea", (el) => el.disabled), false);
-  // ...once the page has laid out the turn it started (within 5s), and from then on it holds that height: frame by frame it never shrinks
-  // or jumps (the chat-height rule, 2026-10-31) - the first frame is as high as what it holds, "Working on this…" one line where the band was three
-  const box = await page.waitForFunction(() => { const h = document.querySelector(".tq-aui-thread")?.getBoundingClientRect().height || 0; return h > 300 && h; },
-    { timeout: 5000, polling: "raf" }).then((h) => h.jsonValue()).catch(() => page.$eval(".tq-aui-thread", (el) => el.getBoundingClientRect().height));
-  const frames = await page.evaluate(() => new Promise((done) => { const hs = [];
-    const tick = () => { hs.push(document.querySelector(".tq-aui-thread")?.getBoundingClientRect().height || 0); hs.length < 12 ? requestAnimationFrame(tick) : done(hs); };
-    requestAnimationFrame(tick); }));
-  assert.ok(frames.every((h) => Math.abs(h - box) <= 1), `laid out at ${box}px, the chat must hold it across frames: ${JSON.stringify(frames)}`);
-  assert.ok(box > 300, `the chat should take the task page's room, got ${box}px`);
 
   // ...and the question the owner typed is asked, by the thread, as the first message
   await page.waitForFunction(() => [...document.querySelectorAll(".tq-aui-user")]
@@ -95,6 +86,15 @@ test("working folds the steps", { timeout: 180000 }, async (t) => {
         session: ses, starting: false, providers: [{ id: 1, label: "Codex", model: "" }] }, { Assignee: "agent:researcher" });
 
   await page.waitForSelector(".tq-aui-thread [data-tq-working]", { timeout: 20000 });
+  // ...once the page has laid out the turn (within 5s), and from then on it holds that height: frame by frame it never shrinks
+  // or jumps (the chat-height rule, 2026-10-31) - the first frame is as high as what it holds, "Working on this…" one line where the band was three
+  const box = await page.waitForFunction(() => { const h = document.querySelector(".tq-aui-thread")?.getBoundingClientRect().height || 0; return h > 300 && h; },
+    { timeout: 5000, polling: "raf" }).then((h) => h.jsonValue()).catch(() => page.$eval(".tq-aui-thread", (el) => el.getBoundingClientRect().height));
+  const frames = await page.evaluate(() => new Promise((done) => { const hs = [];
+    const tick = () => { hs.push(document.querySelector(".tq-aui-thread")?.getBoundingClientRect().height || 0); hs.length < 12 ? requestAnimationFrame(tick) : done(hs); };
+    requestAnimationFrame(tick); }));
+  assert.ok(frames.every((h) => Math.abs(h - box) <= 1), `laid out at ${box}px, the chat must hold it across frames: ${JSON.stringify(frames)}`);
+  assert.ok(box > 300, `the chat should take the task page's room, got ${box}px`);
   const working = await page.evaluate(() => ({
     lines: [...document.querySelectorAll(".tq-aui-thread [data-tq-working]")].map((el) => el.querySelector("summary")?.innerText || el.innerText),
     band: !!document.querySelector(".tq-aui-band, .tq-aui-thinking"),

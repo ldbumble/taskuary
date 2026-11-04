@@ -48,6 +48,16 @@ class SchemaTests(unittest.TestCase):
         self.assertIn('Triage brain', settings_schema.describe('triage_ai', 'connector:80'))
         self.assertEqual(settings_schema.describe('no_such_key', 'x'), 'no_such_key: x')
 
+    def test_your_mail_goes_to_is_gone_and_the_stored_setting_still_reads(self):
+        """Triage picks no worker for a task (the owner, 2026-11-04), so "Your mail goes to" chose nothing: the row goes. The
+        setting stays a default - an older home holds one and agents.migrate_brain_settings still reads it."""
+        from taskuary.store import DEFAULT_SETTINGS
+        self.assertNotIn('default_profile', settings_schema.knobs())
+        self.assertNotIn('Your mail goes to', (ROOT / 'taskuary' / 'settings_schema.json').read_text(encoding='utf-8'))
+        self.assertIn('default_profile', DEFAULT_SETTINGS)
+        view = (ROOT / 'website' / 'src' / 'SettingsView.jsx').read_text(encoding='utf-8')
+        self.assertNotIn('m.type === "profile"', view); self.assertNotIn('profileNames', view)
+
 
 if __name__ == '__main__':
     unittest.main()

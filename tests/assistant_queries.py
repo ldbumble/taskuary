@@ -836,8 +836,6 @@ AREA_SETTINGS = [
       'read:setting.read', freq=3),
     Q('settings', "what's in the Replies settings", None, [c('settings.list', group='Replies'), 'The signature, the calendar check and the channels.'],
       'read:settings.list', freq=2),
-    Q('settings', 'whcih profile gets my mail', None, [c('setting.read', label='Your mail goes to'), 'Your mail goes to the default worker.'],
-      'read:setting.read', freq=2, note='a misspelling: the model reads it'),
     Q('settings', 'make the assistant answer faster', None, c('setting.set', setting='concierge_fast', value='1'), 'open:#settings=config', freq=2),
     Q('settings', 'reset all my settings to default', None, 'There is no reset-all - each setting is changed on its own row under Settings.', 'words',
       tools=('words',), freq=1, note='no such button: said, nothing pressed'),

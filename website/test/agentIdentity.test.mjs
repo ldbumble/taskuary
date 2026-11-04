@@ -21,10 +21,8 @@ test("the task header has no Assigned to menu and Settings names no profile as a
   assert.ok(!page.includes('what: "assign"') && !page.includes('pick?.what === "assign"'), "the Assigned to menu is back");
   assert.doesNotMatch(page, /Assigned to ·|id: "assign"/);
   assert.doesNotMatch(page, /who it is assigned to/, "a Change hover still offers the assignee");
-  const pick = settings.slice(settings.indexOf('if (m.type === "profile") return ('), settings.indexOf('if (m.type === "agents")'));
-  assert.match(pick, /renderValue=\{\(v\) => \(v \? AGENT_SHOWN : "nobody - leave it for me to pick"\)\}/);
-  assert.match(pick, /\{AGENT_SHOWN\}\s*<Box component="span"[^>]*>\{instructionsHint\(n\)\}<\/Box>/);
-  assert.doesNotMatch(pick, />\{n\}<\/MenuItem>/, "a profile never stands alone as the choice");
-  const knob = JSON.parse(readFileSync(new URL("../../taskuary/settings_schema.json", import.meta.url), "utf8")).knobs.default_profile;
-  assert.doesNotMatch(`${knob.desc} ${knob.help}`, /\bworker\b/, "the setting's words name no worker but Taskuary");
+  // ...and "Your mail goes to" is gone whole (the owner, 2026-11-04): triage picks no worker for a task, so the row chose nothing
+  assert.ok(!settings.includes('m.type === "profile"') && !settings.includes("profileNames"), "Settings still offers a profile for the mail");
+  const knobs = JSON.parse(readFileSync(new URL("../../taskuary/settings_schema.json", import.meta.url), "utf8")).knobs;
+  assert.equal(knobs.default_profile, undefined, "the Your mail goes to row is back");
 });

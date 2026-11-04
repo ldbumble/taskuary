@@ -507,6 +507,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       ) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
+      {/* the agent re-planned on a change and found no reply needed (Task 4.5): said plainly, the draft and its Send kept - the owner decides */}
+      {!!r.NotNeeded && (
+        <Typography variant="body2" data-tq-not-needed="" sx={{ color: DIM, mb: 1 }}>Not needed - {r.NotNeeded}</Typography>
+      )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
       {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
       {!!r.Stale && !delivery.frozen && <Alert severity="warning" sx={{ mb: 1 }}>

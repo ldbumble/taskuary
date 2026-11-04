@@ -61,6 +61,9 @@ TOOLS = {
     'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
                       "mail. It becomes a pending reply with a Send button for the owner - nothing is sent.",
                       _S({'text': _STR, 'to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
+    'reply_not_needed': ('own', "The reply waiting on this task is no longer needed - someone else answered, the owner already did. `why` "
+                         "says it in one line. The draft stays, marked, with the owner's Send still on it - nothing is sent, deleted or "
+                         "closed; a new reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
     'propose_email': ('propose', "Draft one more email this task needs (to someone, with a subject). It waits with a Send button for "
                       "the owner - nothing is sent.", _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH}, ('text',)),
                       ('POST', '/api/agent/draft')),
@@ -172,6 +175,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
+    if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
     if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach'))))
     if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''),
                                                          attached(tid, a.get('attach'))))

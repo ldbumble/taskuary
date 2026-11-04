@@ -1137,6 +1137,9 @@ class SQLiteStore:
             # WHICH MAIL THE DRAFT ANSWERS (the delivery target), kept apart from MessageId, the newest mail it saw (freshness); and the drafter's one line on why
             if 'AnswersMid' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN AnswersMid INTEGER')
             if 'DraftWhy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftWhy TEXT')
+            # ...and the agent's word that the reply is NO LONGER NEEDED (someone else answered, the owner already did): the card says so
+            # with Send still on it - never deleted, never sent, nothing closed; a redraft clears it (Task 4.5, 2026-11-04)
+            if 'NotNeeded' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN NotNeeded TEXT')
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
@@ -5475,7 +5478,7 @@ class SQLiteStore:
         """`files`: the names the writer said ride with this draft ([] = a file promised, unnamed; None = it promised none). Left out,
         the same text keeps what its writer said and new text from anyone else drops it - a word about other words is no word on these."""
         fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
-        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, "
+        self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, NotNeeded=NULL, "
                    "DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
                    (files is not ..., fp, draft, draft, run_id, by, rid))
         self._review_changed(rid)
@@ -5545,6 +5548,9 @@ class SQLiteStore:
         self._review_changed(rid)
     def set_review_why(self, rid, why):
         self._exec("UPDATE review SET DraftWhy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (by_sentence(why, 400) or None, rid))
+        self._review_changed(rid)
+    def set_review_not_needed(self, rid, why):
+        self._exec("UPDATE review SET NotNeeded=? WHERE ReviewId=? AND Status='pending'", (by_sentence(why, 300) or None, rid))
         self._review_changed(rid)
     def set_review_sid(self, rid, sid):
         self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)

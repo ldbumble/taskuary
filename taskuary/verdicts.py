@@ -377,6 +377,20 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             store.finish_review_delivery(rid, token, 'unknown', reason='Delivery unknown after an interrupted attempt; verify with the provider before retrying.')
 
 
+# A REPLY NO LONGER NEEDED IS SAID, NOT DELETED (Task 4.5, the owner 2026-11-04): a colleague on the thread answered what the owner was
+# asked, and the drafted reply kept sitting there "ready to send". The agent, re-planning on the change, says so on the draft - the card
+# shows "Not needed - <why>" with Send still under it. Nothing is sent, deleted or closed: the owner decides, and a redraft clears it.
+def not_needed(store, tid: int, why: str, by: str) -> dict:
+    "Mark the task's pending reply not needed, for `why`. {'ok': False, 'why': ...} when there is none or no reason was given."
+    why = ' '.join(str(why or '').split())
+    if not why: return {'ok': False, 'why': 'say why the reply is not needed - who answered it, or what changed'}
+    rv = store.pending_review(tid, kind='draft') or store.pending_review(tid, kind='draft_reply')
+    if not rv: return {'ok': False, 'why': 'no reply is waiting on this task, so there is nothing to mark'}
+    store.set_review_not_needed(rv['ReviewId'], why)
+    store.add_comment(tid, by, 'agent', f"The drafted reply is not needed: {why.rstrip('.')}. It stays on the task - Send still sends it.")
+    return {'ok': True, 'review_id': rv['ReviewId']}
+
+
 def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     """Reconcile task/agent state after its reviewed reply really left the machine."""
     task_id = rv.get('TaskId')

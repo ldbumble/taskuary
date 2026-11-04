@@ -439,9 +439,10 @@ def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
 
 def why_said(out: str) -> tuple:
     """(the reply, the writer's own WHY line - None for none), the line taken off."""
-    body, _, last = out.rstrip().rpartition(chr(10))
-    if not last.strip().upper().startswith(WHY): return out, None
-    return body.rstrip(), ' '.join(last.strip()[len(WHY):].split()) or None
+    ls = out.rstrip().split(chr(10))
+    i = next((i for i in range(len(ls) - 1, -1, -1) if ls[i].strip().upper().startswith(WHY)), None)     # a WHY that wraps is one block, to the end
+    if i is None: return out, None
+    return chr(10).join(ls[:i]).rstrip(), ' '.join(' '.join(ls[i:]).strip()[len(WHY):].split()) or None
 
 
 def files_said(out: str) -> tuple:
@@ -604,8 +605,9 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         from . import operations
         seen['saw'], seen['revision'] = store.last_inbound_on_task(task_id) or promised, operations.message_revision(store, task_id)
     # the mail that holds the ask is the one answered (triage's thread reading) - its sender, its To and Cc; none, and the newest inbound as always
+    ask = (answers and store.get_message(answers)) or last
     asked = (answers and store.get_message(answers)) or next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last)
-    user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {asked.get('FromName')} <{asked.get('FromEmail')}>\n{_to_cc(store, asked)}\n{thread}"
+    user = f"Subject: {last.get('Subject') or t.get('Title') or ''}\nFrom: {ask.get('FromName')} <{ask.get('FromEmail')}>\n{_to_cc(store, ask)}\n{thread}"
     # ...said as what it is: the message above is the owner's own, and the reply is the one that keeps its promise to whom it went
     if promised: user += (f"\n\n--- WHAT THIS REPLY IS FOR: the last message above is YOUR OWN, to {store.promisee(promised) or 'them'}. "
                           f"{t.get('Summary') or ''} Write the message that keeps that promise to them - never an answer to yourself.")

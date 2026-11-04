@@ -1115,6 +1115,9 @@ class SQLiteStore:
             # attempted payload separate from the UI's pending/approved review status.
             for col in ('DeliveryState', 'DeliveryClaim', 'DeliveryAttemptedAt', 'DeliveryEnvelope', 'DeliveryReceipt'):
                 if col not in rvcols: self.cx.execute(f'ALTER TABLE review ADD COLUMN {col} TEXT')
+            # WHICH MAIL THE DRAFT ANSWERS (the delivery target), kept apart from MessageId, the newest mail it saw (freshness); and the drafter's one line on why
+            if 'AnswersMid' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN AnswersMid INTEGER')
+            if 'DraftWhy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftWhy TEXT')
             # the triage-generated checklist (PW-075): JSON items with stable ids, separate from Status
             tcols = {r[1] for r in self.cx.execute('PRAGMA table_info(task)')}
             if 'Checklist' not in tcols:
@@ -5467,6 +5470,13 @@ class SQLiteStore:
         the draft predates the conversation and refuse to send it unchanged.
         """
         self._exec("UPDATE review SET MessageId=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (mid, rid))
+        self._review_changed(rid)
+    def set_review_answers(self, rid, mid):
+        """The mail this draft answers; MessageId stays the freshness marker (update_review_message)."""
+        self._exec("UPDATE review SET AnswersMid=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (mid, rid))
+        self._review_changed(rid)
+    def set_review_why(self, rid, why):
+        self._exec("UPDATE review SET DraftWhy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')", (by_sentence(why, 400) or None, rid))
         self._review_changed(rid)
     def set_review_sid(self, rid, sid):
         self._exec('UPDATE review SET DraftSid=? WHERE ReviewId=?', (sid, rid)); self._review_changed(rid)

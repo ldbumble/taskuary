@@ -30,6 +30,10 @@ test("the socket connects only while the browser is open, and backs off", () => 
   assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 3, "the stack, the split and the peek all pass it");
 });
 
+test("your turn is never said over a pane with no frame drawn (2026-11-04)", () => {
+  assert.match(pane, /\{!live \? "waiting for the page to draw — type once it shows" : handed\.current \? "your turn/);
+});
+
 test("the viewport is set only by the tab the owner is at", () => {
   assert.match(pane, /mayShape\(document\.hidden, document\.hasFocus\(\), claim\)/);
   // ...and a click on the page reshapes it only if the pane's shape moved - a claim re-sent under the owner's first click (2026-11-03)

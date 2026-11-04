@@ -1444,7 +1444,8 @@ class GeneralSession:
             from . import browserview
             try:
                 st = browserview.state(self.sid, fresh=True)
-                browserview.keep_page(self.task_id, st.get('url'))
+                # ...in full: the state file's address has no query string, and a sign-in page reopened without it never drew
+                browserview.keep_page(self.task_id, (st.get('open') and browserview.page_url(self.sid)) or st.get('url'))
                 # an offered browser the agent opened is the task's from now on: the next turn is told it is open, not offered
                 if browser_offer and st.get('open'):
                     self.store.tag_task(self.task_id, browserview.WANTS, actor='assistant'); self.browser_wanted = True

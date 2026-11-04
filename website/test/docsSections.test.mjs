@@ -41,17 +41,12 @@ test("the manage screen names both roads to a worker", () => {
   assert.match(panel, />Import skills</);
 });
 
-// "not routed" was one word for four situations, and for the commonest it said the opposite of what
-// happens: every coding task goes to CODING.md (the owner, 2026-09-17: the coding document is the
-// default for coding tasks, not unrouted).
-test("a worker routed by kind says so, and is not dressed as a fault", () => {
-  assert.match(source, /coding: "all coding tasks"/);
-  assert.match(source, /off: "switched off"/);
-  assert.match(source, /not_offered: "not offered to triage"/);
-  assert.match(source, /no_purpose: "no purpose set"/);
-  // the code comes from the server, because reading its prose would be a second implementation
-  assert.match(source, /pr\.seen\.find\(\(m\) => m\.code\)/);
-  // ...and a coding worker keeps the ordinary chip rather than the muted one
-  assert.match(source, /const isRouted = \(pr\) => pr\.onRoster > 0 \|\| pr\.seen\.some\(\(m\) => m\.code === "coding"\)/);
-  assert.match(source, /every coding task comes here/);
+// Triage picks no worker for a task any more (the owner, 2026-11-04: profiles are for routines and workflows), so a
+// profile row no longer says whether "the roster" offers it - the chip, its four reasons and the WHAT TRIAGE SEES
+// card described a router that is gone.
+test("profiles show no roster chip", () => {
+  for (const gone of ["rosterChip", "isRouted", "NOT_ROUTED", "onRoster", "on the roster", "WHAT TRIAGE SEES", "not routed"])
+    assert.doesNotMatch(source, new RegExp(gone), gone);
+  const role = readFileSync(fileURLToPath(new URL("../src/RoleStart.jsx", import.meta.url)), "utf8");
+  assert.doesNotMatch(role, /now goes to/);
 });

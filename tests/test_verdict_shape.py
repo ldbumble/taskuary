@@ -17,6 +17,7 @@ Three things changed, from the document outwards:
 - What no schema can reach - a CLI brain is a prompt and a text answer - is checked in code: a
   verdict missing the fields is asked for once more, naming exactly what it left out.
 """
+import inspect
 import json
 import tempfile
 import unittest
@@ -177,10 +178,13 @@ class TriageUsesItTests(unittest.TestCase):
             self.assertIn(asked, plain['schema']['properties'], asked)
         for unasked in ('repository', 'relationship', 'playbook', 'profile'):
             self.assertNotIn(unasked, plain['schema']['properties'], unasked)
-        with_repos = triage.verdict_schema(repos=[{'repo': 'a/b'}], candidates=[], playbooks='- pto: x', profiles='- analyst: x')
+        with_repos = triage.verdict_schema(repos=[{'repo': 'a/b'}], candidates=[], playbooks='- pto: x')
         for asked in ('repository', 'needs_repo_choice', 'repo_reason', 'relationship', 'related_message_ids',
-                      'existing_task_id', 'playbook', 'profile'):
+                      'existing_task_id', 'playbook', 'thread'):
             self.assertIn(asked, with_repos['schema']['properties'], asked)
+        # triage picks no worker for a task (the owner, 2026-11-04): no schema can ask for one
+        self.assertNotIn('profile', with_repos['schema']['properties'])
+        self.assertNotIn('profiles', inspect.signature(triage.verdict_schema).parameters)
 
     def test_classify_hands_the_schema_to_a_brain_that_can_carry_one_and_asks_once(self):
         """The provider is enforcing it, so a second call would buy nothing and cost the owner."""
@@ -331,6 +335,13 @@ if __name__ == '__main__':
 
 
 class ThreadReadingTests(unittest.TestCase):
+    def test_the_contract_line_names_no_profile(self):
+        # the answer line, the wire schema and the CLI retry stay in step: none of them names a worker any more
+        line = next(l for l in TEMPLATE.splitlines() if l.startswith('JSON only:'))
+        self.assertNotIn('`profile`', line); self.assertNotIn('"profile"', line)
+        self.assertNotIn('**Which worker.**', TEMPLATE)
+        self.assertNotIn('profile', triage.verdict_schema()['schema']['properties'])
+
     def test_the_contract_line_names_the_thread_reading(self):
         line = next(l for l in TEMPLATE.splitlines() if l.startswith('JSON only:'))
         self.assertIn('"thread": {"asking"', line)

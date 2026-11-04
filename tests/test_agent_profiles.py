@@ -196,7 +196,7 @@ class ProfileEditingTests(unittest.TestCase):
         self.assertEqual(terminal.rules_text(self.s, profile='codex'), terminal.rules_text(self.s, profile='coding'))
         self.assertFalse(self.s.get_doc('codex'))
 
-    def test_new_profile_gets_starter_rules_and_is_immediately_in_triage(self):
+    def test_new_profile_gets_starter_rules_and_triage_still_names_no_worker(self):
         result = self.client.put('/api/agents/procurement', json={
             'cmd': 'claude', 'args': ['-p'], 'kind': 'general', 'purpose': 'Compare vendor quotes and explain costs.',
             'rules_doc': 'procurement', 'triage_enabled': True})
@@ -208,10 +208,10 @@ class ProfileEditingTests(unittest.TestCase):
         self.assertIn('AGENT.md', doc)
         roster = hub_agents.roster(self.s)
         self.assertIn('- procurement: Compare vendor quotes', roster)
+        # a profile is for routines (the owner, 2026-11-04): a task's verdict never carries one, even when the brain names it
         decision = triage.classify_intent({'Subject': 'Compare these vendors', 'Body': 'Find the best quote'},
-            lambda *args, **kwargs: json.dumps({'intent': 'task', 'kind': 'general', 'profile': 'procurement'}),
-            profiles=roster)
-        self.assertEqual(decision['profile'], 'procurement')
+            lambda *args, **kwargs: json.dumps({'intent': 'task', 'kind': 'general', 'profile': 'procurement'}))
+        self.assertNotIn('profile', decision)
 
     def test_a_profile_is_a_name_and_instructions_and_saves_with_no_ai_connected(self):
         """The owner, 2026-10-22: no provider or model on a profile. "Choose a configured CLI provider" refused every save on a box with
@@ -258,38 +258,41 @@ class ProfileEditingTests(unittest.TestCase):
         self.assertNotIn('CODE-ONLY SENTINEL', system)
 
 
-class TriageNamesTheProfileTests(unittest.TestCase):
-    def test_the_contract_asks_for_a_profile_and_explains_it(self):
-        # the guide asks for it (section 4, "Which worker") and its answer line names the field
-        self.assertIn('**Which worker.**', triage.INTENT_SYSTEM)
-        self.assertIn('`profile`', triage.INTENT_SYSTEM)
+class TriageNamesNoProfileTests(unittest.TestCase):
+    """A general agent working a TASK has one goal, to walk the owner through their work (the owner, 2026-11-04):
+    triage stops choosing a worker, and every general task runs on the assistant. Routines keep theirs."""
+    def test_the_contract_neither_asks_for_a_profile_nor_explains_one(self):
+        self.assertNotIn('**Which worker.**', triage.INTENT_SYSTEM)
+        self.assertNotIn('`profile`', triage.INTENT_SYSTEM)
 
-    def _classify(self, answer, profiles):
+    def _classify(self, answer):
         msg = {'Subject': 'Look into the vendor', 'BodyText': 'Can you find out who they are?',
                'FromEmail': 'a@b.test', 'FromName': 'A'}
-        return triage.classify_intent(msg, llm=lambda *a, **k: json.dumps(answer), profiles=profiles)
+        return triage.classify_intent(msg, llm=lambda *a, **k: json.dumps(answer))
 
-    def test_a_profile_from_the_menu_rides_on_the_verdict(self):
-        out = self._classify({'intent': 'task', 'kind': 'coding', 'profile': 'researcher', 'why': 'a look-up'},
-                             profiles='- researcher: find out and report\n- coding: code')
-        self.assertEqual(out['profile'], 'researcher')
-        self.assertEqual(out['kind'], 'coding')               # profile does not disturb the three-way route
-
-    def test_a_profile_that_was_never_offered_is_refused(self):
-        out = self._classify({'intent': 'task', 'kind': 'coding', 'profile': 'lawyer', 'why': 'a look-up'},
-                             profiles='- researcher: find out and report')
+    def test_a_profile_the_brain_names_never_rides_on_the_verdict(self):
+        out = self._classify({'intent': 'task', 'kind': 'general', 'profile': 'researcher', 'why': 'a look-up'})
         self.assertNotIn('profile', out)
-
-    def test_no_roster_means_no_profile_field_at_all(self):
-        out = self._classify({'intent': 'task', 'kind': 'coding', 'profile': 'researcher', 'why': 'a look-up'},
-                             profiles=None)
-        self.assertNotIn('profile', out)
+        self.assertEqual(out['kind'], 'general')
 
     def test_a_reply_only_message_gets_no_profile(self):
-        """Nothing works a reply_only message, so naming a worker for it is meaningless."""
-        out = self._classify({'intent': 'reply_only', 'profile': 'researcher', 'why': 'just answer them'},
-                             profiles='- researcher: find out and report')
+        out = self._classify({'intent': 'reply_only', 'profile': 'researcher', 'why': 'just answer them'})
         self.assertNotIn('profile', out)
+
+    def test_a_workflow_still_names_its_worker(self):
+        """Profiles are for routines and workflows: one whose definition names `analyst` is stamped with it
+        (workflows.run) and its session is seeded ANALYST.md (general._prompt)."""
+        from taskuary import general, ingest, workflows
+        s = seeded(store())
+        s.save_doc('analyst', 'ANALYST RULES: our own figures only.', 'test')
+        sid = s.save_source({'Channel': 'report', 'Address': 'Spend', 'Owner': 'o', 'Active': 1,
+                             'ConfigJson': json.dumps({'type': 'agent', 'title': 'Spend', 'agent': 'analyst', 'prompt': 'sum the month'})}, 'o')
+        with mock.patch.object(ingest, '_auto_general'), mock.patch.object(ingest, '_auto_code'):
+            tid = workflows.run(s, s.get_source(sid))['task_id']
+        self.assertEqual(s.get_task(tid)['Assignee'], 'agent:analyst')
+        system, _ = general._prompt(s, tid)
+        self.assertIn('PROFILE RULES (ANALYST.md)', system)
+        self.assertIn('our own figures only', system)
 
 
 class TheSessionGetsItsOwnRulesTests(unittest.TestCase):

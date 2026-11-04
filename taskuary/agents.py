@@ -1152,22 +1152,11 @@ def routed_role(store, kind: str, profile: str) -> str:
     `queued` lane - "handed to an agent, not started yet" (processing_unread, processing_all). An
     unstamped coding task reads as one that needs the owner.
 
-    General takes the specialist triage named, if it names a general one that exists. Naming none
-    falls to `default_profile` - the worker the owner said their mail is for (an AP rep's `ap`,
-    roles.py) - and with that blank, leaves the task unassigned for the owner to pick at start.
-    `kind: task` leaves the job on the owner's list, so no worker at all."""
-    if str(kind or '') == 'coding': return coding_role(store)
-    if str(kind or '') != 'general': return ''
-    # the two groups never mix: a coding role reaching general work means triage invented a name
-    # the roster could not have offered, and an invented worker must not route anything
-    def general(n):
-        row = store.get_agent(n) if n else None
-        return n if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else ''
-    named = general(str(profile or '').strip())
-    if named: return named
-    # the default is the owner's standing choice, so a worker they have since switched off is not it
-    fallback = str(store.get_setting('default_profile') or '').strip()
-    return fallback if general(fallback) and (store.get_agent(fallback) or {}).get('Active', 1) else ''
+    General is nobody's: a general agent working a TASK has one goal, to walk the owner through their work, so the
+    task is left unassigned and runs on the assistant (general._prompt) - whatever profile was named, and whatever
+    `default_profile` an older version saved (the owner, 2026-11-04). Profiles are for routines and workflows, which
+    stamp their own (workflows.run, flow.py). `kind: task` leaves the job on the owner's list, so no worker at all."""
+    return coding_role(store) if str(kind or '') == 'coding' else ''
 
 
 def repair_role_assignees(store) -> int:

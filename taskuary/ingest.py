@@ -715,7 +715,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     said = said_about(store, msg.get('conversation_id'))
     if said: thread = {**thread, 'assistant_said': said}
     from .projects import context_for_message
-    from . import agents as hub_agents, capabilities
+    from . import capabilities
     project = context_for_message(store, msg)
     from .triage import job_doc
     # THE WHOLE MEMORY, every time (the owner, 2026-10-27: "triage needs the entire thing to make a decision every time, so load the
@@ -738,9 +738,6 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
                              playbooks=_playbook_menu(store), workflows=_workflow_menu(store), project=project, candidates=candidates, repos=repos or None,
-                             # ...and WHICH worker, out of the ones this install actually has: the roster is
-                             # data the owner edits on the Agents page, never a vocabulary in the prompt
-                             profiles=hub_agents.roster(store) or None,
                              # ...and what the owner corrected LAST time a message like this was
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
                              routing_history=_routing_history(store, msg),
@@ -1200,12 +1197,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # TRIAGE's title, never the router's subject cut: a subject line is the very resemblance that
         # joined two unrelated refunds in 2026-09-03, and two people can send one subject about two
         # different things. A verdict that named no title has said nothing to match on.
-        # WHICH ROLE works this - a different question from which brain runs it. Coding has one
-        # role and triage does not choose it; a specialist is named only on general work. The
-        # session is seeded from THIS role's document (terminal.profile_of), so a researcher is
-        # never handed CODING.md's "work only in the repository".
+        # WHICH ROLE works this - a different question from which brain runs it. Coding has one role and triage does not
+        # choose it; general work is the assistant's, so it names nobody (the owner, 2026-11-04: profiles are for routines)
         from . import agents as hub_agents
-        role = hub_agents.routed_role(store, f['kind'], intent.get('profile') or '')
+        role = hub_agents.routed_role(store, f['kind'], '')
         # A GOAL (spec 2026-10-12): the open-ended ask opens as the owner's goal - its done-when sentence, its date, no steps
         # and nobody on it; the planner proposes the steps behind the arrival, as the New sheet's Set a goal does
         goal = intent['intent'] == 'task' and bool(intent.get('goal') and intent.get('done_when'))

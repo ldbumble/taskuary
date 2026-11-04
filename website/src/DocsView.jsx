@@ -21,7 +21,7 @@ import SoulInterview from "./SoulInterview.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import SkillImport from "./SkillImport.jsx";
 import RoleStart from "./RoleStart.jsx";
-import { ACCENT2, FAINT, INK, PALETTE, ROLES, mono } from "./theme.jsx";
+import { ACCENT2, FAINT, INK, PALETTE, mono } from "./theme.jsx";
 import { meter } from "./docMeter.js";
 import { TaskuaryMark } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
@@ -175,25 +175,9 @@ const profName = (n) => n.slice(5);
 // the coding profile is the one of KIND coding, never a name; "coding" is what ships
 const codingDoc = (profs) => (profs || []).find((p) => p.kind === "coding")?.name || "coding";
 const PROF_BLURB = "Instructions for the workers listed under this profile, added to AGENT.md for each task. Define how they work and what they deliver. Workers using different CLIs can share these instructions. Blank the document to restore its starter version.";
-// A row is a rules DOCUMENT, and several agents can share one (every coding worker shares `coding`) -
-// so "on the roster" can mean all, none, or some of that row's members. An imported skill is 1:1, so
-// its chip is never ambiguous; a shared shipped document says the split rather than picking a side,
-// because collapsing "3 of 5 coding agents route" to either word would misstate the other members.
-// `onRoster` counts members the SERVER reports a roster line for (agents.roster_line) - not a count
-// of triage_enabled done here, which called CODING.md "on the roster" when triage can never pick it.
-// ...and when NONE of them route, "not routed" was one word for four different situations - and for
-// the commonest it said the opposite of the truth. CODING.md takes every coding task; the router is
-// simply not what sends it there (the owner, 2026-09-17: the coding document is not unrouted, it is
-// the default for coding tasks). The server's `code` tells them apart; reading its prose would be
-// a second implementation of agents.roster_line.
-const NOT_ROUTED = { coding: "all coding tasks", off: "switched off",
-                     not_offered: "not offered to triage", no_purpose: "no purpose set" };
-const rosterChip = (pr) => (pr.onRoster === 0
-  ? NOT_ROUTED[(pr.seen.find((m) => m.code) || {}).code] || "not routed"
-  : pr.onRoster === pr.members.length ? "on the roster"
-  : `on the roster (${pr.onRoster}/${pr.members.length})`);
-// a worker routed a different way is not a worker in trouble, so it does not wear the muted grey
-const isRouted = (pr) => pr.onRoster > 0 || pr.seen.some((m) => m.code === "coding");
+// A row is a rules DOCUMENT, and several agents can share one (every coding worker shares `coding`). It wears no
+// roster chip: triage picks no worker for a task any more (the owner, 2026-11-04) - profiles are for routines and
+// workflows, which name their own - so a chip saying triage could pick it described a router that is gone.
 const pbSlug = (n) => n.slice(3);
 const PB_BLURB = "How THIS company does one kind of job, for the agent that will do it: when it starts, which connections it uses, the steps, what it may do alone, what to ask first, and what counts as done. Triage matches new messages against `when`; the connector cards list the playbooks that name them.";
 
@@ -357,13 +341,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
         const kind = prof.kind || r.Kind || "coding";
         const name = r.rules_doc || prof.rules_doc || (kind === "coding" ? "coding" : r.Name);
         if (!grouped.has(name)) grouped.set(name, { name, kind, purpose: r.purpose || prof.purpose ||
-          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [], onRoster: 0, seen: [] });
-        const g = grouped.get(name);
-        g.members.push(r.Name);
-        // what triage actually reads for this member, or why nothing - the server's answer, not a guess
-        const seen = r.roster || { line: "", reason: "this server does not report it" };
-        g.seen.push({ name: r.Name, ...seen });
-        if (seen.line) g.onRoster += 1;
+          (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [] });
+        grouped.get(name).members.push(r.Name);
       }
       const profiles = [...grouped.values()];
       setProfs(profiles);
@@ -605,15 +584,12 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                   <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>
                     {pr.name.toUpperCase()}.md
                   </Typography>
-                  {/* quiet chip, not a colour wash - it identifies a state, it does not tint the row */}
-                  <Chip size="small" variant="outlined" label={rosterChip(pr)}
-                    sx={isRouted(pr) ? undefined : { color: ROLES.muted.ink, borderColor: ROLES.muted.bd }} />
                   {`prof:${pr.name}` === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
                       borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>
                   )}
                 </Box>
-                <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set — triage cannot tell when to pick it"}</Typography>
+                <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set"}</Typography>
                 <Typography sx={{ fontSize: 11, color: FAINT, pt: 0.5 }}>Used by {pr.members.join(", ")}</Typography>
               </Box>
             ))}
@@ -701,12 +677,12 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                 that you can hover over to see full text on top of every profile"): SOUL/JOB, then AGENT.md, then this. One AGENT.md,
                 edited under Operator documents - the chip only shows it. */}
             {isProf(docName) && <SharedRulesChip />}
-            {/* WHO RUNS ON THIS, and whether triage is actually offered them. It used to sit on the
+            {/* WHO RUNS ON THIS. It used to sit on the
                 profile's card in the shelf; the rail lists documents by name, so the fact that a
                 document governs `coding, codex` has to travel with the document itself. */}
             {isProf(docName) && cur?.members?.length > 0 && (
               <Typography variant="caption" sx={{ color: FAINT, pt: 0.5, display: "block" }}>
-                Used by {cur.members.join(", ")} · {rosterChip(cur)}
+                Used by {cur.members.join(", ")}
               </Typography>
             )}
           </Box>
@@ -762,31 +738,6 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             {docs[docName] === saved[docName] ? "Saved" : "Save"}
           </Button>
         </Box>
-        {/* the distinction the profiles rest on: the router reads ONE LINE per worker when it picks;
-            the session it picks receives the WHOLE document below. This is that line, as served -
-            truncated where the roster truncates it - or the reason there is none. */}
-        {cur && (
-          <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, flexShrink: 0 }}>
-            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
-              WHAT TRIAGE SEES
-            </Typography>
-            {cur.seen.filter((m) => m.line).map((m) => (
-              <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>))}
-            {/* members kept off for the same reason share one line - six coding agents is one fact, not six.
-                A coding worker is not "not on the roster": it is routed, by kind rather than by the
-                router, and saying it the other way round read as a fault to go and fix. */}
-            {[...new Set(cur.seen.filter((m) => !m.line).map((m) => m.reason))].map((why) => (
-              <Typography key={why} sx={{ fontSize: 11.5, color: FAINT }}>
-                {cur.seen.filter((m) => !m.line && m.reason === why).map((m) => m.name).join(", ")}
-                {cur.seen.find((m) => m.reason === why)?.code === "coding"
-                  ? ": every coding task comes here — the router does not choose it, the kind does"
-                  : `: not on the roster — ${why}`}
-              </Typography>))}
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 0.75 }}>
-              The router reads this one line per worker when it picks. The session it picks is given the whole document below.
-            </Typography>
-          </Box>
-        )}
         {pbMsg && isPb(docName) && (
           <Typography variant="caption" sx={{ display: "block", mb: 1, color: /^(saved|deleted)/.test(pbMsg) ? "#47654a" : "#6b2733" }}>{pbMsg}</Typography>
         )}

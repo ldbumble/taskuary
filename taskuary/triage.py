@@ -264,7 +264,7 @@ def thread_of(j: dict, earlier: set):
     return th if any(th.values()) else None
 
 
-def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
+def verdict_schema(repos=None, candidates=None, playbooks=None, same=False, goals=False, coding=True, workflows=None,
                    earlier=False, thread_task=False, notes=False, workstreams=False, watched=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
@@ -320,7 +320,6 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     if workflows: p['workflow'] = {'type': ['string', 'null']}
     # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them), null when unsure
     if workstreams: p['workstream'] = {'type': ['string', 'null']}
-    if profiles: p['profile'] = {'type': ['string', 'null']}
     if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
                        repo_reason={'type': 'string'})
     if candidates is not None:
@@ -764,7 +763,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
-                    profiles: str = None, routing_history: list = None, seen: set = None, job: str = None,
+                    routing_history: list = None, seen: set = None, job: str = None,
                     coding: bool = True, workflows: str = None, connected: list = None, workstreams: str = None) -> dict:
     """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
     protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
@@ -867,7 +866,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                            + ':\n' + '\n'.join(f'- {n}' for n in notes)
                            + (f'\n({notes_left} further note(s) also apply to this sender but did not fit.)' if notes_left else ''))
             # From here down the code only LABELS what it hands over. Every sentence about how to judge it - the
-            # report brief, the workers, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
+            # report brief, kind, repositories, chat lines, same_as - lives in the guide (2026-10-09:
             # the owner, "why are there items in code in triage? I thought we removed them").
             if watch: system += "\n\nTHE REPORT'S BRIEF - why the owner runs this report and what they watch for:\n" + str(watch)[:1200]
             if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
@@ -877,7 +876,6 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                        'never work); name in "workstream" the one this message belongs to, by its id before the colon, or '
                                        'null when you are not sure:\n' + str(workstreams)[:2000])
             if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
-            if profiles: system += '\n\nTHE WORKERS - the specialists for non-coding work, each with what it is for:\n' + str(profiles)[:2000]
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
             if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
                                       'kind coding - work that would be coding is general.')
@@ -951,7 +949,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
-            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
+            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
                                                                      notes=bool(note_ids), workstreams=bool(workstreams), watched=watched),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
@@ -984,12 +982,6 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 wf = str(j.get('workflow') or '').strip().lower()
                 if workflows and wf and out['intent'] == 'task' and re.search(rf'^- {re.escape(wf)}: ', workflows, re.M):
                     out['workflow'] = wf
-                # WHICH WORKER, when one starts: validated against the roster it was actually shown, the
-                # same way the playbook is. A name nobody offered is dropped, and the task falls to the
-                # default profile - a hallucinated worker must not route work anywhere.
-                pr = str(j.get('profile') or '').strip().lower()
-                if profiles and pr and out['intent'] == 'task' and re.search(rf'^- {re.escape(pr)}: ', profiles, re.M):
-                    out['profile'] = pr
                 if candidates is not None: out.update(relationship_of(j, candidates, [t.get('tid') for t in (thread or {}).get('room_tasks') or []]))
                 # same_as: only a tid it was actually shown - a task it made up joins nothing
                 try: same = int(j.get('same_as')) if j.get('same_as') is not None else None

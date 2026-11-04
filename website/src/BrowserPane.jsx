@@ -7,7 +7,7 @@ import { Box, Typography } from "@mui/material";
 import api from "./api.js";
 import { label } from "./buttons.js";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
-import { fitFrame, keyMessage, mayShape, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
+import { fitFrame, isPaste, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
   wheelMessage } from "./browserSplit.js";
 
 const wsUrl = (sid) => {
@@ -190,7 +190,21 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   const onWheel = (e) => { if (!drivingRef.current) return; e.preventDefault(); forward(wheelMessage(e.nativeEvent, fit.current)); };
   // the page asked for a password, the agent said to type it here, and the keystroke went nowhere
   // and said nothing (the owner, 2026-09-14). Dropping it is right; dropping it in silence is not.
-  const onKey = (e) => { if (!drivingRef.current) return void setAsked(true); e.preventDefault(); e.stopPropagation(); forward(keyMessage(e.type, e.nativeEvent)); };
+  const onKey = (e) => {
+    if (!drivingRef.current) return void setAsked(true);
+    e.stopPropagation();
+    // Ctrl+V is the owner's clipboard, not the page's (empty): the default is let through so the paste event brings it (onPaste)
+    if (isPaste(e)) { if (e.type === "keydown") pasteSoon(); return; }
+    e.preventDefault(); forward(keyMessage(e.type, e.nativeEvent));
+  };
+  // the owner's clipboard typed in. A canvas is not an editable box, so where the browser sends it no paste event the clipboard is read
+  const pasted = useRef(0);
+  const typeIn = (text) => { for (const m of pasteMessages(text)) forward(m); };
+  const pasteSoon = () => {
+    const n = ++pasted.current;
+    setTimeout(() => { if (pasted.current === n) navigator.clipboard?.readText?.().then(typeIn).catch(() => say("Paste was not allowed - type it instead", true)); }, 150);
+  };
+  const onPaste = (e) => { if (!drivingRef.current) return; e.preventDefault(); pasted.current++; typeIn(e.clipboardData?.getData("text/plain")); };
 
   const snapshot = async () => {
     try {
@@ -242,10 +256,12 @@ Take over to drive it yourself; close the session to close it."
       </Box>
       {/* the page. tabIndex so keystrokes land here while driving; the canvas swallows the wheel
           the same way the terminal does, so scrolling the page never scrolls the app */}
-      <Box ref={box} onPointerDown={() => fitViewport(true)}
+      {/* a click on the page is not a claim on its shape: re-sending it reshaped the page under the owner's first click, and the box they
+          clicked could lose its caret before the first keys arrived (2026-11-03) */}
+      <Box ref={box} onPointerDown={() => fitViewport()}
         sx={{ flex: 1, minHeight: 0, position: "relative", cursor: driving ? "default" : "not-allowed" }}>
         <Box component="canvas" ref={canvas} tabIndex={0} onMouseDown={onMouse} onMouseUp={onMouse} onMouseMove={onMouse}
-          onWheel={onWheel} onKeyDown={onKey} onKeyUp={onKey} onContextMenu={(e) => e.preventDefault()}
+          onWheel={onWheel} onKeyDown={onKey} onKeyUp={onKey} onPaste={onPaste} onContextMenu={(e) => e.preventDefault()}
           sx={{ display: "block", outline: "none", position: "absolute", inset: 0 }} />
         {/* BEFORE ANYTHING ARRIVES, it says it is starting: a black box marked "…" is how the owner has described a broken pane
             ("freezes and is just black") - the chip already said "browser · starting…" (2026-10-25) */}

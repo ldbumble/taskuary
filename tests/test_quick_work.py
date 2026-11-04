@@ -46,6 +46,17 @@ def test_several_emails_owed_is_deep():
     from taskuary import slots
     with mock.patch.object(slots, 'all_', return_value=[{'slot': 1}, {'slot': 2}]): assert quickwork.why_deep(s, tid) == 'emails'
 
+def test_a_browser_task_starts_after_its_verdict_is_on_file():
+    "Spawned before the route row, the start read no needs_browser and took the one call; its session then opened a Chrome beside it."
+    s = home(); seen = []
+    said = lambda sy, u, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'w', 'difficulty': 'quick', 'needs_browser': True})
+    def spawn(fn, *a):
+        if fn.__name__ == '_auto_general': seen.append(quickwork.why_deep(a[0], a[1]))
+    with mock.patch('taskuary.ingest._spawn', side_effect=spawn), mock.patch.object(senders, 'wrote_to', return_value=True), \
+         mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'type': 'cli'}]):
+        ingest.ingest_message(s, mail(), llm=said)
+    assert seen == ['browser']
+
 def test_a_browser_task_is_always_deep():
     s = home(); tid, _ = arrived(s); s.tag_task(tid, browserview.WANTS, actor='triage')
     assert quickwork.why_deep(s, tid) == 'browser'

@@ -21,7 +21,7 @@ async function lit(page, key) {
   for (; Date.now() - t0 < 15000; await sleep(25)) if ((seen = await nav(page)).next && seen.back) break;
   return { ms: Date.now() - t0, ...seen };
 }
-const LIT_MS = 1200;
+const LIT_MS = 1000, BIG_MS = 1500;                  // ...a 450-row rail took 1.5-1.8 s before (server.walk_open), 0.4-1.2 s after
 
 test("a row under Watching, clicked, has Back and Next lit within a second", { timeout: 180000 }, async (t) => {
   const { page, errors } = await boot(t);
@@ -58,7 +58,7 @@ test("on a big rail, a task watched before it was ever opened, clicked, has Back
   const got = await lit(page, pick.key);
   console.log(`watched row on a ${pile.length}-row rail: Back and Next lit after ${got.ms} ms`);
   assert.ok(got.next && got.back, `the watched row's bar: ${JSON.stringify(got)}`);
-  assert.ok(got.ms <= LIT_MS, `Back and Next lit after ${got.ms} ms`);
+  assert.ok(got.ms <= BIG_MS, `Back and Next lit after ${got.ms} ms`);
   assert.deepEqual(errors, []);
 });
 

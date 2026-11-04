@@ -253,6 +253,95 @@ const runBridge = (dir, port, ms = 8000) => new Promise((ok) => {
 });
 const until = async (f, ms = 8000) => { for (let i = 0; i < ms / 100 && !f(); i++) await new Promise((r) => setTimeout(r, 100)); return f(); };
 
+// Like Baileys, register the pre-decryption handler inside makeWASocket, before the bridge can
+// register its metadata observer. No onWhatsApp lookup or roster happens to know this pair yet.
+const INBOUND = `
+import { EventEmitter } from "node:events";
+export const DisconnectReason = { loggedOut: 401 };
+export const useMultiFileAuthState = async () => ({ state: { creds: {}, keys: { set: async () => {} } }, saveCreds: async () => {} });
+export const downloadMediaMessage = async () => Buffer.from("synthetic media");
+export const decryptPollVote = () => { throw new Error("no polls here"); };
+export const normalizeMessageContent = (m) => {
+  for (let i = 0; m && i < 5; i++) {
+    const inner = m.ephemeralMessage || m.documentWithCaptionMessage;
+    if (!inner) break;
+    m = inner.message;
+  }
+  return m;
+};
+export default function makeWASocket(config) {
+  const ev = new EventEmitter(), ws = new EventEmitter();
+  ws.on("CB:message", (node) => {
+    if (config.shouldIgnoreJid(node.attrs.from)) return;
+    ev.emit("messages.upsert", { type: "notify", messages: [{ key: { remoteJid: node.attrs.from, id: node.attrs.id },
+      message: { conversation: "first message from the picked number" } }] });
+  });
+  const sock = { ev, ws, user: { id: "15550100100:1@s.whatsapp.net" },
+    groupFetchAllParticipating: async () => ({}), resyncAppState: async () => {} };
+  setTimeout(() => {
+    ev.emit("connection.update", { connection: "open" });
+    ws.emit("CB:message", { attrs: { from: "8000@lid", sender_pn: "15550100200@s.whatsapp.net", id: "FIRST" } });
+    ws.emit("CB:message", { attrs: { from: "9000@lid", sender_pn: "15550100999@s.whatsapp.net", id: "STRANGER" } });
+    const wrap = (message) => ({ ephemeralMessage: { message } });
+    const make = (id, message, jid = "42@g.us") => ({ key: { remoteJid: jid, id }, message, messageTimestamp: 1750000000 });
+    ev.emit("messages.upsert", { type: "append", messages: [
+      make("TEXT", wrap({ extendedTextMessage: { text: "the group export is ready", contextInfo: { quotedMessage: wrap({ conversation: "which export?" }) } } })),
+      make("VOICE", wrap({ audioMessage: { mimetype: "audio/ogg", ptt: true, seconds: 3 } })),
+      make("PHOTO", wrap({ imageMessage: { caption: "the chart", mimetype: "image/png" } })),
+      make("DOC", wrap({ documentWithCaptionMessage: { message: { documentMessage: { fileName: "export.csv", caption: "the figures", mimetype: "text/csv" } } } })),
+      make("CLOSED", wrap({ conversation: "not authorized" }), "99@g.us")
+    ] });
+  }, 30);
+  return sock;
+}`;
+
+const withInboundBridge = async (check) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-inbound-test-"));
+  const fake = path.join(dir, "fake-baileys.mjs");
+  fs.writeFileSync(fake, INBOUND);
+  const hooks = `export async function resolve(s, c, next) {
+    return s === "@whiskeysockets/baileys" ? { url: ${JSON.stringify(pathToFileURL(fake).href)}, shortCircuit: true } : next(s, c); }`;
+  const reg = `import { register } from "node:module"; register(${JSON.stringify("data:text/javascript," + encodeURIComponent(hooks))});`;
+  const port = await freePort(), token = "test-token";
+  const child = spawn(process.execPath, ["--import", "data:text/javascript," + encodeURIComponent(reg), BRIDGE],
+    { cwd: dir, env: { ...process.env, WA_BRIDGE_PORT: String(port), WA_BRIDGE_TOKEN: token,
+      WA_BRIDGE_FILTER: JSON.stringify({ jids: ["15550100200@s.whatsapp.net", "42@g.us"] }) }, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "";
+  child.stdout.on("data", (c) => (out += c)); child.stderr.on("data", (c) => (out += c));
+  try {
+    for (let i = 0; i < 100 && !(await status(port, token))?.connected; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal((await status(port, token))?.connected, true, out);
+    for (let i = 0; i < 100 && (await get(port, "/messages", token))?.messages?.length < 4; i++) await new Promise((r) => setTimeout(r, 50));
+    await check((await get(port, "/messages", token)).messages, dir);
+  } finally {
+    if (child.exitCode === null) { const gone = new Promise((r) => child.once("exit", r)); child.kill(); await gone; }
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
+};
+
+test("the first LID stanza learns its phone number before Baileys decides to discard it", { timeout: 15_000 }, async () => {
+  await withInboundBridge(async (messages) => {
+    assert.equal(messages.find((m) => m.id === "FIRST")?.jid, "15550100200@s.whatsapp.net");
+    assert.ok(!messages.some((m) => m.id === "STRANGER" || m.id === "CLOSED"), "unpicked chats stay closed");
+  });
+});
+
+test("disappearing group messages retain text, quotes and media through nested envelopes", { timeout: 15_000 }, async () => {
+  await withInboundBridge(async (messages, dir) => {
+    const byId = Object.fromEntries(messages.map((m) => [m.id, m]));
+    assert.equal(byId.TEXT.text, "the group export is ready");
+    assert.equal(byId.TEXT.quoted, "which export?");
+    assert.equal(byId.VOICE.voice, true); assert.equal(byId.VOICE.seconds, 3);
+    assert.equal(byId.PHOTO.text, "the chart"); assert.equal(byId.DOC.text, "the figures");
+    assert.equal(byId.DOC.docName, "export.csv");
+    for (const [id, field] of [["VOICE", "audio"], ["PHOTO", "image"], ["DOC", "doc"]]) {
+      assert.ok(byId[id][field], `${id} has its media`);
+      assert.equal(path.dirname(byId[id][field]), path.join(dir, "wa-media"));
+      assert.equal(fs.readFileSync(byId[id][field], "utf8"), "synthetic media");
+    }
+  });
+});
+
 test("a held port is said in one line and exits 98 before WhatsApp is touched", { timeout: 30_000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wa-bridge-test-"));
   const port = await freePort(), holder = net.createServer().listen(port, "127.0.0.1");

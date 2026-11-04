@@ -185,3 +185,12 @@ test("a turn whose answer carries its reply draft is not shown twice - the strea
   // ...while words the answer does not say stay the agent's own
   assert.equal(stepsOf(streamed, { answer: `${report}\n\n${draft}`, keepStart: false }).filter((s) => s.kind === "said").length, 1);
 });
+
+test("a quick answer's raw object is never the agent's words, whichever line of the trace carries it", () => {
+  // the owner's pane, 2026-11-03: a CLI's readable `live` line was the object itself, cut at 300 characters, drawn under Taskuary
+  const raw = JSON.stringify({ report: "Gail Moreno asks what it costs.", draft: "Tell Gail the first month is free.", question: null }).slice(0, 60);
+  for (const trace of [[{ type: "live", name: "claude", detail: raw }], [{ type: "progress", name: "text", detail: "```json\n" + raw }]]) {
+    assert.deepEqual(stepsOf(trace, { keepStart: false }).filter((s) => s.kind === "said"), []);
+  }
+  assert.equal(stepsOf([{ type: "live", name: "claude", detail: "Looking up the price list." }], { keepStart: false })[0].summary, "Looking up the price list.");
+});

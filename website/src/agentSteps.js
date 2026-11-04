@@ -248,6 +248,9 @@ const foundNone = (s) => {
 
 // ── the trace, as steps ──────────────────────────────────────────────────────────────────────────
 const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_line's own rows for a tool call, its result, the init line
+// A QUICK ANSWER'S RAW OBJECT (quickwork.RAW) is its fields, filed as the answer - never words of its working, whichever line carries it: a
+// CLI's readable `live` line was the object cut at 300 characters, drawn under Taskuary (the owner, 2026-11-03)
+const QUICK_RAW = /^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:/i;
 export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const events = trace || [];
   // A structured backend says everything twice: its tool call and text as events, and the same again as readable `live` lines for
@@ -257,7 +260,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const steps = [], byId = new Map();
   const say = (kind, text) => {
     const t = forScreen(text);
-    if (!t) return;
+    if (!t || QUICK_RAW.test(t)) return;
     const last = steps[steps.length - 1];
     if (kind === "said" && last?.kind === "said" && last.live) { last.summary += `\n${t}`; return; }
     steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured });

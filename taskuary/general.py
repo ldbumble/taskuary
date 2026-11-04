@@ -278,9 +278,12 @@ NO_AI = 'No AI is connected'
 
 def _split(store, tid: int) -> tuple[list, list]:
     "The task's chat as (before the current run, the current run), split at the last RUN_TYPE row if there is one."
+    from .quickwork import report_of
     rows = store.list_comments(tid)
     at = max((i for i, c in enumerate(rows) if c.get('ActorType') == RUN_TYPE), default=-1)
-    chat = lambda rs: [c for c in rs if c.get('ActorType') in (USER_TYPE, ASSISTANT_TYPE)]
+    # ...an answer filed as a quick call's raw object reads back as its report, wherever the chat is read: the pane, the next turn, the close-out
+    said = lambda c: {**c, 'Body': report_of(c.get('Body'))} if c.get('ActorType') == ASSISTANT_TYPE else c
+    chat = lambda rs: [said(c) for c in rs if c.get('ActorType') in (USER_TYPE, ASSISTANT_TYPE)]
     return chat(rows[:at + 1]), chat(rows[at + 1:])
 
 
@@ -1650,7 +1653,9 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # had started too (2026-10-25). Its first message launches it, once it runs.
     from . import agents as hub_agents
     signed_out = session.pick.startswith('cli:') and hub_agents.cli_tests(store).get(session.pick[4:]) is False
-    if session.browser_wanted and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
+    # ...nor for a quick answer: its one call never drives a page, and a Chrome left on about:blank beside it was the "empty tab, live" with
+    # "your turn" over it on a task that never needed one (the owner, 2026-11-03). A real turn on the session launches its own (send_prompt)
+    if session.browser_wanted and not quick and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
         from . import browserview
         # on the page the task's browser was last on: after a restart the agent's ask ("sign in on the page beside us")
         # still points somewhere real

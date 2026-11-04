@@ -27,7 +27,6 @@
     "backup_brains": "*",
     "profile_brains": "",
     "default_agent": "",
-    "default_profile": "",
     "general_agent_hands": "cli",
     "repo_trust_private": "ours",
     "repo_trust_public": "writers",

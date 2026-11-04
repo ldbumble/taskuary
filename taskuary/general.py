@@ -28,6 +28,19 @@ RUN_TYPE = 'assistant_run'
 BRIEF_ACTOR = 'taskuary'
 class Stopped(RuntimeError):
     "A turn the owner stopped - the start that ran it is done, not failed (ingest._start_general)."
+# A TURN THAT RAN OUT OF TIME (2026-11-04): a CLI's 1500 s limit killed an agent mid-build, and it read "You stopped it" with Try again.
+# An agent's turn has no limit now (llm.make_cli_llm); a turn that still has one - the dock's look-up - ends `stopped` from this source,
+# its files and thread kept, says so in its own words, and Continue picks it up
+TIMED_OUT = 'timeout'
+def _timed_out(e):
+    "The clipool.TimedOut behind a failed turn, however a brain wrapped it - else None."
+    from .clipool import TimedOut
+    while e is not None and not isinstance(e, TimedOut): e = e.__cause__ or e.__context__
+    return e
+def timed_out_line(e=None, agent='the agent') -> str:
+    "No limit is named: an agent's run has none, and this is only said of a run cut on an old profile's limit or a one-shot cap."
+    return (f"{agent[:1].upper() + agent[1:]}'s run was cut off by a time limit while it was still working. What it made so far is kept - "
+            f"{L('continue')} picks it up from there.")
 def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor') == BRIEF_ACTOR
 # THE OWNER'S WORDS AS THEY TYPED THEM (the owner, 2026-11-04): answered through the Assistant, the agent's chat showed the Assistant's rewording
 # ("Option B: book the 3-year renewal at 6,000.") under YOU for "Go with option B, three years." Their words go under YOU exactly; what the
@@ -1116,6 +1129,9 @@ class GeneralSession:
                 from . import workerstate as ws
                 ws.record(self.store, self.task_id, self.sid, 'working', source='api')
             except Exception: pass
+            # ...and a run under way is not a session saved: a mark left on the task spoke over this run's own ending (2026-11-04)
+            from . import terminal
+            self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
             self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]
             self.trace_revision += 1
             system, user = _prompt(self.store, self.task_id)
@@ -1253,7 +1269,8 @@ class GeneralSession:
             build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
                               cancel=cancel, resume=self.cli_sid or None, research=not hands, fallback_user=user,
                               # the task's CLI stays open between messages instead of starting again (clipool)
-                              keep=f'general:{self.task_id}',
+                              # ...keyed `general:` for an agent's work, which no clock ends (llm.make_cli_llm), `dock:` for the Assistant's chat
+                              keep=f"{'dock' if is_dock(self.store.get_task(self.task_id)) else 'general'}:{self.task_id}",
                               # whose words the task carries decides how its CLI launches (origin.py)
                               task_id=self.task_id)
             # the NAME always rides (so a browser this session opens is one the pane can find); the
@@ -1341,8 +1358,12 @@ class GeneralSession:
             self._remember_session()
             return self._file(reply, paths, t0, browser_tools, browser_offer)
         except Exception as e:
-            self._remember_trace('error', 'assistant', {'result': str(e), 'is_error': True})
-            self._emit(f'\x1b[1;31merror>\x1b[0m {e}\r\n\r\n')
+            stopped = cancel.is_set() or getattr(self, 'closing', False)
+            timed = None if stopped else _timed_out(e)
+            # ...a turn that ran out of time says so in words, not as "Codex exit 1: timed out after 1500s." (2026-11-04)
+            said = timed_out_line(e) if timed is not None else str(e)
+            self._remember_trace('error', 'assistant', {'result': said, 'is_error': True})
+            self._emit(f'\x1b[1;31merror>\x1b[0m {said}\r\n\r\n')
             self._unusable(e)
             # A TURN THAT DIED IS NOT A TURN STILL RUNNING. The turn opened with a `working`
             # event and, on this road, closed with nothing - so `working` stayed the last word
@@ -1353,7 +1374,18 @@ class GeneralSession:
             # reason reaches the log.
             # ...but a turn the OWNER stopped - Stop, or Stop and save closing the session under it - is stopped, never failed: its CLI
             # exits mid-turn, and read as a failure the start was put back in the queue and run again (the overnight run, 2026-11-03)
-            stopped = cancel.is_set() or getattr(self, 'closing', False)
+            if timed is not None:
+                # ...and one that RAN OUT OF TIME paused: its run ends stopped, in words that say why, on the thread it was on - so Continue
+                # resumes it with what it made, and no start queue runs a long build again from the top
+                from . import continuity
+                if timed.session_id and continuity.can_resume(self.store, self.pick): self.cli_sid = timed.session_id; self._remember_session()
+                try:
+                    from . import workerstate as ws
+                    ws.record(self.store, self.task_id, self.sid, 'stopped', text=said, source=TIMED_OUT)
+                except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
+                logger.warning(f'assistant turn on task {self.task_id} ran out of time: {e}')
+                if not is_dock(self.store.get_task(self.task_id)): threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
+                raise Stopped(str(e)) from e
             try:
                 from . import workerstate as ws
                 ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=str(e)[:4000], source='api')
@@ -1567,7 +1599,7 @@ class GeneralSession:
         # prevent the session itself from closing.
         was_alive = self.alive
         # ...and its CLI stops too: a closed task keeps no live process (clipool)
-        from . import clipool; clipool.close(f'general:{self.task_id}')
+        from . import clipool; clipool.close(f'general:{self.task_id}'); clipool.close(f'dock:{self.task_id}')
         # The application-level dock is already offered the Hub publishing road on each turn.
         # Mining it again on New chat launched a hidden Claude process for an ordinary archive;
         # repeated New chats could overlap those minute-long closeout calls and make the next

@@ -18,46 +18,46 @@ KNOWN = [
      # --dangerously-skip-permissions: headless claude otherwise blocks on approvals forever.
      # stream-json + --verbose is what lets the Board show a run as it happens.
      'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose'],
-     'resume_args': ['--resume'], 'timeout': 1500},
+     'resume_args': ['--resume']},
     {'name': 'codex', 'cmd': 'codex', 'label': 'OpenAI Codex CLI',
      # ...and the hooks we install at user scope run untrusted: Codex skips a hook silently until
      # someone approves it inside the TUI, which a pty session never can. The flag adds nothing the
      # sandbox bypass beside it has not already granted (hooks.py, 2026-09-20).
-     'args': ['exec', '--dangerously-bypass-approvals-and-sandbox', '--dangerously-bypass-hook-trust'], 'timeout': 1500},
+     'args': ['exec', '--dangerously-bypass-approvals-and-sandbox', '--dangerously-bypass-hook-trust']},
     # gemini and cursor keep their sessions in files and hand out no id (sessionfiles.SOURCES goes
     # and finds it): ~/.gemini/tmp/<sha256 of the project root>/chats, and ~/.cursor/chats/**/<id>.
     # Read from their documentation, not from a machine that ran them - see sessionfiles.
     {'name': 'gemini', 'cmd': 'gemini', 'label': 'Gemini CLI',
-     'args': ['-p', '--yolo'], 'resume_args': ['--resume'], 'acp': ['--acp'], 'timeout': 1500},
+     'args': ['-p', '--yolo'], 'resume_args': ['--resume'], 'acp': ['--acp']},
     # Qwen Code 0.23.4: stdin selects headless mode; -p requires a string, so leave it out.
     # Its stream-json uses the assistant/tool/result events already parsed by run_cli.
     {'name': 'qwen', 'cmd': 'qwen', 'label': 'Qwen Code',
      'args': ['--yolo', '--output-format', 'stream-json'],
-     'resume_args': ['--resume'], 'acp': ['--acp'], 'timeout': 1500},
+     'resume_args': ['--resume'], 'acp': ['--acp']},
     {'name': 'opencode', 'cmd': 'opencode', 'label': 'OpenCode (DeepSeek, GLM, MiniMax)',
      'description': 'Use /connect to add a provider, then /models to choose it. Task execution only; choose another provider for triage and reports.',
      'args': ['run', '--format', 'json', '--auto'],
-     'resume_args': ['--session'], 'timeout': 1500},
+     'resume_args': ['--session']},
     # Kimi Code 0.43.1 requires an explicit --prompt string; run_cli supplies it.
     # Print mode already grants tools and rejects --auto/--yolo alongside --prompt.
     {'name': 'kimi', 'cmd': 'kimi', 'label': 'Kimi Code (Moonshot AI)',
      'description': 'Use /login to connect Kimi or Moonshot. Windows requires Git Bash. Task execution only; choose another provider for triage and reports.',
      'args': ['--output-format', 'stream-json'],
-     'resume_args': ['--session'], 'timeout': 1500},
+     'resume_args': ['--session']},
     {'name': 'cursor', 'cmd': 'cursor-agent', 'label': 'Cursor CLI',
      'args': ['-p', '--force', '--output-format', 'text'], 'resume_args': ['--resume={id}'],
-     'acp': ['acp'], 'timeout': 1500},
+     'acp': ['acp']},
     # --resume takes an OPTIONAL value, so the id has to be JOINED to it ({id}); its own help says
     # `copilot --resume=<session-id>`. It also takes --session-id=<uuid> for a NEW session, which is
     # how a pane names its conversation up front rather than learning it later (agents.ASSIGN_ARGS).
     {'name': 'copilot', 'cmd': 'copilot', 'label': 'GitHub Copilot CLI',
-     'args': ['-p', '--allow-all-tools'], 'resume_args': ['--resume={id}'], 'acp': ['--acp'], 'timeout': 1500},
+     'args': ['-p', '--allow-all-tools'], 'resume_args': ['--resume={id}'], 'acp': ['--acp']},
     # Meta's agent, on Muse Spark. `exec` is its headless verb (codex's shape, not claude's -p) and
     # --yolo is the approval bypass without which a headless run parks on a prompt forever. Its
     # --json emits Meta's own JSONL event schema, which nothing here parses, so it stays off and
     # the run is read as plain text. POSIX only - see cliinstall.RECIPES.
     {'name': 'muse', 'cmd': 'muse', 'label': 'Meta Muse Code',
-     'args': ['exec', '--yolo'], 'timeout': 1500},
+     'args': ['exec', '--yolo']},
     # Cognition's Devin for Terminal - claude's shape (-p is the headless turn), different
     # spellings for the two things a headless run cannot do without:
     #   --permission-mode dangerous  the approval bypass, a MODE here rather than a flag;
@@ -71,7 +71,7 @@ KNOWN = [
     # answers initialize, session/new (an id like 'relieved-radiator') and session/prompt, streaming
     # thought, message and tool_call updates - verified with acp.ACPClient on the owner's box 2026-09-20.
     {'name': 'devin', 'cmd': 'devin', 'label': 'Devin CLI',
-     'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'acp': ['acp'], 'timeout': 1500},
+     'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'acp': ['acp']},
 ]
 
 

@@ -33,6 +33,12 @@ class Gone(Ended):
     """...before the turn's message reached it: nothing of the turn ran, so sending it again repeats nothing."""
 
 
+class TimedOut(RuntimeError):
+    """A turn that ran past its limit and was killed there - not a CLI that broke. It carries the conversation it was on, so the
+    work it did is picked up by Continue (general.send_prompt) instead of started again."""
+    def __init__(self, msg='', session_id=None): super().__init__(msg); self.session_id = session_id
+
+
 RESTART_FAILED = 'the AI tool stopped, and stopped again when it was restarted'
 MID_TURN = 'the agent stopped in the middle of its turn - nothing was sent again, as it may have done part of the work; Continue picks it up'
 
@@ -61,21 +67,21 @@ class Live:
         try: self.p.kill()
         except Exception: pass
 
-    def turn(self, prompt: str, on_event, cancel=None, timeout: float = 1200) -> tuple:
-        """Send one message and read until its `result`. Returns (result event, raw lines)."""
+    def turn(self, prompt: str, on_event, cancel=None, timeout: float = None) -> tuple:
+        """Send one message and read until its `result`. Returns (result event, raw lines). `timeout` None: no limit - an agent's turn."""
         # a process that went away while idle - killed, or its CLI updated itself under it - never gets the message: Gone, not mid-turn
         if not self.alive(): raise Gone(f'the CLI was gone before the message reached it (exit {self.p.poll()})')
         try:
             self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
             self.p.stdin.flush()
         except (OSError, ValueError) as e: raise Gone(f'the CLI was gone before the message reached it ({e})')
-        raw, end = [], time.time() + timeout
+        raw, end = [], time.time() + timeout if timeout else None
         while True:
             if cancel is not None and cancel.is_set():
                 self.close(); raise RuntimeError('cancelled')
-            left = end - time.time()
+            left = end - time.time() if end else 0.5
             if left <= 0:
-                self.close(); raise RuntimeError(f'timed out after {int(timeout)}s')
+                self.close(); raise TimedOut(f'timed out after {int(timeout)}s', self.sid)
             try: line = self.lines.get(timeout=min(left, 0.5))
             except queue.Empty: continue
             if line is None:
@@ -152,7 +158,7 @@ def warm(key: str, cmd: list, *, cwd=None, env=None, resume=None, swap: bool = F
 
 
 def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resume=None, cancel=None,
-        timeout: float = 1200, resend: bool = False) -> tuple:
+        timeout: float = None, resend: bool = False) -> tuple:
     """One turn on the conversation's live process: (result event, raw lines). A process that died between
     turns is started again once, resumed by its id, before the turn fails. `resend`: a turn with no side effects (a CLI
     with its tools off - the Assistant deciding) is sent again after ANY end, mid-turn included; one that may have done

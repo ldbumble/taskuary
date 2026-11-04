@@ -14,6 +14,24 @@ test("a heredoc written into a file reads as that file written, never 'Read <<EO
   assert.doesNotMatch(said("cat notes.md > /dev/null"), /^Wrote/);
 });
 
+test("a folder the shell fills in ($d) is never shown as its name: the agent's own words for the step are (stress test 2026-11-03)", () => {
+  const command = "$d=Join-Path $env:USERPROFILE 'Downloads'; $d; Get-ChildItem $d -Filter 'notes*' | Select Name; Get-ChildItem . -Recurse -Filter 'notes*'";
+  assert.equal(describeCall("PowerShell", { command, description: "Locate the zip in Downloads" }).summary, "Locate the zip in Downloads");
+  assert.equal(describeCall("PowerShell", { command }).summary, "Looked for files matching 'notes*', and 1 more");
+  assert.equal(describeCall("PowerShell", { command: "Get-ChildItem $d | Select Name" }).summary, "Listed the files");
+  assert.equal(describeCall("Bash", { command: 'cat "$f"' }).summary, "Read a file");
+  assert.equal(describeCall("Bash", { command: "type %TEMP%\\notes.txt" }).summary, "Read a file");
+  assert.equal(describeCall("Bash", { command: "ls ~/Downloads" }).summary, "Listed the files in Downloads");
+  // ...and a pattern it looked for is not a folder it listed
+  const find = 'Get-ChildItem -Recurse -Filter "notes-missing*" -Path "$env:USERPROFILE\\Downloads" -ErrorAction SilentlyContinue | Select FullName';
+  assert.equal(describeCall("PowerShell", { command: find, description: "Search for the named zip elsewhere" }).summary, "Search for the named zip elsewhere");
+  assert.equal(describeCall("PowerShell", { command: find }).summary, "Looked for files matching 'notes-missing*'");
+  assert.equal(describeCall("Bash", { command: "ls ~/Downloads/*.zip" }).summary, "Looked for files matching '*.zip'");
+  // ...nor a file it looked at a folder it listed
+  assert.equal(describeCall("Bash", { command: "ls -la ~/Downloads/notes.zip 2>&1" }).summary, "Looked at notes.zip");
+  assert.equal(describeCall("Bash", { command: "ls -la ~/Downloads/notes.zip", description: "Locate the zip in Downloads" }).summary, "Locate the zip in Downloads");
+});
+
 const DIR = new URL("../../tests/fixtures/agent_steps/", import.meta.url);
 const trace = (b) => JSON.parse(fs.readFileSync(new URL(`${b}.trace.json`, DIR), "utf8"));
 const ANSWER = "The budget review is waiting on Gail Moreno's sign-off: TQ-1142 holds the thread, and the status board reads approvedTotal "
@@ -121,6 +139,18 @@ test("a failed step the agent retried with success reads as recovered; one never
   // ...but the last try failing is a failure, whatever came before
   const last = stepsOf([call("a", "Bash", { command: "npm test" }), res("a", false), call("b", "Bash", { command: "npm test" }), res("b", true)]);
   assert.deepEqual(last.map((s) => s.status), ["error"]);
+});
+
+// A HELD STEP WAITS, IT DID NOT FAIL (the desktop stress test, 2026-11-03): a delete Taskuary held for the owner wore red "failed"
+test("a step Taskuary held for the owner's yes reads as held, never failed", () => {
+  const call = (id, command, description) => ({ type: "tool_call", name: id, detail: { tool_call_id: id, args: { command, description } } });
+  const res = (id, result) => ({ type: "tool_result", name: id, detail: { result, is_error: true } });
+  const steps = stepsOf([
+    { ...call("a", 'Remove-Item "C:/Users/alex/Downloads/notes" -Recurse', "Delete the extracted folder"), name: "PowerShell" },
+    res("a", "PreToolUse:PowerShell hook error: Taskuary held this for the owner: delete notes in Downloads (it can't be undone). It is on the task"),
+    { ...call("b", "npm test"), name: "Bash" }, res("b", "exit 1"),
+  ]);
+  assert.deepEqual(steps.map((s) => s.status), ["held", "error"]);
 });
 
 test("a turn whose answer carries its reply draft is not shown twice - the stream had the draft taken out, the filed answer keeps it", () => {

@@ -62,6 +62,15 @@ export const reviewText = (review) => {
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
+// THE LINE OVER A HELD STEP'S CARD IN THE CHAT, said for what was held: a held delete read "The agent's browser waits for your yes" (2026-11-03)
+export const heldActsLine = (reviews = []) => {
+  const kinds = new Set(reviews.map((r) => proposalFrom(r)?.action));
+  const only = (k) => kinds.size === 1 && kinds.has(k);
+  if (only("browser_act")) return "The agent's browser waits for your yes. Approve runs exactly this in its browser; Dismiss tells the agent it was not done.";
+  if (only("desktop_act")) return "An app on your desktop waits for your yes. Approve runs exactly this; Dismiss tells the agent it was not done.";
+  return `${reviews.length > 1 ? "These steps wait" : "This step waits"} for your yes. Approve runs exactly what is shown; Dismiss tells the agent it was not done.`;
+};
+
 export const proposalPresentation = (review) => {
   if (review?.Kind !== "action") return null;
   const proposal = proposalFrom(review);
@@ -153,9 +162,10 @@ export const proposalPresentation = (review) => {
   if (proposal?.action === "shell_act") return {
     kind: "action",
     title: "The agent's step waits for your yes",
-    context: review.Reason || "Held before it ran · it leaves this computer",
+    context: review.Reason || `Held before it ran · ${proposal.why || "it leaves this computer"}`,
     destinationLabel: "In",
-    destination: proposal.cwd || "the agent's folder",
+    // a delete names the folder it aims at (shellgate.deletes): a general agent's own scratch folder told the owner nothing (2026-11-03)
+    destination: proposal.where || proposal.cwd || "the agent's folder",
     approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",

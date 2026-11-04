@@ -2,6 +2,8 @@
 .tq-aui-tool-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #78917a; }
 .tq-aui-tool-running .tq-aui-tool-dot { background: #c99b42; animation: tqAuiPulse 1.2s ease-in-out infinite; }
 .tq-aui-tool-error .tq-aui-tool-dot { background: #9a4e53; }
+/* held for the owner's yes (agentSteps `held`): the waiting colour, still - nothing failed */
+.tq-aui-tool-held .tq-aui-tool-dot { background: #c99b42; }
 /* WHAT IT DID, as plain lines (agentSteps.js): its own words in the answer's type, and one quiet row per thing it did. A row opens
    on the raw call behind it - kept for debugging, never the first thing read. */
 .tq-aui-steps { margin: 0 0 12px; display: flex; flex-direction: column; gap: 1px; }

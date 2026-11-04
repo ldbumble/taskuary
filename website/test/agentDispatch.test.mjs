@@ -73,7 +73,8 @@ test("the New sheet reports what the dispatch answered, not what it hoped", () =
   // "is on it in a live session" over the top of it (the owner, 2026-09-22)
   const sheet = src("NewSheet.jsx");
   assert.match(sheet, /import \{ outcomeOf \}/);
-  assert.match(sheet, /outcomeOf\(out\)\.text/);
+  // the line leads with the ref, so the outcome is read without it: "TQ-0001 — ... - TQ-0001" said it twice (2026-11-03)
+  assert.match(sheet, /setOk\(`\$\{data\.ref\} — \$\{outcomeOf\(\{ \.\.\.out, ref: "" \}\)\.text\}\.`\)/);
   assert.doesNotMatch(sheet, /setOk\(`\$\{data\.ref\} — \$\{agent\}/);   // never the hoped-for sentence
 });
 

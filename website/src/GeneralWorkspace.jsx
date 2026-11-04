@@ -47,6 +47,7 @@ import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
 import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
+import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
@@ -591,8 +592,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               only road to it, closed the very browser Approve runs in. The same card, where the owner already looks. */}
           {!dock && !!acts?.length && (
             <Box data-tq-browser-acts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
-              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>
-                The agent's browser waits for your yes. Approve runs exactly this in its browser; Dismiss tells the agent it was not done.</Typography>
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>{heldActsLine(acts)}</Typography>
               {acts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
             </Box>
           )}

@@ -337,7 +337,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         }
         filed.current = null;
         if (out?.said) onSaid?.(out.said);
-        setOk(`${data.ref} — ${outcomeOf(out).text}.`);
+        setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words

@@ -72,7 +72,7 @@ What your verdict causes: a task or reply_only lands where the owner works throu
 
 ## 3. Is it the same as work that already exists?
 
-When `open_work` or `recently_closed` is given, answer `same_as` with the tid of the task this message IS, or null.
+When `open_work`, `recently_closed`, `open_items` or `found_by_search` is given, answer `same_as` with the tid of the task this message IS, or null. `open_items` is the owner's other open tasks and Watching items, one line each, with nothing tying them to this message but what they are about: a message about the same matter as one - a third party's follow-up, a confirmation, an answer, on another thread or channel - IS that task; most of them are unrelated. `found_by_search` is what the owner's own task search finds for this message's words, open or closed with when: a shared word is not the same matter, and a closed one named in `same_as` comes back only with new work or a question for the owner.
 
 **How far to combine** (`combine`). The owner sets, for each connection, how readily its messages join a task that is already there - open, or closed in the last week - instead of opening one of their own: `combine.level`, 1 to 5. It is the measure behind every join you answer: `same_problem` in a chat, `new_job` on a thread, `same_as`.
 - **1** - only the same problem: finishing, correcting or narrowing the task's ask, a question or a file about it.
@@ -161,6 +161,8 @@ Each is a sign to weigh; an absent field is not evidence either way.
 - `others_replied`, `last_on_thread` - people other than the owner and the sender who have SENT on this thread, and who spoke last before this message; `last_on_thread_is_you` - true when that was the owner's own reply (its words are their last "you" line in the `exchange`).
 - `exchange` - the recent back-and-forth, oldest first, the owner's lines marked "you", each led by its message id `[#n]`.
 - `open_work`, `recently_closed` - tasks this touches, open or closed lately, each with how it ended.
+- `open_items` - the owner's other open tasks and Watching items, one line each (ref and tid, title, what it asks, source, age).
+- `found_by_search` - what the owner's task search finds for this message's words, open or closed, one line each with its status.
 - `agent_on_it`, `open_todos` - on a task this may join: the agent working it now and what it was put to, and the to-dos still open. See **An agent already on it**.
 - `connected_systems` - what this install can reach for the owner: its mailboxes, data sources and tools, by name and type. A system that is not in it cannot be read or changed from here.
 - `meetings_today` - the owner's meetings today, each already on their rail at its time. A message that only announces, reminds of or links to one of them adds nothing the calendar does not already show; one that changes it, asks something about it or needs something done before it is judged on that.

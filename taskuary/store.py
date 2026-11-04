@@ -2915,6 +2915,14 @@ class SQLiteStore:
             "  FROM task t LEFT JOIN message m ON m.TaskId=t.TaskId "
             " WHERE t.Status NOT IN ('done','dropped') "
             " GROUP BY t.TaskId ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC LIMIT ?", (limit,))
+    def tasks_open_brief(self, limit=40):
+        """The OPEN tasks and Watching items, newest activity first, each with what triage read it to ask (ThreadJson), the channel and the
+        name it first came from - one line each of the list every arrival is shown (context.open_items)."""
+        first = "(SELECT m.{} FROM message m WHERE m.TaskId=t.TaskId AND IFNULL(m.Direction,'')<>'out' ORDER BY m.MessageId LIMIT 1)"
+        return self._rows(
+            "SELECT t.TaskId, t.Title, t.Summary, t.ThreadJson, t.WatchedAt, t.Source, t.OriginBase, t.CreatedAt, "
+            f"       IFNULL(t.UpdatedAt, t.CreatedAt) Touched, {first.format('Channel')} Channel, {first.format('FromName')} FromName "
+            "  FROM task t WHERE t.Status NOT IN ('done','dropped') ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC, t.TaskId DESC LIMIT ?", (limit,))
     def task_people(self, tids) -> dict:
         """{TaskId: [{name, email, channel}]} - who wrote on each task, by display name, never the owner's own lines: what a name on
         another channel is compared against (context.same_name)."""

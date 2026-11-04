@@ -51,6 +51,14 @@ FIELDS = {
     'recently_closed': "recently_closed is work on this thread, sender or subject that was closed in the last few days, each with its "
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",
     'open_work': "open_work is the OPEN tasks this message touches, each with its tid.",
+    'open_items': ("open_items is the owner's other open tasks and Watching items, newest first, one line each: its ref and (tid), title, "
+                   "what it asks, where it came from, whether it is watched, and its age. Nothing ties them to this message by thread, sender "
+                   "or number - most are unrelated. When this message is about the same matter as one of them, whoever wrote it and on "
+                   "whatever channel or thread, answer same_as with that tid."),
+    'found_by_search': ("found_by_search is what the owner's own task search finds for this message's subject and words, open or closed, "
+                        "best found first, one line each: ref and (tid), title, what it asks, its status (open, watching, or closed and "
+                        "when) and age. A word match is not the same matter - when this message IS one of them, answer same_as with "
+                        "that tid; a closed one comes back only when this brings it new work or a question for the owner."),
     'thread_task': "thread_task is the task this message's thread already belongs to - its tid, title, ask and status. The message "
                    "joins it unless you answer new_job: one line saying why this is a different job; null when it is the same.",
     'room_tasks': "room_tasks are this chat's tasks - the ones its same-day lines already sit on, then its others open or closed in the last "
@@ -874,6 +882,10 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not coding: system += ('\n\nTHERE IS NO CODING AGENT on this install (no coding tool, or developer mode is off). Never choose '
                                       'kind coding - work that would be coding is general.')
             same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
+            # ...and any line of the owner's open items: a join by meaning names one of those, and it was shown (context.open_items)
+            # ...and of what the owner's search found, closed ones too (context.found_tasks)
+            same_ids |= {int(x) for k in ('open_items', 'found_by_search') for l in (thread or {}).get(k) or []
+                         for x in re.findall(r'\(tid (\d+)\)', str(l))[:1]}
             goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             earlier_ids = {int(x) for l in (thread or {}).get('exchange') or [] for x in re.findall(r'^\[#(\d+)\]', str(l))}
             home = ((thread or {}).get('thread_task') or {}).get('tid')

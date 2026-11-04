@@ -559,6 +559,14 @@ def no_turn_end_judge_in_the_background():
 
 
 @pytest.fixture(autouse=True)
+def no_opening_carryover():
+    """general.OPENING holds a task an agent is opening on: a reply writer's NEEDS hands the task on holding it until the start lets
+    go (ingest.agent_on_reply `opening`) - and with `_spawn` patched the start never runs, so the next test's task 1 read as live."""
+    from taskuary import general
+    before = set(general.OPENING); yield; general.OPENING.intersection_update(before)
+
+
+@pytest.fixture(autouse=True)
 def no_path_lookup_carryover():
     """pathcache remembers where a CLI was found while the PATH directories read the same - and a test that writes a fake
     CLI into one, or patches os.access or os.path.exists under the real which(), must not inherit the test before it (perf 2.7)."""

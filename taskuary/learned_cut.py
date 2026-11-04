@@ -23,7 +23,7 @@ PEOPLE, CARE, WORK, PROMISES, BRING = SECTIONS.values()
 # ...and triage, and the report's routing judge, read the WHOLE of it every time, through `whole` - not a budgeted cut (the owner,
 # 2026-10-27: "triage needs the entire thing to make a decision every time"). Agents read it on demand (agenttools' owner_memory,
 # `taskuary --memory`) instead of carrying it in their start prompt (2026-10-27: "progressive disclosure")
-READS = {'triage': tuple(SECTIONS), 'drafter': ('people',), 'advisor': ('people', 'work', 'care', 'promises'), 'assistant': tuple(SECTIONS),
+READS = {'triage': tuple(SECTIONS), 'drafter': ('people', 'work'), 'advisor': ('people', 'work', 'care', 'promises'), 'assistant': tuple(SECTIONS),
          'agents': tuple(SECTIONS)}
 # who reads a section, as the owner reads it - triage takes the people lines for a task's PRIORITY only (the owner, 2026-10-25)
 READER_WORDS = {'triage': 'triage', 'drafter': 'drafts', 'advisor': 'the Advisor', 'assistant': 'the Assistant', 'agents': 'agents'}

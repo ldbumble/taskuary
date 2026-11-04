@@ -149,7 +149,7 @@ def test_the_drafter_reads_the_people_lines_about_whoever_it_writes_to():
     s = full()
     said = responder.voice_line(s, ['Gail@northwind.example'])
     assert 'gets the headcount questions' in said and 'Erin Blake' not in said and 'Vendor statements' not in said
-    assert responder.voice_line(s, ['omar@northwind.example']) == ''
+    assert 'gets the headcount' not in responder.voice_line(s, ['omar@northwind.example']), 'the people lines are about the recipient only'
 
 
 def test_each_reader_reads_the_sections_of_the_matrix():
@@ -351,3 +351,18 @@ def test_adopting_a_line_about_someone_files_it_under_your_people():
 def test_the_hot_pass_is_told_never_to_count_presses():
     assert 'button' in learn.LESSON_SYSTEM and 'pr ids' not in learn.LESSON_SYSTEM
     assert 'never a count of button presses' in learn.REFLECT_SYSTEM and 'pr ids' not in learn.REFLECT_SYSTEM
+
+
+def test_the_drafter_reads_how_you_work():
+    from taskuary import responder
+    said = responder.voice_line(full(), ['gail@northwind.example'])
+    assert 'Vendor renewals are put off to Friday' in said and 'How you work' in said and 'Newsletter' not in said
+
+
+def test_voice_line_stays_in_budget():
+    from taskuary import responder
+    s = MemoryStore(); doc = s.get_doc('learned')
+    mk = lambda h, i: f'- Gail Moreno (gail@northwind.example) {h} item {i} ' + 'x' * 60 + f' [s:4 | ev: a{i}, b{i}, c{i} | seen: 2026-10-20 | k: {h}{i}]'
+    for h, head in (('p', learned_cut.PEOPLE), ('w', learned_cut.WORK)): doc = put(doc, head, *[mk(h, i) for i in range(40)])
+    s.save_doc('learned', doc, 'reflect')
+    assert len(responder.voice_line(s, ['gail@northwind.example'])) <= 600 + len(responder.PEOPLE_HEAD) + 200

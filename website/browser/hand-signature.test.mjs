@@ -38,8 +38,14 @@ test("Settings > Your signature: draw it, save, see it, clear it", { timeout: 18
   await page.waitForSelector(`${C} [data-tq-hand-signature-pad] canvas`);
   assert.equal(await page.$eval(C, (el) => [...el.querySelectorAll("button")].find((b) => b.textContent.trim() === "Save").disabled), true, "nothing drawn, nothing to save");
   await page.$eval(`${C} canvas`, (el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
-  await new Promise((r) => setTimeout(r, 300));
-  const pad = await (await page.$(`${C} canvas`)).boundingBox();
+  // ...and still: Settings scrolls itself to the section it opened on, and a stroke drawn while it moves lands half off the pad
+  let pad = null;
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    const now = await (await page.$(`${C} canvas`)).boundingBox();
+    if (pad && now && Math.abs(now.y - pad.y) < 0.5 && Math.abs(now.x - pad.x) < 0.5) break;
+    pad = now;
+  }
   await page.mouse.move(pad.x + 40, pad.y + pad.height * 0.6);
   await page.mouse.down();
   for (let i = 1; i <= 24; i++) await page.mouse.move(pad.x + 40 + i * 14, pad.y + pad.height * (0.6 - 0.25 * Math.sin(i / 3)), { steps: 2 });

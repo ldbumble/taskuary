@@ -612,8 +612,8 @@ class GeneralWaitroomTests(unittest.TestCase):
 
 
 class OneGoalTests(unittest.TestCase):
-    """THE GENERAL AGENT'S ONE GOAL (Task 3.4, 2026-11-04): get the owner to done - starting from triage's reading of the thread, doing as
-    much of their part as it can, and ending each turn with the summary block. A login it finds goes in the draft, never the conversation."""
+    """THE GENERAL AGENT'S ONE GOAL (Task 3.4, 2026-11-04): take the work off the owner's hands - starting from triage's reading of the
+    thread, asking only what it cannot find, re-planning when the thread changes, never sending, and ending each turn with the summary block. A login it finds goes in the draft, never the conversation."""
     def _store(self):
         s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); s.set_setting('owner_name', 'Alex Doyle', 't')
         return s
@@ -631,13 +631,14 @@ class OneGoalTests(unittest.TestCase):
         s = self._store(); plain = general_task(s); mailed = general_task(s); self._mail(s, mailed)
         for tid in (plain, mailed):
             system = general._prompt(s, tid)[0]
-            for want in ('get the owner to done', 'goes only in the reply you draft', selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE):
+            for want in ("off the owner's hands", 'only what you cannot find', 're-plan', 'never send', 'goes only in the reply you draft',
+                         selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE):
                 self.assertIn(want, system, (tid, want))
             self.assertNotIn('into the conversation or a draft', system)
         # ...never the guide's chat, nor a connector card's walk
         dock = general.dock_task(s, 'owner')[0]['TaskId']
         card = s.create_task({'Title': 'Connect the ledger', 'Kind': 'general', 'Status': 'open', 'SourceRef': 'connector:setup'}, 'owner')
-        for tid in (dock, card): self.assertNotIn('get the owner to done', general._prompt(s, tid)[0], tid)
+        for tid in (dock, card): self.assertNotIn("off the owner's hands", general._prompt(s, tid)[0], tid)
 
     def test_a_strangers_task_has_the_goal_but_is_never_steered_to_a_login(self):
         # nothing a stranger writes may point the agent at credentials or the owner's files: the goal stays, the login and where-to-look go
@@ -645,7 +646,8 @@ class OneGoalTests(unittest.TestCase):
         s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
         s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))     # PROFILE RULES (ASSISTANT.md) ride as on an install
         system, user = general._prompt(s, tid)
-        self.assertIn('get the owner to done', system); self.assertIn('PROFILE RULES (ASSISTANT.md)', system)
+        for want in ("off the owner's hands", 'only what you cannot find', 're-plan', 'never send'): self.assertIn(want, system, want)
+        self.assertIn('PROFILE RULES (ASSISTANT.md)', system)
         flat = ' '.join(f'{system}\n{user}'.split())
         for gone in ('put it in the reply you draft', 'goes only in the reply you draft', 'A login or secret', 'A login or key',
                      'supply a login', '.env', 'folders you can read'):
@@ -691,7 +693,7 @@ class OneGoalTests(unittest.TestCase):
     def test_the_shipped_assistant_doc_carries_research_know_how(self):
         doc = (Path(general.__file__).parent / 'templates' / 'assistant.md').read_text(encoding='utf-8')
         flat = ' '.join(doc.split())
-        self.assertIn('get {{owner}} to done', flat)
+        for want in ("off {{owner}}'s hands", 'truly cannot find', 're-plan', 'never send'): self.assertIn(want, flat, want)
         self.assertIn('## When the task needs research or analysis', doc)
         for want in ('what you could not find', 'when the source is from', 'whose figures', 'how you computed', 'who owes what by when',
                      'never book', "{{owner}}'s voice", 'a claim needs a source'):

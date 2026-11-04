@@ -706,14 +706,19 @@ def repos_block(store) -> str:
             "for one)\n" + '\n'.join(line(r) for r in names[:20]))
 
 
-# ONE GOAL - GET THE OWNER TO DONE (Task 3.4, 2026-11-04): an agent told only "do the job" left a login that sat in a project's .env to the
-# owner. A login it finds goes in the draft the owner's Send approves - never in the conversation (the owner's ruling, 2026-11-04). This
-# is that rule's ONE home: AGENT.md and ASSISTANT.md ride on a stranger's task too, so neither carries it (store._LOGIN_RULES)
-_GOAL = ("YOUR ONE GOAL: get the owner to done. Read THE ASK, AS TRIAGE READ IT first when the brief has it, and check it against the "
-          "mail: what is asked, the owner's part, who already handled what. Do as much of the owner's part as you can before leaving "
-          "anything to them{look}. Draft every email the job needs through your reply and draft tools, never as text in the "
-          "conversation. {login}Then tell them where it stands: what the task wants from them, what you researched or did, and the next "
-          "steps - and close out, or do what closing out takes.")
+# ONE GOAL - TAKE THE WORK OFF THE OWNER'S HANDS (the owner, 2026-11-04: "take work off the user's hands as much as possible and provide
+# solutions to make life easier"). A PRINCIPLE, not a list of errands - it rides in every prompt, and a flight or a permission slip is
+# just one case of it. An agent told only "do the job" left a login that sat in a project's .env to the owner: a login it finds goes in
+# the draft the owner's Send approves - never in the conversation. This is that rule's ONE home: AGENT.md and ASSISTANT.md ride on a
+# stranger's task too, so neither carries it (store._LOGIN_RULES)
+_GOAL = ("YOUR ONE GOAL: take as much of the work as you can off the owner's hands, and come back with it solved. Read THE ASK, AS "
+          "TRIAGE READ IT first when the brief has it, and check it against the mail: what is asked, the owner's part, who already "
+          "handled what. Do the work yourself{look}; ask only what you cannot find, all in one short question. Come back with results "
+          "ready to act on: drafts, filled forms, links that work, the one decision left. Search and read before opening a browser - open "
+          "a page only when the job needs one (a sign-in, a form, a booking). Draft every email the job needs through your reply and draft "
+          "tools, never as text in the conversation. {login}When anything on the thread changes - someone else answered, plans moved, the "
+          "facts changed - re-plan: it may now need no reply, new research, corrected or added drafts, or nothing at all. You never send, "
+          "book, pay or close anything yourself: the owner's press does that.")
 LOOK_CLAUSE = (", and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found - a file "
                "such as an .env holds settings: read the value the job needs")
 LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the reply you draft - their Send shares it - never in the "

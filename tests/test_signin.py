@@ -141,6 +141,17 @@ class Filling(unittest.TestCase):
         self.assertIn("bank.example also asks for 'Customer ID'", said); self.assertNotIn('did not accept that password', said)
         self.assertEqual(signin.refused('bank.example', []), 'bank.example did not accept that password')
 
+    def test_a_third_box_the_vault_keeps_is_filled_by_its_label_before_the_user_name(self):
+        p = FakePage(); f = p.fields
+        def fields(want=''):
+            d = f(want if not want.startswith('other:') else '')
+            if want.startswith('other:'): p.focus = want; d['focused'] = True
+            return {**d, 'others': [] if any(w == 'other:Account code' for w, _ in p.typed) else ['Account code']}
+        p.fields = fields
+        out = signin.fill_page(p, 'bank.example', USER, PW, extra={'account CODE': 'NW-0042'})
+        self.assertEqual(p.typed[:3], [('other:Account code', 'NW-0042'), ('user', USER), ('password', PW)])
+        self.assertEqual(out['others'], [])
+
     def test_a_form_inside_another_sites_frame_is_refused_and_said(self):
         p = FakePage(password=False, user=False, frames=['https://idp.evil.example/login'])
         with self.assertRaises(signin.SignInError) as e: signin.fill_page(p, 'bank.example', USER, PW)
@@ -297,7 +308,7 @@ class TheOwnerSignsInOnThePage(Asking):
         self.assertEqual((p['text'], ws.status(self.s, self.tid)['requests'][-1]['choices']), ('Sign in to bank.example to continue', []))
         page = WatchPage([form('https://login.bank.example/signin', password=False), form('https://login.bank.example/signin', user=False),
                           form('https://login.bank.example/signin', user=False), form('https://app.bank.example/home', False, False)],
-                         sent=[{'u': USER, 'p': '', 'href': 'https://login.bank.example/signin'},
+                         sent=[{'u': USER, 'p': '', 'o': {'Account code': 'NW-0042'}, 'href': 'https://login.bank.example/signin'},
                                {'u': '', 'p': PW, 'href': 'https://login.bank.example/signin'}])
         with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
             self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
@@ -306,6 +317,7 @@ class TheOwnerSignsInOnThePage(Asking):
         self.assertFalse(ws.status(self.s, self.tid)['requests'])
         row = signin.saved(self.s, 'bank.example')
         self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
+        self.assertEqual(signin.extra_of(row), {'Account code': 'NW-0042'})          # ...and the other box it typed, by its label
         said = ' '.join(c['Body'] for c in self.s.list_comments(self.tid))
         self.assertIn('Saved your bank.example sign-in to the vault - remove it under Settings → Agent permissions, Saved sign-ins.', said)
         # NOWHERE in the clear: not the comments, the events, the audit, the logs - the vault row is sealed
@@ -410,6 +422,15 @@ class Routes(unittest.TestCase):
         row = signin.saved(self.s, 'portal.example')
         self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
         self.assertNotIn(PW, c.get('/api/signins').text); self.assertNotIn(USER, c.get('/api/signins').text)
+        # ...with the other box its form asks for: sealed with it, listed by its label only, kept when the password is saved again
+        r = c.post('/api/signins', json={'site': 'portal.example', 'user': USER, 'password': PW, 'fields': {'Account code': 'NW-0042'}})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(signin.extra_of(signin.saved(self.s, 'portal.example')), {'Account code': 'NW-0042'})
+        self.assertNotIn('NW-0042', c.get('/api/signins').text)
+        row = next(x for x in c.get('/api/signins').json()['data'] if x['site'] == 'portal.example')
+        self.assertEqual(row['fields'], ['Account code'])
+        signin.save(self.s, 'portal.example', USER, 'new-' + PW)
+        self.assertEqual(signin.extra_of(signin.saved(self.s, 'portal.example')), {'Account code': 'NW-0042'})
         self.assertEqual(c.post('/api/signins', json={'site': 'co.uk', 'password': PW}).status_code, 400)
         self.assertEqual(c.post('/api/signins', json={'site': 'http://portal.example', 'password': PW}).status_code, 400)
         self.assertEqual(c.post('/api/signins', json={'site': 'portal.example', 'password': PW}, headers=AGENT).status_code, 403)

@@ -107,3 +107,16 @@ def test_the_door_returns_the_decision(monkeypatch):
     monkeypatch.setattr(hooks, 'permit', lambda p, tid, wait=None, store=None: {'hookSpecificOutput': {'decision': {'behavior': 'allow'}, 'tid': tid}})
     r = c.post('/api/hooks/claude/permit?task=7', json={'tool_name': 'Bash'}, headers=_hdr(7))
     assert r.status_code == 200 and r.json()['hookSpecificOutput']['decision'] == {'behavior': 'allow'} and r.json()['hookSpecificOutput']['tid'] == 7
+
+
+def test_a_draft_call_is_named_on_the_card_never_shown():
+    "A login the thread asked for goes in the draft, not on view (sessionrecord.hide_draft) - a stranger session's card included."
+    from taskuary import sessionrecord
+    secret, s = 'Pl4ceholder-Secret-9', MemoryStore(); t = s.create_task({'Title': 'x', 'Kind': 'general'}, 'owner'); out = []
+    p = {'tool_name': 'mcp__taskuary__propose_reply', 'tool_input': {'text': f'the password is {secret}', 'to': 'Gail Moreno'}, 'session_id': 's1'}
+    th = threading.Thread(target=lambda: out.append(hooks.permit(p, t, store=s)), daemon=True); th.start()
+    for _ in range(100):
+        if ws.held_for(t) and [e for e in ws.status(s, t)['requests'] if e['kind'] == 'approval_needed']: break
+        threading.Event().wait(0.02)
+    r = _req(s, t); ws.release(t); th.join(5)
+    assert secret not in r['text'] and r['text'].endswith(f'mcp__taskuary__propose_reply: {sessionrecord.DRAFT_SHOWN}')

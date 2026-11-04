@@ -235,6 +235,7 @@ class NavigateTests(unittest.TestCase):
         self.assertEqual(argv[:4], ['agent-browser', '--session', 'tq-s', 'open'])
         self.assertEqual(argv[4], 'https://adp.com/login')
 
+    @unittest.skipUnless(sys.platform == 'win32', "builds Windows paths - pathlib cannot make them elsewhere")
     def test_on_windows_the_npm_shim_is_skipped_so_an_ampersand_stays_in_the_address(self):
         """npm's agent-browser.cmd runs through cmd.exe, which cut https://portal.example/?app=1&return=... at the & and ran the rest
         as a command - the page sat on a white spinner. The shim only starts the .exe beside it, so the .exe is what runs."""

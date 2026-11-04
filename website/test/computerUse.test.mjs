@@ -63,12 +63,15 @@ test("a held act waits on the live canvas, and the sign-in ask never invites the
   assert.match(gw, /data-tq-browser-acts=""/);
   assert.match(gw, /acts\.map\(\(r\) => <ReviewDecision key=\{r\.ReviewId\} review=\{r\} onChanged=\{onDraftDecided\} \/>\)/);
   assert.match(gw, /startsWith\("signin:"\) \? "Message the agent - never your password" : `Answer \$\{name\}'s question…`/);
-  assert.match(gw, /Sign in here opens a page Taskuary types from - the agent never sees it\. /);
-  assert.match(gw, /Or sign in yourself in the browser, then press Signed in\./);
+  // the sign-in ask is the question and a link, no card and no presses (the owner, 2026-11-03)
+  assert.match(gw, />fill it in securely<\/a>/);
+  assert.doesNotMatch(gw, /Sign in here opens a page|then press Signed in|>Sign in here</);
 });
 
-test("saved sign-ins say so when there are none, and the setup key is asked for in plain words", () => {
+test("saved sign-ins say so when there are none, can be added ahead of time, and the setup key is asked for in plain words", () => {
   const ss = src("SavedSignins.jsx");
-  assert.match(ss, /No saved sign-ins\. When an agent asks you to sign in, tick Save to vault/);
+  assert.match(ss, /No saved sign-ins\. A sign-in you type in the agent browser is kept here once it goes through - or add one now\./);
+  assert.match(ss, /api\.post\("\/api\/signins", f\)/);
+  assert.match(src("ConnectorsView.jsx"), /open\?\.kind === "signins" \? <SavedSignins \/>/);
   assert.doesNotMatch(ss, /otpauth:\/\//);
 });

@@ -366,15 +366,16 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 // double ui. we don't need question box if we have way to answer on the bottom"): the card's own field and Answer button went - what is
 // typed in the composer while a question is open is its answer (AssistantThread's answerTyped). `onAnswer(text)` delivers either - a
 // reply in this conversation, or the worker's own answer road - and throws with the reason when it could not.
-// A SIGN-IN it waits on (request id `signin:<site>`, signin.py) also offers the one-time fill page: Taskuary types it into the browser,
-// the agent never sees it. Taking over the browser beside it and pressing Signed in is the other way, as before.
+// A SIGN-IN it waits on (request id `signin:<site>`, signin.py) is NO CARD (the owner, 2026-11-03: "remove that stupid box again as we did
+// with the questions ... just have the question and link to fill it out securely"): the question as a line of the conversation, and a
+// link to the one-time fill page (Taskuary types it, the agent never sees it). Signing in on the page beside it needs no press: Taskuary
+// sees the page go past the sign-in (signin.watch), and "done" typed in the box below says so too.
 export function AgentAsks({ asking, name, onAnswer, taskId }) {
   const [going, setGoing] = useState(false), [err, setErr] = useState("");
   const site = String(asking.request_id || "").startsWith("signin:") ? asking.request_id.slice(7) : "";
-  // ...and its Signed in is a press on EVERY agent's ask (2026-10-25): a terminal CLI's had only the box and a line saying to type it.
-  // The server tells either kind the same words (signin.signed_in), never a chooser's number.
-  const choices = site && !(asking.choices || []).includes("Signed in") ? [...(asking.choices || []), "Signed in"] : asking.choices || [];
-  const fillPage = async () => {
+  const choices = site ? [] : asking.choices || [];
+  const fillPage = async (e) => {
+    e?.preventDefault?.();
     setErr("");
     try {
       const app = howToOpen(window) === "app";
@@ -388,18 +389,20 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
     setGoing(true); setErr("");
     try { await onAnswer?.(w); } catch (e) { setErr(errText(e)); } finally { setGoing(false); }
   };
+  if (site) return (
+    <p className="tq-aui-signin" data-tq-asking={asking.request_id} data-tq-signin-ask={site}>
+      {String(asking.text || `Sign in to ${site} to continue`).replace(/\.?\s*$/, "")}
+      {taskId ? <> - <a href="#" onClick={fillPage} data-tq-signin-link=""
+        title={`A one-time page to type the ${site} sign-in - Taskuary types it into the browser and the agent never sees it`}>fill it in securely</a>
+        , or sign in on the page.</> : ", on the page."}
+      {err && <span className="tq-aui-asking-err" role="alert"> {err}</span>}
+    </p>
+  );
   return (
     <div className="tq-aui-asking" data-tq-asking={asking.request_id}>
       <b>{says(subState({ request: asking }), name)}</b>
       <span className="tq-aui-asking-q">{asking.text}</span>
-      {/* WHAT EACH WAY DOES, said on the card (2026-10-25): "Sign in to X ... Type your answer" read as "type the password here", and
-          the agent-never-sees-it line lived only in a hover. Words only - the presses are the ones it had. */}
-      {site && <span className="tq-aui-asking-hint" data-tq-signin-hint="">
-        {taskId ? "Sign in here opens a page Taskuary types from - the agent never sees it. " : ""}
-        Or sign in yourself in the browser, then press Signed in.</span>}
-      {(!!choices.length || (site && taskId)) && <div className="tq-aui-asking-choices">
-        {site && taskId && <Button size="small" variant="outlined" onClick={fillPage}
-          title={`A one-time page to type the ${site} sign-in - Taskuary fills it into the browser and the agent never sees it`}>Sign in here</Button>}
+      {!!choices.length && <div className="tq-aui-asking-choices">
         {choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
       </div>}
       {err && <span className="tq-aui-asking-err" role="alert">{err}</span>}

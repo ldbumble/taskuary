@@ -9,6 +9,52 @@ import api from "./api";
 import { ago } from "./timeWords.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
+// A SIGN-IN SAVED AHEAD OF TIME (the owner, 2026-11-03: "we probably should have space on connector to fill out what the system requires"):
+// the site, its user name and password - and its authenticator key if it has one - sealed the way the fill page's Save to vault keeps them.
+// The boxes empty once it is kept; nothing typed is ever shown back.
+function AddSignin({ onSaved }) {
+  const [open, setOpen] = useState(false), [f, setF] = useState({ site: "", user: "", password: "", key: "" });
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [said, setSaid] = useState("");
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = async (e) => {
+    e.preventDefault();
+    if (busy || !f.site.trim() || !f.password) return;
+    setBusy(true); setErr(""); setSaid("");
+    try {
+      const { data } = await api.post("/api/signins", f);
+      setF({ site: "", user: "", password: "", key: "" }); setOpen(false); setSaid(`Saved your ${data.site} sign-in to the vault.`); onSaved?.();
+    } catch (x) { setErr(x?.response?.data?.detail || "That sign-in was not saved - try again."); }
+    finally { setBusy(false); }
+  };
+  if (!open) return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.75 }}>
+      <Button size="small" variant="outlined" data-tq-signin-add-open="" onClick={() => { setOpen(true); setSaid(""); }}
+        sx={{ color: INK, borderColor: BORDER, textTransform: "none" }}>Add a sign-in</Button>
+      {said && <Typography role="status" sx={{ color: FAINT, fontSize: 12.5 }}>{said}</Typography>}
+    </Box>
+  );
+  return (
+    <Box component="form" data-tq-signin-add="" onSubmit={save} autoComplete="off"
+      sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, py: 1, maxWidth: 560 }}>
+      <TextField size="small" label="Site" placeholder="portal.example.com" value={f.site} onChange={set("site")} autoFocus
+        inputProps={{ spellCheck: false, "data-tq-signin-site": "" }} sx={{ gridColumn: "1 / -1" }} />
+      <TextField size="small" label="User name" value={f.user} onChange={set("user")} autoComplete="off" inputProps={{ spellCheck: false }} />
+      <TextField size="small" label="Password" type="password" value={f.password} onChange={set("password")} autoComplete="new-password" />
+      <TextField size="small" label="Authenticator setup key (optional)" type="password" value={f.key} onChange={set("key")} autoComplete="off"
+        inputProps={{ spellCheck: false }} sx={{ gridColumn: "1 / -1" }} />
+      <Typography sx={{ gridColumn: "1 / -1", color: FAINT, fontSize: 12 }}>
+        Kept sealed on this computer. Taskuary types it into the page of that site when an agent signs in there - the agent never sees it.</Typography>
+      {err && <Typography role="alert" sx={{ gridColumn: "1 / -1", color: "#a33b3b", fontSize: 12.5 }}>{err}</Typography>}
+      <Box sx={{ gridColumn: "1 / -1", display: "flex", gap: 1 }}>
+        <Button size="small" variant="contained" disableElevation type="submit" disabled={busy || !f.site.trim() || !f.password}>
+          {busy ? "Saving…" : "Save to vault"}</Button>
+        <Button size="small" onClick={() => { setOpen(false); setErr(""); setF({ site: "", user: "", password: "", key: "" }); }}
+          sx={{ color: DIM, textTransform: "none" }}>Cancel</Button>
+      </Box>
+    </Box>
+  );
+}
+
 export default function SavedSignins() {
   const [rows, setRows] = useState(null), [err, setErr] = useState(""), [busy, setBusy] = useState(""), [what, setWhat] = useState("");
   const [keyFor, setKeyFor] = useState(""), [key, setKey] = useState(""), [keyErr, setKeyErr] = useState("");
@@ -36,11 +82,14 @@ export default function SavedSignins() {
   };
   if (err && !rows) return <Typography variant="body2" role="alert" sx={{ color: "#a33b3b", py: 1.5 }}>{err}</Typography>;
   // ...and with none, one quiet line: an owner checking nothing is kept found no trace of the feature at all (2026-10-25)
-  if (!rows?.length) return <Typography data-tq-saved-signins="" variant="body2" sx={{ color: FAINT, py: 1.5, fontSize: 12.5 }}>
-    No saved sign-ins. When an agent asks you to sign in, tick Save to vault on its sign-in page to keep one here.</Typography>;
+  if (!rows?.length) return <Box data-tq-saved-signins="" sx={{ py: 1.5 }}>
+    <Typography variant="body2" sx={{ color: FAINT, fontSize: 12.5 }}>
+      No saved sign-ins. A sign-in you type in the agent browser is kept here once it goes through - or add one now.</Typography>
+    <AddSignin onSaved={load} /></Box>;
   return (
     <Box data-tq-saved-signins="" sx={{ py: 1.5 }}>
       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, mb: 0.5 }}>Saved sign-ins</Typography>
+      <AddSignin onSaved={load} />
       {rows.map((r) => (
         <Box key={r.site} sx={{ py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>

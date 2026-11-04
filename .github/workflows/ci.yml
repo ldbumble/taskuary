@@ -135,13 +135,14 @@ jobs:
     # ...in four (2026-10-27): the one-row dock's and the drawers' tests took part 1 past its 15 minutes, and it was cancelled mid-run.
     # ...and in six, with 20 minutes each (2026-10-27, later): a day's new browser tests took part 1 of four past its 15 again.
     # ...and in eight (2026-11-01): part 1 of six stood at 19 of its 20 minutes, and a day's new tests took it past (cancelled twice).
+    # ...and 25 minutes (2026-11-03): part 1, which opens with the walk table, ran 18.5-19.3 of its 20 and was cancelled mid-walk twice.
     strategy:
       fail-fast: false
       matrix:
         part: [1, 2, 3, 4, 5, 6, 7, 8]
     name: browser (${{ matrix.part }} of 8)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6

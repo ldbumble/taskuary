@@ -253,6 +253,13 @@ def test_a_thanks_with_no_thread_to_measure_by_moves_nothing():
         real = add(3, RAY, 'And September?')
         moved, latest = verdicts.context_moved(s, s.get_review(rid))
         assert moved and latest['MessageId'] == real, rev
+    # ...and a draft pinned to the thanks it last saw (MessageId) while answering the ask is not moved by the older ask
+    s, tid, ask, rid, add = chat_asked(); thanks = add(2, GAIL, 'Thanks!', aside=True)
+    s.update_review_message(rid, thanks); s.set_review_answers(rid, ask)
+    assert verdicts.context_moved(s, s.get_review(rid))[0] is False
+    assert verdicts.context_moved(s, s.get_review(rid) | {'MessageId': ask})[0] is False
+    real = add(3, RAY, 'And September?')
+    assert verdicts.context_moved(s, s.get_review(rid)) == (True, s.get_message(real))
 
 
 def test_an_aside_mail_opens_no_new_draft():

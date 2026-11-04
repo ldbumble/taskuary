@@ -35,7 +35,7 @@ CASES = [
     ('login_kept_in_a_project', login_kept_in_a_project,
      [lambda s: s._case_dir, 'PROFILE RULES (ASSISTANT.md)', 'Your part: give Gail the portal login',
       'put it in the reply you draft', 'Send is their decision to share it', 'Never paste a secret into the conversation'],
-     ['PROFILE RULES (RESEARCHER', 'into the conversation or a draft']),
+     ['PROFILE RULES (RESEARCHER', 'into the conversation or a draft', 'PORTAL_USER=placeholder']),
 ]
 # the reading of the thread rides in the brief from Task 3.4 (general.reading_block)
 LATER = {('login_kept_in_a_project', 'Your part: give Gail the portal login'): 'Task 3.4'}

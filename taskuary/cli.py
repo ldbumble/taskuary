@@ -410,6 +410,7 @@ def main():
             print(f"this task has more than one person on it ({', '.join(out['people'])}) - if it is meant for someone else, save it again with --to <name or address>")
         if out.get('attached'): print('attached: ' + ', '.join(out['attached']))
         for w in out.get('not_attached') or []: print(f'NOT attached - {w}')
+        if out.get('tell'): print(out['tell'])
         return
     if args.item is not None:
         import os, sys

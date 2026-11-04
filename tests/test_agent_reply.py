@@ -200,6 +200,32 @@ class AttachTests(NoHook):
         env = json.loads(s.get_review(rid)['Deliver'])
         self.assertEqual(env.get('not_attached') or [], []); self.assertEqual(len(env['attachments']), 3)
 
+    # ...AND THE AGENT HEARS IT: told only in a comment it never reads, it went on telling the owner "the three files are attached"
+    def test_the_reply_tool_tells_the_agent_which_file_did_not_ride_and_what_to_offer(self):
+        s = MemoryStore(); tid, _ = task_with(s)
+        out = wrapup.agent_reply(s, tid, 'Hi Dana - here are the three summaries.', 'assistant', files=self._three(s, tid))
+        self.assertIn('% Summary - 15 east sites.xlsx', out['tell']); self.assertIn('25MB', out['tell'])
+        self.assertIn('link', out['tell']); self.assertIn('smaller copy', out['tell'])
+
+    def test_saving_the_words_again_without_files_still_says_the_file_that_did_not_ride(self):
+        s = MemoryStore(); tid, _ = task_with(s)
+        wrapup.agent_reply(s, tid, 'Hi Dana - here are the three summaries.', 'assistant', files=self._three(s, tid))
+        out = wrapup.agent_reply(s, tid, 'Hi Dana - here are two of the three summaries.', 'assistant')     # propose_reply carries no files
+        self.assertEqual([w.split(':')[0] for w in out['not_attached']], ['% Summary - 15 east sites.xlsx'])
+        self.assertIn('% Summary - 15 east sites.xlsx', out['tell'])
+
+    def test_all_attached_tells_nothing(self):
+        s = MemoryStore(); tid, _ = task_with(s)
+        out = wrapup.agent_reply(s, tid, 'Hi Dana - the list is attached.', 'assistant', files=[('review.xlsx', self.XLSX)])
+        self.assertNotIn('tell', out); self.assertEqual(out['not_attached'], [])
+
+    def test_the_next_turn_is_told_too(self):
+        from taskuary import general
+        s = MemoryStore(); tid, _ = task_with(s)
+        wrapup.agent_reply(s, tid, 'Hi Dana - here are the three summaries.', 'assistant', files=self._three(s, tid))
+        system, _ = general._prompt(s, tid)
+        self.assertIn('% Summary - 15 east sites.xlsx', system); self.assertIn(wrapup.REFUSED_HEAD, system)
+
     def test_the_shell_door_carries_bytes_not_a_path(self):
         import base64
         s = MemoryStore(); tid, _ = task_with(s)

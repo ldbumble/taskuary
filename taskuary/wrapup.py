@@ -265,6 +265,28 @@ def attach_files(store, rid: int, files, agent: str = 'agent') -> dict:
     return {'attached': done, 'not_attached': why}
 
 
+# ...AND THE AGENT HEARS IT (2026-11-04): a refusal said only in a comment it never reads left it telling the owner "the three files are
+# attached" turn after turn. Every save's answer carries each file the reply does not carry - this save's refusals and the ones still standing
+# on the review (verdicts.refused) - with what to do about it, and the next turn's brief says the same (general._prompt) while one stands.
+REFUSED_HEAD = 'THE REPLY YOU SAVED DOES NOT CARRY EVERY FILE YOU HANDED OVER'
+REFUSED_TELL = ("Its words must not say these are attached. Tell the owner plainly which file did not attach and why, and offer a way on: "
+                "a link to it in their cloud storage, or a smaller copy (zipped, split or trimmed) attached again. Then save the reply again "
+                "with words that match what it carries.")
+def refused_files(store, rid) -> list:
+    """`name: why` of each file the review's envelope keeps as not attached."""
+    from .verdicts import _envelope
+    return [f"{f.get('name')}: {f.get('why')}" for f in (_envelope(store.get_review(int(rid)) or {}).get('not_attached') or []) if f.get('name')] if rid else []
+def refused_line(store, task_id: int) -> str:
+    """The next turn's brief: the files the pending reply does not carry, and what to do - '' while it carries every one."""
+    rv = store.pending_review(task_id, 'draft_reply', live_only=False) or {}
+    got = refused_files(store, rv.get('ReviewId'))
+    return f'{REFUSED_HEAD}\n' + '\n'.join(f'- {w}' for w in got) + f'\n{REFUSED_TELL}' if got else ''
+def _told(store, rid, out: dict) -> dict:
+    no = list(out.get('not_attached') or [])
+    no += [w for w in refused_files(store, rid) if not any(x.split(':')[0] == w.split(':')[0] for x in no)]
+    return {**out, 'not_attached': no, **({'tell': f"Not attached: {'; '.join(no)}. {REFUSED_TELL}"} if no else {})}
+
+
 def _words(t) -> str: return re.sub(r'\s+', ' ', str(t or '')).strip().lower()
 def _at(rv) -> str: return f" at {str(rv.get('DecidedAt'))[11:16]} on {str(rv.get('DecidedAt'))[:10]}" if rv.get('DecidedAt') else ''
 
@@ -315,7 +337,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if not text and files:
         rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
         if not rv: return {'ok': False, 'why': 'there is no pending reply to attach to - save one with --reply first'}
-        return {'ok': True, 'review_id': rv['ReviewId'], **attach_files(store, rv['ReviewId'], files, agent)}
+        return {'ok': True, 'review_id': rv['ReviewId'], **_told(store, rv['ReviewId'], attach_files(store, rv['ReviewId'], files, agent))}
     if not text: return {'ok': False, 'why': 'no reply text'}
     # THE SAME LETTER TWICE IS A MISTAKE, never a new draft: a resumed session saved its first session's reply again after the
     # owner had sent it, and it went back on the table aimed at the sender's "Thanks!" (2026-10-16) - one press from a resend
@@ -396,7 +418,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
     many = [] if str(to or '').strip() else people_named(store, task_id)
     return {'ok': True, 'review_id': rid, 'message_id': mid, 'to': m.get('FromName') or m.get('FromEmail') or '',
-            **({'people': many} if len(many) > 1 else {}), **attach_files(store, rid, files, agent)}
+            **({'people': many} if len(many) > 1 else {}), **_told(store, rid, attach_files(store, rid, files, agent))}
 
 
 # ── the cheap ending ────────────────────────────────────────────────────────────────────

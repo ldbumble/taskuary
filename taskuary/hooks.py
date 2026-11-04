@@ -338,7 +338,7 @@ def install(cwd: str, base: str = None, token: str = '', cmd: str = None) -> boo
 
 def _describe(tool: str, inp) -> str:
     from .agents import _fmt_input
-    try: what = _fmt_input(inp)
+    try: what = _fmt_input(inp, tool)          # a draft by what it is, never its body (sessionrecord.hide_draft)
     except Exception: what = json.dumps(inp)[:200] if inp else ''
     return f'{tool} {what}'.strip() if what else tool
 

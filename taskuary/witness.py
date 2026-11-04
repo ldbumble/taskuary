@@ -121,7 +121,7 @@ def claude_notes(p: dict) -> list:
     ev, at = p.get('hook_event_name') or '', _now()
     if ev == 'PostToolUse':
         name, inp = str(p.get('tool_name') or ''), p.get('tool_input') or {}
-        out = [{'k': 'tool', 'name': name, 'target': _fmt_input(inp), 'at': at, 'source': 'hook'}]
+        out = [{'k': 'tool', 'name': name, 'target': _fmt_input(inp, name), 'at': at, 'source': 'hook'}]
         if name.lower() in EDIT_TOOLS:
             path = inp.get('file_path') or inp.get('notebook_path') or inp.get('path')
             if path: out.append({'k': 'file', 'path': str(path), 'at': at})
@@ -130,7 +130,7 @@ def claude_notes(p: dict) -> list:
         return out
     if ev == 'PostToolUseFailure':
         # the tool itself failed: the pane shows the failure where a running tool would show its name
-        return [{'k': 'tool', 'name': str(p.get('tool_name') or ''), 'target': _fmt_input(p.get('tool_input') or {}), 'at': at, 'source': 'hook',
+        return [{'k': 'tool', 'name': str(p.get('tool_name') or ''), 'target': _fmt_input(p.get('tool_input') or {}, str(p.get('tool_name') or '')), 'at': at, 'source': 'hook',
                  'error': str(p.get('error') or p.get('error_message') or 'failed').strip()[:200]}]
     if ev == 'Stop':
         last = str(p.get('last_assistant_message') or '').strip()

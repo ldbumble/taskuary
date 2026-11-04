@@ -322,6 +322,19 @@ def reply_marker(text: str) -> tuple:
     return (text[:m.start()] + said + text[m.end():]).strip(), said or None
 
 
+# ...and said in ONE place: the draft is Close out's to show (the owner, 2026-11-02: "in agent we should just say 'agent drafted a message'").
+# A model that wrote the reply out in its answer as well as filing it left the whole letter in the agent's pane over the same letter in
+# Close out (the overnight run, 2026-11-03) - its words around the letter stay, the letter's own paragraphs and their rules go
+_RULE = re.compile(r'^\s*([-*_=~])(\s*\1){2,}\s*$')
+def without_draft(text: str, draft: str) -> str:
+    "`text` with every paragraph that is part of `draft` taken out - '' when it was nothing else."
+    flat = lambda s: ' '.join(str(s or '').split()).lower()
+    d, paras = flat(draft), [p for p in re.split(r'\n\s*\n', str(text or '')) if flat(p)]
+    kept = [p for p in paras if flat(p) not in d]
+    if not d or len(kept) == len(paras): return str(text or '').strip()
+    return '\n\n'.join(p.strip('\r\n') for p in kept if not _RULE.match(p)).strip()
+
+
 # ...and the files that go with it. A chat brain has no `taskuary --attach` it can use: an API provider has no shell, and a
 # CLI's command would run mid-turn, before the reply block above is read. So it names the file and the turn's end attaches it.
 _ATTACH_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?ATTACH\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)

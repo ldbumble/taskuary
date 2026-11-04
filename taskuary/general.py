@@ -1358,6 +1358,11 @@ class GeneralSession:
             out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files, sid=self.sid)
             if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
             for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
+        # ...and the letter is Close out's to show: the pane keeps the words around it (selfclose.without_draft) - a draft marked in this
+        # answer, or filed by this session's own `taskuary --reply` mid-turn
+        rv = self.store.pending_review(self.task_id, 'draft_reply') or {}
+        if (mine := drafted or (rv.get('DraftSid') == self.sid and rv.get('DraftText'))):
+            reply = selfclose.without_draft(reply, mine) or 'The reply is drafted - it waits in Close out for your yes.'
         reply, drafts = selfclose.draft_markers(reply)
         if drafts:
             from . import slots

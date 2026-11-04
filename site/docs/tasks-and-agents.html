@@ -142,8 +142,8 @@ across its top while open.</p>
 <tr>
 <td><strong>Close out</strong></td>
 <td>The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue)</td>
-<td><strong>Draft reply</strong> / <strong>Reply</strong>, <strong>Send and close</strong>, <strong>Send</strong>, <strong>Redraft</strong>, <strong>Hand it to a person</strong>, <strong>Mark done</strong>, <strong>Close with a note</strong>, <strong>Attach a file</strong>, <strong>Share</strong>; on GitHub <strong>Approve</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
-<td>Closing the task: <strong>Send and close</strong> sends the reply and then closes it (kept open while an agent works on it); <strong>Send</strong> and approving never close it — the task stays open until you <strong>Mark done</strong></td>
+<td><strong>Draft reply</strong> / <strong>Reply</strong>, <strong>Send and close</strong>, <strong>Send</strong>, <strong>Redraft</strong>, <strong>Hand it to a person</strong>, <strong>Mark done</strong>, <strong>Close with a note</strong>, <strong>Attach a file</strong>, <strong>Share</strong>; on GitHub <strong>Approve and close</strong>, <strong>Approve</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
+<td>Closing the task: <strong>Send and close</strong> sends the reply and then closes it (kept open while an agent works on it); <strong>Approve and close</strong> does the same after the merge or the issue&#39;s close; <strong>Send</strong> and <strong>Approve</strong> never close it — the task stays open until you <strong>Mark done</strong></td>
 </tr>
 </tbody></table>
 <p><strong>Mark done</strong> always comes first on Close out and is never folded away. When a strip runs out of
@@ -223,7 +223,10 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <p>A task an agent or a merged pull request closed stays on your work rail until you have read it.</p>
 <h3 id="the-close-out-what-finishes-it-where-it-lives">The close-out: what finishes it where it lives<a class="anchor" href="#the-close-out-what-finishes-it-where-it-lives" aria-label="Link to this section">#</a></h3>
 <p>Mail is answered by the reply. A pull request is merged, and an issue closed. Whatever the system, the card has the
-same three buttons - only the line under them says what they do there. None of them closes the task: <strong>Mark done</strong> does.</p>
+same three buttons - only the line under them says what they do there. None of them closes the task: <strong>Mark done</strong> does -
+except <strong>Approve and close</strong>, which the task page&#39;s Close out puts first where your reply rides with the close-out: it
+approves, sends the reply, then closes the task (kept open while an agent works on it). <strong>Approve</strong> beside it does the
+same and leaves the task open; when the line is tight it folds into the <strong>▾</strong> beside <strong>Approve and close</strong>.</p>
 <table>
 <thead>
 <tr>
@@ -232,6 +235,10 @@ same three buttons - only the line under them says what they do there. None of t
 </tr>
 </thead>
 <tbody><tr>
+<td><strong>Approve and close</strong> (<strong>Send and close</strong> on a reply alone)</td>
+<td>Does what <strong>Approve</strong> does, then closes the task - in Close out, where your reply goes with it</td>
+</tr>
+<tr>
 <td><strong>Approve</strong> (<strong>Send</strong> on a reply alone)</td>
 <td>Does the task&#39;s last act the normal way for its system, sending your reply with it - and only that</td>
 </tr>

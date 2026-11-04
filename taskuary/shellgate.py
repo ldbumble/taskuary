@@ -21,8 +21,14 @@ What this does not cover, said plainly: Codex, Devin and Copilot sessions (their
 PreToolUse parses `ask` without supporting it yet); a session whose hook could not reach Taskuary (the call runs - the same as the
 browser hook); and a step reached some other way than these tools by name (a script that pushes, an HTTP call made by hand). This
 gates the commands agents use, not every road there is.
+
+A DELETE ON THE OWNER'S COMPUTER WAITS TOO (the same ruling's "delete"; the desktop stress test, 2026-11-03: asked to remove the folder it
+had just unzipped into Downloads, a general agent ran `Remove-Item -Recurse -Force` at once - gone for good, not in the Recycle Bin). What
+is held is a delete tool by name (rm, del, Remove-Item, rmdir... and the .NET / Python calls that delete) aimed OUTSIDE the agent's own
+folder: its working folder and the temp folder are its to tidy, everything else is the owner's. A target it cannot read - a variable set
+somewhere else, a pipe into Remove-Item - is held, never let through for being hard to read.
 """
-import json, ntpath, os, shutil, subprocess
+import json, ntpath, os, re, shlex, shutil, subprocess, tempfile
 from loguru import logger
 from .browsergate import _segments, _deny, _tell
 
@@ -80,8 +86,136 @@ def _api_writes(argv: list) -> bool:
     return False
 
 
-def acts(cmd: str) -> list:
-    """Every step in a shell command that goes out: [{'tool', 'what', 'command'}]. A command that cannot be read and names one of
+# ── deleting on this computer ───────────────────────────────────────────────────────────────────────────────────────────────────
+DELETERS = frozenset('rm rmdir rd del erase remove-item ri unlink shred srm'.split())
+UNDONE = "it can't be undone"
+OUT = 'it leaves this computer'
+# the calls that delete from a snippet or a PowerShell line, whatever runs them: .NET, Python, Node
+_API_DEL = re.compile(r'\[(?:system\.)?io\.(?:file|directory)\]::delete\b|shutil\.rmtree\b|\bos\.(?:remove|unlink|rmdir|removedirs)\b'
+                      r'|\bfs\.(?:rm|rmdir|unlink)(?:sync)?\b|\.delete\(\s*(?:\$true)?\s*\)|\.unlink\(\s*(?:missing_ok\s*=\s*true)?\s*\)', re.I)
+_DEL_WORDS = ('rm', 'del', 'erase', 'remove', 'unlink', 'shred', 'rd', 'rmtree')
+_VAR = re.compile(r'\$(?:env:)?(\w+)|%(\w+)%', re.I)
+_SPLIT = re.compile(r'\r?\n|;|&&|\|\||\||\{|\}')
+_VALUED_DEL = frozenset('-erroraction -ea -filter -include -exclude -depth -credential -stream -warningaction -wa'.split())
+
+
+def _expand(t: str, env: dict) -> str:
+    "A target with what the shell would fill in filled in: the line's own `$dst=...`, then the environment, then ~."
+    def sub(m):
+        n = (m.group(1) or m.group(2)).lower()
+        if n in env: return env[n]
+        v = next((v for k, v in os.environ.items() if k.lower() == n), None)
+        return v if v is not None else os.path.expanduser('~') if n == 'home' else m.group(0)
+    for _ in range(3):
+        t2 = _VAR.sub(sub, t)
+        if t2 == t: break
+        t = t2
+    return os.path.expanduser('~') + t[1:] if t.startswith('~') else t
+
+
+def _real(p: str) -> str: return os.path.normcase(os.path.realpath(p))
+def _under(p: str, root: str) -> bool:
+    r = _real(root)
+    return p != r and p.startswith(r.rstrip('\\/') + os.sep)
+
+
+def _path(t: str) -> str: return re.sub(r'^/([a-zA-Z])(?=/|$)', r'\1:', t) if os.name == 'nt' else t     # Git Bash's /c/Users is C:/Users
+
+
+def _target(t: str, cwd: str, here=None) -> tuple:
+    """(is it the agent's own to delete - inside its working folder or the temp folder, how the owner reads it, the folder it is in).
+    `here`: where the line has `cd`-ed to by now (None: somewhere it could not read). Unreadable is not its own."""
+    here = cwd if here == '' else here
+    if not t or re.search(r'[$`(%]', t): return False, '', ''
+    t = _path(t)
+    if not os.path.isabs(t):
+        if here is None: return False, '', ''                                # after a `cd` it could not follow
+        if not here: return '..' not in re.split(r'[\\/]', t), '', ''       # relative, with no folder to read it against: it stays where it is
+        t = os.path.join(here, t)
+    p, n = _real(t), os.path.normpath(t)
+    name, parent = os.path.basename(n), os.path.basename(os.path.dirname(n))
+    roots = [r for r in (cwd, tempfile.gettempdir(), '/tmp') if r]
+    return any(_under(p, r) for r in roots), (f'{name} in {parent}' if parent and name else name or n), os.path.dirname(n)
+
+
+def deletes(cmd: str, cwd: str = '', env: dict = None) -> list:
+    """Every delete in a shell line aimed outside the agent's own folder: [{'tool', 'what', 'why', 'where', 'command'}], one per line at
+    most - `where` the folder the first named target sits in, for the card's In. Read by the delete tools' own names, through
+    `if (...) { ... }` blocks, `cmd /c` and `bash -c "..."`."""
+    raw, env = str(cmd or ''), {} if env is None else env
+    found = _deletes(raw, cwd, env)
+    if not found['tools']: return []
+    known = list(dict.fromkeys(found['named']))
+    more = len(known) > 3 or (known and found['blind'])
+    what = 'delete ' + (', '.join(known[:3]) + (' and more' if more else '') if known else 'files on this computer')
+    return [{'tool': found['tools'][0], 'what': what, 'why': UNDONE, 'where': (found['places'] or [''])[0], 'command': raw[:400]}]
+
+
+def _deletes(raw: str, cwd: str, env: dict, here='') -> dict:
+    # `here`: the folder the line has moved to - `cd ~/Downloads && rm -rf notes` deletes in Downloads, not in the agent's own folder
+    # (the stress test's second delete, 2026-11-03). '' is the agent's own folder; None a `cd` it could not read
+    named, places, blind, tools = [], [], False, []
+    done = lambda: {'named': named, 'places': places, 'blind': blind, 'tools': tools, 'here': here}
+    if not any(w in raw.lower() for w in _DEL_WORDS + ('cd', 'location')): return done()             # the cheap test first
+    raw = re.sub(r'\$\{(\w+(?::\w+)?)\}', r'$\1', raw)                         # ${dst} is $dst - and its braces are not a block
+    for seg in _SPLIT.split(raw):
+        seg = seg.strip()
+        if not seg: continue
+        if (m := re.match(r'^\$?([A-Za-z_]\w*)\s*=\s*(\S.*)$', seg)) and not m.group(2).startswith('='):
+            try: v = shlex.split(m.group(2), posix=False)
+            except ValueError: v = []
+            if len(v) == 1: env[m.group(1).lower()] = _expand(v[0].strip('"\''), env)
+            continue
+        try: w = [x.strip('"\'') for x in shlex.split(seg, posix=False)]
+        except ValueError: w = [x.strip('"\'') for x in seg.split()]      # a quote the split cut in two (`cmd /c "cd X && rd Y"`)
+        while w and (w[0].lower() in _PREFIX or w[0].lower() in ('if', 'else', 'elseif', 'then', 'do')): w = w[1:]
+        if not w: continue
+        tool = _name(w[0])
+        if tool in ('cd', 'chdir', 'set-location', 'sl', 'pushd', 'push-location'):
+            to = next((x for x in w[1:] if not x.startswith('-') and not re.match(r'^/\w$', x)), '~')       # cmd's `cd /d X`
+            to = _path(_expand(to, env))
+            base = cwd if here == '' else here
+            here = None if re.search(r'[$`(%]', to) or (not os.path.isabs(to) and not base) else os.path.normpath(os.path.join(base or '', to))
+            continue
+        if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):
+            inner = next((i for i, x in enumerate(w) if x.lower() in ('-c', '-command', '/c', '/k')), None)
+            if inner is not None:
+                d = _deletes(' '.join(w[inner + 1:]), cwd, env, here)
+                named += d['named']; places += d['places']; tools += d['tools']; blind, here = blind or d['blind'], d['here']
+            continue
+        finds = tool == 'find' and '-delete' in w
+        if tool not in DELETERS and not finds: continue
+        args, skip = [], False
+        for x in w[1:]:
+            if skip: skip = False; continue
+            if x.lower() in _VALUED_DEL: skip = True; continue
+            if x.startswith('-') or (tool in ('del', 'erase', 'rd', 'rmdir') and re.match(r'^/\w$', x)): continue
+            args.append(x)
+        if finds: args = args[:1] or ['.']
+        if not args:
+            if tool in ('remove-item', 'ri'): blind = True; tools.append(tool)  # piped in: what it deletes is not on the line
+            continue
+        for a in args:
+            own, said, place = _target(_expand(a, env), cwd, here)
+            if own: continue
+            tools.append(tool)
+            if said: named.append(said); places.append(place)
+            else: blind = True
+    if _API_DEL.search(raw): blind = True; tools.append('snippet')
+    # VisualBasic's FileSystem.DeleteDirectory/DeleteFile: to the Recycle Bin it can be undone (the agent's own pick, 2026-11-03), else it can't
+    low = raw.lower()
+    if re.search(r'filesystem\]::delete(?:directory|file)\b', low) and 'sendtorecyclebin' not in low: blind = True; tools.append('snippet')
+    return done()
+
+
+def acts(cmd: str, cwd: str = '') -> list:
+    """Every step in a shell command that waits for the owner: one that goes out (_outward), and a delete outside the agent's own folder
+    (deletes) - [{'tool', 'what', 'why', 'command'}]."""
+    return _outward(cmd) + deletes(cmd, cwd)
+
+
+def _outward(cmd: str) -> list:
+    """Every step in a shell command that goes out: [{'tool', 'what', 'why', 'command'}]. A command that cannot be read and names one of
     these tools is one step - held, never let through for being hard to read."""
     raw = str(cmd or '')
     low = raw.lower()
@@ -89,14 +223,14 @@ def acts(cmd: str) -> list:
     segs = _segments(raw)
     if segs is None:
         import re
-        return [{'tool': '?', 'what': 'run a command that may push, publish or send', 'command': raw[:400]}] if re.search(
+        return [{'tool': '?', 'what': 'run a command that may push, publish or send', 'why': OUT, 'command': raw[:400]}] if re.search(
             r'\b(git\s+push|gh\s+(pr|issue|release|repo|api)|glab|publish|sendmail|send-mailmessage)\b', low) else []
     out = []
     for argv in segs:
         tool, w = _words(argv)
         if tool in ('bash', 'sh', 'powershell', 'pwsh', 'cmd'):                 # `bash -c "git push"`: the string is a command of its own
             for t in argv[1:]:
-                if ' ' in t.strip(): out += acts(t)
+                if ' ' in t.strip(): out += _outward(t)
             continue
         what = (GIT.get(w[0]) if tool == 'git' and w else
                 GH.get(tuple(w[:2])) if tool == 'gh' else GLAB.get(tuple(w[:2])) if tool == 'glab' else
@@ -104,7 +238,7 @@ def acts(cmd: str) -> list:
                 or (tool == 'docker' and w[:1] == ['push']) else MAIL.get(tool))
         if not what and tool in ('gh', 'glab') and w[:1] == ['api'] and _api_writes(argv): what = 'change something on the code host through its API'
         if not what and tool == 'git' and w[:1] == ['push']: what = GIT['push']
-        if what: out.append({'tool': tool, 'what': what, 'command': ' '.join(argv)[:400]})
+        if what: out.append({'tool': tool, 'what': what, 'why': OUT, 'command': ' '.join(argv)[:400]})
     return out
 
 
@@ -129,20 +263,21 @@ def asks(store, t) -> bool:
 def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool = False) -> dict:
     """The hook's answer for one shell command: {} lets it run; `ask` hands it to the CLI's own prompt (never an allow); else a refusal
     holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked."""
-    todo = acts(cmd)
+    todo = acts(cmd, cwd)
     if not todo: return {}
-    what = '; '.join(dict.fromkeys(a['what'] for a in todo))
+    what, why = ('; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why'))
     if ask:
         store.audit('task', tid, 'shell_act_asked', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
         store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")
         return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
-                                       'permissionDecisionReason': f'Taskuary asks you first: {what} (it leaves this computer).'}}
+                                       'permissionDecisionReason': f'Taskuary asks you first: {what} ({why}).'}}
     if not _pending(store, tid, sid, cmd):
         from . import proposals
         proposals.queue(store, tid, {'action': 'shell_act', 'sid': str(sid), 'command': str(cmd)[:4000], 'shell': shell, 'cwd': cwd or '',
-                                     'what': what, 'why': 'it leaves this computer'}, 'agent')
+                                     # the card's In: the folder a delete aims at, never the agent's own scratch folder it ran from
+                                     'what': what, 'why': why, 'where': next((a['where'] for a in todo if a.get('where')), '')}, 'agent')
         store.audit('task', tid, 'shell_act_held', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
-    return _deny(f"{HELD}: {what} (it leaves this computer). It is on the task for the owner to approve; once they do, Taskuary runs this "
+    return _deny(f"{HELD}: {what} ({why}). It is on the task for the owner to approve; once they do, Taskuary runs this "
                  "exact command in the same folder and tells you what happened. Do not try it another way. End your turn now, or go on "
                  "with work that does not need it.")
 

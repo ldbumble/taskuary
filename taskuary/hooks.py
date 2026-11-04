@@ -774,7 +774,8 @@ def browser(payload: dict, brain=None, sid: str = '') -> dict:
     # the cheap tests first: this hook sees every shell command - ...and A STEP THAT LEAVES THE MACHINE (a push, a merge, a public post, a
     # publish, a mail) waits for the owner too (shellgate.py, the Advisor's risky-step hold, the owner 2026-10-28), and so does a desktop
     # act that can't be undone (agentdesktop.py, 2026-10-31)
-    browse, out, desk = browsergate.EXE in cmd.lower(), shellgate.acts(cmd), agentdesktop.EXE in cmd.lower()
+    # ...and a delete outside the agent's own folder, read against the folder it runs in (shellgate.deletes, 2026-11-03)
+    browse, out, desk = browsergate.EXE in cmd.lower(), shellgate.acts(cmd, str(payload.get('cwd') or '')), agentdesktop.EXE in cmd.lower()
     if not browse and not out and not desk: return {}
     t = _pane(payload, 'claude') or _general(payload, sid)
     st = getattr(t, 'store', None) if t else None

@@ -276,13 +276,22 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
 NO_AI = 'No AI is connected'
 
 
+DRAFTED = 'The reply is drafted - it waits in Close out for your yes.'
 def _split(store, tid: int) -> tuple[list, list]:
     "The task's chat as (before the current run, the current run), split at the last RUN_TYPE row if there is one."
+    from . import selfclose
     from .quickwork import report_of
     rows = store.list_comments(tid)
     at = max((i for i, c in enumerate(rows) if c.get('ActorType') == RUN_TYPE), default=-1)
-    # ...an answer filed as a quick call's raw object reads back as its report, wherever the chat is read: the pane, the next turn, the close-out
-    said = lambda c: {**c, 'Body': report_of(c.get('Body'))} if c.get('ActorType') == ASSISTANT_TYPE else c
+    # ...an answer filed as a quick call's raw object reads back as its report, wherever the chat is read: the pane, the next turn, the close-out;
+    # and a letter the answer wrote out is Close out's, there too (selfclose.without_draft): a turn stored before _file took it out still had
+    # it, in the owner's voice, under Taskuary (2026-11-03). Every draft the task has had, its words and what was sent
+    letters = [x for r in store._rows("SELECT DraftText, FinalText FROM review WHERE TaskId=? AND Kind IN ('draft_reply', 'draft', 'clarification', 'slot')",
+                                      (tid,)) for x in (r.get('DraftText'), r.get('FinalText')) if x] if any(c.get('ActorType') == ASSISTANT_TYPE for c in rows) else []
+    def own(text):
+        for x in letters: text = selfclose.without_draft(text, x) or DRAFTED
+        return text
+    said = lambda c: {**c, 'Body': own(report_of(c.get('Body')))} if c.get('ActorType') == ASSISTANT_TYPE else c
     chat = lambda rs: [said(c) for c in rs if c.get('ActorType') in (USER_TYPE, ASSISTANT_TYPE)]
     return chat(rows[:at + 1]), chat(rows[at + 1:])
 
@@ -1385,7 +1394,7 @@ class GeneralSession:
         # answer, or filed by this session's own `taskuary --reply` mid-turn
         rv = self.store.pending_review(self.task_id, 'draft_reply') or {}
         if (mine := drafted or (rv.get('DraftSid') == self.sid and rv.get('DraftText'))):
-            reply = selfclose.without_draft(reply, mine) or 'The reply is drafted - it waits in Close out for your yes.'
+            reply = selfclose.without_draft(reply, mine) or DRAFTED
         reply, drafts = selfclose.draft_markers(reply)
         if drafts:
             from . import slots

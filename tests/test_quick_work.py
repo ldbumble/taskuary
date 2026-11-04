@@ -184,6 +184,18 @@ def test_without_draft_leaves_an_answer_that_never_quotes_it():
     from taskuary import selfclose
     assert selfclose.without_draft('Worth going.\n\n---\n\nSee you.', 'Yes, let us go.') == 'Worth going.\n\n---\n\nSee you.'
 
+def test_a_turn_stored_with_its_letter_reads_without_it():
+    "A turn filed before _file took the letter out still had it, in the owner's voice under Taskuary: it reads back without it everywhere."
+    s = home(); tid, _ = arrived(s)
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, ASK)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I drafted your yes to Erin.\n\n' + LETTER + '\n\nShould I add the time?')
+    s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'DraftText': LETTER, 'Status': 'pending', 'Reason': 'the agent drafted it'})
+    said = general.history(s, tid)[-1]['content'][0]['text']
+    assert said == 'I drafted your yes to Erin.\n\nShould I add the time?'
+    assert general.chat_rows(s, tid)[-1]['Body'] == said                     # ...and the next turn's history, the close-out
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, LETTER)
+    assert general.history(s, tid)[-1]['content'][0]['text'] == general.DRAFTED
+
 def test_a_quick_question_waits_on_the_owner_like_a_general_one():
     s = home(); tid, _ = arrived(s)
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True):

@@ -46,6 +46,7 @@ import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource }
 import { editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
+import SavedSignins from "./SavedSignins.jsx";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
@@ -1535,7 +1536,7 @@ export const CardGrid = ({ children }) => (
 
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
-const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Social", "Agent tools", "Developer", "Project management",
+const GROUP_TITLES = ["AI — agents & models", "AI — voice", "Email", "Messaging", "Social", "Agent tools", "Sign-ins", "Developer", "Project management",
   "Databases", "Cloud & infrastructure", "Corporate systems", "Markets & finance", "Wallets & onchain", "Observability", "Agentic web", "Files & sheets", "Everything else"];
 // planned types read as raw identifiers on a card ("sharepoint_list"), which looks unfinished
 // in a way the feature is not. Named here; anything unnamed falls back to a de-underscored key.
@@ -1795,6 +1796,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const shared = conn ? { conn, reload: load, onBack: back, onCreated: (id) => setOpen({ kind: "connector", id }) } : null;
   const page = open?.kind === "agents" ? <CliConnectionsPage onBack={back} />
     : open?.kind === "voice-vocabulary" ? <VoiceVocabulary onBack={back} />
+    : open?.kind === "signins" ? <SavedSignins />
     : open?.kind === "alchemy-wallet" ? <AlchemyWalletGuide onBack={back}
       onData={() => { const c = byType.alchemy; if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }} />
     : !conn ? null
@@ -1888,6 +1890,12 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ...specialCards("agent_desktop", "Agent Desktop", "", "agent desktop agent-desktop vercel desktop apps windows computer use accessibility",
         (c) => (c.Active ? "on · your agents can operate desktop apps; what can't be undone waits for you" : "off · your agents leave desktop apps alone")),
       ...catalogCards("Agent tools")] },
+    /* THE SIGN-INS A SYSTEM NEEDS, kept ahead of time (the owner, 2026-11-03): one place for every site an agent signs into in its browser -
+       the vault's own list and form (SavedSignins), the same one Settings > Agent permissions shows */
+    { title: "Sign-ins", note: "Sites an agent signs into in its browser. Taskuary types a saved sign-in into the site's own page; the agent never sees it.",
+      cards: [{ key: "signins", title: "Saved sign-ins", guide: true, desc: "Add or remove the sign-ins Taskuary types for your agents",
+        haystack: "sign in signin sign-in login log in password vault saved credentials user name site portal",
+        go: () => setOpen({ kind: "signins" }) }] },
     { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
     { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]), ...catalogCards("Project management")] },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each

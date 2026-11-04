@@ -22,6 +22,9 @@
 .tq-aui-asking-q { color: #3f423d; font-size: 13px; white-space: pre-wrap; }
 .tq-aui-asking-hint { color: #7a756b; font-size: 11.5px; }
 .tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; }
+/* a sign-in ask is a line of the conversation, not a card (2026-11-03): its words, and the fill page's link */
+.tq-aui-signin { margin: 2px 0 10px; color: #3f423d; font-size: 13px; line-height: 1.5; }
+.tq-aui-signin a { color: #41525f; text-decoration: underline; text-underline-offset: 2px; }
 .tq-aui-asking-err { color: #8a2f2f; font-size: 11.5px; }
 /* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
    it to one word a line in a half-width chat (the 2026-10-08 portal run) */

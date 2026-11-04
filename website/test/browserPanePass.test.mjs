@@ -32,7 +32,8 @@ test("the socket connects only while the browser is open, and backs off", () => 
 
 test("the viewport is set only by the tab the owner is at", () => {
   assert.match(pane, /mayShape\(document\.hidden, document\.hasFocus\(\), claim\)/);
-  assert.match(pane, /onPointerDown=\{\(\) => fitViewport\(true\)\}/);
+  // ...and a click on the page reshapes it only if the pane's shape moved - a claim re-sent under the owner's first click (2026-11-03)
+  assert.match(pane, /onPointerDown=\{\(\) => fitViewport\(\)\}/);
 });
 
 test("the split never takes the chat below its minimum width", () => {

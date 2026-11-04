@@ -683,6 +683,27 @@ class SigninKeyBody(BaseModel):
     key: str = ''
 
 
+class SigninAddBody(BaseModel):
+    site: str
+    user: str = ''
+    password: str
+    key: str = ''
+
+
+# A SIGN-IN SAVED AHEAD OF TIME (the owner, 2026-11-03: "we probably should have space on connector to fill out what the system requires"):
+# the same sealed row a fill page's Save to vault keeps (signin.save), for the site named - a bare name or an address, pinned to its
+# registrable domain. Write-only: the answer says the site, never what was typed
+@app.post('/api/signins')
+def signin_add(body: SigninAddBody, request: Request):
+    from . import signin
+    _owner_only(request, "the saved sign-ins are the owner's")
+    site = signin.site_from(body.site)
+    if not site: raise HTTPException(400, 'that is not a site a sign-in can be kept for - type its address, like portal.example.com')
+    try: signin.save(store, site, body.user.strip(), body.password, ACTOR, key=body.key.strip() or None)
+    except ValueError as e: raise HTTPException(400, str(e))
+    return {'ok': True, 'site': site}
+
+
 # A SAVED SIGN-IN'S AUTHENTICATOR KEY (2026-10-25): kept, or (empty) dropped. Write-only: no route ever reads a key back
 @app.post('/api/signins/{site}/code')
 def signin_code(site: str, body: SigninKeyBody, request: Request):

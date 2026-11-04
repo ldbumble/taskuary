@@ -94,7 +94,8 @@ test("a sign-in ask offers the fill page, and no other ask does", () => {
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\)/);
   assert.match(view, /api\.post\(`\/api\/tasks\/\$\{taskId\}\/signin\/link\$\{app \? "\?open=1" : ""\}`\)/);
-  assert.match(view, /\{site && taskId && <Button[^>]*onClick=\{fillPage\}/);
+  // ...as a link in the question's line, not a press on a card (the owner, 2026-11-03)
+  assert.match(view, /<a href="#" onClick=\{fillPage\} data-tq-signin-link=""/);
 });
 
 test("the working dots animate from the general workspace's own stylesheet", () => {

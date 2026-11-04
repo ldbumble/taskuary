@@ -217,7 +217,7 @@ class Asking(unittest.TestCase):
         sess = Chat(); sess.task_id = self.tid
         with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
             signin.needs(self.s, self.tid, 'sess1')
-            self.assertEqual(ws.status(self.s, self.tid)['requests'][-1]['choices'], ['Signed in'])
+            self.assertFalse(ws.status(self.s, self.tid)['requests'][-1]['choices'])     # no presses: the question and its link (2026-11-03)
             tok = signin.link(self.s, self.tid)['url'].rsplit('/', 1)[1]
             signin.by_owner(self.s, tok, USER, PW, False, fill=lambda *a: None)
             self.wait_for(lambda: sess.said)
@@ -235,6 +235,81 @@ class Asking(unittest.TestCase):
     def test_no_keychain_no_save(self):
         with mock.patch.dict(os.environ, {'TASKUARY_VAULT': 'plain'}), self.assertRaises(ValueError): signin.save(self.s, 'bank.example', USER, PW)
         self.assertIsNone(signin.saved(self.s, 'bank.example'))
+
+
+class WatchPage:
+    """The task's tab as Taskuary's own DevTools connection sees it while it watches a sign-in: `pages` is what each look reads, in turn;
+    `sent` is what the page's script hands over (one capture per look) - the owner's typing, sent with the form."""
+    def __init__(self, pages, sent=()):
+        self.pages, self.sent, self.calls = list(pages), list(sent), []
+    def call(self, method, params=None, **kw): self.calls.append(method); return {}
+    def js(self, expr): return None
+    def fields(self, want=''): return self.pages.pop(0) if len(self.pages) > 1 else self.pages[0]
+    def drain(self):
+        if not self.sent: return []
+        return [{'method': 'Runtime.bindingCalled', 'params': {'name': '__tqSignin', 'payload': json.dumps(self.sent.pop(0))}}]
+    def close(self): pass
+
+
+def form(href, password=True, user=True): return {'top': True, 'href': href, 'password': password, 'user': user, 'otp': False}
+
+
+class TheOwnerSignsInOnThePage(Asking):
+    """The owner, 2026-11-03: no card, no Signed in press - "when we have browser it should just save what i type in". The ask is the
+    question alone; the page going past the sign-in is the signal, and what the owner sent on the form is sealed to the vault for next time."""
+    def ask(self, sess):
+        with on_page('https://login.bank.example/signin'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            signin.needs(self.s, self.tid, 'sess1', watch=None)
+        return signin.pending(self.s, self.tid)
+
+    def chat(self):
+        class Chat:
+            sid, alive = 'sess1', True
+            def __init__(s, tid): s.said, s.task_id = [], tid
+            def send_prompt(s, text, as_owner=True): s.said.append(text)
+        return Chat(self.tid)
+
+    def test_a_two_step_sign_in_typed_on_the_page_is_seen_saved_and_used_next_time(self):
+        sess = self.chat(); p = self.ask(sess)
+        self.assertEqual((p['text'], ws.status(self.s, self.tid)['requests'][-1]['choices']), ('Sign in to bank.example to continue', []))
+        page = WatchPage([form('https://login.bank.example/signin', password=False), form('https://login.bank.example/signin', user=False),
+                          form('https://login.bank.example/signin', user=False), form('https://app.bank.example/home', False, False)],
+                         sent=[{'u': USER, 'p': '', 'href': 'https://login.bank.example/signin'},
+                               {'u': '', 'p': PW, 'href': 'https://login.bank.example/signin'}])
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
+        self.assertIn('Runtime.addBinding', page.calls)
+        self.assertEqual(sess.said, ['Signed in to bank.example - continue.'])        # the agent hears the words, never what was typed
+        self.assertFalse(ws.status(self.s, self.tid)['requests'])
+        row = signin.saved(self.s, 'bank.example')
+        self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
+        said = ' '.join(c['Body'] for c in self.s.list_comments(self.tid))
+        self.assertIn('Saved your bank.example sign-in to the vault - remove it under Settings > Agent permissions > Saved sign-ins.', said)
+        # NOWHERE in the clear: not the comments, the events, the audit, the logs - the vault row is sealed
+        self.assertNotIn(PW, self.everything_written()); self.assertNotIn(USER, json.dumps(signin.listing(self.s)))
+        # ...and the next ask on the site is filled from the vault by itself
+        t2, typed = Factory(self.s).task('Pay the toll again'), []
+        with on_page('https://login.bank.example/signin'):
+            self.assertTrue(signin.needs(self.s, t2, 'sess2', fill=lambda sid, site, u, pw, **k: typed.append((site, u, pw)), watch=None)['auto'])
+        self.wait_for(lambda: typed)
+        self.assertEqual(typed, [('bank.example', USER, PW)])
+
+    def test_a_password_the_site_refused_is_not_kept_and_another_sites_form_is_not_heard(self):
+        sess = self.chat(); p = self.ask(sess)
+        # sent on a lookalike's page: not heard. Sent on the site, and the form comes back: not past, nothing kept, the ask stays
+        page = WatchPage([form('https://login.bank.example/signin')] * 4,
+                         sent=[{'u': USER, 'p': PW, 'href': 'https://bank-example.example/signin'},
+                               {'u': USER, 'p': 'wrong', 'href': 'https://login.bank.example/signin'}])
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertFalse(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0, until=.2))
+        self.assertIsNone(signin.saved(self.s, 'bank.example')); self.assertEqual(sess.said, [])
+        self.assertTrue(signin.pending(self.s, self.tid)); self.assertNotIn(self.tid, signin._TYPED)
+
+    def test_done_typed_in_the_chat_box_still_says_signed_in(self):
+        self.assertTrue(signin.said_done('signin:bank.example', 'done'))
+        self.assertTrue(signin.said_done('signin:bank.example', 'Signed in.'))
+        self.assertFalse(signin.said_done('signin:bank.example', 'not yet'))
+        self.assertFalse(signin.said_done('abc123', 'done'))
 
 
 class FromAHook(unittest.TestCase):
@@ -303,6 +378,19 @@ class Routes(unittest.TestCase):
             r = c.post(url, data={'password': PW}, headers={'Origin': 'https://evil.example', 'Sec-Fetch-Site': 'cross-site'})
         self.assertEqual(r.status_code, 403)
         typed.assert_not_called()
+
+    def test_a_sign_in_saved_ahead_of_time_is_sealed_for_its_site_and_said_back_by_site_only(self):
+        """Connections > Sign-ins (the owner, 2026-11-03): a site's sign-in kept before any agent asks - the vault's one store."""
+        signin.remove(self.s, 'portal.example')
+        r = c.post('/api/signins', json={'site': 'https://login.portal.example/start?x=1', 'user': USER, 'password': PW})
+        self.assertEqual((r.status_code, r.json()), (200, {'ok': True, 'site': 'portal.example'}))
+        row = signin.saved(self.s, 'portal.example')
+        self.assertEqual((vault.unseal(row['User']), vault.unseal(row['Secret'])), (USER, PW))
+        self.assertNotIn(PW, c.get('/api/signins').text); self.assertNotIn(USER, c.get('/api/signins').text)
+        self.assertEqual(c.post('/api/signins', json={'site': 'co.uk', 'password': PW}).status_code, 400)
+        self.assertEqual(c.post('/api/signins', json={'site': 'http://portal.example', 'password': PW}).status_code, 400)
+        self.assertEqual(c.post('/api/signins', json={'site': 'portal.example', 'password': PW}, headers=AGENT).status_code, 403)
+        signin.remove(self.s, 'portal.example')
 
     def test_an_agent_reaches_none_of_it(self):
         self.assertEqual(c.post(f'/api/tasks/{self.tid}/signin/link', headers=AGENT).status_code, 403)

@@ -36,3 +36,12 @@ class SendToAgentTests(unittest.TestCase):
         r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'general', 'instruction': 'Go with three years.'})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(self.ses.sent, [('Go with three years.', {'brief': False})])
+
+    def test_a_task_triage_left_to_the_owner_is_the_agents_once_sent(self):
+        "Its Summary said the owner does it by hand, and the agent it was sent to read that as its orders and did nothing."
+        self.s.update_task(self.tid, {'Kind': 'task', 'Summary': 'Omar wants a file deleted - Alex does it by hand.'}, 't')
+        r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'general'})
+        self.assertEqual(r.status_code, 200, r.text)
+        [(text, kw)] = self.ses.sent
+        self.assertTrue(text.startswith('Omar wants a file deleted') and text.endswith(server.HANDED_OVER), text)
+        self.assertEqual(kw, {'brief': True})

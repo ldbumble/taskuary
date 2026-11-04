@@ -208,7 +208,7 @@ class ChatAttachTests(NoHook):
         f = self.home / 'secret.key'; f.write_bytes(b'k')
         s = MemoryStore(); tid, _ = task_with(s)
         self.assertEqual(general._files_to_attach(s, tid, [str(f)], []), [])
-        self.assertTrue(any('Not attached' in str(c.get('Body')) for c in s.list_comments(tid)))
+        self.assertTrue(any('secret.key was not attached' in str(c.get('Body')) for c in s.list_comments(tid)))
 
     def test_every_chat_brain_is_told(self):
         self.assertIn('TASKUARY-ATTACH', selfclose.REPLY_LINE)

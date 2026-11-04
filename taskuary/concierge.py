@@ -449,7 +449,7 @@ def task_now(store, tid: int) -> str:
                  f"{who} is WORKING right now (idle {idle}s) - nothing for the owner until it stops")
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"
     # ...and whether its last session can be picked up, so "no agent" comes with the road that is real (2026-10-18)
-    else: state = 'no agent on it right now' + (f" - its last session is saved ({buttons.label('continue')} reopens it)" if store.resumable_session(tid) else '')
+    else: state = 'no agent on it right now' + (f" - its last session is saved ({buttons.label('continue')} reopens it)" if continuable(store, tid) else '')
     rv = store.pending_review(tid)
     last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') in ('agent', 'assistant_agent')), None)
     lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}"]
@@ -1364,6 +1364,13 @@ def _put_down(store, tid: int, table: dict | None, it: dict, b: str, note: str =
     # ...with no card of it in this chat (named by its ref), or when it did not go through: the receipt's one line, as a press's
     r = receipt_turn(store, done, actor, table=True)
     return {'say': r['say'], 'options': [], 'chips': r['chips'], 'decision': None, 'did': kind, **({'pressed': pressed} if ok else {})}
+
+
+def continuable(store, tid) -> bool:
+    "A stopped agent's work can be picked up: a coding session's own CLI conversation, or a general agent's saved chat with nothing live on it."
+    if store.resumable_session(tid): return True
+    t = store.get_task(tid) or {}
+    return general.handles(t) and not _agent_running(tid) and bool(general.chat_rows(store, tid, run=True))
 
 
 def _did(store, tid: int, said: str, kind: str) -> dict:
@@ -3532,7 +3539,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # ...but CONTINUING is not attaching: it reopens the task's OWN saved session (the owner, 2026-09-30: "continue session
         # and tell the coding agent to merge it in" on a close-out card was refused for want of a ref, and the retry
         # fell to the close-out itself). On the table, with a session to reopen, the table's task is what they mean.
-        resumes = kind == 'agent.continue' and not ref and it.get('tid') and store.resumable_session(it['tid'])
+        resumes = kind == 'agent.continue' and not ref and it.get('tid') and continuable(store, it['tid'])
         # ...and "continue the agent" over a task with NO saved session was told to name the task it had named (the one on the table) - its
         # retry then missed again. The fact goes back: nothing to pick up, and Send to agent is what starts one (the task-page audit, 2026-11-02)
         if kind == 'agent.continue' and not ref and it.get('tid') and not resumes:
@@ -3580,10 +3587,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # came back as a card, and on the next try as a coding agent nobody asked for. The fact goes back, with the real roads
         # (an agent's own card on the table was built from its live session: it is the run that asked)
         live = kind in ('agent.answer', 'agent.tell') and (_agent_running(t) or (store.get_task(t) or {}).get('RunStatus') == 'running')
-        if (kind in ('agent.answer', 'agent.tell') and not live
+        # ...but words for an agent the owner stopped, or a restart cut off, ARE "carry on" (the overnight run, 2026-11-03: "carry on with the
+        # vendor notes" was answered "press Try again or Run another agent"): its saved conversation picks up with them as the owner's note
+        if kind in ('agent.answer', 'agent.tell') and not live and continuable(store, t):
+            kind, params = 'agent.continue', {**params, 'note': str(params.pop('text', '') or '')}
+        elif (kind in ('agent.answer', 'agent.tell') and not live
                 and not (kind == 'agent.answer' and it.get('kind') == 'agent' and int(it.get('tid') or 0) == int(t))):
-            again = f"{buttons.label('continue')} (agent.continue) reopens its last session, or " if store.resumable_session(t) else ''
-            raise CallMiss(f"No agent is on {named} - nothing would hear that. Say so in plain words and offer what is real: {again}"
+            raise CallMiss(f"No agent is on {named} - nothing would hear that. Say so in plain words and offer what is real: "
                            "starting an agent on it (dispatch.prepare) - CALL that only if they asked for one. Nothing was sent.")
         # ...and words for an agent still WORKING are its next prompt (agent.tell), never an answer to a question it did not ask: "tell the
         # agent to use the main branch" was refused "nothing on it is waiting for an answer" over a live session (the owner, 2026-11-02)
@@ -3795,6 +3805,15 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
     # ...and THE OWNER'S NEXT PROMPT TO THE AGENT AT WORK, delivered and said (the owner, 2026-11-02) - the page's Tell the agent, typed by
     # nobody else: it reaches no one outside, so the phone runs it at once as well
     if kind == 'agent.tell' and target: return _tell_now(store, tid, target, str(params.get('text') or ''), actor)
+    # ...and A GENERAL AGENT THE OWNER STOPPED, or a restart cut off, carried on by their words (the overnight run, 2026-11-03: "carry on with
+    # the vendor notes" was answered "press Try again or Run another agent"): its row draws no Continue - its own box is the way on, and these
+    # are the same owner's words - so it is the page's Continue with them as the note, run and said
+    if kind == 'agent.continue' and target and general.handles(store.get_task(target) or {}) and continuable(store, target):
+        note = ' '.join(str(params.get('note') or '').split())
+        r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note}, actor), actor)
+        if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not pick up'} - say so in plain words. Nothing was started.")
+        return _did(store, tid, f"Picked up {task_ref(target)} again" + (f" with your note: “{_title_cut(note, 120)}”." if note else '.'),
+                    'agent.continue')
     # ...and WHERE WORK LIKE THIS GOES, taught and said (2026-11-01): a lesson for triage that moves nothing - "bugs like this go to
     # northwind/importers" was refused as having no button, on the desk where the owner said it
     if kind == 'routing.remember' and target:

@@ -19,6 +19,15 @@ class InterruptedWork(unittest.TestCase):
         self.assertTrue(s.task_has_tag(tid, terminal.INTERRUPTED))
         self.assertIn('nobody is working it', s.list_comments(tid)[-1]['Body'])
 
+    def test_a_run_cut_off_by_a_restart_ends_disconnected_so_continue_is_offered(self):
+        """The overnight run, 2026-11-03: a general agent at work when Taskuary restarted kept `working` as its last word - no session
+        live, status() already read it disconnected, so nothing was written - and its task offered no Continue (taskWorkspace.RUN_ENDED)."""
+        from taskuary import workerstate as ws
+        s = MemoryStore(); tid = self.working(s)
+        ws.record(s, tid, 'g1', 'working', source='api')
+        terminal.recover_after_restart(s)
+        self.assertEqual(ws.ended(s, tid), 'disconnected')
+
     def test_an_ordinary_session_end_is_not_an_interruption(self):
         s = MemoryStore(); tid = self.working(s)
         self.assertTrue(terminal.release_task(s, tid, 'terminal'))

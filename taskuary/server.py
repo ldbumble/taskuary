@@ -4193,11 +4193,12 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # new conversation the task summary is the first ask; on an existing conversation only
         # an explicit new instruction is sent, so clicking twice cannot duplicate the task.
         history = general.history(store, tid)
-        prompt = str(body.instruction or '').strip()
+        typed = prompt = str(body.instruction or '').strip()
         if not prompt and not history:
             prompt = str(task.get('Summary') or task.get('Title') or '').strip()
+        # ...the Summary is Taskuary's brief, never the owner's words: pressed with nothing typed, the pane drew it under YOU (2026-11-03)
         if prompt:
-            background.add_task(session.send_prompt, prompt)
+            background.add_task(session.send_prompt, prompt, brief=not typed)
         # the same four words every door speaks (PW-209): a reused conversation is not a new start
         return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model, 'started': not had_session, 'existing': had_session,
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}

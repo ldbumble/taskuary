@@ -10444,6 +10444,18 @@ async def terminal_ws(ws: WebSocket, sid: str):
         redraw_quiet = redraw_cap = None
         await send_frame({'type': 'ready'})
 
+    def begin_redraw():
+        """Output beyond this point is the child's answer to a resize; `ready` follows it once it goes quiet (finish_redraw).
+        EVERY resize, not just the first: Codex and Claude Code clear the screen and print their whole history again on each one,
+        a few lines a frame, and a pane split beside Close out watched that scroll from the top (the owner, 2026-11-03). The pane
+        holds its last frame until this barrier lands (TerminalView hold)."""
+        nonlocal redraw_boundary, redraw_cap, redraw_quiet
+        for k in (redraw_cap, redraw_quiet):
+            if k: k.cancel()
+        redraw_quiet = None
+        redraw_boundary = delivered + inflight + q.qsize() + 1
+        redraw_cap = asyncio.create_task(finish_redraw(.35))
+
     async def to_browser():
         nonlocal delivered, inflight, redraw_quiet, redraw_cap
         while True:
@@ -10552,9 +10564,8 @@ async def terminal_ws(ws: WebSocket, sid: str):
                     # Not ours to change. Tell this pane what the geometry actually is - and lift
                     # its curtain, which the owner's road does through the redraw barrier below.
                     await send_frame(geom_frame(t, False))
-                    if first_resize:
-                        first_resize = False
-                        await send_frame({'type': 'ready'})
+                    first_resize = False
+                    await send_frame({'type': 'ready'})           # ...every time: a pane holding its frame for this answer lets go
                     continue
                 if first_resize:
                     first_resize = False
@@ -10568,12 +10579,13 @@ async def terminal_ws(ws: WebSocket, sid: str):
                         continue
                     # For a real geometry change, request exactly one resize. The child repaints
                     # asynchronously, so output beyond this boundary is the new live screen.
-                    redraw_boundary = delivered + inflight + q.qsize() + 1
-                    redraw_cap = asyncio.create_task(finish_redraw(.35))
+                    begin_redraw()
                 elif (int(rows), int(cols)) == (int(t.rows), int(t.cols)):
                     # a kept pane coming back asks before it fits itself; already the right size, it still needs the answer
                     await send_frame(geom_frame(t, owns_geometry()))
+                    await send_frame({'type': 'ready'})           # nothing will repaint: no frame to hold
                     continue
+                else: begin_redraw()
                 t.resize(rows, cols)
                 # A real pty says it changed size (Term emits RESIZED, and every pane hears it); a general session and the demo's
                 # replay change theirs silently, so the pane that just took the geometry was never told it owns it and went on

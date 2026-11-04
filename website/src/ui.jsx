@@ -59,6 +59,8 @@ import { personLine, runSearch, withFound } from "./peopleSearch.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 import { AGENT_SHOWN, shownAgent } from "./kinds.js";
+// a waiting note the Assistant passed on keeps the owner's words and its own version apart (waitroom.SEP): the owner's are what is shown
+export const ownWords = (note) => String(note || "").split("\x1f")[0].trim();
 
 // Taskuary actions wear Taskuary's actual product mark. The generic robot glyph suggested a
 // third-party bot and, on a quiet text button, did not make the dispatch action read as a button.
@@ -1453,8 +1455,9 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   const queueRows = pending.map((w, i) => (
         <Box key={w.WId} sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
           <Typography variant="caption" sx={{ ...mono, color: "#6b5f45", fontSize: 9.5, flexShrink: 0 }}>{i + 1}.</Typography>
-          <Typography variant="body2" noWrap={compact} title={w.Note}
-            sx={{ fontSize: compact ? 11 : 11.5, flex: 1, minWidth: 0, whiteSpace: compact ? "nowrap" : "pre-wrap", color: INK }}>{w.Note}</Typography>
+          {/* the owner's own words, never the Assistant's version kept beside them (waitroom.parts, the owner 2026-11-04) */}
+          <Typography variant="body2" noWrap={compact} title={ownWords(w.Note)}
+            sx={{ fontSize: compact ? 11 : 11.5, flex: 1, minWidth: 0, whiteSpace: compact ? "nowrap" : "pre-wrap", color: INK }}>{ownWords(w.Note)}</Typography>
           <Typography variant="caption" onClick={async () => {
               try { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); } catch { failed("Couldn't withdraw it - it may already have gone in."); }
               load(); }}

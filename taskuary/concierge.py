@@ -1781,9 +1781,10 @@ def said_started(store, cid, out: dict) -> str:
     return said
 
 
-def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str) -> dict:
-    """Words to the agent that asked ARE its answer - the box's own purpose, as Answer it says (2026-10-02): they go in, with a receipt."""
-    op = operations.propose(store, 'agent.answer', int(target), {'text': said}, actor)
+def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str, owner: str = '') -> dict:
+    """Words to the agent that asked ARE its answer - the box's own purpose, as Answer it says (2026-10-02): they go in, with a receipt.
+    `owner`: what the owner typed - shown under YOU as it was, the Assistant's version of it folded as Taskuary's (general.relayed)."""
+    op = operations.propose(store, 'agent.answer', int(target), {'text': said, **({'owner': owner} if owner else {})}, actor)
     r = run_proposal(store, op, actor)
     # ...said as what happened, as Tell the agent is: "Done - Answer it · TQ-0004." was the button's name read out (the overnight run, 2026-11-03)
     if r.get('status') == 'done' and (r.get('outcome') or {}).get('delivered'):
@@ -1793,13 +1794,13 @@ def _answer_now(store, tid: int, table: dict | None, target: int, said: str, act
     return {'say': turn['say'], 'options': [], 'chips': turn['chips'] or chips_for(store, table), 'decision': None}
 
 
-def _tell_now(store, tid: int, target: int, said: str, actor: str) -> dict:
+def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = '') -> dict:
     """Words for the agent WORKING on a task, as the owner's next prompt (the owner, 2026-11-02: "send a new prompt into the general/coding
     agent"): the page's own Tell the agent (waitroom.add) - typed in now when the agent is parked at its prompt, else held and typed at
     its next stop, never into the middle of a step. Said in the past, with where the words are."""
     said = ' '.join(str(said or '').split())
     if not said: raise CallMiss('agent.tell needs `text` - the words for the agent. Nothing was sent.')
-    r = run_proposal(store, operations.propose(store, 'agent.tell', int(target), {'text': said}, actor), actor)
+    r = run_proposal(store, operations.propose(store, 'agent.tell', int(target), {'text': said, **({'owner': owner} if owner else {})}, actor), actor)
     if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not go in'} - say so in plain words. Nothing was sent.")
     o = r.get('outcome') or {}
     when = ('it has them now' if o.get('delivered') else
@@ -3804,15 +3805,17 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         return _did(store, tid, f"Added a note to {named}: \u201c{_title_cut(note, 120)}\u201d.", 'task.comment')
     # ...and THE OWNER'S NEXT PROMPT TO THE AGENT AT WORK, delivered and said (the owner, 2026-11-02) - the page's Tell the agent, typed by
     # nobody else: it reaches no one outside, so the phone runs it at once as well
-    if kind == 'agent.tell' and target: return _tell_now(store, tid, target, str(params.get('text') or ''), actor)
+    if kind == 'agent.tell' and target: return _tell_now(store, tid, target, str(params.get('text') or ''), actor, owner=said)
     # ...and A GENERAL AGENT THE OWNER STOPPED, or a restart cut off, carried on by their words (the overnight run, 2026-11-03: "carry on with
     # the vendor notes" was answered "press Try again or Run another agent"): its row draws no Continue - its own box is the way on, and these
     # are the same owner's words - so it is the page's Continue with them as the note, run and said
     if kind == 'agent.continue' and target and general.handles(store.get_task(target) or {}) and continuable(store, target):
         # ...with what they said: a call that left its note out lost "skip the zip file" from "carry on, and skip the zip file" - the owner's
         # own words go with it then, as the page's Continue box would carry them
-        note = ' '.join(str(params.get('note') or params.get('text') or said or '').split())
-        r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note}, actor), actor)
+        # ...under YOU as they typed them, what the Assistant made of them folded as Taskuary's (general.relayed)
+        relay = ' '.join(str(params.get('note') or params.get('text') or '').split())
+        note = ' '.join(str(said or relay).split())
+        r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note, 'context': general.relayed(note, relay)}, actor), actor)
         if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not pick up'} - say so in plain words. Nothing was started.")
         return _did(store, tid, f"Picked up {task_ref(target)} again" + (f" with your note: “{_title_cut(note, 120)}”." if note else '.'),
                     'agent.continue')
@@ -3892,7 +3895,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     from . import appfacts
     tk = operations.KINDS[kind][0]
     if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
-        return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
+        return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor, owner=text)
     if kind == 'script.start':
         # ...its words ride in: "Wrote it into New" over an empty box was the line saying what it had not done (the owner, 2026-10-29)
         return _new(store, tid, table, 'report', str(params.get('text') or text or '').strip()) if 'report' in str(params.get('name') or '') \
@@ -6125,13 +6128,19 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if verb == 'answer_agent' and target_item and target_item.get('tid'):
             # ...and to an agent at work on a task, not one that asked, they are its next prompt (_tell_now)
             if target_item.get('kind') != 'agent':
-                try: return _tell_now(store, tid, int(target_item['tid']), decision.get('text') or text, actor)
+                try: return _tell_now(store, tid, int(target_item['tid']), decision.get('text') or text, actor, owner=text)
                 except CallMiss as e:
                     say_ = f"That did not reach the agent on {task_ref(int(target_item['tid']))} - {str(e).split(' - say so')[0].rstrip('.')}."
                     rec('assistant', say_)
                     return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
-            return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor)
+            return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor, owner=text)
         if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
+        # ...and Continue on a stopped GENERAL agent has no button on its row to light - its own box is the way on - so "get the agent going
+        # again on this" was answered "I can't start it from this item" (the re-check, 2026-11-04): it picks up, the owner's words its note
+        if (verb == 'continue' and target_item and target_item.get('tid') and general.handles(store.get_task(int(target_item['tid'])) or {})
+                and continuable(store, int(target_item['tid']))):
+            t_ = int(target_item['tid'])
+            return _task_writes(store, tid, 'agent.continue', t_, {'note': decision.get('text') or ''}, task_ref(t_), actor, said=text)
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             # ...with what it found first: "find the mail from Gail" searched, said it was not there, and wrote an agent the hunt - and only
             # "Wrote it into New" was shown, the finding gone (the live sweep, 2026-11-01)

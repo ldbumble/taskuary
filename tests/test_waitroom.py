@@ -256,6 +256,45 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(ValueError): waitroom.add(s, 9999, 'x')
 
 
+class GeneralTests(unittest.TestCase):
+    """A general agent's chat says who said what (the overnight run, 2026-11-03): the batch was typed into its conversation and filed
+    whole as the owner's, so YOU read "While you were working, the owner queued 1 note for you..." - Taskuary's words in the owner's bubble."""
+    def general(self, s):
+        from taskuary import general
+        tid = Factory(s).task(title='Vendor list', kind='general', status='in_progress')
+        ses = general.GeneralSession.__new__(general.GeneralSession)
+        ses.task_id, ses.alive, ses.sent, ses.sid, ses.buf = tid, True, [], 'g', ''
+        ses.waiting = lambda: True
+        ses.send_prompt = lambda text, **kw: ses.sent.append((text, kw))
+        return tid, ses
+
+    def said(self, s, tid):
+        from taskuary import general
+        return [('taskuary' if general.is_brief(c) else c['Actor'], c['Body']) for c in s.list_comments(tid) if c['ActorType'] == general.USER_TYPE]
+
+    def test_a_parked_general_agent_files_the_note_as_the_owners_and_the_rest_as_taskuarys(self):
+        s = MemoryStore(); tid, ses = self.general(s)
+        with mock.patch.dict(terminal.SESSIONS, {'g': ses}, clear=True):
+            out = waitroom.add(s, tid, 'Also put Northwind Payroll on the list.')
+            time.sleep(0.3)
+        self.assertEqual((out['delivered'], out['state']), (1, 'parked'))
+        (brief, b), (who, note) = self.said(s, tid)
+        self.assertEqual((brief, who, note), ('taskuary', 'owner', 'Also put Northwind Payroll on the list.'))
+        self.assertIn('While you were working', b); self.assertNotIn('Northwind Payroll', b)
+        [(turn, kw)] = ses.sent                                     # the agent's turn is the batch, filed here already
+        self.assertIn('(1) Also put Northwind Payroll on the list.', turn); self.assertEqual(kw, {'kept': True, 'brief': True})
+
+    def test_an_ended_general_agent_reopens_with_the_same_split(self):
+        from taskuary import general
+        s = MemoryStore(); tid, ses = self.general(s)
+        with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude'}]), \
+             mock.patch.object(general, 'start_session', return_value=ses):
+            out = waitroom.add(s, tid, 'and sort it')
+            time.sleep(0.3)
+        self.assertEqual(out['state'], 'restarted')
+        self.assertEqual([w for w, _ in self.said(s, tid)], ['taskuary', 'owner'])
+        self.assertIn('after the last session ended', ses.sent[0][0])
+
 class DripTests(unittest.TestCase):
     def test_a_pasted_list_becomes_notes_in_order_and_drips_one_per_stop(self):
         s = MemoryStore(); tid = task(s)

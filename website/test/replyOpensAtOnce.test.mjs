@@ -39,6 +39,19 @@ test("the box opens before the model answers, says Drafting, and fills in when i
   off();
 });
 
+// THE ASSISTANT'S "Drafting a reply" LINE IS UNDER WAY (the owner, 2026-11-04: "it says it's doing things and it does not do them"): its id
+// rides the press to /reply and /draft, which say it again with how it went, and the job keeps the server's receipt for the chat to draw
+test("the Assistant's under-way line rides the draft, and the server's receipt is kept", async () => {
+  const api = fakeApi("Yes, Tuesday works.");
+  api.post = ((post) => async (url, body) => { const r = await post(url, body); return url.endsWith("/draft")
+    ? { data: { ...r.data, receipt: { status: "done", text: "Drafted a reply on TQ-0009." } } } : r; })(api.post);
+  await openReply(api, 9, "say yes", null, false, 77);
+  assert.deepEqual(api.calls.at(-2), ["/api/messages/9/reply", { draft: true, later: true, instruction: "say yes", line: 77 }]);
+  assert.deepEqual(api.calls.at(-1), ["/api/reviews/41/draft", { instruction: "say yes", line: 77 }]);
+  api.release(); await draftJob(41).promise;
+  assert.deepEqual(draftJob(41).receipt, { status: "done", text: "Drafted a reply on TQ-0009." });
+});
+
 test("a draft that fails says why in the card", async () => {
   const api = fakeApi(new Error("no AI connector is set up to write replies"));
   await openReply(api, 10);
@@ -60,7 +73,7 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
   const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx"), page = read("TaskPage.jsx"), dec = read("ReviewDecision.jsx");
   assert.doesNotMatch(cards, /\/reply`, \{ draft: true/, "no card waits on the model");
   assert.equal((cards.match(/openReply\(api, /g) || []).length, 2, "Draft a reply, an fyi's Reply");
-  assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null, d\.cc \|\| null\);/);
+  assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null, d\.cc \|\| null, false, d\.line \|\| null\);/);
   assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId, null, null, generate === "ai"\)/);   // the import, renamed: the page's own openReply shadowed it
   // REPLY WITH NO AGENT WORK OPENS EMPTY (the owner, 2026-10-28): only Draft with AI asks for the AI's draft
   assert.match(read("replyDraft.js"), /\.\.\.\(ai \? \{ ai: true \} : \{\}\)/);

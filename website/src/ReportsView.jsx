@@ -653,8 +653,10 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             {section === "reports" && <SetupWithAi kind="report" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-report" }); }} />}
             {section === "dashboards" && <SetupWithAi kind="dashboard" onOpen={() => { setDashDraft(null); onBrowseState?.({ section, open: "new-dashboard" }); }} />}
             {section === "workflows" && <SetupWithAi kind="workflow" onOpen={() => { setDraft(null); onBrowseState?.({ section, open: "new-agent" }); }} />}
-            {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
+          {/* ...and what a press said, on its own line under them: inside the row, Run now's three-line "running in the background"
+              was squeezed between Set up with AI and the page's edge, and read as the toolbar breaking (2026-11-04) */}
+          {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
         </Box>
       ) : null,
       cards: section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}

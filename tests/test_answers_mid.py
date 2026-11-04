@@ -62,3 +62,20 @@ def test_the_cli_and_floor_know_answers():
     assert server.AgentReplyBody(task_id=1, answers=11).answers == 11 and server.AgentReplyBody(task_id=1).answers is None
     import inspect, taskuary.cli as cli
     assert "'--answers'" in inspect.getsource(cli) and "'answers': args.answers" in inspect.getsource(cli)
+
+
+def test_a_second_save_pointed_at_another_mail_replaces_the_recipients():
+    s, tid, ids = thread(asks=[0], aside=[1, 2])
+    rid = wrapup.agent_reply(s, tid, 'Hi Ray - repaired.', 'coding')['review_id']
+    assert 'gail@northwind.example' in json.dumps(s.review_envelope(rid)['cc'])
+    wrapup.agent_reply(s, tid, 'Hi Gail - noted.', 'coding', answers=ids[1])
+    env = s.review_envelope(rid)
+    assert s.get_review(rid)['AnswersMid'] == ids[1] and 'gail@northwind.example' in json.dumps(env['to']) and 'ray@northwind.example' in json.dumps(env['to'])
+
+
+def test_a_plain_re_save_keeps_the_answers_mid_already_pinned():
+    s, tid, ids = thread(aside=[1, 2])
+    rid = wrapup.agent_reply(s, tid, 'Hi Ray - first.', 'coding')['review_id']
+    s.set_review_answers(rid, ids[0])
+    wrapup.agent_reply(s, tid, 'Hi Ray - second.', 'coding')
+    assert s.get_review(rid)['AnswersMid'] == ids[0]

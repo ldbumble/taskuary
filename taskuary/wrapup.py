@@ -375,12 +375,13 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     from . import operations
     store.pin_review_context(rid, mid, operations.message_revision(store, task_id))
     # the mail that holds the ask is what the draft answers and what it is addressed from; the newest mail still pins its freshness
-    ans = answers or answers_for(store, task_id, mid, to); store.set_review_answers(rid, ans)
+    ans = answers or answers_for(store, task_id, mid, to)
+    if ans: store.set_review_answers(rid, ans)   # a plain re-save keeps the mail an earlier save pinned
     rv = store.get_review(rid) or {}
     # ...and to whom it goes, at once - its To and Cc - so the card says the person the agent wrote to, and a line from somebody else
     # later never moves it. An answer to the owner's OWN mail (a promise task's) goes to whom it went (outbound.reply_envelope)
     m = store.get_message(ans or mid) or {}
-    if not store.review_envelope(rid):
+    if ans or not store.review_envelope(rid):   # a mail that holds the ask replaces the recipients an earlier save set
         from .outbound import reply_envelope
         if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)
     from .signatures import agent_signed

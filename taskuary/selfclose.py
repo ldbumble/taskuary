@@ -312,6 +312,17 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who
               f'ATTACHED FILES. Never say a file is attached unless you named it that way.')
 
 
+# ...and EVERY TURN ENDS WITH WHERE THE OWNER STANDS (Task 3.4, 2026-11-04): the general agent's one goal is to get the owner to done, so
+# each turn closes on a block the page draws as three parts - what the task wants, what the agent did, what is on the owner (the parser
+# is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
+SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
+SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"about": "<what this task wants from the owner>", "did": "<what '
+                f'you researched, found or did>", "on_you": ["<each step left for the owner, one short line each>"], "nothing_left": '
+                f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. When you '
+                f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
+                f'(through [[TASKUARY-ASK]]) only when there are real ones.')
+
+
 def reply_marker(text: str) -> tuple:
     """(reply with the markers taken out, the marked reply text) - or (text, None) when it wrote none."""
     m = _REPLY_RE.search(text or '')

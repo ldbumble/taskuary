@@ -699,10 +699,13 @@ def repos_block(store) -> str:
 GOAL_LINE = ("YOUR ONE GOAL: get the owner to done. Read THE ASK, AS TRIAGE READ IT first when the brief has it, and check it against the "
              "mail: what is asked, the owner's part, who already handled what. Do as much of the owner's part as you can before leaving "
              "anything to them, and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found. "
-             "Draft every email the job needs through your reply and draft tools, never as text in the conversation. A login or secret you "
-             "find in their files goes only in the reply you draft - their Send shares it - never in the conversation, your steps or your "
-             "summary. Then tell them where it stands: what the task wants from them, what you researched or did, and the next steps - and "
-             "close out, or do what closing out takes.")
+             "Draft every email the job needs through your reply and draft tools, never as text in the conversation. {login}Then tell them "
+             "where it stands: what the task wants from them, what you researched or did, and the next steps - and close out, or do what "
+             "closing out takes.")
+LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the reply you draft - their Send shares it - never in the "
+                  "conversation, your steps or your summary. ")
+# ...never on a STRANGER's task: their session is never steered toward credentials (the floor blocks credential folders for them too)
+STRANGER_GOAL_LINE, GOAL_LINE = GOAL_LINE.format(login=''), GOAL_LINE.format(login=LOGIN_SENTENCE)
 READING_CHARS = 1_500
 
 
@@ -895,7 +898,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
-    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{GOAL_LINE}\n\n{selfclose.SUMMARY_LINE}'
+    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}\n\n{selfclose.SUMMARY_LINE}'
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words

@@ -2573,10 +2573,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27: "when you hit a button on the bottom that relates to a group, the correct
   // section opens"): the reply's, the draft's and the close's presses Close out, the agent's the Agent - never a closed section for the
   // thing pressed. Heard before it runs (actionRow.onPressing), the row's presses and a card's own alike
-  const openSecRef = useRef(null);
+  const openSecRef = useRef(null), heldRef = useRef(new Set());
   openSecRef.current = threeUp && active ? openSection : null;
+  // ...but a step the agent's own shell, browser or desktop held (a review of Kind `action`) is the AGENT's, pressed in its pane: its
+  // Approve or Dismiss, announced as "<review>:approve" like a draft's Send, opened Close out over the agent it set going again (the
+  // desktop run, 2026-11-04: "close agent_working" a fifth of a second after Dismiss)
+  heldRef.current = new Set(allReviews.filter((r) => r.Kind === "action").map((r) => String(r.ReviewId)));
   useEffect(() => onPressing((id) => {
-    const k = String(id || ""), sec = k.includes(":") || VERB_SECTION.close.has(k) ? "close" : VERB_SECTION.agent.has(k) ? "agent" : null;
+    const k = String(id || ""), held = k.includes(":") && heldRef.current.has(k.split(":")[0]);
+    const sec = held ? null : k.includes(":") || VERB_SECTION.close.has(k) ? "close" : VERB_SECTION.agent.has(k) ? "agent" : null;
     if (sec) openSecRef.current?.(sec);
   }), []);
   // SHARE (the owner, 2026-10-23: one Share button): an agent's Result, or a workflow run's - the server reads what it says off the task
@@ -3088,7 +3093,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} trusting={trusting} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && !resultShown && <AgentRecord {...recordProps} story={story} folded />}
-                  {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""}
+                  {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""} ended={story?.kind === "interrupted" ? story.line || "" : ""}
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
                     onRecord={threeUp ? () => { if (!shows("agent")) setOpenStage("agent"); setResultOpen(true); } : null} />}
                   {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown

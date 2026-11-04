@@ -55,7 +55,7 @@ const textOf = (message) => (message?.content || []).filter((p) => p.type === "t
 // the brief an agent was started on is Taskuary's, not the owner's (general.BRIEF_ACTOR): carried to UserMessage on the message's metadata
 const initial = (messages) => (messages || []).map((m) => ({
   ...m,
-  ...(m.brief ? { metadata: { custom: { brief: true } } } : {}),
+  ...(m.brief ? { metadata: { custom: { brief: true, mail: m.mail || [] } } } : {}),
   createdAt: m.createdAt ? new Date(String(m.createdAt).replace(" ", "T") + (String(m.createdAt).includes("Z") ? "" : "Z")) : undefined,
 }));
 
@@ -170,16 +170,27 @@ const AssistantText = ({ text }) => {
     {files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
   </>;
 };
-const UserMessage = () => useAuiState((s) => !!s.message.metadata?.custom?.brief) ? (
-  <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
-    <BriefLine><MessagePrimitive.Parts /></BriefLine>
-  </MessagePrimitive.Root>
-) : (
-  <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
-    <div className="tq-aui-role">you</div>
-    <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
-  </MessagePrimitive.Root>
-);
+// WHAT CAME IN IS SAID IN ITS SENDER'S WORDS (general.shown_history; the overnight run, 2026-11-03): the mail that carried this turn on, each
+// under who sent it, over Taskuary's folded instructions - the second mail of a thread was readable only inside them
+const CameIn = ({ mail }) => mail.map((x, i) => (
+  <div key={i} className="tq-aui-mail" data-tq-chat-mail="">
+    <div className="tq-aui-role">{x.who}</div>
+    <div className="tq-aui-mail-bubble">{x.words}</div>
+  </div>));
+const UserMessage = () => {
+  const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail);
+  return brief ? (
+    <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
+      <CameIn mail={mail || []} />
+      <BriefLine><MessagePrimitive.Parts /></BriefLine>
+    </MessagePrimitive.Root>
+  ) : (
+    <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
+      <div className="tq-aui-role">you</div>
+      <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
+    </MessagePrimitive.Root>
+  );
+};
 // what each answer published or showed, by the answer's id (the server's `after`): drawn under it, open - the agent chose it
 const ShownCtx = React.createContext({});
 const AssistantMessage = () => {

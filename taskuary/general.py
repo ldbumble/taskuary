@@ -302,6 +302,26 @@ def history(store, tid: int) -> list:
     return _as_messages(chat_rows(store, tid, run=True))
 
 
+# WHAT CAME IN IS SAID IN ITS SENDER'S WORDS (the overnight run, 2026-11-03): a turn carried on by new mail is Taskuary's brief - the
+# news, then Resume's words - and the second mail of a thread was readable only inside the folded "Taskuary's instructions". On the
+# pane a brief after the run's first turn carries the mail that JOINED the task between the turn before it and it, each by its sender.
+# Joined, not stored: a mail read in while the agent worked waits for triage, and is put on the task after the turn it arrived during
+JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM route r WHERE r.MessageId=m.MessageId AND r.TaskId=m.TaskId), '')) AS JoinedAt "
+          "FROM message m WHERE m.TaskId=? AND IFNULL(m.Direction,'in')<>'out' AND m.Status NOT IN ('context','history','skipped') "
+          "AND IFNULL(m.Channel,'')<>'report' ORDER BY JoinedAt, m.MessageId")
+def shown_history(store, tid: int) -> list:
+    "history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words)."
+    from .triage import own_words
+    rows = chat_rows(store, tid, run=True); msgs = _as_messages(rows)
+    mail = store._rows(JOINED, (tid,)) if any(m.get('brief') for m in msgs[1:]) else []
+    for i, (m, c) in enumerate(zip(msgs, rows)):
+        if not i or not m.get('brief'): continue
+        got = [x for x in mail if str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
+        if got: m['mail'] = [{'who': x.get('FromName') or x.get('FromEmail') or '', 'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
+                              'words': own_words(str(x.get('BodyText') or '')).strip()[:3000] or x.get('Subject') or ''} for x in got[-5:]]
+    return msgs
+
+
 def earlier(store, tid: int) -> list:
     "The conversations of the agents run before this one (Run another agent) - kept on the task, never continued."
     return _as_messages(_split(store, tid)[0])

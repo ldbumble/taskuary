@@ -41,7 +41,8 @@ test("a general agent with no AI to run it is refused, offers Connect an AI, and
   await page.evaluate(() => { window.location.hash = "new-task"; });
   await page.waitForFunction(() => [...document.querySelectorAll("[role='tab']")].some((x) => x.textContent.includes("Give an agent a job")), { timeout: 30000 });
   await page.evaluate(() => [...document.querySelectorAll("[role='tab']")].find((x) => x.textContent.includes("Give an agent a job")).click());
-  await page.waitForFunction(() => document.body.innerText.includes("A general agent"), { timeout: 10000 });
+  // ...with Developer mode off there is no fork to pick: the sheet is a general agent's already (2026-11-03)
+  await page.waitForSelector("[data-tq-new] textarea, [role='dialog'] textarea", { timeout: 10000 });
   await page.evaluate(() => [...document.querySelectorAll("p, span, div")].reverse().find((x) => x.textContent.trim() === "A general agent")?.click());
   const box = await page.waitForSelector("[data-tq-new] textarea, [role='dialog'] textarea", { timeout: 10000 });
   await box.type("compare three payroll vendors on price");

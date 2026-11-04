@@ -665,6 +665,13 @@ def setup_skill() -> str:
         return ''
 
 
+def _drafts_hidden(kind, name, detail):
+    "A trace event with any draft body in it shown as DRAFT_SHOWN: a login the thread asked for goes in the draft, never on view."
+    from .sessionrecord import hide_draft
+    if kind == 'tool_call' and isinstance(detail, dict) and 'args' in detail: return {**detail, 'args': hide_draft(name, detail['args'])}
+    return hide_draft('', detail) if kind in ('live', 'progress') and isinstance(detail, str) else detail
+
+
 def repos_block(store) -> str:
     """The owner's repositories and WHERE THEY ARE on this machine: SOUL.md's repo map for what each one is, the agents'
     cwd_map for its checkout. A coding agent is started inside one; this assistant runs in Taskuary's scratch folder and was
@@ -1036,6 +1043,7 @@ class GeneralSession:
         return clean
 
     def _remember_trace(self, kind, name='', detail=None):
+        detail = _drafts_hidden(kind, name, detail)
         event = {'type': str(kind or ''), 'name': str(name or ''),
                  'detail': self._trace_detail(kind, detail)}
         self.trace.append(event)
@@ -1243,6 +1251,7 @@ class GeneralSession:
                 if kind in ('progress', 'live') and isinstance(detail, str):
                     detail = _sc.for_screen(detail)
                     if not detail.strip(): return
+                detail = _drafts_hidden(kind, name, detail)      # the pane, the trace and the kept steps alike (sessionrecord.hide_draft)
                 self._remember_trace(kind, name, detail)
                 if trace: trace(kind, name, detail)
                 if kind == 'tool_call':

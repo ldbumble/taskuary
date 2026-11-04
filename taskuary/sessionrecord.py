@@ -28,6 +28,29 @@ NOTE_ACTOR = 'taskuary'   # who files Taskuary's own notes into a task's chat - 
 _FILE_TOOLS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'edit', 'write', 'create', 'str_replace_editor',
                'write_file', 'replace', 'edit_file'}
 _TARGET_KEYS = ('command', 'cmd', 'pattern', 'query', 'url', 'file_path', 'path', 'filePath', 'absolute_path', 'description', 'prompt')
+# A DRAFT'S BODY STAYS IN THE DRAFT (the owner, 2026-11-04): a login the thread asks for goes in the drafted reply for the owner's Send,
+# never on the pane, the live trace or a kept step - so the call that files one (the toolbox's propose_*, or `taskuary --reply/--draft`
+# in a shell) is shown by what it is, its body replaced. The draft itself lands in the review untouched.
+DRAFT_SHOWN = '(the drafted reply)'
+_DRAFTING = ('propose_reply', 'propose_email')                  # agenttools: the calls whose `text` is a draft
+_DRAFT_FLAG = re.compile(r'(--(?:reply|draft))(?:=|\s+).*?(?=\s--(?:to|attach|subject|item|cc)\b|$)', re.S)
+
+
+def _hide_flags(v):
+    if isinstance(v, str): return _DRAFT_FLAG.sub(lambda m: f'{m[1]} "{DRAFT_SHOWN}"', v) if ('--reply' in v or '--draft' in v) else v
+    if isinstance(v, dict): return {k: _hide_flags(x) for k, x in v.items()}
+    return [_hide_flags(x) for x in v] if isinstance(v, list) else v
+
+
+def hide_draft(name, args):
+    "A tool call's args with any draft body in them replaced by DRAFT_SHOWN - everything else as it was."
+    if str(name or '').endswith(_DRAFTING):
+        if isinstance(args, str):
+            try: j = json.loads(args)
+            except ValueError: return DRAFT_SHOWN
+            return json.dumps(hide_draft(name, j)) if isinstance(j, dict) else DRAFT_SHOWN
+        if isinstance(args, dict): return {**args, **{k: DRAFT_SHOWN for k in ('text', 'body') if k in args}}
+    return _hide_flags(args)
 
 
 def _home() -> Path: return Path.home()
@@ -47,7 +70,8 @@ def _target(args) -> str:
 
 
 def _tool(name, args, at=None) -> dict:
-    s = {'k': 'tool', 'name': str(name or 'tool'), 'text': _target(args), 'at': at}
+    args = hide_draft(name, args)
+    s ={'k': 'tool', 'name': str(name or 'tool'), 'text': _target(args), 'at': at}
     a = args if isinstance(args, dict) else {}
     # a command the agent DESCRIBED reads as what it was for; the command itself stays one click away
     if str(a.get('description') or '').strip() and (a.get('command') or a.get('cmd')):
@@ -126,7 +150,7 @@ def _codex(path: Path) -> list:
                 files = re.findall(r'^\*\*\* (?:Update|Add|Delete) File: (.+)$', str(args), re.M)
                 out += [{'k': 'tool', 'name': 'apply_patch', 'text': _cut(f, TARGET_N), 'file': f, 'at': at} for f in files] or [_tool('apply_patch', '', at)]
             elif t == 'custom_tool_call' and (cmds := re.findall(r'\bcmd:\s*"((?:[^"\\]|\\.)*)"', str(args))):
-                out += [{'k': 'tool', 'name': 'shell', 'text': _cut(c.replace('\\"', '"'), TARGET_N), 'at': at} for c in cmds]   # codex's js harness: the commands it ran
+                out += [{'k': 'tool', 'name': 'shell', 'text': _cut(_hide_flags(c.replace('\\"', '"')), TARGET_N), 'at': at} for c in cmds]   # codex's js harness: the commands it ran
             else: out.append(_tool(p.get('name') or 'shell', args, at))
     return out
 

@@ -2984,7 +2984,10 @@ def release_task(store, task_id, actor='terminal', note=None) -> bool:
     try:
         from . import workerstate as ws
         sid = ws.current_sid(store, task_id)
-        if sid and ws.status(store, task_id)['state'] not in ws.TERMINAL:
+        # ...read off the run's own LAST WORD, not its derived status: with no session live after a restart, status() reads any unfinished run
+        # as `disconnected` already, so nothing was written - the run's last word stayed `working`, and a general agent cut off by the restart
+        # offered no Continue (the overnight run, 2026-11-03)
+        if sid and (store.last_worker_event(task_id, skip=ws.NOTES) or {}).get('Kind') not in ws.TERMINAL:
             ws.record(store, task_id, sid, 'disconnected', text='the session ended', source=actor)
     except Exception as e: logger.debug(f'release_task: no worker ending written for {task_id}: {e}')
     store.update_task(task_id, {'Status': 'open'}, actor)

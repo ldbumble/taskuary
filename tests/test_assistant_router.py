@@ -248,6 +248,24 @@ class DeskRoutes(unittest.TestCase):
             out, _ = say(s, 'start it', item['key'], 'CALL: {"kind": "regular_agent", "params": {}}')
         self.assertTrue(out['say'].startswith('Not done'), out['say']); self.assertNotIn('on it now', out['say'])
 
+    def test_words_for_a_stopped_general_agent_carry_it_on(self):
+        """The overnight run, 2026-11-03: "carry on with the vendor notes, but skip the mail search" on a general agent the owner had
+        stopped was answered "press Try again or Run another agent". Its saved conversation picks up, the words as the owner's note."""
+        from taskuary import general
+        s = store(); tid, item = on_table(s)
+        s.update_task(tid, {'Kind': 'general'}, 't')
+        s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Write the vendor notes.')
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Wrote two of five.')
+        self.assertTrue(concierge.continuable(s, tid))
+        for model in ('CALL: {"kind": "agent.tell", "params": {"text": "carry on, but skip the mail search"}}',
+                      'CALL: {"kind": "agent.answer", "params": {"text": "carry on, but skip the mail search"}}'):
+            with mock.patch.object(concierge, '_agent_running', return_value=False), \
+                 mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
+                out, _ = say(s, 'carry on with it, but skip the mail search', item['key'], model)
+            go.assert_called_once()
+            self.assertEqual((go.call_args[0][0], go.call_args[0][1].note), (tid, 'carry on, but skip the mail search'), model)
+            self.assertNotIn('nothing would hear', out['say'])
+
     def test_a_held_step_let_run_is_named_approve_not_send(self):
         "The overnight run, 2026-11-03: Approve on a held delete came back as \"Done - Send · TQ-0006.\" - nothing was sent."
         s = store(); tid, _ = on_table(s)

@@ -86,3 +86,10 @@ test("an item with an Agent section puts Send to agent on it; the rest stay on t
   const rep = { all: "report", keys: ["from", "report", "close"] }, mine = [v("w:mine", "decide", { label: "Put it on my list" }), v("w:regular_agent", "decide", { label: "Send to agent" })];
   assert.deepEqual(Object.keys(splitRow(rowOf({ ref: "", list: mine }), rep, mine).by), ["report"], "a report has no Agent: all stay on it");
 });
+
+// WHERE THE CHAT IS HOME there is no Close out (the closeout-in-chat spec, Task 4.2): its moves ride the Agent, beside the card they act on
+test("a chat-home task lays no Close out: Reply and Hand it to a person ride the Agent", () => {
+  const { by } = splitRow(rowOf({ ref: "TQ-1", list: task }), { live: false, open: "agent", home: true }, task);
+  assert.equal(by.close, undefined, "nothing for a section that is not there");
+  assert.deepEqual(by.agent.map((x) => x.spine || x.label), ["Send to agent", "Draft reply", "hand"]);
+});

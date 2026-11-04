@@ -149,7 +149,9 @@ test("an important line lands in the task's Advisor section, and every other str
   const agent = page.indexOf('{slot("agent",'), inAgent = page.indexOf('{threeUp && advisorNote && adviceIn === "agent" && <Box'), close = page.indexOf('slot("close",');
   assert.ok(agent > 0 && agent < inAgent && inAgent < close, "in the Agent section, before Close out");
   // ...or in Close out, when the move it is the reason for is there (advice `section`, 2026-10-29: a reply the owner sent in Teams)
-  assert.ok(page.indexOf('{threeUp && advisorNote && adviceIn === "close" && <Box') > close, "in Close out when its move is Close out's");
+  // ...its body (closeBody), which Close out's section draws - or the agent's summary, where the chat is home (Task 4.2)
+  const body = page.slice(page.indexOf("const closeBody = (inChat)"), page.indexOf("const chatCards ="));
+  assert.ok(body.includes('{threeUp && advisorNote && adviceIn === "close" && <Box') && page.indexOf("{closeBody(false)}") > close, "in Close out when its move is Close out's");
   assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
   assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
   assert.match(sec, /<TaskuaryMark size=\{12\} \/><Typography[^>]*>Advisor<\/Typography>/);

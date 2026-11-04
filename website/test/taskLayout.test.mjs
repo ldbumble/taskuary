@@ -175,7 +175,7 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   assert.match(src, /\|\| \(co\.advice \? "Nobody sent this one[^"]*" : CLOSE_BY_HAND\)/);
   // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
   assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
-  assert.match(src, /shows\("reply"\) && co\.writeupAt === "closeout" && <WriteupBlock/);
+  assert.match(src, /coOn && co\.writeupAt === "closeout" && <WriteupBlock/);
   assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest \? "record" : "top";/);
   assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
   assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
@@ -350,9 +350,11 @@ test("a task whose home is the chat shows Came from and the agent, and opens on 
   assert.match(src, /function useTaskMoves\(sec, home = false\)/);
   assert.match(src, /close = home \? sec === "agent" : sec === "close"/);
   assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: liveTerminal\(term\) \}\), secs = taskSections\(home\)/);
-  // ...and until 4.2 Close out's slot is still drawn beside them, so a draft waiting on Send is never out of reach
-  assert.match(src, /const slots = CARDS_IN_SUMMARY \? secs : SECTIONS/);
-  assert.match(src, /const CARDS_IN_SUMMARY = false;/);
+  // ...and Close out's slot is gone there (Task 4.2): its cards live in the agent's summary - on a desk; a phone's stacked page keeps its card
+  assert.match(src, /const cardsIn = CARDS_IN_SUMMARY && home && threeUp, slots = cardsIn \? secs : SECTIONS/);
+  assert.match(src, /const CARDS_IN_SUMMARY = true;/);
+  assert.match(src, /const closeBody = \(inChat\) => \{ const coOn = inChat \|\| shows\("reply"\);/);
+  assert.match(src, /next=\{chatCards\}/);
   // ...and a live agent's slim strip carries Mark done where the chat is home - Close out is no tab of its own there
   assert.match(src, /const liveMoves = useSpineVerbs\("live"\), \{ done \} = useTaskMoves\(sec, home\);/);
   assert.match(src, /\{home && done\.length > 0 && <Box data-tq-live-done=""/);

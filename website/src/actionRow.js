@@ -501,11 +501,13 @@ export function splitRow(row, on, list = []) {
     return { row: nav, by }; }
   const by = {};
   const { move, change } = pillsOf(row);
-  for (const v of [...move, ...change]) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }
+  // ...and a task whose chat is home lays no Close out (taskLayout.chatHome): its moves - Reply, Hand it to a person, an invite's answers - ride the Agent's
+  for (const v of [...move, ...change]) { const k = on.home && stageOf(v) === "close" ? "agent" : stageOf(v); if (k) (by[k] ||= []).push(v); }
   // ...and a draft's own Redraft, which the row never draws (it is the card's, under the draft, while Close out is open): on the folded
   // spine it stands for the draft - filled when it is the Advisor's pick (rowOf's lit) - and Reply, which only opens that draft, steps aside
   const redraft = list.filter((x) => x.card && stageOf(x) === "close").map((v) => ({ ...v, tone: row.lit === v.id ? "p" : "s" }));
   if (redraft.length) by.close = [...redraft, ...(by.close || []).filter((v) => !redraft.some((r) => r.label === v.label) && v.id !== "reply")];
+  if (on.home) delete by.close;
   const { move: all, change: changes, share } = pillsOf(row), rest = all.filter((v) => !stageOf(v));
   // ...Mark done first, then what is lit (a start held for its folder, the Advisor's pick): the title bar folds from its end, never a lit move
   const lit = (v) => !isDone(v) && v.tone === "p";

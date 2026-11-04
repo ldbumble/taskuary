@@ -680,6 +680,12 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
         # the task when nothing else of it waits), never left on the card as an email of one signature
         from . import verdicts
         rv = store.get_review(review_id)
+        # a draft already waiting (a new mail joined the thread and this was the redraft) is never put down or deleted: it is marked
+        # Not needed, with the writer's WHY, and Send still sends it
+        if rv and rv.get('Status') == 'pending' and str(rv.get('DraftText') or '').strip() and not resolution:
+            verdicts.not_needed(store, task_id, seen.get('why') or 'the thread no longer asks you for a reply', 'drafter')
+            logger.info(f'redraft for task {task_id}: the writer says no reply is owed now; the draft is marked not needed')
+            return ''
         if rv and rv.get('Status') in ('pending', 'held'):
             store.add_comment(task_id, 'responder', 'agent', 'No reply drafted - from what was done, nothing needs to go back to the sender.')
             verdicts.decide(store, rv, 'no_reply', None, None, 'responder')

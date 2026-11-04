@@ -8,7 +8,10 @@ import { startHarness } from "./harness.mjs";
    Came from | Agent | Close out in that order, the one the task is up to open, the other two closed tabs ~156px wide whose words read
    across; a tab's press opens its section in one smooth move - never two open, the card never changing height - and the card takes the
    canvas down to a small gap over the dock. A row's press opens the section it belongs to. A live agent keeps nearly all the width, Came
-   from and Close out slim 44px tabs, and its terminal is never remounted or resized by a look away. Invented people only. */
+   from and Close out slim 44px tabs, and its terminal is never remounted or resized by a look away.
+   WHERE THE CHAT IS HOME (phase 4, Task 4.1: a general or reply task) the task opens on the Agent, and Mark done rides its spine; Close out
+   is still drawn beside it until its draft cards live in the agent's summary (Task 4.2), so a draft waiting on Send stays in reach.
+   A plain task opens where it is up to, as before. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // the card of the task opened last (a canvas can hold a card put down a moment ago)
@@ -66,22 +69,24 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   const tasks = (await (await fetch(`${h.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": h.token } })).json()).data;
   const id = (re) => tasks.find((x) => re.test(x.Title))?.TaskId;
 
-  await t.test("a drafted reply opens on Close out; Came from and Agent are its tabs, words across, ~156px, with their status", async () => {
+  await t.test("a drafted reply opens on its chat, the Agent; Came from and Close out are its tabs, words across, ~156px, with their status", async () => {
     await openTask(page, id(/^Invoice 88213/));
     const m = await look(page);
-    assert.equal(m.main, "close", JSON.stringify(m));
+    assert.equal(m.main, "agent", JSON.stringify(m));
+    // ...Close out still drawn until Task 4.2 moves its draft into the agent's summary
     assert.deepEqual(m.slots.map((s) => s.key), ["from", "agent", "close"], "the flow's order");
-    assert.deepEqual(m.slots.map((s) => s.open), [false, false, true], "one open");
+    assert.deepEqual(m.slots.map((s) => s.open), [false, true, false], "one open");
     // ...a tenth of the work area each, 104-156px (TaskPage.tabW: "it should be in ratio", TQ-1251)
     const want = Math.min(156, Math.max(128, m.slots.reduce((n, s) => n + s.w, 0) * 0.1));
     for (const tab of m.tabs) {
       assert.ok(Math.abs(tab.w - want) <= 3, `${tab.key} tab is ~${Math.round(want)}px: ${tab.w}`);
       assert.equal(tab.writing, "horizontal-tb", `${tab.key}'s words read across`);
     }
-    const from = m.tabs.find((x) => x.key === "from").text, agent = m.tabs.find((x) => x.key === "agent").text;
+    const from = m.tabs.find((x) => x.key === "from").text, close = m.tabs.find((x) => x.key === "close").text;
     assert.match(from, /Came from[\s\S]*Tom Alvarez · 1 message[\s\S]*Tom Alvarez: “This invoice[\s\S]*Sorted: a reply to send[\s\S]*1$/, from);
-    assert.match(agent, /Agent[\s\S]*not started[\s\S]*2$/, agent);
-    assert.ok(m.slots[2].w > 600, `the open one fills the rest: ${m.slots[2].w}`);
+    assert.match(close, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*3$/, close);
+    assert.doesNotMatch(close, /Mark done/, "Mark done is the Agent's now");
+    assert.ok(m.slots[1].w > 600, `the open one fills the rest: ${m.slots[1].w}`);
     // ...the card takes the canvas, pinned at its top, a small gap over the dock
     assert.ok(Math.abs(m.card.top - m.canvas.top) <= 2, `pinned to the canvas's top ${JSON.stringify(m)}`);
     assert.ok(m.card.h >= m.canvas.h - 30, `takes the canvas: ${m.card.h} of ${m.canvas.h}`);
@@ -97,9 +102,11 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
     assert.deepEqual(m.slots.map((s) => s.open), [true, false, false]);
     assert.match(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /What came in[\s\S]*What triage made of it/);
     assert.doesNotMatch(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /Full message history/, "no second copy at the foot");
-    const close = m.tabs.find((x) => x.key === "close");
-    assert.ok(close.here, "Close out is where the task is up to");
-    assert.match(close.text, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*Up to here[\s\S]*3$/, close.text);
+    // ...where the chat is home it is up to the Agent, whose spine carries Mark done
+    const agent = m.tabs.find((x) => x.key === "agent"), close = m.tabs.find((x) => x.key === "close");
+    assert.ok(agent.here && !close.here, "the Agent is where the task is up to");
+    assert.match(agent.text, /Agent[\s\S]*Mark done[\s\S]*Up to here[\s\S]*2$/, agent.text);
+    assert.match(close.text, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*3$/, close.text);
     // ...and the stage is the task's, not the pick's
     assert.equal(m.stage, before.stage);
     await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-arrow]`); await sleep(500);
@@ -113,8 +120,10 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   // ...each kind of task opens where it is up to
   await t.test("each task opens on the section it is up to", async () => {
     const drew = []; let many = 0;
-    for (const [re, want] of [[/^Invoice 88213/, "close"], [/^Reconcile the August GL export/, "agent"], [/^Year-end audit/, "from"],
-      [/^Ray: schema sign-off/, "from"], [/^Migrate the census export/, "from"], [/^Invite: AP cutover dry run/, "from"]]) {   // owed, nothing drafted: what came in first (2026-10-28)
+    // ...a general or reply task on its chat (Task 4.1); a plain task where it is up to - owed, nothing drafted: what came in first (2026-10-28)
+    // ...Invoice last: the section opened by hand on it just above stays open while it is the task on the page (secPick)
+    for (const [re, want] of [[/^Reconcile the August GL export/, "agent"], [/^Year-end audit/, "agent"], [/^Ray: schema sign-off/, "from"],
+      [/^Migrate the census export/, "from"], [/^Invite: AP cutover dry run/, "agent"], [/^Invoice 88213/, "agent"]]) {
       const tid = id(re);
       if (!tid) continue;
       await openTask(page, tid);
@@ -138,9 +147,9 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   await t.test("a row's press opens the section it belongs to", async () => {
     for (const [re, start, label, want] of [
       [/^Reconcile the August GL export/, "agent", "Reply", "close"],
-      [/^Year-end audit/, "from", "Draft reply", "close"],
-      [/^Invoice 88213/, "close", "Send to agent", "agent"],
-      [/^Migrate the census export/, "from", "Hand it to a person", "close"]]) {   // (Year-end has a draft by now: it opens on Close out)
+      [/^Year-end audit/, "agent", "Draft reply", "close"],
+      [/^Invoice 88213/, "agent", "Hand it to a person", "close"],
+      [/^Migrate the census export/, "from", "Hand it to a person", "close"]]) {   // (a chat-home task opens on its Agent, Task 4.1)
       await openTask(page, id(re));
       const at = await look(page);
       assert.equal(at.main, start, `${re} opens on ${start}: ${JSON.stringify(at)}`);

@@ -97,7 +97,10 @@ export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent
 // ...BUT TWO WHERE THE CHAT IS HOME (phase 4): a general or reply task is Came from and the agent's chat, opening on the chat, and Close out's
 // own moves (Mark done, Close with a note, Attach, Share) ride the agent's strip. Read off the kind, not the workspace mode: a reply task no
 // agent ran is "empty" there (taskWorkspace), and its chat is still home. A coding task, a plain one and a live terminal keep all three
-export const chatHome = ({ kind, terminal = false } = {}) => !terminal && (isGeneralKind(kind) || kind === "reply");
+// ...and a kind not yet known is not home: a coding task drew two sections for a moment before its detail landed
+export const chatHome = ({ kind, terminal = false } = {}) => !terminal && !!kind && (isGeneralKind(kind) || kind === "reply");
+// ...a live CODING terminal, that is: a general agent's own chat is a session too (mode "assistant"), and its task stays home
+export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
 export const taskSections = (home) => (home ? SECTIONS.filter((s) => s.key !== "close") : SECTIONS);
 export const homeSection = (home, here) => (home ? "agent" : here);
 // ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four

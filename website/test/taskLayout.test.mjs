@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, chatHome, homeSection, taskSections, cameFrom, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, chatHome, homeSection, liveTerminal, taskSections, cameFrom, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -331,6 +331,17 @@ test("a task whose home is the chat shows Came from and the agent, and opens on 
   assert.equal(chatHome({ kind: "coding" }), false);
   assert.equal(chatHome({ kind: "task" }), false);
   assert.equal(chatHome({ kind: "general", terminal: true }), false);
+  // ...nor a kind not known yet: a coding task never draws two sections before its detail lands
+  assert.equal(chatHome({}), false);
+  assert.equal(chatHome({ kind: "" }), false);
+  // ...and the terminal that keeps three is a coding one: a general agent's own live chat ("assistant" mode) is still home
+  assert.equal(liveTerminal({ alive: true, mode: "pty" }), true);
+  assert.equal(liveTerminal({ alive: true }), true);
+  assert.equal(liveTerminal({ alive: true, mode: "assistant" }), false);
+  assert.equal(liveTerminal({ alive: false, mode: "pty" }), false);
+  assert.equal(liveTerminal(null), false);
+  assert.equal(liveTerminal(undefined), false);
+  assert.equal(chatHome({ kind: "general", terminal: liveTerminal({ alive: true, mode: "assistant" }) }), true);
   assert.deepEqual(taskSections(true).map((s) => s.key), ["from", "agent"]);
   assert.equal(taskSections(false), SECTIONS);
   assert.equal(homeSection(true, "close"), "agent");
@@ -338,8 +349,11 @@ test("a task whose home is the chat shows Came from and the agent, and opens on 
   const src = taskSource();
   assert.match(src, /function useTaskMoves\(sec, home = false\)/);
   assert.match(src, /close = home \? sec === "agent" : sec === "close"/);
-  assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: !!term\?\.alive && term\.mode !== "assistant" \}\), secs = taskSections\(home\)/);
+  assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: liveTerminal\(term\) \}\), secs = taskSections\(home\)/);
   // ...and until 4.2 Close out's slot is still drawn beside them, so a draft waiting on Send is never out of reach
   assert.match(src, /const slots = CARDS_IN_SUMMARY \? secs : SECTIONS/);
   assert.match(src, /const CARDS_IN_SUMMARY = false;/);
+  // ...and a live agent's slim strip carries Mark done where the chat is home - Close out is no tab of its own there
+  assert.match(src, /const liveMoves = useSpineVerbs\("live"\), \{ done \} = useTaskMoves\(sec, home\);/);
+  assert.match(src, /\{home && done\.length > 0 && <Box data-tq-live-done=""/);
 });

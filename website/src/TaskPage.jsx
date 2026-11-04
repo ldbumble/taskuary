@@ -96,7 +96,7 @@ import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { CLOSED, REOPEN_MARKED, takeReopen } from "./reopenFromSearch.js";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, cameFrom, chatHome, homeSection, taskSections, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, cameFrom, chatHome, homeSection, liveTerminal, taskSections, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -615,7 +615,7 @@ const PairGlyph = ({ two }) => <svg width="14" height="12" viewBox="0 0 14 12" a
 // ...`pair`: the side-by-side toggle ({ on, with, flip }; none where two halves would not be readable or an agent is live). Paired, the arrow
 // toward the other open half is gone and the outer one slides the pair along, keeping this pane
 export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS, pair = null, home = false }) {
-  const liveMoves = useSpineVerbs("live");
+  const liveMoves = useSpineVerbs("live"), { done } = useTaskMoves(sec, home);
   const arrows = foldArrows(keys, sec).map(([side, mark, to]) => ({ side, mark, to: fold(to) })).filter((a) => !pair?.on || a.to !== pair.with);
   const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${name} back`}
     title={pair?.on ? `Show ${SEC_NAME[a.to] || a.to} beside ${name}` : `Fold ${name} back to its tab`}
@@ -629,7 +629,11 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
       {arrows.filter((a) => a.side === "left").map(arrow)}
       {!live && <Typography data-tq-strip-name="" sx={{ ...SECTION_NAME, flexShrink: 0 }}>{name}</Typography>}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
-        {live ? <Box sx={{ display: "flex", gap: 0.5 }}>
+        {live ? <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+            {/* ...and where the chat is home, Mark done beside Stop (the owner's ruling, phase 4): Close out is no tab of its own to carry it
+                there - a press stops and saves first, as it did from Close out */}
+            {home && done.length > 0 && <Box data-tq-live-done="" sx={{ ...MOVE_LOOK, display: "flex", gap: 0.5, "& .tq-ab": { minHeight: 24, py: 0.1, fontSize: 12 } }}>
+              {done.map((v) => stageBtn(v, v.label, true))}</Box>}
             {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" data-tq-verb="save-end" aria-label={btn("stop_agent")} onClick={onStop}
               sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} />
               <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}</Box>
@@ -1677,7 +1681,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
   // WHERE THE CHAT IS HOME (taskLayout.chatHome): a general or reply task is Came from | Agent and opens on the agent - a general agent's
   // own live chat ("assistant" mode) is still home; a coding terminal is not
-  const home = chatHome({ kind: t?.Kind, terminal: !!term?.alive && term.mode !== "assistant" }), secs = taskSections(home);
+  const home = chatHome({ kind: t?.Kind, terminal: liveTerminal(term) }), secs = taskSections(home);
   // ...Close out's slot stays drawn there until its draft cards live in the agent's summary (Task 4.2 sets CARDS_IN_SUMMARY), so a draft
   // waiting on Send is never out of reach between the two
   const slots = CARDS_IN_SUMMARY ? secs : SECTIONS, slotKeys = slots.map((s) => s.key);
@@ -1765,14 +1769,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const advisedHeld = liveSession || liveRun ? "" : advised;
   // ...nor the task's status under a live agent (the overnight run, 2026-11-03): Approve on a general agent's held delete moved the task from
   // waiting to in progress, the page re-read where it was up to with the step still listed, and jumped to an empty Close out over the agent
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${liveSession ? "live" : t?.Status}|${advisedHeld}|${!!writingUp}`;
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${liveSession ? "live" : t?.Status}|${advisedHeld}|${!!writingUp}|${home}`;
   if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : homeSection(home, sectionHere({ stage: taskStage, advised: advisedHeld })) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
   // with an agent that already ended (in_progress -> open lands seconds after Stop and save: Close out, pressed in between, folded back)
-  const pickKey = `${selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${["done", "dropped"].includes(t?.Status)}`;
-  const section = threeUp ? (secPick.key === pickKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = homeSection(home, sectionHere({ stage: taskStage, advised }));
+  const pickKey = `${selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${["done", "dropped"].includes(t?.Status)}|${home}`;
+  // ...and never a section the task no longer lays (a held Close out once a chat-home task drops it): its home instead
+  const picked = secPick.key === pickKey ? secPick.sec : mainHeld.current.sec;
+  const section = threeUp ? (!picked || slotKeys.includes(picked) ? picked : "agent") : null, hereSec = homeSection(home, sectionHere({ stage: taskStage, advised }));
   // ...and the Advisor's line stands in that section, the one it is about
   const adviceIn = advisorAt(advised);
   // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -
@@ -1817,7 +1823,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // that grew by the strip's height while away refit the terminal and sent the pty a resize
         ...(inRow && sessionView && k === "agent" && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
         {!isOpen(k) && tabFor(k)}
-        {stripOn(k) && <PaneStrip sec={k} home={home} keys={slotKeys} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
+        {stripOn(k) && <PaneStrip sec={k} home={home} keys={slotKeys} live={sessionView && k === "agent"} skip={stripSkip[k]}
+          fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
           onStop={sessionView && k === "agent" ? () => press("save-end") : null}
           pair={canPair ? { on: paired, with: paired ? slots.find((s) => s.key !== k && isOpen(s.key))?.key : null, flip: pairFlip(k) } : null} />}
         {body}</Box>);
@@ -3370,7 +3377,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
                 {/* ...and in the three sections it is the third, its own section - beside a live agent too, a slim tab */}
-                {(!sessionView || threeUp) && slotKeys.includes("close") && slot("close", <Box ref={closeOutRef} data-tq-closeout="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Close out" : undefined}
+                {(!sessionView || threeUp) && slotKeys.includes("close") && slot("close", <Box ref={closeOutRef} data-tq-closeout=""
+                  role={threeUp ? "region" : undefined} aria-label={threeUp ? "Close out" : undefined}
                   sx={threeUp ? { ...SECTION(isOpen("close"), openW("close")), "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }
                   : { ...card, ...step, borderTop: 0, mt: 1, px: 0, py: shows("reply") ? 1.25 : 1, flexShrink: 0,
                   // ...side by side only: a phone's stacked view scrolls whole under its own docked row

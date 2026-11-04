@@ -434,6 +434,8 @@ def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
     for _ in range(2):                                         # WHY and FILES, in either order, each at the very end
         out, f = files_said(out); out, w = why_said(out)
         files, why = (files if f is None else f), why or w
+    # ...and with its control lines off, nothing left is no draft: it fails, said, and never lands on the card as an empty reply
+    if not out.strip(): raise RuntimeError('the AI wrote no reply - only its note on why' if why else 'the AI wrote no reply - only the files it would send')
     return out, files, why
 
 
@@ -442,10 +444,16 @@ def why_said(out: str) -> tuple:
     ls = out.rstrip().split(chr(10))
     ne = [i for i, l in enumerate(ls) if l.strip() and not l.strip().upper().startswith(FILES)]     # FILES lines are control lines: not counted
     # a WHY is the last line, or one or two lines set off by a blank line (the rule asks for one): "Why: ..." inside the reply is the reply's
-    i = next((i for i in reversed(ne[-2:]) if ls[i].strip().upper().startswith(WHY) and (i == ne[-1] or (len(ne) - ne.index(i) <= 2 and (i == 0 or not ls[i - 1].strip())))), None)
-    if i is None: return out, None
-    end = ne[-1] + 1
-    return chr(10).join(ls[:i] + ls[end:]).rstrip(), ' '.join(' '.join(ls[i:end]).strip()[len(WHY):].split()) or None
+    # ...and its second line is its own only when it follows at once: a WHY put FIRST, a blank, then a one-line chat reply, read the reply as
+    # the WHY's wrap and took it too - the draft came back empty, and the empty text went on the card (2026-11-04)
+    w = lambda i: ls[i].strip().upper().startswith(WHY)
+    said = lambda xs: ' '.join(' '.join(xs).strip()[len(WHY):].split()) or None
+    i = next((i for i in reversed(ne[-2:]) if w(i) and i != ne[0] and (i == ne[-1] or (ne[-1] == i + 1 and not ls[i - 1].strip()))), None)
+    if i is not None: end = ne[-1] + 1; return chr(10).join(ls[:i] + ls[end:]).rstrip(), said(ls[i:end])
+    # ...and a WHY put first is the writer's note all the same: its paragraph comes off, and the reply under it stays
+    if not ne or not w(ne[0]): return out, None
+    end = next((j for j in range(ne[0], len(ls)) if not ls[j].strip()), len(ls))
+    return chr(10).join(ls[:ne[0]] + ls[end:]).strip(), said(ls[ne[0]:end])
 
 
 def files_said(out: str) -> tuple:

@@ -184,6 +184,8 @@ def fast_args(cli: str) -> list:
     return []
 
 
+ONE_SHOT = 1500        # seconds a one-shot look-up through a CLI may run (make_cli_llm); an agent run has no such limit
+
 # the CLIs whose PreToolUse hook can REFUSE a shell call, so a browser act can be held (browsergate.py's header says why the rest can't)
 HOLDS_CLI = frozenset({'claude'})
 
@@ -304,9 +306,13 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     # minutes on a mail run is a bug. An agent the owner scheduled INTO a repo (cwd) is not
     # classifying: it researches, reads the systems it has tools for and writes a document. Same
     # rule as the flags above - the classifier gets the short leash, the owner's agent keeps its
-    # profile (run_cli's own default is 1200s). The cap cut two of one report's four runs off at
-    # exactly "timed out after 300s" (2026-09-03).
-    if not (cwd or cli_tools or research): prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
+    # profile. The cap cut two of one report's four runs off at exactly "timed out after 300s" (2026-09-03).
+    # ...and AN AGENT RUN IS NEVER KILLED FOR RUNNING LONG (the owner, 2026-11-04: "we can't have timeout as it's an active agent"): a
+    # general agent's turn, or a run with hands, ends when the agent finishes or the owner presses Stop. The CLI profiles' 1500 s killed a
+    # marketing plan, a site and a zip of materials mid-build - a saved profile may still carry it, so it is dropped here, not just unset
+    if str(keep or '').startswith('general:') or cwd or cli_tools: prof.pop('timeout', None)
+    elif not research: prof['timeout'] = min(int(prof.get('timeout') or 300), 300)
+    else: prof['timeout'] = int(prof.get('timeout') or ONE_SHOT)     # a look-up is one-shot: it keeps a leash
     def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None):
         """max_tokens is advisory here - a CLI has no such flag; the system prompt already says
         how long the answer should be. `images` is accepted and dropped: a CLI reads files off

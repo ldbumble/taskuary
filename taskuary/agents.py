@@ -12,6 +12,7 @@ from loguru import logger
 from . import acp as acp_mod, pathcache, redact, spawn
 from .store import task_ref
 from .clis import preset_args
+from .clipool import TimedOut
 
 _CLI_CHILDREN = set()
 _CLI_CHILDREN_LOCK = threading.Lock()
@@ -1252,7 +1253,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
 
     try:
         client = acp_mod.ACPClient(cmd[0], cmd[1:], cwd=cwd, env=env,
-                                   timeout=profile.get('timeout', 1200), on_update=acp_tracer(trace, name))
+                                   timeout=profile.get('timeout'), on_update=acp_tracer(trace, name))
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)
@@ -1365,9 +1366,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # which() found something that cannot be executed from here. "Not installed" sent people
         # off to reinstall a CLI that was already there; the reason is in denied_msg.
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
-    timed = threading.Event()
-    killer = threading.Timer(profile.get('timeout', 1200), lambda: (timed.set(), p.kill()))
-    killer.start()
+    # A LEASH ONLY WHEN THE CALLER GAVE ONE (llm.make_cli_llm): a one-shot look-up has its limit; an agent run has none and ends when it
+    # finishes or the owner stops it (the owner, 2026-11-04: "we can't have timeout as it's an active agent")
+    timed, limit = threading.Event(), profile.get('timeout')
+    killer = threading.Timer(limit or 0, lambda: (timed.set(), p.kill()))
+    if limit: killer.start()
     # A browser Cancel closes the streaming response. Kill the CLI too; otherwise the UI says
     # stopped while an invisible agent keeps using tools in the background.
     if cancel is not None:
@@ -1488,7 +1491,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         if cancel is not None and cancel.is_set(): raise RuntimeError('cancelled')
         err = ''.join(err_buf)
         said = cli_failure(raw, err)
-        why = (f'timed out after {profile.get("timeout", 1200)}s' if timed.is_set() else said)[:500]
+        why = (f'timed out after {limit}s' if timed.is_set() else said)[:500]
         # the CLASSIFYING patterns read both streams: a sign-in refusal or a Windows launch
         # refusal lands on stderr, while the reason the owner reads now comes off stdout
         hay = f'{said}\n{err}'
@@ -1499,6 +1502,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         # only thing on stderr is the refusal
         if _DENIED.search(hay) and not raw: raise RuntimeError(denied_msg(name, cmd[0] if cmd else '', said))
         if _NO_HOME.search(hay): raise RuntimeError(no_home_msg(_cli_name(name) or name))
+        if timed.is_set(): raise TimedOut(f'{name} exit {p.returncode}: {why}', streamed_sid or (final or {}).get('session_id'))
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     # OpenCode can report provider errors in JSON while its process exits successfully.
     if stream_error: raise RuntimeError(f'{name}: {redact.scrub(stream_error)[:500]}')
@@ -1628,12 +1632,13 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         # turn again after any end; one with tools may have done work mid-turn, and never is
         bare = '--tools' in cmd and cmd.index('--tools') + 1 < len(cmd) and cmd[cmd.index('--tools') + 1] == ''
         final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=spawn_env(profile, extra_env),
-                                 resume=resume, cancel=cancel, timeout=profile.get('timeout', 1200), resend=bare)
+                                 resume=resume, cancel=cancel, timeout=profile.get('timeout'), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     except RuntimeError as e:
         said = str(e)
         if said == 'cancelled': raise
+        if isinstance(e, clipool.TimedOut): raise clipool.TimedOut(f'{name}: {said[:500]}', e.session_id) from e
         limit = rate_limited(said)
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))

@@ -41,7 +41,7 @@ def test_command_only_claude_gets_headless_defaults_on_migration_and_legacy_crea
     connection = cfg['cli_connections']['claude']
     assert connection['args'] == ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose']
     assert connection['resume_args'] == ['--resume']
-    assert connection['timeout'] == 1500
+    assert 'timeout' not in connection          # an agent run has no time limit (the owner, 2026-11-04)
     assert not cli_connections.migrate(cfg)
     cfg['cli_connections']['claude'] = {'cmd': 'claude'}
     assert cli_connections.migrate(cfg)  # repair configs already split by the earlier migration

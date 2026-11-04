@@ -576,6 +576,14 @@ def run_failed(store, tid, live_too: bool = False) -> dict | None:
     return {'sentence': _sentence(c['sentence']), 'fix': c['fix']}
 
 
+def timed_out(store, tid) -> str:
+    "The run's own sentence when its last word is a turn that ran out of time (general.TIMED_OUT), nothing live on it - else ''."
+    from . import general, workerstate
+    last = store.last_worker_event(tid, skip=workerstate.NOTES)
+    ok = last and last['Kind'] == 'stopped' and last.get('Source') == general.TIMED_OUT and workerstate.ended(store, tid) == 'stopped'
+    return str(last.get('Text') or '') if ok else ''
+
+
 def idle_state(store, tid) -> dict:
     """Why nothing is running on a task that was handed to an agent and never began: {'kind', 'line', 'row'}.
 
@@ -603,6 +611,9 @@ def idle_state(store, tid) -> dict:
     out = lambda kind, line, row='': {'kind': kind, 'line': line, 'row': row}
     news = news_since_agent(store, tid)
     if news: return out('news', news_line(store, tid, news))
+    # ...and a run that RAN OUT OF TIME says so in its own words, whatever mark the task wears: "You stopped it" stood over a turn killed at
+    # its limit, the owner having stopped nothing (2026-11-04) - it paused, and Continue picks it up (general.TIMED_OUT)
+    if (to := timed_out(store, tid)): return out('left', to, 'cut off by a time limit - continue it')
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
         return out('saved', 'You stopped it and its report is written.')     # the moves are the item's own buttons (news_line)
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
@@ -722,7 +733,7 @@ def agent_story(store, tid) -> dict | None:
     owner, 2026-10-11: "it should say what the agent did so far and was interrupted or it never started"). Facts only:
     not_started_why's sentence, and for work that went, the run's own worker events - no model. None when no agent
     was ever meant to have the task. The caller hides it behind a live session."""
-    from . import terminal
+    from . import general, terminal
     t = store.get_task(tid) or {}
     if not t or t.get('Status') in ('done', 'dropped'): return None
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
@@ -760,7 +771,8 @@ def agent_story(store, tid) -> dict | None:
     for e in run:
         k, src = e['Kind'], e.get('Source')
         w = ('Started' if not steps else None) if k == 'working' else \
-            (f'Cut off - Taskuary {how}' if src in terminal.INTERRUPTING else 'Session ended') if k == 'disconnected' else _EVENT_SAYS.get(k)
+            (f'Cut off - Taskuary {how}' if src in terminal.INTERRUPTING else 'Session ended') if k == 'disconnected' else \
+            'Cut off by a time limit' if k == 'stopped' and src == general.TIMED_OUT else _EVENT_SAYS.get(k)
         if w and (not steps or steps[-1]['text'] != w):
             steps.append({'at': e['CreatedAt'], 'text': w, 'cut': k == 'disconnected' and src in terminal.INTERRUPTING})
     if len(steps) > 8: steps = steps[:1] + steps[-7:]

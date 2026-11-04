@@ -114,16 +114,17 @@ class AgentSourceTests(unittest.TestCase):
             head, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {'type': 'agent', 'prompt': 'top 15 trending'}))
         self.assertIn('| a/b | Go | 900 |', body); self.assertIn('claude ran a prompt', head)
 
-    def test_a_scheduled_agent_keeps_its_timeout_and_the_classifier_keeps_the_short_leash(self):
+    def test_a_scheduled_agent_has_no_time_limit_and_the_classifier_keeps_the_short_leash(self):
         """Two of that report's four runs died at exactly "timed out after 300s": the 300s cap belongs
-        to the classifier reading one message, not to an agent the owner scheduled into a repo to research."""
+        to the classifier reading one message, not to an agent the owner scheduled into a repo to research - which is an agent run, and
+        is never killed for running long (the owner, 2026-11-04)."""
         from taskuary import llm as llm_mod
         self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'timeout': 1500}))
         seen = {}
         def run_cli(prof, prompt, trace, resume=None): seen['timeout'] = prof.get('timeout'); return 'ok', None, None
         with mock.patch('taskuary.agents.run_cli', run_cli):
             llm_mod.make_cli_llm(self.s, 'coding', cwd='C:/work/census')('SYS', 'USER')
-            self.assertEqual(seen['timeout'], 1500)
+            self.assertIsNone(seen['timeout'])
             llm_mod.make_cli_llm(self.s, 'coding')('SYS', 'USER')
             self.assertEqual(seen['timeout'], 300)
             llm_mod.make_cli_llm(self.s, 'coding', read_only=True, research=True)('SYS', 'USER')

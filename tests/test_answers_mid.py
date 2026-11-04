@@ -79,3 +79,35 @@ def test_a_plain_re_save_keeps_the_answers_mid_already_pinned():
     s.set_review_answers(rid, ids[0])
     wrapup.agent_reply(s, tid, 'Hi Ray - second.', 'coding')
     assert s.get_review(rid)['AnswersMid'] == ids[0]
+
+
+def drafted(s, tid, ids, said, channel=None):
+    from taskuary import responder
+    if channel: s.cx.execute('UPDATE message SET Channel=?', (channel,))
+    rid = s.add_review({'TaskId': tid, 'MessageId': ids[2], 'Kind': 'draft_reply', 'Status': 'pending'})
+    responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: said)
+    return rid
+
+
+def test_why_is_taken_off_and_kept():
+    s, tid, ids = thread(asks=[0], aside=[1, 2])
+    r = s.get_review(drafted(s, tid, ids, 'Friday works.' + chr(10) + 'WHY: He asked for a pay date; the run is Friday.' + chr(10) + 'FILES PROMISED: unnamed'))
+    assert r['DraftText'].startswith('Friday works.') and 'WHY:' not in r['DraftText'] and r['DraftWhy'].startswith('He asked') and r['FilesPromised'] == '{"named": []}'
+
+
+def test_the_drafter_answers_the_ask_to_everyone_on_it():
+    s, tid, ids = thread(asks=[0], aside=[1, 2])
+    rid = drafted(s, tid, ids, 'Hi Ray - done.'); r, env = s.get_review(rid), s.review_envelope(rid)
+    assert (r['AnswersMid'], r['MessageId']) == (ids[0], ids[2]) and 'ray@northwind.example' in json.dumps(env['to']) and 'gail@northwind.example' in json.dumps(env['cc'])
+
+
+def test_a_chat_has_no_reply_all():
+    s, tid, ids = thread(asks=[0], aside=[1, 2])
+    rid = drafted(s, tid, ids, 'Hi Ray - done.', channel='teams')
+    assert s.review_envelope(rid) == {} and s.get_review(rid)['AnswersMid'] == ids[0]
+
+
+def test_no_reading_no_change():
+    s, tid, ids = thread()
+    rid = drafted(s, tid, ids, 'Hi Ray - done.'); r = s.get_review(rid)
+    assert r['AnswersMid'] is None and not r['DraftWhy'] and r['MessageId'] == ids[2]

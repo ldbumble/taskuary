@@ -357,7 +357,10 @@ export const asPressed = (items, { leaving = null, continuing = null, read = nul
 // ...and a put-down has LANDED when the server's pile no longer has the row - or has it put away: Remind me keeps the task on the
 // rail under For later (`deferred`), so waiting for it to vanish hid a reminded task until a reload (UX walk, 2026-10-22) - and Watch it
 // keeps it under Watching (`watching`, watch.py)
-export const putDownLanded = (items, tid) => { const r = (items || []).find((i) => i.tid === tid); return !r || !!r.deferred || !!r.watching; };
+// ...put away BY THE PRESS, against `was`, the row as it stood when pressed (the owner, 2026-11-04): Mark done on a row already under
+// Watching read the pile it was pressed on as landed - the row was drawn on the rail again until the server's answer took it off
+export const putDownLanded = (items, tid, was = null) => { const r = (items || []).find((i) => i.tid === tid);
+  return !r || (!!r.deferred && !was?.deferred) || (!!r.watching && !was?.watching); };
 // when a For later row comes back: its Remind me date (an open task walked past has no clock - it is back with the next walk)
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said by timeWords.bandUntil, and every other gutter age by timeWords.band - one rule for how a time reads

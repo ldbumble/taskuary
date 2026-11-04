@@ -1203,6 +1203,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // sat on the rail as an open task already seen: under For later (the owner, 2026-10-01: "it first went to Later ... and
   // did not disappear right away"). Held until the pile no longer carries it, so a reopened task is never hidden.
   const [leavingTid, setLeavingTid] = useState(null);
+  const leavingWas = useRef(null);                   // the row being put down, as it stood at the press (funnelPile.putDownLanded)
   // ...and the rows a walk press READS (rule 4), by key: {keys, coming, after} - `coming` the fyi batch below them, `after` the rail they
   // wait out when the answer brought none (surface)
   const [readGone, setReadGone] = useState(null);
@@ -3348,7 +3349,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { if (!readGone?.after) return;
     if (pile !== readGone.after || !(pile?.items || []).some((i) => readGone.keys.some((k) => answersTo(i, k)))) setReadGone(null); }, [pile, readGone]);
   useEffect(() => {                                   // the close has landed: the server's pile no longer has it, or has it For later
-    if (leavingTid && pile?.items && putDownLanded(pile.items, leavingTid)) setLeavingTid(null);
+    if (leavingTid && pile?.items && putDownLanded(pile.items, leavingTid, leavingWas.current)) setLeavingTid(null);
   }, [pile, leavingTid]);
   useEffect(() => {                                   // ...and the continue has: the server's pile has it working (or not at all)
     const row = continuingTid && pile?.items ? pile.items.find((i) => i.tid === continuingTid) : undefined;
@@ -3365,7 +3366,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the close and the walk's answer are out;
     // a close that fails unfolds it and says why
-    putDown: (key, tid = null) => { leftKey.current = key; setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); },
+    putDown: (key, tid = null) => { leftKey.current = key; setExpanded(false); setFoldedKey(key); setNextComing(true);
+      leavingWas.current = (pileRef.current?.items || []).find((i) => i.tid === tid) || null; setLeavingTid(tid); },
     pickUp: (key, why) => { leftKey.current = null; setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
     [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line, litNow?.hand?.to, litNow?.hand?.note, noteAdvice?.for, noteAdvice?.state, noteAdvice?.line, noteAdvice?.verb]);   // eslint-disable-line react-hooks/exhaustive-deps
   const lastCardIdx = useMemo(() => { const i = tableCardIndex(shown, old ? null : current || cardKey), c = shown[i]?.card;

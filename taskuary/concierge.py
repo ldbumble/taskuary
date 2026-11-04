@@ -3373,8 +3373,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         want = str(params.get('role') or '').strip().lower()
         hit = want if want in roles.ROLES else next((k for k, v in roles.ROLES.items() if want and want in v['title'].lower()), None)
         if not hit: raise CallMiss('The roles I can set up: ' + '; '.join(f"{k} ({v['title']})" for k, v in roles.ROLES.items()) + '. Nothing was set up.')
-        # a yes/no the model may write as words: anything but an explicit yes keeps the owner's mail where it goes today
-        return role_card(store, tid, hit, params.get('portal'), str(params.get('route_mail')).strip().lower() in ('true', 'yes', '1'), item, actor)
+        return role_card(store, tid, hit, params.get('portal'), item, actor)
     # THE DRAFTS IN TURN (the owner, 2026-10-20: "approve all drafts - each draft still goes through its own Send"): the next one comes up
     # with Send lit, and the line says how many wait - never sent from here. On a phone the next draft is the walk's card, its Send a choice
     if kind == 'review.each':
@@ -5145,39 +5144,38 @@ SCOPE_SAYS = {'read': 'it can read, never change or send', 'write': 'it can read
 
 
 ROLE_READ_SYSTEM = ('You read the owner\'s answer to set-up questions. Answer JSON only: {"portal": "<the web address they gave, '
-                    'or empty>", "route_mail": true | false}. route_mail is true only when they clearly want their own non-coding '
-                    'mail to go to the new worker from now on; trying it out, testing, not yet, or no answer is false.')
+                    'or empty>"}.')
 
 
 def _propose_role(store, tid: int, ask: str, role: str, item: dict | None, actor: str, llm, answers: dict = None) -> dict:
     """A role (roles.py), walked: the questions it needs, asked once as a numbered list; the answer read for intent by the
-    model (never by matching words); then the whole set-up on ONE card - worker, playbooks, workflow, where the mail goes."""
+    model (never by matching words); then the whole set-up on ONE card - worker, playbooks, workflow. Where the mail goes is not
+    asked: a task's general work runs on the assistant (the owner, 2026-11-04)."""
     from . import compose, roles
     r = roles.ROLES[role]
     rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
     if answers is None:
-        qs = ((['What is the address of your bill-approval portal? Say skip to add it later.'] if r.get('workflow') else [])
-              + [f"Should your own non-coding mail go to the {r['profile'].upper()} worker from now on, or are you only trying it out?"])
+        qs = ['What is the address of your bill-approval portal? Say skip to add it later.'] if r.get('workflow') else []
+        if not qs: return role_card(store, tid, role, '', item, actor)      # nothing to ask: straight to the card
         say_ = f"To set Taskuary up for {r['title'].lower()}:\n" + '\n'.join(f"{n}. {q}" for n, q in enumerate(qs, 1)) + '\n\nNothing is set up yet.'
         rec(say_, {'kind': SETUP_QUESTIONS, 'ask': ask, 'questions': qs, 'role': role})
         return {'say': say_, 'options': [], 'decision': None}
     try: got = compose._json(llm(ROLE_READ_SYSTEM, json.dumps(answers), max_tokens=200)) or {}
     except Exception as e:
         logger.warning(f'concierge: reading the role answers failed - {e}'); got = {}
-    return role_card(store, tid, role, got.get('portal'), got.get('route_mail') is True, item, actor)
+    return role_card(store, tid, role, got.get('portal'), item, actor)
 
 
-def role_card(store, tid: int, role: str, portal, route: bool, item: dict | None, actor: str) -> dict:
+def role_card(store, tid: int, role: str, portal, item: dict | None, actor: str) -> dict:
     """The Set it up card for a role - what it lays out, line by line, before the owner's yes."""
     from . import playbooks, roles
     r = roles.ROLES[role]
     portal = str(portal or '').strip()
     if portal and '://' not in portal: portal = 'https://' + portal
-    params = {'role': role, 'portal': portal, 'route_mail': bool(route)}
+    params = {'role': role, 'portal': portal}
     wf = r.get('workflow') or {}
     lines = [f"Worker: {r['profile'].upper()}.md",
              'Playbooks: ' + '; '.join(playbooks.parse(roles.playbook_text(b))['title'] for b in r['playbooks']),
-             'Your mail: ' + ('non-coding mail goes to the worker' if route else 'goes where it goes today'),
              *([f"Ledger: {(store.get_connector_by_type(r['ledger']) or {}).get('Name') or r['ledger']} set to read if nobody chose its "
                 'authority, so nothing reaches it without your click'] if r.get('ledger') else []),
              *([f"Routine: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
@@ -5389,10 +5387,6 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'role.apply' and o.get('role'):
         bits = [f"the {o['profile'].upper()} agent is {'added' if o.get('profile_added') else 'already here'}"]
         if o.get('playbooks_added'): bits.append(f"{plural(len(o['playbooks_added']), 'playbook')} added")
-        bits.append('your non-coding mail goes to it' if o.get('mail_routed') else
-                    "nothing is sent to it by default, though it is on the list new mail is sorted to, so mail that reads as its work can still "
-                    'reach it - turn off "Can be given new work from what comes in" on its profile to stop that' if o.get('on_roster') else
-                    'your mail goes where it went before')
         if o.get('ledger_narrowed'): bits.append(f"{o['ledger_narrowed']} is set to read, so nothing reaches it without your click")
         flow = (f" \"{o['workflow_title']}\" is under Reports, switched off. Say run it and I'll start it once - "
                 'when it stops at the sign-in, sign in yourself in the browser beside the chat.') if o.get('workflow_id') else ''

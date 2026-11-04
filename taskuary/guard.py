@@ -196,7 +196,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/(ai/defaults|setup/(adopt-brain|dismiss|seen|walk|walk/reset)|knowledge/reindex|calendar/prep(are)?|prompt-image)$',
      "set-up, the brains, the index and the owner's own starts"),
     (r'POST', r'^/api/reports/(\d+/replay|due)$', "replaying a judge or running every due report is the owner's"),
-    (r'POST', r'^/api/roles/[a-z0-9_-]+$', "a role decides where the owner's mail goes and narrows a ledger's authority"),
+    (r'POST', r'^/api/roles/[a-z0-9_-]+$', "a role adds a worker and a workflow and narrows a ledger's authority"),
     (r'POST', r'^/api/platform/macos/(open-settings|probe)$', "operating-system permission prompts are the owner's"),
     (r'POST', r'^/api/deleted/\d+/restore$', "Undo and Restore put back what the owner removed - a report, a rule, a profile, a sign-in (recentlydeleted)"),
     (r'POST|PUT', r'^/api/voice/(transcribe|vocabulary|speech-on|listen(/[0-9a-f]+/stop)?)$', "the owner's microphone and vocabulary"),

@@ -86,6 +86,34 @@ def seed():
     return out[-1] if out else ''
 
 
+def reflowing(n: int):
+    """FAKE_CLAUDE_HISTORY=n: n lines of history, and on every change of the pty's size the whole of it cleared and printed again a few
+    lines at a time - what Codex (and Claude Code) do on a resize, the reprint the pane must not show (browser/terminal-split.test.mjs).
+    FAKE_CLAUDE_TICK=s: a working agent, one more line of output every s seconds."""
+    import threading
+    line = lambda i: f'history line {i:03d} - the vendor export, step {i}\r\n'
+    lines, lock, tick = [line(i) for i in range(n)], threading.Lock(), env('FAKE_CLAUDE_TICK', 0)
+    def paint(clear):
+        with lock:
+            if clear: sys.stdout.write('\x1b[H\x1b[2J\x1b[3J')
+            for i in range(0, len(lines), 8): sys.stdout.write(''.join(lines[i:i + 8])); sys.stdout.flush(); time.sleep(.015)
+            sys.stdout.write('> '); sys.stdout.flush()
+    def size():
+        try: return os.get_terminal_size(sys.__stdout__.fileno())
+        except OSError: return None
+    def watch(was):
+        while True:
+            time.sleep(.05)
+            if (now := size()) != was: was = now; paint(True)
+    def work():
+        while True:
+            time.sleep(tick)
+            with lock: lines.append(line(len(lines))); sys.stdout.write('\r\x1b[2K' + lines[-1] + '> '); sys.stdout.flush()
+    paint(False)
+    threading.Thread(target=watch, args=(size(),), daemon=True).start()
+    if tick: threading.Thread(target=work, daemon=True).start()
+
+
 def interactive():
     """`claude` with no -p, as a coding agent runs it in a pty: the seed answered, then each line typed answered, until the pty goes.
     The rules match anywhere in what was said - a coding seed is Taskuary's whole prompt, not "The owner says: ..." (browser/agent-presses)."""
@@ -98,6 +126,7 @@ def interactive():
         else: reply = 'Ok.'
         sys.stdout.write(f'\r\n● {reply}\r\n\r\n> '); sys.stdout.flush()
     sys.stdout.write(f'fake claude - session {sid}\r\n'); sys.stdout.flush()
+    if os.environ.get('FAKE_CLAUDE_HISTORY'): reflowing(int(os.environ['FAKE_CLAUDE_HISTORY']))
     first = seed()
     if first: say(first)
     else: sys.stdout.write('> '); sys.stdout.flush()

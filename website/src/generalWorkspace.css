@@ -31,6 +31,19 @@
 .tq-aui-signin { margin: 2px 0 10px; color: #3f423d; font-size: 13px; line-height: 1.5; }
 .tq-aui-signin a { color: #41525f; text-decoration: underline; text-underline-offset: 2px; }
 .tq-aui-asking-err { color: #8a2f2f; font-size: 11.5px; }
+/* ...and so is the agent's own question (2026-11-04): its sentence in the answer's type, the choices under it only when it gave real ones */
+.tq-aui-asked { margin: 2px 0 10px; display: flex; flex-direction: column; gap: 8px; }
+.tq-aui-asked-q { margin: 0; color: #292824; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* "WORKING ON THIS…" (2026-11-04): one quiet line while the turn runs, its steps folded under it; a finished turn's steps fold the same way */
+.tq-aui-working { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 12.5px; color: #6e685f; }
+.tq-aui-working em { font-style: normal; font-variant-numeric: tabular-nums; color: #8b877e; }
+.tq-aui-working-fold { margin: 0 0 8px; }
+.tq-aui-working-fold > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #6e685f; list-style: none; }
+.tq-aui-working-fold > summary::-webkit-details-marker { display: none; }
+.tq-aui-working-fold > summary::after { content: "▸"; font-size: 10px; color: #a9a294; }
+.tq-aui-working-fold[open] > summary::after { content: "▾"; }
+.tq-aui-working-fold > summary:hover { color: #292824; }
+.tq-aui-working-fold > .tq-aui-steps { margin-top: 6px; }
 /* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
    it to one word a line in a half-width chat (the 2026-10-08 portal run) */
 .tq-aui-progress { margin: 0 0 8px; border: 1px dashed #ddd7cd; border-radius: 9px; color: #77766f; font-size: 11.5px; }
@@ -56,18 +69,6 @@
 .tq-aui-band-head span { font-size: 12.5px; font-weight: 600; color: #292824; }
 .tq-aui-band-head em { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums;
   font: 500 11px/1.4 'Cascadia Mono', Consolas, monospace; color: #8b877e; }
-.tq-aui-band-now { margin-top: 5px; font-size: 13px; line-height: 1.5; color: #292824; overflow-wrap: anywhere; }
-.tq-aui-band-step { color: #8b877e; }
-.tq-aui-band-meter { display: flex; gap: 3px; margin-top: 7px; }
-.tq-aui-band-meter span { height: 3px; flex: 1; border-radius: 2px; background: #b9c4b6; }
-.tq-aui-band-meter span.on { background: #6f8a6e; animation: tqAuiPulse 1.2s ease-in-out infinite; }
-.tq-aui-band-trail { margin-top: 7px; font: 11.5px/1.7 'Cascadia Mono', Consolas, monospace; color: #8b877e; }
-.tq-aui-band-so { margin-top: 8px; padding-top: 7px; border-top: 1px dashed #e0dad0; }
-.tq-aui-band-so > span { display: block; margin-bottom: 3px; font: 600 9.5px/1.4 'Cascadia Mono', Consolas, monospace;
-  letter-spacing: .13em; text-transform: uppercase; color: #8b877e; }
-.tq-aui-band-so > div { font-size: 12.5px; line-height: 1.8; color: #292824; }
-.tq-aui-band-so em { font-style: normal; background: #eee9df; border-radius: 3px; padding: 1px 5px;
-  margin-right: 4px; white-space: nowrap; }
 @media (max-width: 700px) { .tq-aui-band { width: 100%; } }
 
 /* A finished tool call is history. Six of them, each ending in the word COMPLETE - wrapped mid-word

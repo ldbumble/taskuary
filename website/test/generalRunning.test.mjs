@@ -9,11 +9,9 @@ test("a running turn says so, whichever backend is answering", () => {
   const view = read("GeneralWorkspace.jsx");
   assert.ok(view.includes("<ThreadPrimitive.If running>"), "the running thread must render something");
   // Both roads still say it - the pane that is streaming the answer, and a turn running without us.
-  // The DOCK says it with the dots it always had; a work window says it with the band, which also
-  // says who is working, what it is doing now, how long, and what it has got (agentWork.js).
-  // ...the band only while nothing else on screen shows it working: once its steps stream into the thread the dots alone
-  // say it is alive (the owner, 2026-10-14: "no need ... to tell you what it's doing in 2 places")
-  assert.match(view, /const atWork = dock \|\| work\?\.steps\?\.length \? <Thinking[\s\S]*?: <AgentBand/);
+  // The DOCK says it with the dots it always had; a work window with ONE QUIET LINE, "Working on this…" (the closeout-in-chat spec,
+  // 2026-11-04) - folded over the turn's steps once they stream in (WorkSteps), on its own until then (AtWork -> AgentBand)
+  assert.match(view, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork name=\{name\}/);
   assert.match(view, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
   assert.match(view, /\{serverBusy && atWork\}/);
   assert.match(view, /serverBusy=\{busy\} provider=\{session\?\.provider \|\| pickedLabel\} name=\{name\}/);
@@ -21,14 +19,13 @@ test("a running turn says so, whichever backend is answering", () => {
   assert.match(view, /const AgentBand = \(\{ name, provider, work, since, starting = "" \}\)/);
 });
 
-test("the band reports the turn, and never invents a total it was not told", () => {
+test("the working line reports the turn quietly, and never invents a total it was not told", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /work\.steps\.length > 1 && <span className="tq-aui-band-step"> — step \{work\.steps\.length\}/);
   assert.doesNotMatch(view, /of about/);                                            // no made-up denominator
   assert.match(view, /elapsedText\(now - since\)/);                                 // the turn's clock
-  assert.match(view, /what it has so far/);
+  assert.doesNotMatch(view, /tq-aui-band-meter|what it has so far/, "no meter or sources scrolling past - the steps fold under the line");
   const css = read("generalWorkspace.css");
-  assert.match(css, /\.tq-aui-band \{/);
+  assert.match(css, /\.tq-aui-working \{/);
   // ...and the six identical COMPLETEs go quiet, except in the dock, which is left as it was
   assert.match(css, /\.tq-aui-tool-complete summary em \{ display: none; \}/);
   assert.match(css, /\.tq-aui-dock \.tq-aui-tool-complete summary em \{ display: block; \}/);

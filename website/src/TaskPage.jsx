@@ -3271,11 +3271,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
                       // ...or says the agent's draft waiting in Close out (AgentDraftNotice.jsx), where its questions are asked
-                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking))": { display: "none" } } : {}) }}>
+                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking, .tq-aui-thread [data-tq-working]))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
-                        mails={storedMessages}
+                        mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere}
                         approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />

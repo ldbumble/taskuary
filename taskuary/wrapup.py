@@ -137,6 +137,16 @@ def reply_target(store, task_id: int):
     return own or (store.promised_in(store.get_task(task_id)) or {}).get('MessageId') or (rows[0]['MessageId'] if rows else None)
 
 
+def answers_for(store, task_id: int, mid: int, to: str = '') -> int | None:
+    """The mail that holds the ask a reply to `mid` answers: the newest of triage's asks that is on the task, in `mid`'s conversation, no newer than
+    `mid` - and, with `to`, written by the person `mid` is from. None when triage read no ask there: the reply then answers `mid` as it always did."""
+    conv, mine = (store.get_message(mid) or {}).get('ConversationId'), {m['MessageId'] for m in store.list_messages(task_id)}
+    asks = [a.get('mid') for a in (store.task_thread(task_id) or {}).get('asks') or [] if isinstance(a, dict)]
+    ok = [i for i in asks if isinstance(i, int) and i in mine and i <= mid and (store.get_message(i) or {}).get('ConversationId') == conv
+          and (not str(to or '').strip() or _person(store, i) == _person(store, mid))]
+    return max(ok, default=None)
+
+
 # WHO A REPLY IS TO IS THE AGENT'S TO SAY (2026-11-02): a task that had joined a second person's thread took the session's follow-up
 # question to its first requester and filed it as a reply to the second person's "Perfect!" - reply_target answers the NEWEST mail,
 # whoever wrote it. `taskuary --reply --to <name or address>` names the person, and the reply answers that person's newest message.
@@ -294,7 +304,7 @@ def owner_asked_since(store, task_id: int, at: str) -> bool:
 
 
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
-                to: str = '', sid: str = None) -> dict:
+                to: str = '', sid: str = None, answers: int | None = None) -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
     the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
@@ -320,6 +330,11 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         mid = hit['MessageId']
         if held and _person(store, held.get('MessageId')) != _person(store, mid): held = {}
     else: mid = reply_target(store, task_id) or held.get('MessageId')
+    # ...and `answers` names the mail that holds the ask when the owner means one triage did not pick: it must be somebody's mail on this task
+    if answers:
+        a = store.get_message(answers) or {}
+        if a.get('TaskId') != task_id or a.get('Status') in ('context', 'skipped') or str(a.get('Direction') or 'in') == 'out' or from_owner(store, a):
+            return {'ok': False, 'why': f'#{answers} is not a mail on this task'}
     # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's
     # answer IS the result, and filing it as a reply "waiting on your approval" addressed it to them (2026-09-23).
     # Refusing it outright threw the answer away - a whole review the owner asked for, gone (2026-10-06) - so keep it.
@@ -359,10 +374,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # FYI this answered - never equal - and Send threw the agent's words away for a fresh draft to whoever wrote last (2026-11-02)
     from . import operations
     store.pin_review_context(rid, mid, operations.message_revision(store, task_id))
+    # the mail that holds the ask is what the draft answers and what it is addressed from; the newest mail still pins its freshness
+    ans = answers or answers_for(store, task_id, mid, to); store.set_review_answers(rid, ans)
     rv = store.get_review(rid) or {}
     # ...and to whom it goes, at once - its To and Cc - so the card says the person the agent wrote to, and a line from somebody else
     # later never moves it. An answer to the owner's OWN mail (a promise task's) goes to whom it went (outbound.reply_envelope)
-    m = store.get_message(mid) or {}
+    m = store.get_message(ans or mid) or {}
     if not store.review_envelope(rid):
         from .outbound import reply_envelope
         if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)

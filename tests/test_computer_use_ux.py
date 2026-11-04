@@ -113,6 +113,7 @@ class TheBriefAndItsWords(unittest.TestCase):
         seen = {}
         def answer(system, user, **kw): seen.update(system=system); return 'The browser did not open.'
         with mock.patch.object(browserview, 'start', return_value=False), mock.patch.object(browserview, 'installed', return_value=True), \
+                mock.patch.object(browserview, 'last_page', return_value='https://pay.example/invoice'), \
                 mock.patch.object(llm, 'build_llm', return_value=answer):
             sess.send_prompt('Pay it', pick='cli:claude')
         self.assertIn('THE BROWSER DID NOT OPEN', seen['system']); self.assertIn(browserview.FAILED_WHY, seen['system'])

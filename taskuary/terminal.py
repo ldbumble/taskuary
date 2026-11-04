@@ -1258,8 +1258,10 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # and the session must not wait for it.
     if task_id and store:
         from . import browserview as _bv, ingest as _ingest
-        if _ingest.mark_browser(store, task_id):         # ...or that triage read the work as done on a web page (2026-10-29)
-            threading.Thread(target=_bv.start, args=(t.sid,), daemon=True).start()
+        # ...or that triage read the work as done on a web page (2026-10-29) - launched now only on the page it was last on: with no
+        # address the agent's first navigate launches it (browserview.on_demand, the owner 2026-11-04: "no browser ... if we don't have a URL")
+        if _ingest.mark_browser(store, task_id) and (last := _bv.last_page(task_id)):
+            threading.Thread(target=_bv.start, args=(t.sid, last), daemon=True).start()
         from . import agentdesktop as _ad
         _ad.mark_from_triage(store, task_id)               # ...and in a desktop app, with Agent Desktop on (2026-10-31)
     if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
@@ -1892,7 +1894,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import browserview as _bv
     # the hold is promised only to a CLI whose hook can refuse (llm.HOLDS_CLI): Codex was told "held" and paid (2026-10-25)
     from .llm import HOLDS_CLI
-    if _bv.wanted(t) and shutil.which('agent-browser'): parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))
+    # ...told it is OPEN only when there is a page to open it on (last_page); else offered, launched by its first navigate (on_demand)
+    if _bv.wanted(t) and shutil.which('agent-browser'):
+        parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI, open_now=bool(_bv.last_page(tid))))
     # ...and the owner's desktop apps, once Agent Desktop is on and the task is marked "needs desktop" - never on a stranger's task
     # (agentdesktop.py; its hook refuses there too)
     if not stranger and _ad.on(store) and _ad.wanted(store.get_task(tid)): parts.append(_ad.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))

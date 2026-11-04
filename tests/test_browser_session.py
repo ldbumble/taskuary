@@ -34,8 +34,11 @@ class AskingForOneTests(unittest.TestCase):
         asked = s.create_task({'Title': 'portal', 'Kind': 'coding', 'Tags': bv.WANTS}, 'o')
         plain = s.create_task({'Title': 'code', 'Kind': 'coding'}, 'o')
         with mock.patch.object(terminal.shutil, 'which', return_value='/usr/bin/agent-browser'):
-            self.assertIn('A BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
-            self.assertNotIn('A BROWSER IS OPEN', terminal.seed_text(s, plain, repo=None, cwd=''))
+            # ...offered until there is a page to open it on: its first navigate launches it (browserview.on_demand, 2026-11-04)
+            self.assertIn('NO BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
+            with mock.patch.object(bv, 'last_page', return_value='https://portal.example/login'):
+                self.assertIn('A BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
+            self.assertNotIn('BROWSER IS OPEN', terminal.seed_text(s, plain, repo=None, cwd=''))
 
     def test_nothing_is_promised_when_the_tool_is_not_installed(self):
         s = MemoryStore()
@@ -95,10 +98,11 @@ class TheChatIsNamedTooTests(unittest.TestCase):
         self.assertFalse(self._turn(hands='look')[0].get('cli_tools'), 'look only, and no browser asked for: no shell')
 
     def test_a_task_that_asked_for_one_gets_the_browser_and_the_brief(self):
-        seen, started = self._turn(tags=bv.WANTS)
+        # ...launched by its first navigate, not with the turn: no URL, no browser (the owner, 2026-11-04)
+        with mock.patch.object(bv, 'installed', return_value=True): seen, started = self._turn(tags=bv.WANTS)
         self.assertIn('AGENT_BROWSER_SESSION', seen.get('extra_env') or {})
         self.assertTrue(seen.get('cli_tools'), 'it has to be able to RUN agent-browser')
-        started.assert_called_once()
+        started.assert_not_called()
 
 
 class AskingForOneLaterTests(unittest.TestCase):

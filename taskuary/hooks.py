@@ -792,6 +792,11 @@ def browser(payload: dict, brain=None, sid: str = '') -> dict:
     t = _pane(payload, 'claude') or _general(payload, sid)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
+    # ...and the browser comes up HERE, at the agent's first navigate - never before it has an address (browserview.on_demand)
+    if browse:
+        from . import browserview
+        try: browserview.on_demand(t.sid, cmd)
+        except Exception as e: logger.warning(f'the browser for {t.sid} did not start on its first page - {e}')
     # ...asked in the CLI's own prompt where the owner can answer it there, held for the task's Approve where nobody can (shellgate.asks)
     if out: return shellgate.check(st, t.task_id, t.sid, cmd, tool, str(payload.get('cwd') or getattr(t, 'cwd', '') or ''), shellgate.asks(st, t))
     # a line that drives both is judged desktop first: either one held holds the whole line

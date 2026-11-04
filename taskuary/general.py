@@ -1253,9 +1253,15 @@ class GeneralSession:
                 browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid), **HEADLESS_ENV}
                 # ...but Chrome is only LAUNCHED, and the shell only granted, for a task that asked
                 # for one. A chat that did not is a research session: it reads, it does not run.
-                if self.browser_wanted and browserview.start(self.sid, browserview.last_page(self.task_id) or 'about:blank'):
+                # ...and never on an empty tab (the owner, 2026-11-04: "no browser should open if we don't have a URL"): up already, or on
+                # the page it was last on - else OFFERED, and the agent's first `agent-browser open <url>` launches it (browserview.on_demand)
+                last = browserview.last_page(self.task_id) if self.browser_wanted else ''
+                if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):
                     browser_tools = True
                     system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
+                elif self.browser_wanted and not last and browserview.installed():
+                    browser_tools, browser_offer = True, True
+                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=False)}'
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
                     why = browserview.FAILED_WHY if browserview.installed() else 'agent-browser is not installed on this computer'
@@ -1849,9 +1855,11 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     signed_out = session.pick.startswith('cli:') and hub_agents.cli_tests(store).get(session.pick[4:]) is False
     # ...nor for a quick answer: its one call never drives a page, and a Chrome left on about:blank beside it was the "empty tab, live" with
     # "your turn" over it on a task that never needed one (the owner, 2026-11-03). A real turn on the session launches its own (send_prompt)
-    if session.browser_wanted and not quick and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
-        from . import browserview
-        # on the page the task's browser was last on: after a restart the agent's ask ("sign in on the page beside us")
-        # still points somewhere real
-        threading.Thread(target=browserview.start, args=(session.sid, browserview.last_page(tid) or 'about:blank'), daemon=True).start()
+    # ...nor with no address to open (the owner, 2026-11-04: "no browser should open if we don't have a URL"): only on the page the task's
+    # browser was last on - after a restart the agent's ask ("sign in on the page beside us") still points somewhere real. Else the agent's
+    # first navigate launches it (browserview.on_demand)
+    from . import browserview
+    last = browserview.last_page(tid) if session.browser_wanted else ''
+    if last and not quick and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
+        threading.Thread(target=browserview.start, args=(session.sid, last), daemon=True).start()
     return session

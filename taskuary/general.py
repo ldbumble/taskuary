@@ -709,19 +709,19 @@ def repos_block(store) -> str:
 # ONE GOAL - GET THE OWNER TO DONE (Task 3.4, 2026-11-04): an agent told only "do the job" left a login that sat in a project's .env to the
 # owner. A login it finds goes in the draft the owner's Send approves - never in the conversation (the owner's ruling, 2026-11-04). This
 # is that rule's ONE home: AGENT.md and ASSISTANT.md ride on a stranger's task too, so neither carries it (store._LOGIN_RULES)
-GOAL_LINE = ("YOUR ONE GOAL: get the owner to done. Read THE ASK, AS TRIAGE READ IT first when the brief has it, and check it against the "
-             "mail: what is asked, the owner's part, who already handled what. Do as much of the owner's part as you can before leaving "
-             "anything to them{look}. Draft every email the job needs through your reply and draft tools, never as text in the "
-             "conversation. {login}Then tell them where it stands: what the task wants from them, what you researched or did, and the next "
-             "steps - and close out, or do what closing out takes.")
+_GOAL = ("YOUR ONE GOAL: get the owner to done. Read THE ASK, AS TRIAGE READ IT first when the brief has it, and check it against the "
+          "mail: what is asked, the owner's part, who already handled what. Do as much of the owner's part as you can before leaving "
+          "anything to them{look}. Draft every email the job needs through your reply and draft tools, never as text in the "
+          "conversation. {login}Then tell them where it stands: what the task wants from them, what you researched or did, and the next "
+          "steps - and close out, or do what closing out takes.")
 LOOK_CLAUSE = (", and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found - a file "
                "such as an .env holds settings: read the value the job needs")
 LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the reply you draft - their Send shares it - never in the "
                   "conversation, your steps or your summary. ")
 # ...and on a STRANGER's task neither where to look nor the login: their session is never steered toward the owner's files or credentials
 # (the floor blocks credential folders for them too)
-STRANGER_GOAL_LINE = GOAL_LINE.format(look='', login='')
-GOAL_LINE = GOAL_LINE.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
+STRANGER_GOAL_LINE = _GOAL.format(look='', login='')
+GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
 READING_CHARS = 1_500
 
 

@@ -547,6 +547,13 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
     exe = program()
     w, h = int(w), int(h)
     if not exe or not (200 <= w <= 4000 and 200 <= h <= 4000): return False
+    # ...ONLY ON A BROWSER THAT IS UP. Any agent-browser command LAUNCHES a daemon for its session when none answers - so a pane that sent
+    # its shape while the task's browser was still starting (a reload, Back and Forward, a resize) launched a second, default-configured
+    # one beside Taskuary's: "a daemon ... started concurrently with different daemon configuration", every open the agent tried after
+    # failed the same way, and the pane showed an empty tab (the browser-agent walk, 2026-11-04). The pane sends its shape again when it
+    # is next shown or focused.
+    lock = _START_LOCKS.get(sid)
+    if (lock and lock.locked()) or not state(sid, fresh=True).get('open'): return False
     try:
         spawn.popen([exe, '--session', session_name(sid), 'set', 'viewport', str(w), str(h)], env=_cli_env(sid),
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, close_fds=True)

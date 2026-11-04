@@ -159,6 +159,19 @@ class AskingForOneLaterTests(unittest.TestCase):
 class TheShapeOfThePageTests(unittest.TestCase):
     """The pane says what shape it is; the page renders that shape, so there is nothing to letterbox."""
 
+    def setUp(self):
+        p = mock.patch.object(bv, 'state', return_value={'open': True}); p.start(); self.addCleanup(p.stop)
+
+    def test_a_browser_not_up_yet_is_never_sent_a_shape(self):
+        """Any agent-browser command launches a daemon when none answers: a shape sent while the task's browser was still starting
+        launched a second, default one - "started concurrently with different daemon configuration", and the agent's every open after
+        failed (the browser-agent walk, 2026-11-04)."""
+        with mock.patch.object(bv.shutil, 'which', return_value='ab'), mock.patch.object(bv.spawn, 'popen') as popen:
+            with mock.patch.object(bv, 'state', return_value={'open': False}): self.assertFalse(bv.set_viewport('abc123', 1200, 1480))
+            lock = bv._START_LOCKS.setdefault('abc123', __import__('threading').Lock())
+            with lock: self.assertFalse(bv.set_viewport('abc123', 1200, 1480))      # mid-launch: the start holds its lock
+        popen.assert_not_called()
+
     def test_the_viewport_is_set_on_the_session_and_never_waited_on(self):
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
              mock.patch.object(bv.spawn, 'popen') as popen:

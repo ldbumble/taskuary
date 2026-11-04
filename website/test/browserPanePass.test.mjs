@@ -30,6 +30,11 @@ test("the socket connects only while the browser is open, and backs off", () => 
   assert.equal((term.match(/open=\{browser\.open\}/g) || []).length, 3, "the stack, the split and the peek all pass it");
 });
 
+test("the first frame of a connection sends the pane's shape, which a still-starting browser was refused (2026-11-04)", () => {
+  assert.match(pane, /if \(!shaped\.current\) \{ shaped\.current = true; fitViewport\(true\); \}/);
+  assert.match(pane, /ws\.onclose = \(\) => \{ setLive\(false\); shaped\.current = false;/);
+});
+
 test("your turn is never said over a pane with no frame drawn (2026-11-04)", () => {
   assert.match(pane, /\{!live \? "waiting for the page to draw — type once it shows" : handed\.current \? "your turn/);
 });

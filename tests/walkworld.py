@@ -170,6 +170,13 @@ def agent_closes(store, src: dict, sym: str):
     reconcile(store)
 
 
+def watch(store, src: dict, sym: str):
+    """Put under Watching somewhere other than the walk - triage's watch verdict, or Watch it pressed on another surface (watch.py)."""
+    from taskuary import watch as w
+    w.watch(store, src[sym]['tid'], 'triage')
+    reconcile(store)
+
+
 def rows(store, full: bool = False) -> list:
     from taskuary import funnel
     p = funnel.pile(store)

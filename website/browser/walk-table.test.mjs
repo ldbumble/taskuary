@@ -111,7 +111,7 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
     if (verb === "heading") { await page.evaluate((l) => document.querySelector(`[data-tq-section-head="${l}"]`)?.click(), args[0]); return true; }
     if (verb === "leave") { assert.ok(await LEAVE[args[1]](), `${args[1]} pressed`); return true; }
     if (verb === "send") { sendOk = args[1] === "closes"; assert.ok(await send(), "Send pressed"); return true; }
-    if (["arrive", "close-elsewhere", "agent-closes", "read"].includes(verb)) { await fixture(verb, args[0]); return false; }
+    if (["arrive", "close-elsewhere", "agent-closes", "watch", "read"].includes(verb)) { await fixture(verb, args[0]); return false; }
     if (verb === "phone") { await fixture(`phone ${args[0]}`); return false; }
     if (verb === "reload") { await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 40000 }); await sleep(2500); return false; }
     if (verb === "peek") { world = await api("/api/fixture/walk/keys", {}); assert.equal(symOf(world.below), args[0], "the prepared Next"); return false; }
@@ -170,6 +170,7 @@ test("the walk table, clicked, with every action's frames recorded", { timeout: 
       for (const s of (b.rail || c.rail)?.has || []) if (!onRail(s)) why.push(`${s} should be on the rail`);
       for (const s of (b.rail || c.rail)?.not || []) if (onRail(s)) why.push(`${s} should be off the rail`);
       for (const s of c.later || []) if (!after.rail.some(([run, k]) => run === "later" && k === keys()[s])) why.push(`${s} should be under For later`);
+      for (const s of c.watching || []) if (!after.rail.some(([run, k]) => run === "watching" && k === keys()[s])) why.push(`${s} should be under Watching`);
       if ("back" in c && want !== "END" && after.back !== null && after.back !== c.back) why.push(`Back ${after.back ? "on" : "off"}, wanted ${c.back ? "on" : "off"}`);
       if (watched && frames.length) {
         const press = frames.findIndex((f) => true), blank = frames.slice(press + 1).filter((f) => !f.item && !f.dots && !f.end);

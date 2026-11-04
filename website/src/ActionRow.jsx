@@ -90,8 +90,13 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const { verbs: kept, advised } = seen.current || { verbs: { list: [], ref: "" }, advised: null };
   // ...all but the walk's Back and Next, which stand as they do now: greyed from a press until its move lands (the owner, 2026-11-03: one move
   // at a time) - a held row drew them live over the move, and a click on them then did nothing
-  const navNow = (v) => ((v.group === "next" || v.group === "back") && !now.list.some((x) => x.group === v.group && !x.disabled) ? { ...v, disabled: true } : v);
-  const verbs = kept === now ? now : { ...kept, list: kept.list.map(navNow) };
+  // ...and LIT as they are now too (the owner, 2026-11-04: "i clicked a watching task and there is no next/back thing yet? took a long time
+  // to light up"): the held row's own Nav was drawn, greyed where the live one was lit - a click from the top row kept Back grey, and from a
+  // row with no Nav none stood, until the hold let go (up to ROW_HOLD_MS after the new item's verbs, ROW_STUCK_MS at worst)
+  const nav = (v) => v.group === "next" || v.group === "back";
+  const navNow = (v) => (!nav(v) ? v : now.list.find((x) => x.group === v.group && !x.disabled) || { ...v, disabled: true });
+  const verbs = kept === now ? now : { ...kept, list: [...kept.list.map(navNow),
+    ...now.list.filter((x) => nav(x) && !x.disabled && !kept.list.some((k) => k.group === x.group))] };
   // ...a held button acts only where it stands for no item and is still live - never the item being left's own
   // ...and a held button of the item STILL ON THE TABLE acts too (2026-10-27, Run another agent on a general agent did nothing): while its
   // write-up ran the row kept re-drawing and stayed held, and every press of the item's own verbs fell through to nothing

@@ -580,6 +580,15 @@ def ended_short(why: str) -> str:
     return f"it ended its turn still waiting on {why or 'work of its own'}"
 
 
+def held_for(store, tid: int, sid: str) -> bool:
+    "A step of this session waiting on the task for the owner's Approve or Dismiss."
+    for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
+        try: d = json.loads(r.get('DraftText') or '{}')
+        except ValueError: continue
+        if isinstance(d, dict) and d.get('sid') == sid: return True
+    return False
+
+
 def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None):
     "Read a headless turn's last message for work it left unfinished; record the run as failed, with why, when it did."
     import hashlib
@@ -599,6 +608,9 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
             if len(_ENDED) >= _JUDGED_MAX: _ENDED.pop(next(iter(_ENDED)))
             _ENDED[key] = why
         if not why: return
+        # ...and a turn that ended on a step held for the owner's Approve (shellgate, browsergate) is waiting on them, not short: it read
+        # "Failed - it ended its turn still waiting on the owner to press Approve" with Try again over the held delete (2026-11-03)
+        if held_for(store, tid, sid): return
         # ...only while that turn is still the newest word, as judge_turn: the owner may have written since
         evs = [e for e in ws.events(store, tid, sid) if e['Kind'] not in ws.NOTES]
         if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return

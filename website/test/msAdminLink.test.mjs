@@ -7,8 +7,9 @@ const flat = cv.replace(/\s+/g, " ");
 // the Microsoft card's approval-link box, from its heading to the link itself
 const box = () => { const i = flat.indexOf("Approval link for your Microsoft 365 admin"); return flat.slice(i, flat.indexOf("{adminUrl}</Typography>", i)); };
 
-// an admin opened the approval link and Microsoft stopped on AADSTS900971 "No reply address provided": the link returned to a URI the
-// app's registration does not list. It now returns to http://localhost/api/ms/callback - so after Accept the admin's browser may not connect
+// an admin opened the approval link and Microsoft stopped on AADSTS900971 "No reply address provided": v2.0/adminconsent returns only to a
+// Web reply URL and the app's one redirect is a desktop one. The link is now the authorize page with prompt=admin_consent, returning to
+// http://localhost/api/ms/callback - so after Accept the admin's browser may not connect
 test("the approval box tells the admin what to do and that a page that won't load afterwards is expected", () => {
   for (const w of ["They open the link, sign in, and click Accept", "If the page after Accept says it can't connect, that's expected: the approval is done.",
     "Nothing to set up in Azure."]) assert.ok(box().includes(w), w);

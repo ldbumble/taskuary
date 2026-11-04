@@ -47,14 +47,18 @@ class DeviceFlowTests(unittest.TestCase):
 
     def test_the_admin_link_is_a_consent_grant_on_our_app_id(self):
         u = msauth.admin_consent_url(CFG)
-        self.assertTrue(u.startswith('https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=app-1&'))   # common -> organizations: personal accounts have no admin
-        self.assertIn('Mail.ReadWrite', u)
-        # the one redirect Taskuary's registration lists, exactly as listed - no port; the stock nativeclient URI it does not list
-        # ended an admin's approval on Microsoft's page with AADSTS900971 "No reply address provided"
+        # v2 /adminconsent takes a Web reply URL only: the app's one redirect is on the Mobile and desktop platform, so Microsoft
+        # stopped on AADSTS900971 "No reply address provided". The authorize endpoint takes that public-client redirect as it is.
+        self.assertTrue(u.startswith('https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?'))   # personal accounts have no admin
+        self.assertNotIn('/v2.0/adminconsent', u); self.assertNotIn('nativeclient', u)
         q = parse_qs(urlsplit(u).query)
-        self.assertEqual((q['redirect_uri'][0], q['state'][0]), ('http://localhost/api/ms/callback', msauth.ADMIN_STATE)); self.assertNotIn('nativeclient', u)
+        self.assertEqual({k: q[k][0] for k in ('client_id', 'response_type', 'prompt', 'redirect_uri', 'state', 'code_challenge_method')},
+                         {'client_id': 'app-1', 'response_type': 'code', 'prompt': 'admin_consent', 'redirect_uri': 'http://localhost/api/ms/callback',
+                          'state': msauth.ADMIN_STATE, 'code_challenge_method': 'S256'})
+        self.assertIn('Mail.ReadWrite', q['scope'][0])
+        self.assertNotEqual(q['code_challenge'][0], parse_qs(urlsplit(msauth.admin_consent_url(CFG)).query)['code_challenge'][0])   # its verifier is thrown away
         self.assertEqual(msauth.ADMIN_REDIRECT, 'http://localhost' + msauth.REDIRECT_PATH)
-        self.assertIn('/contoso.example/v2.0/adminconsent', msauth.admin_consent_url({**CFG, 'tenant_id': 'contoso.example'}))
+        self.assertIn('/contoso.example/oauth2/v2.0/authorize?', msauth.admin_consent_url({**CFG, 'tenant_id': 'contoso.example'}))
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''), self.assertRaises(RuntimeError): msauth.admin_consent_url({})
 
     def test_access_token_is_cached_and_a_rotated_refresh_token_is_persisted(self):
@@ -130,9 +134,9 @@ class EndpointTests(unittest.TestCase):
         server._MSFLOWS[flow]['scope'] = msauth.BASE_SCOPES        # nothing optional asked: the refusal stands (no base-only retry)
         with mock.patch.object(msauth, 'device_poll', side_effect=msauth.AdminConsent('needs an admin')), mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):
             r = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()
-        self.assertEqual(r['status'], 'error'); self.assertIn('adminconsent?client_id=app-1', r['admin_consent_url'])
+        self.assertEqual(r['status'], 'error'); self.assertIn('authorize?client_id=app-1', r['admin_consent_url'])
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', 'app-1'):                       # and on request, before anyone fails
-            self.assertIn('adminconsent', c.get(f'/api/connectors/{cid}/ms/adminlink').json()['url'])
+            self.assertIn('prompt=admin_consent', c.get(f'/api/connectors/{cid}/ms/adminlink').json()['url'])
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
             self.assertEqual(c.get(f'/api/connectors/{cid}/ms/adminlink').status_code, 409)   # no app id yet: said, not a 500
 
@@ -252,7 +256,7 @@ class BrowserSignInTests(unittest.TestCase):
                                                              'error_description': 'AADSTS90094: Admin consent is required.'}, follow_redirects=False)
                 if r.status_code == 302: q = parse_qs(urlsplit(r.headers['location']).query)
             out = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()
-        self.assertIn('admin', r.text); self.assertIn('adminconsent?client_id=app-1', out['admin_consent_url'])
+        self.assertIn('admin', r.text); self.assertIn('authorize?client_id=app-1', out['admin_consent_url'])
         self.assertEqual(server.store.get_connector(cid)['Active'], 0, 'a failed sign-in changes nothing on the card')
 
     # A CORPORATE TENANT'S REFUSAL that does come back (the owner, 2026-11-02): never Entra's raw prose on the card, but the one plain line -
@@ -269,7 +273,7 @@ class BrowserSignInTests(unittest.TestCase):
                 if retried: r = self._refuse(parse_qs(urlsplit(r.headers['location']).query), err, desc)
                 out = c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': d['flow']}).json()
             p.assert_not_called()
-            self.assertEqual(out['status'], 'error'); self.assertIn('adminconsent?client_id=app-1', out['admin_consent_url'])
+            self.assertEqual(out['status'], 'error'); self.assertIn('authorize?client_id=app-1', out['admin_consent_url'])
             self.assertIn('your IT admin approves Taskuary once with the approval link below', out['detail'])
             self.assertNotIn('AADSTS', out['detail'], 'the plain line, not the raw error')
             self.assertIn("approval link on Taskuary's Outlook or Teams card", html.unescape(r.text), 'the tab points at the card, which has the link')
@@ -299,6 +303,18 @@ class BrowserSignInTests(unittest.TestCase):
         r = self.LOCAL.get('/api/ms/callback', params={'admin_consent': 'True'})          # no state at all reads the same
         self.assertIn('Approved', r.text)
         self.assertEqual(server._MSFLOWS, flows, 'no sign-in round touched')
+
+    def test_an_admins_approval_by_the_authorize_link_comes_back_with_a_code_that_is_never_a_sign_in(self):
+        cid = self._card(); flows = dict(server._MSFLOWS); before = server.store.get_connector(cid, with_secret=True)
+        with mock.patch.object(msauth, 'code_redeem', side_effect=AssertionError('an approval is never redeemed')):
+            for client in (self.LOCAL, c):
+                r = client.get('/api/ms/callback', params={'code': 'CODE-1', 'state': msauth.ADMIN_STATE, 'session_state': 's'})
+                t = html.unescape(r.text)
+                self.assertEqual(r.status_code, 200); self.assertIn('Approved', t)
+                self.assertIn('Everyone in your organisation can now sign in to Taskuary. You can close this tab.', t)
+                for w in ('Signed in', 'sign-in was not started', 'only finishes on the computer'): self.assertNotIn(w, t)
+        self.assertEqual(server._MSFLOWS, flows, 'no sign-in round touched')
+        self.assertEqual(server.store.get_connector(cid, with_secret=True), before, 'the card is not signed in as the admin')
 
     def test_an_admins_refusal_says_what_happened_in_plain_words(self):
         for err, desc, says in (('access_denied', 'AADSTS65004: User declined to consent to access the app.', 'cancelled, so nothing changed'),

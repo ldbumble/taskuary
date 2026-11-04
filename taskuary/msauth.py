@@ -88,7 +88,7 @@ class CompanyPolicy(RuntimeError):
 
 
 # THE BROWSER SIGN-IN comes back here. Entra ignores the port of an http://localhost redirect on a public client, so the one
-# URI registered on the app - http://localhost/api/ms/callback - matches whatever port this install listens on. The admin-consent
+# URI registered on the app - http://localhost/api/ms/callback - matches whatever port this install listens on. The admin-approval
 # link sends exactly that registered URI, no port (ADMIN_REDIRECT): it is what the registration lists, and the port rule is the
 # sign-in's - so after Accept the browser tries port 80, and a Taskuary on another port is simply not there (the approval stands).
 REDIRECT_PATH = '/api/ms/callback'
@@ -98,19 +98,24 @@ ADMIN_REDIRECT, ADMIN_STATE = f'http://localhost{REDIRECT_PATH}', 'admin-consent
 def admin_consent_url(cfg: dict, scope: str = SCOPES) -> str:
     """The link the user forwards to their Microsoft 365 admin. One click + Accept grants the
     delegated scopes for the whole organisation - a consent grant on OUR app id, so nobody on
-    their side registers anything. The redirect is the one URI Taskuary's registration lists, exactly as listed
-    (ADMIN_REDIRECT): one it does not list ends on Microsoft's page with AADSTS900971 "No reply address provided" -
-    the stock nativeclient URI did, for a customer's admin. After Accept the admin's browser goes to localhost:
-    on the machine Taskuary runs on, /api/ms/callback says it is approved (admin_return); anywhere else the page
-    does not load, and the approval stands all the same. ADMIN_STATE tells that return from a sign-in's."""
+    their side registers anything.
+    NOT v2.0/adminconsent: that endpoint returns only to a Web-platform reply URL, and Taskuary's one redirect is on the
+    "Mobile and desktop" platform, so Microsoft stopped there with AADSTS900971 "No reply address provided" for a customer's
+    admin even with the registered URI. The authorize endpoint takes a public client's redirect as it is; prompt=admin_consent
+    puts the organisation-wide consent screen in front of the admin. It comes back with a code and ADMIN_STATE, which the
+    callback reads as approved and never redeems - the verifier behind its PKCE challenge is thrown away here, so nobody can.
+    On the machine Taskuary runs on, /api/ms/callback says Approved (admin_return); anywhere else the page does not load, and
+    the approval stands all the same."""
     t = tenant(cfg); t = 'organizations' if t == 'common' else t     # personal accounts have no admin
-    return (f'{AUTH}/{t}/v2.0/adminconsent?client_id={_need_client(cfg)}&scope={quote(scope)}'
-            f'&redirect_uri={quote(ADMIN_REDIRECT, safe="")}&state={ADMIN_STATE}')
+    return f'{AUTH}/{t}/oauth2/v2.0/authorize?' + urlencode({
+        'client_id': _need_client(cfg), 'response_type': 'code', 'redirect_uri': ADMIN_REDIRECT, 'response_mode': 'query', 'scope': scope,
+        'state': ADMIN_STATE, 'prompt': 'admin_consent', 'code_challenge': _challenge(secrets.token_urlsafe(48)), 'code_challenge_method': 'S256'})
 
 
-def admin_return(consented: str = None, error: str = None, desc: str = '') -> tuple:
-    "What the admin-consent return says, as (ok, head, line) for a plain page - the admin is not signing in, so never a broken sign-in."
-    if not error and str(consented or '').lower() == 'true':
+def admin_return(consented: str = None, error: str = None, desc: str = '', code: str = None) -> tuple:
+    """What the admin-approval return says, as (ok, head, line) for a plain page - the admin is not signing in, so never a broken sign-in.
+    The authorize link comes back with a code (never redeemed), an approval link from before it with admin_consent=True."""
+    if not error and (code or str(consented or '').lower() == 'true'):
         return True, 'Approved', 'Everyone in your organisation can now sign in to Taskuary. You can close this tab.'
     d = f'{error or ""}: {desc or ""}'
     if 'AADSTS90094' in d or 'AADSTS90008' in d or 'administrator' in d.lower() and 'role' in d.lower():

@@ -4027,7 +4027,8 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
 };
 
 // AADSTS900971 "No reply address provided": Microsoft's page stopped at the organisation's approval step - for a person signing in, or
-// for an admin who opened an approval link from before it returned to http://localhost/api/ms/callback (msauth.admin_consent_url)
+// for an admin who opened an older approval link: v2.0/adminconsent, which returns only to a Web reply URL, never the app's desktop
+// one. The link is now the authorize page with prompt=admin_consent (msauth.admin_consent_url)
 const NO_REPLY = /AADSTS900971/;
 export const msSays = (d) => NO_REPLY.test(d || "") ? "Microsoft stopped at your organisation's approval step (error AADSTS900971, \"No reply address provided\") - "
   + "your IT admin approves Taskuary once with the link below, then sign in again." : d;

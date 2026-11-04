@@ -3884,12 +3884,9 @@ def _loop_in(rid: int, m: dict, who: list) -> tuple:
 
 
 def _keep_instruction(rid: int, said: str):
-    """The owner's words for a draft, kept on its review (phase B) - and the second time the same words are said for one person, they
-    are how that person is written to: a STYLE.md "By recipient" line every later draft to them reads (byrecipient, phase C;
-    the owner, 2026-10-23: the typed instruction is stored and remembered, the 2nd time a style line, no chips)."""
-    store.add_review_instruction(rid, said)
+    "The owner's words for a draft: kept, and the second time for one person a style line (byrecipient.keep_instruction)."
     from . import byrecipient
-    byrecipient.note_instruction(store, rid, said)
+    byrecipient.keep_instruction(store, rid, said)
 
 
 def _reply_nudge(instruction) -> str | None:

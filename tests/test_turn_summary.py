@@ -8,7 +8,7 @@ A reply task that no agent works takes its On you from triage's reading instead.
 import json
 from unittest import mock
 
-from taskuary import general, ingest, selfclose
+from taskuary import byrecipient, general, ingest, selfclose
 from taskuary.store import MemoryStore
 
 STEP = 'confirm the pay date with AP before sending'
@@ -167,3 +167,50 @@ def test_a_restated_step_keeps_its_place_and_note():
     s.set_on_you(tid, [STEP, 'reply to Gail'], 'assistant')
     items = s.task_checklist(tid)
     assert [i['text'] for i in items] == [STEP, 'find the pay date', 'reply to Gail'] and items[0]['note'] == 'AP said Thursday'
+
+
+# TASK 5.2 - a correction typed in the chat is learned the way the draft box's words were: quietly, no chip, no "Remembered" line
+def draft_for(s, tid, who, n=1):
+    mid = s.add_message({'TaskId': tid, 'ExternalId': f'c{tid}-{n}', 'Channel': 'email', 'Subject': 's', 'FromEmail': who, 'BodyText': 'b', 'Status': 'routed'})
+    return s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi.'})
+
+
+def review(s, rid): return next(r for r in s._rows('SELECT * FROM review WHERE ReviewId=?', (rid,)))
+
+
+def test_a_redraft_word_is_kept_on_the_draft():
+    s = MemoryStore(); tid = task(s); rid = draft_for(s, tid, 'ray@northwind.example')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Cc Gail on it')
+    assert general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': 'Cc Gail on it'}]) == 1
+    assert 'Cc Gail on it' in review(s, rid)['Instructions']
+
+
+def test_said_twice_for_one_person_becomes_a_style_line():
+    s = MemoryStore()
+    for n in (1, 2):
+        tid = task(s); draft_for(s, tid, 'ray@northwind.example', n)
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Make it shorter')
+        general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': 'make it shorter'}])
+    assert [w for w, _ in byrecipient.lines(s)] == ['ray@northwind.example']
+
+
+def test_not_the_ask_is_an_owner_correction():
+    s = MemoryStore(); tid = task(s)
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'No, the ask is the pay date, not the bonus')
+    with mock.patch('taskuary.learn.learn_from') as lf:
+        assert general.take_corrections(s, tid, [{'kind': 'ask', 'review': None, 'said': 'the ask is the pay date, not the bonus'}]) == 1
+    lf.assert_called_once(); assert 'owner_correction' in lf.call_args[0][1] and 'the pay date, not the bonus' in lf.call_args[0][1]
+
+
+def test_words_the_owner_never_said_are_dropped():
+    s = MemoryStore(); tid = task(s); rid = draft_for(s, tid, 'ray@northwind.example')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Looks fine, thanks')
+    with mock.patch('taskuary.learn.learn_from') as lf:
+        assert general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': 'Always cc Gail'}, {'kind': 'ask', 'review': None, 'said': 'wrong ask'}]) == 0
+    lf.assert_not_called(); assert 'Gail' not in (review(s, rid).get('Instructions') or '')
+
+
+def test_corrections_ride_the_summary_block_and_stay_off_the_screen():
+    c = [{'kind': 'ask', 'review': None, 'said': 'the pay date'}, {'kind': 'redraft', 'review': 7, 'said': 'Cc Gail'}, {'kind': 'x', 'said': 'no'}, 'junk']
+    text, summ = selfclose.summary_marker(f'Done.\n{block(corrections=c)}')
+    assert text == 'Done.' and summ['corrections'] == c[:2]

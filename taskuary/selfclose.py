@@ -320,7 +320,9 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'you researched, found or did>", "on_you": ["<each step left for the owner, one short line each>"], "nothing_left": '
                 f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. When you '
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
-                f'(through [[TASKUARY-ASK]]) only when there are real ones.')
+                f'(through [[TASKUARY-ASK]]) only when there are real ones. When the owner\'s newest message CORRECTS you, add "corrections": '
+                f'[{{"kind": "redraft" (their words for the draft) or "ask" (you read what the task wants wrongly), "review": <the draft\'s id or null>, '
+                f'"said": "<their exact words>"}}] - never show them as anything.')
 _SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
 # ...and one that never closed: a live line is cut to 300-400 characters before it is drawn (agents.py), and a turn can end without
 # the closing tag - the opening tag through to the end goes, and so does a tag cut off part-way at the very end ("[[TASKUA")
@@ -348,6 +350,9 @@ def summary_marker(text: str, letters=()) -> tuple:
     flat = lambda x, n: without_letters(' '.join(str(x or '').split()), letters)[:n]
     out = {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600), 'nothing_left': j.get('nothing_left') is True}
     if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, 200) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
+    if cs := [{'kind': c['kind'], 'review': c['review'] if isinstance(c.get('review'), int) else None, 'said': ' '.join(c['said'].split())[:1000]}
+              for c in j.get('corrections') or [] if isinstance(c, dict) and c.get('kind') in ('redraft', 'ask') and isinstance(c.get('said'), str) and c['said'].strip()]:
+        out['corrections'] = cs[:6]
     return (rest, out) if out['about'] or out['did'] or out.get('on_you') else bare()
 
 

@@ -418,6 +418,37 @@ def _cut(text, n):
     return text if len(text) <= n else text[:n] + f'\n[trimmed {len(text) - n:,} characters]'
 
 
+def take_corrections(store, tid: int, corrections) -> int:
+    """What the owner corrected in the chat reaches the learning paths, quietly (no chip, no "Remembered" line): a `redraft` word is kept
+    on the pending draft like the draft box's (byrecipient.keep_instruction), an `ask` ("not the ask") is an owner_correction for
+    learn.learn_from. Kept only when `said` is in the owner's newest message - the agent reports, it never invents. Returns how many."""
+    try:
+        norm = lambda s: ' '.join(str(s or '').lower().split())
+        last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') == USER_TYPE and not is_brief(c)), None)
+        n, kept = norm((last or {}).get('Body')), 0
+        for c in corrections or []:
+            said = ' '.join(str((c or {}).get('said') or '').split())
+            if not said or norm(said) not in n: continue
+            if c.get('kind') == 'redraft':
+                rv = store.pending_review(tid, 'draft_reply')
+                if c.get('review') is not None and (not rv or rv.get('ReviewId') != c['review']): rv = next((r for r in store._rows('SELECT * FROM review WHERE ReviewId=? AND TaskId=?', (c['review'], tid))), None)
+                if not rv: continue
+                from . import byrecipient
+                byrecipient.keep_instruction(store, rv['ReviewId'], said)
+            elif c.get('kind') == 'ask':
+                from . import learn
+                from .ingest import exchange_lines
+                t = store.get_task(tid) or {}
+                m = next(iter(reversed(store.list_messages(tid))), None)
+                thread = ' | '.join(exchange_lines(store, m))[:1500] if m else ''
+                learn.learn_from(store, f"owner_correction on TQ-{tid}: the reading was {t.get('Summary') or t.get('Title') or ''}; the owner said: {said}; the thread: {thread}")
+            else: continue
+            kept += 1
+        return kept
+    except Exception as e:
+        logger.warning(f'corrections on task {tid} not learned: {e}'); return 0
+
+
 def is_dock(task: dict | None) -> bool:
     """The global guide is stored like a chat, but is not work on the owner's task list."""
     return str((task or {}).get('SourceRef') or '') == DOCK_TAG
@@ -1644,6 +1675,7 @@ class GeneralSession:
             hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         if summ:
+            take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
             self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
             if 'on_you' in summ: self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now

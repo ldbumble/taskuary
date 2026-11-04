@@ -1363,7 +1363,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // button, then the brain pill under a rule - three stacked rows where a running agent gets one, on
   // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
   // are taking away precious agent space"). Live is live, whoever is working.
-  const liveSession = !!term?.alive;
+  // ...and so is a start UNDER WAY with no session yet (the detail's `starting`, general.OPENING: a quick call, a Continue, a carried-on turn):
+  // the Agent section opens on "Starting…" at once, not when the session first speaks ~10 s on (the owner, 2026-11-04)
+  const agentOpening = isGeneral && !!detail?.starting && detail?.task?.TaskId === selected;
+  const liveSession = !!term?.alive || agentOpening;
+  // ...and a start held back for a free agent slot says "Waiting its turn" in its place (QueuedStart)
+  const queuedRow = (listRow?.State === "queued" ? listRow?.Queued : null) || (detail?.task?.TaskId === selected ? detail?.queued : null) || null;
   // ...and what a Send leaves open: an agent on it, working or waiting on you, keeps the task open (concierge.close_after_send)
   const liveWork = liveSession || liveRun ? "the agent is working" : "";
   // No "are you sure" box on a live session (the owner, 2026-10-19: "this should be a hover over the buttons"): the press
@@ -1415,7 +1420,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const rounds = closeoutRounds({ messages: (detail?.messages || []).filter((m) => !isIdeaLine(m)), reviews: allReviews, outside: sentOutsideAll,
     closeouts: detail?.closeouts || [], open: !["done", "dropped"].includes(t?.Status), ms: tsMs });
   // ...and a draft an earlier agent session wrote is not this one's while a newer session is live (agentDraftAsk.latestDrafts, 2026-11-03)
-  const round = rounds.at(-1), reviews = latestDrafts(roundReviews(allReviews, rounds), liveSession ? term.sid : "");
+  const round = rounds.at(-1), reviews = latestDrafts(roundReviews(allReviews, rounds), liveSession ? term?.sid || "" : "");
   const pendingReview = pendingReplyReview(reviews);
   // ...and any other reply waiting, to someone else on the task - each drawn under it with its own To and Send (MoreDrafts)
   const moreDrafts = otherPendingReplies(reviews, pendingReview);
@@ -1644,7 +1649,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and one the OWNER stopped - Stop and save, its story "You stopped it", its run's own last word - reads stopped, never "finished" with
   // ✓ Done under it (the overnight run, 2026-11-03), whatever the result it left is called
   const stoppedRun = !term?.alive && (detail?.runEnded === "stopped" || ["saved", "interrupted"].includes(detail?.agentStory?.kind));
-  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory || failedRun
+  const generalStarted = isGeneral && (!!term?.alive || agentOpening || hasGeneralHistory || failedRun
     || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   // ONE BAR, THE SAME BAR. The Task and Reply cards both open with [ primary ] | [ named ]
   // [ named ] ... fact, and the Agent card alone answered with a row of default-size buttons UNDER
@@ -1890,8 +1895,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         words: (rowText(m, sourceFiles.get(m.MessageId)) || cleanText(m.ReadText || m.BodyText || "")).slice(0, 200) })),
       count: sourceCount, workflow: fromWorkflow, made: `${detail.ref} · ${made}`, to: toLine(cameIn?.Recipients).short, sorted: sortedLine(facts, t?.Kind || "task").replace(/^Sorted as: /, "Sorted: ") }),
     agent: agentStatus({ profile: runRole || hasRecord || term ? agentName(t) : "",   /* Taskuary, never the profile (kinds.js shownAgent) */
-      word: agentWord({ live: !!term?.alive, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: stoppedRun || agentState === AGENT.stopped,
-        result: resultShown, record: hasRecord, codeRun }),
+      word: agentWord({ live: !!term?.alive || agentOpening, waiting: agentState === AGENT.waiting, failed: failedRun, stopped: stoppedRun || agentState === AGENT.stopped,
+        result: resultShown, record: hasRecord, codeRun, queued: !!queuedRow }),
       // ...a path into the task's outputs as the file's name, and no markdown marks mid-line: the folded spine read
       // "**C:\\Users\\<you>\\.taskuary\\scratch\\outputs\\TQ-n\\..." (stress test 2026-11-02). \x60, not a bare backtick:
       // test/scope.test.mjs strips literals by regex and reads one as a template, swallowing the component's setters
@@ -3042,8 +3047,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     one a running agent gets). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
-                {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
-                  <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
+                {/* ...the task's own read too: the table opens a task with no list row, and the row lags the task's read (2026-11-04) */}
+                {!liveSession && queuedRow && <Box sx={{ mb: 1 }}>
+                  <QueuedStart taskId={t.TaskId} queued={queuedRow} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 {!codeRun && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : shows("agent") ? (agentBar ? 0.8 : 1.5) : 1.1,
@@ -3293,6 +3299,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere}
+                        opening={agentOpening}
                         approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
                     </React.Suspense>
                   </Box>

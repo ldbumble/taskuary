@@ -692,7 +692,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, approve = null, mails = [], reviews = [],
-  checklist = null }) {
+  checklist = null, opening = false }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -795,7 +795,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the background (server._walk_opens). Mount's snapshot lands inside that gap, so a poll gated on
   // the session alone never started at all: no question, no band, no browser beside the conversation
   // for the whole first answer (the owner, 2026-09-14: "it looked like it did not start").
-  const busy = !!data?.session?.busy || !!data?.starting;
+  // ...and the moment the PAGE learns a start is under way (`opening`, the task's own read of general.OPENING): this pane may have loaded
+  // before it, idle, and polled nothing - "Starting…" waited ~10 s for something else to read it again (the owner, 2026-11-04)
+  const busy = !!data?.session?.busy || !!data?.starting || (!dock && opening);
+  // ...and whether this turn has drawn anything yet: its trace holds more than what Taskuary itself writes as a turn opens - the `start`,
+  // the prompt it sent and the CLI's launch line (server's run-tail reads them the same way: ours, not news)
+  const drawn = (data?.session?.trace || []).some((e) => e?.type && !["start", "prompt"].includes(e.type) && !(e.type === "tool" && e.name === "cli"));
   /* ...AND WHILE IT WAITS ON THE PAGE - a sign-in or a hand-over - which Taskuary itself can answer: the saved sign-in typed, the fill page
      sent, the owner signing in on the page (signin.watch). None of those is this pane's own send, so nothing read again: the question and
      "your turn - type" stood over a page already signed in, the agent's next answer and its held click unseen until a reload (the
@@ -818,9 +823,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         if (busy || fresh.session) onSession?.(fresh.session || null);
         if (grew || traceChanged) setRevision((k) => k + 1);
       } catch { /* it will still be there next tick */ }
-    }, 2500);
+    }, drawn ? 2500 : 1000);      // a start that has drawn nothing yet is read every second: its first word gives the room at once
     return () => { live = false; clearInterval(timer); };
-  }, [busy, onPage, task.TaskId, data?.messages, onSession]);
+  }, [busy, onPage, drawn, task.TaskId, data?.messages, onSession]);
   // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {
@@ -840,6 +845,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and at once when that door says it answered (`reread`, bumped by the page): the note is on the conversation by then, and the
   // session it starts is seconds away
   useEffect(() => { if (loaded && reread) refresh(); }, [reread]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and when the page learns a start is under way: the session it opens is read now, not a poll later
+  useEffect(() => { if (loaded && opening && !dock) refresh(); }, [opening]);  // eslint-disable-line react-hooks/exhaustive-deps
   const pasted = (e) => {
     const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
     if (images.length) { e.preventDefault(); upload(images); }
@@ -851,7 +858,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     catch (e) { setError(errText(e)); setNewChatBusy(false); }
   };
 
-  if (!data && !error) return <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
+  // ...a start the page already knows of says so before the conversation's first read lands, never a 520px spinner over nothing
+  if (!data && !error) return !dock && opening
+    ? <Box data-tq-starting="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.75, overflow: "hidden", bgcolor: PANEL2, px: 1.5, pt: 1.5, ...(compact ? { height: "auto" } : { flex: "0 0 auto" }) }}>
+        <AgentBand name={agentName(task)} work={workOf([])} starting={startingLine(agentName(task))} /></Box>
+    : <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the question the answer box below shows is said there only (askOnce.js)
   const shownMessages = withoutAsked(messagesWithTrace(data?.messages, session, dock),
@@ -868,7 +879,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
   // STARTED AND SILENT: the agent is on its way and has filed nothing - the pane is that one line high, not the room an answer gets
   const quiet = !dock && busy && !(data?.messages || []).some((m) => m.role === "assistant");
-  const starting = quiet ? startingLine(name, session?.provider || pickedLabel) : "";
+  // ...and a start onto a conversation that has answered before (Continue, a carried-on turn): the same line until this turn draws its
+  // first output, under the turns already there - never "is working" over a session that has not come up yet (2026-11-04)
+  const starting = quiet || (!dock && (data?.starting || opening) && !drawn) ? startingLine(name, session?.provider || pickedLabel) : "";
   // the chat IS the workspace, running or not - a session only decides whether a browser sits
   // beside it. It used to be one of four bodies behind a switcher (a fake terminal of the same
   // conversation, a browser button, a numbers panel); a general agent is a chat the way a coding

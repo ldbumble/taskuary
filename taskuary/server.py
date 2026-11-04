@@ -2065,7 +2065,7 @@ def task_detail(task_id: int):
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
-    from . import assistant, concierge, origin, workflows
+    from . import assistant, concierge, general, origin, workflows
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo, sigs = {}, {}
@@ -2125,6 +2125,10 @@ def task_detail(task_id: int):
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
             'session': session,
+            # ...and a start UNDER WAY before it has a session (general.OPENING: a quick call, a Continue, a carried-on turn), or one waiting
+            # on a free agent slot: the Agent section says "Starting…" or "Waiting its turn" at once, not when the session first speaks (2026-11-04)
+            'starting': task_id in general.OPENING,
+            'queued': _queued_info(store.get_dispatch(task_id)),
             # ...and what the task IS, the list's own State (taskstate): the table opens a task with no list row, and without it an
             # agent's own close read "stopped and saved" and opened on Close out (the owner, 2026-10-21)
             'state': (st := _task_state(task_id, d, session)),
@@ -4255,8 +4259,14 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
             # the owner sent it to read that as its orders and did nothing (the overnight run, 2026-11-03)
             if was not in task_kinds.AGENT and prompt: prompt += '\n\n' + HANDED_OVER
         # ...the Summary is Taskuary's brief, never the owner's words: pressed with nothing typed, the pane drew it under YOU (2026-11-03)
+        # ...marked opening until its turn has run, as Continue's is: answered before the turn takes the session, the page read an idle
+        # session with nothing said, drew no Starting… and never polled (2026-11-04)
         if prompt:
-            background.add_task(session.send_prompt, prompt, brief=not typed)
+            def turn():
+                try: session.send_prompt(prompt, brief=not typed)
+                finally: general.OPENING.discard(tid)
+            general.OPENING.add(tid)
+            background.add_task(turn)
         # the same four words every door speaks (PW-209): a reused conversation is not a new start
         return {'dispatch': 'assistant', 'agent': session.provider, 'model': session.model, 'started': not had_session, 'existing': had_session,
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}

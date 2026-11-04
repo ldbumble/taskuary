@@ -1775,7 +1775,20 @@ class GeneralSession:
 # pane loads its snapshot inside that gap. Without this it saw no session, concluded nothing was
 # running, never polled again, and sat on its welcome copy through the whole first answer
 # (the owner, 2026-09-14: "it looked like it did not start").
-OPENING = set()
+# ...and THE MARK ITSELF IS NEWS (the owner, 2026-11-04: "the agent tab did not say 'agent starting' right away. Until 10 seconds later it just
+# opened"): a quick call, a Continue or a carried-on turn holds a task here for seconds before a session exists, and nothing told the open task
+# page - it learned of the start only when the session wrote something. Marking and clearing wake its views (task-changed), as a write does.
+class _Opening(set):
+    def add(self, tid):
+        if tid not in self: super().add(tid); _opening_moved(tid)
+    def discard(self, tid):
+        if tid in self: super().discard(tid); _opening_moved(tid)
+
+def _opening_moved(tid):
+    from . import handraise
+    handraise.moved(tid)
+
+OPENING = _Opening()
 
 
 def session_for(tid: int):

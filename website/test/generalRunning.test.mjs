@@ -38,7 +38,8 @@ test("a turn the SERVER started before this pane opened is still a turn in fligh
   // through the whole first answer - no question, no band, no browser beside it, which reads
   // exactly like a walk that never started (the owner, 2026-09-14).
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /const busy = !!data\?\.session\?\.busy \|\| !!data\?\.starting;/);
+  // ...and one the page already knows of (`opening`, the task detail's `starting`) before this pane has read it (2026-11-04)
+  assert.match(view, /const busy = !!data\?\.session\?\.busy \|\| !!data\?\.starting \|\| \(!dock && opening\);/);
   const poll = view.slice(view.indexOf("const busy ="), view.indexOf("const pasted ="));
   // ...and a wait on the page, which Taskuary itself can answer (a sign-in typed from the vault, 2026-11-04)
   assert.match(poll, /if \(!busy && !onPage\) return undefined;/, "one definition of work in flight drives the poll");

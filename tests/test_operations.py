@@ -80,7 +80,7 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual((rev['version'], rev['params']), (2, {'kind': 'coding'}))
         out = operations.execute(self.s, op['id'], 1, lambda: runs.append(1), 'owner')
         self.assertEqual(out['status'], 'stale'); self.assertEqual(runs, [])
-        ok = operations.execute(self.s, op['id'], 2, lambda: runs.append(1) or {'ok': True}, 'owner')
+        ok = operations.execute(self.s, op['id'], 2, lambda: runs.append(1) or {'ok': True, 'started': True}, 'owner')     # a start that started (effects)
         self.assertEqual(ok['status'], 'done'); self.assertEqual(runs, [1])
 
     def test_new_context_on_the_target_makes_the_proposal_stale(self):
@@ -117,7 +117,11 @@ class ExecutionTests(unittest.TestCase):
 class CorrectionTests(unittest.TestCase):
     def run_op(self, s, kind, target, params):
         op = operations.propose(s, kind, target, params, 'owner')
-        return operations.execute(s, op['id'], op['version'], lambda: {'ok': True}, 'owner')
+        # ...a handler that did its act: an agent start that started, a filed message filed - what it promised is looked at (effects.py)
+        def did():
+            if kind == 'message.file': s.set_message_status(target, 'ignored')
+            return {'ok': True, 'started': True}
+        return operations.execute(s, op['id'], op['version'], did, 'owner')
 
     def test_fyi_made_a_task_is_a_correction_with_the_verdict_and_the_change(self):
         s = MemoryStore(); mid = arrive(s, 'fyi')['message_id']

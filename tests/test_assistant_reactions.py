@@ -470,7 +470,7 @@ class ResponseTests(unittest.TestCase):
         with mock.patch('taskuary.outbound.reply_to_message') as send:
             out = decide(s, 'reply and tell them the export is fixed and shipping tonight', 'reply', key=item['key'],
                          text_arg='the export is fixed and shipping tonight')
-        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'the export is fixed and shipping tonight'})   # the page drafts with this
+        self.assertEqual({k: v for k, v in out['decision'].items() if k != 'line'}, {'verb': 'reply', 'text': 'the export is fixed and shipping tonight'})   # the page drafts with this
         self.assertIsNone(out.get('proposal')); send.assert_not_called()                                    # nothing goes out
 
     def test_approve_is_confirmed_then_sends_the_drafted_reply_and_the_task_stays_open(self):
@@ -864,7 +864,7 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
         self.assertEqual([i['key'] for i in pile(s)], [item['key']])
         # ...and telling them something is a reply the model names, drafted at once - never a filing
         out = decide(s, 'let them know we will fix it by Friday', 'reply', key=item['key'], text_arg='we will fix it by Friday')
-        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'we will fix it by Friday'}); self.assertIsNone(out.get('proposal'))
+        self.assertEqual({k: v for k, v in out['decision'].items() if k != 'line'}, {'verb': 'reply', 'text': 'we will fix it by Friday'}); self.assertIsNone(out.get('proposal'))
 
     def test_the_verbs_the_owner_kept_using_each_have_a_proposal_kind(self):
         # later, skip, archive and not_ours_remember were retired with their buttons (the owner, 2026-09-25)

@@ -16,7 +16,7 @@ import contextlib, hashlib, json, re, threading, uuid
 from datetime import datetime
 from loguru import logger
 from . import kinds as task_kinds
-from . import failures
+from . import effects, failures
 
 # kind -> (target kind, required parameters, how to read "what the owner made of it" for the correction
 # comparison: a fixed word, 'kind' for the parameter of that name, or None when the action is never a
@@ -349,6 +349,7 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     # arriving in the same instant gets the receipt shape and runs nothing
     if not store.claim_operation(op_id, version): return {**_public(store.get_operation(op_id)), 'duplicate': True}
     _running.op = op_id
+    was = effects.snap(store, op['Kind'], op['TargetId'], params)
     try: outcome = run()
     except Halt as e:
         # a halt says its own way on (offers, needs, a repository to pick); the one failure shape only fills a fix it did not name
@@ -364,6 +365,10 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
         store.update_operation(op_id, {'Status': 'error', 'Error': c['sentence'], 'Actor': actor, 'OutcomeJson': json.dumps(failures.outcome(c))})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     finally: _running.op = None
+    # ...and a handler that came back clean is not yet the act: what the act PROMISED is looked at in the store (effects.py, the owner
+    # 2026-11-04: "it says it's doing things and it does not do them") - a Mark done over a task still open is a failure, said with why
+    if not _failed(outcome) and (why := effects.missed(store, op['Kind'], op['TargetId'], params, was, outcome)):
+        outcome = {**(outcome if isinstance(outcome, dict) else {}), 'error': why, 'retry': True, 'unlanded': True}
     if _failed(outcome):
         # the handler came back, but its own word is that nothing happened: an error the owner can retry, and
         # never a lesson - a 'not a task' success was recorded off a start that never launched (PW-130)

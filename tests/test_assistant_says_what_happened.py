@@ -173,23 +173,17 @@ def under_way(s, text='Rewriting the draft on TQ-0001.'):
     return concierge.record(s, dock, 'assistant', text), dock
 
 
-@pytest.mark.parametrize('got,why', [('', 'came back with nothing'), ('SAME', 'same words again'), (None, 'failed: the drafting AI timed out'),
-                                     ('Thanks - it goes out with Friday\'s run.', None)])
-def test_a_rewrite_says_what_the_box_holds(s, got, why):
+@pytest.mark.parametrize('before,after,why', [('Thanks - we pay on Friday.', '', 'came back empty'),
+                                              ('Thanks - we pay on Friday.', 'Thanks - we pay on Friday.', 'same as before'),
+                                              ('Thanks - we pay on Friday.', "Thanks - it goes out with Friday's run.", None)])
+def test_a_rewrite_says_what_the_box_holds_and_settles_its_line(s, before, after, why):
     t = task(s, Kind='reply')
-    rid = s.add_review({'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Thanks - we pay on Friday.'})
+    rid = s.add_review({'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': before})
     cid, dock = under_way(s)
-    def write(store, tid, rid_, **k):
-        if got is None: raise RuntimeError('the drafting AI timed out')
-        return store.get_review(rid_)['DraftText'] if got == 'SAME' else got
-    with mock.patch.object(server.responder, 'write_draft', write):
-        try: d = write(s, t, rid)
-        except RuntimeError: d, err = '', 'the drafting AI timed out'
-        else: err = ''
-        if d: s.update_review_draft(rid, d, None)
-        rc = server._draft_receipt(rid, t, 'Thanks - we pay on Friday.', err, True, cid, got=d)
+    s.update_review_draft(rid, after, None)                   # an empty one is refused there and said (store.EMPTY_DRAFT)
+    rc = server._draft_receipt(t, server._rewritten(rid, before), True, cid)
     line = next(c_ for c_ in s.list_comments(dock) if c_['CommentId'] == cid)['Body']
-    if why: assert rc['status'] == 'failed' and why in rc['text'] and '✓' not in rc['text'] and line.startswith('The draft on TQ-'), rc
+    if why: assert rc['status'] == 'failed' and why in rc['text'] and line.startswith('The draft on TQ-'), rc
     else: assert rc['status'] == 'done' and rc['text'].startswith('Rewrote the draft on') and line.startswith('Rewrote the draft')
     assert '"receipt": "' + ('error' if why else 'done') + '"' in line, 'the line kept says it as a receipt, tick or cross'
 

@@ -27,7 +27,9 @@ def a_draft():
 class ProposalTests(unittest.TestCase):
     def confirm(self, s, op):
         ran = []
-        return operations.execute(s, op['id'], op['version'], lambda: ran.append(1) or {'ok': True}), ran
+        # ...a send that went: the review is approved after it, which is what the receipt is checked against (effects.py)
+        def send(): ran.append(1); s.decide_review(op['target'], 'approved', None, 'owner'); return {'ok': True}
+        return operations.execute(s, op['id'], op['version'], send), ran
 
     def test_a_new_draft_after_the_proposal_refuses_the_yes(self):
         s, item = a_draft()

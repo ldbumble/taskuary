@@ -33,6 +33,12 @@ from loguru import logger
 from .browsergate import _segments, _deny, _tell
 
 HELD = 'Taskuary held this for the owner'
+# ...said to the agent the hold covers, as the browser's hold is (browserview.HOLD_LINE): told nothing, a general agent asked "Should I delete
+# it?" in words, the owner said yes, and the delete was held for a second yes on the task (the overnight run, 2026-11-03)
+HOLD_LINE = ("A DELETE ON THE OWNER'S COMPUTER outside your working folder, and a step that leaves the machine (a push, a merge, a publish, "
+             "a mail from a script), is HELD for the owner's press: Taskuary refuses it with \"held for the owner\", puts it on the task, runs "
+             "it once they approve and tells you what happened. So never ask the owner in words whether to delete - run the command, end your "
+             "turn when it is held, and say what waits for their Approve.")
 ASKS = {'claude'}       # the CLIs whose PreToolUse hook can answer `ask` with their own prompt (measured: Claude 2.1.312 honours it)
 # each tool's own words for a step that goes out, as (what it does, in the owner's words): its subcommand, or (subcommand, action)
 GIT = {'push': 'push the agent\'s commits out of this computer'}

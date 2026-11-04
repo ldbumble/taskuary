@@ -1147,6 +1147,10 @@ class GeneralSession:
                 # workbook under a folder of its own choosing and handed the owner a made-up http://127.0.0.1:7787/outputs/... link
                 from . import outputs
                 system = f'{system}\n\n{POST_LINE}\n\n{selfclose.SHOW_LINE}\n\n{outputs.brief(self.task_id)}'      # a CLI has hands to make the file it shows
+                # ...and what its hook holds for the owner, where it can hold (shellgate.HOLD_LINE): asked in words first, it was asked twice
+                if self.holds_browser():
+                    from . import shellgate
+                    system = f'{system}\n\n{shellgate.HOLD_LINE}'
                 from . import handbook as hub
                 if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
             else:
@@ -1265,6 +1269,9 @@ class GeneralSession:
                     from . import selfclose
                     from . import outputs
                     system = f'{system}\n\n{POST_LINE}\n\n{selfclose.SHOW_LINE}\n\n{outputs.brief(self.task_id)}'
+                    if self.holds_browser():
+                        from . import shellgate
+                        system = f'{system}\n\n{shellgate.HOLD_LINE}'
                     if hub.enabled(self.store): system = f'{system}\n\n{HUB_LINE}'
                 elif hub.enabled(self.store):
                     system = f'{system}\n\n{hub.ASSISTANT_LINE}'

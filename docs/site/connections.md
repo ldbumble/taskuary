@@ -76,7 +76,9 @@ opens that link once, signs in and clicks Accept; nothing is registered in your 
 nothing to set up in Azure. After Accept their browser goes to `http://localhost/api/ms/callback`:
 if the page says it can't connect, that is expected - the approval is done. Then press Sign in with
 Microsoft again. An admin who saw AADSTS900971 on the approval link itself had one from an older
-Taskuary; the card's *Get the admin link* gives a fresh one. The same link answers AADSTS65001, AADSTS90094, AADSTS50105 (the app
+Taskuary - it went to Microsoft's admin-consent page, which only returns to a web address and so
+had nowhere to send them back; the card's *Get the admin link* gives a fresh one, a sign-in page
+that asks for the organisation's consent. The same link answers AADSTS65001, AADSTS90094, AADSTS50105 (the app
 is limited to people IT assigned) and AADSTS53003 (a Conditional Access policy).
 
 :::note For an IT admin approving Taskuary
@@ -88,15 +90,18 @@ is limited to people IT assigned) and AADSTS53003 (a Conditional Access policy).
   entry covers whatever port Taskuary listens on (7787 unless changed). The admin-approval link
   returns to the same `http://localhost/api/ms/callback`, exactly as registered: on the computer
   Taskuary runs on it shows *Approved*; anywhere else the page does not load, and the approval
-  stands all the same.
+  stands all the same. Nothing is signed in by it - the code it brings back is never used.
   Missing, Microsoft's own page stops with error **AADSTS50011** (the redirect URI does not match) and never returns to
   Taskuary - the card says so while it waits.
 - **Delegated permissions (Microsoft Graph)**, all a user's own consent:
   - Outlook: `offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read`
   - Teams: `offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read`
   - Plus `Files.ReadWrite` only on a card where the owner turns on *Allow saving files*.
-- **Approving once for everyone:** the card's *Get the admin link* is a standard admin-consent
-  URL for Taskuary's app id. Nothing is registered in your tenant.
+- **Approving once for everyone:** the card's *Get the admin link* is Microsoft's standard sign-in
+  page (`/oauth2/v2.0/authorize`) for Taskuary's app id with `prompt=admin_consent` - sign in as an
+  admin and Accept with *Consent on behalf of your organization*. Nothing is registered in your tenant.
+- **Or from the Entra admin center**, once anyone in your organisation has signed in to Taskuary
+  (or tried to): Enterprise applications → Taskuary → Permissions → *Grant admin consent*.
 :::
 
 Taskuary reads your **Sent** folder as well as your inbox. That is what makes "has this been

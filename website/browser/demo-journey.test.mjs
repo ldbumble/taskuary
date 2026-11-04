@@ -94,6 +94,17 @@ test("the default static demo completes one reviewed request and never calls a l
     assert.ok(await page.$('a[href="https://taskuary.com/docs/"]'), "the setup action provides a working installation destination");
     await page.goto(`${origin}/?demo=explore`, { waitUntil: "networkidle0" });
     assert.equal(await page.$('[data-tq-demo-journey]'), null);
+    // Advisor evidence need not be in the feed. Opening it must resolve the stored mail,
+    // not silently move on to the first task in the tour.
+    const evidence = await page.evaluate(async () => {
+      const { default: api } = await import("/src/api.js");
+      const opened = (await api.post("/api/walk/open", { key: "msg:944" })).data;
+      const message = (await api.get("/api/messages/944")).data;
+      return { item: opened.item, message };
+    });
+    assert.equal(evidence.item.mid, 944);
+    assert.equal(evidence.item.title, "Badge printer quote");
+    assert.match(evidence.message.BodyText, /valid until Friday/);
     // THE CHAT ANSWERS ITS SUGGESTIONS, NOTHING TYPED IS READ FOR MEANING (the owner, 2026-10-28): free words get the honest line and
     // the suggestion chips; a chip's own words get its recorded answer and call - the walk moves, the table's item settles
     const chat = await page.evaluate(async () => {

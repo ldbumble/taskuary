@@ -52,7 +52,7 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
   assert.ok(bar.includes("sx={canContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
   // a general agent's composer sits under this bar and continues the same conversation: no second door (2026-09-29) - unless its
   // run ended under it, when Continue is the press that picks it back up (taskWorkspace.barContinues, 2026-10-21)
-  assert.match(tasks, /const barContinue = barContinues\(\{ canContinue, isGeneral, ended: detail\?\.runEnded \}\);/);
+  assert.match(tasks, /const barContinue = barContinues\(\{ canContinue, isGeneral, ended: detail\?\.runEnded, gone: !term \}\);/);
   assert.ok(bar.includes("{barContinue && <Button"), "the bar's Continue: a coding agent's, or a general run that ended");
   // whichever state it is in, exactly one move is filled: continue it or run another - an ended session has nothing to stop and save
   assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);

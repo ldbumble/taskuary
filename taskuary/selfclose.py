@@ -291,6 +291,14 @@ CHAT_LINE = (
     f'question, offered options, or still need something; a conversation that is still going is '
     f'not an ending, and neither is an answer the owner may want to push back on.')
 
+# ...and WHERE THE OWNER CLOSES IT (no CHAT_LINE: nobody wrote in, or the owner keeps the task to finish): the agent said "I couldn't
+# close the task from here", a failure over finished work (the desktop stress test, 2026-11-03). It is told whose press the close is
+def owner_closes_line() -> str:
+    from .buttons import label
+    return (f'ENDING THE TASK: closing this task is the owner\'s, not yours - they close it with {label("close")} once they have what they '
+            f'need. When the work is complete, say so plainly and that it is ready for {label("close")}. Never say you could not close it '
+            f'or tried to: that is not something you do here, so nothing failed.')
+
 
 # ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between
 # the markers become the task's pending reply as written (wrapup.agent_reply) and stay in the chat too.

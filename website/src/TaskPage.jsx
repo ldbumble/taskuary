@@ -1645,7 +1645,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...but a general agent's open card already has its composer under the bar, and what you type there continues the same
   // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
   // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
-  const barContinue = barContinues({ canContinue, isGeneral, ended: detail?.runEnded });   // ...and a general run that ended under it
+  const barContinue = barContinues({ canContinue, isGeneral, ended: detail?.runEnded, gone: !term });   // ...and a general run that ended under it
   // STOP AND SAVE ONLY WHILE THERE IS SOMETHING TO STOP (owner-approved, 2026-10-20): it stood on the row of an agent that was
   // already stopped (G7), and then of one that had failed, finished or been cut off by a restart. A session that has ENDED offers
   // what applies - Continue, Run another, Mark done, the write-up's own actions - and the live row keeps its Stop and save.
@@ -1748,8 +1748,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...AND THE ADVISOR'S PICK NAMES THE SECTION ITS MOVE IS IN (advice `section`, taskLayout.sectionHere): a reply that already went opens
   // on Close out, its Mark done lit - read once its decision lands, as the detail is (the canvas hands its decision in with its line, `note`)
   const advised = String((canvas ? note?.advice : taskAdvice)?.section || "");
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advised}|${!!writingUp}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : sectionHere({ stage: taskStage, advised }) };
+  // ...but NOT WHILE AN AGENT IS ON IT (the owner, 2026-11-03): Approve on a held step brought the Advisor's new pick, and the page
+  // jumped to Close out and folded the agent's reply - its pick is read when the agent ends, as the rest of the page is
+  const advisedHeld = liveSession || liveRun ? "" : advised;
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advisedHeld}|${!!writingUp}`;
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : sectionHere({ stage: taskStage, advised: advisedHeld }) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
@@ -3041,9 +3044,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}</span>}
                     /* ...and once the agent has acted - its Result, or the run that failed - its "stopped" or "failed" chip is the header's pill
-                       again (the owner, 2026-10-25); a working agent's chip stays where it is */
+                       again (the owner, 2026-10-25) */
+                    /* ...and a live agent's state is the task header's pill alone (StatusPill, from the same session): its chip here said it a
+                       second time, one above the other (the desktop stress test, 2026-11-03) */
                     chip={<>{settled ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
-                      : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
+                      : agentState && !term?.alive ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
                     /* ...in the three sections the one way to the full record is its button under the summary (the owner, 2026-10-27: "why are
                        there 2 buttons for full results?"): the heading neither folds nor says "Result" there */
                     {...(threeUp && !sessionView && resultShown ? { onToggle: null, folded: false, sub: "" } : {})}

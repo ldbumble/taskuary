@@ -753,6 +753,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # closing the task and drafting a reply to a sender there is not
     owed = sources and task.get('SourceRef') != 'connector:setup'
     if owed and selfclose.mode(store) != 'off' and not selfclose.stays_open(store, tid): system = system + '\n\n' + selfclose.CHAT_LINE
+    elif not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE

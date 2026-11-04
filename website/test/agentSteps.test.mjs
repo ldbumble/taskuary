@@ -153,6 +153,19 @@ test("a step Taskuary held for the owner's yes reads as held, never failed", () 
   assert.deepEqual(steps.map((s) => s.status), ["held", "error"]);
 });
 
+// A LOOK THAT FOUND NOTHING ANSWERED (the desktop stress test, 2026-11-03): `ls notes*` with no match is no failure
+test("a look whose non-zero exit is its answer reads 'found none'; a look that broke, or any other step, still fails", () => {
+  const call = (name, command, description) => ({ type: "tool_call", name, detail: { tool_call_id: "a", args: { command, description } } });
+  const res = (result) => ({ type: "tool_result", name: "a", detail: { result, is_error: true } });
+  const st = (name, command, result, description) => stepsOf([call(name, command, description), res(result)])[0].status;
+  assert.equal(st("Bash", "ls notes*", "Exit code 2\nls: cannot access 'notes*': No such file or directory"), "none");
+  assert.equal(st("Bash", "cd ~/Downloads && ls notes*", "Exit code 2\nls: cannot access 'notes*': No such file or directory", "Look for the notes"), "none");
+  assert.equal(st("Bash", "grep -r invoice-4471 docs", "Exit code 1"), "none");
+  assert.equal(st("PowerShell", "Get-ChildItem C:/Users/alex/Downloads/notes", "Get-ChildItem : Cannot find path 'C:\\Users\\alex\\Downloads\\notes' because it does not exist."), "none");
+  assert.equal(st("Bash", "ls --frobnicate notes*", "Exit code 2\nls: unrecognized option '--frobnicate'\nTry 'ls --help' for more information."), "error");
+  assert.equal(st("Bash", "npm test", "Exit code 1"), "error");
+});
+
 test("a turn whose answer carries its reply draft is not shown twice - the stream had the draft taken out, the filed answer keeps it", () => {
   const report = "My recommendation is to send Erin alone.\n\n**Worth going.** The tax changes land in January.";
   const after = "If you'd rather send both of them, tell me and I'll rewrite the reply.";

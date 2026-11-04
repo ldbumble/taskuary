@@ -67,6 +67,15 @@ def resolve(tid: int, rel: str):
         return None
 
 
+
+def named(tid: int, raw: str):
+    "A file an agent names by its name in the folder or by its full path - resolve's rules either way, so a path out of the folder is None."
+    raw = str(raw or '').strip().strip('"\'')
+    if raw and (Path(raw).is_absolute() or _DRIVE.match(raw)):
+        try: raw = Path(raw).resolve().relative_to(folder(tid).resolve()).as_posix()
+        except (OSError, ValueError): return None
+    return resolve(tid, raw)
+
 def row(tid: int, p: Path, rel: str) -> dict:
     "One file as the page draws it - the same shape as a shown page (server._artifact_row), so one list draws both."
     from urllib.parse import quote

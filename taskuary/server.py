@@ -716,6 +716,45 @@ def signin_code(site: str, body: SigninKeyBody, request: Request):
     return {'ok': True, 'code': bool(body.key.strip())}
 
 
+# ── THE OWNER'S HANDWRITTEN SIGNATURE (handsign.py, Settings -> Your signature): drawn or uploaded once, read back by the owner's token
+# alone - the guard denies every one of these to a session, and _owner_only says no to anyone else who gets this far ──
+class HandSignatureBody(BaseModel):
+    data: str                         # base64, or the data: URL a canvas hands over
+
+@app.get('/api/hand-signature')
+def hand_signature(request: Request):
+    from . import handsign
+    _owner_only(request, "the owner's signature is theirs")
+    return handsign.info()
+
+@app.get('/api/hand-signature/image')
+def hand_signature_image(request: Request):
+    from . import handsign
+    _owner_only(request, "the owner's signature is theirs")
+    got = handsign.load()
+    if not got: raise HTTPException(404, 'no signature is saved')
+    return Response(got[0], media_type=got[1], headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+
+@app.put('/api/hand-signature')
+def hand_signature_save(body: HandSignatureBody, request: Request):
+    import base64, binascii
+    from . import handsign
+    _owner_only(request, "the owner's signature is theirs")
+    try: raw = base64.b64decode(re.sub(r'^data:[^,]*,', '', body.data.strip()), validate=True)
+    except (binascii.Error, ValueError): raise HTTPException(422, 'that picture did not arrive whole - try again')
+    try: out = handsign.save(raw)
+    except ValueError as e: raise HTTPException(422, str(e))
+    store.audit('setting', 0, 'hand_signature', ACTOR, detail={'saved': True, 'type': out['type']})
+    return out
+
+@app.delete('/api/hand-signature')
+def hand_signature_clear(request: Request):
+    from . import handsign
+    _owner_only(request, "the owner's signature is theirs")
+    store.audit('setting', 0, 'hand_signature', ACTOR, detail={'saved': False, 'had': handsign.clear()})
+    return handsign.info()
+
+
 # The fill page sits outside /api on purpose: it is opened as a page, so no header can ride on it - the one-time token in its address
 # IS its key, and only that token's hash is kept. Its POST is same-origin only (the token gate checks Origin on /api alone).
 @app.get('/signin/{token}', include_in_schema=False)
@@ -5298,6 +5337,54 @@ def agent_propose(body: AgentProposeBody, request: Request):
     if not q: raise HTTPException(422, 'the proposal was refused - the reason is on the task')
     return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}
 
+class AgentSignBody(BaseModel):
+    task_id: int; attachment: int | None = None; file: str = ''; name: str = ''; data: str = ''   # data: base64, from the CLI's own read
+    fields: dict = {}; sign: dict = {}; date: bool | str = False; agent: str = 'agent'
+
+@app.post('/api/agent/sign-form')
+def agent_sign_form(body: AgentSignBody, request: Request):
+    """A PDF on the session's OWN task - one of its attachments, a file in its folder, or one the CLI read - filled and signed with the
+    owner's saved signature (handsign), into the task's folder and shown in the chat. Nothing leaves: it rides on a reply only when the
+    agent attaches it, and goes only on the owner's Send. With no signature saved the answer says so, and nothing is signed."""
+    import base64, binascii
+    from . import agenttools, handsign, outputs, session_artifacts
+    _own_task_only(request, body.task_id)
+    tid = body.task_id
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if body.attachment is not None:
+        x = store.get_attachment(int(body.attachment)) or {}
+        m = store.get_message(x.get('MessageId')) or {}
+        if not x or str(m.get('TaskId') or '') != str(tid): raise HTTPException(404, f'{body.attachment} is not an attachment on this task - read_message lists the ones it has')
+        if agenttools.unvouched(store, tid, {'id': m['MessageId']}): raise HTTPException(403, agenttools.UNVOUCHED)
+        p = _attachment_path(x.get('Path'))
+        if not p: raise HTTPException(404, f"{x.get('Name')} is not kept here - open the original message")
+        name, pdf = x.get('Name') or 'form.pdf', p.read_bytes()
+    elif body.file:
+        p = outputs.named(tid, body.file)
+        if not p: raise HTTPException(404, f'{body.file} is not a file in this task\'s folder ({outputs.folder(tid)})')
+        name, pdf = p.name, p.read_bytes()
+    elif body.data:
+        try: name, pdf = body.name or 'form.pdf', base64.b64decode(body.data, validate=True)
+        except (binascii.Error, ValueError): raise HTTPException(422, 'the file was not valid base64')
+    else: raise HTTPException(422, 'name the form: `attachment` (its id) or `file` (a PDF in your folder)')
+    try: signed, did = handsign.sign(pdf, body.fields, body.sign, body.date)
+    except LookupError as e: return {'ok': False, 'signature': False, 'says': str(e)}
+    except RuntimeError as e: return {'ok': False, 'says': str(e)}
+    except ValueError as e: raise HTTPException(422, str(e))
+    except Exception as e:
+        logger.warning(f'sign_form on task {tid} failed: {e}')
+        raise HTTPException(422, f'that PDF could not be filled ({type(e).__name__}) - say so to the owner; they can sign it by hand')
+    d = outputs.folder(tid); d.mkdir(parents=True, exist_ok=True)
+    stem = re.sub(r'[^\w .()-]+', '-', Path(name).stem).strip(' .-') or 'form'
+    out = next(d / f'{stem}-signed{f"-{i}" if i else ""}.pdf' for i in range(1000) if not (d / f'{stem}-signed{f"-{i}" if i else ""}.pdf').exists())
+    out.write_bytes(signed)
+    art = session_artifacts.shown(store, tid, out, body.agent)
+    store.audit('task', tid, 'sign_form', body.agent, detail={'file': out.name, 'page': did['page'], 'filled': did['filled']})
+    return {'ok': True, 'file': out.name, 'path': str(out), 'artifact': art['ArtifactId'], **did,
+            'says': f"Filled and signed {out.name} (the signature is on page {did['page']}) and showed it in the chat. Attach it to the reply - "
+                    f"propose_reply with attach: [\"{out.name}\"], or taskuary --reply ... --attach \"{out}\" - and ask the owner whether to send "
+                    "it; it goes only on their Send."}
+
 @app.post('/api/mcp')
 async def mcp_rpc(request: Request, task: int = 0):
     """Taskuary's tools as an MCP server (agenttools) for the session on `task` - its agent token and task proof in the headers, which
@@ -5314,8 +5401,9 @@ async def mcp_rpc(request: Request, task: int = 0):
                              'error': {'code': -32001, 'message': 'agents cannot do this: a session uses the tools of its OWN task'}}, status_code=403)
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
-             'reply': lambda tid, text, to='': agent_reply(AgentReplyBody(task_id=tid, text=text, to=to), request),
-             'draft': lambda tid, text, to, subject: agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject), request),
+             'reply': lambda tid, text, to='', files=(): agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files)), request),
+             'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
+             'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]

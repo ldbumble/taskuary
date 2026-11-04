@@ -91,6 +91,8 @@ DENIED = (
     (r'POST', r'^/api/cli/setup', "setting a coding CLI up runs it on this machine, and signs in as the owner - their decision"),
     (r'POST', r'^/api/setup/first-run/', "choosing the AI that reads the mail, or the mailbox it reads, is the owner's decision"),
     (r'POST', r'^/api/signature(/|$)', "the signature under the owner's email is theirs to read off their mail and check"),
+    # ...and the one they sign forms with (handsign.py): no session reads the picture or swaps it - sign_form places it, on a form the owner sees
+    (r'GET|HEAD|PUT|POST|DELETE', r'^/api/hand-signature(/|$)', "the owner's handwritten signature - only Taskuary places it, on a form the owner sees before anything is sent"),
     (r'PUT|DELETE|POST', r'^/api/cli/connections', 'CLI commands and connection tests are configured by the owner'),
     (r'POST', r'^/api/problems/', 'what is failing is the owner\'s to read - an agent does not get to clear the bell'),
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very
@@ -130,6 +132,7 @@ AGENT_WRITES = (
     (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting)$',
      "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
+    (r'POST', r'^/api/agent/sign-form$', "`taskuary --sign-form`: a PDF on the session's OWN task filled and signed into its folder (handsign) - nothing leaves"),
     (r'POST', r'^/api/mcp$', "Taskuary's own tools for the session (agenttools): each one is a door on this list or a read, on its OWN task"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),
     (r'POST', r'^/api/(hub|handbook)(/\d+/(comment|vote|retire|restore))?$',

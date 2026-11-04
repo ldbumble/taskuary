@@ -190,7 +190,7 @@ class TheWatchedBrowserOutlivesAPauseTests(unittest.TestCase):
     def test_every_door_the_server_opens_matches_the_launch(self):
         """set viewport (the pane's shape), open (the address bar) and close each run agent-browser
         from the server; a single one without the environment relaunches the daemon."""
-        browserview.set_viewport('abc123', 1200, 800)
+        with mock.patch.object(browserview, 'state', return_value={'open': True}): browserview.set_viewport('abc123', 1200, 800)
         with self.assertRaises(ValueError): browserview.navigate('abc123', 'https://example.test')
         browserview.home().mkdir(parents=True, exist_ok=True); (browserview.home() / 'tq-abc123.stream').write_text('1')
         browserview.close('abc123')

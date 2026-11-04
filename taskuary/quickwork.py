@@ -7,7 +7,7 @@ already ran deep). It never guesses from the words of the task.
 THE DEPTH RULING (2026-10-29, after the replay found 93 of 140 recent tasks with no recorded difficulty and 30 'standard'): quick when triage
 read the work as quick or standard or recorded nothing; the agent only for hard work, a browser, a stranger, several emails owed, a task that
 already ran deep, and a routine. A quick call that finds it needs more escalates, so a wrong 'quick' costs one cheap call."""
-import re, threading
+import json, re, threading
 from typing import NamedTuple
 from loguru import logger
 from . import brainroute, browserview, general, ingest, llm, origin, selfclose, slots
@@ -94,7 +94,25 @@ def answer_text(step, raw: str = '') -> bool:
     "True for a (kind, name, detail) step that is the call's answer streamed as text - the JSON object, whole or a piece of it."
     kind, name, d = step
     d = str(d or '').strip()
+    # ...and a CLI's readable `live` lines say it again (agents._live_line): with the text dropped the turn had no structured step left, so
+    # the pane read those lines instead (agentSteps.stepsOf) and drew the object, cut at 300 characters, as Taskuary's words (2026-11-03)
+    if kind == 'live': return bool(d) and (d in str(raw or '') or any(is_raw(x) for x in d.splitlines()))
     return kind == 'progress' and name in ('text', 'agent_message') and bool(d) and (is_raw(d) or d in str(raw or ''))
+
+# A BODY THAT IS THE OBJECT is shown as its report: a turn filed whole, fenced or cut short reads back as what the owner reads, never as JSON
+_REPORT = re.compile(r'"report"\s*:\s*"((?:[^"\\]|\\.)*)', re.S)
+def report_of(text) -> str:
+    "The report a raw quick answer holds - or the text as it is, when it is not one."
+    t = str(text or '')
+    if not is_raw(t): return t
+    body = re.sub(r'^\s*```(?:json)?\s*|\s*```\s*$', '', t)
+    try: a = read(json.loads(body))
+    except ValueError: a = None
+    if a is not None: return a.report
+    m = _REPORT.search(body)                       # cut short: the report as far as it got, its last escape whole or dropped
+    if not m: return ''
+    try: return _clean(json.loads('"' + re.sub(r'\\u?[0-9a-fA-F]{0,3}$|\\$', '', m.group(1)) + '"'))
+    except ValueError: return _clean(m.group(1).replace('\\n', '\n'))
 
 def as_reply(out: QuickAnswer) -> str:
     "The answer as the markers a general turn writes, so GeneralSession._file reads it exactly as it reads one."

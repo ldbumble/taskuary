@@ -2338,6 +2338,7 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
     from . import general
     try:
         general.start_session(store, tid, actor='router').send_prompt(carry_on_turn(store, tid, msg, mid), brief=True)
+    except general.Stopped: pass           # the owner stopped the carried-on turn: nothing failed
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
         logger.warning(f'assistant carry-on failed for task {tid}: {e}')
@@ -3059,6 +3060,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
         if (fresh or quickwork.only_quick(store, tid)) and (ask := first_ask(store, tid, brief)): session.send_prompt(ask, brief=True)
         return True
     except Exception as e:
+        if isinstance(e, general.Stopped): return True         # the owner stopped it: nothing failed, and nothing starts it again
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')
         from . import blackboard as bb
         bb.record_failure(store, tid, e, 'assistant', label='The assistant')

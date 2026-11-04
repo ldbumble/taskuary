@@ -2774,6 +2774,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         turn = '\n\n'.join(x for x in [news, f'FROM THE OWNER: {note}' if note else '', continuity.RESUME_PROMPT] if x)
         def go():
             try: general.start_session(store, task_id, actor=ACTOR).send_prompt(turn, imgs or None, brief=True, kept=True)
+            except general.Stopped: pass       # the owner stopped it again: nothing to say
             except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
             finally: general.OPENING.discard(task_id)
         # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has

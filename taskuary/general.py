@@ -26,6 +26,8 @@ RUN_TYPE = 'assistant_run'
 # the owner had typed it. It is still that turn (the next turn continues the conversation it opened), but filed by Taskuary, and the
 # pane folds it into one grey line, "Taskuary's instructions". The same actor as Taskuary's own notes (sessionrecord.NOTE_ACTOR).
 BRIEF_ACTOR = 'taskuary'
+class Stopped(RuntimeError):
+    "A turn the owner stopped - the start that ran it is done, not failed (ingest._start_general)."
 def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor') == BRIEF_ACTOR
 # ``assistant`` was briefly written by Timeline discussions before those tasks were normalized
 # to ``general``. Keep it as a read-compatible alias so existing discussions still open in the
@@ -1322,15 +1324,19 @@ class GeneralSession:
             # (TQ-0496, 2026-09-11: codex refused the model in ~/.codex/config.toml).
             # A background task swallows what it raises, so this is also the only place the
             # reason reaches the log.
+            # ...but a turn the OWNER stopped - Stop, or Stop and save closing the session under it - is stopped, never failed: its CLI
+            # exits mid-turn, and read as a failure the start was put back in the queue and run again (the overnight run, 2026-11-03)
+            stopped = cancel.is_set() or getattr(self, 'closing', False)
             try:
                 from . import workerstate as ws
-                ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='api')
+                ws.record(self.store, self.task_id, self.sid, 'stopped' if stopped else 'failed', text=str(e)[:4000], source='api')
             except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
             logger.warning(f'assistant turn failed on task {self.task_id}: {e}')
             # ITS CLI DIED PART-WAY THROUGH (clipool.MID_TURN): the turn was not sent again, as it may have done some of the work.
             # The session ends here, its conversation saved - so the task reads stopped and its row offers Continue, which picks the
             # saved conversation back up; a session left open over a dead process offered Stop and save on nothing (2026-10-21)
             from .clipool import MID_TURN
+            if stopped: raise Stopped(str(e)) from e
             if MID_TURN in str(e): threading.Timer(0.1, self.close, kwargs={'learn': False}).start()
             # A FAILED TURN IS SAID AS A FAILURE (owner-approved, 2026-10-21): left open, the session read alive and not busy - "waiting
             # on you" on the card, the rail and the Board over an agent that never ran. It ends here, its conversation kept, so every
@@ -1525,6 +1531,7 @@ class GeneralSession:
         return True
 
     def close(self, learn=True, report=True):
+        self.closing = True          # a turn running now ends because of this, not on its own (send_prompt: stopped, not failed)
         # Coding sessions already ask this at wrap. General sessions used to bypass that branch,
         # so everything the assistant learned about the business disappeared with the chat even
         # though the Hub explicitly holds more than technical facts. A session boundary is the

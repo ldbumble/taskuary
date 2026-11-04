@@ -1,13 +1,13 @@
 {
  "/api/version": {
-  "version": "0.3.10.27",
+  "version": "0.3.10.28",
   "started": "2026-10-30 10:57:34",
   "cli_installer_revision": 2
  },
  "/api/build": {
   "asset": "index-DCO1eA8i.js",
-  "version": "0.3.10.27",
-  "disk_version": "0.3.10.27"
+  "version": "0.3.10.28",
+  "disk_version": "0.3.10.28"
  },
  "/api/demo": {
   "demo": true,

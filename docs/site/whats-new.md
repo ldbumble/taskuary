@@ -2,6 +2,17 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.28 - 2026-11-04
+
+- A helpdesk's answer on its own thread is shown the request it answers, so a watched ask and its ticket confirmation are one row
+- Settings drops "Your mail goes to": triage picks no worker for a task, so the row chose nothing
+- The role walk no longer asks where the owner's mail goes, and applying a role moves none of it
+- A file the agent hands over that cannot ride is kept on the reply, by name and why
+- Close out says which file did not attach and why, and Attach another names a refused file
+- The agent is told which file its reply does not carry, and what to offer instead
+- The admin approval link goes through the sign-in page, which takes the app's desktop redirect
+- Help page: why an old approval link said AADSTS900971, and the Entra admin center as a last resort
+
 ## 0.3.10.27 - 2026-11-04
 
 - An agent run is never killed for running long, and a turn cut by a time limit says so and offers Continue

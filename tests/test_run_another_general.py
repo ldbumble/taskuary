@@ -40,7 +40,7 @@ class RunAnotherTests(unittest.TestCase):
         self.assertEqual([m['content'][0]['text'] for m in general.earlier(self.s, self.tid)],
                          [ASKED, ANSWERED], 'the earlier agent\'s turns stay on the task')
         self.assertEqual(self.s.saved_session(self.tid)['NativeId'], '', 'the earlier CLI conversation is never resumed')
-        session.send_prompt.assert_called_once_with('Find out who signs the snag list')
+        session.send_prompt.assert_called_once_with('Find out who signs the snag list', brief=True)
 
     def test_the_new_agents_prompt_is_its_own_with_where_the_earlier_one_got_to(self):
         self.dispatch(fresh=True)

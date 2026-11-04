@@ -97,6 +97,6 @@ test("a draft an earlier agent session wrote is not drawn while a newer session 
   assert.deepEqual(latestDrafts([old, fresh, owned], "s-new").map((r) => r.ReviewId), [11, 9]);
   assert.equal(agentAsks(latestDrafts([old], "s-new")).length, 0, "no 'drafted a message' notice for it");
   const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /reviews = latestDrafts\(roundReviews\(allReviews, rounds\), liveSession \? term\.sid : ""\)/,
+  assert.match(page, /reviews = latestDrafts\(roundReviews\(allReviews, rounds\), liveSession \? term\?\.sid \|\| "" : ""\)/,
     "the page's reply, its notice, Send and Mark done all read the reviews with it left out");
 });

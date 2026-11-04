@@ -2416,6 +2416,12 @@ def desktop_status():
     c = agentdesktop.card(store)
     return {'on': agentdesktop.on(store), 'active': bool(c.get('Active')), 'installed': agentdesktop.installed(), 'how': agentdesktop.HOW}
 
+@app.post('/api/tasks/{task_id}/assistant/seen')
+def assistant_seen(task_id: int):
+    """The task is on screen (the page posts every 60 s while it is open): its agent's CLI stays open - nothing here starts one."""
+    from . import clipool
+    return {'warm': clipool.touch(f'general:{task_id}') > 0}
+
 @app.post('/api/tasks/{task_id}/assistant/cancel')
 def assistant_cancel(task_id: int):
     """The stop button. The ONLY thing that stops an answer being written - walking away does

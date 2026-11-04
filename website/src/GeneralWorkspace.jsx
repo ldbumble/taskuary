@@ -785,6 +785,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const stopRun = useCallback(() => {
     api.post(`/api/tasks/${task.TaskId}/assistant/cancel`).catch(() => {});
   }, [task.TaskId]);
+  /* On screen, the agent's CLI stays open: the server reaps one nobody touches for 30 minutes, and this is the touch. Nothing starts here. */
+  useEffect(() => {
+    const seen = () => { if (!document.hidden) api.post(`/api/tasks/${task.TaskId}/assistant/seen`).catch(() => {}); };
+    seen(); const t = setInterval(seen, 60000);
+    return () => clearInterval(t);
+  }, [task.TaskId]);
 
   /* An answer written while you were somewhere else. The run no longer dies when this pane
      goes away, so when it comes back the conversation may be mid-sentence - or already have

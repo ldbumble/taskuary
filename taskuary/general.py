@@ -1229,6 +1229,7 @@ class GeneralSession:
         from . import selfclose
         selfclose.forget(self.task_id)
         t0 = self.last                       # the turn's own time, kept with its record (sessionrecord.record sums them)
+        from . import clipool; self.warm_ = clipool.is_live(f'general:{self.task_id}')      # its CLI was already open at the start of this turn: the audit says so
         self._cancel = cancel if cancel is not None else threading.Event()
         cancel = self._cancel
         try:
@@ -1683,7 +1684,7 @@ class GeneralSession:
         try: sessionrecord.keep_turn(self.task_id, rid, self.trace)
         except Exception as e: logger.debug(f'general turn steps not kept for task {self.task_id}: {e}')
         self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
-                         {'provider': self.provider, 'model': self.model, 'chars': len(reply), 'took': round(time.time() - t0)})
+                         {'provider': self.provider, 'model': self.model, 'chars': len(reply), 'took': round(time.time() - t0), 'warm': bool(getattr(self, 'warm_', False))})
         self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
         # AFTER the turn is filed, and off this thread: closing runs wrapup.wrap, which closes
         # this very session - doing it inline would kill the pty from inside its own answer.

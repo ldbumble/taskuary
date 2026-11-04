@@ -145,3 +145,20 @@ def test_a_swap_after_a_turn_replaces_only_a_live_idle_process_launched_otherwis
     swapped = clipool._POOL['chat:1']
     b = ask(cli + ['--model', 'other'], 'chat:1', 'again', resume=a['sid'])
     assert b['pid'] != a['pid'] and b['sid'] == a['sid'] and clipool._POOL['chat:1'] is swapped is not lv   # the next ask takes the swapped one
+
+
+def test_is_live(cli):
+    assert not clipool.is_live('general:5')
+    ask(cli, 'general:5', 'hi')
+    assert clipool.is_live('general:5') and not clipool.is_live('general:6')
+    clipool.close('general:5')
+    assert not clipool.is_live('general:5')
+
+
+def test_touch_keeps_a_process_from_the_reaper(cli):
+    ask(cli, 'general:5', 'hi'); ask(cli, 'general:6', 'hi')
+    for k in ('general:5', 'general:6'): clipool._POOL[k].used -= 31 * 60
+    assert clipool.touch('general:5') == 1
+    clipool._sweep()
+    assert clipool.is_live('general:5') and not clipool.is_live('general:6'), 'on screen stays; the one nobody looks at is reaped'
+    assert clipool.touch('general:9') == 0

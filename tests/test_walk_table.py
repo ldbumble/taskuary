@@ -71,6 +71,7 @@ class Walk:
         if verb == 'arrive': return walkworld.arrive(self.s, self.src, args[0])
         if verb == 'close-elsewhere': return walkworld.close_elsewhere(self.s, self.src, args[0])
         if verb == 'agent-closes': return walkworld.agent_closes(self.s, self.src, args[0])
+        if verb == 'watch': return walkworld.watch(self.s, self.src, args[0])
         if verb == 'read':
             funnel.settle(self.s, self.key(args[0]), 'surfaced', 'owner', read=True); return walkworld.reconcile(self.s)
         if verb == 'new-chat': funnel.reset_walk(self.s); self.on = None; return None
@@ -143,6 +144,9 @@ def check(w: Walk, case: dict, out, before: int):
     for sym in case.get('later') or ():
         row = next((r for r in items if walkworld.matches(r, src[sym])), None)
         assert row and lanes.level_of(row) == 'later', f'{rid}: {sym} should be under For later - {trail}'
+    for sym in case.get('watching') or ():
+        row = next((r for r in items if walkworld.matches(r, src[sym])), None)
+        assert row and lanes.level_of(row) == 'watching', f'{rid}: {sym} should be under Watching - {trail}'
     # a task its agent closed stays in Tasks, in its place, until read (the owner, 2026-11-02) - never under Reports
     for sym in case.get('finished') or ():
         row = next((r for r in items if walkworld.matches(r, src[sym])), None)

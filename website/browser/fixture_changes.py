@@ -699,13 +699,14 @@ def install_processing_changes(app, store):
     @app.post('/api/fixture/walk/do')
     def walk_do(body: dict):
         verb, sym = body.get('verb'), body.get('sym')
-        if verb not in ('arrive', 'close-elsewhere', 'agent-closes', 'read', 'phone start', 'phone next') \
+        if verb not in ('arrive', 'close-elsewhere', 'agent-closes', 'watch', 'read', 'phone start', 'phone next') \
                 or (sym is not None and not re.fullmatch(r'[A-Z]\d', str(sym))):
             raise HTTPException(422, 'a table verb and a symbol')
         from taskuary import concierge, funnel, railwalk, remote_assistant
         if verb == 'arrive': walkworld.arrive(store, world, sym)
         elif verb == 'close-elsewhere': walkworld.close_elsewhere(store, world, sym)
         elif verb == 'agent-closes': walkworld.agent_closes(store, world, sym)
+        elif verb == 'watch': walkworld.watch(store, world, sym)
         elif verb == 'read':                          # ...a row the demo's own passes took off already is read already
             key = walkworld.key_of(store, world, sym)
             if key: funnel.settle(store, key, 'surfaced', 'owner', read=True); walkworld.reconcile(store)

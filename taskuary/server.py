@@ -5845,10 +5845,11 @@ def _with_pile(out: dict, body) -> dict:
 
 # THE WALK'S OWN ROUTES (railwalk, 2026-10-30): the page sends an action and draws the Answer that comes back - the row, its words and
 # chips, where the walk now stands, and the rail as the move left it with the next answer prepared in it.
-def _walk_answer(out: dict, body: RailWalkBody) -> Response:
+def _walk_answer(out: dict, body: RailWalkBody, along: bool = True) -> Response:
     # ...the cached rail unless something moved since it was built (funnel.pile's own check: a write anywhere, a worker): forced, a walk
     # move built the whole rail a second time after the one its own writes had already cost it (2026-10-31, 0.5 s a press on a real home)
-    out = {**out, 'pile': _pile_along(fyi=body.fyi, force=False)}
+    # `along=False`: no rail rides, and the page reads it itself once the answer has drawn (AssistantView.landed)
+    out = {**out, 'pile': _pile_along(fyi=body.fyi, force=False) if along else None}
     _refresh_after(out)
     return _encoded(out)
 
@@ -5884,7 +5885,13 @@ def walk_open(body: RailWalkBody):
     from . import railwalk
     if body.level: return _walk_answer(railwalk.section(store, body.level, ACTOR, press=body.press), body)
     if not body.key: raise HTTPException(422, 'a key or a section is required')
-    return _walk_answer(railwalk.open(store, body.key, ACTOR, press=body.press, at=body.from_key), body)
+    # A ROW CLICKED ANSWERS WITHOUT BUILDING THE RAIL (the owner, 2026-11-04: "i clicked a watching task and there is no next/back thing
+    # yet? took a long time to light up"): opening a row reads its "+N", and that write made the answer build the whole rail before it
+    # went - Back and Next stand greyed until a move lands, ~0.5 s of a click on 450 rows, more on a real home. The rail it opened is
+    # the one on screen; the cached one rides when nothing moved, else the page reads it after the answer has drawn
+    from . import funnel
+    out = railwalk.open(store, body.key, ACTOR, press=body.press, at=body.from_key)
+    return _walk_answer(out, body, along=funnel.warm(store))
 
 @app.post('/api/walk/leave')
 def walk_leave(body: RailWalkBody):

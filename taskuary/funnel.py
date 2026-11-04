@@ -1489,6 +1489,25 @@ def workers_signature(live_state) -> str | None:
 _OBSERVE = object()
 
 
+def _moved(store, workers) -> bool:
+    """Written to, or a worker moved, since the cached build began. Held under _LOCK."""
+    top = _rail_top(store)
+    if workers is None or workers != _CACHE.get('workers'): return True
+    if top is None or _CACHE.get('mark') is None or top == _CACHE['mark']: return False
+    if not _chat_only(store, _CACHE['mark'], top): return True
+    _CACHE['mark'] = top; return False                 # ...the Assistant's own words only: the build stands, at the new mark
+
+
+def warm(store) -> bool:
+    """A read of the pile now is served from the cache: built for this store, in its time, and nothing written or moved since."""
+    from . import terminal as term
+    try: workers = workers_signature(term.live_sessions(tail=6))
+    except Exception: return False
+    with _LOCK:
+        return (_CACHE.get('store') is store and bool(_CACHE.get('pile')) and time.time() - _CACHE.get('at', 0) < PILE_EVERY
+                and not _moved(store, workers))
+
+
 def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, seen=None) -> dict:
     """The pile, cached for a few seconds: it is polled while the page is open, and every look
     is a dozen queries.
@@ -1510,12 +1529,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
     workers = workers_signature(observed)
     with _LOCK:
         same_store = _CACHE.get('store') is store
-        def moved():                                   # written to, or a worker moved, since the cached build began
-            top = _rail_top(store)
-            if workers is None or workers != _CACHE.get('workers'): return True
-            if top is None or _CACHE.get('mark') is None or top == _CACHE['mark']: return False
-            if not _chat_only(store, _CACHE['mark'], top): return True
-            _CACHE['mark'] = top; return False         # ...the Assistant's own words only: the build stands, at the new mark
+        moved = lambda: _moved(store, workers)
         if same_store and _CACHE['pile'] and not force and moved(): _CACHE.update(at=0.0); force = True
         # One websocket event wakes every open browser. If they all arrive while the first forced
         # rebuild is running, that one result satisfies all of them; rebuilding once per tab is a

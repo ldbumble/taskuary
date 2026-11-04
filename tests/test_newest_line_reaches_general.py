@@ -100,6 +100,16 @@ class NextTurn(unittest.TestCase):
         self.carried_on(s, tid)
         self.assertIn(ASK, self.brain.turn)
 
+    def test_an_agent_whose_hook_holds_is_told_not_to_ask_before_a_delete(self):
+        """The overnight run, 2026-11-03: asked "Should I delete it?" in words, the owner said yes, and the delete was held for a second yes.
+        Resumed on its CLI or started fresh, a Claude session is told what its hook holds (shellgate.HOLD_LINE)."""
+        from taskuary import shellgate
+        for resumable in (True, False):
+            s = store(); tid = worked(s, resumable=resumable)
+            self.carried_on(s, tid)
+            self.assertIn(shellgate.HOLD_LINE, self.brain.calls[-1][0], resumable)
+            ended(tid)
+
     def test_a_line_the_news_read_missed_is_still_the_turn(self):
         s = store(); tid = worked(s)
         _out, spawned = ingested(s, mail(**AGAIN))

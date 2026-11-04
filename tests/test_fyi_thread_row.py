@@ -74,3 +74,16 @@ def test_clearing_fyi_row_by_row_reads_every_thread_under_them():
         assert set(said) == {'processing:a', 'processing:b', 'processing:c', 'processing:d', 'processing:e'}
         funnel._keep_threads(s, [fyi('processing:d', 'email:payroll', '2026-10-28 09:30:00')])
         assert funnel.thread_of(s, 'processing:d') == [], 'a row drawn alone forgets the thread it had'
+
+
+def test_a_folded_mail_settles_alone_and_never_its_own_remembered_thread():
+    """The walk table's world went 0.6s, 1, 3, 10, 48, 300s and CI timed out (2026-11-04): each mail under a row was settled with its OWN
+    remembered thread (_THREADS keeps them past a read), which named the row above it again - mails on one thread settled each other on and
+    on. A folded mail is settled once, alone."""
+    from taskuary.store import MemoryStore
+    s, said = MemoryStore(), []
+    with mock.patch.dict(funnel._THREADS, {'store': s, 'by': {'processing:a': ['processing:b'], 'processing:b': ['processing:a']}}), \
+         mock.patch.dict(funnel._CACHE, {'store': None, 'pile': None, 'full': None}), \
+         mock.patch.object(s, 'set_funnel_state', side_effect=lambda k, *a, **kw: said.append(k)):
+        funnel.settle(s, 'processing:a', 'surfaced', read=True)
+    assert said == ['processing:a', 'processing:b']

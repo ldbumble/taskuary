@@ -327,7 +327,9 @@ const scriptedItemLine = (item) => {
 const itemFromTimeline = (key) => {
   const match = /^msg:(\d+)$/.exec(String(key || ""));
   if (!match) return null;
-  const row = feedRows().find((r) => String(r.MessageId) === match[1]);
+  // Advisor evidence can be outside the visible feed (the scripted badge quote is one).
+  // Resolve the stored message too, or a source link silently advances to an unrelated task.
+  const row = feedRows().find((r) => String(r.MessageId) === match[1]) || state["/api/messages/one"]?.[match[1]];
   if (!row) return null;
   return {
     key, kind: row.Channel === "report" ? "report" : "fyi", lane: "fyi",

@@ -531,7 +531,8 @@ def _show_files(store, tid: int, named: list, paths: list, actor='assistant'):
         why = "only a file from the agent's own folder can be shown" if p is None else '' if p.is_file() else 'there is no such file'
         if not why:
             try: session_artifacts.shown(store, tid, p, actor); continue
-            except (OSError, ValueError) as e: why = 'it could not be read'
+            except ValueError as e: why = str(e)          # its type, in words: '.exe cannot be shown - only ...'
+            except OSError: why = 'it could not be read'
         store.add_comment(tid, 'assistant', 'agent', f'{file_name(raw)} was not shown - {why}.')
 
 

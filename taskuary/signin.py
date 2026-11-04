@@ -40,6 +40,7 @@ import hashlib, html as H, ipaddress, json, logging, re, secrets, shutil, subpro
 from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
+from . import words
 
 TTL = 15 * 60                   # a fill link lives this long, and opens once
 AGAIN = 10 * 60                 # a saved sign-in the site asks for again inside this is not tried a second time
@@ -492,7 +493,7 @@ CAPTURE = r'''(() => {
 WATCH_FOR = 30 * 60             # a sign-in ask is watched this long, then left to the owner's word
 WATCH_EVERY = 1.5
 _TYPED = {}                     # tid -> {'user', 'pw', 'site'}: what the owner sent on the page, until the sign-in is past - memory only
-SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under Settings > Agent permissions > Saved sign-ins.'
+SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under {where}, Saved sign-ins.'
 
 
 def heard(tid, site: str, raw) -> bool:
@@ -521,7 +522,7 @@ def keep_typed(store, tid, site) -> bool:
     try: save(store, site, t.get('user') or '', t['pw'], by='owner')
     except ValueError as e:
         store.add_comment(tid, 'taskuary', 'agent', f'Your {site} sign-in was not saved: {e}.'); return False
-    store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site))
+    store.add_comment(tid, 'taskuary', 'agent', SAVED_LINE.format(site=site, where=words.name('agent_permissions')))
     return True
 
 

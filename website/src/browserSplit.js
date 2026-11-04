@@ -150,11 +150,11 @@ export const shortUrl = (u, max = 64) => {
   return s.length <= max ? s : `${s.slice(0, Math.ceil(max * 0.6))}…${s.slice(-Math.floor(max * 0.35))}`;
 };
 
-// IS THERE A BROWSER TO SHOW. A task that asked for one shows its pane while Chrome is still coming up
-// (`expect`) - but only until that browser has been seen open: once it has, and closes, the pane folds.
-// `expect` alone kept it standing for ever over a frozen last frame and a "no page open" note, its socket
-// knocking every two seconds on a relay that refused it (the 2026-10-02 pane pass).
-export const showsBrowser = (open, expect, seen) => !!open || (!!expect && !seen);
+// IS THERE A BROWSER TO SHOW: one that is open ON A PAGE (the owner, 2026-11-04: "browser should not show unless we need login";
+// "no browser should open if we don't have a URL"). A task marked "needs a browser" used to reserve the pane while Chrome came up, and
+// an empty tab took it: a black about:blank beside an agent that only searched and asked where and when. Nothing shows - no view, no
+// chip - until the agent opens a page; a sign-in, a hand-over and a held act all wait on one (isBlankPage below).
+export const showsBrowser = (open, url) => !!open && !isBlankPage(url);
 
 // WHO SHAPES THE PAGE. Every tab watching one session used to set its viewport - a phone and a desktop on
 // the same task fought, and the desktop's page came back phone-shaped between black bars (2026-10-02).
@@ -167,8 +167,7 @@ export const mayShape = (hidden, focused, claim = false) => !hidden && (!!claim 
 // pane stays folded to its chip, one click from showing, and unfolds by itself once the agent goes to a real address.
 export const isLocalPage = (url) => /^file:/i.test(String(url || "").trim());
 // AN EMPTY TAB IS NOT A PAGE (the owner, 2026-11-03): a Chrome launched for a task marked "needs a browser" sat on about:blank as half the
-// canvas - "an empty tab, live" - on a task the agent answered without one. It folds to its chip until the agent opens a page, the owner
-// unfolds it, or something waits on it (SessionPane)
+// canvas - "an empty tab, live" - on a task the agent answered without one. It takes no room at all (showsBrowser)
 export const isBlankPage = (url) => { const u = String(url || "").trim(); return !u || /^about:/i.test(u); };
 // ...and "your turn - click the page and type" is for a wait ON the page: the agent's hand-over (isTurn) or a sign-in (signin.PREFIX) -
 // never a question it asked in words, which is answered in the chat's box

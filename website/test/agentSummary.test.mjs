@@ -35,6 +35,19 @@ test("Next steps: nothing left only when no draft waits and no On you step is un
   assert.deepEqual(nextSteps({ summary: { nothing_left: true }, reviews, cards: false }).drafts, []);
 });
 
+// ...and a held browser act or a playbook waiting on Approve is something left too (review, Task 3.6)
+test("Next steps: an Approve still pending is never Nothing left to do here", () => {
+  const held = [{ ReviewId: 7, Kind: "action", Status: "pending" }];
+  const a = nextSteps({ summary: { nothing_left: true }, reviews: held });
+  assert.deepEqual(a.held.map((r) => r.ReviewId), [7]);
+  assert.equal(a.nothing, false);
+  const b = nextSteps({ summary: { nothing_left: true }, acts: [{ ReviewId: 8, Kind: "action", Status: "pending" }], reviews: held });
+  assert.deepEqual(b.held.map((r) => r.ReviewId), [7, 8], "the chat's own acts and the task's reviews, each once");
+  assert.equal(b.nothing, false);
+  assert.deepEqual(nextSteps({ summary: { nothing_left: true }, reviews: [{ ReviewId: 9, Kind: "action", Status: "approved" }] }).held, []);
+  assert.equal(nextSteps({ summary: { nothing_left: true }, reviews: [{ ReviewId: 9, Kind: "action", Status: "approved" }] }).nothing, true);
+});
+
 test("the chat draws the summary, and the turn's working is one line with its steps folded under it", () => {
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /import AgentSummary from "\.\/AgentSummary\.jsx";/);
@@ -45,4 +58,5 @@ test("the chat draws the summary, and the turn's working is one line with its st
   for (const h of ["What this is about", "What I did", "Next steps", "Nothing left to do here", "data-tq-summary", "data-tq-on-you"])
     assert.ok(card.includes(h), h);
   assert.doesNotMatch(card, /<Button|onClick/, "the summary draws no press of its own yet (Task 4.2 brings the cards)");
+  assert.doesNotMatch(card + view.slice(view.indexOf("<AgentSummary")), /onChanged=\{work/, "no prop nothing reads yet (Task 4.2 adds it with the cards)");
 });

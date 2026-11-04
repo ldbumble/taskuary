@@ -29,10 +29,14 @@ test("a general task with no session opens as a usable chat and asks its questio
 
   // the pane is a chat, not an empty box: the composer takes input with nothing running
   assert.equal(await page.$eval(".tq-aui-composer textarea", (el) => el.disabled), false);
-  // ...once the page has laid out the turn it started: the first frame is as high as what it holds, and "Working on this…" is one line
-  // where the band was three (2026-11-04)
+  // ...once the page has laid out the turn it started (within 5s), and from then on it holds that height: frame by frame it never shrinks
+  // or jumps (the chat-height rule, 2026-10-31) - the first frame is as high as what it holds, "Working on this…" one line where the band was three
   const box = await page.waitForFunction(() => { const h = document.querySelector(".tq-aui-thread")?.getBoundingClientRect().height || 0; return h > 300 && h; },
     { timeout: 5000, polling: "raf" }).then((h) => h.jsonValue()).catch(() => page.$eval(".tq-aui-thread", (el) => el.getBoundingClientRect().height));
+  const frames = await page.evaluate(() => new Promise((done) => { const hs = [];
+    const tick = () => { hs.push(document.querySelector(".tq-aui-thread")?.getBoundingClientRect().height || 0); hs.length < 12 ? requestAnimationFrame(tick) : done(hs); };
+    requestAnimationFrame(tick); }));
+  assert.ok(frames.every((h) => Math.abs(h - box) <= 1), `laid out at ${box}px, the chat must hold it across frames: ${JSON.stringify(frames)}`);
   assert.ok(box > 300, `the chat should take the task page's room, got ${box}px`);
 
   // ...and the question the owner typed is asked, by the thread, as the first message
@@ -134,5 +138,61 @@ test("an agent's question reads in plain words", { timeout: 180000 }, async (t) 
   const ask = await page.$eval('[data-tq-asking="r9"]', (el) => ({ text: el.innerText.trim(), buttons: el.querySelectorAll("button").length }));
   assert.equal(ask.text, q, "the question, in the agent's own words, and nothing else");
   assert.equal(ask.buttons, 0, "no choices were given, so no buttons");
+  assert.deepEqual(errors, []);
+});
+
+// THE FOLD THE OWNER OPENED STAYS OPEN (review, Task 3.6): each new step is a new trace revision, and the server's live message is keyed by
+// it - the steps snapped shut under the owner's eyes every time the agent took one more
+test("the opened working fold stays open while the agent takes more steps", { timeout: 180000 }, async (t) => {
+  const harness = await startHarness();
+  t.after(() => harness.close());
+  // a search, then a page, then a search: one kind after another reads as one line (agentSteps.group), so they alternate
+  const tool = (i) => (i % 2 ? ["WebFetch", { url: `https://vendor.example/terms/${i}` }] : ["WebSearch", { query: `Northwind renewal ${i}` }]);
+  const call = (i) => [{ type: "tool_call", name: tool(i)[0], detail: { tool_call_id: `c${i}`, args: tool(i)[1] } },
+                       { type: "tool_result", name: tool(i)[0], detail: { tool_call_id: `c${i}` } }];
+  let rev = 1;
+  const ses = () => ({ sid: "g1", alive: true, busy: true, mode: "chat", cli: "taskuary", provider: "Codex",
+                       trace: Array.from({ length: rev + 1 }, (_, i) => call(i)).flat(), trace_revision: rev });
+  const { page, errors, made } = await chatTask(harness, t, "Brief me on the Northwind renewal", () => ({
+    messages: [{ id: "u1", role: "user", content: [{ type: "text", text: "Brief me on the Northwind renewal" }] }],
+    session: ses(), starting: false, providers: [{ id: 1, label: "Codex", model: "" }] }), { Assignee: "agent:researcher" });
+  await page.waitForSelector(".tq-aui-thread [data-tq-working] summary", { timeout: 20000 });
+  await page.click(".tq-aui-thread [data-tq-working] summary");
+  const steps = () => page.evaluate(() => [...document.querySelectorAll(".tq-aui-thread [data-tq-working] .tq-aui-step")].filter((s) => s.checkVisibility()).length);
+  await page.waitForFunction(() => document.querySelector(".tq-aui-thread [data-tq-working]")?.open === true, { timeout: 5000 });
+  const before = await steps();
+  rev = 2;                                                     // one more step lands: the poll reads trace_revision 2
+  await page.waitForFunction((n) => document.querySelectorAll(".tq-aui-thread [data-tq-working] .tq-aui-step").length > n, { timeout: 15000 }, before);
+  assert.equal(await page.$eval(".tq-aui-thread [data-tq-working]", (d) => d.open), true, "still open after the next step");
+  assert.ok(await steps() > before, "...and the new step reads in it");
+  // ...and the pane mounted again - the owner looked at another page and came back to the same turn - opens where they left it
+  const other = await page.evaluate(async () => (await fetch("/api/tasks", { method: "POST", headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"),
+    "Content-Type": "application/json" }, body: JSON.stringify({ Title: "Call Erin Blake back", Summary: "Call Erin Blake back" }) })).json());
+  await page.evaluate((id) => { window.location.hash = `task=${id}`; }, other.taskId);
+  await page.waitForFunction(() => !document.querySelector(".tq-aui-thread"), { timeout: 15000 });
+  await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
+  await page.waitForSelector(".tq-aui-thread [data-tq-working] .tq-aui-step", { timeout: 20000 });
+  assert.equal(await page.$eval(".tq-aui-thread [data-tq-working]", (d) => d.open), true, "still open after the pane mounted again");
+  assert.deepEqual(errors, []);
+});
+
+// A MID-TURN FAILURE IS NEVER FOLDED AWAY (review, Task 3.6): the steps go under "Working on this…", the error stays a line of its own
+test("a mid-turn error is said outside the fold", { timeout: 180000 }, async (t) => {
+  const harness = await startHarness();
+  t.after(() => harness.close());
+  const trace = [{ type: "tool_call", name: "WebFetch", detail: { tool_call_id: "c1", args: { url: "https://vendor.example/terms" } } },
+                 { type: "tool_result", name: "WebFetch", detail: { tool_call_id: "c1" } },
+                 { type: "error", error: "The vendor page refused the request" }];
+  const { page, errors } = await chatTask(harness, t, "Read the vendor terms", () => ({
+    messages: [{ id: "u1", role: "user", content: [{ type: "text", text: "Read the vendor terms" }] }],
+    session: { sid: "g2", alive: true, busy: true, mode: "chat", cli: "taskuary", provider: "Codex", trace, trace_revision: 1 },
+    starting: false, providers: [{ id: 1, label: "Codex", model: "" }] }), { Assignee: "agent:researcher" });
+  await page.waitForSelector(".tq-aui-thread [data-tq-working]", { timeout: 20000 });
+  const shown = await page.evaluate(() => ({
+    open: document.querySelector(".tq-aui-thread [data-tq-working]").open,
+    error: [...document.querySelectorAll(".tq-aui-thread .tq-aui-note-error")].filter((e) => e.checkVisibility()).map((e) => e.innerText) }));
+  assert.equal(shown.open, false, "the steps are folded");
+  assert.equal(shown.error.length, 1, `the error is on screen, got ${JSON.stringify(shown.error)}`);
+  assert.match(shown.error[0], /The vendor page refused the request/);
   assert.deepEqual(errors, []);
 });

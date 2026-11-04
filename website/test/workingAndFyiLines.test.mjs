@@ -5,9 +5,11 @@ import { readFileSync } from "node:fs";
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
 // the owner, 2026-10-14: "no need while it's working to tell you what it's doing in 2 places"
-test("an agent whose steps stream into the thread keeps only the dots, not a second copy of its newest step", () => {
+// ...and the closeout-in-chat spec, 2026-11-04: one "Working on this…" line, the steps folded under it (WorkSteps), alone until they come (AtWork)
+test("an agent whose steps stream into the thread says it is working once, not a second copy of its newest step", () => {
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /const atWork = dock \|\| work\?\.steps\?\.length \? <Thinking provider=\{dock \? provider : name\} \/>\s*: <AgentBand /);
+  assert.match(ws, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork /);
+  assert.match(ws, /return folded \? null : <AgentBand \{\.\.\.props\} \/>;/);
   assert.match(ws, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
   assert.match(ws, /\{serverBusy && atWork\}/);
 });

@@ -769,8 +769,13 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the session alone never started at all: no question, no band, no browser beside the conversation
   // for the whole first answer (the owner, 2026-09-14: "it looked like it did not start").
   const busy = !!data?.session?.busy || !!data?.starting;
+  /* ...AND WHILE IT WAITS ON THE PAGE - a sign-in or a hand-over - which Taskuary itself can answer: the saved sign-in typed, the fill page
+     sent, the owner signing in on the page (signin.watch). None of those is this pane's own send, so nothing read again: the question and
+     "your turn - type" stood over a page already signed in, the agent's next answer and its held click unseen until a reload (the
+     browser-agent walk, 2026-11-04). */
+  const onPage = waitsOnPage(data?.asking || null);
   useEffect(() => {
-    if (!busy) return undefined;
+    if (!busy && !onPage) return undefined;
     let live = true;
     const timer = setInterval(async () => {
       try {
@@ -781,12 +786,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         setData(fresh);
         // ...and the page's copy too: it held the session the turn STARTED with, so its heading said "is working" under the
         // finished answer (2026-10-15)
-        onSession?.(fresh.session || null);
+        // (a read made only because it waits on the page tells the page of a session only when there is one: an agent asking from a
+        // terminal has none here, and a null swapped the task's agent view out from under its question)
+        if (busy || fresh.session) onSession?.(fresh.session || null);
         if (grew || traceChanged) setRevision((k) => k + 1);
       } catch { /* it will still be there next tick */ }
     }, 2500);
     return () => { live = false; clearInterval(timer); };
-  }, [busy, task.TaskId, data?.messages, onSession]);
+  }, [busy, onPage, task.TaskId, data?.messages, onSession]);
   // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {

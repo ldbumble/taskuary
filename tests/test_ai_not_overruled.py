@@ -65,7 +65,8 @@ def test_the_answer_to_the_asking_agent_runs_at_once_by_the_tool_road_too():
          mock.patch.object(server, '_run_operation', return_value={'delivered': True}) as ran:
         out = concierge.say(s, 'use main', item=item, llm=lambda *a, **k: line)
     assert 'proposal' not in out and ran.call_count == 1
-    assert ran.call_args[0][0]['kind'] == 'agent.answer' and ran.call_args[0][0]['params'] == {'text': 'Build from main.'}
+    # ...with the owner's own words beside the Assistant's version: theirs under YOU, its version folded as Taskuary's (2026-11-04)
+    assert ran.call_args[0][0]['kind'] == 'agent.answer' and ran.call_args[0][0]['params'] == {'text': 'Build from main.', 'owner': 'use main'}
 
 
 def test_the_apps_own_words_with_no_ai_open_no_page():

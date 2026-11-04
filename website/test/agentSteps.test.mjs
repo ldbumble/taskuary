@@ -194,3 +194,11 @@ test("a quick answer's raw object is never the agent's words, whichever line of 
   }
   assert.equal(stepsOf([{ type: "live", name: "claude", detail: "Looking up the price list." }], { keepStart: false })[0].summary, "Looking up the price list.");
 });
+
+test("Claude's retries while it cannot reach its servers are one line, the newest try's", () => {
+  // the desktop run, 2026-11-04: seven "Can't reach Claude's servers ... (n of 10)" ran together under Taskuary with the network down
+  const live = (n) => ({ type: "live", detail: `Can't reach Claude's servers right now - trying again (${n} of 10)` });
+  const steps = stepsOf([live(1), live(2), live(3), { type: "live", detail: "Reading the folder now." }], { keepStart: false });
+  assert.deepEqual(steps.map((s) => s.summary), ["Can't reach Claude's servers right now - trying again (3 of 10)", "Reading the folder now."]);
+  assert.equal(steps[0].retry, undefined);
+});

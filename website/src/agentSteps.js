@@ -250,7 +250,8 @@ const foundNone = (s) => {
 const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_line's own rows for a tool call, its result, the init line
 // A QUICK ANSWER'S RAW OBJECT (quickwork.RAW) is its fields, filed as the answer - never words of its working, whichever line carries it: a
 // CLI's readable `live` line was the object cut at 300 characters, drawn under Taskuary (the owner, 2026-11-03)
-const QUICK_RAW = /^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:/i;
+const RETRY = /^Can't reach Claude's servers right now/;      // agents._live_line's line for Claude's own api_retry
+const QUICK_RAW =/^\s*(?:```(?:json)?\s*)?\{\s*"(?:report|draft|question|done|escalate|why)"\s*:/i;
 export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const events = trace || [];
   // A structured backend says everything twice: its tool call and text as events, and the same again as readable `live` lines for
@@ -262,6 +263,13 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
     const t = forScreen(text);
     if (!t || QUICK_RAW.test(t)) return;
     const last = steps[steps.length - 1];
+    // ...and Claude's retries while it cannot reach its servers are ONE line, the newest try's: each was appended to the last, seven
+    // "Can't reach Claude's servers ... (n of 10)" run together under Taskuary (the desktop run, 2026-11-04)
+    if (RETRY.test(t)) {
+      const was = steps.find((x) => x.retry);
+      if (was) was.summary = t; else steps.push({ id: `retry-${steps.length}`, kind: "note", summary: t, detail: "", status: "done", retry: true });
+      return;
+    }
     if (kind === "said" && last?.kind === "said" && last.live) { last.summary += `\n${t}`; return; }
     steps.push({ id: `${kind}-${steps.length}`, kind, summary: t, detail: "", status: "done", live: kind === "said" && !structured });
   };
@@ -306,7 +314,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const said = flat(forScreen(answer));
   const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(flat).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
   const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.summary)) : steps;
-  return group(kept).map(({ raw, output, live, q, host, file, pattern, count, asked, ...s }) => s);
+  return group(kept).map(({ raw, output, live, q, host, file, pattern, count, asked, retry, ...s }) => s);
 }
 
 // ── consecutive calls of one kind read as one line ───────────────────────────────────────────────

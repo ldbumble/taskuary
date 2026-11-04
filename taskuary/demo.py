@@ -50,6 +50,7 @@ ALLOWED_WRITES = (
     r'^/api/prompt-image$',                            # a picture for a prompt: saved in the demo's own home
     r'^/api/messages/\d+/(file|promote|read)$',        # the triage verdicts: the whole funnel
     r'^/api/reviews?/\d+/(hold|drop|edit)$',           # ...but never /send
+    r'^/api/reviews/\d+/attachment$',                  # a file onto a draft: copied into the demo's own home, sent nowhere
     r'^/api/board/notes',                              # the wall
     r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
     r'^/api/settings$',                                # display preferences

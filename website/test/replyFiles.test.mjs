@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { filesPromised, sizeText } from "../src/replyFiles.js";
+import { filesPromised, filesShort, sizeText } from "../src/replyFiles.js";
 import { replyEnvelope } from "../src/sendState.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
@@ -58,4 +58,22 @@ test("a chat offers no picker that lies, and says a file cannot ride only where 
   assert.match(pane, /const mail = String\(channel \|\| "email"\)\.toLowerCase\(\) === "email"/);
   // the warning is a LINE, never a block: "attached in my last mail" is a real sentence
   assert.doesNotMatch(pane, /disabled=\{missing/);
+});
+
+// THREE NAMED, TWO RIDE (2026-11-04): the agent's draft said "here are the three" and Close out showed two chips and nothing more - the third,
+// over the mailbox's cap, was refused in a comment under the agent's pane. The card says which file did not ride and why, where the files are.
+test("a file the agent named that did not ride is said on the card, by name and why", () => {
+  const two = [{ name: "_ Summary - Erin_ Gail.xlsx", size: 9 }, { name: "_ Summary - Ray_ Omar.xlsx", size: 9 }];
+  const r = { FilesPromised: JSON.stringify({ named: ["% Summary - Erin, Gail.xlsx", "% Summary - Ray, Omar.xlsx", "% Summary - 15 east sites.xlsx"] }),
+    Deliver: JSON.stringify({ kind: "reply", to: ["a@b.test"], attachments: two,
+      not_attached: [{ name: "% Summary - 15 east sites.xlsx", why: "that file is over 25MB, which no mailbox will accept" }] }) };
+  assert.deepEqual(filesShort(r, two), ["Not attached: % Summary - 15 east sites.xlsx — that file is over 25MB, which no mailbox will accept."]);
+  // ...and with no reason kept (a writer that named three, two attached by hand), the count says it
+  const counted = { FilesPromised: r.FilesPromised, Deliver: JSON.stringify({ attachments: two }) };
+  assert.deepEqual(filesShort(counted, two), ["The draft names 3 files and 2 are attached."]);
+  // ...all there, or none promised, or none attached at all (the card's own "nothing is attached" line covers that): nothing more
+  assert.deepEqual(filesShort({ FilesPromised: JSON.stringify({ named: ["a.xlsx", "b.xlsx"] }) }, two), []);
+  assert.deepEqual(filesShort({}, two), []);
+  assert.deepEqual(filesShort({ FilesPromised: r.FilesPromised }, []), []);
+  assert.match(read("ReviewDecision.jsx"), /short=\{filesShort\(filedDelivery, deliveryFiles\(filedDelivery\)\)\}/);
 });

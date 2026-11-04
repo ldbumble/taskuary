@@ -17,7 +17,7 @@ import { ALERT_INK, DIM } from "./theme.jsx";
 import { sizeText } from "./replyFiles.js";
 import { useVerbs } from "./actionRow.js";
 
-export default function ReplyFiles({ reviewId, files = [], promised = false, channel = "email", onChanged, toRow = false, disabled = false }) {
+export default function ReplyFiles({ reviewId, files = [], promised = false, short = [], channel = "email", onChanged, toRow = false, disabled = false }) {
   const pick = useRef(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -28,14 +28,18 @@ export default function ReplyFiles({ reviewId, files = [], promised = false, cha
     const list = [...(chosen || [])];
     if (!list.length) return;
     setErr(""); setBusy("adding");
+    // ...each file on its own: one refused says which, by name, and the rest still go on (the owner, 2026-11-04: "can't attach more things")
+    const no = [];
     try {
       for (const file of list) {
-        await api.post(`/api/reviews/${reviewId}/attachment`, file,
-          { params: { name: file.name }, headers: { "Content-Type": file.type || "application/octet-stream" } });
+        try {
+          await api.post(`/api/reviews/${reviewId}/attachment`, file,
+            { params: { name: file.name }, headers: { "Content-Type": file.type || "application/octet-stream" } });
+        } catch (e) { no.push(`Not attached: ${file.name} — ${e?.response?.data?.detail || "it could not be attached"}.`); }
       }
-      onChanged?.();
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not attach that file"); }
-    finally { setBusy(""); if (pick.current) pick.current.value = ""; }
+      if (no.length < list.length) onChanged?.();
+      setErr(no.join(" "));
+    } finally { setBusy(""); if (pick.current) pick.current.value = ""; }
   };
   const drop = async (name) => {
     if (disabled) return;
@@ -79,6 +83,7 @@ export default function ReplyFiles({ reviewId, files = [], promised = false, cha
           This draft mentions an attachment and nothing is attached — it will send with the words only.
         </Typography>
       )}
+      {mail && short.map((line) => <Typography key={line} variant="caption" data-tq-not-attached sx={{ display: "block", mt: 0.5, color: ALERT_INK }}>{line}</Typography>)}
       {err && <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>
   );

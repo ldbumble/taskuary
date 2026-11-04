@@ -309,7 +309,9 @@ class DeskRoutes(unittest.TestCase):
             s = store(); tid, item = on_table(s)
             with mock.patch.object(concierge, '_agent_running', return_value=True), mock.patch.object(waitroom, 'state', return_value=('working', None)):
                 out, _ = say(s, 'tell the agent to use the main branch', item['key'], model)
-            self.assertEqual(out['say'], f'Told the agent on TQ-{tid:04d}: “use the main branch” - they go in when it stops at its prompt.', model)
+            # ...the receipt quotes what the owner typed, never the Assistant's version of it put in their mouth (the desktop run, 2026-11-04:
+            # "closed it, go ahead" came back as "Answered the agent: 'I've saved and closed ledger-locked.xlsx...'")
+            self.assertEqual(out['say'], f'Told the agent on TQ-{tid:04d}: “tell the agent to use the main branch” - they go in when it stops at its prompt.', model)
             # ...the note keeps the owner's own words and the Assistant's version apart (waitroom.parts, the owner 2026-11-04)
             self.assertEqual([waitroom.parts(n['Note']) for n in s.waiting_notes(tid)], [('tell the agent to use the main branch', 'use the main branch')])
             self.assertNotIn('nothing on it is waiting', out['say'])

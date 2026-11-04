@@ -1788,7 +1788,7 @@ def _answer_now(store, tid: int, table: dict | None, target: int, said: str, act
     r = run_proposal(store, op, actor)
     # ...said as what happened, as Tell the agent is: "Done - Answer it · TQ-0004." was the button's name read out (the overnight run, 2026-11-03)
     if r.get('status') == 'done' and (r.get('outcome') or {}).get('delivered'):
-        return {**_did(store, tid, f"Answered the agent on {task_ref(target)}: “{_title_cut(' '.join(str(said or '').split()), 120)}”.", 'agent.answer'),
+        return {**_did(store, tid, f"Answered the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said or '').split()), 120)}”.", 'agent.answer'),
                 'chips': chips_for(store, table)}
     turn = receipt_turn(store, r, actor, table=True)
     return {'say': turn['say'], 'options': [], 'chips': turn['chips'] or chips_for(store, table), 'decision': None}
@@ -1805,7 +1805,7 @@ def _tell_now(store, tid: int, target: int, said: str, actor: str, owner: str = 
     o = r.get('outcome') or {}
     when = ('it has them now' if o.get('delivered') else
             f"they wait for your {buttons.label('continue')}" if o.get('state') == 'held_stranger' else 'they go in when it stops at its prompt')
-    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(said, 120)}” - {when}.", 'agent.tell')
+    return _did(store, tid, f"Told the agent on {task_ref(target)}: “{_title_cut(' '.join(str(owner or said).split()), 120)}” - {when}.", 'agent.tell')
 
 
 def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, list]:

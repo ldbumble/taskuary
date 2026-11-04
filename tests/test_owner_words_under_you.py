@@ -72,8 +72,10 @@ class AssistantDoors(unittest.TestCase):
         s = MemoryStore(); tid = Factory(s).task(title='PhishGuard renewal', kind='general', status='in_progress')
         seen = []
         with mock.patch.object(concierge, 'run_proposal', side_effect=lambda st, op, a: (seen.append(op['params']), {'status': 'done', 'outcome': {'delivered': True}})[1]):
-            concierge._answer_now(s, general.dock_task(s, 'owner')[0]['TaskId'], None, tid, RELAY, 'owner', owner=OWNER)
+            out = concierge._answer_now(s, general.dock_task(s, 'owner')[0]['TaskId'], None, tid, RELAY, 'owner', owner=OWNER)
         self.assertEqual(seen, [{'text': RELAY, 'owner': OWNER}])
+        # ...and its receipt quotes what the owner typed, never the Assistant's version put in their mouth (the desktop run, 2026-11-04)
+        self.assertIn(f'“{OWNER}”', out['say'])
 
     def test_continue_from_the_box_files_the_owners_note_and_folds_the_assistants(self):
         s = MemoryStore(); tid = s.create_task({'Title': 'Vendor notes', 'Kind': 'general', 'Status': 'open'}, 'router')

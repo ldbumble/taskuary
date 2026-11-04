@@ -106,7 +106,8 @@ def _open_keyed(url):
 # as it was. A stranger's session runs only the agent commands that go over HTTP with its own task-bound token, where the
 # server's STRANGER scope decides.
 AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'board', 'learned', 'upvote', 'downvote', 'comment',
-              'search', 'message', 'memory')        # ...and the owner's mail history and memory, which a stranger's task never reads
+              'search', 'message', 'memory',        # ...and the owner's mail history and memory, which a stranger's task never reads
+              'sign_form')                          # ...and the owner's signature, which never goes on a stranger's form
 STRANGER_ACTS = AGENT_ACTS[:11]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
@@ -220,6 +221,29 @@ def _memory(args, stranger):
     if not got: return
     r, out = got
     print(out.get('says') or '' if r.status_code == 200 else f"not read: {out.get('detail') or r.text[:200]}")
+
+
+def _sign_form(args, stranger):
+    """`taskuary --sign-form FILE|ATTACHMENT_ID [--form JSON]`: the sign_form tool for a CLI with no MCP - a PDF filled and signed with
+    the owner's saved signature (handsign), into this task's folder and shown in the chat. This process reads a FILE and sends its
+    bytes; the server never opens a path it is handed. Nothing is sent: --reply ... --attach the signed copy for the owner's Send."""
+    import base64, json, os, sys
+    try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, OSError): pass
+    tid = os.environ.get('TASKUARY_TASK')
+    if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to sign for'); return
+    try: spec = json.loads(args.form or '{}')
+    except ValueError as e: print(f'not signed: --form is not JSON ({e})'); return
+    body = {'task_id': int(tid), 'agent': os.environ.get('TASKUARY_AGENT') or 'agent', **{k: spec[k] for k in ('fields', 'sign', 'date') if k in spec}}
+    src = str(args.sign_form).strip()
+    if src.isdigit() and not os.path.isfile(src): body['attachment'] = int(src)
+    else:
+        try: body.update(name=os.path.basename(src), data=base64.b64encode(open(src, 'rb').read()).decode())
+        except OSError as e: print(f'not signed: cannot read {src}: {e.strerror or e}'); return
+    got = _post('/api/agent/sign-form', body, stranger, timeout=120)
+    if not got: return
+    r, out = got
+    print(out.get('says') or out if r.status_code == 200 else f"not signed: {out.get('detail') or r.text[:200]}")
 
 
 def main():
@@ -346,6 +370,12 @@ def main():
     ap.add_argument('--until', default='', metavar='YYYY-MM-DD', help='with --search: sent on or before this day')
     ap.add_argument('--limit', type=int, default=20, help='with --search: how many hits at most')
     ap.add_argument('--message', metavar='ID', help='print one message from --search in full, with its thread (m1073 or 1073)')
+    # ...and a form a mail brought (handsign.py): filled and signed with the owner's saved signature, for their Send
+    ap.add_argument('--sign-form', metavar='PDF', help="fill and sign a PDF form with the owner's saved signature - a PDF file, or the id of an "
+                                                       "attachment on this task; with --form. The signed copy lands in your task folder and shows in "
+                                                       "the chat: attach it to --reply for the owner's Send, never send it yourself.")
+    ap.add_argument('--form', metavar='JSON', help='with --sign-form: {"fields": {name: value}, "sign": {"field": name} or {"near": "Parent '
+                                                   'signature"} or {"page": 1, "box": [x, y, width, height]}, "date": true or a field name}')
     ap.add_argument('--memory', metavar='SECTION', nargs='?', const='',
                     help="print what Taskuary has learned about the owner (LEARNED.md) - all of it, or one section: people, care, work, promises, bring")
     args = ap.parse_args()
@@ -464,6 +494,7 @@ def main():
         return
     if args.search is not None or args.message is not None: return _history(args, stranger)
     if args.memory is not None: return _memory(args, stranger)
+    if args.sign_form: return _sign_form(args, stranger)
     if args.note and stranger is not None:
         # a stranger's note: through the board door, which pins it to the token's own task (B2 keeps it off the others' seeds)
         import os, sys

@@ -21,6 +21,7 @@ CAP = 12000                                         # one result; past it the ag
 
 _S = lambda props, need=(): {'type': 'object', 'properties': props, 'required': list(need)}
 _STR, _INT = {'type': 'string'}, {'type': 'integer'}
+_ATTACH = {'type': 'array', 'items': _STR, 'description': 'files in your task folder to attach, by name - a form sign_form signed'}
 
 # name -> (cls, description, input schema, door). Descriptions say what the tool reads, where from, and what it never does.
 TOOLS = {
@@ -59,10 +60,23 @@ TOOLS = {
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
     'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
                       "mail. It becomes a pending reply with a Send button for the owner - nothing is sent.",
-                      _S({'text': _STR, 'to': _STR}, ('text',)), ('POST', '/api/agent/reply')),
+                      _S({'text': _STR, 'to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
     'propose_email': ('propose', "Draft one more email this task needs (to someone, with a subject). It waits with a Send button for "
-                      "the owner - nothing is sent.", _S({'to': _STR, 'subject': _STR, 'text': _STR}, ('text',)),
+                      "the owner - nothing is sent.", _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH}, ('text',)),
                       ('POST', '/api/agent/draft')),
+    # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
+    # want me to send it out'"): signed with the picture the owner saved, which the agent never sees (handsign)
+    'sign_form': ('own', "Fill in and sign a PDF form with the owner's saved signature - `attachment` (an attachment id on this task) or "
+                  "`file` (a PDF in your task folder). `fields`: {field name: value} (a box: \"yes\"); `sign`: where it goes - {\"field\": "
+                  "name}, {\"near\": \"Parent signature\"} (the words by a flat form's line) or {\"page\": 1, \"box\": [x, y, width, height]} "
+                  "(points from the bottom left); `date`: true writes today's date beside it, or a field name to put it in. The signed copy "
+                  "lands in your folder and shows in the chat. When a mail brings a form to fill or sign, fill and sign it here, show it, "
+                  "and propose the reply with it in `attach` for the owner's Send - never send it yourself. With no signature saved it says "
+                  "so: ask the owner to add one in Settings -> Your signature; never make one up.",
+                  _S({'attachment': _INT, 'file': _STR, 'fields': {'type': 'object', 'additionalProperties': True},
+                      'sign': {'type': 'object', 'properties': {'field': _STR, 'near': _STR, 'page': _INT,
+                                                                 'box': {'type': 'array', 'items': {'type': 'number'}}}},
+                      'date': {'type': ['boolean', 'string']}}), ('POST', '/api/agent/sign-form')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
                 "comment), close_issue, open_pr, land, run_tool {type, connector_id, ...} (a send, post or order on one of their "
                 "systems), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
@@ -158,10 +172,26 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
-    if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), *([str(a['to'])] if a.get('to') else [])))
-    if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or '')))
+    if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach'))))
+    if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''),
+                                                         attached(tid, a.get('attach'))))
+    if name == 'sign_form':
+        out = doors['sign'](tid, a)
+        return out['says'] if out.get('says') else _j(out)
     if name == 'propose': return _j(doors['propose'](tid, a))
     raise ValueError(f'no tool {name!r} - tools/list names them')
+
+
+def attached(tid: int, names) -> list:
+    "The files a propose tool names to attach, read from the task's own folder (outputs.named) - a name outside it is a ValueError."
+    import base64
+    from . import outputs
+    out = []
+    for raw in ([names] if isinstance(names, str) else names or []):
+        p = outputs.named(tid, raw)
+        if not p: raise ValueError(f'{raw} is not a file in your task folder ({outputs.folder(tid)}) - nothing was saved')
+        out.append({'name': p.name, 'data': base64.b64encode(p.read_bytes()).decode()})
+    return out
 
 
 def own_message(store, tid: int, args: dict) -> bool:

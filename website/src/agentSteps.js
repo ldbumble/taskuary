@@ -235,13 +235,15 @@ const rawOf = (name, args) => {
 };
 
 // A LOOK THAT FOUND NOTHING ANSWERED (the desktop stress test, 2026-11-03): `ls notes*` with no match exits non-zero, and red "failed"
-// read as something gone wrong. A list or search step that says nothing past its exit code, or speaks only of the very thing it was
-// asked to look for, found none; a line about anything else - a flag it did not take, a folder it was not asked about - is a failure
+// read as something gone wrong. A list or search step that says nothing past its exit code, or whose every line is the OS saying the
+// very thing it was asked for is not there, found none. Any other line - a flag it did not take, a folder it was not asked about, and
+// a refusal like Permission denied even on the path it was asked for (the owner, 2026-11-03) - is a failure
+const NOT_THERE = /no such file or directory|cannot find (the )?(path|file)|does not exist|file not found|no matches found/i;
 const foundNone = (s) => {
   if (!["list", "search"].includes(s.kind)) return false;
   const lines = s.output.split(/\r?\n| ⏎ /).map((l) => l.trim()).filter((l) => l && !/^exit code -?\d+$/i.test(l));
   const asked = (s.asked || []).map((a) => String(a).replace(/^['"]|['"]$/g, "")).filter((a) => a.length > 1);
-  return lines.every((l) => asked.some((a) => l.includes(a) || l.includes(baseName(a))));
+  return lines.every((l) => NOT_THERE.test(l) && asked.some((a) => l.includes(a) || l.includes(baseName(a))));
 };
 
 // ── the trace, as steps ──────────────────────────────────────────────────────────────────────────

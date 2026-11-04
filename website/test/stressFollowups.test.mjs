@@ -19,8 +19,10 @@ test("an Approve on a held step keeps the agent's pane: the Advisor's pick re-ke
   assert.doesNotMatch(s, /mainKey = `[^`]*\|\$\{advised\}\|/);
 });
 
-test("a live agent's state is said once, by the task header's pill", () => {
-  assert.match(src("TaskPage.jsx"), /agentState && !term\?\.alive \? <LifecycleChip kind="agent"/);
+test("the agent's state is said once, by the task header's pill - live or stopped, the pane heading carries no chip of its own", () => {
+  const s = src("TaskPage.jsx");
+  assert.match(s, /chip=\{resultShown \? shareBadge : null\} tone=\{PALETTE\.sage\}/);
+  assert.doesNotMatch(s, /<LifecycleChip kind="agent"|<StoryChip /);
 });
 
 test("'Started <the agent>' opens the conversation's first turn only", () => {

@@ -110,8 +110,8 @@ import MoreDrafts from "./MoreDrafts.jsx";
 import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
 import { closeoutRounds, roundReviews } from "./closeoutRounds.js";
 import { diffStat } from "./agentRecord.js";
-import AgentStory, { StoryChip } from "./AgentStory.jsx";
-import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
+import AgentStory from "./AgentStory.jsx";
+import { startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { useShareParts } from "./Share.jsx";
@@ -1645,7 +1645,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...but a general agent's open card already has its composer under the bar, and what you type there continues the same
   // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
   // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
-  const barContinue = barContinues({ canContinue, isGeneral, ended: detail?.runEnded, gone: !term });   // ...and a general run that ended under it
+  const barContinue = barContinues({ canContinue, isGeneral, ended: detail?.runEnded });   // ...and a general run that ended under it
   // STOP AND SAVE ONLY WHILE THERE IS SOMETHING TO STOP (owner-approved, 2026-10-20): it stood on the row of an agent that was
   // already stopped (G7), and then of one that had failed, finished or been cut off by a restart. A session that has ENDED offers
   // what applies - Continue, Run another, Mark done, the write-up's own actions - and the live row keeps its Stop and save.
@@ -3043,12 +3043,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}</span>}
-                    /* ...and once the agent has acted - its Result, or the run that failed - its "stopped" or "failed" chip is the header's pill
-                       again (the owner, 2026-10-25) */
-                    /* ...and a live agent's state is the task header's pill alone (StatusPill, from the same session): its chip here said it a
-                       second time, one above the other (the desktop stress test, 2026-11-03) */
-                    chip={<>{settled ? null : story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
-                      : agentState && !term?.alive ? <LifecycleChip kind="agent" phase={agentState} compact /> : null}{resultShown && shareBadge}</>} tone={PALETTE.sage} {...stageProps("agent")}
+                    /* ...and the agent's state is the task header's pill alone (StatusPill): its chip here said it a second time, one above
+                       the other, live or stopped (the owner, 2026-11-03) */
+                    chip={resultShown ? shareBadge : null} tone={PALETTE.sage} {...stageProps("agent")}
                     /* ...in the three sections the one way to the full record is its button under the summary (the owner, 2026-10-27: "why are
                        there 2 buttons for full results?"): the heading neither folds nor says "Result" there */
                     {...(threeUp && !sessionView && resultShown ? { onToggle: null, folded: false, sub: "" } : {})}

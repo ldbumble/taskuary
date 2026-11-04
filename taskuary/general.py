@@ -693,6 +693,62 @@ def repos_block(store) -> str:
             "for one)\n" + '\n'.join(line(r) for r in names[:20]))
 
 
+# ONE GOAL - GET THE OWNER TO DONE (Task 3.4, 2026-11-04). In code, not only in ASSISTANT.md: an owner-edited copy stops tracking its
+# template (store.py), and an agent told only "do the job" left a login that sat in a project's .env to the owner. A login it finds goes
+# in the draft the owner's Send approves - never in the conversation (the owner's ruling, 2026-11-04)
+GOAL_LINE = ("YOUR ONE GOAL: get the owner to done. Read THE ASK, AS TRIAGE READ IT first when the brief has it, and check it against the "
+             "mail: what is asked, the owner's part, who already handled what. Do as much of the owner's part as you can before leaving "
+             "anything to them, and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found. "
+             "Draft every email the job needs through your reply and draft tools, never as text in the conversation. A login or secret you "
+             "find in their files goes only in the reply you draft - their Send shares it - never in the conversation, your steps or your "
+             "summary. Then tell them where it stands: what the task wants from them, what you researched or did, and the next steps - and "
+             "close out, or do what closing out takes.")
+READING_CHARS = 1_500
+
+
+def _md(at, clock=False) -> str:
+    try: d = datetime.fromisoformat(str(at or '').strip().replace('Z', '+00:00')[:19].replace(' ', 'T'))
+    except ValueError: return ''
+    return f'{d.month}/{d.day}' + (f' {d:%H:%M}' if clock else '')
+
+
+def reading_block(store, tid: int) -> str:
+    """Triage's reading of the thread (store.task_thread), and every mail on the task by number - what the agent reads FIRST, and checks
+    against the mail. '' with no reading; an older or partial one (no `thread` on the verdict, an owner-edited TRIAGE.md) reads as what it has."""
+    try: t = store.task_thread(tid)
+    except Exception: t = None
+    if not isinstance(t, dict): return ''
+    s = lambda v: ' '.join(str(v).split()) if isinstance(v, (str, int, float)) and not isinstance(v, bool) else ''
+    ls = lambda k: [o for o in (t.get(k) if isinstance(t.get(k), list) else []) if o]
+    objs = lambda k, f: [(o.get('mid'), s(o.get(f))) for o in ls(k) if isinstance(o, dict)]
+    mails = [m for m in store.list_messages(tid) if m.get('Status') not in ('context', 'skipped') and str(m.get('Direction') or 'in') != 'out'
+             and not wrapup.from_owner(store, m)]
+    who = {m['MessageId']: s(m.get('FromName') or m.get('FromEmail')) or 'someone' for m in mails}
+    at = {m['MessageId']: m.get('SentAt') for m in mails}
+    try:
+        tgt = wrapup.reply_target(store, tid)
+        tgt = (wrapup.answers_for(store, tid, tgt) or tgt) if tgt else None
+    except Exception as e: logger.debug(f'general: no reply target for the reading - {e}'); tgt = None
+    done = '; '.join(f"{s(o.get('who'))} - {s(o.get('did'))}" for o in ls('others') if isinstance(o, dict) and s(o.get('who')))
+    aside = '; '.join(f'[#{m}] {w}' for m, w in objs('aside', 'why') if isinstance(m, int))
+    on = '; '.join(x for x in map(s, ls('on_you')) if x)
+    rows = [('Asking', s(t.get('asking'))), ('Your part', s(t.get('your_part'))), ('Already handled', done),
+            ('The mail the reply answers', f'[#{tgt}] {who.get(tgt, "someone")} · {_md(at.get(tgt))}'.rstrip(' ·') if tgt else ''),
+            ('Aside', aside), ('On you', on)]
+    if not any(v for k, v in rows if k != 'The mail the reply answers'): return ''
+    head = 'THE ASK, AS TRIAGE READ IT (check it against the mail):\n' + '\n'.join(f'{k}: {v}' for k, v in rows if v)
+    # ...newest mail kept first when the list runs long: the oldest goes, and the line says how many
+    lines, room = [], READING_CHARS - len(head) - 120
+    for m in reversed(mails):
+        l = f"[#{m['MessageId']}] {who[m['MessageId']]} · {_md(m.get('SentAt'), True)}".rstrip(' ·')
+        if room - len(l) - 1 < 0: break
+        lines.insert(0, l); room -= len(l) + 1
+    gone = len(mails) - len(lines)
+    tail = ('\n\nTHE MAIL ON THIS TASK: (a reply that answers one other than the newest names it with `--answers N`)\n'
+            + (f'({gone} older not listed)\n' if gone else '') + '\n'.join(lines)) if mails else ''
+    return _cut(head + tail, READING_CHARS)
+
+
 def _prompt(store, tid: int) -> tuple[str, str]:
     detail = store.task_detail(tid) or {}
     task = detail.get('task') or {}
@@ -839,6 +895,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
+    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{GOAL_LINE}\n\n{selfclose.SUMMARY_LINE}'
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
@@ -851,10 +908,12 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     rows = chat_rows(store, tid, run=True)
     last = rows[-1] if rows else {}
     ask = _cut(last.get('Body'), OWNER_ASK_CHARS) if sources and not dock and last.get('ActorType') == USER_TYPE else ''
+    rd = '' if stranger or dock else reading_block(store, tid)      # ...and triage's reading right under the task: GOAL_LINE reads it first
     head = ((f"THE OWNER'S ASK - what they want done about the task and the material below:\n{ask}\n\n" if ask else '')
             + f"TASK {detail.get('ref') or tid}\n" + ours(f"TITLE: {task.get('Title') or ''}\n")
             + ours(f"SUMMARY: {task.get('Summary') or ''}\n") + f"STATUS: {task.get('Status') or ''}\n"
             + ours(chk) + "\n"
+            + (f'{rd}\n\n' if rd else '')
             + (dock_snapshot(store) + '\n\n' if dock else '')
             + (wall + '\n\n' if wall else '')
             + (hub_context.strip() + '\n\n' if hub_context else '')

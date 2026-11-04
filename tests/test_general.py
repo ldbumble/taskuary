@@ -611,4 +611,68 @@ class GeneralWaitroomTests(unittest.TestCase):
         start.assert_called_once(); coding.assert_not_called(); fake.send_prompt.assert_called_once()
 
 
+class OneGoalTests(unittest.TestCase):
+    """THE GENERAL AGENT'S ONE GOAL (Task 3.4, 2026-11-04): get the owner to done - starting from triage's reading of the thread, doing as
+    much of their part as it can, and ending each turn with the summary block. A login it finds goes in the draft, never the conversation."""
+    def _store(self):
+        s = MemoryStore(); s.set_setting('owner_email', 'alex@northwind.example', 't'); s.set_setting('owner_name', 'Alex Doyle', 't')
+        return s
+
+    def _mail(self, s, tid, name='Ray Colton', at='2026-11-04T09:00:00Z', body='Alex - can you send Gail the vendor-portal login?', ext='ray-1'):
+        return s.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': ext, 'Subject': 'Vendor portal login', 'FromName': name,
+                              'FromEmail': f"{name.split()[0].lower()}@northwind.example", 'BodyText': body, 'Status': 'routed', 'SentAt': at})
+
+    def _read(self, s, tid, **kw):
+        s.cx.execute('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Ray Colton wants the vendor-portal login for Gail Moreno',
+            'your_part': 'give Gail the portal login', 'others': [], 'asks': [], 'aside': [], 'on_you': [], **kw}), tid)); s.cx.commit()
+
+    def test_every_general_task_has_the_one_goal(self):
+        from taskuary import selfclose
+        s = self._store(); plain = general_task(s); mailed = general_task(s); self._mail(s, mailed)
+        for tid in (plain, mailed):
+            system = general._prompt(s, tid)[0]
+            for want in ('get the owner to done', 'goes only in the reply you draft', selfclose.SUMMARY_OPEN, selfclose.SUMMARY_LINE):
+                self.assertIn(want, system, (tid, want))
+            self.assertNotIn('into the conversation or a draft', system)
+        # ...never the guide's chat, nor a connector card's walk
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        card = s.create_task({'Title': 'Connect the ledger', 'Kind': 'general', 'Status': 'open', 'SourceRef': 'connector:setup'}, 'owner')
+        for tid in (dock, card): self.assertNotIn('get the owner to done', general._prompt(s, tid)[0], tid)
+
+    def test_the_reading_leads_the_brief(self):
+        s = self._store(); tid = general_task(s)
+        ray = self._mail(s, tid); erin = self._mail(s, tid, 'Erin Blake', '2026-11-04T10:30:00Z', 'Thanks Ray!', 'erin-1')
+        self._read(s, tid, others=[{'who': 'Erin Blake', 'did': 'said thanks'}], asks=[{'mid': ray, 'about': 'the portal login'}],
+                   aside=[{'mid': erin, 'why': 'thanks only'}], on_you=['confirm Gail has it'])
+        user = general._prompt(s, tid)[1]
+        for want in ('THE ASK, AS TRIAGE READ IT (check it against the mail):', 'Your part: give Gail the portal login',
+                     'Already handled: Erin Blake - said thanks', f'The mail the reply answers: [#{ray}] Ray Colton', f'Aside: [#{erin}] thanks only',
+                     'On you: confirm Gail has it', 'THE MAIL ON THIS TASK:', f'[#{ray}] Ray Colton', f'[#{erin}] Erin Blake'):
+            self.assertIn(want, user, want)
+        self.assertLess(user.index('TASK '), user.index('THE ASK, AS TRIAGE READ IT'))
+        self.assertLess(user.index('THE ASK, AS TRIAGE READ IT'), user.index('FROM Ray Colton'))
+        self.assertLessEqual(len(general.reading_block(s, tid)), 1500)
+        # ...never on a stranger's task: the reading is of their words
+        s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
+        self.assertNotIn('THE ASK, AS TRIAGE READ IT', general._prompt(s, tid)[1])
+
+    def test_no_reading_no_block(self):
+        s = self._store(); tid = general_task(s); self._mail(s, tid)
+        self.assertEqual(general.reading_block(s, tid), '')
+        self.assertNotIn('THE ASK, AS TRIAGE READ IT', general._prompt(s, tid)[1])
+        # ...an older or partial reading is "no reading" where it lacks a part, never an exception
+        for bad in ({'asking': 'x'}, {'asks': 'not a list', 'others': [None, 3], 'on_you': 'x'}, []):
+            s.cx.execute('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps(bad), tid)); s.cx.commit()
+            general.reading_block(s, tid); general._prompt(s, tid)
+
+    def test_the_shipped_assistant_doc_carries_research_know_how(self):
+        doc = (Path(general.__file__).parent / 'templates' / 'assistant.md').read_text(encoding='utf-8')
+        flat = ' '.join(doc.split())
+        self.assertIn('get {{owner}} to done', flat)
+        self.assertIn('## When the task needs research or analysis', doc)
+        for want in ('what you could not find', 'when the source is from', 'whose figures', 'how you computed', 'who owes what by when',
+                     'never book', "{{owner}}'s voice", 'a claim needs a source'):
+            self.assertIn(want, flat, want)
+
+
 if __name__ == '__main__': unittest.main()

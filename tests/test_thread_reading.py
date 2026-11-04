@@ -55,3 +55,12 @@ def test_the_thread_task_carries_the_last_reading_and_report():
     s.add_comment(tid, 'agent', 'agent', 'AGENT REPORT\nSummary: the pay run is Friday')
     ht = ingest.thread_task(s, tid)
     assert ht['reading']['asking'] == 'Ray wants the pay date' and 'Friday' in ht['agent_said']
+
+
+def test_the_chat_payload_carries_the_reading():
+    from taskuary import server    # TASKUARY_HOME is set to a temp dir before this import: importing it migrates the live home
+    s = server.store
+    tid = s.create_task({'Title': 'Export date', 'Kind': 'general', 'Status': 'open'}, 'test')
+    assert server._assistant_payload(tid)['thread'] is None
+    s._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Ray wants the export date', 'your_part': 'Confirm'}), tid))
+    assert server._assistant_payload(tid)['thread']['asking'] == 'Ray wants the export date'

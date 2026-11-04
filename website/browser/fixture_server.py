@@ -51,6 +51,28 @@ class NoOutboundSocket(socket.socket):
         raise RuntimeError(f"browser fixture blocked outbound socket connection to {address!r}")
 
 
+def _install_fresh_routes(app, store):
+    """The starts no API press makes, shaped as triage makes them (browser/agent-starts-at-once): a quick call that holds the task opening
+    for `hold` seconds with no session, then hands it to the agent (quickwork.escalate); or a start queued behind full agent slots."""
+    import threading, time
+    from fastapi import Body
+    from taskuary import general, ingest
+
+    @app.post("/api/fixture/general/start")
+    def fixture_general_start(body: dict = Body(...)):
+        tid = int(body["taskId"])
+        if body.get("queue"):
+            store.enqueue_dispatch(tid, None, "assistant", "2 agents are already running")
+            store.add_comment(tid, "router", "agent", "Waiting its turn: 2 agents are already running, and it starts by itself when there is room.")
+            return {"queued": True}
+        general.OPENING.add(tid)
+        def escalate():
+            try: time.sleep(float(body.get("hold") or 0)); ingest._auto_general(store, tid, deep=True)
+            finally: general.OPENING.discard(tid)
+        threading.Thread(target=escalate, daemon=True).start()
+        return {"opening": True}
+
+
 async def run() -> None:
     # asyncio's Windows wakeup socket exists by the time this coroutine runs. The
     # pre-bound listener above remains the real socket; only later outbound sockets
@@ -89,6 +111,7 @@ async def run() -> None:
         from taskuary import agents
         agents._fresh_path = lambda: os.environ.get("PATH", "")
     from taskuary.server import app, store
+    if FRESH: _install_fresh_routes(app, store)
     if not FRESH:
         from fixture_changes import install_processing_changes
         install_processing_changes(app, store)

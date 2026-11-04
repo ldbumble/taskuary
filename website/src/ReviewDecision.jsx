@@ -8,7 +8,7 @@ import { Alert, Box, Button, Typography, CircularProgress, Menu, MenuItem } from
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
-import { filesPromised } from "./replyFiles.js";
+import { filesPromised, filesShort } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
@@ -541,7 +541,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         </Box>
       )}
       {!proposal && !isCal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
-        promised={filesPromised(r)} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen} />}
+        promised={filesPromised(r)} short={filesShort(filedDelivery, deliveryFiles(filedDelivery))} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen} />}
       {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || "").toLowerCase() === "email" && (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
           CC: {ccNow.length ? ccNow.join(", ") : "none"}

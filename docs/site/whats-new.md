@@ -2,6 +2,31 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.29 - 2026-11-04
+
+- Triage sees every open item and what the owner's search finds, so a matter joins its task from any source
+- A row clicked lights Back and Next at once, a watched row included
+- Mark done on a watched row takes it off the rail at the press and keeps it off
+- The rail's age gutter splits the first half hour into < 5m, < 15m and < 30m
+- Triage no longer picks a worker for a task: every general task runs on the one assistant; routines still name theirs
+- A general task whose reply writer says NEEDS starts the assistant on it, as a reply task's does
+- A login the thread asks the owner for, kept in their own files, goes in the drafted reply and never in the conversation
+- A drafted reply's body stays out of the agent's pane, live trace and kept steps
+- A research task handed on by the reply writer's NEEDS keeps its kind, and counts as opening until its start lets go
+- A drafted reply's body stays off the CLI live line and an ACP call named by its kind, and a broken start lets its hold go
+- A Claude hook on the draft call names it by what it is: the worker's tool line and the approval text carry no body
+- A stranger session's permission card names the draft call, never its body
+- The general agent's one goal is to get the owner to done, starting from triage's reading
+- A stranger's task keeps the one goal but is never steered toward a login
+- The login rule lives only in the owner's own goal line, never in a document a stranger's task reads
+- Each agent turn ends with what it is about, what it did and what is on the owner
+- A summary block cut short never reaches the screen, and the owner's On you steps survive ticks, edits and empty summaries
+- The agent's chat says Working on thisâ€¦, and ends each turn in three parts
+- An opened Working on thisâ€¦ stays open, a failure is never folded, and a pending Approve is not Nothing left
+- Profiles are for routines only: the roster and the "Can be given new work" switch go
+- The assistant-tools page is the catalogue as it stands
+- GOAL_LINE is defined once, and the danger check asks the verdict schema without a profile
+
 ## 0.3.10.28 - 2026-11-04
 
 - A helpdesk's answer on its own thread is shown the request it answers, so a watched ask and its ticket confirmation are one row

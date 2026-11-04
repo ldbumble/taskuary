@@ -618,6 +618,22 @@ HISTORY = [
      'Sharing for visibility.', 'fyi', 'cc-for-visibility, nothing asked'),
 ]
 
+# WHAT TRIAGE MADE OF AN FYI (the verdict's `thread`, kept on its own route - store.message_thread): what an FYI's middle opens with,
+# "What this says" and "What matters to you" (ItemSections ItemAsk). By its words; an FYI not here has no reading, as an older verdict has none
+FYI_READS = {
+    'Sharing for visibility.': ('Priya forwarded the regional operations newsletter for visibility', 'Nothing is asked of you - it is for reading when you have a minute'),
+    'The feed dropped on Thursday and has caught up. Nothing is missing.': ('The bank feed is back and August is complete', 'The month-end reconciliation can use August as it is'),
+    'Attached is your statement. No action required.': ('The August statement of account, sent automatically', 'Nothing to pay or answer - keep it for the close'),
+    'Your agreement renews on 1 November. No action is needed to continue.': ('The food services agreement renews by itself on 1 November', 'If you mean to change the contract, it has to be before then'),
+}
+
+def _file_fyi(store, f, mid, why, body):
+    """An FYI filed as triage files it: its reading on the route, when the world wrote one (FYI_READS)."""
+    said = FYI_READS.get(body)
+    if not said: return f.route(mid, None, 'file', why)
+    return store.add_route(mid, None, 'file', None, why, [], 'triage', verdict={'intent': 'fyi', 'why': why, 'thread': {
+        'asking': said[0], 'your_part': said[1], 'others': [], 'asks': [], 'aside': [], 'on_you': []}})
+
 
 # ── the calendar, scripted (calwrite.py): the demo has no calendar behind it, so the week it answers invites against is this ──
 def _workdays(n: int) -> list:
@@ -706,7 +722,7 @@ def seed(store) -> int:
             f.review(tid, mid, draft=DRAFTS.get(body) or DRAFTS[subject])
         else:
             mid = f.message(status='filed', **said)
-            f.route(mid, None, 'file', why)
+            _file_fyi(store, f, mid, why, body)
         refs[subject] = tid if verdict != 'fyi' else None
         made += 1
 
@@ -823,7 +839,8 @@ def seed(store) -> int:
                         from_email=email if channel == 'email' else None, sent_at=when,
                         status='filed' if verdict == 'fyi' else 'routed',
                         conversation_id=f'{channel}:{email or name}:{days}', source_name=source)
-        f.route(mid, tid, 'file' if verdict == 'fyi' else 'create', why)
+        if verdict == 'fyi': _file_fyi(store, f, mid, why, body)
+        else: f.route(mid, tid, 'create', why)
         if tid: past.append((tid, mid, when, channel, verdict))
         made += 1
     seed_history_work(store, f, past)

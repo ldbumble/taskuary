@@ -3455,7 +3455,8 @@ def get_message(mid: int):
     """One message, whole body - the timeline row only carries a 4000-char preview."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
-    return _readable(m)
+    # ...and triage's reading of it, for an item no task holds - an FYI, a report: "What this says", "What matters to you" (ItemSections)
+    return (_readable(m) or {}) | {'reading': store.message_thread(mid)}
 
 def _att_row(a: dict, mail: bool = True) -> dict:
     """One attachment as the panel needs it: enough to decide whether to draw it or list it. `mail`: it rode in on an email, where

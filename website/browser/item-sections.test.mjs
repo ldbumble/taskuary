@@ -159,3 +159,16 @@ test("a dashboard opens on itself between slim Came from and Close out tabs, lik
   assert.ok(await page.$("[data-tq-item-sections] [data-tq-dash-canvas]"), "the dashboard itself is the open section");
   assert.deepEqual(errors, []);
 });
+
+// WHAT IT SAYS AND WHAT MATTERS TO YOU (the Close-out spec section 8, 2026-11-04): an FYI's middle opens with triage's reading of it, as a
+// task's chat does - kept on its own route, since no task holds it (store.message_thread)
+test("an FYI's middle says what it says and what matters to you", { timeout: 240000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  assert.ok(await clickRow(page, await findRow(page, /Regional operations newsletter/)));
+  await settled(page, "fyi");
+  await tab(page, "agent"); await sleep(800);
+  const said = await page.$eval('[data-tq-item-sections] [data-tq-slot="agent"] [data-tq-item-ask="fyi"]', (e) => e.innerText);
+  assert.match(said, /What this says\s+Priya forwarded the regional operations newsletter[\s\S]*What matters to you\s+Nothing is asked of you/, said);
+  assert.match(await page.$eval("[data-tq-fyi-agent]", (e) => e.innerText), /No agent yet/, "the Agent section still says nobody is on it");
+  assert.deepEqual(errors, []);
+});

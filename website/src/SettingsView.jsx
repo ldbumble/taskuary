@@ -27,6 +27,7 @@ import AiDefaults from "./AiDefaults.jsx";
 import AgentPermissions from "./AgentPermissions.jsx";
 import SharedLinks from "./SharedLinks.jsx";
 import SavedSignins from "./SavedSignins.jsx";
+import HandSignature from "./HandSignature.jsx";
 import SendFilter from "./SendFilter.jsx";
 import AboutYou from "./AboutYou.jsx";
 import UpdateCard from "./UpdateCard.jsx";
@@ -726,6 +727,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
   const after = {
     Sharing: <SharedLinks />,
+    Replies: <HandSignature />,              // the signature forms are signed with sits beside the one under the email
     "Agent permissions": <><SavedSignins /><SendFilter /></>,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)

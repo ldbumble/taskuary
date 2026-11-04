@@ -30,8 +30,18 @@ test("ago: just now inside a minute either way, behind in whole units, ahead rea
 
 test("age is the bare distance, band the rail's gutter, bandUntil For later's countdown", () => {
   assert.deepEqual([age(at(0.4), now), age(at(40), now), age(at(240), now), age(at(-12), now), age("", now)], ["now", "40m", "4h", "in 12m", ""]);
-  assert.deepEqual([band(at(10), now), band(at(45), now), band(at(185), now), band(at(-5), now)], ["< 30m", "< 1h", "3h", "in 5m"]);
+  assert.deepEqual([band(at(10), now), band(at(45), now), band(at(185), now), band(at(-5), now)], ["< 15m", "< 1h", "3h", "in 5m"]);
   assert.deepEqual([bandUntil(at(-10), now), bandUntil(at(-45), now), bandUntil(at(-185), now), bandUntil(at(5), now)], ["in 30m", "in 1h", "in 3h", ""]);
+});
+
+// the owner, 2026-11-04: finer tiers for fresh rows. Whole minutes r (rounded): r<5 "< 5m", r<15 "< 15m", r<30 "< 30m", then as before
+test("band: fresh rows get < 5m / < 15m / < 30m, the edges at 5, 15 and 30 whole minutes; later and future unchanged", () => {
+  const b = (m) => band(at(m), now);
+  assert.deepEqual([0, 2, 4.4].map(b), ["< 5m", "< 5m", "< 5m"]);
+  assert.deepEqual([5, 12, 14.4].map(b), ["< 15m", "< 15m", "< 15m"]);
+  assert.deepEqual([15, 16, 29, 29.4].map(b), ["< 30m", "< 30m", "< 30m", "< 30m"]);
+  assert.deepEqual([30, 31, 59, 60, 1439, 1440].map(b), ["< 1h", "< 1h", "< 1h", "1h", "23h", "1d"]);
+  assert.deepEqual([-60, -5].map(b), ["in 1h", "in 5m"]);
 });
 
 test("dur says how long something has run; span and plural say a count", () => {

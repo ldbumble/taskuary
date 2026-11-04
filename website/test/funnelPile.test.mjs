@@ -392,13 +392,13 @@ test("every lane the Tasks rail can land on has a word and a role", async () => 
   }
 });
 
-test('timeWords.band: empty or unreadable is blank, the past buckets into < 30m / < 1h / Nh / Nd', () => {
+test('timeWords.band: empty or unreadable is blank, the past buckets into < 5m / < 15m / < 30m / < 1h / Nh / Nd', () => {
   const now = new Date('2026-09-28T12:00:00').getTime();
   const ago = (min) => new Date(now - min * 60000).toISOString();
   assert.strictEqual(tw.band('', now), '');
   assert.strictEqual(tw.band(null, now), '');
   assert.strictEqual(tw.band('not a date', now), '');
-  assert.strictEqual(tw.band(ago(0), now), '< 30m');
+  assert.strictEqual(tw.band(ago(0), now), '< 5m');
   assert.strictEqual(tw.band(ago(29), now), '< 30m');
   assert.strictEqual(tw.band(ago(30), now), '< 1h');
   assert.strictEqual(tw.band(ago(59), now), '< 1h');

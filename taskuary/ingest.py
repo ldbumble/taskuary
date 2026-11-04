@@ -2150,9 +2150,10 @@ DRAFTER_NEEDS = 'The reply writer could not answer it from what it had - it need
 NEEDS_SAID = 'not drafted - it needs '      # how responder._answer words a NEEDS failure
 
 
-def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str) -> bool:
+def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str, opening: bool = False) -> bool:
     """Start the agent a `task` verdict names (general or coding) on a REPLY task, where it may start by itself (auto_start_ok);
-    else say why not on the task. True when one was set going."""
+    else say why not on the task. True when one was set going. `opening`: the assistant counts as live from here, not from its
+    thread's start a beat later (general.OPENING, let go by _start_general), so a second hand-over meanwhile starts nothing."""
     v = verdict or {}
     kind = str(v.get('kind') or '').lower()
     if v.get('degraded') or v.get('intent') != 'task' or kind not in task_kinds.AGENT: return False
@@ -2167,7 +2168,9 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str)
         not_started(store, tid, who)
         store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': str(who), 'reply': True})
         return False
-    store.update_task(tid, {'Kind': kind}, 'triage')
+    from . import general
+    # ...a research or marketing task is already the assistant's: it keeps its kind (only a reply task, or a coding one, changes)
+    if not (kind == 'general' and general.handles(store.get_task(tid))): store.update_task(tid, {'Kind': kind}, 'triage')
     store.tag_task(tid, REPLY_TAG, actor='triage')
     if (store.get_task(tid) or {}).get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
     store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message needs {task_kinds.worker(kind)} before it can be answered: it "
@@ -2177,7 +2180,9 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str)
     if choose:
         store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
         _spawn(_choose_then_start, store, tid, msg, mid)
-    else: _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
+    else:
+        if opening and kind != 'coding': general.OPENING.add(tid)
+        _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
     return True
 
 
@@ -2199,7 +2204,7 @@ def hand_reply_to_agent(store, tid, rid, why: str) -> bool:
     need = (w[len(NEEDS_SAID):].split('. ')[0] if w.startswith(NEEDS_SAID)
             else 'the work done first - its draft only promised to look into it later')
     store.add_comment(tid, 'responder', 'agent', f"{DRAFTER_NEEDS}{need.rstrip('.')}.")
-    return agent_on_reply(store, tid, _from_row(m, store), m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': why}, 'auto-draft')
+    return agent_on_reply(store, tid, _from_row(m, store), m['MessageId'], {'intent': 'task', 'kind': 'general', 'why': why}, 'auto-draft', opening=True)
 
 
 # WHAT AN AGENT COULD DO FOR THE OWNER (the owner, 2026-10-28): triage reads the main ask and may say, in one sentence to the owner, what
@@ -3049,12 +3054,13 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     `deep`: the quick path already handed this one on (quickwork.escalate), so it never goes back to it.
     A task triage judged quick (quickwork.takes) is answered in one call instead: no desk, a fraction of one (quickwork._take). Every door reaching
     here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
-    from . import blackboard as bb, quickwork
+    from . import blackboard as bb, general, quickwork
     if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
     if not has_room(store):
         # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
         store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)
         store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
+        general.OPENING.discard(tid)            # queued is not live: the drain starts it
         return
     _start_general(store, tid, brief)
 
@@ -3074,6 +3080,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
     from . import general, quickwork
     try:
         session = general.start_session(store, tid, actor='router')
+        general.OPENING.discard(tid)            # a hand-over's hold (agent_on_reply `opening`): the session is live from here
         fresh = not general.history(store, tid)
         store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
                           + ('.' if fresh else ' - it carries on the conversation already open here.'))
@@ -3086,6 +3093,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
         from . import blackboard as bb
         bb.record_failure(store, tid, e, 'assistant', label='The assistant')
         return False
+    finally: general.OPENING.discard(tid)
 
 
 # THE DRAFTS BEING WRITTEN AT ARRIVAL, by review: a Draft with AI or a Reply pressed on the new row meanwhile waits for this one

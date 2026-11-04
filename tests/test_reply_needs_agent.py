@@ -284,3 +284,18 @@ def test_needs_on_a_coding_task_or_under_a_live_agent_starts_nothing_new(case):
     try: rv, spawned = drafted(s, tid, writer(PORTAL)[0])
     finally: general.OPENING.discard(tid)
     assert 'needs the portal login' in rv['DraftNeeds'] and spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG)
+
+
+def test_needs_keeps_a_general_kind_and_holds_the_start_against_a_second_one():
+    s = store(); tid = general_ask(s, kind='research')
+    _rv, spawned = drafted(s, tid, writer(PORTAL)[0])
+    assert spawned == ['_auto_general'] and s.get_task(tid)['Kind'] == 'research'
+    assert tid in general.OPENING                     # opening from the hand-over on: a second NEEDS meanwhile is an agent live on it
+    assert drafted(s, tid, writer(PORTAL)[0])[1] == []
+
+
+def test_needs_on_a_general_task_with_a_conversation_already_starts_nothing():
+    s = store(); tid = general_ask(s)
+    with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'content': 'earlier'}]):
+        _rv, spawned = drafted(s, tid, writer(PORTAL)[0])
+    assert spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG) and tid not in general.OPENING

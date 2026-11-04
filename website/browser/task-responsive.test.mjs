@@ -54,6 +54,9 @@ test("task context, expanded messages and agent results fit short laptops and ph
         // Result's press before the task's detail had loaded, and the room never opened: CI, 2026-10-28). A press that took is never repeated,
         // so a toggle cannot be folded back
         const room = "[data-tq-agent-room='rest'] .tq-aui-viewport";
+        // ...and pressed on the Result's own button once it has drawn: it comes with the task's detail, a beat after the summary, and the
+        // heading pressed in its place on a phone folds the Result away (CI, 2026-11-04: red on two release runs in a row)
+        await page.waitForSelector("[data-tq-work] [data-tq-full-result]", { timeout: 10000 }).catch(() => {});
         for (let i = 0; i < 4 && !(await page.$(room)); i++) {
           const was = await page.$eval('[data-tq-work]', (w) => { const b = w.querySelector('[data-tq-full-result]') || w.querySelector('[data-tq-step="2"]').parentElement;
             window.__pressed = b; const v = b.getAttribute("aria-expanded"); b.click(); return v; });

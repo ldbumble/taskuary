@@ -67,6 +67,13 @@ class AttachingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verdicts.attach(self.store, self.rid, 'huge.zip', b'x' * (outbound.ATTACH_MAX + 1))
 
+    def test_one_that_fits_alone_but_not_beside_the_rest_is_refused_at_attach_not_at_send(self):
+        half = b'x' * (outbound.ATTACH_MAX // 2)
+        verdicts.attach(self.store, self.rid, 'east.xlsx', half)
+        with self.assertRaises(ValueError) as e: verdicts.attach(self.store, self.rid, 'west.xlsx', half + b'x')
+        self.assertIn('send a link', str(e.exception))
+        self.assertEqual(len(verdicts.attach(self.store, self.rid, 'east.xlsx', half)['attachments']), 1)   # ...a replacement counts once
+
 
 class ReadingThemBackTests(unittest.TestCase):
     def test_a_file_that_moved_stops_the_send_instead_of_half_making_it(self):

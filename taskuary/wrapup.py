@@ -261,7 +261,7 @@ def attach_files(store, rid: int, files, agent: str = 'agent') -> dict:
     done, why = [], []
     for name, data in files or []:
         try: verdicts.attach(store, rid, name, data, agent); done.append(name)
-        except ValueError as e: why.append(f'{name}: {e}')
+        except ValueError as e: why.append(f'{name}: {e}'); verdicts.refused(store, rid, name, str(e))
     return {'attached': done, 'not_attached': why}
 
 
@@ -389,7 +389,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...said once per letter: the same reply saved twice - its marker and its `--reply` in one turn - wrote "agent drafted the reply
     # itself" and "assistant drafted the reply itself" one under the other (the email walk, 2026-10-29)
     same = agent_drafted(rv) and ' '.join(str(rv.get('DraftText') or '').split()) == ' '.join(text.split())
-    store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent); store.set_review_sid(rid, sid)
+    # ...with the names of the files it hands over kept as the draft's promise (FilesPromised): the card counts them against what rides
+    store.update_review_draft(rid, text, run_id or rv.get('RunId'), by=AGENT_DRAFT + agent, files=[n for n, _ in files] if files else ...)
+    store.set_review_sid(rid, sid)
     if not same: store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
     many = [] if str(to or '').strip() else people_named(store, task_id)

@@ -33,7 +33,7 @@ import PublishedPages from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, shownOnce, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
-import { heldOn, isTurn, TURN_BACK } from "./browserSplit.js";
+import { heldOn, isTurn, TURN_BACK, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
@@ -1005,7 +1005,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
             change the tree around the thread, or the answer streaming into it is remounted away
             ...and no sid on a card whose session is not live (`noTools`): its browser was asked for every 3 s under a stopped, saved
             or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
-        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={!!asking} idle={!busy && !streaming}
+        <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy && !streaming}
           stack={!dock} taskId={dock ? null : task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
           onView={viewShownIs} expectBrowser={wantsBrowser(task)}>{thread}</SessionPane>
       </Box>

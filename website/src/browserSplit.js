@@ -166,6 +166,13 @@ export const mayShape = (hidden, focused, claim = false) => !hidden && (!!claim 
 // that opens a file of its own in its browser - rendering a mock receipt to test against - is not out on the web: the
 // pane stays folded to its chip, one click from showing, and unfolds by itself once the agent goes to a real address.
 export const isLocalPage = (url) => /^file:/i.test(String(url || "").trim());
+// AN EMPTY TAB IS NOT A PAGE (the owner, 2026-11-03): a Chrome launched for a task marked "needs a browser" sat on about:blank as half the
+// canvas - "an empty tab, live" - on a task the agent answered without one. It folds to its chip until the agent opens a page, the owner
+// unfolds it, or something waits on it (SessionPane)
+export const isBlankPage = (url) => { const u = String(url || "").trim(); return !u || /^about:/i.test(u); };
+// ...and "your turn - click the page and type" is for a wait ON the page: the agent's hand-over (isTurn) or a sign-in (signin.PREFIX) -
+// never a question it asked in words, which is answered in the chat's box
+export const waitsOnPage = (asking) => isTurn(asking) || String(asking?.request_id || "").startsWith("signin:");
 
 // Should this slot hold the split, or just a chip? The Wall tiles three or four sessions across.
 // `stack`: an agent's conversation on its task (GeneralWorkspace) - too narrow to split, the browser goes ABOVE the chat instead of

@@ -1105,10 +1105,23 @@ def install_processing_changes(app, store):
     def browser_view(body: dict):
         """{step: 'open', frame}: a general task whose agent has Taskuary's browser open on an invented webinar sign-up page.
         {step: 'hold' | 'turn' | 'close', taskId}: the hold puts its Register press on the task (browsergate's own proposal); the agent
-        hands the page over for a human check (browserview.your_turn); the agent's session ends with the browser on that page."""
+        hands the page over for a human check (browserview.your_turn); the agent's session ends with the browser on that page.
+        {step: 'blank', frame}: a general task marked as needing a browser whose agent answered without one - its Chrome on about:blank,
+        and a question for the owner asked in words (the owner's pane, 2026-11-03)."""
         step = body.get('step')
-        if step not in ('open', 'hold', 'turn', 'close') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
+        if step not in ('open', 'hold', 'turn', 'close', 'blank') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
         from taskuary import proposals, terminal
+        if step == 'blank':
+            from taskuary import workerstate as ws
+            tid = store.create_task({'Title': 'Gail Moreno asks what Taskuary costs', 'Kind': 'general', 'Status': 'in_progress',
+                                     'Tags': 'needs:browser'}, 'fixture')
+            store.add_comment(tid, 'taskuary', _gen.USER_TYPE, 'Gail Moreno wrote: what does it cost a month, and can you sign me up?')
+            store.add_comment(tid, 'assistant', _gen.ASSISTANT_TYPE, 'Gail Moreno asks what it costs.\n\nFirst month free, or a price now?')
+            sess = ViewAgent(store, tid)
+            terminal.SESSIONS[sess.sid] = sess; view_sid[tid] = sess.sid
+            VIEW[sess.sid] = {'open': True, 'url': 'about:blank', 'frame': str(body.get('frame') or ''), 'input': [], 'ran': []}
+            ws.record(store, tid, sess.sid, 'input_needed', request_id='q-price', text='First month free, or a price now?', source='api')
+            return {'taskId': tid, 'sid': sess.sid}
         if step == 'open':
             frame = str(body.get('frame') or '')
             if not frame or len(frame) > 2_000_000: raise HTTPException(422, 'a base64 JPEG frame is required')

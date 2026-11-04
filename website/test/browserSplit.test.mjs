@@ -192,3 +192,16 @@ test("a file the agent opened in its browser is not browsing, so it takes no roo
   assert.equal(isLocalPage("about:blank"), false);
   assert.equal(isLocalPage(""), false);
 });
+
+test("an empty tab is not a page: the view folds to its chip until the agent opens one, or something waits on it", async () => {
+  const { isBlankPage, waitsOnPage } = await import("../src/browserSplit.js");
+  assert.equal(isBlankPage("about:blank"), true);
+  assert.equal(isBlankPage(""), true);
+  assert.equal(isBlankPage(" about:newtab"), true);
+  assert.equal(isBlankPage("https://portal.example/login"), false);
+  // "your turn - click the page and type" is for a wait ON the page - its hand-over or a sign-in - never a question asked in words
+  assert.equal(waitsOnPage({ request_id: `${TURN_PREFIX}abc` }), true);
+  assert.equal(waitsOnPage({ request_id: "signin:portal.example" }), true);
+  assert.equal(waitsOnPage({ request_id: "571e07b97197", text: "First month free, or a price now?" }), false);
+  assert.equal(waitsOnPage(null), false);
+});

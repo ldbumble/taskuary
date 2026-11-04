@@ -78,6 +78,14 @@ test("a page that finished painting while the owner looked away is drawn when th
   for (let i = 0; i < 20; i++) { now = await pixels(page); if (now.blue > 0.02) break; await new Promise((r) => setTimeout(r, 250)); }
   await shot(page, "view-after-looking-away");
   assert.ok(now.blue > 0.02 && now.white < first.white, `the painted page is on the view, not the white of its loading: ${JSON.stringify(now)}`);
+  // ...and the agent's input under the view is on screen, inside its card - not 40px under the edge behind a second scrollbar
+  const input = await page.evaluate(() => {
+    const room = document.querySelector("[data-tq-agent-room='live']"), box = room && [...room.querySelectorAll("textarea")].pop();
+    let p = room?.parentElement;
+    while (p && !(/(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.clientHeight)) p = p.parentElement;
+    return box && p && { input: Math.round(box.getBoundingClientRect().bottom), edge: Math.round(p.getBoundingClientRect().bottom), over: p.scrollHeight - p.clientHeight };
+  });
+  assert.ok(input && input.input <= input.edge && input.over <= 12, `the agent's input is inside the card ${JSON.stringify(input)}`);
   const seen = await call(`/api/fixture/browser/view/${made.taskId}`, null, "GET");
   assert.ok(seen.acks.includes(sent.seq), `the frame drawn on return is acked: ${JSON.stringify(seen.acks)}`);
   assert.deepEqual(errors, []);

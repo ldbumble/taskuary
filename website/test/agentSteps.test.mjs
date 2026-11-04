@@ -170,6 +170,10 @@ test("a look whose non-zero exit is its answer reads 'found none'; a look that b
   assert.equal(st("PowerShell", "Get-ChildItem C:/Users/alex/Downloads/notes", "Get-ChildItem : Cannot find path 'C:\\Users\\alex\\Downloads\\notes' because it does not exist."), "none");
   assert.equal(st("Bash", "ls --frobnicate notes*", "Exit code 2\nls: unrecognized option '--frobnicate'\nTry 'ls --help' for more information."), "error");
   assert.equal(st("Bash", "npm test", "Exit code 1"), "error");
+  // ...and a refusal on the very path it was asked for is an error, never "found none" (the owner, 2026-11-03)
+  assert.equal(st("Bash", "ls /srv/notes", "Exit code 2\nls: cannot open directory '/srv/notes': Permission denied"), "error");
+  assert.equal(st("PowerShell", "Get-ChildItem C:/Users/alex/Downloads/notes", "Get-ChildItem : Access to the path 'C:\\Users\\alex\\Downloads\\notes' is denied."), "error");
+  assert.equal(st("Bash", "grep -r invoice-4471 docs", "Exit code 2\ngrep: docs: Permission denied"), "error");
 });
 
 test("a turn whose answer carries its reply draft is not shown twice - the stream had the draft taken out, the filed answer keeps it", () => {

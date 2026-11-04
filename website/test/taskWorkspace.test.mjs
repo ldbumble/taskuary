@@ -32,9 +32,7 @@ test("a general agent whose run ended under it offers Continue on its bar; one w
   const { barContinues } = await import("../src/taskWorkspace.js");
   assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: "failed" }), true);      // its CLI died part-way through
   assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: "disconnected" }), true);   // cut off
-  assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: "stopped" }), false);       // the owner stopped it: its chat box
-  assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: "stopped", gone: true }), true);   // ...until a restart took its session
-  assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: null, gone: true }), false);
+  assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: "stopped" }), true);        // the owner stopped it: always Continue (2026-11-03)
   assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: null }), false);       // a saved chat: its composer continues
   assert.equal(barContinues({ canContinue: true, isGeneral: true, ended: "finished" }), false);
   assert.equal(barContinues({ canContinue: true, isGeneral: false }), true);

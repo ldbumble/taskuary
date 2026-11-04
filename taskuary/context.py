@@ -270,6 +270,84 @@ def recent_open(store, msg: dict, limit: int = OPEN_SEATS) -> list:
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
 
+# EVERY OPEN ITEM, ONE LINE EACH (the owner, 2026-11-04: "different tasks from different sources can still be joined????"). The vendor's
+# "your portal account is active" came on a new thread from a third party - no shared sender, thread or number - and with no embedder
+# nothing put the Watching item it answers in front of triage, so it opened a second row. Structure ties only what it can see; meaning
+# is the model's to read, so it is shown the owner's open work itself: newest first, the ones already shown above left out. N bounds
+# the prompt: 40 lines of at most 140 characters is ~5.6K characters (~1.4K tokens) against a prompt of 20K+, and an item idle past the
+# 40 newest is the one least likely to be what arrives now - the structural ties above still reach it by thread, sender or number.
+OPEN_ITEMS, OPEN_ITEM_CHARS = 40, 140
+
+
+def _age(at) -> str:
+    try: d = (datetime.now() - datetime.fromisoformat(str(at)[:19].replace('T', ' '))).days
+    except ValueError: return ''
+    return 'today' if d < 1 else f'{d}d' if d < 14 else f'{d // 7}w'
+
+
+def _asks(t: dict) -> str:
+    "What the item asks: triage's own reading of its thread where it made one, else the task's summary."
+    try: th = json.loads(t.get('ThreadJson') or 'null') or {}
+    except ValueError: th = {}
+    return (th.get('asking') if isinstance(th, dict) else '') or t.get('Summary') or ''
+
+
+def open_items(store, skip=(), limit: int = OPEN_ITEMS) -> list:
+    """The owner's open tasks and Watching items as one line each - ref and tid, title, what it asks, where it came from, age - so an
+    arrival about the same matter from anyone, on any channel, can be named as that task (same_as). `skip` is what triage was already
+    shown. Evidence, never a rule: the model says whether one of them is this."""
+    from .senders import channel_name
+    out = []
+    for t in store.tasks_open_brief(limit + len(skip)):
+        if t['TaskId'] in skip: continue
+        src = 'yours' if _own(t) else ', '.join(x for x in (channel_name(t.get('Channel') or t.get('Source')), _short(t.get('FromName'), 30)) if x)
+        out.append(_item(t, src, 'watching' if t.get('WatchedAt') else ''))
+        if len(out) >= limit: break
+    return out
+
+
+def _item(t: dict, *tail) -> str:
+    "One line: ref and (tid), title, what it asks, then `tail` and its age - what it asks gives way, never which task or its state."
+    head = f"{task_ref(t['TaskId'])} (tid {t['TaskId']}) {_short(t.get('Title'), 50)}"
+    tail = ' | '.join(x for x in (*tail, _age(t.get('CreatedAt'))) if x)
+    return ' | '.join(x for x in (head, _short(_asks(t), OPEN_ITEM_CHARS - len(head) - len(tail) - 6), tail) if x)[:OPEN_ITEM_CHARS]
+
+
+# CLOSED WORK IS FOUND BY THE OWNER'S OWN SEARCH (the owner, 2026-11-04: triage should "check if there is something like this"). A follow-up
+# on a matter closed last week, from a new sender on a new thread, ties to nothing structural and is past recent_closures' days, so it
+# opened a fresh task beside the one it reopens. The arrival's subject and its longest words are put to the search box's own engine
+# (store.list_tasks q=, what search.everything and the agents' search_tasks run), one word at a time; a word that finds more than
+# SEARCH_COMMON tasks says nothing about this one and is dropped, and a task found by two words or more - or by the whole subject - is
+# shown with its status: open or watched, or closed and when. The model says whether it is this; a done task it names reopens only on
+# work owed (_join_same). A dropped task is never rejoined (_joinable_task), so it is not shown. ~10 lines of 140: ~1.4K characters.
+SEARCH_HITS, SEARCH_WORDS, SEARCH_COMMON = 10, 8, 20
+
+
+def search_words(msg: dict) -> list:
+    "The words the search is run on: the subject's, then the body's longest - each folded once, digits kept, as the search box takes them."
+    w = lambda s, n: [x for x in re.findall(r'[\w\-]+', str(s or '').lower()) if len(x) >= n]
+    body = sorted(dict.fromkeys(w(str(msg.get('body') or '')[:TOPIC_CHARS], 5)), key=len, reverse=True)
+    return list(dict.fromkeys(w(msg.get('subject'), 4) + body))[:SEARCH_WORDS]
+
+
+def found_tasks(store, msg: dict, skip=(), limit: int = SEARCH_HITS) -> list:
+    """Tasks open or done that the owner's own search finds for this arrival, best found first, one line each with its status (see above)."""
+    from collections import Counter
+    hits, rows = Counter(), {}
+    subj = ' '.join(str(msg.get('subject') or '').split())
+    for q, weight in [*((x, 1) for x in search_words(msg)), *([(subj, 2)] if len(subj.split()) > 1 else [])]:
+        got = store.list_tasks(None, q=q, shown=True)
+        if len(got) > SEARCH_COMMON: continue          # counted over every task, shown or not: commonness is the word's, not this list's
+        for t in got:
+            if t['TaskId'] not in skip and t.get('Status') != 'dropped': hits[t['TaskId']] += weight; rows[t['TaskId']] = t
+    best = sorted((i for i, n in hits.items() if n >= 2), key=lambda i: (-hits[i], -i))[:limit]
+    def state(t):
+        if t.get('Status') != 'done': return 'watching' if t.get('WatchedAt') else 'open'
+        a = _age(t.get('ClosedAt') or t.get('UpdatedAt'))
+        return f"closed {a if a in ('today', '') else a + ' ago'}".strip()
+    return [_item(rows[i], state(rows[i])) for i in best]
+
+
 WORKED_HOURS = 4         # how long before a mail of the owner's the work they were doing still speaks to it
 
 

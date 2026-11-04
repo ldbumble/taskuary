@@ -675,6 +675,16 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
         # ...and the open GOALS with their steps, so a mail on another thread can say which step it serves (spec 2026-10-12)
         goals = taskcontext.open_goals(store)
         if goals: thread = {**thread, 'open_goals': goals}
+        # ...and every other open task and Watching item, one line each: a third party's follow-up on another thread or channel shares
+        # no structure with the task it belongs to, so only its meaning can join it - the model's to read (open_items, 2026-11-04)
+        shown = {int(w['tid']) for k in ('open_work', 'room_tasks', 'open_goals') for w in thread.get(k) or [] if w.get('tid')}
+        if (items := taskcontext.open_items(store, shown | {int((thread.get('thread_task') or {}).get('tid') or 0)})):
+            thread = {**thread, 'open_items': items}
+        # ...and what the owner's own search finds for it, open or closed: a follow-up on a matter closed last week, from anyone (2026-11-04)
+        shown |= {int(w['tid']) for w in thread.get('recently_closed') or [] if w.get('tid')}
+        shown |= {int(x) for l in thread.get('open_items') or [] for x in re.findall(r'\(tid (\d+)\)', l)[:1]}
+        if (found := taskcontext.found_tasks(store, msg, shown | {int((thread.get('thread_task') or {}).get('tid') or 0)})):
+            thread = {**thread, 'found_by_search': found}
         # ...and how this sender's last asks were worked, further back than three days (TQ-0955, 2026-10-05)
         theirs = taskcontext.sender_history(store, msg)
         if theirs: thread = {**thread, 'sender_history': theirs}

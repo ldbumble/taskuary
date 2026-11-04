@@ -105,6 +105,9 @@ const q = (s) => (s ? `“${String(s).replace(/\s+/g, " ").trim()}”` : "");
 // a second of the click that opened it (the owner, 2026-11-01: "this still happens")
 export const TAB_MOST = 40;
 // ...and under the first line whom it went to, when anyone but the owner was on it (`to`, taskSources.toLine - the owner, 2026-11-03)
+// ...WHO it came from, for its first line: an email's sender by name - its SourceName is the owner's own mailbox, and the spine of every mail
+// task read "alex@northwind.example · 1 message" (the overnight run, 2026-11-03) - and a chat's room (a WhatsApp group, a Teams channel) by its own
+export const cameFrom = (m) => !m ? "" : String(m.Channel || "").toLowerCase() === "email" ? String(m.FromName || m.FromEmail || "") : String(m.SourceName || "");
 export const fromStatus = ({ channel = "", count = 0, msgs = [], workflow = null, made = "", sorted = "", to = "" } = {}) => ({
   lines: [count ? [channel, plural(count, "message")].filter(Boolean).join(" · ") : workflow ? `Routine · ${workflow.title}` : made, to,
     ...msgs.slice(0, TAB_MOST).map((m) => `${m.who}: ${q(m.words)}`)].filter(Boolean),

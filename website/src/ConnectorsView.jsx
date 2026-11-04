@@ -1966,7 +1966,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go();
         onBrowseState?.({ ...browseState, section: q ? c.crumb || browseState.section : browseState.section, open: c.key,
           connector: c.key === "agents" ? "cli-agents" : /^[cds](\d+)$/.exec(c.key)?.[1] || "" }); }) }} /> })),
-      detail, onBack: back,
+      detail, onBack: back, openKey: browseState.open || (conn ? `c${conn.ConnectorId}` : ""),
       openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",
       search: (
         <Box component="input" type="search" value={q} onChange={(e) => search(e.target.value)} placeholder="Search connectors…"
@@ -3677,8 +3677,9 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
         setSt(data); onStatus?.(data);
         if (data.connected && wasConnected === false) reload?.();     // just paired: the card's status line changes
         wasConnected = !!data.connected;
-        // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair
-        if (data.bridge === false && data.node && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
+        // Node is there and the bridge is not: start it, once per visit - the owner opened this card to pair. Not one stopped on purpose
+        // (manager.held): a Remove stopped it, and starting it here put the card straight back up (TQ-1320) - Start bridge is the way back
+        if (data.bridge === false && data.node && !data.manager?.held && !kicked.current && !["installing", "starting", "failed"].includes(data.manager?.phase)) { kicked.current = true; startBridge(); }
         setTimeout(tick, data.connected ? 30000 : data.bridge === false ? (data.node ? 3000 : 6000) : 4000);
       // A STATUS WE COULD NOT READ IS NOT "NODE IS MISSING". Faking {bridge:false} here sent the owner
       // off to install Node they already had, because the app was restarting or busy for a moment.
@@ -3768,6 +3769,7 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
             <Typography variant="caption" sx={{ color: phase === "failed" ? "#a33" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
               {phase === "installing" ? "Fetching the bridge's dependency (Baileys, not bundled on purpose). The QR appears here the moment the bridge is up."
                 : phase === "failed" ? `The bridge could not start: ${st.manager.detail}`
+                : st.manager?.held ? "The bridge is stopped and this computer is unpaired. Start bridge to pair a phone again."
                 : "Starting the bridge…"}
             </Typography>
             {phase === "failed" && (

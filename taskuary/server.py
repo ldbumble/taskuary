@@ -7074,7 +7074,15 @@ def connector_reset(cid: int):
     if not c: raise HTTPException(404, 'connector not found')
     # at once, with the page's Undo: its sealed sign-in is kept for the Undo line's minutes, then forgotten (recentlydeleted.py)
     from . import recentlydeleted
+    # a WhatsApp card's pairing lives in the bridge, not the row: removed with it, or the bridge kept syncing (wabridge.forget)
+    bridge = None
+    if c['Type'] == 'whatsapp':
+        from . import wabridge, demo
+        if not demo.enabled():
+            try: bridge = wabridge.forget(store.get_connector(cid, with_secret=True) or c)
+            except Exception as e: logger.warning(f'wa bridge: the pairing was not removed with the card: {e}'); bridge = {'unpaired': False, 'why': str(e)}
     out = recentlydeleted.remove_connection(store, cid, c.get('Name') or c['Type'])
+    if bridge is not None: out['bridge'] = bridge
     store.audit('connector', cid, 'reset', ACTOR, detail={'type': c['Type']})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)

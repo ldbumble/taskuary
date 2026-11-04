@@ -22,7 +22,7 @@ _STATE = {'phase': 'idle', 'detail': '', 'pid': None, 'at': 0.0}   # idle | inst
 _LOCK = threading.Lock()
 
 
-def state() -> dict: return dict(_STATE)
+def state() -> dict: return {**_STATE, 'held': _SUP['held']}   # held: stopped on purpose - the card does not start it by itself
 
 
 # Baileys logs every protocol frame it handles and the bridge appends all of it to one file. Nothing
@@ -502,25 +502,41 @@ def restart(wait: bool = False, filter_policy: dict = None) -> dict:
     return start(wait=wait, filter_policy=filter_policy)
 
 
-def pair_again(wait: bool = False, filter_policy: dict = None) -> dict:
-    """PAIR AGAIN, the card's button for "Logged out" and for a contact sync that keeps failing (2026-10-23): the address book is
-    encrypted with app-state keys only the phone hands out, and a linked device that missed one cannot ask for it in Baileys 6.7 -
-    "failed to find key ... to decode mutation" every ten minutes until it pairs afresh. The bridge unlinks itself on the phone,
-    stops, and its auth folder is set aside (renamed, never deleted - it is the one copy of the old pairing); the bridge then
-    starts unpaired and the card shows the QR."""
+def unpair(hold: bool = False) -> str:
+    """Unlink this device on the phone, stop the bridge and set its auth folder aside (renamed, never deleted - it is the one copy
+    of the old pairing). '' when done, else why the folder could not be moved. `hold`: the supervisor leaves the bridge down."""
     import requests
     try: requests.post(f'http://127.0.0.1:{port()}/logout', headers={'x-bridge-token': token()}, json={}, timeout=8)
-    except requests.RequestException as e: logger.info(f'wa bridge: could not unlink on the phone first ({e}) - pairing again anyway')
-    stop(); time.sleep(1.0)
+    except requests.RequestException as e: logger.info(f'wa bridge: could not unlink on the phone first ({e}) - setting the pairing aside anyway')
+    stop(hold=hold); time.sleep(1.0)
     run = run_dir(); auth = run / 'wa-auth'
     if auth.exists():
         aside = run / f"wa-auth.replaced-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         try: auth.rename(aside)
-        except OSError as e:
-            _set('failed', f'could not set the old pairing aside ({e}) - Restart bridge, then Pair again'); return state()
+        except OSError as e: return f'could not set the old pairing aside ({e})'
         logger.info(f'wa bridge: old pairing set aside as {aside.name}')
-    (run / '.carried-wa-auth').touch()         # the package folder's old pairing must not come back on this start (stage)
+    (run / '.carried-wa-auth').touch()         # the package folder's old pairing must not come back on the next start (stage)
+    return ''
+
+
+def pair_again(wait: bool = False, filter_policy: dict = None) -> dict:
+    """PAIR AGAIN, the card's button for "Logged out" and for a contact sync that keeps failing (2026-10-23): the address book is
+    encrypted with app-state keys only the phone hands out, and a linked device that missed one cannot ask for it in Baileys 6.7 -
+    "failed to find key ... to decode mutation" every ten minutes until it pairs afresh. The bridge unlinks itself (unpair); the
+    bridge then starts unpaired and the card shows the QR."""
+    if why := unpair(): _set('failed', f'{why} - Restart bridge, then Pair again'); return state()
     return start(wait=wait, filter_policy=filter_policy)
+
+
+# REMOVE CONNECTION TAKES THE PAIRING WITH IT (TQ-1320): Remove wiped the card's row, and the bridge went on running, paired, so the
+# card's pairing box still said "Paired - connected" and the phone still listed the device. Removing it unlinks the device, sets the
+# auth folder aside and leaves the bridge stopped; setting it up again starts from the QR. Undo puts the card's settings back, not
+# the pairing - WhatsApp has already forgotten the device by then, so it is scanned again.
+def forget(c: dict) -> dict:
+    "The bridge side of removing a WhatsApp card. Nothing for a bridge the owner runs elsewhere (a non-default bridge_url)."
+    if not managed(c): return {'unpaired': False, 'why': 'external bridge'}
+    why = unpair(hold=True)
+    return {'unpaired': not why, 'why': why}
 
 
 # ── A BRIDGE THAT DIED IS STARTED AGAIN (2026-10-22) ──────────────────────────────────────────────────────────

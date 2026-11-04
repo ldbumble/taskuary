@@ -25,7 +25,7 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
 export function BrowseFrame({ title, summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
-  openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false, noneAction = null }) {
+  openLabel = "", openKey = null, search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false, noneAction = null }) {
   // ONE WAY TO SAY A PAGE'S BOX FOUND NOTHING (verify, 2026-10-20): a page that forgot to pass its own line said "Nothing here." under
   // the words typed - Settings did. `query` is the box's words; while there are any, the frame says it, the way the search does
   const none = String(query || "").trim() ? nothingMatches(query, searched || title) : empty || "Nothing here.";
@@ -38,7 +38,10 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
   // a card opened, or a section picked, is brought into view - the conversation above it does not move
   const root = useRef(null), one = useRef(null);
   const opened = !!detail;
-  useEffect(() => { if (live && opened) one.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, opened, openLabel]);
+  // ...once per card opened: `openKey` names WHICH card, where openLabel carries its status too - a Connections card's label is its status
+  // line, so every switch flipped, Test or reload on it scrolled the page back to the card's top (TQ-1320). Pages without one key on the label
+  const which = openKey ?? openLabel;
+  useEffect(() => { if (live && opened) one.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, opened, which]);
   useEffect(() => { if (live && section != null) root.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, section]);
   // an earlier browse card is one line - a record, not a door, like every folded item on the canvas (the owner, 2026-10-16)
   if (!live) return <div className="tq-fold"><b>{title}</b></div>;

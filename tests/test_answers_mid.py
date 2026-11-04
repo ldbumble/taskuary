@@ -216,3 +216,51 @@ def test_an_aside_mail_is_not_redrafted():
                                         'subject': 'RE: Export', 'body': 'Thanks!', 'sent_at': '2026-11-04 10:17:00'}, llm=judged)
     r = s.get_review(rid)
     assert out.get('task_id') == tid and (r['MessageId'], r['Stale']) == (ask, 0) and not spawned.called
+
+
+def test_a_reply_with_a_merge_close_out_goes_to_the_ask():
+    s, tid, ask, rid = asked()
+    pr = s.add_message({'TaskId': tid, 'ExternalId': 'gh-7', 'Channel': 'github', 'SourceName': 'northwind/ledger', 'Subject': 'Fix the export',
+                        'FromName': 'Ray Colton', 'FromEmail': RAY[0], 'SentAt': '2026-11-04 10:20:00', 'BodyText': 'Can you merge this?', 'Status': 'routed'})
+    last = line(s, tid, 21, GAIL, 'Thanks!', aside=True)
+    s.update_review_message(rid, last); s.set_review_answers(rid, pr)
+    co = s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'approved', 'DraftText': json.dumps({'action': 'merge_pr', 'repo': 'northwind/ledger', 'number': 7})})
+    assert verdicts._carried(s, s.get_review(co), s.get_review(rid))
+    from taskuary import github
+    with mock.patch('taskuary.ci._conn', lambda st: {'Secret': 'x'}), mock.patch.object(github, 'comment_issue', return_value='u') as say:
+        out = verdicts._post_with_closeout(s, s.get_review(co), s.get_review(rid), '', 'owner')
+    assert out['ok'] and say.called and s.get_message(pr)['Status'] == 'sent'
+
+
+def chat_asked(revision=False):
+    from taskuary import operations
+    s = MemoryStore(); tid = s.create_task({'Title': 'Repair the export', 'Kind': 'task', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+    add = lambda i, who, body, aside=False: (lambda mid: s.add_route(mid, tid, 'attach', 1.0, 'triage', [], 'triage',
+                                                                      verdict=ASIDE if aside else {'intent': 'reply_only', 'why': 'asks'}) and mid)(
+        s.add_message({'TaskId': tid, 'ExternalId': f'w{i}', 'Channel': 'whatsapp', 'SourceName': 'alex', 'FromName': who[1], 'FromEmail': who[0],
+                       'SentAt': f'2026-11-04 11:{i:02d}:00', 'BodyText': body, 'Status': 'routed'}))
+    ask = add(1, RAY, 'Can you repair the export?')
+    rid = s.add_review({'TaskId': tid, 'MessageId': ask, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Done.',
+                        **({'ContextRevision': operations.message_revision(s, tid)} if revision else {})})
+    return s, tid, ask, rid, add
+
+
+def test_a_thanks_with_no_thread_to_measure_by_moves_nothing():
+    for rev in (False, True):
+        s, tid, ask, rid, add = chat_asked(rev); add(2, GAIL, 'Thanks!', aside=True)
+        assert verdicts._own_lines(s, s.get_review(rid)) is None
+        assert verdicts.context_moved(s, s.get_review(rid))[0] is False, rev
+        real = add(3, RAY, 'And September?')
+        moved, latest = verdicts.context_moved(s, s.get_review(rid))
+        assert moved and latest['MessageId'] == real, rev
+
+
+def test_an_aside_mail_opens_no_new_draft():
+    s = MemoryStore(); tid = s.create_task({'Title': 'Repair the export', 'Kind': 'task', 'Status': 'open', 'Source': 'email'}, 'router')
+    line(s, tid, 11, RAY, 'Can you repair the export?')
+    judged = lambda system, user, **k: json.dumps({'intent': 'reply_only', 'why': 'a thanks', 'title': 'Repair the export', 'summary': 'Gail says thanks.',
+                                                   'thread': {'asks': [], 'aside': [{'mid': 0, 'why': 'a thanks'}]}})
+    with mock.patch.object(ingest, '_spawn') as spawned:
+        out = ingest.ingest_message(s, {'external_id': 'x18', 'channel': 'email', 'from_email': GAIL[0], 'from_name': GAIL[1], 'conversation_id': 'conv-9',
+                                        'subject': 'RE: Export', 'body': 'Thanks!', 'sent_at': '2026-11-04 10:18:00'}, llm=judged)
+    assert out.get('task_id') == tid and s.pending_review(tid) is None and not spawned.called

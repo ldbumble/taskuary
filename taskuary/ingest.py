@@ -1026,7 +1026,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             added = store.merge_task_checklist(tid, follow['checklist'], 'triage', src=mid)
             if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
         if (follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not talking and not follow.get('invite')
-                and not store.pending_review(tid)):
+                and not is_aside(follow) and not store.pending_review(tid)):
             # a fresh question on an existing task is reply-needed there: one pending review for
             # this message, drafted at once, whatever the channel can carry (PW-043)
             unsendable = send_block(store, msg.get('channel'))

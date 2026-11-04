@@ -60,7 +60,7 @@ test("the draft's own buttons are heard before they run, as the row's are", () =
   announce("12:approve"); off();
   assert.deepEqual(heard, ["12:approve"]);
   const rd = src("ReviewDecision.jsx");
-  for (const at of ['announce(no(verb));', 'announce(no("redraft"));', 'announce(no("copy"));']) assert.ok(rd.includes(at), at);
+  for (const at of ['announce(no(id));', 'announce(no("redraft"));', 'announce(no("copy"));']) assert.ok(rd.includes(at), at);
 });
 
 test("the Tasks tab hears every press on its own page, and only while it is the tab in view", () => {

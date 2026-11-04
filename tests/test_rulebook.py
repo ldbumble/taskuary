@@ -79,7 +79,9 @@ def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, s
     s, by, syn = world
     item = by[case]
     d = _decide(s, syn, item, verb=verb)
-    assert (d.get('state'), d.get('verb'), bool(d.get('line'))) == (state, verb, says), d
+    # ...a Send the model names on a draft in its task's Close out lights Send and close there (the owner, 2026-11-03)
+    lit = 'send_close' if verb == 'approve' and item.get('tid') else verb
+    assert (d.get('state'), d.get('verb'), bool(d.get('line'))) == (state, lit, says), d
     assert len(d.get('line') or '') <= 64, 'a line is read whole on a phone'
     assert not words.jargon_in(d.get('line') or ''), d['line']
     # THE ADVISOR PICKS ONLY FROM THE BUTTONS THE ROW DRAWS (offered: row_buttons, plus Chase on a wait, plus Next)
@@ -88,7 +90,7 @@ def test_each_state_is_one_decision_on_every_surface(world, case, state, verb, s
     chips = concierge.chips_for(s, syn.get(item['key']) or item)
     lead = remote_assistant.primary({'chips': chips, 'item': item}, d)
     if verb == 'next': assert lead['verb'] == 'next'
-    elif verb in {c['verb'] for c in chips}: assert lead['verb'] == verb
+    elif lit in {c['verb'] for c in chips}: assert lead['verb'] == lit
     assert remote_assistant.advice_line({'item': item}, d) == (d.get('line') or '')
 
 
@@ -432,7 +434,7 @@ def test_what_leaves_stands_beside_the_models_send(s):
     advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'approve', 'line': '', 'evidence': []}))
     with mock.patch.object(advisor, 'notice'):
         d = advisor.decide(s, f'task:{t}', preread=False)
-    assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'approve', 'Goes to dana@vendor.example - new to this thread.'), d
+    assert (d['state'], d['verb'], d['line']) == ('draft_ready', 'send_close', 'Goes to dana@vendor.example - new to this thread.'), d
 
 
 # ── AN ACTION WAITING FOR THE OWNER'S YES (the 2026-11-02 audit: an agent's card read as asking lit nothing over a held `git push`) ──────

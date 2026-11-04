@@ -178,14 +178,15 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // close is the one that closes, and the primary; Send sends and the task stays open, as it does everywhere else
   const closesIt = closeOnSend && onTask && !!onSent;
   // ...but never while work on it is live (the owner, 2026-11-01): the reply goes and the task stays open - the server keeps it so too
-  const sendWord = btn("approve"), closeWord = btn("send_close"), stays = `the task stays open until you ${btn("close")}`;
+  const sendWord = btn("approve"), closeWord = btn("send_close"), closeCo = btn("send_close", "closeout"), stays = `the task stays open until you ${btn("close")}`;
   const closeThen = liveWork ? `the task stays open while ${liveWork}` : "then the task closes";
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
     && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || filesPromised(r));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
-    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}${closesIt && sendable ? ` - ${closeThen}` : ` - and only that; ${stays}`}.`
+    : co ? (closesIt && sendable && !simulated && !r.Stale ? `${closeCo} ${co.then}, then sends your reply to ${replyContext(r)} - ${closeThen}; ${co.approveLabel} does the same and ${stays}.`
+      : `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""} - and only that; ${stays}.`)
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
     : isCal && !r.Stale ? (closesIt ? `${closeWord} tells the calendar, with the note above if there is one - ${closeThen}; ${sendWord} tells it and ${stays}.`
       : `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`)
@@ -195,6 +196,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const twoSends = closesIt && !simulated && !co && !proposal && canSendIt && !r.Stale && !chatFile && !delivery.frozen;
   const copying = ccNow.length && !isCal ? `, copying ${ccNow.length}` : "", to = isCal ? "Tells the calendar" : `Sends this to ${replyContext(r)}`;
   const closeTitle = `${to} - ${closeThen}`, sendTitle = `${to} - ${stays}`;
+  // ...and A CLOSE-OUT'S TWO (the owner, 2026-11-03): Approve and close - the merge or the issue's close, then the reply, then the task's close -
+  // and Approve, which does the same and leaves the task open. Only where the reply rides with it: with none, Approve never closed the task
+  const twoApproves = !!co && !r.Stale && closesIt && sendable && !simulated && !delivery.frozen;
+  const coDoes = co ? `${co.then}, then sends your reply to ${replyContext(r)}` : "";
+  const closeCoTitle = `${closeCo} ${coDoes} - ${closeThen}`, coTitle = `${co?.approveLabel} ${coDoes} - ${stays}`;
+  // ...either pair keeps its line, and folds its open one when tight
+  const paired = twoSends || twoApproves;
   // A DRAFT THAT CANNOT LEAVE FROM HERE is copied (the owner, 2026-10-22: "buttons do the talking"): Copy beside Redraft, which
   // copies and closes nothing; why it cannot be sent is the Copy button's hover - the three lines that said so are gone
   const [copied, setCopied] = useState(false);
@@ -228,11 +236,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     return true;
   };
 
-  const decideBoth = async (verb) => {
+  // `close`: false on the pair's plain Approve - the close-out and the reply go, and the task stays open (twoApproves)
+  const decideBoth = async (verb, close = true) => {
     if (delivery.frozen) return;
     // the reply that rides with the close-out is checked before the merge, not after it (verdicts.decide refuses it there too)
     if (verb !== "reject" && sendable && words.trim() && refuseBlank()) return;
-    announce(no(verb));
+    const id = verb === "approve" && close && twoApproves ? "send_close" : verb;
+    announce(no(id)); setPressed(id);
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
@@ -245,13 +255,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // WAIT FOR IT, THEN MOVE ON (the owner, 2026-10-02): the close-out landed with no error, so the task may be closed now
       // ...the press is over when the server answers: the re-read after it is the page's, and "Sending…" waited on it too
       // ...and the reply that went with it closes the task, on the task page (closeOnSend) - the merge alone does not
-      else if (data.ok && verb !== "reject" && onSent) { setSent(true); setBusy(false); await onSent({ closes: closesIt && !!data.reply?.ok }); return; }
+      else if (data.ok && verb !== "reject" && onSent) { setSent(true); setBusy(false); await onSent({ closes: closesIt && close && !!data.reply?.ok }); return; }
       reloadGh(); onChanged?.();
     } catch (e) {
       if (timedOut(e)) onChanged?.();       // no answer in a minute: the review's own delivery state says where it stands
       else setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again.");
     }
-    finally { acted(no(verb)); }          // the Advisor reads the item again: what it advised has been done, or failed
+    finally { acted(no(id)); }          // the Advisor reads the item again: what it advised has been done, or failed
     setBusy(false);
   };
 
@@ -349,10 +359,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // THE LINE NEVER WRAPS (the owner, 2026-10-23): with two sends it holds one line, and when they do not fit Send folds into a ▾ - measured
   // against the width it needed, so it comes back out once there is room again. An advised Send stays in view (actionRow: the lit move)
   const [foldSend, setFoldSend] = useState(false), [sendAt, setSendAt] = useState(null), foldAt = useRef(0);
-  const folded = twoSends && foldSend && lit !== no("approve");
+  const folded = paired && foldSend && lit !== no("approve");
   useLayoutEffect(() => {
     const el = movesRef.current;
-    if (!twoSends || !el || typeof ResizeObserver === "undefined") return undefined;
+    if (!paired || !el || typeof ResizeObserver === "undefined") return undefined;
     const fit = () => {
       if (!foldSend && el.scrollWidth > el.clientWidth + 1) { foldAt.current = el.scrollWidth; setFoldSend(true); }
       else if (foldSend && el.clientWidth >= foldAt.current) setFoldSend(false);
@@ -361,7 +371,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [twoSends, foldSend]);
+  }, [paired, foldSend]);
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
@@ -391,7 +401,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: off, run: sendAnyway, title: btnHint("approve", "unknown") },
         ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: off, run: doneAnyway, title: btnHint("close") }] : [])] : []),
     ] : co && !r.Stale ? [
-      { id: no("approve"), label: busy ? sentOr(co.busyLabel) : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: off || blocked || (sendable && !words.trim()), run: () => decideBoth("approve"),
+      // a close-out's two: Approve and close the primary, Approve beside it - the one that folds when the line is tight
+      ...(twoApproves ? [{ id: no("send_close"), label: busy && pressed === "send_close" ? sentOr(co.busyLabel) : closeCo, tone: "p", title: blocked ? gh.reason : closeCoTitle,
+        disabled: off || blocked || !words.trim(), run: () => decideBoth("approve", true), why: blocked ? gh.reason.split(" - ")[0] : !words.trim() ? "write the reply first" : "" }] : []),
+      { id: no("approve"), label: busy && !(twoApproves && pressed === "send_close") ? sentOr(co.busyLabel) : co.approveLabel, tone: twoApproves ? "s" : "p",
+        title: blocked ? gh.reason : twoApproves ? coTitle : thenLine, disabled: off || blocked || (sendable && !words.trim()), run: () => decideBoth("approve", !twoApproves),
         why: blocked ? gh.reason.split(" - ")[0] : sendable && !words.trim() ? "write the reply first" : "" },
       ...(co.alt ? [{ id: no("alt"), label: altSends ? `${co.alt.label} & send your text` : co.alt.label, tone: "s", title: altTitle, disabled: off, run: () => decideBoth(co.alt.verb) }] : []),
     ] : proposal ? [
@@ -562,8 +576,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Box>
         </Box>
       )}
-      <Box ref={movesRef} data-tq-moves="" data-tq-two-sends={twoSends ? (folded ? "folded" : "both") : undefined}
-        sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: twoSends ? "nowrap" : "wrap", ...(twoSends ? { "& > button": { whiteSpace: "nowrap", flexShrink: 0 } } : {}) }}>
+      <Box ref={movesRef} data-tq-moves="" data-tq-two-sends={paired ? (folded ? "folded" : "both") : undefined}
+        sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: paired ? "nowrap" : "wrap", ...(paired ? { "& > button": { whiteSpace: "nowrap", flexShrink: 0 } } : {}) }}>
         {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies
@@ -580,13 +594,33 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           /* ONE PRESS FOR THE LAST TWO ACTS (the owner, 2026-09-27: "shouldn't we combine this?"): the merge or
              close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
              carry leaves just the close-out. */
+          /* ...and on the task page's Close out, TWO (the owner, 2026-11-03): Approve and close first and filled, Approve beside it - folded into
+             the ▾ beside Approve and close when the line is tight, as Close out's Send is */
           <>
+          {twoApproves ? (<>
+            <Button size="small" variant={closeVariant} disableElevation disabled={off || blocked || !words.trim()}
+              onClick={() => decideBoth("approve", true)} title={blocked ? gh.reason : closeCoTitle} data-tq-send="close">
+              {busy && pressed === "send_close" ? sentOr(co.busyLabel) : closeCo}</Button>
+            {folded ? (<>
+              <Button size="small" variant="outlined" disabled={off || blocked || !words.trim()} onClick={(e) => setSendAt(e.currentTarget)} title={coTitle}
+                aria-label={`More - ${co.approveLabel}`} data-tq-send-more="" sx={{ minWidth: 0, px: 1 }}>▾</Button>
+              <Menu open={!!sendAt} anchorEl={sendAt} onClose={() => setSendAt(null)}>
+                <MenuItem dense title={coTitle} data-tq-verb={no("approve")} sx={{ fontSize: 13 }}
+                  onClick={() => { setSendAt(null); decideBoth("approve", false); }}>{co.approveLabel}</MenuItem>
+              </Menu>
+            </>) : (
+              <Button size="small" variant={lit === no("approve") ? "contained" : "outlined"} disableElevation disabled={off || blocked || !words.trim()}
+                onClick={() => decideBoth("approve", false)} title={coTitle} data-tq-send="open">
+                {busy && pressed !== "send_close" ? sentOr(co.busyLabel) : co.approveLabel}</Button>
+            )}
+          </>) : (
             <Button size="small" variant={solid} disableElevation disabled={off || blocked || (sendable && !words.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
               {busy ? sentOr(co.busyLabel) : co.approveLabel}</Button>
-            {co.alt && <Button size="small" variant="outlined" disabled={off}
-              onClick={() => decideBoth(co.alt.verb)} title={altTitle}>
-              {altSends ? `${co.alt.label} & send your text` : co.alt.label}</Button>}
+          )}
+          {co.alt && <Button size="small" variant="outlined" disabled={off}
+            onClick={() => decideBoth(co.alt.verb)} title={altTitle}>
+            {altSends ? `${co.alt.label} & send your text` : co.alt.label}</Button>}
           </>
         ) : proposal ? (
           <Button size="small" variant={solid} disableElevation disabled={off || (proposal.kind === "closeout" && blocked)}

@@ -32,7 +32,8 @@ class RefusedTests(_Rail):
     def test_a_send_the_demo_refused_is_an_act_and_the_line_moves_off_send(self):
         s = self._world(); key, r = self._draft(s)
         # a draft waiting: the scripted model lights Send, and the model's light is what is lit (the owner, 2026-11-02)
-        self.assertEqual(self._advise(s, key).get('verb'), 'approve', 'a draft waiting: Send')
+        # ...in its Close out, where the send that closes is the one lit (the owner, 2026-11-03)
+        self.assertEqual(self._advise(s, key).get('verb'), 'send_close', 'a draft waiting: Send and close')
         before = advisor.revision(s, 'task', r['TaskId'])
         self.assertTrue(demo.refused(s, f"/api/reviews/{r['ReviewId']}/decide", demo.SENDS), 'the refusal is left on the item')
         self.assertNotEqual(before, advisor.revision(s, 'task', r['TaskId']), 'a refused press moves the revision')
@@ -41,7 +42,7 @@ class RefusedTests(_Rail):
         offered = [v['verb'] for v in advisor.offered(s, advisor._item(s, 'task', r['TaskId'], key))]
         self.assertNotIn('new_task', offered, 'no task to fix the demo for not sending'); self.assertNotIn('report_bug', offered)
         after = self._advise(s, key)
-        self.assertNotEqual(after.get('verb'), 'approve', f'the line still sends the owner to the refused Send: {after}')
+        self.assertNotIn(after.get('verb'), ('approve', 'send_close'), f'the line still sends the owner to the refused Send: {after}')
         self.assertTrue(after.get('line'))
 
     def test_a_refused_proposal_is_kept_on_its_target_and_paths_with_no_item_leave_nothing(self):

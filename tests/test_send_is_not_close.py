@@ -110,7 +110,7 @@ def test_a_send_does_not_settle_the_table():
 def test_the_advisor_offers_send_before_and_mark_done_after(s):
     tid, mid, rid = make_review(s, task_kind='general')
     before = [v['verb'] for v in advisor.offered(s, {'kind': 'review', 'lane': 'approve', 'rid': rid, 'tid': tid, 'mid': mid, 'draft': True, 'key': f'review:{rid}'})]
-    assert before[0] == 'approve'
+    assert before[:2] == ['send_close', 'approve'], 'Close out\'s two sends first, Send and close leading (the owner, 2026-11-03)'
     send(s, rid)
     with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
         item = next(i for i in funnel.pile(s, force=True)['items'] if i.get('tid') == tid)

@@ -21,6 +21,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/sync-phase',
         '/api/fixture/task/agent-closed',
         '/api/fixture/task/tracker-closeout',
+        '/api/fixture/task/pr-closeout',
         '/api/fixture/task/coding-saved',
         '/api/fixture/task/coding-live', '/api/fixture/task/coding-live/end',
         '/api/fixture/task/chat-burst',
@@ -133,6 +134,23 @@ def install_processing_changes(app, store):
         due = trackers.closeout_due(store, tid)
         if not due or not proposals.closeout(store, tid, due, body['comment'], 'router'): raise HTTPException(409, 'no close-out was raised')
         return {'taskId': tid}
+
+    @app.post('/api/fixture/task/pr-closeout')
+    def pr_closeout(body: dict):
+        """A task whose coding agent opened a pull request and finished: its close-out (merge northwind/ledger#42) waits beside the reply to the
+        person who asked, one decision on Close out's card. Nothing reaches GitHub - the test answers the card's read and its press. Invented people."""
+        if body: raise HTTPException(422, 'no fields')
+        import json
+        tid = store.create_task({'Title': 'Ledger export drops the 4100 accounts', 'Kind': 'coding', 'Status': 'open', 'Source': 'github'}, 'router')
+        conv = f'github:northwind/ledger#42@{tid}'
+        mid = store.add_message({'TaskId': tid, 'Channel': 'github', 'ExternalId': conv, 'ConversationId': conv, 'FromName': 'Gail Moreno',
+                                 'Subject': 'Ledger export drops the 4100 accounts', 'Status': 'routed',
+                                 'BodyText': 'The nightly ledger export is missing the 4100 accounts - can you have a look?'})
+        reply = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending',
+                                  'DraftText': 'Fixed - the export reads the 4100 accounts from the new chart again.'})
+        co = store.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(
+            {'action': 'merge_pr', 'repo': 'northwind/ledger', 'number': 42, 'closeout': True, 'text': 'Read the 4100 accounts from the new chart'})})
+        return {'taskId': tid, 'reply': reply, 'closeout': co}
 
     @app.get('/api/fixture/tracker/writes')
     def tracker_writes_seen(): return {'writes': tracker_writes}

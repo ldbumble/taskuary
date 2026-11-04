@@ -1363,7 +1363,8 @@ ALT_QUESTION = {'not_ours': 'How far?', 'agent': 'Which agent?'}
 def _pinned(store, item: dict | None, verb: str) -> dict:
     """What a pick must still find when it lands: the draft this message showed (verdicts.draft_revision). The yes is
     pressed off THIS message, and an agent's `taskuary --reply` can rewrite the draft before the owner answers."""
-    if verb != 'approve' or store is None or not (item or {}).get('rid'): return {}
+    # ...either send: Send and close leads the draft's chips (the owner, 2026-11-03), and a draft rewritten under it is no more sent by it
+    if verb not in ('approve', 'send_close') or store is None or not (item or {}).get('rid'): return {}
     from . import verdicts
     try: return {'shown': verdicts.draft_revision(store, int(item['rid']))}
     except Exception as e:
@@ -1380,7 +1381,7 @@ def _drawn_at(item: dict | None) -> dict:
 
 def _draft_moved(store, act: dict, on: dict) -> str:
     """The draft changed after the phone showed it: nothing is sent, and the new one is shown for its own yes."""
-    if not act.get('shown') or act.get('verb') != 'approve' or not on.get('rid'): return ''
+    if not act.get('shown') or act.get('verb') not in ('approve', 'send_close') or not on.get('rid'): return ''
     from . import concierge, verdicts
     if verdicts.draft_revision(store, int(on['rid'])) == act['shown']: return ''
     nxt = concierge.surface(store, act.get('key'), actor='owner')

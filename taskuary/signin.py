@@ -470,21 +470,24 @@ def _audit(store, tid, site, how, ok, why='', saved=None, code=None):
 #   one line on the task saying so and where to remove it. A password the site refused is never kept: it is only kept once past.
 # Nothing typed is logged, put in an event, a comment or the audit; captures while Taskuary itself types a sign-in (FILLING) are ignored.
 CAPTURE = r'''(() => {
-  if (window !== window.top || window.__tqSigninHooked || typeof __tqSignin !== 'function') return;
+  if (window !== window.top || window.__tqSigninHooked) return;
   window.__tqSigninHooked = true;
   const vis = (e) => { const r = e.getBoundingClientRect(); return !e.disabled && r.width > 2 && r.height > 2; };
   const texty = (e) => ['text', 'email', 'tel', ''].includes(e.type);
+  const deepAll = (sel) => { const out = []; const walk = (r) => { r.querySelectorAll('*').forEach((e) => {
+    if (e.matches(sel)) out.push(e); if (e.shadowRoot) walk(e.shadowRoot); }); }; walk(document); return out; };
   const grab = () => {
-    const ins = [...document.querySelectorAll('input')].filter(vis);
+    const ins = deepAll('input').filter(vis);
     const pw = ins.find((e) => e.type === 'password' && e.value);
     const before = pw ? ins.slice(0, ins.indexOf(pw)) : ins;
     const user = before.filter((e) => texty(e) && e.value).pop();
-    if (!pw && !user) return;
+    if ((!pw && !user) || typeof __tqSignin !== 'function') return;
     try { __tqSignin(JSON.stringify({ u: user ? user.value : '', p: pw ? pw.value : '', href: location.href })); } catch (_) {}
   };
   document.addEventListener('submit', grab, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') grab(); }, true);
-  document.addEventListener('pointerdown', (e) => { if (e.target && e.target.closest && e.target.closest('button, [type=submit], [role=button], a')) grab(); }, true);
+  // composedPath: a key or a press inside a component's shadow root reaches the document retargeted to its host
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.composedPath().some((x) => x.tagName === 'INPUT')) grab(); }, true);
+  document.addEventListener('pointerdown', (e) => { if (e.composedPath().some((x) => x.matches && x.matches('button, [type=submit], [role=button], a'))) grab(); }, true);
 })()'''
 WATCH_FOR = 30 * 60             # a sign-in ask is watched this long, then left to the owner's word
 WATCH_EVERY = 1.5
@@ -533,7 +536,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
     except Exception as e: logger.debug(f'signin: task {tid} is not watched for its {site} sign-in - {e}'); return False
     try:
         try:
-            c.call('Runtime.enable'); c.call('Runtime.addBinding', {'name': '__tqSignin'})
+            c.call('Runtime.enable'); c.call('Page.enable'); c.call('Runtime.addBinding', {'name': '__tqSignin'})
             c.call('Page.addScriptToEvaluateOnNewDocument', {'source': CAPTURE})
             c.js(CAPTURE)
         except SignInError as e: logger.debug(f'signin: the {site} page of task {tid} could not be listened to - {e}')
@@ -563,32 +566,42 @@ _QUIET.addHandler(logging.NullHandler()); _QUIET.propagate = False; _QUIET.disab
 
 # Every field is looked for in THIS document - never a frame's, so a sign-in box another site framed into the page is not one
 # Taskuary types into. Visible, enabled and writable only; the user-name box is the text field before the password box.
+# ...AND INSIDE ITS COMPONENTS' OPEN SHADOW ROOTS (the browser-agent walk, 2026-11-03): a portal built of web components keeps its User
+# ID box in one, querySelectorAll never saw it, and the page read as "no sign-in form" - so the fill page could not type into it.
+# A box in a shadow root is named by its host's words too, and the focused box is the one at the bottom of the shadow roots' focus.
+DEEP = r'''const deepAll = (sel) => { const out = []; const walk = (r) => { r.querySelectorAll('*').forEach((e) => {
+    if (e.matches(sel)) out.push(e); if (e.shadowRoot) walk(e.shadowRoot); }); }; walk(document); return out; };
+  const deepActive = () => { let a = document.activeElement; while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement; return a; };
+  const hostOf = (e) => { const r = e.getRootNode(); return r && r.host ? r.host : null; };'''
 FIELDS = r'''(want) => {
+  ''' + DEEP + r'''
   const vis = (e) => { const s = getComputedStyle(e), r = e.getBoundingClientRect();
     return !e.disabled && !e.readOnly && s.visibility !== 'hidden' && s.display !== 'none' && +s.opacity > 0.05 && r.width > 4 && r.height > 4; };
-  const ins = [...document.querySelectorAll('input')].filter(vis);
+  const ins = deepAll('input').filter(vis);
   const pw = ins.find((e) => e.type === 'password');
   const texty = (e) => ['text', 'email', 'tel', ''].includes(e.type);
-  const named = (e) => /user|mail|login|account|ident|member|customer/i
-    .test([e.name, e.id, e.autocomplete, e.getAttribute('aria-label'), e.placeholder].join(' '));
+  const words = (e) => { const h = hostOf(e); return [e.name, e.id, e.autocomplete, e.getAttribute('aria-label'), e.placeholder,
+    h && h.id, h && h.getAttribute('name'), h && h.getAttribute('label'), h && h.getAttribute('aria-label')].join(' '); };
+  const named = (e) => /user|mail|login|account|ident|member|customer/i.test(words(e));
   const before = pw ? ins.slice(0, ins.indexOf(pw)).filter(texty) : [];
-  const user = before.reverse().find(named) || before[0] || (!pw && (ins.find((e) => texty(e) && named(e)) || null));
+  const alone = ins.filter(texty);
+  const user = before.reverse().find(named) || before[0] || (!pw && (ins.find((e) => texty(e) && named(e)) || (alone.length === 1 ? alone[0] : null)));
   const frames = [...document.querySelectorAll('iframe')].filter(vis).map((e) => e.src || '');
   // THE CODE BOX (2026-10-25): the one the page itself marks as a one-time code, else a short numeric-looking box that names a
   // code - never the user name or password box. A page of six one-digit boxes is not one this types into (not built).
   const coded = (e) => /otp|one.?time|totp|2fa|mfa|passcode|verif|auth.*code|security.?code|^code$/i
-    .test([e.name, e.id, e.getAttribute('aria-label'), e.placeholder].join(' ').trim());
+    .test(words(e).trim());
   const otp = ins.find((e) => e.autocomplete === 'one-time-code') || (!pw && ins.find((e) => e !== user
     && ['text', 'tel', 'number', ''].includes(e.type) && !(e.maxLength > 0 && e.maxLength < 4) && coded(e))) || null;
   const el = want === 'password' ? pw : want === 'user' ? user : want === 'otp' ? otp : null;
   if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
   if (el && want === 'otp') el.setAttribute('data-tq-code', '');
   return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames,
-           focused: !!el && document.activeElement === el };
+           focused: !!el && deepActive() === el };
 }'''
-CLEAR = "document.querySelectorAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; })"
+CLEAR = "(() => { " + DEEP + " deepAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; }); })()"
 SETTLE = 2.0                    # after the submit, before the boxes are emptied and the agent hears: the page's own post goes first
-STILL = "(() => ({ href: location.href, password: !!document.activeElement && document.activeElement.type === 'password' }))()"
+STILL = "(() => { " + DEEP + " const a = deepActive(); return { href: location.href, password: !!a && a.type === 'password' }; })()"
 
 
 class Cdp:
@@ -600,7 +613,17 @@ class Cdp:
         try: self.ws = connect(ws_url, proxy=None, **kw)
         except TypeError: self.ws = connect(ws_url, **kw)              # websockets before 15 has no proxy setting
         self.n, self.session, self.events = 0, None, []
-        self.session = self.call('Target.attachToTarget', {'targetId': target, 'flatten': True}, top=True)['sessionId']
+        self.session = self.call('Target.attachToTarget', {'targetId': self.tab(target), 'flatten': True}, top=True)['sessionId']
+
+    def tab(self, target: str) -> str:
+        """The tab to attach to: agent-browser's own word for it when that tab is still there - its .target file is not rewritten every
+        time the tab is, and a stale id attached to nothing, so neither a fill nor a watch reached the page (the browser-agent walk,
+        2026-11-03) - else the one web page the browser holds, else the first."""
+        try: pages = [t for t in self.call('Target.getTargets', top=True).get('targetInfos') or [] if t.get('type') == 'page']
+        except SignInError: return target
+        if not pages or any(t.get('targetId') == target for t in pages): return target
+        web = [t for t in pages if str(t.get('url') or '').startswith(('http://', 'https://'))]
+        return (web or pages)[0]['targetId']
 
     def call(self, method, params=None, top=False, timeout=10.0) -> dict:
         self.n += 1; i = self.n
@@ -612,7 +635,7 @@ class Cdp:
             left = end - time.time()
             if left <= 0: raise SignInError('the browser did not answer in time')
             r = json.loads(self.ws.recv(timeout=left))
-            if 'method' in r and 'id' not in r and len(self.events) < 200: self.events.append(r)
+            if r.get('method') == 'Runtime.bindingCalled' and len(self.events) < 200: self.events.append(r)   # the page's own events are not kept
             if r.get('id') == i:
                 if 'error' in r: raise SignInError(f'the browser refused {method.split(".")[0]}')
                 return r.get('result') or {}
@@ -628,7 +651,7 @@ class Cdp:
         while True:
             try: r = json.loads(self.ws.recv(timeout=0))
             except Exception: break
-            if 'method' in r and 'id' not in r: self.events.append(r)
+            if r.get('method') == 'Runtime.bindingCalled' and len(self.events) < 200: self.events.append(r)
         out, self.events = self.events, []
         return out
     def type(self, text: str): self.call('Input.insertText', {'text': text})

@@ -248,6 +248,9 @@ class TheSignInPage(unittest.TestCase):
     def test_the_page_names_its_task_and_says_what_happens_next(self):
         line = signin.for_line(self.s, self.tid)
         self.assertTrue(line.startswith('for TQ-') and 'Pay the toll' in line)
+        # the agent's own name carries brackets ("Claude Code (on this computer)"): it follows a dash, never nested in more of them
+        with mock.patch('taskuary.workerstate._live', return_value=mock.Mock(provider='Claude Code (on this computer)')):
+            self.assertTrue(signin.for_line(self.s, self.tid).endswith('Pay the toll - Claude Code (on this computer)'))
         self.assertIn(line, signin.form_html('northwind.example', 15, task=line))
         none = signin.done_html('northwind.example', True, told=False, ref='TQ-0001')
         self.assertIn('No agent is running on TQ-0001 - open it to continue', none); self.assertNotIn('the agent goes on', none)

@@ -56,3 +56,21 @@ def test_a_batch_reads_the_thread_under_every_row_not_only_the_first():
             if road == 'batch': funnel.settle(s, key, 'surfaced', read=True)
             else: railwalk._effect(s, {'on': key, 'members': ['processing:b', 'processing:d'], 'kind': 'reads'}, heads, key, 'owner', 1)
         assert set(said) == every, f'{road}: {sorted(every - set(said))} never read'
+
+
+def test_clearing_fyi_row_by_row_reads_every_thread_under_them():
+    """"Clear the FYI" took the FYI to zero, then the rows came back with "+N" (TQ-1300): the Assistant's sweep settles row by row, each
+    settle empties the rail cache, and from the second row on its folded mails were never read. The drawn threads outlive the cache."""
+    from taskuary import concierge
+    from taskuary.store import MemoryStore
+    s, said = MemoryStore(), []
+    heads = [fyi('processing:b', 'email:audit', '2026-10-28 09:00:00', thread=['processing:a']),
+             fyi('processing:d', 'email:payroll', '2026-10-28 09:30:00', thread=['processing:c', 'processing:e'])]
+    with mock.patch.dict(funnel._THREADS, {'store': None, 'by': {}}):
+        funnel._keep_threads(s, heads)
+        with mock.patch.dict(funnel._CACHE, {'store': s, 'pile': {'items': heads}, 'full': None}), \
+             mock.patch.object(s, 'set_funnel_state', side_effect=lambda k, *a, **kw: said.append(k)):
+            for h in heads: assert concierge._clear_one(s, h['key'], 'owner', 'cleared by the owner')
+        assert set(said) == {'processing:a', 'processing:b', 'processing:c', 'processing:d', 'processing:e'}
+        funnel._keep_threads(s, [fyi('processing:d', 'email:payroll', '2026-10-28 09:30:00')])
+        assert funnel.thread_of(s, 'processing:d') == [], 'a row drawn alone forgets the thread it had'

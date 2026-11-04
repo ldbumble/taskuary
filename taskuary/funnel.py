@@ -102,6 +102,9 @@ _CACHE = {'at': 0.0, 'pile': None, 'store': None, 'generation': 0, 'full': None,
 _STATE = {}                        # tid -> 'working' | a blocked sub-state | 'done' | 'idle', as last seen by the watcher
 BLOCKED = ('parked', 'asking', 'approval', 'stalled')   # the sub-states of the blocked lane (workerstate.sub_state)
 _SEEN = {}                         # tid -> (state, first seen at) - a change must HOLD before it is news
+# the mails folded under each FYI row (its "+N"), as the rail last drew it - kept past invalidate(): every settle empties _CACHE, so a sweep
+# that read rows one by one ("clear the FYI") found the thread under its first row only, and the rest came back as "+N" rows (TQ-1300)
+_THREADS = {'store': None, 'by': {}}
 _WATCHED = [False]                 # first LOOK, even when there were no sessions; _STATE empty is not the same thing
 DWELL = 12.0                       # seconds a new state must survive before the watcher announces it
 _REPORT_SUMMARY = re.compile(r'(?im)^summary:\s*(.+)$')
@@ -1563,6 +1566,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE, see
         p['live_seq'] = seen
         _CACHE.update(at=time.time(), pile=p, store=store, full=full['items'] if shared else None,
                       generation=_CACHE.get('generation', 0) + 1, mark=mark, workers=workers)
+        _keep_threads(store, [*(full['items'] if shared else ()), *p['items']])
         return p
 
 
@@ -1613,11 +1617,23 @@ def unwritten_full_items(store) -> list | None:
     return full_items(store) if top is not None and _CACHE.get('mark') == top else None
 
 
+def _keep_threads(store, items):
+    """Remember each drawn row's folded thread; a row drawn alone forgets one it had. Rows no longer drawn (read) keep theirs."""
+    if _THREADS['store'] is not store: _THREADS.update(store=store, by={})
+    for i in items:
+        if not str(i.get('key') or '').startswith('processing:'): continue
+        if i.get('thread'): _THREADS['by'][i['key']] = list(i['thread'])
+        else: _THREADS['by'].pop(i['key'], None)
+
+
 def thread_of(store, key: str) -> list:
-    """The keys folded under the FYI row `key` - the other mails on its email thread - as the rail last drew it."""
-    if not str(key or '').startswith('processing:') or _CACHE.get('store') is not store: return []
-    rows = [*(_CACHE.get('full') or ()), *((_CACHE.get('pile') or {}).get('items') or ())]
-    return list(next((i.get('thread') or [] for i in rows if i.get('key') == key and i.get('thread')), []))
+    """The keys folded under the FYI row `key` - the other mails on its email thread - as the rail last drew it, even after a settle
+    emptied the rail's cache (_THREADS)."""
+    if not str(key or '').startswith('processing:'): return []
+    if _CACHE.get('store') is store:
+        rows = [*(_CACHE.get('full') or ()), *((_CACHE.get('pile') or {}).get('items') or ())]
+        if (got := next((i.get('thread') for i in rows if i.get('key') == key and i.get('thread')), None)): return list(got)
+    return list(_THREADS['by'].get(key) or []) if _THREADS['store'] is store else []
 
 
 def _label_workstreams(store, items: list):
@@ -1645,7 +1661,7 @@ def cached_pile(store) -> dict | None:
 
 
 def invalidate(): _CACHE.update(at=0.0, pile=None, store=None, full=None, mark=None, workers=None); _SOURCES.update(at=0.0, by={})
-def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False
+def forget_states(): _STATE.clear(); _SEEN.clear(); _WATCHED[0] = False; _THREADS.update(store=None, by={})
 
 
 def present(store, payload: dict) -> dict:

@@ -26,7 +26,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import api from "./api.js";
 import { DEMO_SAID } from "./apiError.js";
 import { runOperation } from "./taskOps.js";
-import { openReply, rewriteReceipt } from "./replyDraft.js";
+import { draftJob, openReply, rewriteReceipt } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
@@ -2446,10 +2446,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       }
       // the reply's card comes up at once and its draft fills in behind it - never a wait on the model (2026-10-01)
       if (verb === "reply" && mid) {
-        const data = await openReply(api, mid, d.text || null, d.cc || null);
+        const data = await openReply(api, mid, d.text || null, d.cc || null, false, d.line || null);
         // a name to loop in that nobody by it has written as is said, never guessed: the card's CC row takes an address
         if (data?.cc_unknown?.length) setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt",
           text: `I have no address for ${data.cc_unknown.join(", ")} - add them in the reply's CC.` }]);
+        // ..."Drafting a reply" is under way, never done: a draft that did not come is said under it, with why (the server's receipt,
+        // the owner 2026-11-04: "it says it's doing things and it does not do them") - one that came is the card's own, Send lit
+        const failed = (rc) => rc?.status === "failed" && setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "failed", text: rc.text }]);
+        failed(data?.receipt);
+        if (data?.reviewId && data.drafting) Promise.resolve(draftJob(data.reviewId)?.promise).then(() => {
+          const j = draftJob(data.reviewId);
+          failed(j?.receipt || (j?.state === "failed" ? { status: "failed", text: `No reply was drafted - ${j.error}.` } : null));
+        });
         // ...wherever it was asked about: "send Omar the answer" with nothing on the table was told "it lands below for your
         // yes", and the draft went onto his task with nothing landing here (2026-10-06)
         // ...and its Send is lit: drafting is not sending, the owner's press is (the owner, 2026-10-19)
@@ -2461,7 +2469,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         loadPile(); return;
       }
       if (verb === "redraft" && cur?.rid && mid) {
-        const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, redraft: true, instruction: d.text || null });
+        const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, redraft: true, instruction: d.text || null, ...(d.line ? { line: d.line } : {}) });
         // "below" only when it lands below: a redraft on another task said "read it below" over nothing (2026-10-19 UI walk) - there
         // the receipt names the task and its chip opens it
         const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`;

@@ -1380,6 +1380,8 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # had already removed (the owner, 2026-09-22: "don't see anywhere on agent or task to choose repo").
         out = dispatch_task(tid, DispatchBody(kind=p.get('kind'), agent=p.get('agent'), brain=p.get('brain'),
                                               instruction=p.get('instructions'), model=p.get('model')), background)
+        # ...a start the door refused is its 422, said as its reason - it read "'JSONResponse' object has no attribute 'get'" (2026-11-04)
+        if isinstance(out, JSONResponse): raise RuntimeError(json.loads(out.body or b'{}').get('detail') or 'the agent did not start')
         if out.get('dispatch') == 'needs_repo':
             raise operations.Halt(f"{out.get('ref') or 'it'} needs a repository first - {out.get('reason') or 'pick one'}", out)
         return out
@@ -3792,6 +3794,8 @@ class OpenReplyBody(BaseModel):
     app_words: bool = False
     # DRAFT WITH AI was pressed: every press that asks for a draft gets one now (open_reply), so it says no more than `draft`
     ai: bool = False
+    # the Assistant's under-way line for this ("Rewriting the draft on TQ-n."): said again in its place with how it went (concierge.settle)
+    line: int | None = None
 
 
 @app.post('/api/messages/{mid}/reply')
@@ -3874,8 +3878,24 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     # what the review holds now, and `changed`/`why` are the receipt's to read, never the writer's return
     rewrite = owed and not later
     got = _rewritten(rid, before) if rewrite else {}
+    # ...and the Assistant's under-way line for it ("Rewriting the draft on TQ-n.") is said again in its place, with the same receipt: a draft
+    # decided here now, or one already in the box (_draft_receipt) - one still being written is /draft's to say
+    receipt = None if owed and later else _draft_receipt(tid, got or _rewritten(rid, ''), body is not None and body.redraft, body.line if body is not None else None)
     return {'reviewId': rid, 'taskId': tid, 'draft': got.get('draft', draft) if rewrite else draft, 'drafting': bool(owed and later), **got,
-            **({'cc': looped} if looped else {}), **({'cc_unknown': unknown} if unknown else {})}
+            **({'receipt': receipt} if receipt else {}), **({'cc': looped} if looped else {}), **({'cc_unknown': unknown} if unknown else {})}
+
+
+def _draft_receipt(tid, got: dict, rewrite: bool = False, line=None) -> dict:
+    """{'status': done | failed, 'text'} for a reply's draft from what the review holds now (_rewritten: changed into something, or why not),
+    and the Assistant's under-way line for it said again in its place with the same words (concierge.settle, the owner 2026-11-04: "it says
+    it's doing things and it does not do them")."""
+    from . import concierge
+    ref, why = task_ref(tid) if tid else 'the card', '' if got.get('changed') else str(got.get('why') or 'no draft came back').rstrip(' .')
+    text = (f"{'Rewrote the draft' if rewrite else 'Drafted a reply'} on {ref} - read it before you {buttons.label('approve')}." if not why else
+            f"The draft on {ref} was not rewritten - {why}. It is as it was; edit it there, or ask again." if rewrite else
+            f"No reply was drafted on {ref} - {why}. Write it in the box, or press {buttons.label('redraft', 'none')}.")
+    concierge.settle(store, line, text, not why)
+    return {'status': 'failed' if why else 'done', 'text': text}
 
 
 def _rewritten(rid: int, before: str) -> dict:
@@ -6484,7 +6504,9 @@ def release_review(rid: int):
     store.audit('review', rid, 'release', ACTOR)
     return {'ok': True}
 
-class DraftBody(BaseModel): instruction: str | None = None     # a reply opened at once with the owner's words (open_reply's later)
+class DraftBody(BaseModel):
+    instruction: str | None = None     # a reply opened at once with the owner's words (open_reply's later)
+    line: int | None = None            # the Assistant's "Drafting a reply on TQ-n" line, said again with how it went (_draft_receipt)
 
 @app.post('/api/reviews/{rid}/draft')
 def draft_review(rid: int, body: DraftBody = None):
@@ -6508,9 +6530,11 @@ def draft_review(rid: int, body: DraftBody = None):
     running = None if body and (body.instruction or '').strip() else DRAFTING.get(rid)
     if running and running.wait(180):
         got = store.get_review(rid) or {}
-        if got.get('DraftText'): return {'ok': True, 'draft': got['DraftText']}
+        if got.get('DraftText'): return {'ok': True, 'draft': got['DraftText'], 'receipt': _draft_receipt(rv.get('TaskId'), {'changed': True}, False, body and body.line)}
         # ...and what that writer said it needs is the answer too: a second call would only say it again (ingest._auto_draft)
-        if got.get('DraftNeeds'): return {'ok': False, 'draft': '', 'needs': by_sentence(str(got['DraftNeeds']), 2000)}
+        if got.get('DraftNeeds'):
+            needs = by_sentence(str(got['DraftNeeds']), 2000)
+            return {'ok': False, 'draft': '', 'needs': needs, 'receipt': _draft_receipt(rv.get('TaskId'), {'changed': False, 'why': needs}, False, body and body.line)}
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob
@@ -6537,14 +6561,17 @@ def draft_review(rid: int, body: DraftBody = None):
         # THE WRITER SAID WHAT IT NEEDS - no draft, and no failure: a plain line on the card and Send to agent / Continue lit (rulebook
         # needs_agent). It was a 422 like any error, so the card drew a red app failure cut mid-word (walk 2026-10-29)
         store.set_review_draft_needs(rid, str(e))
-        return {'ok': False, 'draft': '', 'needs': by_sentence(str(e), 2000)}
+        needs = by_sentence(str(e), 2000)
+        return {'ok': False, 'draft': '', 'needs': needs, 'receipt': _draft_receipt(rv.get('TaskId'), {'changed': False, 'why': needs}, False, body and body.line)}
     except Exception as e:
         store.set_review_draft_error(rid, str(e))     # visible beside the draft box, with Retry (PW-046)
+        _draft_receipt(rv.get('TaskId'), {'changed': False, 'why': by_sentence(str(e))}, False, body and body.line)
         raise HTTPException(422, by_sentence(str(e)))
     store.audit('review', rid, 'redraft', ACTOR)
     # ...and an empty one never replaced the draft (store.update_review_draft): what the review holds is the answer, said changed or why not
     if not str(draft or '').strip(): store.update_review_draft(rid, draft, rv.get('RunId'))
-    return {'ok': True, **_rewritten(rid, rv.get('DraftText') or '')}
+    got = _rewritten(rid, rv.get('DraftText') or '')
+    return {'ok': True, **got, 'receipt': _draft_receipt(rv.get('TaskId'), got, bool(rv.get('DraftText')), body and body.line)}
 
 class EnvelopeBody(BaseModel): mode: str | None = None; to: list[str] | None = None; cc: list[str] | None = None
 

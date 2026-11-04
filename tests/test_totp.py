@@ -77,7 +77,7 @@ class Typing(unittest.TestCase):
     def test_the_code_follows_the_password_on_the_sites_next_page(self):
         p = CodePage(otp_after=True)
         out = signin.fill_page(p, 'bank.example', USER, PW, code=lambda: '123456', code_wait=5)
-        self.assertEqual(out, {'code': True})
+        self.assertEqual(out, {'code': True, 'others': []})
         self.assertEqual(p.typed, [('user', USER), ('password', PW), ('password', '<enter>'), ('otp', '123456'), ('otp', '<enter>')])
 
     def test_a_code_prompt_alone_gets_the_code_alone(self):
@@ -89,7 +89,7 @@ class Typing(unittest.TestCase):
         p = CodePage()
         with mock.patch.object(signin.time, 'time', side_effect=[0, 0, 1, 99, 99]):
             out = signin.fill_page(p, 'bank.example', USER, PW, code=lambda: '111111', code_wait=5)
-        self.assertEqual(out, {'code': False})
+        self.assertEqual(out, {'code': False, 'others': []})
         self.assertNotIn('111111', [t for _, t in p.typed])
 
     def test_a_code_prompt_on_another_site_gets_nothing(self):

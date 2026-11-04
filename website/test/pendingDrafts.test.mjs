@@ -25,3 +25,8 @@ test("the other pending replies are drawn beside the one Close out shows - never
   assert.deepEqual(otherPendingReplies(reviews, null).map((r) => r.ReviewId), [10, 12]);
   assert.deepEqual(otherPendingReplies([toGail], toGail), []);
 });
+
+test("a reply answers the mail that asked (AnswersMid), not the newest it saw (MessageId)", () => {
+  assert.equal(draftAnswers({ AnswersMid: 11, MessageId: 13 }, [{ MessageId: 11 }, { MessageId: 13 }]).MessageId, 11);
+  assert.equal(draftAnswers({ AnswersMid: null, MessageId: 13 }, [{ MessageId: 11 }, { MessageId: 13 }]).MessageId, 13);
+});

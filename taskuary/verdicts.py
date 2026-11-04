@@ -33,7 +33,9 @@ def context_moved(store, rv: dict):
         # ...and a reply moves only with ITS conversation: a line on another thread of the task, from somebody it does not go to, is
         # theirs - Send on an agent's question to one requester redrafted it as an answer to a second one's "Perfect!" (2026-11-02)
         seen = operations.seen_upto(store, tid, rv['ContextRevision']) if rv.get('ContextRevision') else None
-        later = [m for m in mine if m['MessageId'] > max(rv['MessageId'], seen or 0)]
+        # ...and a line triage read as an aside - a "thanks", a "got it" - is no news the draft is behind (2026-11-04)
+        aside = store.aside_mids(tid)
+        later = [m for m in mine if m['MessageId'] > max(rv['MessageId'], seen or 0) and m['MessageId'] not in aside]
         latest, moved = (later[-1] if later else None), bool(later)
     elif tid:
         latest = store.last_material_inbound_on_task(tid)
@@ -215,7 +217,9 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
     from . import outbound
     rid = rv['ReviewId']
     env = dict(envelope if envelope is not None else _envelope(rv))
-    msg = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
+    # the reply goes to the mail that ASKED (AnswersMid); MessageId is the newest line it saw, which may be a "thanks" (2026-11-04)
+    to_mid = rv.get('AnswersMid') or rv.get('MessageId')
+    msg = store.get_message(to_mid) if to_mid else None
     # FILES ARE NOT AN ADDRESS. A reply's envelope stays empty until the send works out who it goes to, and attaching
     # to it wrote {"attachments": [...]} alone - which read as new outbound mail with no recipient (2026-10-07: a
     # session's `--attach`; the owner's Attach button did the same). Only a destination makes it outgoing - not files,
@@ -251,7 +255,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             return unknown('the provider returned no usable delivery receipt')
         finished = store.finish_review_delivery(rid, token, 'sent', receipt=sent)
         if not finished: raise RuntimeError('the provider receipt could not be saved; verify delivery before retrying')
-        if rv.get('MessageId'): store.set_message_status(rv['MessageId'], 'sent')
+        for m in {rv.get('MessageId'), rv.get('AnswersMid')} - {None}: store.set_message_status(m, 'sent')
         if attempted['envelope'].get('kind') == 'zoho_invoice':
             from . import invoice_workflow
             invoice_workflow.mark_sent(store, int(attempted['envelope'].get('item_id')),

@@ -528,11 +528,16 @@ def _show_files(store, tid: int, named: list, paths: list, actor='assistant'):
     from . import session_artifacts
     for raw in named or []:
         p = _own_file(raw, paths)
-        why = 'only a file from the working folder can be shown' if p is None else '' if p.is_file() else 'there is no such file'
+        why = "only a file from the agent's own folder can be shown" if p is None else '' if p.is_file() else 'there is no such file'
         if not why:
             try: session_artifacts.shown(store, tid, p, actor); continue
-            except (OSError, ValueError) as e: why = str(e)
-        store.add_comment(tid, 'assistant', 'agent', f'Not shown - {raw}: {why}')
+            except (OSError, ValueError) as e: why = 'it could not be read'
+        store.add_comment(tid, 'assistant', 'agent', f'{file_name(raw)} was not shown - {why}.')
+
+
+# A FILE IS SAID BY ITS NAME, never the path the agent wrote (the overnight run, 2026-11-03): "Not attached to the reply - C:\Users\...\files\
+# vendors-2026.txt: only a file from the working folder ..." stood on the task, a machine's line in the owner's view
+def file_name(raw) -> str: return re.split(r'[\\/]', str(raw or '').strip().rstrip('\\/'))[-1] or 'A file'
 
 
 def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
@@ -542,9 +547,10 @@ def _files_to_attach(store, tid: int, named: list, paths: list) -> list:
     for raw in named or []:
         p = _own_file(raw, paths)
         if p is None:
-            store.add_comment(tid, 'assistant', 'agent', f'Not attached to the reply - {raw}: only a file from the working folder or one that came with this task can go'); continue
+            store.add_comment(tid, 'assistant', 'agent', f"{file_name(raw)} was not attached to the reply - only a file from the agent's own folder, "
+                              'or one that came with this task, can go with it.'); continue
         try: out.append((p.name, p.read_bytes()))
-        except OSError as e: store.add_comment(tid, 'assistant', 'agent', f'Not attached to the reply - {raw}: {e.strerror or e}')
+        except OSError: store.add_comment(tid, 'assistant', 'agent', f'{file_name(raw)} was not attached to the reply - it could not be read.')
     return out
 
 

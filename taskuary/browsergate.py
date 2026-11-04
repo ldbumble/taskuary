@@ -123,7 +123,7 @@ def _run(sid: str, args: list, wait: float, tag: str) -> tuple:
     """(exit code, output) of one agent-browser command in this session's browser. Output to a FILE (browserview.navigate says
     why: the daemon inherits a pipe and it never ends)."""
     from . import browserview, spawn
-    exe = shutil.which(EXE)
+    exe = browserview.program()
     if not exe: raise RuntimeError('agent-browser is not installed')
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-{tag}.log'
     with open(log, 'wb') as f:

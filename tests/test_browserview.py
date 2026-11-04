@@ -146,6 +146,20 @@ class RelayTests(unittest.TestCase):
         self.assertEqual((bv._frame(bv.LAST['r1']['frame']), bv.LAST['r1']['url']), (JPEG, 'https://example.test/login'))
         self.assertEqual(bv.state('r1', fresh=True)['url'], 'https://example.test/login')
 
+    def test_a_frame_held_back_for_a_sign_in_is_acked_by_the_relay_so_the_view_comes_back(self):
+        """While Taskuary types a sign-in no frame reaches the page - and under ack pacing a frame nobody acks is the last one sent: the
+        view stood frozen on the sign-in form for good after the fill. The relay acks what it drops; the page's own ack still goes
+        through mid-fill, and its keys and clicks do not."""
+        bv.FILLING.add('r1'); self.addCleanup(bv.FILLING.discard, 'r1')
+        with c.websocket_connect('/api/terminals/r1/browser/ws') as ws:
+            self.assertEqual([ws.receive_json()['type'] for _ in range(2)], ['status', 'url'])     # the frame was held back
+            ws.send_json({'type': 'ack', 'seq': 6})
+            ws.send_json({'type': 'input_keyboard', 'eventType': 'keyDown', 'key': 'a', 'text': 'a'})
+            ws.send_json({'type': 'ack', 'seq': 8})
+            end = time.time() + 5
+            while time.time() < end and len(self.fake.got) < 3: time.sleep(.05)
+        self.assertEqual(self.fake.got, [{'type': 'ack', 'seq': 7}, {'type': 'ack', 'seq': 6}, {'type': 'ack', 'seq': 8}])
+
     def test_no_browser_refuses_the_socket_like_a_missing_terminal(self):
         from starlette.websockets import WebSocketDisconnect
         with self.assertRaises(WebSocketDisconnect) as cm:
@@ -220,6 +234,24 @@ class NavigateTests(unittest.TestCase):
         argv, _ = self.calls[0]
         self.assertEqual(argv[:4], ['agent-browser', '--session', 'tq-s', 'open'])
         self.assertEqual(argv[4], 'https://adp.com/login')
+
+    def test_on_windows_the_npm_shim_is_skipped_so_an_ampersand_stays_in_the_address(self):
+        """npm's agent-browser.cmd runs through cmd.exe, which cut https://portal.example/?app=1&return=... at the & and ran the rest
+        as a command - the page sat on a white spinner. The shim only starts the .exe beside it, so the .exe is what runs."""
+        d = Path(os.environ['TASKUARY_HOME']) / f'npm-{time.time_ns()}'
+        native = d / 'node_modules' / 'agent-browser' / 'bin' / 'agent-browser-win32-x64.exe'
+        native.parent.mkdir(parents=True); native.write_bytes(b''); (d / 'agent-browser.cmd').write_text('@ECHO off')
+        url = 'https://portal.example/signin/?app=1&return=https://portal.example/home&target=%23/home'
+        with mock.patch.object(bv.shutil, 'which', return_value=str(d / 'agent-browser.cmd')), mock.patch.object(bv.os, 'name', 'nt'), \
+             mock.patch('platform.machine', return_value='AMD64'):
+            self.assertEqual(bv.program(), str(native))
+            bv.navigate('s', url)
+        self.assertEqual(self.calls[0][0], [str(native), '--session', 'tq-s', 'open', url])
+        # ...and elsewhere, or with no .exe beside the shim, it is what PATH says
+        with mock.patch.object(bv.shutil, 'which', return_value='/usr/bin/agent-browser'): self.assertEqual(bv.program(), '/usr/bin/agent-browser')
+        native.unlink()
+        with mock.patch.object(bv.shutil, 'which', return_value=str(d / 'agent-browser.cmd')), mock.patch.object(bv.os, 'name', 'nt'):
+            self.assertEqual(bv.program(), str(d / 'agent-browser.cmd'))
 
     def test_only_http_addresses_are_opened(self):
         """A pane that runs whatever is typed at it is a hole; http(s) is the whole job here."""

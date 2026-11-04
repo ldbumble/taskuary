@@ -33,7 +33,7 @@ def install_processing_changes(app, store):
         '/api/fixture/signin/link',
         '/api/fixture/signin/terminal-ask',
         '/api/fixture/browser/last-frame',
-        '/api/fixture/browser/view',
+        '/api/fixture/browser/view', '/api/fixture/browser/paint',
         '/api/fixture/processing/arrive-during-next', '/api/fixture/processing/rerun',
         '/api/fixture/task/closed-elsewhere', '/api/fixture/task/live-agent',
         '/api/fixture/task/agent-draft', '/api/fixture/task/agent-word',
@@ -1035,9 +1035,25 @@ def install_processing_changes(app, store):
         _bv.remember(str(sid), frame)
         for m in (json.dumps({'type': 'status', 'connected': True, 'screencasting': True}), json.dumps({'type': 'url', 'url': v['url']}), frame):
             await ws.send_text(m)
+        v.setdefault('sockets', []).append(ws)
         try:
-            while True: v['input'].append(json.loads(await ws.receive_text()).get('type'))
+            while True:
+                m = json.loads(await ws.receive_text())
+                v['input'].append(m.get('type'))
+                if m.get('type') == 'ack': v.setdefault('acks', []).append(m.get('seq'))
         except Exception: pass
+        finally: v['sockets'].remove(ws)
+
+    @app.post('/api/fixture/browser/paint')
+    async def browser_paint(body: dict):
+        """{taskId, frame}: the page moves on - one more frame down every open view's socket, the newest seq, as a screencast sends it."""
+        import json
+        v = VIEW.get(view_sid.get(int(body.get('taskId') or 0)) or '')
+        if not v or not body.get('frame'): raise HTTPException(404, 'no fixture browser on that task')
+        v['seq'] = v.get('seq', 1) + 1
+        m = json.dumps({'type': 'frame', 'seq': v['seq'], 'data': body['frame'], 'metadata': {'deviceWidth': 1200, 'deviceHeight': 760}})
+        for ws in list(v.get('sockets', [])): await ws.send_text(m)
+        return {'seq': v['seq'], 'sent': len(v.get('sockets', []))}
 
     def view_run(sid, args, wait, tag):
         v = VIEW.get(str(sid))
@@ -1110,7 +1126,7 @@ def install_processing_changes(app, store):
     def browser_view_seen(tid: int):
         "What the agent was told, what its browser ran, and what the owner's mouse and keys sent the page."
         v = VIEW.get(view_sid.get(tid)) or {}
-        return {'told': told.get(tid, []), 'ran': v.get('ran', []), 'input': v.get('input', [])}
+        return {'told': told.get(tid, []), 'ran': v.get('ran', []), 'input': v.get('input', []), 'acks': v.get('acks', [])}
 
     # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
     MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news',

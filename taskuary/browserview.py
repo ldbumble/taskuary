@@ -60,9 +60,24 @@ FILLING = set()
 # search finds the key in any order, and it cannot be fooled by the payload: base64 holds no quote, and a
 # url that spells `"type":"frame"` inside its string arrives with those quotes escaped.
 _KIND = re.compile(r'"type"\s*:\s*"(frame|url)"')
+_SEQ, _ACK = re.compile(r'"seq"\s*:\s*(\d+)'), re.compile(r'"type"\s*:\s*"ack"')
 
 
 def installed() -> bool: return bool(shutil.which('agent-browser'))
+
+
+def program() -> str:
+    """agent-browser's own program, to run with an argv list - or ''. npm puts a .cmd shim on Windows' PATH, and a .cmd runs through
+    cmd.exe, which reads & | < > ^ in an argument as its own: the owner's address bar opened https://portal.example/?app=1&return=...
+    as ?app=1 and ran `return=...` as a command, and the page sat on a white loading spinner (2026-11-03). An approved fill or eval
+    with an & in it was cut the same way. The shim only starts the .exe beside it, so that is what is run."""
+    p = shutil.which('agent-browser') or ''
+    if os.name == 'nt' and p.lower().endswith(('.cmd', '.bat')):
+        import platform
+        arch = 'arm64' if platform.machine().lower() in ('arm64', 'aarch64') else 'x64'
+        n = Path(p).parent / 'node_modules' / 'agent-browser' / 'bin' / f'agent-browser-win32-{arch}.exe'
+        if n.is_file(): return str(n)
+    return p
 def session_name(sid: str) -> str: return f'tq-{sid}'
 # WHAT EVERY agent-browser COMMAND FOR A SESSION MUST AGREE ON. agent-browser fingerprints a
 # command's launch options into <session>.config, and when a command's fingerprint differs from
@@ -170,7 +185,12 @@ async def relay(ws, sid: str):
             async def down():
                 async for m in up:
                     m = m if isinstance(m, str) else m.decode('utf-8', 'replace')
-                    if sid in FILLING and (k := _KIND.search(m)) and k.group(1) == 'frame': continue   # a sign-in is going in
+                    # a sign-in is going in: the frame is dropped - AND ACKED HERE, for the page never will. Under ack pacing one frame is
+                    # in flight at a time, so a frame nobody acked was the last the pane ever got: after "Sign in here" the view stood
+                    # frozen on the sign-in form for good, the agent signed in and working on a page the owner could not see (2026-11-03)
+                    if sid in FILLING and (k := _KIND.search(m)) and k.group(1) == 'frame':
+                        if q := _SEQ.search(m): await up.send(json.dumps({'type': 'ack', 'seq': int(q.group(1))}))
+                        continue
                     remember(sid, m)
                     await ws.send_text(m)
                 # the BROWSER hung up (closed or crashed): its page is no longer the page, so a pane reopened on a relaunch reads the
@@ -181,7 +201,8 @@ async def relay(ws, sid: str):
                 # focus or spoiled the typed password (2026-10-25)
                 while True:
                     m = await ws.receive_text()
-                    if sid not in FILLING: await up.send(m)
+                    # ...an ack is not input: the page's ack of the frame it drew just before the fill still goes, or the stream stalls on it
+                    if sid not in FILLING or _ACK.search(m): await up.send(m)
             tasks = [asyncio.create_task(down()), asyncio.create_task(back())]
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for t in pending: t.cancel()
@@ -285,7 +306,7 @@ def navigate(sid: str, url: str) -> str:
         if re.match(r'^[a-z][a-z0-9+.-]*:', u, re.I):
             raise ValueError('only http:// and https:// addresses can be opened here')
         u = 'https://' + u
-    exe = shutil.which('agent-browser')
+    exe = program()
     if not exe: raise ValueError('agent-browser is not installed')
     if not state(sid, fresh=True)['open']: raise ValueError('this session has no browser open')
     # one log per session, overwritten each time: on Windows the daemon may still hold the handle,
@@ -312,7 +333,7 @@ def navigate(sid: str, url: str) -> str:
 def close(sid: str, tid: int = None):
     """The pty ended: close its browser too. Best effort, and only when there is one - otherwise a
     headless Chrome per finished task sits idle for an hour each. `tid`: the task whose browser view keeps its last frame (keep_frame)."""
-    exe = shutil.which('agent-browser')
+    exe = program()
     with _START_LOCKS_GUARD:
         lock = _START_LOCKS.setdefault(sid, threading.Lock())
     # If the workspace closes while Chrome is still coming up, wait for that exact launch and
@@ -462,7 +483,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
     with the session: bound to it by name, restored from the owner's own saved cookies, and
     closed with it (Term._pump -> close).
     """
-    exe = shutil.which('agent-browser')
+    exe = program()
     if not exe: return False
     # General work starts the browser as soon as the workspace mounts, then its first prompt
     # verifies that it is ready before handing the CLI browser instructions. Those two roads can
@@ -508,7 +529,7 @@ def set_viewport(sid: str, w: int, h: int) -> bool:
 
     Fire and forget: the page still draws, letterboxed, if this never lands. Nothing is waited on -
     a piped agent-browser call blocks until the DAEMON exits, not until the command does."""
-    exe = shutil.which('agent-browser')
+    exe = program()
     w, h = int(w), int(h)
     if not exe or not (200 <= w <= 4000 and 200 <= h <= 4000): return False
     try:

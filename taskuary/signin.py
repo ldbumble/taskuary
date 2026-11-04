@@ -249,7 +249,8 @@ def for_line(store, tid) -> str:
     if not tid: return ''
     t, sess = store.get_task(tid) or {}, ws._live(tid)
     who = str(getattr(sess, 'provider', '') or getattr(sess, 'label', '') or '') if sess else ''
-    return f"for {task_ref(tid)} · {t.get('Title') or 'a task'}" + (f' ({who})' if who else '')
+    # ...the agent's name after a dash: "(Claude Code (on this computer))" read as a typo on the one page about a password (2026-11-03)
+    return f"for {task_ref(tid)} · {t.get('Title') or 'a task'}" + (f' - {who}' if who else '')
 
 
 def gone_why(store, tok) -> tuple:
@@ -528,7 +529,7 @@ class Cdp:
 def _cdp_url(sid: str) -> str:
     """The session's Chrome DevTools address, from agent-browser itself. Output to a FILE, not a pipe: see browserview.navigate."""
     from . import browserview, spawn
-    exe = shutil.which('agent-browser')
+    exe = browserview.program()
     if not exe: raise SignInError('agent-browser is not installed')
     log = Path(tempfile.gettempdir()) / f'{browserview.session_name(sid)}-cdp.log'
     with open(log, 'wb') as f:

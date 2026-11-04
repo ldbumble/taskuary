@@ -42,7 +42,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
   const [asked, setAsked] = useState(false);
   const drivingRef = useRef(false);
   drivingRef.current = driving;
-  const held = useRef(0);       // the newest frame's seq while this tab is hidden: acked on return
+  const held = useRef(null);    // the newest frame while this tab is hidden: drawn and acked on return
   // null until the daemon says; false = it is up but holding no page, so no frame is coming
   const [attached, setAttached] = useState(null);
   const shape = useRef(null), shapeTimer = useRef(null);
@@ -78,6 +78,18 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
     ctx.drawImage(im, f.x, f.y, f.w, f.h);
   };
 
+  const draw = (m, send) => {
+    const im = new Image();
+    im.onload = () => {
+      /* LIVE IS THE SOCKET, NOT THE CLOCK. This went grey four seconds after the last frame -
+         and an ack-paced stream sends no frame at all while a page sits still, so a sign-in
+         form the agent was waiting on read as a dead pane (2026-09-15). It is live until the
+         relay closes; a page that is not moving is a page that is not moving. */
+      img.current = im; paint(); setLive(true);
+      send?.({ type: "ack", seq: m.seq });       // ack AFTER drawing: the next frame is the page now, not history
+    };
+    im.src = m.src;
+  };
   useEffect(() => {
     if (!open) { setLive(false); return undefined; }
     let ws, closed = false, retry = null, tries = 0;
@@ -93,17 +105,8 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
              every 80ms, and an ack asking for the next one. The stream is ack-paced end to end
              (browserview.py), so holding the ack stops it at the source - Chrome stops capturing -
              and the frame it stopped on is acked the moment the tab comes back. */
-          if (document.hidden) { held.current = m.seq; return; }
-          const im = new Image();
-          im.onload = () => {
-            /* LIVE IS THE SOCKET, NOT THE CLOCK. This went grey four seconds after the last frame -
-               and an ack-paced stream sends no frame at all while a page sits still, so a sign-in
-               form the agent was waiting on read as a dead pane (2026-09-15). It is live until the
-               relay closes; a page that is not moving is a page that is not moving. */
-            img.current = im; paint(); setLive(true);
-            send({ type: "ack", seq: m.seq });       // ack AFTER drawing: the next frame is the page now, not history
-          };
-          im.src = m.src;
+          if (document.hidden) { held.current = m; return; }
+          draw(m, send);
         } else if (m.type === "url" && m.url) setUrl(m.url);
         /* THE STREAM SAYS WHEN IT HAS NOTHING, and we used to drop that on the floor. An
            agent-browser daemon answers its screencast port the moment it launches, whether or not
@@ -130,9 +133,12 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
     const wake = () => {
       if (document.hidden) return;
       fitViewport(true);                       // back at this tab: it is the one being watched again
-      if (!held.current) return;
-      sendRef.current?.({ type: "ack", seq: held.current });
-      held.current = 0;
+      /* THE FRAME THAT CAME WHILE NOBODY LOOKED IS DRAWN, then acked. Only its seq was kept, and the ack asks for a NEWER frame - which
+         a page sitting still never makes. So a sign-in page that finished painting while the owner was in another window (the fill
+         page, the mail) stayed on the white of its loading for good: "still looks like white browser hand off page" (2026-11-03). */
+      const m = held.current;
+      held.current = null;
+      if (m) draw(m, sendRef.current);
     };
     const focus = () => fitViewport(true);
     document.addEventListener("visibilitychange", wake); window.addEventListener("focus", focus);

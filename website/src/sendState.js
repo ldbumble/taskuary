@@ -71,9 +71,17 @@ export function sendBlockLine(rv) {
   return `Cannot send from here: ${why}. The draft stays here to copy or edit.`;
 }
 
+// AN EMPTY DRAFT IS SAID, never a blank box under a grey Send (2026-11-04): the server refuses an empty write and keeps the text before it,
+// with this as its DraftError (store.EMPTY_DRAFT) - and an agent's reply with no words is the same thing
+export const EMPTY_DRAFT = "the draft came back empty";
+export const EMPTY_LINE = "The draft came back empty - Redraft, or tell me what to say.";
 export function draftState(rv) {
   const drafted = rv?.HasDraft === 1 || (rv?.HasDraft == null && !!String(rv?.DraftText || "").trim());
+  const err = String(rv?.DraftError || "");
+  // ...and a rewrite that failed over a draft that stands says so: the draft in the box is the one before it
+  if (drafted && err) return { state: "kept", line: `The rewrite didn't come back - ${err.startsWith(EMPTY_DRAFT) ? "it was empty" : err}. The draft below is the one before it.`, retry: true };
   if (drafted) return { state: "drafted", line: "", retry: false };
+  if (err.startsWith(EMPTY_DRAFT) || (!err && !rv?.DraftNeeds && String(rv?.DraftBy || "").startsWith("agent:"))) return { state: "empty", line: EMPTY_LINE, retry: true };
   // THE WRITER SAID WHAT IT NEEDS (store.set_review_draft_needs): no failure - a plain line, whole, and the Advisor lights Send to agent /
   // Continue. It came as a DraftError: red, cut mid-word, "New task to fix this" (walk 2026-10-29)
   if (rv?.DraftNeeds) { const s = String(rv.DraftNeeds).trim(); return { state: "needs", line: s.charAt(0).toUpperCase() + s.slice(1), retry: true }; }

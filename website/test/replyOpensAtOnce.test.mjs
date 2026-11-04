@@ -97,5 +97,5 @@ test("Close out's reply card follows a draft under way, spins in its box, and sa
   assert.match(dec, /followDraft\(api, r\)/);
   assert.match(dec, /const drafting = job\?\.state === "drafting" \|\| redrafting \|\| !!r\.Drafting/);
   assert.match(dec, /boxText\(\{ text, draft: reviewText\(r\), drafting, signature: r\.Signature \}\)/);
-  assert.match(dec, /\["needs", "failed"\]\.includes\(draftState\(r\)\.state\)/);
+  assert.match(dec, /\["needs", "failed", "empty", "kept"\]\.includes\(draftState\(r\)\.state\)/);
 });

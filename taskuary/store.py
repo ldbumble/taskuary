@@ -136,6 +136,7 @@ def _fold(value):
 
 
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
+EMPTY_DRAFT = 'the draft came back empty'     # update_review_draft's refusal: the card's plain line reads it (sendState.draftState)
 POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active', 'Mailbox')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 # The reports this app seeds, as (sentinel setting, the Address the seeder writes, the config type).
@@ -5476,12 +5477,18 @@ class SQLiteStore:
         self._review_changed(rid)
     def update_review_draft(self, rid, draft, run_id, by=None, files=...):
         """`files`: the names the writer said ride with this draft ([] = a file promised, unnamed; None = it promised none). Left out,
-        the same text keeps what its writer said and new text from anyone else drops it - a word about other words is no word on these."""
+        the same text keeps what its writer said and new text from anyone else drops it - a word about other words is no word on these.
+        AN EMPTY DRAFT IS NO DRAFT: nothing (or only blanks) never replaces the text there - the review keeps it and says the draft came back
+        empty (DraftError), so the card says so instead of a blank box under Send (2026-11-04). False when refused."""
+        if not str(draft or '').strip():
+            self.set_review_draft_error(rid, EMPTY_DRAFT)
+            return False
         fp = None if files in (None, ...) else json.dumps({'named': [str(f) for f in files]})
         self._exec("UPDATE review SET FilesPromised=CASE WHEN ? THEN ? WHEN DraftText IS ? THEN FilesPromised END, DraftText=?, RunId=?, DraftError=NULL, DraftNeeds=NULL, NotNeeded=NULL, "
                    "DraftBy=? WHERE ReviewId=? AND DeliveryClaim IS NULL AND IFNULL(DeliveryState,'') NOT IN ('sending','unknown','sent')",
                    (files is not ..., fp, draft, draft, run_id, by, rid))
         self._review_changed(rid)
+        return True
     def add_review_instruction(self, rid, text: str):
         """Keep the owner's instruction for this draft beside the ones before it - never replaced, never cleared by a redraft."""
         said = ' '.join(str(text or '').split())[:1000]

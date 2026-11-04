@@ -3834,7 +3834,7 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     rv = store.pending_review(tid) if tid else None
     rid = rv['ReviewId'] if rv else store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft',
                                                       'Status': 'pending', 'Reason': 'you opened a reply on this message'})
-    draft = (rv or {}).get('DraftText') or ''
+    draft = before = (rv or {}).get('DraftText') or ''
     if rv and rv.get('MessageId') != mid:
         draft = ''                    # a correct old draft is still wrong for a newer conversation
     if body is not None and body.redraft: draft = ''          # write it again over what is there
@@ -3848,17 +3848,19 @@ def open_reply(mid: int, body: OpenReplyBody = None):
     # Reply on a task no agent had worked opened a signature-only box under Draft with AI, nothing coming (2026-10-28) - and when the
     # arrival's own draft was still being written (ingest.DRAFTING) it landed in that box seconds later, unannounced. Every press that
     # asks for a draft is owed one; the page's /draft waits on a draft already under way, and a writer with nothing to go on says so.
-    owed = not draft and (body is None or body.draft)
+    owed, failed = not draft and (body is None or body.draft), False
     if owed and not later:
         try:
             draft = (responder.write_draft(store, tid, rid, actor=ACTOR, nudge=_reply_nudge(body and body.instruction), pressed=True) if tid
                      else responder.draft_for_message(store, m, rid, instruction=_reply_nudge(body and body.instruction)))
         except Exception as e:
             logger.warning(f'reply draft failed for message {mid}: {e}')   # the box opens empty; write it yourself
+            failed = True
             # ...with the reason beside it (PW-046): what it needs is the owner's to read, whole - work for an agent, never a failure
             try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
             except Exception as e2: logger.debug(f'could not record the draft failure on review {rid}: {e2}')
-    if body is not None and body.redraft and draft: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
+    # ...an empty one is refused there and said (store.EMPTY_DRAFT): the draft before it stays
+    if body is not None and body.redraft and not failed: store.update_review_draft(rid, draft, (rv or {}).get('RunId'))
     # WHO IT GOES TO, AT ONCE: the envelope was pinned only when the AI's draft landed (responder.write_draft), so a fresh box -
     # Write another above all - showed the sender alone and no CC for the seconds the model took (2026-10-13). It is a lookup on
     # the message, nothing to wait for; a draft finds it set and keeps it, an envelope the owner set already stays.
@@ -3867,8 +3869,21 @@ def open_reply(mid: int, body: OpenReplyBody = None):
         if env: store.set_review_envelope(rid, env)
     store.audit('review', rid, 'redraft' if (body is not None and body.redraft) else 'open_reply', ACTOR, detail={'message_id': mid})
     looped, unknown = _loop_in(rid, m, (body.cc if body is not None else None) or [])
-    return {'reviewId': rid, 'taskId': tid, 'draft': draft, 'drafting': bool(owed and later),
+    # A REWRITE IS SAID DONE ONLY WHEN THE DRAFT CHANGED: the Assistant said "Rewritten" over a box that stayed empty (2026-11-04) - `draft` is
+    # what the review holds now, and `changed`/`why` are the receipt's to read, never the writer's return
+    rewrite = owed and not later
+    got = _rewritten(rid, before) if rewrite else {}
+    return {'reviewId': rid, 'taskId': tid, 'draft': got.get('draft', draft) if rewrite else draft, 'drafting': bool(owed and later), **got,
             **({'cc': looped} if looped else {}), **({'cc_unknown': unknown} if unknown else {})}
+
+
+def _rewritten(rid: int, before: str) -> dict:
+    "What a (re)draft left on the review: its text now, whether that changed into something, and - when it did not - why, plainly."
+    rv = store.get_review(rid) or {}
+    now = str(rv.get('DraftText') or '')
+    changed = bool(now.strip()) and now != str(before or '')
+    why = '' if changed else (rv.get('DraftNeeds') or rv.get('DraftError') or ('it came back the same as before' if now.strip() else store_mod.EMPTY_DRAFT))
+    return {'draft': now, 'changed': changed, **({'why': by_sentence(str(why))} if why else {})}
 
 
 def _loop_in(rid: int, m: dict, who: list) -> tuple:
@@ -6526,7 +6541,9 @@ def draft_review(rid: int, body: DraftBody = None):
         store.set_review_draft_error(rid, str(e))     # visible beside the draft box, with Retry (PW-046)
         raise HTTPException(422, by_sentence(str(e)))
     store.audit('review', rid, 'redraft', ACTOR)
-    return {'ok': True, 'draft': draft}
+    # ...and an empty one never replaced the draft (store.update_review_draft): what the review holds is the answer, said changed or why not
+    if not str(draft or '').strip(): store.update_review_draft(rid, draft, rv.get('RunId'))
+    return {'ok': True, **_rewritten(rid, rv.get('DraftText') or '')}
 
 class EnvelopeBody(BaseModel): mode: str | None = None; to: list[str] | None = None; cc: list[str] | None = None
 

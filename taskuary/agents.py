@@ -232,6 +232,11 @@ def _live_line(j):
     if t == 'system':
         # only the real session init is news; the other system events (hooks, compaction,
         # subagent starts) repeated 'session started' forever and said nothing
+        # ...except Claude's own retries when it cannot reach its servers (the desktop run, 2026-11-04: the network down, the pane said
+        # "Starting Taskuary on Claude Code… 3m" for the ten tries it made before it gave up, and nothing said why it was slow)
+        if j.get('subtype') == 'api_retry':
+            n, of = j.get('attempt'), j.get('max_retries')
+            return f"Can't reach Claude's servers right now - trying again" + (f' ({n} of {of})' if n and of else '')
         if j.get('subtype') not in (None, 'init'): return None
         m = j.get('model') or (j.get('modelInfo') or {}).get('name') or ''
         return 'session started' + (f' · model {m}' if m else '')

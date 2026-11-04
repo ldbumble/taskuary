@@ -193,7 +193,9 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
 // Result to see more"): what it did and what it based it on (agentRecord.resultLine), then what it made - each page or file by name with
 // its Open (agentRecord.madeOnce) - and nothing else: no state sentence, no last message, no record. The Result heading unfolds the rest.
 // `pages`: the task's shown and published pages; the files it left for the task are read here (outputs.py)
-export const ResultSummary = ({ taskId, stamp, pages = [], said = "", onRecord = null }) => {
+// `ended`: how a run with nothing written ended, in its story's own sentence - a restart's "Taskuary closed while ... had this" read "It ended
+// without a written result - open the Result for what it did" over a Result with nothing in it (the desktop run, 2026-11-04)
+export const ResultSummary = ({ taskId, stamp, pages = [], said = "", ended = "", onRecord = null }) => {
   const [rec, setRec] = useState(null), [outputs, setOutputs] = useState([]);
   useEffect(() => {
     let live = true;
@@ -210,7 +212,7 @@ export const ResultSummary = ({ taskId, stamp, pages = [], said = "", onRecord =
     <Box data-tq-result-summary="" sx={{ mt: 0.9, display: "flex", flexDirection: "column", gap: 0.9 }}>
       {held.waiting.map((l, i) => <Typography key={i} data-tq-result-held="" sx={{ fontSize: 13, fontWeight: 600, color: INK }}>{l}</Typography>)}
       {did ? <Box data-tq-result-did="" sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={did} /></Box>
-        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result - open the Result for what it did.</Typography>}
+        : <Typography data-tq-result-ended="" sx={{ fontSize: 12.5, color: DIM }}>{ended || "It ended without a written result - open the Result for what it did."}</Typography>}
       {rest && <Box data-tq-result-rest="" sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={rest} /></Box>}
       {held.after.map((l, i) => <Typography key={i} data-tq-result-ran="" sx={{ fontSize: 12.5, color: DIM }}>{l}</Typography>)}
       {found && <Box data-tq-result-found=""><Typography sx={head}>What it found</Typography>

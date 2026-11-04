@@ -2776,9 +2776,14 @@ def continue_work(task_id: int, body: ContinueBody = None):
         if note: store.add_comment(task_id, 'owner', general.USER_TYPE, note)
         turn = '\n\n'.join(x for x in [news, f'FROM THE OWNER: {note}' if note else '', f'{general.RELAY} {extra}' if extra else '', continuity.RESUME_PROMPT] if x)
         def go():
-            try: general.start_session(store, task_id, actor=ACTOR).send_prompt(turn, imgs or None, brief=True, kept=True)
-            except general.Stopped: pass       # the owner stopped it again: nothing to say
-            except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.')
+            try:
+                try: ses = general.start_session(store, task_id, actor=ACTOR)
+                except Exception as e: _walk_cannot(task_id, f'The session could not continue: {e}. Your saved conversation is still here.'); return
+                # ...a turn that fails is its run's own failure, said by the run (workerstate `failed`) with Try again: a line here said it twice,
+                # "Failed - Claude: API Error ..." over "The session could not continue: claude: API Error ..." (the desktop run, 2026-11-04)
+                try: ses.send_prompt(turn, imgs or None, brief=True, kept=True)
+                except general.Stopped: pass       # the owner stopped it again: nothing to say
+                except Exception as e: logger.info(f'task {task_id}: the continued turn failed - {e}')
             finally: general.OPENING.discard(task_id)
         # marked HERE, as /resume and the walk are: the page reloads the conversation the moment this answers, before the thread has
         # a session, read "nothing running" and never looked again - Continue and Try again left the new turn unseen (the agents walk,

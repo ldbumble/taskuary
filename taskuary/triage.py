@@ -186,6 +186,7 @@ NEEDS_BROWSER = _bullet('needs_browser')   # the work is done on a web page: the
 NEEDS_DESKTOP = _bullet('needs_desktop')   # ...in a desktop app: the task is marked "needs desktop" when Agent Desktop is on (agentdesktop, 2026-10-31)
 WRAPPER = _bullet('wrapper')     # the text its sender did not write, for a screen to leave out (2026-10-28)
 WATCH = _bullet('watch')       # the fourth verdict, for a document written before it (the owner, 2026-11-03)
+THREAD = _bullet('thread')         # every verdict reads the whole conversation: who asks what, the owner's part, the mails that are aside (2026-11-04)
 HANDLED = _bullet('handled_elsewhere')   # a watched task's new line: does it show somebody else dealt with it (watch.py, 2026-11-01)
 DATA_CLASSES = ('ordinary', 'sensitive')
 INTENTS = ('task', 'reply_only', 'watch', 'fyi')
@@ -227,6 +228,32 @@ def note_id(line: str) -> str:
 def without_coding(guide: str) -> str:
     keep = [l for l in str(guide or '').splitlines() if not l.lstrip().startswith('- **coding**')]
     return '\n'.join(keep).replace('"kind": "coding|general|task"', '"kind": "general|task"')
+
+
+_S = {'type': 'string'}
+THREAD_SCHEMA = {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['asking', 'your_part', 'others', 'asks', 'aside', 'on_you'],
+    'properties': {'asking': _S, 'your_part': _S, 'on_you': {'type': 'array', 'items': _S},
+                   'others': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False, 'required': ['who', 'did'], 'properties': {'who': _S, 'did': _S}}},
+                   'asks': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False, 'required': ['mid', 'about'], 'properties': {'mid': {'type': 'integer'}, 'about': _S}}},
+                   'aside': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False, 'required': ['mid', 'why'], 'properties': {'mid': {'type': 'integer'}, 'why': _S}}}}}
+
+
+def thread_of(j: dict, earlier: set):
+    """The model's reading of the whole thread, cut to size; a mid it was not shown (0 is the mail being judged) is dropped. None when there is none."""
+    t = j.get('thread')
+    if not isinstance(t, dict): return None
+    s = lambda v, n: ' '.join(str(v or '').split())[:n]
+    def mids(k, f):
+        r = []
+        for o in (t.get(k) if isinstance(t.get(k), list) else []):
+            try: m = int(o['mid'])
+            except (TypeError, ValueError, KeyError): continue
+            if m in earlier | {0}: r.append({'mid': m, f: s(o.get(f), 200)})
+        return r[:6]
+    oth = [{'who': s(o.get('who'), 200), 'did': s(o.get('did'), 200)} for o in (t.get('others') if isinstance(t.get('others'), list) else []) if isinstance(o, dict)][:6]
+    on = [s(x, 200) for x in (t.get('on_you') if isinstance(t.get('on_you'), list) else []) if x][:6]
+    th = {'asking': s(t.get('asking'), 300), 'your_part': s(t.get('your_part'), 300), 'others': oth, 'asks': mids('asks', 'about'), 'aside': mids('aside', 'why'), 'on_you': on}
+    return th if any(th.values()) else None
 
 
 def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None,
@@ -303,6 +330,7 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
         # ...and when it joins with a part the title does not cover, the title that covers both: the task widens, never narrows to the
         # line (the owner, 2026-10-29: a chat bridge's later lines joined at combine 4 - the task should read as the bridge's, not the last line's)
         p['task_title'] = {'type': ['string', 'null']}
+    p['thread'] = THREAD_SCHEMA   # every verdict reads the whole thread, so it is never optional on the wire (2026-11-04)
     # the earlier lines of the exchange the ask rests on - shown with the task so its ask can be checked (2026-10-22)
     if earlier: p['rests_on'] = {'type': ['array', 'null'], 'items': {'type': 'integer'}}
     # ...and the standing notes it applied, by the ids they were shown with (ingest.relevant_notes): the model says which bear on it
@@ -901,6 +929,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and '**needs_browser**' not in base: system += '\n\n' + NEEDS_BROWSER   # ...and whether it is done on a web page (2026-10-29)
             if not shape and '**needs_desktop**' not in base: system += '\n\n' + NEEDS_DESKTOP   # ...or in a desktop app (2026-10-31)
             if not shape and '**wrapper**' not in base: system += '\n\n' + WRAPPER    # ...and what its sender did not write (2026-10-28)
+            if '**thread**' not in base: system += '\n\n' + THREAD   # ...and the reading of the whole thread (2026-11-04)
             if '**watch**' not in base: system += '\n\n' + WATCH     # ...and the fourth verdict, someone else's to handle (2026-11-03)
             if watched and '**handled_elsewhere**' not in base: system += '\n\n' + HANDLED   # ...and whether a watched task looks handled (2026-11-01)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
@@ -967,6 +996,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     except (TypeError, ValueError): continue
                     if v in earlier_ids and v not in rests: rests.append(v)
                 if rests: out['rests_on'] = rests
+                if (th := thread_of(j, earlier_ids)): out['thread'] = th
                 # notes_applied: only the ids of notes it was shown - which standing notes bore on this message is the model's word
                 applied = j.get('notes_applied') if isinstance(j.get('notes_applied'), list) else []
                 if note_ids: out['notes_applied'] = [i for i in dict.fromkeys(str(x) for x in applied) if i in note_ids]

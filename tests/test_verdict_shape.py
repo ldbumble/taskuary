@@ -328,3 +328,15 @@ class WrongFormatSaysWhatCameBackTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ThreadReadingTests(unittest.TestCase):
+    def test_the_contract_line_names_the_thread_reading(self):
+        line = next(l for l in TEMPLATE.splitlines() if l.startswith('JSON only:'))
+        self.assertIn('"thread": {"asking"', line)
+        asks = []
+        def brain(system, user, **kw):
+            asks.append(user); return '{"intent": "fyi", "why": "x", "title": "t", "summary": "s"}'
+        brain.takes_want = False
+        triage.classify_intent(MSG, llm=brain, system='My own rules. Answer JSON only.')
+        self.assertEqual(len(asks), 1)                                  # a missing thread is never worth a second ask

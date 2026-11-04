@@ -2,6 +2,19 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.10.27 - 2026-11-04
+
+- An agent run is never killed for running long, and a turn cut by a time limit says so and offers Continue
+- A draft keeps which mail it answers apart from the newest mail it saw
+- The agent's reply answers the mail that holds the ask, and can be pointed at another
+- A re-saved reply addressed from the mail that holds the ask, and a plain re-save that keeps what was pinned
+- The drafter answers the mail that holds the ask and leaves the owner one line on why
+- A draft with no thread reading keeps its From and Cc, and a WHY that wraps is taken off whole
+- A WHY is taken off only at the very end, set off by a blank line, so a Why heading in the reply stays
+- A thanks on the thread leaves the draft where it was, and Send goes to the mail that asked
+- A reply sent with a merge goes to the mail that asked, and an aside opens no draft and moves no unthreaded reply
+- A draft pinned to a thanks is not moved by the older ask it answers, and the store finds the newest line past the asides
+
 ## 0.3.10.26 - 2026-11-04
 
 - The owner's exact words go under YOU; what the Assistant adds is Taskuary's, folded

@@ -639,6 +639,13 @@ class OneGoalTests(unittest.TestCase):
         card = s.create_task({'Title': 'Connect the ledger', 'Kind': 'general', 'Status': 'open', 'SourceRef': 'connector:setup'}, 'owner')
         for tid in (dock, card): self.assertNotIn('get the owner to done', general._prompt(s, tid)[0], tid)
 
+    def test_a_strangers_task_has_the_goal_but_is_never_steered_to_a_login(self):
+        s = self._store(); tid = general_task(s); self._mail(s, tid)
+        s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
+        system = general._prompt(s, tid)[0]
+        self.assertIn('get the owner to done', system)
+        for gone in ('goes only in the reply you draft', 'A login or secret you find'): self.assertNotIn(gone, system, gone)
+
     def test_the_reading_leads_the_brief(self):
         s = self._store(); tid = general_task(s)
         ray = self._mail(s, tid); erin = self._mail(s, tid, 'Erin Blake', '2026-11-04T10:30:00Z', 'Thanks Ray!', 'erin-1')

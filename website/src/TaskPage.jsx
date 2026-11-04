@@ -1751,7 +1751,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...but NOT WHILE AN AGENT IS ON IT (the owner, 2026-11-03): Approve on a held step brought the Advisor's new pick, and the page
   // jumped to Close out and folded the agent's reply - its pick is read when the agent ends, as the rest of the page is
   const advisedHeld = liveSession || liveRun ? "" : advised;
-  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${t?.Status}|${advisedHeld}|${!!writingUp}`;
+  // ...nor the task's status under a live agent (the overnight run, 2026-11-03): Approve on a general agent's held delete moved the task from
+  // waiting to in progress, the page re-read where it was up to with the step still listed, and jumped to an empty Close out over the agent
+  const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${liveSession ? "live" : t?.Status}|${advisedHeld}|${!!writingUp}`;
   if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : sectionHere({ stage: taskStage, advised: advisedHeld }) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or

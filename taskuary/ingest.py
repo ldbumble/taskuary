@@ -3055,13 +3055,17 @@ def _auto_general(store, tid, brief: str = None, deep: bool = False):
     A task triage judged quick (quickwork.takes) is answered in one call instead: no desk, a fraction of one (quickwork._take). Every door reaching
     here has passed auto_start_ok already, so the gate is the same for both; a task triage never judged reads as deep."""
     from . import blackboard as bb, general, quickwork
-    if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
-    if not has_room(store):
-        # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
-        store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)
-        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
-        general.OPENING.discard(tid)            # queued is not live: the drain starts it
-        return
+    try:
+        if not deep and _reads_quick(store, tid): return quickwork.start(store, tid, brief)
+        if not has_room(store):
+            # the brief waits with it (a quick call's notes, an Advisor's idea): the drain starts the agent on it, not on the bare Summary
+            store.enqueue_dispatch(tid, None, 'assistant', busy_words(store), brief=brief)
+            store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {busy_words(store)}, and it starts by itself when there is room.')
+            general.OPENING.discard(tid)            # queued is not live: the drain starts it
+            return
+    except Exception:
+        general.OPENING.discard(tid)                # a hand-over's hold (agent_on_reply `opening`) never outlives a start that broke
+        raise
     _start_general(store, tid, brief)
 
 

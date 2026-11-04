@@ -50,3 +50,35 @@ def test_kept_steps_hide_the_body_from_any_trace_or_cli_log():
 def test_a_call_that_drafts_nothing_is_shown_as_before():
     assert sessionrecord._tool('Bash', {'command': 'git status --short'})['text'] == 'git status --short'
     assert sessionrecord._tool('Bash', {'command': 'taskuary --draft-file out.md'})['text'] == 'taskuary --draft-file out.md'
+
+
+
+def _through_a_session(events):
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Portal login for Gail', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    session = general.GeneralSession(s, tid); session.pick, session.provider = 'cli:claude', 'claude'
+
+    def fake_build(*a, trace=None, **k):
+        def brain(system, user, **kw):
+            for e in events: trace(*e)
+            return 'Drafted the reply to Gail for your Send.'
+        return brain
+
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', side_effect=fake_build):
+        session.send_prompt('Get Gail the login')
+    return session.scrollback(), json.dumps(session.info()['trace']), json.dumps(sessionrecord.general_steps(s, tid))
+
+
+def test_the_cli_live_line_shows_the_draft_by_what_it_is():
+    from taskuary import agents
+    line = agents._live_line({'type': 'assistant', 'message': {'content': [
+        {'type': 'tool_use', 'name': 'mcp__taskuary__propose_reply', 'input': {'text': f'the password is {SECRET}', 'to': 'Gail Moreno'}}]}})
+    assert line == f'→ mcp__taskuary__propose_reply: {sessionrecord.DRAFT_SHOWN}'
+    pane, trace, steps = _through_a_session([('live', 'claude', line)])
+    assert 'propose_reply' in pane and not [w for w in (pane, trace, steps) if SECRET in w]
+
+
+def test_an_acp_call_named_by_its_kind_is_known_by_its_title():
+    args = {'text': f'Hi Gail, the password is {SECRET}', 'to': 'Gail Moreno', 'title': 'taskuary: propose_reply'}
+    pane, trace, steps = _through_a_session([('tool_call', 'other', {'tool_call_id': 'acp-1', 'args': args})])
+    assert 'tool>' in pane and not [w for w in (pane, trace, steps) if SECRET in w]

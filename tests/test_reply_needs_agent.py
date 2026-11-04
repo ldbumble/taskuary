@@ -299,3 +299,13 @@ def test_needs_on_a_general_task_with_a_conversation_already_starts_nothing():
     with mock.patch.object(general, 'history', return_value=[{'role': 'user', 'content': 'earlier'}]):
         _rv, spawned = drafted(s, tid, writer(PORTAL)[0])
     assert spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG) and tid not in general.OPENING
+
+
+
+@pytest.mark.parametrize('where', ['_reads_quick', 'has_room'])
+def test_a_start_that_fails_before_it_opens_lets_the_hold_go(where):
+    s = store(); tid = general_ask(s); general.OPENING.add(tid)
+    with mock.patch.object(ingest, '_reads_quick', return_value=False), \
+         mock.patch.object(ingest, where, side_effect=RuntimeError('the queue is unreadable')), pytest.raises(RuntimeError):
+        ingest._auto_general(s, tid)
+    assert tid not in general.OPENING

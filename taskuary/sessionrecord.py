@@ -42,9 +42,15 @@ def _hide_flags(v):
     return [_hide_flags(x) for x in v] if isinstance(v, list) else v
 
 
+def drafting(name, args=None) -> bool:
+    "Is this the call that files a draft - by its name, or by the title an ACP call carries when it is named by its kind ('other')?"
+    title = args.get('title') if isinstance(args, dict) else ''
+    return any(d in str(x or '') for d in _DRAFTING for x in (name, title))
+
+
 def hide_draft(name, args):
     "A tool call's args with any draft body in them replaced by DRAFT_SHOWN - everything else as it was."
-    if str(name or '').endswith(_DRAFTING):
+    if drafting(name, args):
         if isinstance(args, str):
             try: j = json.loads(args)
             except ValueError: return DRAFT_SHOWN
@@ -71,7 +77,7 @@ def _target(args) -> str:
 
 def _tool(name, args, at=None) -> dict:
     args = hide_draft(name, args)
-    s ={'k': 'tool', 'name': str(name or 'tool'), 'text': _target(args), 'at': at}
+    s = {'k': 'tool', 'name': str(name or 'tool'), 'text': _target(args), 'at': at}
     a = args if isinstance(args, dict) else {}
     # a command the agent DESCRIBED reads as what it was for; the command itself stays one click away
     if str(a.get('description') or '').strip() and (a.get('command') or a.get('cmd')):

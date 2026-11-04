@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { proposalPresentation, reviewStatusLabel, reviewText } from "../src/reviewProposal.js";
+import { heldActsLine, proposalPresentation, reviewStatusLabel, reviewText } from "../src/reviewProposal.js";
 
 const playbook = {
   Kind: "action",
@@ -133,4 +133,20 @@ test("an agent's tracker act names the item it lands on", () => {
   const p = proposalPresentation(review);
   assert.equal(p.destination, "NW-12 · linear move");
   assert.equal(reviewText(review), "status: In Review");
+});
+
+// A HELD DELETE (shellgate.deletes, the desktop stress test 2026-11-03): its card says where it aims, and the line over it is no browser's
+test("a held delete names the folder it aims at, and the line over the card says what was held", () => {
+  const del = { Kind: "action", Reason: "held before it ran, in the agent's shell: delete notes in Downloads - it can't be undone",
+    DraftText: JSON.stringify({ action: "shell_act", sid: "g1", command: 'rm -rf "/home/alex/Downloads/notes"', cwd: "/home/alex/.taskuary/scratch",
+      what: "delete notes in Downloads", why: "it can't be undone", where: "/home/alex/Downloads" }) };
+  assert.equal(proposalPresentation(del).destination, "/home/alex/Downloads");
+  const push = { Kind: "action", DraftText: JSON.stringify({ action: "shell_act", sid: "g1", command: "git push", cwd: "/work/ledger", why: "it leaves this computer" }) };
+  assert.equal(proposalPresentation(push).destination, "/work/ledger");
+  assert.match(proposalPresentation(push).context, /it leaves this computer/);
+  const browse = { Kind: "action", DraftText: JSON.stringify({ action: "browser_act", sid: "g1", command: "agent-browser click @e1" }) };
+  assert.doesNotMatch(heldActsLine([del]), /browser/);
+  assert.match(heldActsLine([del]), /^This step waits for your yes\./);
+  assert.match(heldActsLine([browse]), /^The agent's browser waits/);
+  assert.match(heldActsLine([browse, del]), /^These steps wait/);
 });

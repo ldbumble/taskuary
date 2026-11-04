@@ -21,6 +21,9 @@ test("a dispatch answer is read as started, existing, needs_repo or assistant - 
   assert.equal(outcomeOf({ dispatch: "session", started: false, existing: true, agent: "coding", ref: "TQ-0003" }).state, "existing");
   assert.match(outcomeOf({ dispatch: "session", started: false, existing: true, agent: "coding", ref: "TQ-0003" }).text, /already/);
   assert.equal(outcomeOf({ dispatch: "assistant", started: true, agent: "cli:claude", ref: "TQ-0004" }).state, "started");
+  // ...and a general agent is "on it", never "in a live session" - a coding session's words (stress test 2026-11-03)
+  assert.equal(outcomeOf({ dispatch: "assistant", started: true, agent: "Claude Code", ref: "TQ-0004" }).text, "Claude Code is on it - TQ-0004");
+  assert.match(outcomeOf({ dispatch: "session", started: true, accepted: true, agent: "coding" }).text, /in a live session$/);
   // an older server without the flags: a session payload is a start, a needs_repo is not
   assert.equal(outcomeOf({ dispatch: "session", session: { sid: "s" } }).state, "started");
   assert.equal(outcomeOf({ dispatch: "needs_repo" }).state, "needs_repo");

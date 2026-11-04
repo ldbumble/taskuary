@@ -61,7 +61,7 @@ test("Stop and save puts the agent down and keeps the Agent pane open while it w
   assert.match(page, /setErr\(""\); setWritingUpAt\(\{ id, n, sid \}\); setTerm\(null\);\n    try \{\n      const \{ data \} = await api\.post\(`\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, background: true \}\);/);
   assert.match(page, /setWritingUpAt\(null\); findTerm\(id\);/);                                  // a press that fails gives the session back
   assert.match(page, /const restStage = sessionView \|\| writingUp \? "agent" : \(pressedHere \|\| writeup \? "reply" :/); assert.match(page, /\(openStage \|\| restStage\)/);
-  assert.match(page, /sec: writingUp \? "agent" : sectionHere\(/);                                // the Agent section, while it writes
+  assert.match(page, /sec: writingUp \? "agent" : homeSection\(home, sectionHere\(/);                                // the Agent section, while it writes
   assert.doesNotMatch(page, /setSeekCloseOut/);
   // ...a failure's Try again is Close out's (taskLayout.closeOut)
   assert.match(page, /\{shows\("reply"\) && co\.writeupAt === "closeout" && <WriteupBlock view=\{writeup\}/);

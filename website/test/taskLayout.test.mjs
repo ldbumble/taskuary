@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, cameFrom, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, chatHome, homeSection, taskSections, cameFrom, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -70,7 +70,7 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   assert.match(src, /onClickCapture=\{stacked \? phoneFromTap : undefined\}/);
   // ...while what a finished agent offers stays where it was: Close out and its record are drawn whenever no session fills the page
   // ...(and in the three sections it is the third section, beside a live agent too as a slim tab - 2026-10-27)
-  assert.match(src, /\{\(!sessionView \|\| threeUp\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/);
+  assert.match(src, /\{\(!sessionView \|\| threeUp\) && slotKeys\.includes\("close"\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/);
   // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")
   assert.match(src, /\{!sessionView && hasRecord && !resultRest && \(/);
   assert.match(src, /\{resultRest && !sessionView && <ResultSummary /);
@@ -122,7 +122,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf),
   // or the one the Advisor's decision names its move is in (sectionHere, 2026-10-29)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : homeSection\(home, sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\)\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -321,4 +321,25 @@ test("Close out knows the owner answered outside Taskuary, and says so", () => {
   const src = taskSource();
   assert.match(src, /&& !writeup && !outside/);
   assert.match(src, /variant=\{outside \? "outlined" : "contained"\}/);
+});
+
+// WHERE THE CHAT IS HOME (phase 4, Task 4.1): a general or reply task shows Came from and the agent, opens on the agent, and Mark done,
+// Close with a note, Attach and Share ride the agent's strip; a coding task, a plain task and a live terminal keep their three sections
+test("a task whose home is the chat shows Came from and the agent, and opens on the chat", () => {
+  assert.equal(chatHome({ kind: "general" }), true);
+  assert.equal(chatHome({ kind: "reply" }), true);
+  assert.equal(chatHome({ kind: "coding" }), false);
+  assert.equal(chatHome({ kind: "task" }), false);
+  assert.equal(chatHome({ kind: "general", terminal: true }), false);
+  assert.deepEqual(taskSections(true).map((s) => s.key), ["from", "agent"]);
+  assert.equal(taskSections(false), SECTIONS);
+  assert.equal(homeSection(true, "close"), "agent");
+  assert.equal(homeSection(false, "close"), "close");
+  const src = taskSource();
+  assert.match(src, /function useTaskMoves\(sec, home = false\)/);
+  assert.match(src, /close = home \? sec === "agent" : sec === "close"/);
+  assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: !!term\?\.alive && term\.mode !== "assistant" \}\), secs = taskSections\(home\)/);
+  // ...and until 4.2 Close out's slot is still drawn beside them, so a draft waiting on Send is never out of reach
+  assert.match(src, /const slots = CARDS_IN_SUMMARY \? secs : SECTIONS/);
+  assert.match(src, /const CARDS_IN_SUMMARY = false;/);
 });

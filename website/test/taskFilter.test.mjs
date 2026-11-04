@@ -105,7 +105,7 @@ test("with a live session, X steps back to the task first and the session keeps 
   // (the steps are sections of one card since the 2026-10-06 cleanup - `...card, ...step` - the gates are the same)
   // ...and in the three sections (2026-10-27) Close out is one of them beside a live agent too, a slim tab (slot)
   for (const gate of [/\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from=""/,
-    /\{!sessionView && detail\.runs\.length > 0/, /\{\(!sessionView \|\| threeUp\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/,
+    /\{!sessionView && detail\.runs\.length > 0/, /\{\(!sessionView \|\| threeUp\) && slotKeys\.includes\("close"\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/,
     /: \{ \.\.\.card, \.\.\.step, borderTop: 0, mt: 1, px: 0, py: shows\("reply"\)/]) {
     assert.match(source, gate);
   }

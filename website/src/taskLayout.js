@@ -5,6 +5,7 @@ import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
 import { drawerLit, mainView, sectionOf as sectionOfStage, stageOf } from "./stages.js";
 import { waitingEmails } from "./taskLifecycle.js";
+import { isGeneralKind } from "./autostart.js";
 
 // WHILE AN AGENT WORKS THE WORK TAKES THE WHOLE WIDTH: a live session - coding or general, working or waiting on you (the rail's
 // spinning ring, or its hand) - and From folds to one line over it; the terminal is never covered or squeezed. `sessionView` is the
@@ -93,6 +94,12 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
 // open and fills the width, the other two are closed tabs that say where each stands in a line or two. `here`: the section the task is up
 // to (stages.sectionOf). Pure, so node --test reads it.
 export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent", n: 2, name: "Agent" }, { key: "close", n: 3, name: "Close out" }];
+// ...BUT TWO WHERE THE CHAT IS HOME (phase 4): a general or reply task is Came from and the agent's chat, opening on the chat, and Close out's
+// own moves (Mark done, Close with a note, Attach, Share) ride the agent's strip. Read off the kind, not the workspace mode: a reply task no
+// agent ran is "empty" there (taskWorkspace), and its chat is still home. A coding task, a plain one and a live terminal keep all three
+export const chatHome = ({ kind, terminal = false } = {}) => !terminal && (isGeneralKind(kind) || kind === "reply");
+export const taskSections = (home) => (home ? SECTIONS.filter((s) => s.key !== "close") : SECTIONS);
+export const homeSection = (home, here) => (home ? "agent" : here);
 // ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four
 // short lines, each clamped so a tab never scrolls. Words quoted are somebody's own; each line only where there is something to say.
 // ...and read like a book's SPINE (the owner, 2026-10-27): its `lines` at the top under the name, its `foot` - the one status line - at the

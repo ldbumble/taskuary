@@ -60,3 +60,10 @@ test("the chat draws the summary, and the turn's working is one line with its st
   assert.doesNotMatch(card, /<Button|onClick/, "the summary draws no press of its own yet (Task 4.2 brings the cards)");
   assert.doesNotMatch(card + view.slice(view.indexOf("<AgentSummary")), /onChanged=\{work/, "no prop nothing reads yet (Task 4.2 adds it with the cards)");
 });
+
+// Review Focus 4 (Task 4.1): until the cards live in the summary (4.2), a pending draft is not counted where no cards are drawn - Close out still draws it
+test("a pending draft is no Next step where the summary draws no cards", () => {
+  const reviews = [{ ReviewId: 1, Kind: "reply", Status: "pending", DraftText: "Thanks, Erin" }];
+  assert.equal(nextSteps({ summary: { nothing_left: false }, reviews, cards: false }).drafts.length, 0);
+  assert.equal(nextSteps({ summary: { nothing_left: false }, reviews }).drafts.length, 1);
+});

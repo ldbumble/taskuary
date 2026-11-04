@@ -96,7 +96,7 @@ import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { CLOSED, REOPEN_MARKED, takeReopen } from "./reopenFromSearch.js";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, cameFrom, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
+import { CLOSE_BY_HAND, SECTIONS, advisorAt, cameFrom, chatHome, homeSection, taskSections, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -446,7 +446,7 @@ const fitTabLines = (tab) => {
   if (cut >= 0) ls.slice(cut).forEach((l) => l.setAttribute("data-tq-unfit", ""));
 };
 // ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close
-export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen }) {
+export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen, home = false }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
     const tab = ref.current;
@@ -479,7 +479,7 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       <Box component="span" data-tq-tab-name="">{sec.name}</Box>
       {lines.map((l, i) => <Box component="span" key={i} data-tq-tab-line="">{l}</Box>)}
-      <SpineMoves sec={sec.key} name={sec.name} />
+      <SpineMoves sec={sec.key} name={sec.name} home={home} />
       {/* ...its foot ONE HEIGHT in every tab (the owner, 2026-10-27: "the 1 line and 2 line are not on the same line"): the rule, a status
           block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
       <Box component="span" data-tq-tab-foot="">
@@ -528,8 +528,9 @@ const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="b
 // done, Close with a note, Attach a file and Share after its own moves; Came from its Change ▾
 // ...MARK DONE FIRST (the owner, 2026-11-02: "Mark done should always be the first button in the Close out tab"): `done` leads Close out's
 // spine and strip, before its own moves (Find a time, Draft reply, Hand it to a person); the rest of the task's own after them, as before
-function useTaskMoves(sec) {
-  const head = useSpineVerbs("head"), share = useSpineVerbs("share"), change = useSpineVerbs("change"), close = sec === "close";
+// ...and ON THE AGENT'S where the chat is home (taskLayout.chatHome, phase 4 - the owner ruled Mark done and Close with a note live there)
+function useTaskMoves(sec, home = false) {
+  const head = useSpineVerbs("head"), share = useSpineVerbs("share"), change = useSpineVerbs("change"), close = home ? sec === "agent" : sec === "close";
   return { done: close ? head.filter(isDoneMove) : NO_MOVES, task: close ? [...head.filter((v) => !isDoneMove(v)), ...share] : NO_MOVES,
     change: sec === "from" ? change : NO_MOVES };
 }
@@ -545,8 +546,8 @@ function ChangeMoves({ change }) {
 }
 // ...`quiet`: an item's own whole-item moves laid on its one pane (actionRow.splitRow `all`: a report's Pause this report and Share) wear the
 // task's own quiet look, as its Change pill set them apart on the bar
-function SpineMoves({ sec, name = SEC_NAME[sec] }) {
-  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p"), { done, task, change } = useTaskMoves(sec);
+function SpineMoves({ sec, name = SEC_NAME[sec], home = false }) {
+  const vs = useSpineVerbs(sec).filter((v) => !v.tucked || v.tone === "p"), { done, task, change } = useTaskMoves(sec, home);
   if (!vs.length && !done.length && !task.length && !change.length) return null;
   return (
     <Box data-tq-spine-moves={sec} role="group" aria-label={`${name} moves`} sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
@@ -565,9 +566,10 @@ export const STRIP_H = 44, STRIP_LIVE_H = 32;
 const foldArrows = (keys, k) => { const i = keys.indexOf(k), last = keys.length - 1;
   return [...(i > 0 ? [["left", i === last ? "›" : "‹", keys[i - 1]]] : []), ...(i >= 0 && i < last ? [["right", i ? "›" : "‹", keys[i + 1]]] : [])]; };
 const TASK_KEYS = ["from", "agent", "close"];
+const CARDS_IN_SUMMARY = false;   // Task 4.2: the summary draws the draft cards, and a chat-home task drops Close out's slot
 // ...one line: what does not fit folds into its ▾ from the end - never Mark done nor what is lit
-export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
-  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { done, task, change } = useTaskMoves(sec);
+export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec], home = false }) {
+  const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { done, task, change } = useTaskMoves(sec, home);
   // ...a `tucked` move keeps its rule (a sent reply's Hand it to a person): behind the strip's ▾ unless it is lit
   const up = all.filter((v) => !v.tucked || v.tone === "p"), tucked = all.filter((v) => !up.includes(v));
   const own = (vs) => vs.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true }));
@@ -612,7 +614,7 @@ const PairGlyph = ({ two }) => <svg width="14" height="12" viewBox="0 0 14 12" a
 // ...`name` and `keys` for an item's own three sections (ItemSections: Came from | Report | Close out)
 // ...`pair`: the side-by-side toggle ({ on, with, flip }; none where two halves would not be readable or an agent is live). Paired, the arrow
 // toward the other open half is gone and the outer one slides the pair along, keeping this pane
-export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS, pair = null }) {
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS, pair = null, home = false }) {
   const liveMoves = useSpineVerbs("live");
   const arrows = foldArrows(keys, sec).map(([side, mark, to]) => ({ side, mark, to: fold(to) })).filter((a) => !pair?.on || a.to !== pair.with);
   const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${name} back`}
@@ -631,7 +633,7 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
             {onStop && liveMoves.some((v) => !v.disabled) && <Tooltip title={btn("stop_agent")}><IconButton size="small" data-tq-strip-stop="" data-tq-verb="save-end" aria-label={btn("stop_agent")} onClick={onStop}
               sx={{ width: 24, height: 24, color: ACCENT, border: `1px solid ${BORDER}` }}><StopCircleOutlinedIcon sx={{ fontSize: 15 }} />
               <Box component="span" sx={HIDDEN_WORDS}>{btn("stop_agent")}</Box></IconButton></Tooltip>}</Box>
-          : <PaneMoves sec={sec} skip={skip} name={name} />}
+          : <PaneMoves sec={sec} skip={skip} name={name} home={home} />}
       </Box>
       {pair && <Tooltip title={pairWord}><Box component="button" type="button" data-tq-strip-pair={pair.on ? "on" : "off"} aria-label={pairWord} aria-pressed={pair.on}
         sx={{ ...STRIP_ARROW, borderRadius: "7px" }} onClick={pair.flip}><PairGlyph two={!pair.on} /></Box></Tooltip>}
@@ -1673,6 +1675,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const hasRecord = !!(report || detail?.transcript || (isGeneral && generalStarted)
     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result"));
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
+  // WHERE THE CHAT IS HOME (taskLayout.chatHome): a general or reply task is Came from | Agent and opens on the agent - a general agent's
+  // own live chat ("assistant" mode) is still home; a coding terminal is not
+  const home = chatHome({ kind: t?.Kind, terminal: !!term?.alive && term.mode !== "assistant" }), secs = taskSections(home);
+  // ...Close out's slot stays drawn there until its draft cards live in the agent's summary (Task 4.2 sets CARDS_IN_SUMMARY), so a draft
+  // waiting on Send is never out of reach between the two
+  const slots = CARDS_IN_SUMMARY ? secs : SECTIONS, slotKeys = slots.map((s) => s.key);
   // THE RESULT (the redesign, owner-approved 2026-10-21): an agent that has stopped and saved - or finished, or stopped - with a record
   // to show; the work column's agent half is its result then, the session one "Replay the session" line in it
   // ...never when the sender wrote AGAIN after it (`news`): that result answers what came before, and the page leads with what is on
@@ -1758,13 +1766,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...nor the task's status under a live agent (the overnight run, 2026-11-03): Approve on a general agent's held delete moved the task from
   // waiting to in progress, the page re-read where it was up to with the step still listed, and jumped to an empty Close out over the agent
   const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${liveSession ? "live" : t?.Status}|${advisedHeld}|${!!writingUp}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : sectionHere({ stage: taskStage, advised: advisedHeld }) };
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : homeSection(home, sectionHere({ stage: taskStage, advised: advisedHeld })) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
   // with an agent that already ended (in_progress -> open lands seconds after Stop and save: Close out, pressed in between, folded back)
   const pickKey = `${selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${["done", "dropped"].includes(t?.Status)}`;
-  const section = threeUp ? (secPick.key === pickKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = sectionHere({ stage: taskStage, advised });
+  const section = threeUp ? (secPick.key === pickKey ? secPick.sec : mainHeld.current.sec) : null, hereSec = homeSection(home, sectionHere({ stage: taskStage, advised }));
   // ...and the Advisor's line stands in that section, the one it is about
   const adviceIn = advisorAt(advised);
   // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -
@@ -1793,8 +1801,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...less its slot's own 1px rule on the left (Agent and Close out), so the body lies inside it
   // ...side by side, half of what the closed tab and the two slots' rules leave
   // ...never laid wider than its slot: a 320px floor ran a 900px desk's ~240px Came from under the Agent spine (useStackBelow)
-  const openW = (k) => (paired ? Math.max(320, Math.floor((bodyW - SECTIONS.filter((s) => !isOpen(s.key)).reduce((n, s) => n + closedW(s.key), 0) - 2) / 2))
-    : Math.max(OPEN_MIN, bodyW - SECTIONS.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1)));
+  const openW = (k) => (paired ? Math.max(320, Math.floor((bodyW - slots.filter((s) => !isOpen(s.key)).reduce((n, s) => n + closedW(s.key), 0) - 2) / 2))
+    : Math.max(OPEN_MIN, bodyW - slots.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1)));
   // ...and on the canvas the open one wears its white strip (PaneStrip): the body under it, its own name head given to the strip
   const stripOn = (k) => inRow && isOpen(k);
   const stripH = (k) => (sessionView && k === "agent" ? STRIP_LIVE_H : STRIP_H);
@@ -1809,9 +1817,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // that grew by the strip's height while away refit the terminal and sent the pty a resize
         ...(inRow && sessionView && k === "agent" && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
         {!isOpen(k) && tabFor(k)}
-        {stripOn(k) && <PaneStrip sec={k} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
+        {stripOn(k) && <PaneStrip sec={k} home={home} keys={slotKeys} live={sessionView && k === "agent"} skip={stripSkip[k]} fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
           onStop={sessionView && k === "agent" ? () => press("save-end") : null}
-          pair={canPair ? { on: paired, with: paired ? SECTIONS.find((s) => s.key !== k && isOpen(s.key))?.key : null, flip: pairFlip(k) } : null} />}
+          pair={canPair ? { on: paired, with: paired ? slots.find((s) => s.key !== k && isOpen(s.key))?.key : null, flip: pairFlip(k) } : null} />}
         {body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were
   const pane = section === "agent" ? "agent" : section === "close" ? "reply" : (stacked && !openStage && paneOfMove(litMove)) || paneRest;
@@ -1893,9 +1901,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // ...a closed section's tab, in place of the section: the arrow points the way it opens
   const tabFor = (key) => {
-    const sec = SECTIONS.find((s) => s.key === key);
-    return <SectionTab sec={sec} {...(tabLines()[key] || {})} here={hereSec === key} mini={closedW(key) === MINI_W}
-      before={SECTIONS.findIndex((s) => s.key === key) < SECTIONS.findIndex((s) => s.key === section)} onOpen={() => openSection(key)} />;
+    const sec = slots.find((s) => s.key === key);
+    return <SectionTab sec={sec} home={home} {...(tabLines()[key] || {})} here={hereSec === key} mini={closedW(key) === MINI_W}
+      before={slots.findIndex((s) => s.key === key) < slots.findIndex((s) => s.key === section)} onOpen={() => openSection(key)} />;
   };
   // CAME FROM'S PARTS, drawn once and arranged by the layout: a phone's stacked page (and a live agent's left drawer there) keeps them as
   // they were - the facts and the conversations in one Came from part, what triage made of it at the foot - and the three sections set
@@ -3362,7 +3370,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
 
                 {/* ...the draft a little heavier than the words round it (the owner, 2026-10-25: "subtly focus the reply"): the eye lands on what goes out */}
                 {/* ...and in the three sections it is the third, its own section - beside a live agent too, a slim tab */}
-                {(!sessionView || threeUp) && slot("close", <Box ref={closeOutRef} data-tq-closeout="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Close out" : undefined}
+                {(!sessionView || threeUp) && slotKeys.includes("close") && slot("close", <Box ref={closeOutRef} data-tq-closeout="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Close out" : undefined}
                   sx={threeUp ? { ...SECTION(isOpen("close"), openW("close")), "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }
                   : { ...card, ...step, borderTop: 0, mt: 1, px: 0, py: shows("reply") ? 1.25 : 1, flexShrink: 0,
                   // ...side by side only: a phone's stacked view scrolls whole under its own docked row

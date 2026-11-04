@@ -46,7 +46,18 @@ test("a put-down lands when its row leaves the pile or comes back For later, and
   assert.equal(putDownLanded(rows, 4), false, "still an ordinary row: the server has not answered yet");
   assert.equal(putDownLanded(rows, 99), true, "closed: gone from the pile");
   assert.equal(putDownLanded([{ ...rows[1], deferred: true, back_at: "2026-10-23 09:00:00" }], 4), true, "reminded: For later");
-  assert.match(read("AssistantView.jsx"), /putDownLanded\(pile\.items, leavingTid\)\) setLeavingTid\(null\)/);
+  assert.match(read("AssistantView.jsx"), /putDownLanded\(pile\.items, leavingTid, leavingWas\.current\)\) setLeavingTid\(null\)/);
+});
+
+// MARK DONE ON A WATCHED ROW (the owner, 2026-11-04): the row was under Watching when pressed, so the pile it was pressed on read as landed and
+// the rail drew it again until the server's answer came. Put away counts only when the press put it there.
+test("a row put away before the press has landed only when it leaves the pile, or the press puts it away another way", () => {
+  const watched = { ...rows[1], watching: true }, reminded = { ...rows[1], deferred: true };
+  assert.equal(putDownLanded([watched], 4, watched), false, "Mark done on a watched row: still on the pile, not landed");
+  assert.equal(putDownLanded([], 4, watched), true, "gone from the pile: landed");
+  assert.equal(putDownLanded([watched], 4, rows[1]), true, "Watch it: the press put it under Watching");
+  assert.equal(putDownLanded([reminded], 4, watched), true, "Remind me on a watched row: For later");
+  assert.equal(putDownLanded([reminded], 4, reminded), false, "Mark done on a reminded row: still For later, not landed");
 });
 
 // A REPORT THAT RE-RAN ON THE TABLE (the owner, 2026-11-02): its row has a new key and answers to the old one the card still holds. A press

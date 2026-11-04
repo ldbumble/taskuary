@@ -2731,6 +2731,10 @@ def resume_asking(actor: str = 'startup') -> list:
     return out
 
 
+HANDED_OVER = ("THE OWNER HANDED THIS TO YOU: triage first read it as the owner's to do themselves, and the owner chose an agent instead. "
+               "Do the work - what the summary says about who does it was triage's guess, not the owner's instruction.")
+
+
 class ContinueBody(BaseModel):
     note: str | None = None          # what to tell it as it picks up - optional
     images: list[str] = []           # pictures to go with it (/api/prompt-image)
@@ -4142,7 +4146,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     # regular workspace. Reject stale/deleted agent names instead of silently accepting a typo.
     if body.agent and not store.get_agent(body.agent):
         raise HTTPException(422, f'unknown agent: {body.agent}')
-    task_kind = str(task.get('Kind') or '').lower()
+    task_kind = was = str(task.get('Kind') or '').lower()
     requested = str(body.kind or '').lower()
     if requested and requested not in task_kinds.AGENT:
         raise HTTPException(422, 'kind must be general or coding')
@@ -4196,6 +4200,9 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         typed = prompt = str(body.instruction or '').strip()
         if not prompt and not history:
             prompt = str(task.get('Summary') or task.get('Title') or '').strip()
+            # ...and a task triage left to the owner is the agent's now: its Summary said "Alex makes both changes by hand", and the agent
+            # the owner sent it to read that as its orders and did nothing (the overnight run, 2026-11-03)
+            if was not in task_kinds.AGENT and prompt: prompt += '\n\n' + HANDED_OVER
         # ...the Summary is Taskuary's brief, never the owner's words: pressed with nothing typed, the pane drew it under YOU (2026-11-03)
         if prompt:
             background.add_task(session.send_prompt, prompt, brief=not typed)

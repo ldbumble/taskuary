@@ -10,7 +10,10 @@ import { askWidth, startHarness } from "./harness.mjs";
    inside it while it is open, never on the bar. A spine's press opens its pane and starts the step there - Hand it to a person a compose
    card in Close out. Open, a pane wears a white strip across its top: its name, its moves and the arrows that fold it back. A live agent's bar is Back, Next and Stop and save. The chat is a small pill in the
    corner, apart from the bar, typeable at rest: typing opens it out of its corner into the window, and a line sent lands in it.
-   And no pane is a dead end: every open task's open Agent pane and Close out carry their own way on. Invented people only. */
+   And no pane is a dead end: every open task's open Agent pane and Close out carry their own way on.
+   WHERE THE CHAT IS HOME (phase 4, Task 4.1: a general or reply task) the task's own moves - Mark done first, Close with a note, Attach a
+   file, Share - ride the Agent's spine and strip instead of Close out's, a live general agent's slim strip too; a coding task keeps them on
+   Close out. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let CUR = "[data-tq-canvas-item]";
 const openTask = async (page, id) => {
@@ -59,7 +62,9 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Invoice 88213/));
       await openSec(page, "close");
       const m = await look(page);
-      assert.deepEqual(m.agent.moves.map((x) => x.word), ["Send to agent"], JSON.stringify(m.agent));
+      // ...a reply task's home is its chat (Task 4.1): Mark done leads the Agent's spine, the task's own moves after its stage move
+      assert.deepEqual(stageWords(m.agent), ["Send to agent"], JSON.stringify(m.agent));
+      assert.equal(m.agent.moves[0]?.word, "Mark done", JSON.stringify(m.agent));
       assert.ok(m.agent.between && m.agent.rule, "between the pane's name and its status, under a rule");
       // ...and the moves stand out but not all the same (the owner, 2026-10-29): a stage move outlined in the slate, slate words on white; Mark
       // done the same with a stronger edge; the title bar's other moves quiet words in a faint-edged white pill (the owner, 2026-10-29: "these
@@ -79,7 +84,9 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       // ...the bar is Back and Next alone (the owner, 2026-10-29); the task's own moves ride on Close out, the title bar has none (2026-10-30)
       assert.deepEqual(m.bar.filter((x) => !/Back$|^Next/.test(x)), [], `the bar: ${m.bar}`);
       assert.deepEqual(m.title, [], `the title bar: ${m.title}`);
-      assert.ok(["Mark done", "Close with a note", "Share"].every((x) => m.head.includes(x)), `Close out's moves: ${m.head}`);
+      const agentWords = m.agent.moves.map((x) => x.word);
+      assert.ok(["Mark done", "Close with a note", "Share"].every((x) => agentWords.includes(x)), `the Agent's spine: ${agentWords}`);
+      assert.ok(!m.head.some((x) => TASK_MOVE.test(x)), `Close out no longer carries them: ${m.head}`);
     });
 
     await t.test("an open pane's white strip: its name, its moves, and arrows that fold it back to its spine", async () => {
@@ -105,11 +112,12 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await page.waitForFunction((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`)]
         .some((b) => b.textContent.trim() === "Redraft"), { timeout: 8000 }, CUR).catch(() => {});
       const m = await look(page);
-      // ...Mark done first (the owner, 2026-11-02: "Mark done should always be the first button in the Close out tab"), its own moves after
-      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 3), ["Mark done", "Redraft", "Hand it to a person"], JSON.stringify(m.close));
+      // ...Close out's spine its own moves alone; Mark done is the open Agent's, first on its strip (Task 4.1)
+      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 2), ["Redraft", "Hand it to a person"], JSON.stringify(m.close));
+      assert.ok(!m.head.includes("Mark done"), `${m.head}`);
       assert.ok(m.close.between && m.close.rule);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
-      assert.ok(m.head.includes("Mark done"), `${m.head}`);
+      assert.equal(m.pane.agent[0], "Mark done", `the Agent's strip: ${m.pane.agent}`);
       assert.ok(await page.$(`${CUR} [data-tq-run-form]`), "the agent's own form carries its start");
     });
 
@@ -128,7 +136,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Invoice 88213/));
       await openSec(page, "from");
       const m = await look(page);
-      assert.deepEqual([m.agent.moves.map((x) => x.word), stageWords(m.close)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
+      assert.deepEqual([stageWords(m.agent), stageWords(m.close)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
+      assert.equal(m.agent.moves[0]?.word, "Mark done", "Mark done on the Agent's spine");
       assert.deepEqual([...m.pane.from].sort(), [...FROM, "Change ▾"].sort(), `Came from open: its heading carries Not a task, Remind me, Watch it and Change ${JSON.stringify(m.pane)}`);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-n]`);
@@ -197,6 +206,61 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await page.click("[data-tq-box-close]");
       await page.waitForFunction(() => !document.querySelector(".tq-chat-unit .tq-compose-box[data-tq-open]")
         && document.querySelector(".tq-chat-unit .tq-compose-box").getBoundingClientRect().width >= 300, { timeout: 5000 });
+    });
+
+    // ...A CODING TASK KEEPS ITS THREE (Task 4.1): Came from | Agent | Close out, and Mark done first on Close out's spine and strip
+    await t.test("a coding task keeps three sections, its Mark done on Close out", async () => {
+      const made = await (await fetch(`${hz.fixtureApi}/api/tasks`, { method: "POST", headers: { "X-Taskuary-Token": hz.token, "Content-Type": "application/json" },
+        body: JSON.stringify({ Title: "Fix the export date format", Summary: "The census export writes dates as MM/DD in northwind/ledger", Kind: "coding" }) })).json();
+      assert.ok(made.taskId, JSON.stringify(made));
+      await openTask(page, made.taskId);
+      const slots = await page.$$eval(`${CUR} [data-tq-slot]`, (xs) => xs.map((x) => x.dataset.tqSlot));
+      assert.deepEqual(slots, ["from", "agent", "close"], "a coding task's three sections");
+      await openSec(page, "agent");
+      await page.waitForFunction((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`)]
+        .some((b) => b.textContent.trim() === "Mark done"), { timeout: 8000 }, CUR).catch(() => {});
+      const m = await look(page);
+      assert.equal(m.close.moves[0]?.word, "Mark done", `Close out's spine: ${JSON.stringify(m.close)}`);
+      assert.ok(!m.pane.agent.includes("Mark done"), `not on the Agent: ${JSON.stringify(m.pane)}`);
+      await openSec(page, "close");
+      assert.equal((await look(page)).pane.close[0], "Mark done", "first on Close out's strip");
+    });
+
+    // ...and a LIVE GENERAL AGENT's slim strip carries Mark done beside Stop and save where the chat is home: Close out is no tab of its own
+    // to carry it there. Nothing presses it. The demo starts no agent, so its live session is answered here
+    await t.test("a live general agent on a chat-home task: Mark done on its strip, beside Stop and save", async () => {
+      const tid = id(/^Year-end audit/);
+      const ses = { sid: "g-live", taskId: tid, alive: true, busy: true, mode: "assistant", cli: "taskuary", agent: "general", provider: "Claude Code",
+        trace: [], trace_revision: 0 };
+      // ...the task's own read carries the session too, else the page reads it as gone and puts the live pane out
+      const detail = { ...(await (await fetch(`${hz.fixtureApi}/api/tasks/${tid}`, { headers: { "X-Taskuary-Token": hz.token } })).json()), session: ses };
+      const answer = (req) => {
+        const p = new URL(req.url()).pathname, json = (body) => req.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+        if (req.method() === "GET" && p === "/api/terminals") return void json({ data: [ses] });
+        if (req.method() === "GET" && p === `/api/tasks/${tid}`) return void json(detail);
+        if (req.method() === "GET" && p === `/api/tasks/${tid}/assistant`) return void json({ session: ses, starting: false, earlier: null,
+          messages: [{ id: "comment-901", role: "assistant", createdAt: new Date().toISOString(), content: [{ type: "text", text: "Gathering the fixed asset register for Erin Blake." }] }],
+          providers: [{ id: "cli:claude", label: "Claude Code", model: "" }] });
+        page.fixtureRequestGuard(req);
+      };
+      page.off("request", page.fixtureRequestGuard); page.on("request", answer);
+      try {
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
+        await openTask(page, tid);
+        const strip = `${CUR} [data-tq-pane-strip=agent][data-tq-live]`;
+        await page.waitForSelector(`${strip} [data-tq-live-done] button[data-tq-verb=done]`, { timeout: 15000 })
+          .catch(async () => assert.fail(`no Mark done on the live strip: ${await page.evaluate((s) => document.querySelector(s)?.outerHTML.slice(0, 2000) || "no live strip", strip)}`));
+        const st = await page.$eval(strip, (e) => ({ moves: [...e.querySelectorAll("button")].map((b) => b.dataset.tqVerb || b.dataset.tqStripFold || ""),
+          disabled: e.querySelector("[data-tq-verb=done]").disabled, h: Math.round(e.getBoundingClientRect().height) }));
+        assert.ok(st.moves.includes("save-end") && !st.disabled && st.h <= 34, `Mark done beside Stop and save, the strip still slim: ${JSON.stringify(st)}`);
+        const task = await (await fetch(`${hz.fixtureApi}/api/tasks/${tid}`, { headers: { "X-Taskuary-Token": hz.token } })).json();
+        assert.ok(!["done", "dropped"].includes(String(task.task?.Status)), "nothing pressed it");
+      } finally {
+        page.off("request", answer); page.on("request", page.fixtureRequestGuard);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
+      }
     });
 
     await t.test("no dead end: every open task's open Agent pane and Close out carry their own way on", async () => {

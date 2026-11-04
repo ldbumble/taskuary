@@ -21,12 +21,14 @@ test("a reply sent from here is Close out's: the stage stays drafted and Close o
 test("once open, the main view and its section are held: only a new task, its detail landing, an agent starting or ending, a close or a stack re-reads them", () => {
   // ...and a write-up starting or ending (Stop holds the Agent pane while it writes, 2026-10-29)
   // ...and the section the Advisor's decision names once it lands (advice `section`, 2026-10-29: answered outside, it opens on Close out)
-  assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{liveSession \? \"live\" : t\?\.Status\}\|\$\{advisedHeld\}\|\$\{!!writingUp\}`/);
+  assert.match(src, /mainKey = `\$\{selected\}\|\$\{detail\?\.task\?\.TaskId === selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{liveSession \? \"live\" : t\?\.Status\}\|\$\{advisedHeld\}\|\$\{!!writingUp\}\|\$\{home\}`/);
   assert.match(src, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : homeSection\(home, sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\)\) \};/);
   assert.match(src, /const main = mainHeld\.current\.main;/);
   // ...a tab's press opens its section, and it stays open under the owner: only another task, an agent starting or stopping, a close or
   // reopen or the width fold it - not the detail, the Advisor's pick, the write-up's end or in_progress -> open catching up (2026-11-01)
-  assert.match(src, /const pickKey = `\$\{selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{\["done", "dropped"\]\.includes\(t\?\.Status\)\}`;/);
-  assert.match(src, /const section = threeUp \? \(secPick\.key === pickKey \? secPick\.sec : mainHeld\.current\.sec\) : null/);
+  assert.match(src, /const pickKey = `\$\{selected\}\|\$\{!!term\?\.alive\}\|\$\{sessionView\}\|\$\{stacked\}\|\$\{threeUp\}\|\$\{\["done", "dropped"\]\.includes\(t\?\.Status\)\}\|\$\{home\}`;/);
+  assert.match(src, /const picked = secPick\.key === pickKey \? secPick\.sec : mainHeld\.current\.sec;/);
+  // ...a held section the task no longer lays (Close out once a chat-home task drops it) falls back to its home
+  assert.match(src, /const section = threeUp \? \(!picked \|\| slotKeys\.includes\(picked\) \? picked : "agent"\) : null/);
   assert.match(src, /const openSection = \(s\) => \{ if \(!\(paired && isOpen\(s\)\)\) setSecPick\(\{ key: pickKey, sec: s \}\); \};/);
 });

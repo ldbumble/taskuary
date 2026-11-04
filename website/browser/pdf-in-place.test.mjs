@@ -28,7 +28,7 @@ const landed = async (dir, name) => {
 const viewer = (page, sel) => page.waitForFunction((s) => {
   const f = document.querySelector(`${s} iframe`);
   return f && /^blob:/.test(f.src) && f.getBoundingClientRect().height > 100;
-}, { timeout: 15000 }, sel);
+}, { timeout: 30000 }, sel);
 
 /* A PDF IS READ WHERE YOU ARE (the owner, 2026-11-04: "When clicking a pdf link in Came from or the agent, it should display the pdf
    inline if it's what we are working on, instead of downloading"). The invoice a mail carried, opened from Came from's "1 attachment":

@@ -187,14 +187,25 @@ const WorkCtx = React.createContext(null);
 // a turn still running is ONE LINE, "Working on this…", its steps folded under it (the closeout-in-chat spec, 2026-11-04); a turn that
 // ended in its summary keeps them folded above it. A turn with no summary - older ones, a CLI that wrote none, one that died - as ever
 const live = (m) => m?.status?.type === "running" || String(m?.id || "").startsWith("live-");
+// ...and a fold the owner opened stays open: the server's live message is `live-<sid>-<trace revision>` - a new id at every step - and the pane
+// itself mounts again when the owner comes back to the task. Kept by the turn, never by the message's id or the DOM
+const OPEN_FOLDS = new Set();
+const foldKey = (id) => String(id || "").replace(/^(live-.+)-\d+$/, "$1");
 const WorkSteps = ({ data }) => {
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
+  const key = foldKey(useAuiState((s) => s.message.id)), [open, setOpen] = useState(() => OPEN_FOLDS.has(key));
+  useEffect(() => { setOpen(OPEN_FOLDS.has(key)); }, [key]);
   if (!at || (!now && !ended)) return <AgentSteps data={data} />;
-  const n = (data?.steps || []).filter(isWork).length;
-  return <details className="tq-aui-working-fold" data-tq-working={now ? "" : undefined}>
-    <summary>{now ? <><span className="tq-aui-band-dot" />Working on this…</> : n ? plural(n, "step") : "Along the way"}</summary>
-    <AgentSteps data={data} />
-  </details>;
+  // a failure is never folded away: it is its own line under the fold (a retried one that worked is "recovered", and folds with the rest)
+  const all = data?.steps || [], bad = all.filter((s) => s.kind === "error" || s.status === "error"), n = all.filter(isWork).length;
+  const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
+  return <>
+    <details className="tq-aui-working-fold" data-tq-working={now ? "" : undefined} open={open} onToggle={toggle}>
+      <summary>{now ? <><span className="tq-aui-band-dot" />Working on this…</> : n ? plural(n, "step") : "Along the way"}</summary>
+      <AgentSteps data={{ steps: all.filter((s) => !bad.includes(s)) }} />
+    </details>
+    {!!bad.length && <AgentSteps data={{ steps: bad }} />}
+  </>;
 };
 // ...and with none of its steps on screen yet, the line stands alone (AgentBand)
 const AtWork = (props) => {
@@ -214,7 +225,7 @@ const AssistantMessage = () => {
         {!!rest.length && <PublishedPages pages={rest} open />}
         {/* drafts are counted, never drawn as cards here yet: they come inside Next steps with Task 4.2 */}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          onChanged={work.onChanged} />}
+          acts={work.acts} />}
       </div>
     </MessagePrimitive.Root>
   );
@@ -888,7 +899,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
     <AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
-    <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, onChanged: refresh }}>
+    <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])] }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}

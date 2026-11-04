@@ -122,11 +122,14 @@ GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt',
-             'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy', 'WatchedAt', 'WatchBack')
+             'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy', 'WatchedAt', 'WatchBack', 'ThreadJson')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass', 'MeetJson')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
+def thread_pinned(thread, mid):
+    # triage writes mid 0 for "the mail being judged"; a stored reading names the real message
+    return {k: [{**o, 'mid': mid} if isinstance(o, dict) and o.get('mid') == 0 else o for o in v] if isinstance(v, list) else v for k, v in thread.items()}
 def _fold(value):
     """Case-fold for search. casefold() beats lower() on the pairs that differ (German ss)."""
     return str(value or '').casefold()
@@ -1146,6 +1149,8 @@ class SQLiteStore:
             for col in ('WaitingOn', 'WaitingSince', 'WokeMid'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             if 'TrustedThrough' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN TrustedThrough INTEGER')
+            # triage's newest reading of the conversation (triage.thread_of), its mid 0 already the mail's own id
+            if 'ThreadJson' not in tcols: self.cx.execute('ALTER TABLE task ADD COLUMN ThreadJson TEXT')
             # an email slot an agent addressed as "Name <address>" handed the provider the whole string (TQ-0957): the
             # recipient is the address, the name rides beside it (slots.split) - repaired once, on start
             from .slots import split
@@ -4901,6 +4906,9 @@ class SQLiteStore:
         if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'), verdict.get('danger_aim'))
         if isinstance(verdict, dict) and isinstance(verdict.get('meet'), dict) and mid:
             self._exec('UPDATE message SET MeetJson=? WHERE MessageId=?', (json.dumps(verdict['meet']), mid))
+        if isinstance(verdict, dict) and isinstance(verdict.get('thread'), dict) and mid:
+            verdict = {**verdict, 'thread': thread_pinned(verdict['thread'], mid)}
+            if tid: self._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps(verdict['thread'], default=str), tid))
         if isinstance(verdict, dict) and tid: self.judge_task(tid, verdict, 'triage')     # how hard, how sure, what data (the router)
         return self._exec('''INSERT INTO route
             (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
@@ -4917,6 +4925,18 @@ class SQLiteStore:
                         "AND Decision<>'attach' ORDER BY RouteId DESC LIMIT 1", (task_id,))
         try: return json.loads(row['VerdictJson']) if row else None
         except Exception: return None
+    def task_thread(self, task_id):
+        row = self._one('SELECT ThreadJson FROM task WHERE TaskId=?', (task_id,))
+        try: t = json.loads(row['ThreadJson']) if row and row['ThreadJson'] else None
+        except Exception: return None
+        return t if isinstance(t, dict) else None
+    def aside_mids(self, task_id):
+        # every mail triage ever called aside on this task, across its verdicts
+        out = set()
+        for r in self._rows('SELECT VerdictJson FROM route WHERE TaskId=? AND VerdictJson IS NOT NULL', (task_id,)):
+            try: out |= {o['mid'] for o in json.loads(r['VerdictJson'])['thread']['aside'] if isinstance(o['mid'], int) and o['mid']}
+            except Exception: continue
+        return out
     def list_routes(self, task_id): return self._rows('SELECT * FROM route WHERE TaskId=? ORDER BY RouteId', (task_id,))
     def add_comment(self, task_id, actor, actor_type, body):
         return self._exec('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',

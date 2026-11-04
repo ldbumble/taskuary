@@ -105,10 +105,10 @@ def _open_keyed(url):
 # moment a session unsets its own. An owner's session already has full permissions, so this buys nothing there and stays
 # as it was. A stranger's session runs only the agent commands that go over HTTP with its own task-bound token, where the
 # server's STRANGER scope decides.
-AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'board', 'learned', 'upvote', 'downvote', 'comment',
+AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'reply_not_needed', 'board', 'learned', 'upvote', 'downvote', 'comment',
               'search', 'message', 'memory',        # ...and the owner's mail history and memory, which a stranger's task never reads
               'sign_form')                          # ...and the owner's signature, which never goes on a stranger's form
-STRANGER_ACTS = AGENT_ACTS[:11]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
+STRANGER_ACTS = AGENT_ACTS[:12]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
             "session never borrows it. Restart the session from its task.")
@@ -338,6 +338,9 @@ def main():
                          "to approve (you are not sending it), and finishing keeps it instead of redrafting. Say who it is to with --to "
                          "(their name or address) - without it, it answers the newest mail on the task. Use - to read it from stdin.")
     ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
+    ap.add_argument('--reply-not-needed', metavar='WHY', help='the reply waiting on this task is no longer needed (someone else answered, '
+                                                             'the owner already did) - say why in one line. The draft stays, marked, with '
+                                                             "the owner's Send still on it; nothing is sent, deleted or closed.")
     ap.add_argument('--follow-up', action='store_true',
                     help='with --reply: the owner asked you for ANOTHER message after your reply already went - it is saved as a '
                          'follow-up to it. Without this, a second reply to a message already answered (nothing new from them) is refused.')
@@ -456,6 +459,18 @@ def main():
         r, out = got
         print(f"item {args.item}: {'settled' if out.get('state') == 'done' else 'waiting on the owner'}" if out.get('ok')
               else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
+        return
+    if args.reply_not_needed:
+        import os, sys
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no reply to mark'); return
+        got = _post('/api/agent/not-needed', {'task_id': int(tid), 'why': args.reply_not_needed, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
+        if not got: return
+        r, out = got
+        print("marked not needed - the draft stays for the owner, Send still sends it." if out.get('ok')
+              else f"not marked: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.tick or args.untick:
         import os, sys

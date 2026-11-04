@@ -1069,6 +1069,10 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
     if not _same_words(body, rv.get('FinalText') or rv.get('DraftText') or ''):
         store.add_comment(tid, 'you', 'human',
                           f"You replied {SENT_FROM.get(msg['channel'], 'outside Taskuary')}: {body[:300]}")
+        # ...and the task's assistant hears that you already answered, wherever you did (Task 4.5): what is left is its to re-plan.
+        # Never Taskuary's own acknowledgement, which promises an answer and is not one
+        from . import ingest
+        if not ingest.is_ack(store, sent): ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
     return 1
 
 

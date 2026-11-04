@@ -5332,6 +5332,17 @@ def agent_tick(body: AgentTickBody, request: Request):
     if err: raise HTTPException(*err)
     return {'ok': True, 'item': hit['id'], 'text': hit['text'], 'done': bool(body.done)}
 
+class AgentNotNeededBody(BaseModel): task_id: int; why: str; agent: str = 'agent'
+
+@app.post('/api/agent/not-needed')
+def agent_not_needed(body: AgentNotNeededBody, request: Request):
+    """`taskuary --reply-not-needed "<why>"` from the session working the task: the reply waiting there is no longer needed - someone
+    else answered, the owner already did (verdicts.not_needed). The card says so with Send still on it; nothing is sent, deleted or closed."""
+    from . import verdicts
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    return verdicts.not_needed(store, body.task_id, body.why, body.agent)
+
 class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''
@@ -5414,6 +5425,7 @@ async def mcp_rpc(request: Request, task: int = 0):
                              'error': {'code': -32001, 'message': 'agents cannot do this: a session uses the tools of its OWN task'}}, status_code=403)
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
+             'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
              'reply': lambda tid, text, to='', files=(): agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files)), request),
              'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),

@@ -7,7 +7,7 @@ task (TQ-0586 drew an ANALYST on coding work) while general tasks got none at al
 
 Spec: docs/superpowers/specs/2026-09-16-profile-brain-separation-design.md
 """
-import json, unittest
+import inspect, json, unittest
 
 from taskuary import agents as hub_agents, general, triage
 from taskuary.store import MemoryStore
@@ -53,12 +53,19 @@ class WhichRoleTests(unittest.TestCase):
         self.assertEqual(hub_agents.routed_role(s, 'coding', 'analyst'), 'coding')
         self.assertEqual(hub_agents.routed_role(s, 'coding', 'copilot'), 'coding')
 
-    def test_general_takes_the_named_specialist(self):
-        self.assertEqual(hub_agents.routed_role(store(), 'general', 'analyst'), 'analyst')
+    def test_general_takes_the_assistant(self):
+        """A general TASK has one goal, walking the owner through their work (the owner, 2026-11-04): a specialist
+        named for it lands nowhere, and the unassigned task runs on the assistant (general._prompt)."""
+        self.assertEqual(hub_agents.routed_role(store(), 'general', 'researcher'), '')
+        self.assertEqual(hub_agents.routed_role(store(), 'general', 'analyst'), '')
 
     def test_general_with_no_profile_names_nobody(self):
         """No 'default general role' exists, by design - the owner picks at start."""
         self.assertEqual(hub_agents.routed_role(store(), 'general', ''), '')
+
+    def test_a_default_profile_routes_nothing(self):
+        s = store(); s.set_setting('default_profile', 'analyst', 'o')
+        self.assertEqual(hub_agents.routed_role(s, 'general', ''), '')
 
     def test_general_never_falls_through_to_coder(self):
         self.assertNotEqual(hub_agents.routed_role(store(), 'general', ''), 'coding')
@@ -153,6 +160,8 @@ class GeneralRoleTests(unittest.TestCase):
 
 
 class TheWorkersBlockTests(unittest.TestCase):
+    """Triage picks no worker for a task (the owner, 2026-11-04): profiles are for routines and workflows, so the
+    roster is neither shown nor asked for, and the guide no longer tells the model to name one."""
     def prompt(self, **kw):
         """The system prompt classify_intent builds, without calling a model."""
         seen = []
@@ -161,24 +170,26 @@ class TheWorkersBlockTests(unittest.TestCase):
             seen.append(system)
             return '{"intent": "fyi", "why": "x"}'
 
-        triage.classify_intent({'subject': 's', 'body': 'b'}, llm=fake, profiles='- analyst: our figures', **kw)
+        triage.classify_intent({'subject': 's', 'body': 'b'}, llm=fake, **kw)
         return seen[0]
 
-    def test_the_block_asks_on_general_not_coding(self):
-        # the roster rides as labelled data; WHEN to name one is the guide's (section 4, 2026-10-09)
+    def test_triage_is_shown_no_workers(self):
         p = self.prompt()
-        self.assertIn('THE WORKERS -', p)
-        self.assertIn('- analyst: our figures', p)
-        self.assertNotIn('(kind: coding)', p)
-        self.assertIn('When the kind is general and one of THE WORKERS listed below plainly fits the job', p)
+        self.assertNotIn('THE WORKERS', p)
+        self.assertNotIn('Which worker', p)
+        self.assertNotIn('profiles', inspect.signature(triage.classify_intent).parameters)
 
-    def test_the_block_says_coding_needs_no_profile(self):
-        self.assertRegex(self.prompt(), r'Coding needs no worker')
-
-    def test_the_block_survives_an_operator_document(self):
-        """The owner's store holds a TRIAGE.md that REPLACES INTENT_SYSTEM (triage.py:408). The
-        rule has to ride in the appended block or it never reaches that install."""
+    def test_an_operator_document_is_shown_none_either(self):
         p = self.prompt(system='My own triage document. Answer JSON with intent, kind, checklist, "summary".')
         self.assertIn('My own triage document', p)
-        self.assertIn('THE WORKERS', p)
-        self.assertNotIn('(kind: coding)', p)
+        self.assertNotIn('THE WORKERS', p)
+
+
+class TheHandOffNamesNoWorkerTests(unittest.TestCase):
+    """The assistant's hand-off follows triage (the owner, 2026-11-04): a general job runs on the assistant, so the
+    model is neither offered profiles to name in `as` nor told it may."""
+    def test_regular_agent_takes_no_as(self):
+        from taskuary import concierge, toolcatalog
+        self.assertNotIn('`as`', toolcatalog._DECIDE['regular_agent'])
+        self.assertEqual(toolcatalog.HINTS['regular_agent'], 'text, new?')
+        self.assertNotIn('`as`', concierge.read_op(store(), 'agents.list', {}))

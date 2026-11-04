@@ -318,18 +318,16 @@ class ReadsTests(unittest.TestCase):
             out = concierge.say(s, 'can you do this for me', llm=lambda system, user, **kw: answer)
         return s, out, out.get('proposal') or {}
 
-    def test_an_ask_for_a_worker_that_fits_picks_it_and_starts_it(self):
-        """The owner, 2026-09-24: "if we have profile for it it should start a general agent" - the worker is chosen; and
-        2026-11-02 (superseding 2026-10-01's "never"): "why can't assistant start an agent. i'm okay with that" - the words start it."""
+    def test_a_general_hand_off_runs_the_assistant_whatever_worker_it_names(self):
+        """2026-11-02 (superseding 2026-10-01's "never"): "why can't assistant start an agent. i'm okay with that" - the words
+        start it. And 2026-11-04: a general agent working a TASK walks the owner through their work - profiles are for
+        routines, so a worker the model names is not who takes it, and the line names nobody."""
         s, out, prop = self._handoff('Research job.' + chr(10) + 'CALL: {"kind": "regular_agent", "params": {"text": "find out what the CLI Anything project does", "as": "researcher"}}')
         self.assertTrue(prop.get('auto'), prop)
         self.assertNotIn(concierge.WAITS, out['say'])
         self.assertTrue(prop.get('clear'), prop)
-        self.assertEqual(prop['params']['profile'], 'researcher')
-        self.assertIn('researcher', out['say'])
-        # ...and the task it makes is the researcher's, so the session is seeded with the researcher's rules
-        t = concierge.setup_task(s, 'find out what it does', 'owner', kind='general', agent_job=True, profile='researcher')
-        self.assertEqual(s.get_task(t['taskId'])['Assignee'], 'agent:researcher')
+        self.assertIsNone(prop['params'].get('profile'))
+        self.assertNotIn('The researcher takes it', out['say'])
 
     def test_a_worker_nobody_named_is_asked_about_not_guessed(self):
         # ...it starts on the default worker (2026-11-02), never on one guessed from the words

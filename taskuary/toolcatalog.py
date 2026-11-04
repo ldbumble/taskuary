@@ -421,7 +421,7 @@ _DECIDE = {
     'send_close':      'the same send, then the task closes - unless an agent or anything else on it still waits',
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
-    'regular_agent':   ('send it to an agent that does not write code - `text`: the job; `as`: a profile from agents.list, only when one fits; '
+    'regular_agent':   ('send it to an agent that does not write code - `text`: the job; '
                         '`new`: true when the job is NOT about the item on the table - it becomes a task of its own. Never for Taskuary\'s own '
                         'settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new'),
     'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
@@ -558,7 +558,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'task.create_from_text': 'kind, text, channel?, to?', 'report.route': 'line, how, to?', 'pipe.remove': 'select, learn?','agents.stop': 'refs|all', 'page.open': 'page, query?', 'pipe.block': 'select, how?', 'pipe.mine': 'select', 'rule.change': 'about, how?', 'hub.vote': 'post, up?', 'memory.remember': 'note, about?, section?, replaces?', 'memory.wrong': 'key, how?', 'button.light': 'button, ref?, note?', 'app.repair': 'name, how', 'issue.draft': 'kind, trying, happened', 'pipe.clear': 'select, scope?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until', 'meeting.new': 'who?, about?, when?, minutes?'}
 

@@ -3191,13 +3191,10 @@ def read_op(store, kind: str, params: dict) -> str:
                 f"{'has a key' if c['has_secret'] else 'no key yet'}, last sync {c['last_sync'][:16] or 'never'}"
                 + (f"{NEWLINE}last error: {c['last_error']}" + (f" (the fix: {c['fix']})" if c.get('fix') else '') if c['last_error'] else ''))
     if kind == 'agents.list':
-        from . import appfacts, agents as hub_agents
-        # ...and the WORKERS a hand-off can name ([researcher]) - they rode every turn as their own block until the
-        # prompt went to progressive disclosure (2026-09-25)
-        roster = hub_agents.roster(store).strip()
+        from . import appfacts
+        # a hand-off names no profile: a general task runs on the assistant (the owner, 2026-11-04)
         return ('agents: ' + ', '.join(f"{a['name']} ({a['kind']}{'' if a['active'] else ', off'})" for a in appfacts.agents(store))
-                + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store))
-                + (NEWLINE + 'profiles a hand-off can name in `as`:' + NEWLINE + roster if roster else ''))
+                + NEWLINE + 'brains: ' + '; '.join(appfacts.brains(store)))
     if kind == 'repos.list':
         from . import agents as _ag, terminal as term
         if not _coding(store): return f'{_ag.no_coding_why(store)} - there is no coding agent here, so no repositories to name.'
@@ -4713,15 +4710,11 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
                 choices = term.known_repos(store)
                 label = buttons.label('coding_agent')
             else:
-                # ...and a general one names its WORKER - the profile the model picked off the roster, validated
-                # the way triage's pick is (agents.routed_role). Typed in the chat it used to get the plain default
-                # agent even with a researcher on the roster for exactly this (the owner, 2026-09-24)
-                from . import agents as hub_agents
-                role = hub_agents.routed_role(store, 'general', decision.get('as') or '')
-                params['profile'] = picked.get('agent') or role or None      # the box's own profile pick wins
-                clear = bool(role) or not hub_agents.roster(store).strip()
-                label = buttons.label('regular_agent')         # the worker picked is said in the line, never in the button's name
-                if role: note = f' The {role} takes it.'
+                # ...and a general one runs on the assistant: a general agent working a TASK walks the owner through their work,
+                # so the model names no worker (the owner, 2026-11-04 - profiles are for routines). Only the agent box's own pick rides
+                params['profile'] = picked.get('agent') or None
+                clear = True
+                label = buttons.label('regular_agent')
     elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message

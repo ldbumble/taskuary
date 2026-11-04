@@ -119,13 +119,9 @@ test("Docs sends you to the one screen that holds both roads", () => {
   assert.match(read("AgentsPanel.jsx"), /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\}/);
 });
 
-test("the profiles list already scrolls, and a row says whether it reaches the router", () => {
+test("the profiles list already scrolls", () => {
   // R5: this list already had overflowY - this asserts it stayed, not that it was just added
   assert.match(docs, /section === "profiles"[\s\S]{0,2400}overflowY: "auto"/);
-  // a row not on the roster must say so where the list already is, not just inside the open document
-  assert.match(docs, /const rosterChip = \(pr\) => /);
-  assert.match(docs, /"not routed"/);
-  assert.match(docs, /"on the roster"/);
 });
 
 // Fix round 1: the server slugifies a name before writing it and echoes back the slug, but a row
@@ -155,16 +151,6 @@ test("slug matches the server's own rule (taskuary/skillimport.py's save())", ()
   assert.equal(slug("My Skill"), "my-skill");
   assert.equal(slug("  --Weird__Name!! "), "weird-name");
   assert.equal(slug(""), "");
-});
-
-test("a profile row's roster state comes from the server, and the open profile shows the line triage reads", () => {
-  // ONE implementation of "does triage see this worker" (agents.roster_line): the row counts members
-  // the server gave a line, and the card shows that line - or the reason there is none - verbatim.
-  assert.match(docs, /const seen = r\.roster \|\| /);
-  assert.match(docs, /if \(seen\.line\) g\.onRoster \+= 1;/);
-  assert.doesNotMatch(docs, /triage_enabled !== false\) g\.onRoster/);
-  assert.match(docs, /WHAT TRIAGE SEES/);
-  assert.match(docs, /not on the roster — \$\{why\}/);   // one line per REASON, however many members share it
 });
 
 test("an own profile can be removed from Docs at once, with Undo in place - it never asks (the owner, 2026-10-21)", () => {

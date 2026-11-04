@@ -83,25 +83,20 @@ class RoleTests(unittest.TestCase):
 
 
 class DefaultProfileTests(unittest.TestCase):
-    def test_general_work_triage_named_nobody_for_goes_to_the_default(self):
-        s, _ = setup()
-        s.upsert_agent('ap', 'accounts-payable', 'cli', '{}'); s.upsert_agent('researcher', 'research', 'cli', '{}')
-        self.assertEqual(agents.routed_role(s, 'general', ''), '')        # blank keeps the old answer
-        s.set_setting('default_profile', 'ap', 'o')
-        self.assertEqual(agents.routed_role(s, 'general', ''), 'ap')
-        self.assertEqual(agents.routed_role(s, 'general', 'invented'), 'ap')
-        self.assertEqual(agents.routed_role(s, 'general', 'researcher'), 'researcher')   # a better fit still wins
+    def test_general_work_goes_to_the_assistant(self):
+        """A general agent working a TASK walks the owner through their work (the owner, 2026-11-04): applying a
+        role adds its worker for routines and sets no default for the mail, and an old default routes nothing."""
+        s, cfg = setup()
+        with mock.patch.object(playbooks, 'folder', return_value=Path(tempfile.mkdtemp())), mock.patch.object(config, 'save'):
+            out = roles.apply(s, cfg, 'ap')
+        self.assertFalse(s.get_setting('default_profile'))
+        self.assertNotIn('default_profile', out)
+        self.assertEqual(agents.routed_role(s, 'general', ''), '')
+        self.assertEqual(agents.routed_role(s, 'general', 'ap'), '')
+        s.set_setting('default_profile', 'ap', 'o')                       # one an older version wrote
+        self.assertEqual(agents.routed_role(s, 'general', ''), '')
         self.assertEqual(agents.routed_role(s, 'coding', ''), 'coding')
         self.assertEqual(agents.routed_role(s, 'task', ''), '')           # the owner's own list stays theirs
-
-    def test_a_coding_or_switched_off_default_routes_nothing(self):
-        s, _ = setup()
-        s.set_setting('default_profile', 'coding', 'o')
-        self.assertEqual(agents.routed_role(s, 'general', ''), '')
-        s.upsert_agent('ap', 'accounts-payable', 'cli', '{}'); s.set_setting('default_profile', 'ap', 'o')
-        self.assertEqual(agents.routed_role(s, 'general', ''), 'ap')
-        s._exec("UPDATE agent SET Active=0 WHERE Name='ap'")
-        self.assertEqual(agents.routed_role(s, 'general', ''), '')
 
 
 class WorkflowRunsAsItsWorkerTests(unittest.TestCase):

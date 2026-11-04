@@ -15,6 +15,12 @@ def test_claudes_retries_are_said_while_it_cannot_reach_its_servers():
     assert agents._live_line({'type': 'system', 'subtype': 'hook_response'}) is None            # the other system events stay quiet
 
 
+def test_the_agent_is_told_its_reply_is_in_close_out_not_below():
+    """\"Your reply to her is drafted below\" said the agent, over a draft that is Close out's to show, beside its answer."""
+    from taskuary import selfclose
+    assert 'The owner reads it in Close out, beside your answer, never in it' in selfclose.REPLY_LINE
+
+
 class Ses:
     def __init__(self): self.sent = []
     def send_prompt(self, text, *a, **kw): raise RuntimeError("claude: API Error: Connection refused (ECONNREFUSED)")

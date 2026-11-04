@@ -314,7 +314,7 @@ const together = (run) => {
   }
   if (k === "search") return `Searched files for ${listOf(run.map((s) => s.pattern && quoted(s.pattern)))}`;
   if (k === "web") return `Searched the web for ${listOf(run.map((s) => s.q && quoted(s.q)))}`;
-  if (k === "page") { const h = [...new Set(run.map((s) => s.host).filter(Boolean))]; return h.length === 1 ? `Read ${n} pages on ${h[0]}` : `Read ${n} pages (${listOf(h)})`; }
+  if (k === "page") { const h = [...new Set(run.map((s) => s.host).filter(Boolean))]; return h.length === 1 ? `Read ${n} pages on ${h[0]}` : h.length ? `Read ${n} pages (${listOf(h)})` : `Read ${n} web pages`; }
   if (k === "mail" && run.every((s) => s.q !== undefined)) return `Searched your mail for ${listOf(run.map((s) => s.q && !s.q.includes("$") && quoted(s.q)))}`;
   if (k === "edit") return `Changed ${n} files`;
   return run.every((s) => s.summary === run[0].summary) ? `${run[0].summary} (${n} times)` : null;

@@ -8845,11 +8845,8 @@ def agents():
     head = hub_agents.default_agent(store)
     rows = sorted(store.list_agents(), key=lambda a: a['Name'] != head)
     profs = hub_agents.profiles(store)
-    # `roster` is the line triage actually reads for this worker, or why there is none - answered
-    # HERE so the Docs page shows the router's real view instead of re-deriving it from Config.
     return {'data': [{**a, 'installed': hub_agents.runs_here(profs.get(a['Name']) or {}),
                       'rules_doc': hub_agents.profile_document(store, a['Name']),
-                      'roster': dict(zip(('line', 'reason', 'code'), hub_agents.roster_line(store, a))),
                       'purpose': hub_agents.profile_purpose(a['Name'], profs.get(a['Name']) or {}, a.get('Kind') or 'coding')}
                      for a in rows],
             'config': cfg.get('agents', {}), 'default': head,
@@ -8907,8 +8904,6 @@ def put_agent(name: str, body: dict):
     # answer, asked when work starts. "Choose a configured CLI provider" refused every profile on a box with none connected
     profile['kind'] = profile.get('kind') or hub_agents.DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind') or 'coding'
     profile['purpose'] = hub_agents.profile_purpose(name, profile, profile['kind'])
-    if profile.get('triage_enabled', True) and not profile['purpose']:
-        raise HTTPException(422, 'Describe when triage should choose this profile, or turn off automatic triage routing')
     if profile.get('rules_doc') and not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', str(profile['rules_doc'])):
         raise HTTPException(422, 'Invalid rules document name')
     rules_doc = profile.get('rules_doc')
@@ -8920,7 +8915,7 @@ def put_agent(name: str, body: dict):
     cli_connections.sync(cfg, store, name)
     rules_doc = hub_agents.ensure_profile_document(store, name)
     store.audit('agent', 0, 'save', ACTOR, detail=name)
-    return {'ok': True, 'rules_doc': rules_doc, 'triage_available': profile.get('triage_enabled', True) is not False and bool(profile['purpose'])}
+    return {'ok': True, 'rules_doc': rules_doc}
 
 @app.get('/api/roles')
 def roles_list():

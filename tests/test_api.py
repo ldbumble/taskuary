@@ -619,7 +619,7 @@ class ApiTests(unittest.TestCase):
                 'cwd_map': {'o/r': 'C:/src/r'}, 'kind': 'coding',
                 'purpose': 'writes and changes code, in a repository'}
         self.assertEqual(c.put('/api/agents/uitest', json=prof).json(),
-                         {'ok': True, 'rules_doc': 'coding', 'triage_available': True})
+                         {'ok': True, 'rules_doc': 'coding'})
         # the model names the BRAIN's gear, so it lands on the connection and leaves the worker:
         # a profile has nothing to do with which model runs it (the 2026-09-16 spec)
         role = {k: v for k, v in prof.items() if k not in ('model', 'provider')}

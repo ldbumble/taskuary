@@ -818,55 +818,11 @@ def ensure_profile_document(store, name: str) -> str:
     return doc
 
 
-# One worker's purpose, on the roster line. Bounded HERE, not where it is saved: the 2000-char cap
-# on the whole roster (triage.py) is a budget shared by every worker in the loop, and only the code
-# assembling that shared list knows how many lines are competing for it. An imported skill's raw
-# `description` can be a multi-sentence folded block (skillimport.py) that would otherwise crowd
-# every other worker off the end of a prompt that just truncates.
-ROSTER_PURPOSE_MAX = 200
-
 # The kinds that mean "works a repository". `cli` is the legacy spelling older databases use.
 CODING_KINDS = ('coding', 'cli')
 # Work that can still be dispatched. An allowlist rather than a list of endings, so a status added
 # later cannot quietly make a repair start rewriting finished tasks (the store also has `dropped`).
 LIVE_STATUSES = ('open', 'in_progress')
-
-
-def roster(store) -> str:
-    """The workers triage may choose between: one line each, name and purpose. Same shape as the
-    playbook menu (playbooks.menu) because triage validates the answer against these very lines -
-    the roster is DATA the owner controls, never a vocabulary baked into the prompt.
-
-    GENERAL roles only. A coding task has exactly one role and triage does not choose it
-    (routed_role), so offering the coding profiles here is what let `copilot` - a CLI, not a
-    worker - be named on TQ-0588's coding work."""
-    return '\n'.join(l for l, *_ in (roster_line(store, a) for a in store.list_agents()) if l)
-
-
-def roster_line(store, a: dict) -> tuple:
-    """(line, reason, code) for one agent row: the EXACT line triage reads for it, or '' plus why
-    there is none. roster() is assembled from this and the Docs page shows it per profile, so "does
-    triage see this worker" has one implementation. It used to have two - this rule here and a count
-    of `triage_enabled` in JSX - and the JSX one said "on the roster" for CODING.md, which triage can
-    never choose. The router reads this ONE LINE per worker; the session it picks gets the document.
-
-    `code` is the same answer in a word a UI can switch on, because the four of these are NOT one
-    situation and a chip that called them all "not routed" said the opposite of the truth for the
-    commonest: every coding task goes to CODING.md, the router simply is not what sends it there
-    (the owner, 2026-09-17: the coding document is not routed - it is the default for every coding task).
-    Reading the prose to tell them apart would be a second implementation of this rule.
-    """
-    if not a.get('Active', 1): return '', 'switched off', 'off'
-    if str(a.get('Kind') or '').lower() in CODING_KINDS:
-        return '', 'a coding worker - coding tasks have one role and triage does not choose it', 'coding'
-    try: prof = json.loads(a.get('Config') or '{}')
-    except ValueError: prof = {}
-    if prof.get('triage_enabled') is False:
-        return '', 'not offered new work - "Can be given new work from what comes in" is off', 'not_offered'
-    purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
-    if not purpose: return '', 'no purpose set - triage has nothing to choose it by', 'no_purpose'
-    if len(purpose) > ROSTER_PURPOSE_MAX: purpose = purpose[:ROSTER_PURPOSE_MAX - 1].rstrip() + '…'
-    return f"- {a['Name']}: {purpose}", '', ''
 
 
 def coding_role(store) -> str:

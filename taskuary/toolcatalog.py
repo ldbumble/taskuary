@@ -124,7 +124,7 @@ PURPOSE = {
     # THE TASK PAGE, as tools (2026-09-25). A task tool acts on the task on the table, or on the one `ref` names
     # (TQ-0123) - never a guess. Each is the page's own button.
     'task.update':              ("change a task's priority, title, owner or due day - any of `priority`: regular | important | urgent, "
-                                 "`title`, `assignee`: exactly `owner` (the owner takes it) or `agent:<profile>` (a worker on the roster), "
+                                 "`title`, `assignee`: exactly `owner` (the owner takes it) or `agent:<profile>` (one of the saved profiles), "
                                  "`due`: the day the work is due (2026-10-30, \"friday\", \"2 weeks\", or \"none\" to clear it); `ref` when "
                                  "it is not the one on the table. Any other value is refused with the allowed ones"),
     'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',

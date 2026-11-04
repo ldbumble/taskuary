@@ -115,7 +115,7 @@ test('Connections share CLI commands; Docs profiles are a name and instructions 
   assert.equal(writes[1].name, 'scout');
   assert.equal(writes[1].update.provider, undefined);
   assert.equal(writes[1].update.model, undefined);
-  assert.equal(writes[1].update.triage_enabled, true);
+  assert.equal(writes[1].update.triage_enabled, undefined);
   assert.equal(writes[1].update.cmd, undefined);
   await page.waitForFunction(() => document.body.innerText.includes('SCOUT.md'));
   await clickRail(page, 'Manage profiles');

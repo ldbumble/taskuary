@@ -138,3 +138,81 @@ def test_a_why_heading_inside_the_body_is_not_a_why():
     nl = chr(10); body = nl.join(['Hi Ray.', 'Why: the run moved.', 'It is Friday now and the file goes Thursday.', 'Thanks, Alex'])
     assert responder._answer(lambda *a, **k: body, 's', 'u', 10) == (body, None, None)
     assert responder._answer(lambda *a, **k: body + nl + 'WHY: he asked.', 's', 'u', 10) == (body, None, 'he asked.')
+
+
+# SEND GOES TO THE ASK; AN ASIDE MOVES NOTHING (2026-11-04): a "thanks" on the thread is not news the draft is behind, and Send answers the
+# mail that asked (AnswersMid), not the newest line it saw (MessageId, the freshness marker). Invented people; the provider is a stub.
+from unittest import mock
+from taskuary import verdicts, ingest
+SENT = {'channel': 'email', 'to': ['ray@northwind.example'], 'cc': []}
+ASIDE = {'intent': 'fyi', 'why': 'thanks', 'thread': {'asks': [], 'aside': [{'mid': 0, 'why': 'a thanks'}]}}
+
+
+def line(s, tid, i, who, body, aside=False, conv='conv-9'):
+    a, n = who
+    mid = s.add_message({'TaskId': tid, 'ExternalId': f'x{i}', 'ConversationId': conv, 'Channel': 'email', 'SourceName': 'alex@northwind.example',
+                         'Subject': 'Export', 'FromName': n, 'FromEmail': a, 'SentAt': f'2026-11-04 10:{i:02d}:00', 'BodyText': body, 'Status': 'routed',
+                         'RecipientsJson': json.dumps({'to': ['alex@northwind.example'], 'cc': ['gail@northwind.example']})})
+    s.add_route(mid, tid, 'attach', 1.0, 'triage', [], 'triage', verdict=ASIDE if aside else {'intent': 'reply_only', 'why': 'asks'})
+    return mid
+
+
+RAY, GAIL, ERIN = ('ray@northwind.example', 'Ray Colton'), ('gail@northwind.example', 'Gail Moreno'), ('erin@northwind.example', 'Erin Blake')
+
+
+def asked():
+    s = MemoryStore(); tid = s.create_task({'Title': 'Repair the export', 'Kind': 'task', 'Status': 'open', 'Source': 'email'}, 'router')
+    ask = line(s, tid, 11, RAY, 'Can you repair the export?')
+    rid = s.add_review({'TaskId': tid, 'MessageId': ask, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Hi Ray - repaired.'})
+    return s, tid, ask, rid
+
+
+def test_a_thanks_does_not_mark_the_draft_stale():
+    s, tid, ask, rid = asked(); line(s, tid, 12, GAIL, 'Thanks!', aside=True)
+    assert verdicts.context_moved(s, s.get_review(rid)) == (False, None)
+
+
+def test_a_real_reply_still_moves_it():
+    s, tid, ask, rid = asked(); line(s, tid, 12, GAIL, 'Thanks!', aside=True); real = line(s, tid, 14, RAY, 'Also the September one?')
+    moved, latest = verdicts.context_moved(s, s.get_review(rid))
+    assert moved and latest['MessageId'] == real
+
+
+def test_send_goes_to_the_ask():
+    s, tid, ask, rid = asked(); last = line(s, tid, 13, GAIL, 'Thanks!', aside=True)
+    s.update_review_message(rid, last); s.set_review_answers(rid, ask)
+    seen = []
+    out = verdicts._deliver_review(s, s.get_review(rid), 'Hi Ray - repaired.', 'approve', 'owner', send_fn=lambda snap: seen.append(snap) or SENT)
+    assert out['ok'] and seen[0]['message']['MessageId'] == ask and 'ray@northwind.example' in json.dumps(seen[0]['envelope'])
+    assert s.get_message(ask)['Status'] == s.get_message(last)['Status'] == 'sent'
+
+
+def test_a_review_with_no_answers_mid_sends_to_its_message_as_before():
+    s, tid, ask, rid = asked(); seen = []
+    verdicts._deliver_review(s, s.get_review(rid), 'Hi Ray - repaired.', 'approve', 'owner', send_fn=lambda snap: seen.append(snap) or SENT)
+    assert seen[0]['message']['MessageId'] == ask and s.get_message(ask)['Status'] == 'sent'
+
+
+def test_two_drafts_answer_their_own_mails():
+    s, tid, ask, a = asked(); erin = line(s, tid, 15, ERIN, 'And can you send me the new totals?')
+    b = s.add_review({'TaskId': tid, 'MessageId': erin, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Hi Erin - attached.'})
+    for r in (a, b): s.update_review_message(r, erin)
+    s.set_review_answers(a, ask); s.set_review_answers(b, erin)
+    line(s, tid, 16, GAIL, 'Thanks both!', aside=True)
+    seen = []
+    with mock.patch('taskuary.outbound.reply_to_message', lambda st, msg, body, to=None, cc=None, attachments=None: seen.append((msg['MessageId'], to)) or SENT):
+        for r in (a, b): verdicts.decide(s, s.get_review(r), 'approve', s.get_review(r)['DraftText'])
+    assert [m for m, _ in seen] == [ask, erin] and 'ray@northwind.example' in json.dumps(seen[0][1]) and 'erin@northwind.example' in json.dumps(seen[1][1])
+    assert 'erin@northwind.example' not in json.dumps(seen[0][1])
+    assert [s.get_review(r)['Stale'] for r in (a, b)] == [0, 0]
+
+
+def test_an_aside_mail_is_not_redrafted():
+    s, tid, ask, rid = asked()
+    judged = lambda system, user, **k: json.dumps({'intent': 'reply_only', 'why': 'a thanks', 'title': 'Repair the export', 'summary': 'Gail says thanks.',
+                                                   'thread': {'asks': [], 'aside': [{'mid': 0, 'why': 'a thanks'}]}})
+    with mock.patch.object(ingest, '_spawn') as spawned:
+        out = ingest.ingest_message(s, {'external_id': 'x17', 'channel': 'email', 'from_email': GAIL[0], 'from_name': GAIL[1], 'conversation_id': 'conv-9',
+                                        'subject': 'RE: Export', 'body': 'Thanks!', 'sent_at': '2026-11-04 10:17:00'}, llm=judged)
+    r = s.get_review(rid)
+    assert out.get('task_id') == tid and (r['MessageId'], r['Stale']) == (ask, 0) and not spawned.called

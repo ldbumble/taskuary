@@ -1006,8 +1006,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         went = _carry_on(store, tid, msg, mid, follow, actor)
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
+        # ...unless triage read THIS mail as an aside (a "thanks" on the thread): the draft is no further behind, and stays on what it answers
         behind = store.pending_review(tid, kind='draft')
-        if behind:
+        if behind and not is_aside(follow):
             store.mark_review_stale(behind['ReviewId'])
             # WHATEVER the new line was judged to be. This rewrote the draft only when the follow-up
             # was reply_only, so Ray's second mail - judged a task, because it asked for access -
@@ -2521,6 +2522,12 @@ def _joinable_task(store, tid):
     """An open task, or a DONE one a line can reopen - never a dropped one (not a task, or folded away)."""
     t = store.get_task(tid) if tid else None
     return tid if t and t.get('Status') != 'dropped' else None
+
+
+def is_aside(v: dict | None) -> bool:
+    """Did triage read the mail it judged (mid 0) as an aside on its thread? A missing or partial reading is not one."""
+    th = (v or {}).get('thread')
+    return isinstance(th, dict) and isinstance(th.get('aside'), list) and any(isinstance(o, dict) and o.get('mid') == 0 for o in th['aside'])
 
 
 def owes_owner(v: dict | None) -> bool:

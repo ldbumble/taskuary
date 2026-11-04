@@ -7,5 +7,8 @@ const isReply = (r) => r && r.Kind !== "action" && r.Kind !== "slot" && r.Status
 export const otherPendingReplies = (reviews = [], shown = null) =>
   reviews.filter((r) => isReply(r) && r.ReviewId !== shown?.ReviewId).sort((a, b) => (a.ReviewId || 0) - (b.ReviewId || 0));
 
-// the task's message a pending reply answers - its own MessageId - or null when it is not one of them
-export const draftAnswers = (review, messages = []) => (review?.MessageId && messages.find((m) => m.MessageId === review.MessageId)) || null;
+// the task's message a pending reply answers - the mail that asked (AnswersMid), else its own MessageId - or null when it is not one of them
+export const draftAnswers = (review, messages = []) => {
+  const mid = review?.AnswersMid || review?.MessageId;
+  return (mid && messages.find((m) => m.MessageId === mid)) || null;
+};

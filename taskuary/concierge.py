@@ -5752,6 +5752,55 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
         if llm is None and DELIVERY.get() == DESK: warm(store, actor, changed=True)
 
 
+# A QUESTION ON A REPORT, AN FYI OR A DASHBOARD IS ANSWERED, NEVER ACTED ON (the owner, 2026-11-04: "question on report should not start
+# task"): its own box (ItemSections ItemAsk) sends the turn with the item in its view, area 'item'. The model reads the item whole and answers
+# from it; a CALL, a DECIDE or a VIEW line it writes is dropped, so nothing is filed, started or pressed - the item's own moves do that
+ASKED_ON = ('report', 'fyi', 'dashboard')
+ITEM_ONLY = ("THE OWNER ASKED IN THIS ITEM'S OWN BOX: answer from what is written above, in plain words. Nothing is done from this box - "
+             "no task, no agent, no button, no look-up - so never say you started, filed, sent, changed or looked up anything; if what "
+             "they want needs doing, say which of the item's own buttons does it.")
+
+def asked_on_item(view) -> str | None:
+    """The item kind when the turn came from a report's, an FYI's or a dashboard's own box, else None (a dock turn)."""
+    if not isinstance(view, dict) or view.get('area') != 'item': return None
+    it = view['item'] if isinstance(view.get('item'), dict) else {}
+    return it.get('kind') if it.get('kind') in ASKED_ON else None
+
+
+def item_whole(store, item: dict | None) -> str:
+    """A report, an FYI or a dashboard as its page shows it, bounded: its words, triage's reading of it and its links (_task_whole's twin)."""
+    if not item: return '(the item is no longer on the rail - say so)'
+    m = store.get_message(int(item['mid'])) if item.get('mid') else None
+    out = [facts(store, item)]
+    if m and str(m.get('BodyText') or '').strip(): out.append(f"ALL OF IT:\n{_cut(m['BodyText'], 6000)}")
+    th = store.message_thread(int(item['mid'])) if m else None
+    if th: out.append('TRIAGE READ IT AS: ' + ' | '.join(f'{k}: {_cut(v, 300)}' for k, v in (('what it says', th.get('asking')),
+                      ('what matters to the owner', th.get('your_part')), ('on the owner', '; '.join(th.get('on_you') or []))) if v))
+    try: links = [l for l in (json.loads((m or {}).get('MailMetaJson') or '{}') or {}).get('links') or [] if isinstance(l, list) and len(l) == 2]
+    except (ValueError, TypeError, AttributeError): links = []
+    if links: out.append('ITS LINKS: ' + '; '.join(f'{_cut(w, 80)} -> {_cut(h, 200)}' for w, h in links[:12]))
+    return _cut('\n\n'.join(out), 9000)
+
+
+def _answer_on_item(store, tid: int, text: str, item: dict | None, llm, trace=None, cancel=None) -> dict:
+    record(store, tid, 'user', text)
+    if not llm:
+        say_ = no_brain(); record(store, tid, 'assistant', say_)
+        return {'say': say_, 'options': [], 'chips': [], 'decision': None, 'no_brain': True}
+    try:
+        raw = str(llm(turn_system(store, llm), f"{item_whole(store, item)}\n\n{ITEM_ONLY}\n{OWNER_SAYS}{text}\nAnswer them, briefly.",
+                      max_tokens=MAX_TOKENS) or '').strip()
+        from . import pageview
+        raw = parse_decision(parse_call(pageview.take(raw, None)[0])[0])[0]
+        reply, broken = gate(parse_options(raw)[0])
+        if broken or not reply.strip(): reply = LOST
+    except Exception as e:
+        logger.warning(f'concierge: the answer on an item failed - {e}'); reply = LOST
+    if cancel is not None and cancel.is_set(): raise Stopped('stopped by the owner')
+    record(store, tid, 'assistant', reply)
+    return {'say': reply, 'options': [], 'chips': [], 'decision': None}
+
+
 def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
          open_card: str | None = None, images: list | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
@@ -5767,6 +5816,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if item is None: item = funnel.next_item(store, key, items=funnel.full_items(store)) if key else None   # the route already built it
     # ...and a task opened by name or from the rail may not be in the pile at all: it is still what is on screen (2026-10-01)
     if item is None and key: item = funnel.item_for_key(store, key)
+    # ...asked in a report's, an FYI's or a dashboard's own box: answered from it, and nothing more (asked_on_item)
+    if asked_on_item(_TURN.get().get('view')): return _answer_on_item(store, tid, text, item, _brain_for(store, tid, llm, trace, cancel), trace, cancel)
     # "1" MEANS THE SAME THING ON BOTH SCREENS. The phone numbers its options because a chat has no
     # buttons, and the owner, having answered by number there, typed "1" on the desktop too - where it
     # was just a digit for the model to interpret, so it answered about something else entirely (the

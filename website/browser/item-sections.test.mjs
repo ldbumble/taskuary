@@ -172,3 +172,25 @@ test("an FYI's middle says what it says and what matters to you", { timeout: 240
   assert.match(await page.$eval("[data-tq-fyi-agent]", (e) => e.innerText), /No agent yet/, "the Agent section still says nobody is on it");
   assert.deepEqual(errors, []);
 });
+
+// A QUESTION ON AN FYI ONLY GETS AN ANSWER (the owner, 2026-11-04: "question on report should not start task"): its box answers under itself
+// - the recorded answer ends on a CALL to start an agent, which the item's box drops - and the row is still an FYI, with no task made
+test("typing in an FYI's box shows the answer under it and the row stays an FYI", { timeout: 240000 }, async (t) => {
+  const { page, errors } = await boot(t, { width: 1440, height: 900 });
+  assert.ok(await clickRow(page, await findRow(page, /Regional operations newsletter/)));
+  await settled(page, "fyi");
+  const tasks = () => page.evaluate(() => fetch("/api/tasks", { headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token") } }).then((r) => r.json()).then((j) => (Array.isArray(j) ? j : j.data || []).length));
+  const had = await tasks();
+  assert.ok(had > 0, "the task list was read");
+  await tab(page, "agent"); await sleep(800);
+  await page.type('[data-tq-item-ask="fyi"] [aria-label="Ask about this"]', "anything asked of me here?");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector('[data-tq-item-ask="fyi"] [data-tq-item-answer]', { timeout: 30000 });
+  const a = await page.$eval('[data-tq-item-ask="fyi"] [data-tq-item-said]', (e) => e.innerText);
+  assert.match(a, /You: anything asked of me here\?[\s\S]*Priya only forwarded it so you can read it/, a);
+  assert.doesNotMatch(a, /CALL|task\.create/, a);
+  await sleep(2000);
+  assert.ok(await page.$('[data-tq-item-sections="fyi"]'), "still the FYI on the table");
+  assert.equal(await tasks(), had, "no task was made");
+  assert.deepEqual(errors, []);
+});

@@ -21,7 +21,7 @@ import { terminalOutputBatcher } from "./terminalOutput.js";
 import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane, { LastView } from "./BrowserPane.jsx";
-import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage,
+import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage, isBlankPage,
   splitRatio, viewOnScreen, PHONE_BELOW } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
@@ -763,7 +763,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
         const r = await api.get(`/api/terminals/${sid}/browser`);
         if (stop) return;
         setBrowser(r.data || { open: false });
-        if (r.data?.open) setSeen(true);
+        if (r.data?.open && !isBlankPage(r.data.url)) setSeen(true);      // a page it opened - an empty tab was never one (isBlankPage)
         if (r.data?.open && r.data?.url && !/^about:/.test(r.data.url)) lastPage.current = r.data.url;
       } catch { /* server away for a moment: keep showing what we had */ }
       asking = false;
@@ -786,7 +786,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   // ...and the agent's canvas keeps the view once seen, on its last frame, while the session lives (`ended`)
   const showingBrowser = !!sid && (showsBrowser(browser.open, expectBrowser, seen) || (stack && seen));
   const ended = stack && seen && !browser.open;
-  const layout = layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
+  // ...and an empty tab folds to its chip, as a local file does, until the agent opens a page or something waits on it (isBlankPage)
+  const blank = isBlankPage(browser.url) && !held.length && !turn && !yourTurn && !browser.filling;
+  const layout = layoutFor(width, showingBrowser, folded || ((isLocalPage(browser.url) || blank) && !localOk), stack);
   const onScreen = showingBrowser && viewOnScreen(layout);
   useEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
   const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
@@ -817,7 +819,8 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
       {/* ...and when the agent waits on the owner, the chip says so: at 1024px the agent's "open in the browser beside you" pointed at a
           chip that named only an address (2026-10-25) */}
       {ended ? `browser · closed${lastPage.current ? ` · last on ${shortUrl(lastPage.current, 28)}` : ""}` : !browser.open ? "browser · starting…"
-        : held.length ? "browser · waits for your Approve - open it" : yourTurn ? "browser · your turn - open it" : `browser · ${shortUrl(browser.url, 36) || "open"}`}
+        : held.length ? "browser · waits for your Approve - open it" : yourTurn ? "browser · your turn - open it"
+        : isBlankPage(browser.url) ? "browser · an empty tab - show it" : `browser · ${shortUrl(browser.url, 36) || "open"}`}
     </Box>
   );
   /* A BROWSER THAT WAS OPEN AND CLOSED says so, where its chip or half sat: the pane just vanished, so a crash, a close and a glitch

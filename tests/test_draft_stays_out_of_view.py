@@ -82,3 +82,15 @@ def test_an_acp_call_named_by_its_kind_is_known_by_its_title():
     args = {'text': f'Hi Gail, the password is {SECRET}', 'to': 'Gail Moreno', 'title': 'taskuary: propose_reply'}
     pane, trace, steps = _through_a_session([('tool_call', 'other', {'tool_call_id': 'acp-1', 'args': args})])
     assert 'tool>' in pane and not [w for w in (pane, trace, steps) if SECRET in w]
+
+
+def test_a_claude_hook_on_the_draft_call_keeps_its_body_out_of_the_worker_and_the_approval():
+    """A trusted Claude terminal session has the Taskuary MCP server: its PostToolUse names the tool's target on the worker
+    (witness.claude_notes), and its PermissionRequest writes the approval text (hooks._describe) - both from the hook payload."""
+    from taskuary import hooks, witness
+    inp = {'text': f'Hi Gail, the password is {SECRET}', 'to': 'Gail Moreno'}
+    for ev in ('PostToolUse', 'PostToolUseFailure'):
+        notes = witness.claude_notes({'hook_event_name': ev, 'tool_name': 'mcp__taskuary__propose_reply', 'tool_input': inp})
+        assert notes[0]['target'] == sessionrecord.DRAFT_SHOWN and SECRET not in json.dumps(notes)
+    said = hooks._describe('mcp__taskuary__propose_reply', inp)
+    assert said == f'mcp__taskuary__propose_reply {sessionrecord.DRAFT_SHOWN}' and SECRET not in said

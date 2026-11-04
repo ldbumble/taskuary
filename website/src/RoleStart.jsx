@@ -1,6 +1,6 @@
-// Start from a role: one click from "I do accounts payable" to the worker, its playbooks and its
-// mail. Everything it lays out (roles.py) already had its own page; nobody who is not technical
-// ever found all four, so the role is offered here, where the workers live, until it is taken.
+// Start from a role: one click from "I do accounts payable" to the worker, its playbooks and its daily job - no mail is
+// routed to it: a task's general work runs on the assistant (2026-11-04). Everything it lays out (roles.py) already had its
+// own page; nobody who is not technical ever found them all, so the role is offered here, where the workers live, until it is taken.
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
 import api from "./api";
@@ -10,7 +10,6 @@ import { FAINT, INK } from "./theme.jsx";
 const said = (r) => [
   r.profile_added ? `Added the ${r.profile.toUpperCase()}.md worker.` : `The ${r.profile.toUpperCase()}.md worker was already here.`,
   r.playbooks_added.length ? `Added ${r.playbooks_added.length} playbook${r.playbooks_added.length > 1 ? "s" : ""}.` : "",
-  `Mail with no better-suited worker now goes to ${r.profile}.`,
   r.ledger_narrowed ? `${r.ledger_narrowed} is set to read: every bill becomes a proposal you approve.` : "",
   r.workflow_id ? "The daily portal job is under Reports, in Workflows, switched off until you have signed in to the portal once." : "",
 ].filter(Boolean).join(" ");
@@ -50,7 +49,7 @@ export default function RoleStart({ onApplied }) {
         <DialogTitle sx={{ fontSize: 16 }}>Set up for {open?.title.toLowerCase()}</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: 12.5, color: INK, mb: 1.5 }}>
-            Adds the {open?.profile.toUpperCase()}.md worker and its playbooks, and sends your mail to it when no other worker fits.
+            Adds the {open?.profile.toUpperCase()}.md worker, its playbooks and its daily job.
             Nothing is posted to your ledger without your approval.
           </Typography>
           {open?.portal_needed && (

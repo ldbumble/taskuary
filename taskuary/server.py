@@ -1795,7 +1795,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # the same road the Profiles page's Set up takes (roles.apply) - the chat walked the owner to it
         from . import roles
         # the SERVER's config (the one put_agent saves): `cfg` is a local name further down this function
-        return roles.apply(store, globals()['cfg'], str(p.get('role') or ''), str(p.get('portal') or ''), bool(p.get('route_mail')))
+        return roles.apply(store, globals()['cfg'], str(p.get('role') or ''), str(p.get('portal') or ''))
     if kind == 'pipe.clear':
         from . import concierge
         # a SELECTOR names the set - the model's, checked by select_items - and nothing else clears: a word list matching the
@@ -8916,18 +8916,17 @@ def put_agent(name: str, body: dict):
 
 @app.get('/api/roles')
 def roles_list():
-    """The roles one click sets Taskuary up for (roles.py): a worker, its playbooks, where mail goes."""
+    """The roles one click sets Taskuary up for (roles.py): a worker, its playbooks, its daily job."""
     from . import roles
     return {'data': roles.catalog(store)}
 
 class RoleBody(BaseModel):
     portal: str = ''
-    route_mail: bool = True
 
 @app.post('/api/roles/{name}')
 def roles_apply(name: str, body: RoleBody):
     from . import roles
-    try: return roles.apply(store, cfg, name, body.portal, body.route_mail)
+    try: return roles.apply(store, cfg, name, body.portal)
     except ValueError as e: raise HTTPException(422, str(e))
 
 @app.delete('/api/agents/{name}')

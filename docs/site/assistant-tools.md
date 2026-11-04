@@ -15,7 +15,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text, channel?, to?), task.create_from_message(kind), meeting.new(who?, about?, when?, minutes?), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear(select, scope?), pipe.defer(select, until), pipe.close(select), pipe.remove(select, learn?), pipe.block(select, how?), pipe.mine(select), review.each, button.light(button, ref?, note?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how, to?), report.edit(config), report.delete, advisor.ideas |
-| **app** | settings, connections, scripts, memory, rules, bell, Hub, Board, Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?), problems.dismiss |
+| **app** | settings, connections, scripts, memory, rules, bell, Hub, Board, Search | setting.set(setting, value), connection.create(type), role.apply(role, portal?), connection.test, connection.pause, connection.resume, app.repair(name, how), issue.draft(kind, trying, happened), script.start(name), memory.remember(note, about?, section?, replaces?), memory.wrong(key, how?), people.relate(who), rule.change(about, how?), deleted.restore(what), hub.publish(title, body, topic?, kind?, why_earned?), hub.comment(post, text), hub.vote(post, up?), page.open(page, query?), problems.dismiss |
 | **look** | look-ups - they run at once and change nothing | app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, pipe.read, calendar.read, activity.list, errors.list, memory.about, memory.list, outputs.find, deleted.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, app.health, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -729,11 +729,10 @@ Bring up a connector card to connect it; a second one of a kind opens with its A
 
 ### `role.apply`
 
-Set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. Before calling, ASK the owner, one question at a time: the address of their bill-approval portal (`portal`; fine to leave out), and whether their own non-coding mail should go to that worker (`route_mail`: true or false - when they are only trying it out, false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say they sign in to the portal themselves in the browser pane.
+Set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. Before calling, ASK the owner the address of their bill-approval portal (`portal`; fine to leave out). The workflow is created OFF: after the yes, offer to run it once (report.run), and say they sign in to the portal themselves in the browser pane.
 
 - `role` - ap (accounts payable)
 - `portal` (optional)
-- `route_mail` (optional) - true or false - when they are only trying it out
 
 <p class="runs">Brings up its button for you to press.</p>
 

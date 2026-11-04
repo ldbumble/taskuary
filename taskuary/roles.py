@@ -2,14 +2,13 @@
 
 Everything a role needs already existed as a separate thing to find and fill in: a PROFILE (the
 worker and its rules document, agents.py), PLAYBOOKS (how each kind of job is done, playbooks.py),
-a WORKFLOW (a scheduled job, workflows.py), and the routing that sends mail to the worker. Someone
-who is not technical never assembled the four, so a role is the four written down together, and
-apply() lays them out:
+a WORKFLOW (a scheduled job, workflows.py) and the ledger it checks. Someone who is not technical
+never assembled them, so a role is all of them written down together, and apply() lays them out:
 
-- the profile is an ordinary agent row plus its document (templates/<profile>.md), on the roster;
+- the profile is an ordinary agent row plus its document (templates/<profile>.md), for routines and
+  workflows to name - it is not offered the mail and no default sends mail to it: a task's general
+  work runs on the assistant (the owner, 2026-11-04);
 - each shipped playbook is copied into ~/.taskuary/playbooks, never over one already there;
-- `default_profile` is set, so general work that triage names no worker for lands on this one
-  (agents.routed_role);
 - the role's workflow is created SWITCHED OFF. A scheduled browser job needs a sign-in that only
   the owner can type, so it starts when they have signed in once and turned it on;
 - a ledger the role writes to is narrowed to read when nobody has chosen its Authority: every bill
@@ -56,17 +55,16 @@ def catalog(store) -> list:
     from . import agents
     return [{'name': k, 'title': r['title'], 'blurb': r['blurb'], 'profile': r['profile'],
              'applied': bool(store.get_agent(r['profile'])),
-             'is_default': (store.get_setting('default_profile') or '') == r['profile'],
              'portal_needed': bool(r.get('workflow'))} for k, r in ROLES.items()]
 
 
-def _profile(store, cfg, r, routed: bool = True) -> bool:
-    """The worker - instructions only, run on the default brain like the shipped roles (agents.seed_profiles) - on the
-    triage roster only when the owner's mail is to reach it. An existing one is the owner's and is left as it is."""
+def _profile(store, cfg, r) -> bool:
+    """The worker - instructions only, run on the default brain like the shipped roles (agents.seed_profiles) - off triage's
+    roster, since profiles are for routines and workflows (2026-11-04). An existing one is the owner's and is left as it is."""
     from . import agents, cli_connections
     name = r['profile']
     if name in (cfg.get('agents') or {}) or store.get_agent(name): return False
-    prof = {**agents.cli_inheritance(cfg), 'kind': r['kind'], 'purpose': r['purpose'], 'triage_enabled': bool(routed)}
+    prof = {**agents.cli_inheritance(cfg), 'kind': r['kind'], 'purpose': r['purpose'], 'triage_enabled': False}
     cfg.setdefault('agents', {})[name] = prof
     store.upsert_agent(name, r['kind'], 'cli', json.dumps(prof))
     try: cli_connections.sync(cfg, store, name)
@@ -100,25 +98,18 @@ def _workflow(store, r, portal: str):
                               'ConfigJson': json.dumps(c)}, 'role')
 
 
-def apply(store, cfg, name: str, portal: str = '', route_mail: bool = True) -> dict:
-    """Lay the role out. Returns what changed, so the page and the chat can say it in plain words.
-
-    `route_mail` False sets up the worker and its job WITHOUT moving the owner's mail: no default route, and the
-    worker stays off triage's roster - trying a role out (the owner, 2026-10-08) is not handing over the inbox."""
+def apply(store, cfg, name: str, portal: str = '') -> dict:
+    """Lay the role out. Returns what changed, so the page and the chat can say it in plain words. The owner's mail is never
+    moved: it used to be, by `route_mail` and `default_profile`, until triage stopped picking a worker (the owner, 2026-11-04)."""
     from . import config
     r = ROLES.get(name)
     if not r: raise ValueError(f'unknown role {name!r} - one of {", ".join(ROLES)}')
-    made = _profile(store, cfg, r, route_mail)
+    made = _profile(store, cfg, r)
     if made: config.save(cfg)
     books = _playbooks(r)
-    was = store.get_setting('default_profile') or ''
-    if route_mail and was != r['profile']: store.set_setting('default_profile', r['profile'], 'role')
     narrowed = _ledger(store, r)
     wid = _workflow(store, r, portal.strip())
     out = {'role': name, 'profile': r['profile'], 'profile_added': made, 'playbooks_added': books,
-           'default_profile': r['profile'] if route_mail else was, 'default_was': was, 'mail_routed': bool(route_mail),
-           # a worker that was already here keeps its own roster setting - so triage may still hand it mail
-           'on_roster': bool(json.loads((store.get_agent(r['profile']) or {}).get('Config') or '{}').get('triage_enabled', True)),
            'ledger_narrowed': narrowed, 'workflow_id': wid, 'workflow_title': (r.get('workflow') or {}).get('title', '')}
     store.audit('role', 0, 'apply', 'owner', detail=out)
     logger.info(f'role {name}: {out}')

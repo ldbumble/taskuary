@@ -7439,10 +7439,11 @@ def ms_callback(request: Request, code: str = None, state: str = '', error: str 
     and the tab is told only whether it worked - never a token (escaped, under a CSP, no-store)."""
     import hmac
     from . import msauth
-    # AN ADMIN'S APPROVAL comes back here too (msauth.admin_consent_url): admin_consent=True, or an error, and no code. It carries no
-    # secret and starts no sign-in, so it is answered first, from any browser, as the plain page an admin who may never run Taskuary reads
-    if admin_consent is not None or (state == msauth.ADMIN_STATE and not code):
-        ok, head, line = msauth.admin_return(admin_consent, error, error_description or '')
+    # AN ADMIN'S APPROVAL comes back here too (msauth.admin_consent_url): ADMIN_STATE with a code, or an error - admin_consent=True from a
+    # link made before it. The code is never redeemed and nobody is signed in as the admin: it starts no round, so it is answered
+    # first, from any browser, as the plain page an admin who may never run Taskuary reads
+    if admin_consent is not None or state == msauth.ADMIN_STATE:
+        ok, head, line = msauth.admin_return(admin_consent, error, error_description or '', code)
         return _oauth_tab(ok, line, head=head, tail='')
     if not _is_loopback(request.client.host if request.client else ''):
         return _oauth_tab(False, 'This sign-in only finishes on the computer Taskuary runs on.')

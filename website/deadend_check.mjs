@@ -117,6 +117,7 @@ const WALK_SKIP = {
   "elsewhere": "as Chase them: a slipped follow-up's answer",
   "test_connection": "on a connection's own card, not an item's row - the connection cards are walked by the browser setup tests",
   "next:batch": "shows only on a run of notices read together - the demo's fyi fold away under 'more fyi' instead",
+  "send_close": "Close out's Send and close sends then closes the task - the walk's demo drafts are pressed with Send so the walk can go on; send-and-close.test.mjs presses it and checks the task closes",
   "next:batch_short": "next:batch's word on a desk bar squeezed to ~120px (900-960 with the ask bar, the owner, 2026-11-03) - the walk never runs at that width; press-runs-once.test.mjs reads it",
   "next:read": "the badge a Next press leaves on a report, a dashboard or an fyi it walked past (✓ Read) - a word on the card, not a button; the press is Next's own",
   "split": "opens the split-or-merge drawer; its own press is walked, the reshape itself is the task tests'",

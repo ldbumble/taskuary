@@ -6,7 +6,11 @@ import { spawnSync } from "node:child_process";
 
 const [part, of] = process.argv.slice(2).map(Number);
 if (!(part >= 1 && of >= 1 && part <= of)) { console.error("usage: node browser/shard.mjs <part 1..N> <N>"); process.exit(2); }
-const all = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts["test:browser"].split(/\s+/).filter((a) => a.endsWith(".test.mjs"));
+// ...the walk table runs as a job of its own (ci.yml walk-table): its 61 cases take ~12 minutes alone, and part 1 holding it with 17
+// other files ran past 25 minutes and was cancelled twice (2026-11-04)
+const OWN_JOB = new Set(["browser/walk-table.test.mjs"]);
+const all = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts["test:browser"].split(/\s+/)
+  .filter((a) => a.endsWith(".test.mjs") && !OWN_JOB.has(a));
 const mine = all.filter((_, i) => i % of === part - 1);
 console.log(`part ${part} of ${of}: ${mine.length} of ${all.length} files - ${mine.join(" ")}`);
 const r = spawnSync(process.execPath, ["--test", "--test-concurrency=1", ...mine], { stdio: "inherit" });

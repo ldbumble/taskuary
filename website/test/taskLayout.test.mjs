@@ -253,6 +253,11 @@ test("the three sections come in the flow's order, and each closed tab says wher
   assert.equal(agentWord({ live: true, waiting: true }), "needs you");
   assert.equal(agentWord({ failed: true, result: true }), "failed");
   assert.equal(agentWord({ result: true }), "finished");
+  // ...and a run the owner stopped (Stop and save, a restart) reads stopped with its result shown, never finished (2026-11-03)
+  assert.equal(agentWord({ stopped: true, result: true }), "stopped");
+  const tp = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(tp, /const stoppedRun = !term\?\.alive && \(detail\?\.runEnded === "stopped" \|\| \["saved", "interrupted"\]\.includes\(detail\?\.agentStory\?\.kind\)\);/);
+  assert.match(tp, /failed: failedRun, stopped: stoppedRun \|\| agentState === AGENT\.stopped,/);
   assert.deepEqual(agentStatus({ profile: "assistant", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box", advisor: "Send" }),
     { lines: ["assistant · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done · Advisor: Send is next" });
   assert.deepEqual(agentStatus({}), { lines: ["not started"], foot: "" });

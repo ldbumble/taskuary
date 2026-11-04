@@ -693,19 +693,22 @@ def repos_block(store) -> str:
             "for one)\n" + '\n'.join(line(r) for r in names[:20]))
 
 
-# ONE GOAL - GET THE OWNER TO DONE (Task 3.4, 2026-11-04). In code, not only in ASSISTANT.md: an owner-edited copy stops tracking its
-# template (store.py), and an agent told only "do the job" left a login that sat in a project's .env to the owner. A login it finds goes
-# in the draft the owner's Send approves - never in the conversation (the owner's ruling, 2026-11-04)
+# ONE GOAL - GET THE OWNER TO DONE (Task 3.4, 2026-11-04): an agent told only "do the job" left a login that sat in a project's .env to the
+# owner. A login it finds goes in the draft the owner's Send approves - never in the conversation (the owner's ruling, 2026-11-04). This
+# is that rule's ONE home: AGENT.md and ASSISTANT.md ride on a stranger's task too, so neither carries it (store._LOGIN_RULES)
 GOAL_LINE = ("YOUR ONE GOAL: get the owner to done. Read THE ASK, AS TRIAGE READ IT first when the brief has it, and check it against the "
              "mail: what is asked, the owner's part, who already handled what. Do as much of the owner's part as you can before leaving "
-             "anything to them, and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found. "
-             "Draft every email the job needs through your reply and draft tools, never as text in the conversation. {login}Then tell them "
-             "where it stands: what the task wants from them, what you researched or did, and the next steps - and close out, or do what "
-             "closing out takes.")
+             "anything to them{look}. Draft every email the job needs through your reply and draft tools, never as text in the "
+             "conversation. {login}Then tell them where it stands: what the task wants from them, what you researched or did, and the next "
+             "steps - and close out, or do what closing out takes.")
+LOOK_CLAUSE = (", and look in THE OWNER'S REPOSITORIES and the folders you can read before saying a thing cannot be found - a file "
+               "such as an .env holds settings: read the value the job needs")
 LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the reply you draft - their Send shares it - never in the "
                   "conversation, your steps or your summary. ")
-# ...never on a STRANGER's task: their session is never steered toward credentials (the floor blocks credential folders for them too)
-STRANGER_GOAL_LINE, GOAL_LINE = GOAL_LINE.format(login=''), GOAL_LINE.format(login=LOGIN_SENTENCE)
+# ...and on a STRANGER's task neither where to look nor the login: their session is never steered toward the owner's files or credentials
+# (the floor blocks credential folders for them too)
+STRANGER_GOAL_LINE = GOAL_LINE.format(look='', login='')
+GOAL_LINE = GOAL_LINE.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
 READING_CHARS = 1_500
 
 
@@ -733,7 +736,7 @@ def reading_block(store, tid: int) -> str:
         tgt = (wrapup.answers_for(store, tid, tgt) or tgt) if tgt else None
     except Exception as e: logger.debug(f'general: no reply target for the reading - {e}'); tgt = None
     done = '; '.join(f"{s(o.get('who'))} - {s(o.get('did'))}" for o in ls('others') if isinstance(o, dict) and s(o.get('who')))
-    aside = '; '.join(f'[#{m}] {w}' for m, w in objs('aside', 'why') if isinstance(m, int))
+    aside = '; '.join(f'[#{int(m)}] {w}' for m, w in objs('aside', 'why') if str(m).isdigit())   # an int, or one written as text
     on = '; '.join(x for x in map(s, ls('on_you')) if x)
     rows = [('Asking', s(t.get('asking'))), ('Your part', s(t.get('your_part'))), ('Already handled', done),
             ('The mail the reply answers', f'[#{tgt}] {who.get(tgt, "someone")} · {_md(at.get(tgt))}'.rstrip(' ·') if tgt else ''),
@@ -898,7 +901,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
-    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system += f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}\n\n{selfclose.SUMMARY_LINE}'
+    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
+        system += f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}\n\n{selfclose.SUMMARY_LINE}'
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words

@@ -34,7 +34,7 @@ def login_kept_in_a_project(s) -> int:
 CASES = [
     ('login_kept_in_a_project', login_kept_in_a_project,
      [lambda s: s._case_dir, 'PROFILE RULES (ASSISTANT.md)', 'Your part: give Gail the portal login',
-      'put it in the reply you draft', 'Send is their decision to share it', 'Never paste a secret into the conversation'],
+      'goes only in the reply you draft', 'their Send shares it', 'never in the conversation, your steps or your summary', '.env'],
      ['PROFILE RULES (RESEARCHER', 'into the conversation or a draft', 'PORTAL_USER=placeholder']),
 ]
 LATER = {}   # a need a later task supplies: (case, need) -> the task

@@ -343,23 +343,25 @@ _FANOUT_NOW = ('\n## Several to-dos at once\n'
 _PROMISE_AT = '- "Nothing to do here" is also an ending'
 _PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
                 '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
-# A LOGIN THE THREAD ASKS FOR GOES IN THE DRAFT (the owner, 2026-11-04): AGENT.md called credentials the owner's to decide and ASSISTANT.md
-# said never paste a secret "into the conversation or a draft", so a colleague's ask for a login kept in the owner's own project could only
-# be handed back. The owner's Send is that decision: the value goes in the drafted reply, never the conversation. {name: (was, now)}, put
-# into an edited copy where the old words still read as shipped (login_goes_in_the_draft).
+# THE LOGIN RULE LIVES IN CODE (the owner, 2026-11-04, and the Task 3.4 review): a login the thread asks for and the owner's own files hold
+# goes in the drafted reply - the owner's Send is the decision - never the conversation. AGENT.md and ASSISTANT.md ride on a STRANGER's task
+# too, so neither carries it: general.GOAL_LINE, on the owner's own tasks only, is its one home. An edited copy stops tracking its template,
+# so the login lines an earlier wording put in it come out where they still read word for word (login_rule_in_code). {name: (froms, to)}
 _LOGIN_RULES = {
-    'agent': ('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
-              '  irreversible are theirs to decide. Say what you would do and wait.\n',
+    'agent': (('- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
+               '  irreversible are theirs to decide. Say what you would do and wait. A login or key the thread asks\n'
+               '  {{owner_first}} to supply, kept in their own files, is decided by their Send: find it and put it in the\n'
+               '  reply you draft, never in the conversation, your steps, a summary, a comment or a log.\n',),
               '- Money, legal, HR, credentials, permissions, production configuration, deletions and anything\n'
-              '  irreversible are theirs to decide. Say what you would do and wait. A login or key the thread asks\n'
-              '  {{owner_first}} to supply, kept in their own files, is decided by their Send: find it and put it in the\n'
-              '  reply you draft, never in the conversation, your steps, a summary, a comment or a log.\n'),
-    'assistant': ('  searching the disk. A file such as an .env holds settings: read the value the job needs, never paste\n'
-                  '  a secret into the conversation or a draft.\n',
-                  '  searching the disk. A file such as an .env holds settings: read the value the job needs.\n'
-                  '- When the thread asks {{owner}} to supply a login, a key or other details their own files hold, find\n'
-                  "  it and put it in the reply you draft: {{owner}}'s Send is their decision to share it. Never paste a\n"
-                  '  secret into the conversation, your steps, your summary, a comment or a log.\n')}
+              '  irreversible are theirs to decide. Say what you would do and wait.\n'),
+    # ...and the wording before it, whose "never paste a secret into the conversation or a draft" forbids the draft the ruling asks for
+    'assistant': (('  searching the disk. A file such as an .env holds settings: read the value the job needs.\n'
+                   '- When the thread asks {{owner}} to supply a login, a key or other details their own files hold, find\n'
+                   "  it and put it in the reply you draft: {{owner}}'s Send is their decision to share it. Never paste a\n"
+                   '  secret into the conversation, your steps, your summary, a comment or a log.\n',
+                   '  searching the disk. A file such as an .env holds settings: read the value the job needs, never paste\n'
+                   '  a secret into the conversation or a draft.\n'),
+                  '  searching the disk.\n')}
 _CODING_NOW = "`coding` is for a CHANGE inside a system this install holds the code or the credentials for: code changed in one of the owner's repositories, data changed in one of their systems, an account created or granted on a system they run. Reading from those systems - a query, a report, a look-up - changes nothing and is `general`."
 _SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
               '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
@@ -1635,15 +1637,16 @@ class SQLiteStore:
                 if body.count(at) == 1 and '## Several to-dos at once' not in body:
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_fans_out_todos', '1', 'migration')")
-            # ...and A LOGIN THE THREAD ASKS FOR GOES IN THE DRAFT (_LOGIN_RULES), into an edited AGENT.md / ASSISTANT.md the same way, once
-            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='login_goes_in_the_draft'").fetchone():
-                for name, (was, now) in _LOGIN_RULES.items():
+            # ...and THE LOGIN RULE LIVES IN CODE (_LOGIN_RULES): out of an edited AGENT.md / ASSISTANT.md that still reads it as shipped, once
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='login_rule_in_code'").fetchone():
+                for name, (froms, to) in _LOGIN_RULES.items():
                     row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
                     body = (row['Content'] or '') if row else ''
                     nl = '\r\n' if '\r\n' in body else '\n'
-                    was, now = was.replace('\n', nl), now.replace('\n', nl)
-                    if body.count(was) == 1: self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
-                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('login_goes_in_the_draft', '1', 'migration')")
+                    was = next((f.replace('\n', nl) for f in froms if body.count(f.replace('\n', nl)) == 1), None)
+                    if was:
+                        self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, to.replace('\n', nl)), _now(), name))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('login_rule_in_code', '1', 'migration')")
             # ...and THE GUIDE REPLACES THE PATCHWORK (the owner, 2026-10-09: "make it clear how to triage things, what to
             # look for, signs that would suggest things"). The sentence swaps above each fixed one rule; the template is now
             # one guide written as questions and signs, and the judgement code used to append lives in it. A document only

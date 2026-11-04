@@ -101,7 +101,7 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
             d = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'general'}).json()
         self.assertEqual(d['dispatch'], 'assistant')
         self.assertEqual(_task(d['taskId'])['Kind'], 'general')
-        session.send_prompt.assert_called_once_with('Which one is better?')
+        session.send_prompt.assert_called_once_with('Which one is better?', brief=True)      # nothing typed: Taskuary's brief, never under YOU
 
     def test_explicit_regular_choice_corrects_an_existing_coding_task(self):
         mid = _msg('compare the responsibilities', 'Please review the list and explain the gaps.')

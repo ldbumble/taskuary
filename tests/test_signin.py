@@ -254,6 +254,18 @@ class WatchPage:
 def form(href, password=True, user=True): return {'top': True, 'href': href, 'password': password, 'user': user, 'otp': False}
 
 
+class StaleTab(unittest.TestCase):
+    def test_a_tab_id_agent_browser_left_stale_falls_to_the_page_the_browser_holds(self):
+        """agent-browser's .target kept a tab id after the tab was replaced: the attach reached nothing, so neither a fill nor a watch saw
+        the sign-in page (the browser-agent walk, 2026-11-03)."""
+        c = signin.Cdp.__new__(signin.Cdp)
+        infos = [{'targetId': 'NEWTAB', 'type': 'page', 'url': 'chrome://newtab/'}, {'targetId': 'LIVE', 'type': 'page', 'url': 'https://login.bank.example/'},
+                 {'targetId': 'W', 'type': 'service_worker', 'url': 'https://bank.example/sw.js'}]
+        c.call = lambda m, p=None, top=False, timeout=10.0: {'targetInfos': infos}
+        self.assertEqual(c.tab('GONE'), 'LIVE')
+        self.assertEqual(c.tab('NEWTAB'), 'NEWTAB')                 # still there: agent-browser's word stands
+
+
 class TheOwnerSignsInOnThePage(Asking):
     """The owner, 2026-11-03: no card, no Signed in press - "when we have browser it should just save what i type in". The ask is the
     question alone; the page going past the sign-in is the signal, and what the owner sent on the form is sealed to the vault for next time."""

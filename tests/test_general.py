@@ -640,11 +640,27 @@ class OneGoalTests(unittest.TestCase):
         for tid in (dock, card): self.assertNotIn('get the owner to done', general._prompt(s, tid)[0], tid)
 
     def test_a_strangers_task_has_the_goal_but_is_never_steered_to_a_login(self):
+        # nothing a stranger writes may point the agent at credentials or the owner's files: the goal stays, the login and where-to-look go
         s = self._store(); tid = general_task(s); self._mail(s, tid)
         s.cx.execute("UPDATE task SET OriginBase='stranger' WHERE TaskId=?", (tid,)); s.cx.commit()
-        system = general._prompt(s, tid)[0]
-        self.assertIn('get the owner to done', system)
-        for gone in ('goes only in the reply you draft', 'A login or secret you find'): self.assertNotIn(gone, system, gone)
+        s.upsert_agent('assistant', 'general', 'cli', json.dumps({'kind': 'general'}))     # PROFILE RULES (ASSISTANT.md) ride as on an install
+        system, user = general._prompt(s, tid)
+        self.assertIn('get the owner to done', system); self.assertIn('PROFILE RULES (ASSISTANT.md)', system)
+        flat = ' '.join(f'{system}\n{user}'.split())
+        for gone in ('put it in the reply you draft', 'goes only in the reply you draft', 'A login or secret', 'A login or key',
+                     'supply a login', '.env', 'folders you can read'):
+            self.assertNotIn(gone, flat, gone)
+        for gone in ("THE OWNER'S REPOSITORIES", 'folders you can read', 'A login'): self.assertNotIn(gone, general.STRANGER_GOAL_LINE, gone)
+        # ...and the owner's own task keeps all of it, from code
+        own = general_task(s); system = general._prompt(s, own)[0]
+        for want in ('goes only in the reply you draft', "THE OWNER'S REPOSITORIES and the folders you can read", '.env'):
+            self.assertIn(want, general.GOAL_LINE, want); self.assertIn(want, system, want)
+
+    def test_an_aside_numbered_as_text_is_still_read(self):
+        s = self._store(); tid = general_task(s); ray = self._mail(s, tid)
+        self._read(s, tid, aside=[{'mid': str(ray), 'why': 'thanks only'}, {'mid': 'x', 'why': 'no number'}])
+        got = general.reading_block(s, tid)
+        self.assertIn(f'Aside: [#{ray}] thanks only', got); self.assertNotIn('no number', got)
 
     def test_the_reading_leads_the_brief(self):
         s = self._store(); tid = general_task(s)

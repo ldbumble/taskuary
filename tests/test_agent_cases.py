@@ -31,27 +31,28 @@ def test_the_prompt_carries_nothing_the_case_never_wants(case):
     assert not [n for n in next(c[3] for c in C.CASES if c[0] == case) if n in p]
 
 
-# AN OWNER-EDITED COPY STOPS TRACKING ITS TEMPLATE (store.py), so the login rule goes into an edited AGENT.md / ASSISTANT.md where the
-# old words still read as shipped, once - the rest of the document stays as its owner left it
-@pytest.mark.parametrize('name', ['agent', 'assistant'])
+# THE LOGIN RULE LIVES IN CODE (general.GOAL_LINE, the owner's own tasks only - Task 3.4 review): AGENT.md and ASSISTANT.md ride on a
+# stranger's task too, so neither carries it. An owner-edited copy stops tracking its template (store.py): the login lines an earlier
+# wording put there come out where they still read word for word - the rest of the document stays as its owner left it
+@pytest.mark.parametrize('name,i', [('agent', 0), ('assistant', 0), ('assistant', 1)])
 @pytest.mark.parametrize('nl', ['\n', '\r\n'])
-def test_an_edited_copy_takes_the_login_rule_once(tmp_path, name, nl):
+def test_an_edited_copy_loses_the_login_rule(tmp_path, name, i, nl):
     from taskuary import store as S
-    was, now = S._LOGIN_RULES[name]
+    froms, to = S._LOGIN_RULES[name]
     shipped = (Path(S.__file__).parent / 'templates' / f'{name}.md').read_text(encoding='utf-8').replace('\r\n', '\n')
-    assert shipped.count(now) == 1
-    old = (shipped.replace(now, was) + '- Our own line.\n').replace('\n', nl)
+    assert shipped.count(to) == 1 and not [f for f in froms if f in shipped]
+    old = (shipped.replace(to, froms[i]) + '- Our own line.\n').replace('\n', nl)
     s = S.SQLiteStore(str(tmp_path / 'tq.db')); s.save_doc(name, old, 'owner')
-    s.cx.execute("DELETE FROM setting WHERE Name='login_goes_in_the_draft'"); s.cx.commit()
+    s.cx.execute("DELETE FROM setting WHERE Name='login_rule_in_code'"); s.cx.commit()
     got = S.SQLiteStore(str(tmp_path / 'tq.db')).get_doc(name)
-    assert got.count(now.replace('\n', nl)) == 1 and '- Our own line.' in got and 'or a draft' not in got
-    if nl == '\r\n': assert '\n' not in got.replace('\r\n', '')
+    assert got == (shipped + '- Our own line.\n').replace('\n', nl)
+    for gone in ('put it in the', 'or a draft', '.env'): assert gone not in got, gone
     assert S.SQLiteStore(str(tmp_path / 'tq.db')).get_doc(name) == got
 
 
 def test_a_reworded_copy_is_left_alone(tmp_path):
     from taskuary import store as S
-    mine = '# ASSISTANT.md\nOur own rules only.\n'
+    mine = '# ASSISTANT.md\nOur own rules only. A login the thread asks for: put it in the reply you draft.\n'
     s = S.SQLiteStore(str(tmp_path / 'tq.db')); s.save_doc('assistant', mine, 'owner')
-    s.cx.execute("DELETE FROM setting WHERE Name='login_goes_in_the_draft'"); s.cx.commit()
+    s.cx.execute("DELETE FROM setting WHERE Name='login_rule_in_code'"); s.cx.commit()
     assert S.SQLiteStore(str(tmp_path / 'tq.db')).get_doc('assistant') == mine

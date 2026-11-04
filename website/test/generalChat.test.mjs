@@ -49,7 +49,8 @@ test("an ended general session's chat gives the page back to the stage that is f
   // ...a finished one's chat is the rest of its Result, behind the Result heading while the Result rests on its summary - unless it asks (2026-10-27)
   // ...or that is at work again: a turn under way shows (its band, its thinking line, or its "Working on this…")
   // ...and a failed run rests on its reason and fix the same way (2026-10-28)
-  assert.match(src, /\.\.\.\(resultRest \|\| \(failedRun && !resultOpen\) \? \{ "&:not\(:has\(\[data-tq-asking\], \[data-tq-agent-notice\], \.tq-aui-band, \.tq-aui-thinking, \.tq-aui-thread \[data-tq-working\]\)\)": \{ display: "none" \} \} : \{\}\)/);
+  assert.match(src, /\.\.\.\(resultRest \|\| \(failedRun && !resultOpen\) \? \{ "&:not\(:has\(\[data-tq-asking\], \[data-tq-agent-notice\], \.tq-aui-band, \.tq-aui-thinking, \.tq-aui-thread \[data-tq-working\], \[data-tq-waits\], \[data-tq-on-you\]\)\)": \{ display: "none" \} \} : \{\}\)/);
+  // ...or that holds what waits on the owner: a draft card or an On you step in its summary (Task 4.2)
 });
 
 // THE CHAT'S STRIP RIDES IN THE STEP'S HEADING ON THE CANVAS: "Agent work" on one row and the agent's name, brain and Full screen on

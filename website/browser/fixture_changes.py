@@ -38,6 +38,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/arrive-during-next', '/api/fixture/processing/rerun',
         '/api/fixture/task/closed-elsewhere', '/api/fixture/task/live-agent',
         '/api/fixture/task/agent-draft', '/api/fixture/task/agent-word',
+        '/api/fixture/task/closeout-in-chat', '/api/fixture/task/on-you-tick',
         '/api/fixture/advisor/world',
         '/api/fixture/advisor/say',
         '/api/fixture/intake/arrive',
@@ -842,6 +843,51 @@ def install_processing_changes(app, store):
                                'SentAt': (datetime.now() + timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')})
         funnel.invalidate()
         return {'reviewId': out['review_id']}
+
+    @app.post('/api/fixture/task/closeout-in-chat')
+    def closeout_in_chat(body: dict):
+        """A task whose close-out lives in its chat (the closeout-in-chat spec, Task 4.2): Ray Colton and Gail Moreno on one thread, a reply
+        drafted to each, triage's reading on the task and - `on_you` - one step only the owner can take. `kind`: general (an agent turned it
+        into these), reply (the drafter wrote the first draft, its why kept, no agent ran) or coding (unchanged: three sections). Invented."""
+        if set(body) - {'kind', 'drafts', 'on_you'} or body.get('kind') not in ('general', 'reply', 'coding') or body.get('drafts', 2) not in (0, 1, 2) \
+                or not isinstance(body.get('on_you', False), bool):
+            raise HTTPException(422, 'kind is general, reply or coding; drafts 0, 1 or 2; on_you a boolean')
+        import json
+        from taskuary import funnel
+        conv, now = f'fixture-chat-{datetime.now():%H%M%S%f}', datetime.now()
+        tid = store.create_task({'Title': 'Renewal terms for the Northwind contract', 'Kind': body['kind'], 'Status': 'open', 'Source': 'email'}, 'router')
+        def mail(i, who, addr, words, ago):
+            return store.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': f'{conv}-{i}', 'ConversationId': conv, 'FromName': who, 'FromEmail': addr,
+                                      'Subject': 'Northwind renewal' if i == 1 else 'RE: Northwind renewal', 'BodyText': words, 'Status': 'routed',
+                                      'SentAt': (now - timedelta(minutes=ago)).strftime('%Y-%m-%d %H:%M:%S')})
+        m1 = mail(1, 'Ray Colton', 'ray@vendor.example', 'Can you confirm the renewal term is 24 months before I send the paper?', 90)
+        m2 = mail(2, 'Gail Moreno', 'gail@northwind.example', 'Please keep me posted on what Ray needs from us.', 30)
+        store._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Ray Colton wants the renewal term confirmed before he sends the paper.',
+            'your_part': 'Confirm the 24-month term to Ray and keep Gail posted.', 'others': [], 'asks': [{'mid': m1, 'about': 'the renewal term'}], 'aside': [], 'on_you': []}), tid))
+        n = body.get('drafts', 2)
+        rids = [store.add_review({'TaskId': tid, 'MessageId': m1, 'Kind': 'reply', 'Channel': 'email', 'Status': 'pending',
+                                  'DraftText': 'Hi Ray - yes, the renewal is 24 months from March 1. Send the paper over when it is ready.'})] if n else []
+        if n == 2:
+            rids.append(store.add_review({'TaskId': tid, 'MessageId': m2, 'Kind': 'reply', 'Channel': 'email', 'Status': 'pending',
+                                          'DraftText': 'Hi Gail - I confirmed the 24-month term to Ray; his paper comes next.'}))
+        if rids: store._exec('UPDATE review SET DraftWhy=? WHERE ReviewId=?', ('I read his question and the contract dates, so the draft confirms the 24 months.', rids[0]))
+        # ...an agent that has talked on it: its conversation is what the page reads as started (the turns themselves the test serves)
+        if body['kind'] == 'general':
+            store.add_comment(tid, 'owner', 'assistant_user', 'Answer Ray and keep Gail posted.')
+            store.add_comment(tid, 'agent', 'assistant_agent', 'Both replies are drafted.')
+        items = store.set_on_you(tid, ['Sign the renewal in your e-signature tool once Ray sends it.'], 'agent') if body.get('on_you') else []
+        funnel.invalidate()
+        return {'taskId': tid, 'reviews': rids, 'onYou': [i['id'] for i in items if i.get('on_you')]}
+
+    @app.post('/api/fixture/task/on-you-tick')
+    def on_you_tick(body: dict):
+        """The owner's On you step ticked - as the agent does through `taskuary` when the owner says it is done (Task 4.2) - and the page poked."""
+        if set(body) != {'task_id', 'item'} or type(body['task_id']) is not int or not isinstance(body['item'], str):
+            raise HTTPException(422, 'exact task_id and item are required')
+        from taskuary import funnel, live
+        if not store.tick_checklist_item(body['task_id'], body['item'], True, 'agent'): raise HTTPException(404, 'no such step')
+        funnel.invalidate(); live.emit('task-changed', task_id=body['task_id'])
+        return {'ok': True}
 
     @app.post('/api/fixture/task/agent-word')
     def agent_word(body: dict):

@@ -13,7 +13,8 @@ import { askWidth, startHarness } from "./harness.mjs";
    And no pane is a dead end: every open task's open Agent pane and Close out carry their own way on.
    WHERE THE CHAT IS HOME (phase 4, Task 4.1: a general or reply task) the task's own moves - Mark done first, Close with a note, Attach a
    file, Share - ride the Agent's spine and strip instead of Close out's, a live general agent's slim strip too; a coding task keeps them on
-   Close out. Invented people only. */
+   Close out. And there Close out is no section (Task 4.2): its moves - Reply, Redraft, Hand it to a person - ride the Agent, whose chat
+   holds the card they act on. The three sections' own moves are read on the demo's invoice made a plain task. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let CUR = "[data-tq-canvas-item]";
 const openTask = async (page, id) => {
@@ -57,14 +58,41 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
     await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
     const tasks = (await (await fetch(`${hz.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": hz.token } })).json()).data;
     const id = (re) => tasks.find((x) => re.test(x.Title))?.TaskId;
+    // ...a plain task keeps its three sections: the invoice, its kind made "task", carries Close out's moves as before Task 4.2
+    const plain = async (re) => { const tid = id(re);
+      const r = await fetch(`${hz.fixtureApi}/api/tasks/${tid}`, { method: "PATCH", headers: { "X-Taskuary-Token": hz.token, "Content-Type": "application/json" },
+        body: JSON.stringify({ Kind: "task" }) });
+      assert.ok(r.ok, `the invoice made a plain task: ${r.status}`); return tid; };
+
+    // WHERE THE CHAT IS HOME (Task 4.2): Came from | Agent, and Close out's moves on the Agent beside its card
+    await t.test("a reply whose chat is home: two sections, Close out's moves and its card on the Agent", async () => {
+      await openTask(page, id(/^Invoice 88213/));
+      const slots = await page.$$eval(`${CUR} [data-tq-slot]`, (xs) => xs.map((x) => x.dataset.tqSlot));
+      assert.deepEqual(slots, ["from", "agent"], "no Close out");
+      const m = await look(page);
+      assert.equal(m.open, "agent");
+      assert.equal(m.close, null, "no Close out spine");
+      assert.equal(m.pane.agent[0], "Mark done", `Mark done first on the Agent's strip: ${m.pane.agent}`);
+      assert.ok(m.pane.agent.includes("Hand it to a person"), `Close out's moves ride the Agent: ${m.pane.agent}`);
+      assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
+      assert.ok(await page.$(`${CUR} [data-tq-slot=agent] [data-tq-closeout] [data-tq-two-sends]`), "the draft's Send and close in the Agent");
+      await openSec(page, "from");
+      const f = await look(page);
+      assert.equal(f.agent.moves[0]?.word, "Mark done", JSON.stringify(f.agent));
+      assert.ok(stageWords(f.agent).includes("Hand it to a person"), `the folded Agent's spine: ${JSON.stringify(f.agent)}`);
+      // ...and Hand it to a person opens its compose card where the draft is, in the Agent - no drawer
+      await page.click(`${CUR} [data-tq-spine-moves=agent] button[data-tq-verb=hand]`);
+      await page.waitForSelector(`${CUR} [data-tq-slot=agent][data-tq-open] [data-tq-handoff-card] input`, { timeout: 8000 });
+      assert.ok(!(await page.$(".MuiDrawer-root .MuiDrawer-paper")), "no drawer over the page");
+      await page.click(`${CUR} [data-tq-handoff-card] [aria-label="Close handoff"]`);
+      await page.waitForFunction((CUR) => !document.querySelector(`${CUR} [data-tq-handoff-card]`), { timeout: 5000 }, CUR);
+    });
 
     await t.test("Close out open: Send to agent on Agent's spine, in the middle of it; the bar the task's own moves", async () => {
-      await openTask(page, id(/^Invoice 88213/));
+      await openTask(page, await plain(/^Invoice 88213/));
       await openSec(page, "close");
       const m = await look(page);
-      // ...a reply task's home is its chat (Task 4.1): Mark done leads the Agent's spine, the task's own moves after its stage move
-      assert.deepEqual(stageWords(m.agent), ["Send to agent"], JSON.stringify(m.agent));
-      assert.equal(m.agent.moves[0]?.word, "Mark done", JSON.stringify(m.agent));
+      assert.deepEqual(m.agent.moves.map((x) => x.word), ["Send to agent"], JSON.stringify(m.agent));
       assert.ok(m.agent.between && m.agent.rule, "between the pane's name and its status, under a rule");
       // ...and the moves stand out but not all the same (the owner, 2026-10-29): a stage move outlined in the slate, slate words on white; Mark
       // done the same with a stronger edge; the title bar's other moves quiet words in a faint-edged white pill (the owner, 2026-10-29: "these
@@ -84,9 +112,7 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       // ...the bar is Back and Next alone (the owner, 2026-10-29); the task's own moves ride on Close out, the title bar has none (2026-10-30)
       assert.deepEqual(m.bar.filter((x) => !/Back$|^Next/.test(x)), [], `the bar: ${m.bar}`);
       assert.deepEqual(m.title, [], `the title bar: ${m.title}`);
-      const agentWords = m.agent.moves.map((x) => x.word);
-      assert.ok(["Mark done", "Close with a note", "Share"].every((x) => agentWords.includes(x)), `the Agent's spine: ${agentWords}`);
-      assert.ok(!m.head.some((x) => TASK_MOVE.test(x)), `Close out no longer carries them: ${m.head}`);
+      assert.ok(["Mark done", "Close with a note", "Share"].every((x) => m.head.includes(x)), `Close out's moves: ${m.head}`);
     });
 
     await t.test("an open pane's white strip: its name, its moves, and arrows that fold it back to its spine", async () => {
@@ -112,23 +138,24 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await page.waitForFunction((CUR) => [...document.querySelectorAll(`${CUR} [data-tq-section-tab=close] [data-tq-spine-moves] button`)]
         .some((b) => b.textContent.trim() === "Redraft"), { timeout: 8000 }, CUR).catch(() => {});
       const m = await look(page);
-      // ...Close out's spine its own moves alone; Mark done is the open Agent's, first on its strip (Task 4.1)
-      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 2), ["Redraft", "Hand it to a person"], JSON.stringify(m.close));
-      assert.ok(!m.head.includes("Mark done"), `${m.head}`);
+      // ...Mark done first (the owner, 2026-11-02: "Mark done should always be the first button in the Close out tab"), its own moves after
+      assert.deepEqual(m.close.moves.map((x) => x.word).slice(0, 3), ["Mark done", "Redraft", "Hand it to a person"], JSON.stringify(m.close));
       assert.ok(m.close.between && m.close.rule);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
-      assert.equal(m.pane.agent[0], "Mark done", `the Agent's strip: ${m.pane.agent}`);
+      assert.ok(m.head.includes("Mark done"), `${m.head}`);
       assert.ok(await page.$(`${CUR} [data-tq-run-form]`), "the agent's own form carries its start");
     });
 
-    await t.test("nothing drafted: the spine says Draft reply, and its press opens Close out and starts the draft there", async () => {
+    // ...a general task's chat is home (Task 4.2): Draft reply rides the Agent's spine, and its press opens the Agent and starts the draft in it
+    await t.test("nothing drafted: the spine says Draft reply, and its press opens the Agent and starts the draft there", async () => {
       await openTask(page, id(/^Year-end audit/));
-      await openSec(page, "agent");
+      await openSec(page, "from");
       const m = await look(page);
-      assert.deepEqual(stageWords(m.close), ["Draft reply", "Hand it to a person"], JSON.stringify(m.close));
-      await page.click(`${CUR} [data-tq-spine-moves=close] button[data-tq-verb=reply]`);
-      await page.waitForSelector(`${CUR} [data-tq-slot=close][data-tq-open]`, { timeout: 5000 });
-      await page.waitForFunction((CUR) => /Drafting|AI drafted|Redraft|Send/.test(document.querySelector(`${CUR} [data-tq-slot=close]`)?.innerText || ""),
+      assert.equal(m.close, null, "no Close out on a chat-home task");
+      assert.ok(["Draft reply", "Hand it to a person"].every((x) => stageWords(m.agent).includes(x)), JSON.stringify(m.agent));
+      await page.click(`${CUR} [data-tq-spine-moves=agent] button[data-tq-verb=reply]`);
+      await page.waitForSelector(`${CUR} [data-tq-slot=agent][data-tq-open]`, { timeout: 5000 });
+      await page.waitForFunction((CUR) => /Drafting|AI drafted|Redraft|Send/.test(document.querySelector(`${CUR} [data-tq-slot=agent] [data-tq-closeout]`)?.innerText || ""),
         { timeout: 20000 }, CUR);
     });
 
@@ -136,8 +163,8 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
       await openTask(page, id(/^Invoice 88213/));
       await openSec(page, "from");
       const m = await look(page);
-      assert.deepEqual([stageWords(m.agent), stageWords(m.close)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
-      assert.equal(m.agent.moves[0]?.word, "Mark done", "Mark done on the Agent's spine");
+      assert.deepEqual([m.agent.moves.map((x) => x.word), stageWords(m.close)], [["Send to agent"], ["Redraft", "Hand it to a person"]], JSON.stringify(m));
+      assert.equal(m.close.moves[0]?.word, "Mark done", "Mark done on a plain task's Close out");
       assert.deepEqual([...m.pane.from].sort(), [...FROM, "Change ▾"].sort(), `Came from open: its heading carries Not a task, Remind me, Watch it and Change ${JSON.stringify(m.pane)}`);
       assert.ok(!m.bar.some((x) => STAGE.test(x)), `no stage move on the bar: ${m.bar}`);
       await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-n]`);
@@ -271,7 +298,9 @@ for (const [w, h] of [[1440, 900], [1366, 768]]) {
         if (await page.$(`${CUR} .xterm`)) continue;   // a live agent: its bar's Stop and save (above)
         const from = await (async () => { await openSec(page, "from"); return (await look(page)).pane.from; })();
         if (!from.includes("Not a task") || !from.some((x) => /^(Remind me|Back .+)$/.test(x))) miss.push(`${task.Title} · from: ${from}`);
+        // ...a chat-home task has no Close out: its way on is in the Agent, with the card (Task 4.2)
         for (const key of ["agent", "close"]) {
+          if (!(await page.$(`${CUR} [data-tq-slot=${key}]`))) continue;
           await openSec(page, key);
           const way = await page.evaluate((CUR, key) => {
             const slot = document.querySelector(`${CUR} [data-tq-slot=${key}]`);

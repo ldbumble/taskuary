@@ -10,7 +10,8 @@ import { startHarness } from "./harness.mjs";
    canvas down to a small gap over the dock. A row's press opens the section it belongs to. A live agent keeps nearly all the width, Came
    from and Close out slim 44px tabs, and its terminal is never remounted or resized by a look away.
    WHERE THE CHAT IS HOME (phase 4, Task 4.1: a general or reply task) the task opens on the Agent, and Mark done rides its spine; Close out
-   is still drawn beside it until its draft cards live in the agent's summary (Task 4.2), so a draft waiting on Send stays in reach.
+   is no section there (Task 4.2): its draft cards live in the agent's summary, so the task is Came from | Agent, and a press that was Close
+   out's stays on the Agent, where its card is.
    A plain task opens where it is up to, as before. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -69,23 +70,23 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   const tasks = (await (await fetch(`${h.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": h.token } })).json()).data;
   const id = (re) => tasks.find((x) => re.test(x.Title))?.TaskId;
 
-  await t.test("a drafted reply opens on its chat, the Agent; Came from and Close out are its tabs, words across, ~156px, with their status", async () => {
+  await t.test("a drafted reply opens on its chat, the Agent; Came from is its tab, words across, ~156px, with its status - no Close out", async () => {
     await openTask(page, id(/^Invoice 88213/));
     const m = await look(page);
     assert.equal(m.main, "agent", JSON.stringify(m));
-    // ...Close out still drawn until Task 4.2 moves its draft into the agent's summary
-    assert.deepEqual(m.slots.map((s) => s.key), ["from", "agent", "close"], "the flow's order");
-    assert.deepEqual(m.slots.map((s) => s.open), [false, true, false], "one open");
+    // ...Close out folded into the chat (Task 4.2): its draft is a card in the Agent
+    assert.deepEqual(m.slots.map((s) => s.key), ["from", "agent"], "the flow's order");
+    assert.deepEqual(m.slots.map((s) => s.open), [false, true], "one open");
+    assert.ok(await page.$(`${CUR} [data-tq-slot=agent] [data-tq-closeout] [data-tq-two-sends]`), "the draft and its sends are in the Agent");
     // ...a tenth of the work area each, 104-156px (TaskPage.tabW: "it should be in ratio", TQ-1251)
     const want = Math.min(156, Math.max(128, m.slots.reduce((n, s) => n + s.w, 0) * 0.1));
     for (const tab of m.tabs) {
       assert.ok(Math.abs(tab.w - want) <= 3, `${tab.key} tab is ~${Math.round(want)}px: ${tab.w}`);
       assert.equal(tab.writing, "horizontal-tb", `${tab.key}'s words read across`);
     }
-    const from = m.tabs.find((x) => x.key === "from").text, close = m.tabs.find((x) => x.key === "close").text;
+    const from = m.tabs.find((x) => x.key === "from").text;
     assert.match(from, /Came from[\s\S]*Tom Alvarez · 1 message[\s\S]*Tom Alvarez: “This invoice[\s\S]*Sorted: a reply to send[\s\S]*1$/, from);
-    assert.match(close, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*3$/, close);
-    assert.doesNotMatch(close, /Mark done/, "Mark done is the Agent's now");
+    assert.deepEqual(m.tabs.map((x) => x.key), ["from"], "no Close out tab");
     assert.ok(m.slots[1].w > 600, `the open one fills the rest: ${m.slots[1].w}`);
     // ...the card takes the canvas, pinned at its top, a small gap over the dock
     assert.ok(Math.abs(m.card.top - m.canvas.top) <= 2, `pinned to the canvas's top ${JSON.stringify(m)}`);
@@ -99,21 +100,19 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
     assert.ok(seen.every((f) => Math.abs(f.h - before.card.h) <= 1), `the card moved: ${[...new Set(seen.map((f) => f.h))]}`);
     const m = await look(page);
     assert.equal(m.main, "from");
-    assert.deepEqual(m.slots.map((s) => s.open), [true, false, false]);
+    assert.deepEqual(m.slots.map((s) => s.open), [true, false]);
     assert.match(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /What came in[\s\S]*What triage made of it/);
     assert.doesNotMatch(await page.$eval("[data-tq-canvas-item] [data-tq-from]", (e) => e.innerText), /Full message history/, "no second copy at the foot");
     // ...where the chat is home it is up to the Agent, whose spine carries Mark done
-    const agent = m.tabs.find((x) => x.key === "agent"), close = m.tabs.find((x) => x.key === "close");
-    assert.ok(agent.here && !close.here, "the Agent is where the task is up to");
+    const agent = m.tabs.find((x) => x.key === "agent");
+    assert.ok(agent.here, "the Agent is where the task is up to");
     assert.match(agent.text, /Agent[\s\S]*Mark done[\s\S]*Up to here[\s\S]*2$/, agent.text);
-    assert.match(close.text, /Close out[\s\S]*Reply to Tom Alvarez[\s\S]*Drafted · waiting for Send[\s\S]*3$/, close.text);
+    assert.ok(!m.tabs.some((x) => x.key === "close"), "and no Close out tab beside it");
     // ...and the stage is the task's, not the pick's
     assert.equal(m.stage, before.stage);
     await page.click(`${CUR} [data-tq-section-tab=agent] [data-tq-tab-arrow]`); await sleep(500);
-    assert.equal((await look(page)).main, "agent");
-    await page.click(`${CUR} [data-tq-section-tab=close] [data-tq-tab-arrow]`); await sleep(500);
     const back = await look(page);
-    assert.equal(back.main, "close");
+    assert.equal(back.main, "agent");
     assert.equal(back.card.h, before.card.h, "one height through every switch");
   });
 
@@ -146,9 +145,10 @@ test("three sections in the flow's order, open where the task is up to, tabs tha
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27)
   await t.test("a row's press opens the section it belongs to", async () => {
     for (const [re, start, label, want] of [
-      [/^Reconcile the August GL export/, "agent", "Reply", "close"],
-      [/^Year-end audit/, "agent", "Draft reply", "close"],
-      [/^Invoice 88213/, "agent", "Hand it to a person", "close"],
+      // ...where the chat is home Close out's presses stay on the Agent, whose chat holds their card (Task 4.2)
+      [/^Reconcile the August GL export/, "agent", "Reply", "agent"],
+      [/^Year-end audit/, "agent", "Draft reply", "agent"],
+      [/^Invoice 88213/, "agent", "Hand it to a person", "agent"],
       [/^Migrate the census export/, "from", "Hand it to a person", "close"]]) {   // (a chat-home task opens on its Agent, Task 4.1)
       await openTask(page, id(re));
       const at = await look(page);

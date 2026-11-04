@@ -8,7 +8,8 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 // Close out, from its heading to the Run traces fold under it
 const closeOut = () => {
   const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3"');
-  return page.slice(at, page.indexOf("<Fold title={`Run traces", at));
+  // ...and the body it draws, closeBody - Close out's section's or, where the chat is home, the agent's summary's (Task 4.2)
+  return page.slice(at, page.indexOf("<Fold title={`Run traces", at)) + page.slice(page.indexOf("const closeBody = (inChat)"), page.indexOf("const chatCards ="));
 };
 
 // The card drew the NEWEST AGENT REPORT, and the poll that saw the agent's own merge filed a second one whose "last

@@ -223,9 +223,9 @@ const AssistantMessage = () => {
       <div className="tq-aui-agent-body">
         <MessagePrimitive.Parts components={{ Text: AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
-        {/* drafts are counted, never drawn as cards here yet: they come inside Next steps with Task 4.2 */}
+        {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} />}
+          acts={work.acts} next={custom.folded ? null : work.next} />}
       </div>
     </MessagePrimitive.Root>
   );
@@ -456,6 +456,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
   const working = !dock && !!serverBusy;
+  // ...where the chat has no summary yet, what Close out held (`next`) stands under the thread on its own - a draft is never without its one place
+  const nextAt = React.useContext(WorkCtx), summed = (messages || []).some((m) => m?.summary);
   const modelAdapter = useMemo(() => ({
     async *run({ messages: runMessages, abortSignal }) {
       onBusyChange?.(true);
@@ -640,6 +642,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </Box>
           )}
           </ThreadPrimitive.If>
+          {/* ...a chat no turn has summed up yet: what Close out held, under the thread (Task 4.2) */}
+          {!dock && nextAt?.next && !summed && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 }, pt: 0.5, borderTop: `1px solid ${BORDER}` }}>
+            <Typography component="span" sx={{ display: "block", color: FAINT, fontSize: 11.5, fontWeight: 700, mt: 1, mb: 0.25 }}>Next steps</Typography>{nextAt.next}</Box>}
           {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
               whose press opens Close out at it - working or not, since the agent saves it mid-turn */}
           {!dock && approve}
@@ -692,7 +697,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, approve = null, mails = [], reviews = [],
-  checklist = null, opening = false }) {
+  checklist = null, opening = false, next = null }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -918,7 +923,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
     <AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
-    <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])] }}>
+    <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}

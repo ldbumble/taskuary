@@ -818,7 +818,10 @@ def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
     from . import workerstate as ws, redact
     sid, inp = run_sid(payload, tid), payload.get('tool_input')
     inp = inp if isinstance(inp, dict) else {}
+    from .sessionrecord import DRAFT_SHOWN, drafting
+    # a draft by what it is, never its body (sessionrecord.hide_draft)
     what = redact.scrub(str(inp.get('command') or inp.get('url') or inp.get('file_path') or inp))[:600]
+    if drafting(payload.get('tool_name'), inp): what = DRAFT_SHOWN
     g = ws.group_key(f'permit:{tid}:{sid}:{time.time_ns()}')        # a new group per call, so one Allow can never cover the next
     rid = ws.question_id(g, 1)
     # the hold BEFORE the card: an answer that lands between the two would find nothing to release and the wait would never end

@@ -2022,7 +2022,9 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     if verb == 'done': _idea_done(store, key, by)
     # ...and an FYI row that speaks for its whole email thread settles the mails folded under it (processing_unread.fold_fyi_threads)
     for k in (thread_of(store, key) if thread is None else thread):
-        try: settle(store, k, verb, by, hours, note, read=read)
+        # ...a folded mail settles alone: its own remembered thread (_THREADS) names the row above it again, and mails on one thread settled
+        # each other over and over - the walk table's world took 0.6s, then 1, 3, 10, 48, 300s (CI, 2026-11-04)
+        try: settle(store, k, verb, by, hours, note, read=read, thread=())
         except Exception as e: logger.debug(f'funnel: {k} under {key} not settled - {e}')
     invalidate()
     # BULK PROCESSING: an item leaving the head is what pays for the next one to be judged - triage

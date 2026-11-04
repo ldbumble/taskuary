@@ -2183,9 +2183,15 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str)
 
 def hand_reply_to_agent(store, tid, rid, why: str) -> bool:
     """The reply writer could not answer (responder.NotDrafted: NEEDS, or only a promise): no draft, and a reply task goes to the
-    general agent to do the work and draft the real reply - by itself where it may, else the line says why it did not."""
+    general agent to do the work and draft the real reply - by itself where it may, else the line says why it did not.
+    ...and a GENERAL task no agent has run on yet the same (Task 3.2, 2026-11-04): a colleague asked the owner for details kept in the
+    owner's own project, the writer said NEEDS, and nothing more happened. Whether the agent can find what the writer lacks is its
+    judgement, read from the NEEDS words it is handed (reply_job) - never a list here. A coding task, an agent live on it, or a general
+    conversation already open is left as it is: the owner's Continue or the agent's own turn picks it up, never a second start."""
+    from . import general
     t = store.get_task(tid) or {}
-    if t.get('Kind') != 'reply' or t.get('Status') in ('done', 'dropped'): return False
+    if t.get('Status') in ('done', 'dropped') or live_agent(store, tid): return False
+    if t.get('Kind') != 'reply' and (not general.handles(t) or general.history(store, tid)): return False
     rv = store.get_review(rid) or {}
     m = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
     if not m: return False

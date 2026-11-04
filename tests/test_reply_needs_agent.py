@@ -251,3 +251,36 @@ def test_accepting_the_offer_starts_the_assistant_with_that_job():
         assert OFFER in prompt and "waits for the owner's yes" in prompt and 'Nothing is sent' in prompt
         assert s.get_task(tid)['Kind'] == 'general' and ingest.offer_of(s, tid) == ''
         assert c.post(f'/api/tasks/{tid}/offer').status_code == 409                 # taken once
+
+
+# ── a GENERAL task whose writer says NEEDS goes to the assistant too (Task 3.2, 2026-11-04): only a reply task did, so a general task
+# asking the owner for details their own files hold stopped at the writer's NEEDS with no agent ever run on it ───────────────────────
+PORTAL = 'NEEDS: the portal login Gail is waiting for - it is kept in one of your projects, not in the thread'
+
+
+def general_ask(s, kind='general'):
+    from taskuary.testing import Factory
+    f = Factory(s)
+    tid = f.task(title='Ray asks for the vendor-portal login', kind=kind)
+    mid = f.message(tid, from_email='ray@northwind.example', from_name='Ray Colton', subject='Portal login',
+                    body='Can you send Gail the vendor-portal login so she can upload the payment file?')
+    f.review(tid, mid)
+    return tid
+
+
+def test_needs_on_a_general_task_starts_the_assistant_once_with_the_needs_as_its_brief():
+    s = store(); tid = general_ask(s)
+    rv, spawned = drafted(s, tid, writer(PORTAL)[0])
+    assert 'needs the portal login Gail is waiting for' in rv['DraftNeeds'] and spawned == ['_auto_general']
+    assert s.get_task(tid)['Kind'] == 'general'
+    ask = ingest.first_ask(s, tid)
+    assert ask.startswith('THIS TASK IS A REPLY OWED to Ray Colton') and 'the portal login Gail is waiting for' in ask
+
+
+@pytest.mark.parametrize('case', ['coding', 'live'])
+def test_needs_on_a_coding_task_or_under_a_live_agent_starts_nothing_new(case):
+    s = store(); tid = general_ask(s, kind='coding' if case == 'coding' else 'general')
+    if case == 'live': general.OPENING.add(tid)
+    try: rv, spawned = drafted(s, tid, writer(PORTAL)[0])
+    finally: general.OPENING.discard(tid)
+    assert 'needs the portal login' in rv['DraftNeeds'] and spawned == [] and not s.task_has_tag(tid, ingest.REPLY_TAG)

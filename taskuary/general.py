@@ -1012,10 +1012,15 @@ class GeneralSession:
         next, not ignored. So: queue. In slices, so a browser that gives up stops waiting too.
         """
         end = time.time() + max(0.0, wait)
-        while True:
-            if self._lock.acquire(timeout=0.25): return True
-            if cancel is not None and cancel.is_set(): return False
-            if time.time() >= end: return False
+        self.waiting_turns = getattr(self, 'waiting_turns', 0) + 1
+        try:
+            while True:
+                if self._lock.acquire(timeout=0.25):
+                    self.turn_no = getattr(self, 'turn_no', 0) + 1
+                    return True
+                if cancel is not None and cancel.is_set(): return False
+                if time.time() >= end: return False
+        finally: self.waiting_turns -= 1
 
     def write(self, data):
         """Make xterm a second composer for the same conversation."""
@@ -1483,13 +1488,18 @@ class GeneralSession:
         # even if a resumed model remembers an older close instruction and emits the marker.
         has_source = bool((self.store.task_detail(self.task_id) or {}).get('messages'))
         if closing is not None and has_source:
-            threading.Timer(0.1, self._close_out, args=(closing,)).start()
+            threading.Timer(0.1, self._close_out, args=(closing,), kwargs={'turn': getattr(self, 'turn_no', 0)}).start()
         return reply
 
-    def _close_out(self, summary: str):
+    def _close_out(self, summary: str, turn: int = None):
         """The chat said the work was done. Same ending as a coding session's: the task closes,
         the conversation stays on the task as its record, and the reply to whoever asked is
-        drafted for the owner to approve."""
+        drafted for the owner to approve. `turn`: the turn that said so - a later one started or waiting means it is not done."""
+        # NEVER OVER A TURN STILL TO COME (the overnight run, 2026-11-03): the sender's second mail was passed in while the first turn worked;
+        # that turn ended saying done, the close ran 0.1s later and wrapped the session up under the second turn - the pane read finished
+        # and paired Close out for the twenty seconds it was still working. The later turn says for itself whether the work is done
+        if turn is not None and (getattr(self, 'turn_no', 0) != turn or getattr(self, 'waiting_turns', 0)):
+            logger.info(f'task {self.task_id}: its agent said done, but another turn is on - the close waits for that one'); return
         from . import selfclose
         try: out = selfclose.declare(self.store, self.task_id, summary, 'assistant', sid=self.sid)
         except Exception as e:

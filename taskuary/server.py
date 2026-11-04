@@ -759,7 +759,7 @@ async def signin_submit(token: str, request: Request):
         # the form again, on a fresh link, with the site's answer: nothing saved, the agent not told "signed in"
         r = signin.peek(store, e.again) if e.again else None
         if not r: return _signin_gone(token, f'Nothing was signed in: {e}.')
-        return HTMLResponse(signin.form_html(r['Site'], signin.TTL // 60, f"{r['Site']} did not accept that password - nothing was saved. Try again.",
+        return HTMLResponse(signin.form_html(r['Site'], signin.TTL // 60, f"{e} - nothing was saved. Try again.",
                                              task=signin.for_line(store, r['TaskId']), action=f'/signin/{e.again}'), 409, headers=signin.HEADERS)
     except LookupError: return _signin_gone(token)
     except (signin.SignInError, ValueError) as e:

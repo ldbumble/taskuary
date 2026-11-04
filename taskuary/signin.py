@@ -361,8 +361,9 @@ def _auto(store, tid, sid, site, rid, fill):
         _continue(store, tid, rid, site, 'taskuary', bool(got.get('code')))
     except NotAccepted as e:
         _audit(store, tid, site, 'vault', False, str(e))
-        store.add_comment(tid, 'taskuary', 'agent', f'The saved password for {site} did not work - {site} kept its sign-in form up. '
-                                                    'Press Sign in here and type the right one; tick Save to vault to update it.')
+        why = str(e) if 'also asks for' in str(e) else (f'The saved password for {site} did not work - {site} kept its sign-in form up. '
+                                                      'Sign in on the page, or fill it in securely with the right one - it is saved when it works.')
+        store.add_comment(tid, 'taskuary', 'agent', why[0].upper() + why[1:] + ('.' if not why.endswith('.') else ''))
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
@@ -597,7 +598,12 @@ FIELDS = r'''(want) => {
   const el = want === 'password' ? pw : want === 'user' ? user : want === 'otp' ? otp : null;
   if (el) { el.focus(); try { el.select(); } catch (_) { el.value = ''; } }
   if (el && want === 'otp') el.setAttribute('data-tq-code', '');
-  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames,
+  // ...AND WHAT ELSE THE FORM ASKS: a box beside the user name and password left empty - a "Customer ID", a company code. Taskuary keeps
+  // only the two, so a form that needs a third was refused and the saved password blamed (the browser-agent walk, 2026-11-04)
+  const labelOf = (e) => { const h = hostOf(e), l = e.labels && e.labels[0];
+    return String((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || (h && (h.getAttribute('label') || h.getAttribute('aria-label'))) || e.name || '').trim().slice(0, 40); };
+  const others = pw ? ins.filter((e) => texty(e) && e !== user && e !== otp && !e.value).map(labelOf).filter(Boolean) : [];
+  return { origin: location.origin, href: location.href, top: window === window.top, password: !!pw, user: !!user, otp: !!otp, frames, others,
            focused: !!el && deepActive() === el };
 }'''
 CLEAR = "(() => { " + DEEP + " deepAll('input[type=password], input[data-tq-code]').forEach((e) => { e.value = ''; }); })()"
@@ -759,7 +765,7 @@ def fill_page(c: Cdp, site: str, user: str, pw: str, wait: float = STEP_WAIT, co
     if not s.get('password') or not on_site(s.get('href'), site): raise SignInError('the page changed under the sign-in - nothing was typed')
     c.type(pw)
     c.enter()
-    return {'code': bool(code) and _await_code(c, site, code, code_wait)}
+    return {'code': bool(code) and _await_code(c, site, code, code_wait), 'others': list(f.get('others') or [])}
 
 
 REJECT_WAIT = 4.0               # after SETTLE: how long a site is given to take its password box away before the password is called refused
@@ -778,6 +784,14 @@ def accepted(c, site: str, wait: float = REJECT_WAIT) -> bool:
         time.sleep(.5)
 
 
+def refused(site: str, others=None) -> str:
+    "Why a typed sign-in stayed on its form - the box the form also needed, when it showed one empty, before blaming the password."
+    o = [str(x) for x in (others or []) if str(x).strip()]
+    if o: return (f'{site} also asks for {o[0]!r}, which Taskuary does not keep - type it on the page, then sign in there; the saved '
+                  'password was not shown to be wrong')
+    return f'{site} did not accept that password'
+
+
 def type_in(sid: str, site: str, user: str, pw: str, code=None) -> dict:
     """Sign the session's browser in on `site`: the screencast held while it types, the socket closed after."""
     from . import browserview
@@ -791,7 +805,7 @@ def type_in(sid: str, site: str, user: str, pw: str, code=None) -> dict:
             ok = out.get('code') or accepted(c, site)
             try: c.js(CLEAR)
             except SignInError: pass                          # the page moved on: nothing of it is left to clear
-            if not ok: raise NotAccepted(f'{site} did not accept that password')
+            if not ok: raise NotAccepted(refused(site, out.get('others')))
             return out
         finally: c.close()
 

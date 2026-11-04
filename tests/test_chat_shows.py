@@ -46,7 +46,7 @@ class ShowFilesTests(unittest.TestCase):
         outside = config.home() / 'secrets.png'; outside.write_bytes(PNG)
         general._show_files(self.s, self.tid, [str(outside)], [])
         self.assertEqual(self.shown(), [])
-        self.assertTrue(any('Not shown' in (c.get('Body') or '') for c in self.s.list_comments(self.tid)))
+        self.assertTrue(any('secrets.png was not shown' in (c.get('Body') or '') for c in self.s.list_comments(self.tid)))
 
     def test_only_pictures_pages_and_tables_can_be_shown(self):
         f = self.scratch / 'tool.exe'; f.write_bytes(b'MZ')

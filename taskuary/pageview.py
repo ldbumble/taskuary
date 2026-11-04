@@ -26,7 +26,7 @@ AREAS = ('task', 'connections', 'reports', 'settings', 'hub', 'board', 'new', 's
 OPEN_KEYS = ('section', 'open', 'knob', 'connector', 'step', 'tab', 'query')
 # AN OUTWARD SEND, by its verb (buttons.json) or by its words: the row's Send is `approve`, an invite's answer sends one, a hand-off sends
 # the person a mail. The page marks its own (data-tq-send); this list is the server's check when it did not
-SEND_VERBS = frozenset({'approve', 'send', 'accept_invite', 'decline_invite', 'propose_time', 'share', 'forward', 'send-handoff', 'email'})
+SEND_VERBS = frozenset({'approve', 'send_close', 'send', 'accept_invite', 'decline_invite', 'propose_time', 'share', 'forward', 'send-handoff', 'email'})
 # ..."Send to agent" starts work here and sends nothing out: it is the owner's kind of press, like Mark done - and the Assistant's
 # to press when the owner says so (the owner, 2026-11-02: "why can't assistant start an agent"). "Send to coding agent" too: it was
 # read as a send, so "have a coding agent fix this" on New only lit it

@@ -1681,6 +1681,11 @@ def _run_kind(op: dict, background: BackgroundTasks):
             raise operations.Halt(out['send_error'], {'delivery': out.get('delivery') or 'failed', 'unsent': True, 'rid': tid}
                                   | ({'fix': out['send_fix']} if out.get('send_fix') else {}))
         if out.get('send_error'): out = {**out, 'reply_error': out['send_error']}
+        # SEND AND CLOSE (the owner, 2026-11-03: "button send and close and send without closing"): `close` closes the task once the reply
+        # went, through the one gate (concierge.close_after_send) - kept open, and said why, while an agent or anything else on it waits
+        if p.get('close') and rv.get('TaskId') and not out.get('reply_error'):
+            from . import concierge
+            out = {**out, **concierge.close_after_send(store, int(rv['TaskId']), ACTOR)}
         return out
     if kind == 'agent.answer':
         # the exact outstanding request of the run that asked (PW-138/139); nothing asked = the waiting room (PW-140)

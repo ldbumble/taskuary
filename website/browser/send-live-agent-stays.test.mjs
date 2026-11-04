@@ -7,7 +7,7 @@ import { startHarness } from "./harness.mjs";
    should not close the tasks. it did that and now it's open with it not being on the table. If anything still working never close the task
    automatically"). The task's agent sits at its prompt, waiting on the owner; Send on Close out sends the reply, and the task stays open -
    on the rail, on the table, its agent still there. The page put the row down at the press and never picked it back up: off the rail,
-   its canvas drawn over nothing. Invented people only. */
+   its canvas drawn over nothing. The press is Send and close, Close out's closing send (the owner, 2026-11-03). Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("Send with a live agent waiting on you: the reply goes, the task stays on the rail and the table with its agent", { timeout: 300000 }, async (t) => {
@@ -49,13 +49,13 @@ test("Send with a live agent waiting on you: the reply goes, the task stays on t
   await page.waitForSelector(`${pageSel} [data-tq-section-tab=close]`, { timeout: 20000 });
   if (!(await page.$$eval(`${pageSel} [data-tq-closeout] button`, (bs) => bs.some((b) => b.offsetParent)))) await page.$eval(`${pageSel} [data-tq-section-tab=close]`, (b) => b.click());
   await page.waitForFunction((sel) => [...document.querySelectorAll(`${sel} [data-tq-closeout] button, [data-tq-row] button`)]
-    .some((b) => /^Send\b/.test(b.textContent.trim()) && !b.disabled && b.offsetParent), { timeout: 20000 }, pageSel)
+    .some((b) => /^Send and close\b/.test(b.textContent.trim()) && !b.disabled && b.offsetParent), { timeout: 20000 }, pageSel)
     .catch(async () => assert.fail(`no Send: ${await page.evaluate(() => [...document.querySelectorAll("button")].filter((b) => b.offsetParent).map((b) => b.textContent.trim()).join(" | "))}`));
   // ...and what it says under it tells the truth: the task stays open while the agent works
   const told = await page.evaluate((sel) => document.querySelector(`${sel} [data-tq-closeout]`)?.innerText || "", pageSel);
   assert.ok(!/then the task closes/.test(told), `Send says it closes the task under a live agent: ${told.slice(0, 400)}`);
   await page.evaluate((sel) => {
-    const b = [...document.querySelectorAll(`${sel} [data-tq-closeout] button, [data-tq-row] button`)].find((x) => /^Send\b/.test(x.textContent.trim()) && !x.disabled && x.offsetParent);
+    const b = [...document.querySelectorAll(`${sel} [data-tq-closeout] button, [data-tq-row] button`)].find((x) => /^Send and close\b/.test(x.textContent.trim()) && !x.disabled && x.offsetParent);
     b.click();
   }, pageSel);
   for (let i = 0; i < 20 && recorded !== 200; i++) await sleep(250);

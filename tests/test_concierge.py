@@ -232,7 +232,7 @@ class TurnTests(unittest.TestCase):
         with mock.patch.object(concierge, 'brain', return_value=None), concierge.delivering(concierge.PHONE):
             out = concierge.surface(s)
         self.assertIn('Dana wrote on email', out['say']); self.assertIn('"Export still broken"', out['say'])
-        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send, Redraft, or move on', out['say'])
+        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send, Send and close, or move on', out['say'])
         self.assertEqual(out['options'], [])
 
     def test_a_model_that_fails_still_leaves_a_line(self):

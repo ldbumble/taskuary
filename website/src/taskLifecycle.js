@@ -78,15 +78,16 @@ export const pendingReplyReview = (reviews = []) =>
 // `noSender`: a task the owner typed has nobody to answer, and its card said "sending the reply closes it" under
 // "Nobody sent this one, so there is nobody to answer" - the one way out it named did not exist
 // ONE PROMISE, THE CODE'S (the UI audit, 2026-10-21: the header said "closes itself", Close out "never closes", Send out results
-// "closes once it is sent"): no send closes a task - the reply's, or the last of its emails (slots._left) - only Mark done does. The
+// "closes once it is sent"): no send closes a task - the reply's, or the last of its emails (slots._left) - only Mark done does,
+// or Close out's Send and close (the owner, 2026-11-03), the reply and the close in one press. The
 // one thing that closes a task by itself is its agent saying done on a task nobody is owed an answer on (wrapup.wrap, selfclose)
 const closesItself = (manual, owesEmails, noSender) => !manual && noSender && !owesEmails;
 export const completionLine = (manual, owesEmails, noSender = false) => closesItself(manual, owesEmails, noSender)
   ? "Automatic task. When its agent says it is done, Taskuary closes it."
-  : !manual ? "Automatic task. When its agent is done, Taskuary prepares the reply; sending it leaves the task open - Mark done closes it."
+  : !manual ? "Automatic task. When its agent is done, Taskuary prepares the reply; Send leaves the task open - Send and close or Mark done closes it."
   : owesEmails ? "You control completion. Ending an agent run leaves this task open, and so does sending its emails - Mark done closes it."
   : noSender ? "You control completion. Ending an agent run leaves this task open; press Mark done when it's finished."
-  : "You control completion. Ending an agent run leaves this task open, and so does sending the reply - Mark done closes it.";
+  : "You control completion. Ending an agent run leaves this task open, and so does Send - Send and close or Mark done closes it.";
 // ...and the same answer as a FACT on the settings row, beside the pills it belongs with: the sentence above sat
 // right-aligned across two lines and explained ("Hate the why. Just tell me what." - the owner); it is the tooltip now.
 export const completionFact = (manual, owesEmails, noSender = false) => closesItself(manual, owesEmails, noSender)

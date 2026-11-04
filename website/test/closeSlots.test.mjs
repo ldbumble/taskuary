@@ -36,7 +36,8 @@ test("Approve all never sweeps up an email the agent added, or one with no addre
 
 test("the footer says what closes the task", async () => {
   const { completionLine } = await import("../src/taskLifecycle.js");
-  assert.match(completionLine(true, false), /so does sending the reply - Mark done closes it/);   // Send never closes (2026-10-18)
+  assert.match(completionLine(true, false), /so does Send - Send and close or Mark done closes it/);   // Send never closes (2026-10-18); Send and close does (2026-11-03)
+  assert.match(completionLine(false, false), /Send leaves the task open - Send and close or Mark done closes it/);
   assert.match(completionLine(true, true), /so does sending its emails - Mark done closes it/);   // the last email closes nothing (slots._left)
   assert.match(completionLine(false, false), /Automatic task/);
   assert.match(completionLine(true, false, true), /press Mark done/);       // nobody to answer: no reply to send

@@ -5,7 +5,8 @@ import { startHarness } from "./harness.mjs";
 
 /* SEND ON CLOSE OUT CLOSES THE TASK ONCE IT WENT (the owner, 2026-10-29: "wait until the send actually succeeds, then close the task").
    A send that failed leaves the task open, on Close out, with the error showing - the page never swapped under the owner's hand
-   (2026-10-27: "I hit send on close out and ... it reopened the task page???"). A send that went closes it: Mark done's own road. */
+   (2026-10-27: "I hit send on close out and ... it reopened the task page???"). A send that went closes it: Mark done's own road.
+   ...the press is Send and close, Close out's closing send (the owner, 2026-11-03); its plain Send leaves the task open (send-and-close). */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("Send on Close out: a failed send stays on Close out with its error, one that went closes the task", { timeout: 300000 }, async (t) => {
@@ -44,11 +45,11 @@ test("Send on Close out: a failed send stays on Close out with its error, one th
   const mainOf = () => page.$eval("[data-tq-task-body]", (e) => e.getAttribute("data-tq-main")).catch(() => null);
   assert.equal(await mainOf(), "close", "a drafted reply opens on Close out");
   const press = () => page.evaluate(() => {
-    const b = [...document.querySelectorAll("[data-tq-closeout] button")].find((x) => /^Send\b/.test(x.textContent.trim()) && !x.disabled && x.offsetParent);
+    const b = [...document.querySelectorAll("[data-tq-closeout] button")].find((x) => /^Send and close\b/.test(x.textContent.trim()) && !x.disabled && x.offsetParent);
     if (!b) return false; b.click(); return true;
   });
 
-  assert.ok(await press(), "Close out offers Send");
+  assert.ok(await press(), "Close out offers Send and close");
   await page.waitForFunction(() => /The reply was not sent/.test(document.querySelector("[data-tq-closeout]")?.textContent || ""), { timeout: 15000 });
   const seen = new Set();
   for (let i = 0; i < 6; i++) { await sleep(500); seen.add(await mainOf()); }

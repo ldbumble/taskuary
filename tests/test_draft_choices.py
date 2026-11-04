@@ -13,8 +13,9 @@ class DraftChoicesTests(unittest.TestCase):
         item = {'key': 'review:4', 'kind': 'review', 'rid': 4, 'mid': 7, 'tid': t, 'ref': f'TQ-{t:04d}', 'draft': 'Yes, Tuesday works.',
                 'title': 'Rota', 'who': 'Erin Blake'}
         chips = concierge.chips_for(s, item)
-        self.assertEqual([c['verb'] for c in chips][:3], ['approve', 'redraft', 'close'], "Close out first: it is the one that sends")
-        self.assertEqual(chips[2]['label'], 'Mark done')
+        # ...and Close out's two sends (the owner, 2026-11-03): Send, and Send and close
+        self.assertEqual([c['verb'] for c in chips][:4], ['approve', 'send_close', 'redraft', 'close'], "Close out first: it is the one that sends")
+        self.assertEqual(chips[3]['label'], 'Mark done')
         self.assertNotIn('reject', [c['verb'] for c in chips])
         self.assertNotIn('redraft', [c['verb'] for c in concierge.chips_for(s, {**item, 'rid': None})], 'no draft to write again')
 

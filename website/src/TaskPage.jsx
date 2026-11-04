@@ -1303,6 +1303,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // goes through the server's one gate (concierge.close_after_send): kept open, said on the task, while anything on it still waits on
   // you - a held agent step, a proposal, an email it owes, a session still open (a held `git push` was closed under, 2026-10-29).
   // Anything else (an Approve, one of its emails) reads the task again and stays on it; closed by something else meanwhile means walk on
+  // ...and only Close out's Send and close says `closes` (the owner, 2026-11-03: "send and close and send without closing"): its plain Send
+  // reads the task again and stays on it, as Send does everywhere else
   // ...and NOTHING STILL WORKING IS PUT DOWN (the owner, 2026-11-01: "if agent screen is still open and you hit send message it should
   // not close the tasks"): with work live the press puts nothing down, and a close the server kept open picks the row back up - put
   // down at the press, it stayed off the rail with its agent still drawn on the canvas

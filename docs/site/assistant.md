@@ -32,6 +32,7 @@ phone the task view is the screen, and **Expand** takes the session full screen 
 | **Next** | every card | The row directly below on the rail comes up. A report, an idea or an FYI is read and leaves the rail; an open task stays under Tasks, in its place. **Back** is the row directly above, and reads nothing. **Walk me through my tasks** starts at the top | at once |
 | **Mark done** | a draft reply, a finished agent, a task | The one close: the task is done, an unsent draft is retired, a live agent is stopped, and it leaves your rail | at once |
 | **Send** | a draft reply, one of a task's emails, a question for the sender | Sends it, and only that: the task stays open - on the table with its receipt, Mark done or Next - until you **Mark done** | you confirm |
+| **Send and close** | a draft reply on a task (Close out) | Sends it, then closes the task - kept open, and said why, while an agent works on it or anything else on it waits on you. "Send it" brings up **Send**; "send it and close it" brings up **Send and close** | you confirm |
 | **Approve** | an agent's proposal, a task's close-out (a pull request to merge, an issue to close) | Runs only that action - on GitHub merges the pull request or closes the issue and posts the reply as its comment. The task stays open until you **Mark done** | you confirm |
 | **Reply** | a person's ask, a finished agent with no draft | Writes a draft reply. Nothing is sent | at once |
 | **Make a task** | an ask, an fyi, an idea | A task on your own list. No agent starts | you confirm |

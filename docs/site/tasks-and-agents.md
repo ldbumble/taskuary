@@ -13,7 +13,7 @@ across its top while open.
 |---|---|---|---|
 | **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not a task**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
 | **Agent** | One or more runs by a coding or general agent, and the Result each left | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** | Ending a session does not mark the task done or send a reply |
-| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve**, **Decline**, **Not yet** | Closing the task: sending and approving never do — the task stays open until you **Mark done** |
+| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Send** and approving never close it — the task stays open until you **Mark done** |
 
 **Mark done** always comes first on Close out and is never folded away. When a strip runs out of
 room, the rest of its moves fold into a **▾** at its end. The task's title bar holds only its status,
@@ -31,8 +31,8 @@ when it stops.
 
 ![Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
 
-There is one close, **Mark done**. Sending a reply or approving an agent's act never closes a task by itself (the
-owner's rule: sending and closing are two steps). Mark done always does the
+There is one close, **Mark done**. Close out's **Send and close** is a Send and then that close, in one press. A plain
+**Send**, or approving an agent's act, never closes a task by itself (the owner's rule: sending and closing are two steps). Mark done always does the
 same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
 it leaves your work rail, and the "yours to end" mark comes off.
 
@@ -40,6 +40,7 @@ it leaves your work rail, and the "yours to end" mark comes off.
 |---|---|---|
 | **Mark done** — the task page, the Assistant's button or card, "done" or "close" in the chat, the phone | Mark done | never |
 | **Send** a reply (or one of the task's emails) | Sends it, and nothing else: the item stays in front of you with its receipt, and **Mark done** or **Next** | always - sending and closing are two steps |
+| **Send and close** in Close out | Sends the reply; once it went, Mark done. Sent nowhere it cannot confirm, it waits for **Check delivery** or **Send anyway** first | an agent is still working on it, or anything else on it still waits on you (a held step, another reply) - the task says why |
 | **Tick the last checklist box** | Mark done | an agent is still working on it |
 | **Hand it to a person** | Forwards it, and the task waits on them (📤 waiting on them) | always - **Mark done** when it is finished |
 | **Not ours** / **Not a task** | Deleted if nothing was done on it, otherwise Mark done | never |

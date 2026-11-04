@@ -14,7 +14,7 @@ from .routing import first_line, draft_task_fields
 from .policy import evaluate
 from .triage import agent_words, classify_intent, person_name, sender_called, wrapper_of
 from .store import task_ref, auto_code_enabled, _now
-from . import buttons, remind, senders, textsim, watch, words, workstreams
+from . import buttons, remind, senders, textsim, watch, wrapup, words, workstreams
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -1672,8 +1672,11 @@ def thread_task(store, tid) -> dict | None:
     the `exchange` beside it."""
     t = store.get_task(tid) if tid else None
     if not t: return None
+    rep = next((wrapup.report_body(c['Body']) for c in reversed(store.list_comments(tid)) if wrapup.is_report(c['Body'])), '')
     return with_agent(store, {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(t.get('Summary') or '').split())[:300],
             'status': 'closed' if t.get('Status') == 'done' else 'open',
+            # what triage last made of the whole thread, and what the agent last said it did: a new mail is measured against both
+            **({'reading': r} if (r := store.task_thread(tid)) else {}), **({'agent_said': rep[:600]} if rep else {}),
             # ...and the owner WATCHING it for somebody else to handle (watch.py): triage says whether this message shows it handled
             **({'watching': True} if watch.watching(t) else {})})
 

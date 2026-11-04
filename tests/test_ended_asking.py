@@ -103,3 +103,17 @@ def test_the_tasks_detail_carries_the_question_for_the_page(s, monkeypatch):
     done = Factory(s).task(title='Packet download', kind='coding', status='open')
     ev(s, done, 'working', sid='c2'); ev(s, done, 'turn_end', 'Deployed.', sid='c2'); ev(s, done, 'disconnected', 'the session ended', source='shutdown', sid='c2')
     assert server.task_detail(done)['leftAsking'] == []
+
+
+def test_a_run_that_ended_waiting_on_a_sign_in_offers_its_browser_back_not_an_answer(s, monkeypatch):
+    """A restart cut off a general agent waiting on "Sign in to ... to continue": the page said Answer it over a run whose answer is a
+    sign-in on a page that was gone (the owner, 2026-11-03: "agent is closed but it shows answer it??"). Its Continue opens the session and
+    its browser again; the detail names the site instead of a question."""
+    from taskuary import server
+    monkeypatch.setattr(server, 'store', s)
+    t = Factory(s).task(title='Pay the Payworth invoice', kind='general', status='open')
+    ev(s, t, 'working'); ev(s, t, 'turn_end', 'The Payworth sign-in page is open.')
+    ev(s, t, 'input_needed', 'Sign in to payworth.example to continue', source='api', rid='signin:payworth.example')
+    ev(s, t, 'disconnected', 'the session ended', source='shutdown')
+    d = server.task_detail(t)
+    assert (d['leftAsking'], d['leftSignin']) == ([], 'payworth.example')

@@ -14,7 +14,7 @@ import { label } from "./buttons.js";
 // `onFail(error)` if it could not continue
 // `initial`: words the box opens holding - the owner's notes when the Assistant lit Continue with them ("rerun it with these notes: ...")
 // `asked`: the question the run was still asking when it ended (workerstate.left_asking) - the box is its answer, and says so
-export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "", asked = "" }) {
+export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "", asked = "", signin = "" }) {
   const [note, setNote] = useState(initial || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -37,6 +37,9 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>
       <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{word}{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      {/* a run that ended WAITING ON A SIGN-IN (2026-11-03): no answer in words - Continue opens its browser again, and the sign-in is asked there */}
+      {!asked && signin && <Typography data-tq-left-signin={signin} sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>
+        {`Sign in to ${signin} to continue. Continue opens the agent browser on that page again - sign in there, or fill it in securely from the link it shows.`}</Typography>}
       {asked && <Typography data-tq-left-asking sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>{asked}</Typography>}
       <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder={asked ? "Your answer - it goes to the agent as it picks up" : "Anything to tell it as it picks up? (optional) - paste or drop a picture too"}
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} {...pics.drop}

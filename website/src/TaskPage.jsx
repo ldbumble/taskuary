@@ -2285,7 +2285,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     {runFormOpen
       && <Box data-tq-run-form="">{nextRunForm}</Box>}
     {continueCard && !runFormOpen && !sessionView && <Box data-tq-continue-pane="" sx={{ mt: 1.25 }}>
-      <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} asked={leftAsking} onClose={() => setContinueCard(null)}
+      <ContinueBox inline task={t} taskRef={detail?.ref || ""} initial={continueCard.note || ""} asked={leftAsking} signin={(!term?.alive && detail?.leftSignin) || ""} onClose={() => setContinueCard(null)}
         onPress={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: selected } }))}
         onFail={() => window.dispatchEvent(new CustomEvent("tq-continuing", { detail: { tid: null } }))}
         onDone={() => { setContinueCard(null); continued(); }} /></Box>}
@@ -3766,7 +3766,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {shareMenu}
       {t && <EmailSomeone open={emailOpen} task={t} detail={detail} onClose={() => setEmailOpen(false)}
         onDrafted={() => { setEmailOpen(false); loadDetail(selected); loadTasks(); onChanged?.(); setOpenStage("reply"); }} />}
-      {t && <ContinueBox task={t} anchor={continueAt} asked={leftAsking} onClose={() => setContinueAt(null)} onDone={continued} />}
+      {t && <ContinueBox task={t} anchor={continueAt} asked={leftAsking} signin={(!term?.alive && detail?.leftSignin) || ""} onClose={() => setContinueAt(null)} onDone={continued} />}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} act={remindAct} onLeave={onLeave} onStay={onStay} live={liveSession}
         said={remindSaid} />}

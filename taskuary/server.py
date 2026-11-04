@@ -2047,6 +2047,7 @@ def task_detail(task_id: int):
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
     session = hub_term.for_task(task_id, tail=3, details=False)
     judged, ran, story = _brainroute().judged(store, task_id), _workerstate().ended(store, task_id), _agent_story(task_id)
+    left = _workerstate().left_asking(store, task_id) if ran else []         # what a run that is over was still asking the owner
     # "Run again on the strong model" is offered only on an open task whose agent failed or whose reader was unsure (TaskPage's
     # ▾): asking the router on every other open cost ~11 ms a task, 2.7x what an open cost in 0.3.9.34 (2026-10-26)
     strong = _brainroute().strong_offered(d['task'], judged, ran, story)
@@ -2095,7 +2096,10 @@ def task_detail(task_id: int):
             'runEnded': ran,
             # ...and the question it was still asking the owner when it ended (workerstate.left_asking): its Continue is the answer, and
             # says so (the owner, 2026-11-03: "it's asking me question but the ai closed the agent why?")
-            'leftAsking': [r['text'] for r in _workerstate().left_asking(store, task_id)] if ran else [],
+            # ...but a SIGN-IN it was waiting on is not answered in words (the owner, 2026-11-03: "agent is closed but it shows answer it??"):
+            # its Continue opens the session and its browser again, and the agent asks for the sign-in there - `leftSignin` names the site
+            'leftAsking': [r['text'] for r in left if not str(r.get('request_id') or '').startswith('signin:')],
+            'leftSignin': next((str(r['request_id'])[7:] for r in left if str(r.get('request_id') or '').startswith('signin:')), ''),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)

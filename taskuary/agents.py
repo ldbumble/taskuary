@@ -189,8 +189,11 @@ def child_env(base: dict = None, home: str = None, windows: bool = None) -> dict
     return env
 
 
-def _fmt_input(inp) -> str:
-    """The one field a human wants to see per tool call - command, path, pattern…"""
+def _fmt_input(inp, name: str = '') -> str:
+    """The one field a human wants to see per tool call - command, path, pattern… - and a draft by what it is, never its body
+    (sessionrecord.hide_draft: a login the thread asked for goes in the draft, not on the pane)."""
+    from .sessionrecord import DRAFT_SHOWN, drafting
+    if drafting(name, inp): return DRAFT_SHOWN
     if not isinstance(inp, dict): return str(inp)[:140]
     for k in ('command', 'file_path', 'path', 'pattern', 'url', 'query', 'description', 'prompt'):
         if inp.get(k): return str(inp[k])[:140]
@@ -244,7 +247,7 @@ def _live_line(j):
     if t == 'assistant':
         out = []
         for c in (j.get('message') or {}).get('content') or []:
-            if c.get('type') == 'tool_use': out.append(f"→ {c.get('name')}: {_fmt_input(c.get('input'))}")
+            if c.get('type') == 'tool_use': out.append(f"→ {c.get('name')}: {_fmt_input(c.get('input'), c.get('name'))}")
             elif c.get('type') == 'text' and (c.get('text') or '').strip(): out.append(c['text'].strip()[:300])
         return '\n'.join(out) or None
     if t == 'user':

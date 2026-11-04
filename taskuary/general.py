@@ -21,6 +21,9 @@ ASSISTANT_TYPE = 'assistant_agent'
 # RUN ANOTHER AGENT on a general task starts a second conversation (new_run): this row is where it begins. The chat, the prompt and the
 # pane read the turns after the last one; the earlier agent's turns stay on the task, read as `earlier`
 RUN_TYPE = 'assistant_run'
+# WHERE THE OWNER STANDS after a turn (selfclose.summary_marker, Task 3.5): its {about, did, on_you, nothing_left} as JSON, filed after the
+# answer it ends - never a chat turn itself; shown_history puts it on that answer
+SUMMARY_TYPE = 'assistant_summary'
 # TASKUARY'S INSTRUCTIONS ARE NOT THE OWNER'S WORDS (the owner, 2026-10-30): an agent that starts by itself is handed its brief - "THIS
 # TASK IS A REPLY OWED...", "A QUICK LOOK CAME FIRST..." - as the conversation's first user turn, and the pane drew it under YOU as though
 # the owner had typed it. It is still that turn (the next turn continues the conversation it opened), but filed by Taskuary, and the
@@ -357,7 +360,8 @@ JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM rou
           "FROM message m WHERE m.TaskId=? AND IFNULL(m.Direction,'in')<>'out' AND m.Status NOT IN ('context','history','skipped') "
           "AND IFNULL(m.Channel,'')<>'report' ORDER BY JoinedAt, m.MessageId")
 def shown_history(store, tid: int) -> list:
-    "history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words)."
+    """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
+    each answer with the `summary` filed after it."""
     from .triage import own_words
     rows = chat_rows(store, tid, run=True); msgs = _as_messages(rows)
     mail = store._rows(JOINED, (tid,)) if any(m.get('brief') for m in msgs[1:]) else []
@@ -366,6 +370,15 @@ def shown_history(store, tid: int) -> list:
         got = [x for x in mail if str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
         if got: m['mail'] = [{'who': x.get('FromName') or x.get('FromEmail') or '', 'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
                               'words': own_words(str(x.get('BodyText') or '')).strip()[:3000] or x.get('Subject') or ''} for x in got[-5:]]
+    # ...and each answer with the summary filed after it (SUMMARY_TYPE): the turn's three parts, drawn under it
+    summ, last = {}, None
+    for c in store.list_comments(tid):
+        if c.get('ActorType') == ASSISTANT_TYPE: last = c['CommentId']
+        elif c.get('ActorType') == SUMMARY_TYPE and last:
+            try: summ[f'comment-{last}'] = json.loads(c.get('Body') or '')
+            except ValueError: continue
+    for m in msgs:
+        if m['id'] in summ: m['summary'] = summ[m['id']]
     return msgs
 
 
@@ -1555,6 +1568,10 @@ class GeneralSession:
                 out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
                 if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
         reply, ticks = selfclose.tick_markers(reply)          # the to-dos it finished, on the road `taskuary --tick` takes
+        # ...and where the owner stands, taken out of the answer - with no line of a letter waiting on them in it (selfclose.without_letters)
+        letters = [drafted, *(r['DraftText'] for r in self.store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Status='pending'", (self.task_id,)))]
+        reply, summ = selfclose.summary_marker(reply, [x for x in letters if x])
+        if summ: reply = reply or summ['did']
         if ticks:
             from .store import agent_tick
             for i in ticks:
@@ -1615,6 +1632,9 @@ class GeneralSession:
             from . import hooks
             hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
+        if summ:
+            self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
+            self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
         from . import sessionrecord
         try: sessionrecord.keep_turn(self.task_id, rid, self.trace)

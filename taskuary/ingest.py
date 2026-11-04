@@ -1338,6 +1338,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if intent.get('invite'): reason = f"{intent['why']} · your answer goes out only when you press {buttons.label('approve')}"
     # a split is triage's own decision and recorded as one, so the correction loop and the eval replay read it like any verdict
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], 'triage' if split_from else actor, verdict=verdict)
+    # A REPLY NO AGENT WORKS takes what is on the owner from triage's reading (Task 3.5) - where an agent works, its turn summary says it.
+    # A reading is optional (older verdicts, CLI brains): none, or none with an on_you list, leaves the list as it is
+    th = (verdict or {}).get('thread') if isinstance(verdict, dict) else None
+    if tid and isinstance(th, dict) and isinstance(th.get('on_you'), list) and (store.get_task(tid) or {}).get('Kind') == 'reply' and not live_agent(store, tid):
+        store.set_on_you(tid, th['on_you'], 'triage')
     # ...and only now the agent it set going: started before the verdict was on file, the start read no needs_browser, took the quick
     # one-call path, and its session then found the verdict and opened a browser beside one call that never drives a page (2026-11-03)
     for a in starts: _spawn(*a)

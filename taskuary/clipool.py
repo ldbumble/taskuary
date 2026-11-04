@@ -21,6 +21,7 @@ from loguru import logger
 from . import spawn
 
 IDLE_SECONDS = 30 * 60
+GRACE = IDLE_SECONDS         # how long a process nobody touches stays open; an agent's TURN has no limit (the owner's ruling) - this is idle time only
 MAX_LIVE = 6
 INPUT = ['--input-format', 'stream-json']
 
@@ -104,14 +105,31 @@ _POOL: dict[str, Live] = {}
 _LOCK = threading.Lock()
 
 
+def _sweep():
+    now = time.time()
+    with _LOCK:
+        idle = [k for k, lv in _POOL.items() if not lv.lock.locked() and (now - lv.used > GRACE or not lv.alive())]
+        for k in idle: _POOL.pop(k).close()
+    for k in idle: logger.debug(f'clipool: closed {k} (idle or gone)')
+
+
 def _reap():
-    while True:
-        time.sleep(60)
-        now = time.time()
-        with _LOCK:
-            idle = [k for k, lv in _POOL.items() if not lv.lock.locked() and (now - lv.used > IDLE_SECONDS or not lv.alive())]
-            for k in idle: _POOL.pop(k).close()
-        for k in idle: logger.debug(f'clipool: closed {k} (idle or gone)')
+    while True: time.sleep(60); _sweep()
+
+
+def is_live(key: str) -> bool:
+    with _LOCK: lv = _POOL.get(key)
+    return lv is not None and lv.alive()
+
+
+def touch(prefix: str) -> int:
+    """The conversation is on screen: its idle clock starts again, so a task the owner is looking at never has its process reaped
+    from under them. Returns how many live processes it kept."""
+    n, now = 0, time.time()
+    with _LOCK:
+        for k, lv in _POOL.items():
+            if (k == prefix or k.startswith(prefix + ':')) and lv.alive(): lv.used = now; n += 1
+    return n
 
 
 threading.Thread(target=_reap, daemon=True, name='clipool-reaper').start()

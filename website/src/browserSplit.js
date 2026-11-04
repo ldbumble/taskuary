@@ -69,14 +69,38 @@ export const modifiers = (e) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.me
 
 // A keystroke for the page. Printable keys carry `text` so the page receives the character;
 // keyDown for a printable key uses CDP's "keyDown" which also inserts text when `text` is set.
+// EVERY KEY CARRIES ITS WINDOWS KEY CODE. Chrome runs Backspace, Delete, the arrows, Home/End, Tab and Ctrl+A off
+// windowsVirtualKeyCode, not off `key`: without it a typed "abc" went in and Backspace did nothing (the owner on a portal's
+// sign-in, 2026-11-03: "something went in but backspace did not work"). Measured against agent-browser 0.38.2's stream: no
+// code, "abc" + Backspace stayed "abc"; with it, "ab" - and Ctrl+A then Backspace emptied the box.
+const VK = { Backspace: 8, Tab: 9, Enter: 13, Shift: 16, Control: 17, Alt: 18, Pause: 19, CapsLock: 20, Escape: 27, " ": 32, PageUp: 33,
+  PageDown: 34, End: 35, Home: 36, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46, Meta: 91 };
+export const keyCodeOf = (e) => {
+  if (e.keyCode) return e.keyCode;
+  if (VK[e.key] != null) return VK[e.key];
+  const m = /^(?:Key([A-Z])|Digit(\d))$/.exec(e.code || "");
+  if (m) return (m[1] || m[2]).charCodeAt(0);
+  if (/^F\d{1,2}$/.test(e.key || "")) return 111 + Number(e.key.slice(1));
+  return e.key && e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : 0;
+};
+// Ctrl+V (Cmd+V) is not sent as a key: the page's clipboard is the agent's browser's, empty. The paste event brings the owner's own
+// clipboard instead (pasteMessages).
+export const isPaste = (e) => (e.ctrlKey || e.metaKey) && !e.altKey && String(e.key).toLowerCase() === "v";
 export const keyMessage = (type, e) => {
   const eventType = type === "keydown" ? (e.key.length === 1 ? "keyDown" : "rawKeyDown") : type === "keyup" ? "keyUp" : null;
   if (!eventType) return null;
   const m = { type: "input_keyboard", eventType, key: e.key, code: e.code, modifiers: modifiers(e) };
+  const vk = keyCodeOf(e);
+  if (vk) Object.assign(m, { windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk });
   if (type === "keydown" && e.key.length === 1 && !e.ctrlKey && !e.metaKey) m.text = e.key;
   else if (type === "keydown" && e.key === "Enter") m.text = "\r";
   return m;
 };
+// The owner's clipboard, typed into the page a character at a time: agent-browser's stream has no insert-text message, and a keyDown
+// carrying several characters inserts none of them (measured, 0.38.2). A line break is an Enter.
+export const pasteMessages = (text) => [...String(text || "").replace(/\r\n?/g, "\n")].slice(0, 4000).map((ch) => (ch === "\n"
+  ? { type: "input_keyboard", eventType: "keyDown", key: "Enter", code: "Enter", modifiers: 0, windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: "\r" }
+  : { type: "input_keyboard", eventType: "keyDown", key: ch, modifiers: 0, text: ch }));
 
 // Parse one relay message; frames become {type, seq, src, w, h} ready to draw, the rest pass through.
 export const parseMessage = (raw) => {

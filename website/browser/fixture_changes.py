@@ -1040,6 +1040,14 @@ def install_processing_changes(app, store):
             while True:
                 m = json.loads(await ws.receive_text())
                 v['input'].append(m.get('type'))
+                # THE PAGE'S FOCUSED BOX, as Chrome's Input.dispatchKeyEvent edits it: text goes in on a keyDown that carries it; Backspace
+                # and Delete act only with their Windows key code - without it they do nothing (measured on agent-browser 0.38.2)
+                if m.get('type') == 'input_keyboard' and m.get('eventType') in ('keyDown', 'rawKeyDown'):
+                    f, vk = v.setdefault('field', ''), m.get('windowsVirtualKeyCode')
+                    if vk == 8: v['field'] = f[:-1]
+                    elif vk == 65 and m.get('modifiers') == 2: v['all'] = True
+                    elif m.get('text') and m.get('text') != '\r': v['field'] = ('' if v.pop('all', False) else f) + m['text']
+                    if vk == 8 and v.pop('all', False): v['field'] = ''
                 if m.get('type') == 'ack': v.setdefault('acks', []).append(m.get('seq'))
         except Exception: pass
         finally: v['sockets'].remove(ws)
@@ -1126,7 +1134,7 @@ def install_processing_changes(app, store):
     def browser_view_seen(tid: int):
         "What the agent was told, what its browser ran, and what the owner's mouse and keys sent the page."
         v = VIEW.get(view_sid.get(tid)) or {}
-        return {'told': told.get(tid, []), 'ran': v.get('ran', []), 'input': v.get('input', []), 'acks': v.get('acks', [])}
+        return {'told': told.get(tid, []), 'ran': v.get('ran', []), 'input': v.get('input', []), 'acks': v.get('acks', []), 'field': v.get('field', '')}
 
     # ── THE STATE MATRIX (browser/state-matrix, 2026-10-28): the task states the demo world lacks, each one task, invented people ──────────
     MATRIX = ('sent', 'working', 'coding_working', 'asked', 'stopped', 'finished', 'done', 'note', 'deferred', 'todo', 'idea', 'news',

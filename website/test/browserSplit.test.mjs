@@ -4,7 +4,7 @@ import {
   DEFAULT_RATIO,
   clampRatio,
   fitFrame,
-  keyMessage,
+  keyMessage, isPaste, pasteMessages,
   isLocalPage,
   layoutFor,
   MIN_CHAT_PX,
@@ -64,7 +64,18 @@ test("mouse and wheel events become CDP input at page coordinates", () => {
 
 test("keystrokes carry text for printable keys and Enter, none for chords and specials", () => {
   assert.deepEqual(keyMessage("keydown", { key: "a", code: "KeyA" }),
-    { type: "input_keyboard", eventType: "keyDown", key: "a", code: "KeyA", modifiers: 0, text: "a" });
+    { type: "input_keyboard", eventType: "keyDown", key: "a", code: "KeyA", modifiers: 0, text: "a", windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 });
+  // the editing keys run off the Windows key code in Chrome - without it Backspace did nothing (2026-11-03)
+  for (const [key, vk] of [["Backspace", 8], ["Delete", 46], ["Tab", 9], ["ArrowLeft", 37], ["ArrowRight", 39], ["Home", 36], ["End", 35]]) {
+    const m = keyMessage("keydown", { key, code: key });
+    assert.equal(m.eventType, "rawKeyDown"); assert.equal(m.windowsVirtualKeyCode, vk, key); assert.equal(m.text, undefined);
+    assert.equal(keyMessage("keyup", { key, code: key }).windowsVirtualKeyCode, vk);
+  }
+  const all = keyMessage("keydown", { key: "a", code: "KeyA", ctrlKey: true });
+  assert.equal(all.windowsVirtualKeyCode, 65); assert.equal(all.modifiers, 2);
+  assert.equal(keyMessage("keydown", { key: "Enter", code: "Enter" }).windowsVirtualKeyCode, 13);
+  assert.ok(isPaste({ key: "v", ctrlKey: true }) && isPaste({ key: "V", metaKey: true }) && !isPaste({ key: "v" }));
+  assert.deepEqual(pasteMessages("a\r\nb").map((m) => m.text), ["a", "\r", "b"]);
   assert.equal(keyMessage("keydown", { key: "a", code: "KeyA", ctrlKey: true }).text, undefined);
   assert.equal(keyMessage("keydown", { key: "Enter", code: "Enter" }).text, "\r");
   assert.equal(keyMessage("keydown", { key: "Tab", code: "Tab" }).eventType, "rawKeyDown");

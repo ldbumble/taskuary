@@ -22,7 +22,7 @@
 .tq-aui-step em { color: #8a6d1f; font-size: 11px; font-style: normal; white-space: nowrap; }
 .tq-aui-step.tq-aui-tool-error em { color: #9a4e53; }
 /* ...a step the agent retried and got through (agentSteps `recovered`): a quiet note, never the failure's red */
-.tq-aui-step.tq-aui-tool-recovered em { color: #858078; }
+.tq-aui-step.tq-aui-tool-recovered em, .tq-aui-step.tq-aui-tool-none em { color: #858078; }
 .tq-aui-step-thought summary, .tq-aui-step-thought .tq-aui-step-line { font-style: italic; color: #858078; }
 .tq-aui-step pre { margin: 2px 0 6px 21px; padding: 8px 10px; max-height: 220px; overflow-x: hidden; overflow-y: auto; border-radius: 7px;
   background: #22231f; color: #e8e4dc; font: 10.5px/1.45 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }

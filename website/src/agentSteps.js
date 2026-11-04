@@ -145,15 +145,15 @@ const commandStep = (cmd, depth = 0) => {
     if (READERS.has(p) && plain.length) { const f = plain[plain.length - 1]; found.push({ kind: "read", summary: named(f) ? `Read ${baseName(f)}` : "Read a file", file: f, vague: !named(f) }); continue; }
     if (GREPS.has(p) || (p === "git" && args[0] === "grep")) {
       const e = args.indexOf("-e"), pat = e >= 0 ? args[e + 1] : plain[p === "git" ? 1 : 0];
-      found.push({ kind: "search", summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat }); continue;
+      found.push({ kind: "search", summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat, asked: plain }); continue;
     }
     if (LISTS.has(p)) {
       // ...and a pattern (`-Filter 'notes*'`, `ls *.zip`) is what it looked for, never a folder: "Listed the files in notes*" (2026-11-03)
       const d = plain.find((a) => !/[*?]/.test(a)), g = plain.find((a) => /[*?]/.test(a));
-      if (g) { found.push({ kind: "list", summary: `Looked for files matching ${quoted(baseName(g))}`, vague: true }); continue; }
+      if (g) { found.push({ kind: "list", summary: `Looked for files matching ${quoted(baseName(g))}`, vague: true, asked: plain }); continue; }
       // ...and `ls -la notes.zip` looked at one file: "Listed the files in notes.zip" read the zip as a folder
-      if (d && named(d) && /\.[A-Za-z0-9]{1,5}$/.test(baseName(d))) { found.push({ kind: "list", summary: `Looked at ${baseName(d)}`, vague: true }); continue; }
-      found.push({ kind: "list", summary: !d || d === "." ? "Listed the files here" : named(d) ? `Listed the files in ${baseName(d)}` : "Listed the files", vague: !!d && !named(d) });
+      if (d && named(d) && /\.[A-Za-z0-9]{1,5}$/.test(baseName(d))) { found.push({ kind: "list", summary: `Looked at ${baseName(d)}`, vague: true, asked: plain }); continue; }
+      found.push({ kind: "list", summary: !d || d === "." ? "Listed the files here" : named(d) ? `Listed the files in ${baseName(d)}` : "Listed the files", vague: !!d && !named(d), asked: plain });
       continue;
     }
     if (SNIPPET[p] && args.some((a) => a === "-c" || a === "-e")) { found.push({ kind: "run", summary: `Ran a ${SNIPPET[p]} snippet`, filler: true }); continue; }
@@ -198,7 +198,7 @@ export const describeCall = (name, args = {}) => {
     // ...Claude's own words for a browser step ("Press the pay button for invoice INV-1001") say more than the verb does
     // ...and so do its words for a step whose file or folder the shell had yet to fill in ($d)
     if (s && s.kind !== "run" && !((s.browser || s.vague) && a.description)) return s;
-    if (a.description) return { kind: s?.browser ? "page" : s?.vague ? s.kind : "run", summary: clip(a.description) };
+    if (a.description) return { kind: s?.browser ? "page" : s?.vague ? s.kind : "run", summary: clip(a.description), ...(s?.vague && s.asked ? { asked: s.asked } : {}) };
     return s || { kind: "run", summary: "Ran a command" };
   }
   if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? `Read ${baseName(f)}` : "Read a file", file: f }; }
@@ -234,6 +234,16 @@ const rawOf = (name, args) => {
   return `${name} ${JSON.stringify(a, null, 2)}`;
 };
 
+// A LOOK THAT FOUND NOTHING ANSWERED (the desktop stress test, 2026-11-03): `ls notes*` with no match exits non-zero, and red "failed"
+// read as something gone wrong. A list or search step that says nothing past its exit code, or speaks only of the very thing it was
+// asked to look for, found none; a line about anything else - a flag it did not take, a folder it was not asked about - is a failure
+const foundNone = (s) => {
+  if (!["list", "search"].includes(s.kind)) return false;
+  const lines = s.output.split(/\r?\n| ⏎ /).map((l) => l.trim()).filter((l) => l && !/^exit code -?\d+$/i.test(l));
+  const asked = (s.asked || []).map((a) => String(a).replace(/^['"]|['"]$/g, "")).filter((a) => a.length > 1);
+  return lines.every((l) => asked.some((a) => l.includes(a) || l.includes(baseName(a))));
+};
+
 // ── the trace, as steps ──────────────────────────────────────────────────────────────────────────
 const ECHO = /^(→ |· |✗ |session started\b)/;            // agents._live_line's own rows for a tool call, its result, the init line
 export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
@@ -264,7 +274,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       step.output = String(e.detail?.result || "");
       // a step Taskuary HELD for the owner's yes (shellgate, browsergate) did not fail: it waits - red "failed" over a held delete read
       // as something gone wrong (the desktop stress test, 2026-11-03)
-      step.status = !e.detail?.is_error ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : "error";
+      step.status = !e.detail?.is_error ? "done" : /Taskuary held this for the owner/.test(step.output) ? "held" : foundNone(step) ? "none" : "error";
       if (step.kind === "mail" && step.q !== undefined) { const n = countOf(step.output); if (n !== null) step.count = n; }
     } else if (e.type === "progress" && e.detail) {
       const name = String(e.name || "");
@@ -291,7 +301,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   const said = flat(forScreen(answer));
   const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(flat).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
   const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.summary)) : steps;
-  return group(kept).map(({ raw, output, live, q, host, file, pattern, count, ...s }) => s);
+  return group(kept).map(({ raw, output, live, q, host, file, pattern, count, asked, ...s }) => s);
 }
 
 // ── consecutive calls of one kind read as one line ───────────────────────────────────────────────
@@ -310,7 +320,7 @@ const together = (run) => {
   return run.every((s) => s.summary === run[0].summary) ? `${run[0].summary} (${n} times)` : null;
 };
 const statusOf = (run) => run.some((s) => s.status === "running") ? "running" : run.some((s) => s.status === "error") ? "error"
-  : run.some((s) => s.status === "held") ? "held" : run.some((s) => s.status === "recovered") ? "recovered" : "done";
+  : run.some((s) => s.status === "held") ? "held" : run.some((s) => s.status === "recovered") ? "recovered" : run.every((s) => s.status === "none") ? "none" : "done";
 const detailOf = (s) => [s.raw, s.output && `→ ${s.output.length > 1500 ? `${s.output.slice(0, 1500)}…` : s.output}`].filter(Boolean).join("\n");
 const withCount = (summary, run) => run[0].kind === "mail" && run.every((s) => s.count !== undefined)
   ? `${summary} (${plural(run.reduce((t, s) => t + s.count, 0), "result")})` : summary;

@@ -9,7 +9,8 @@ import "./agentStepRows.css";
 // debugging; what it SAID is its own words, in the type the answer is in.
 // ...a failure the agent made good by trying again (`recovered`, agentSteps.stepsOf) says so quietly; red is for one it did not
 // ...and one Taskuary held for the owner's yes (`held`) waits, quietly - its card below says what Approve runs
-const STATUS_WORD = { running: "working", recovered: "retried - worked", held: "waits for your yes", error: "failed" };
+// ...and a look whose non-zero exit was its answer (`none`: `ls notes*`, nothing there) found none - plainly, no red
+const STATUS_WORD = { running: "working", recovered: "retried - worked", held: "waits for your yes", none: "found none", error: "failed" };
 export const StepRow = ({ step }) => {
   if (step.kind === "said") return <div className="tq-aui-said"><Md text={step.summary} /></div>;
   if (step.kind === "note" || step.kind === "error") return <div className={`tq-aui-note tq-aui-note-${step.kind}`}>{step.summary}</div>;

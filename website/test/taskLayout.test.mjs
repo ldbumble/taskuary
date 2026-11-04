@@ -122,7 +122,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf),
   // or the one the Advisor's decision names its move is in (sectionHere, 2026-10-29)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : sectionHere\(\{ stage: taskStage, advised \}\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -290,7 +290,7 @@ test("the Advisor's pick names the section the task opens on, and its line stand
   assert.equal(closeStatus({ to: "Erin Blake", sent: true, advisor: "Mark done" }).foot, "Advisor: Mark done is next");
   assert.equal(agentStatus({ word: "not started" }).foot, "");
   const src = taskSource();
-  assert.match(src, /sectionHere\(\{ stage: taskStage, advised \}\)/, "the opening section reads the Advisor's pick");
+  assert.match(src, /sectionHere\(\{ stage: taskStage, advised(: advisedHeld)? \}\)/, "the opening section reads the Advisor's pick");
   assert.match(src, /advisorNote && adviceIn === "close"/, "Close out draws the Advisor's line when its move is there");
   assert.match(src, /advisorNote && adviceIn === "agent"/);
 });

@@ -427,7 +427,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
         attachments: attachmentsRef.current.map((a) => a.path),
       };
       const events = [];
-      const content = (reply) => [...stepsPart(events, { answer: reply || "" }), ...(reply ? [{ type: "text", text: reply }] : [])];
+      // ..."Started Claude Code (on this computer)" only on the conversation's first turn: it opened every follow-up the owner typed
+      // (the desktop stress test, 2026-11-03)
+      const keepStart = !runMessages.some((m) => m.role === "assistant");
+      const content = (reply) => [...stepsPart(events, { answer: reply || "", keepStart }), ...(reply ? [{ type: "text", text: reply }] : [])];
       // A run that fails has to SAY so, here, under the question. Thrown out of the adapter it
       // is swallowed: the owner sees their own message and nothing after it, which is
       // indistinguishable from an agent that is still thinking (the wall, 2026-08-31). The

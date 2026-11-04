@@ -38,8 +38,16 @@ def context_moved(store, rv: dict):
         later = [m for m in mine if m['MessageId'] > max(rv['MessageId'], seen or 0) and m['MessageId'] not in aside]
         latest, moved = (later[-1] if later else None), bool(later)
     elif tid:
-        latest = store.last_material_inbound_on_task(tid)
-        if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
+        latest, aside = store.last_material_inbound_on_task(tid), store.aside_mids(tid)
+        # ...an aside here is no news either: the newest line that is not one, and a revision that moved only by asides has not moved
+        if latest and latest['MessageId'] in aside:
+            latest = next((m for m in store._rows("SELECT * FROM message WHERE TaskId=? AND Status NOT IN ('context','history','skipped','filed') "
+                                                  "AND IFNULL(Direction,'in')<>'out' AND IFNULL(Channel,'')<>'report' ORDER BY SentAt DESC, MessageId DESC",
+                                                  (tid,)) if m['MessageId'] not in aside), None)
+        if rv.get('ContextRevision'):
+            moved = operations.message_revision(store, tid) != rv['ContextRevision']
+            if moved and aside and (seen := operations.seen_upto(store, tid, rv['ContextRevision'])) is not None:
+                moved = any(i > seen and i not in aside for i, _ in operations._material(store, tid))
         else: moved = bool(latest and latest.get('MessageId') != rv.get('MessageId'))
     else:
         m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
@@ -398,7 +406,8 @@ def _carried(store, closeout: dict, reply: dict) -> bool:
     """Does the close-out itself carry this reply? A reply to a GitHub PR or issue IS a comment on it, so it goes WITH
     the merge/close the owner approved - not as a separate send that the GitHub card's replies switch refuses (the
     owner, 2026-09-27: "it should be close pr with message not separate section")."""
-    msg = store.get_message(reply['MessageId']) if reply.get('MessageId') else {}
+    to_mid = reply.get('AnswersMid') or reply.get('MessageId')      # the mail that asked, as _deliver_review sends it
+    msg = store.get_message(to_mid) if to_mid else {}
     return str((msg or {}).get('Channel') or '').lower() == 'github'
 
 

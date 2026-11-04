@@ -10,6 +10,8 @@ export function readingOf(raw) {
     asks: arr(r.asks).filter((o) => o && typeof o === "object"), aside: arr(r.aside).filter((o) => o && typeof o === "object" && str(o.why)),
     on_you: arr(r.on_you).map(str).filter(Boolean) };
 }
+// ...and on an item no task holds (a report, an FYI, a dashboard: ItemSections' middle): what it says and what matters to you, no more
+export const itemLines = (r) => (r ? [{ k: "says", text: r.asking }, { k: "matters", text: r.your_part }].filter((l) => l.text) : []);
 const mday = (at) => { const m = /(\d{4})-(\d{2})-(\d{2})/.exec(String(at || "")); return m ? `${+m[2]}/${+m[3]}` : ""; };
 export function readingLines(r, mails = []) {
   if (!r) return [];

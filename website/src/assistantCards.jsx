@@ -874,6 +874,12 @@ function useReportSource(sid) {
   try { cfg = JSON.parse(row?.ConfigJson || "{}") || {}; } catch { cfg = {}; }
   return { runs: row ? reportSchedule(cfg) : "", reads: !row ? "" : (cfg.sources || []).length > 1 ? cfg.sources.map((x) => x.label || typeWord(x.type)).join(", ") : typeWord(cfg.type), goes: row?.RouteWords || "", run: (runs?.data || [])[0] || null };
 }
+// WHAT AN ITEM SAYS AND THE BOX UNDER IT (ItemSections ItemAsk): triage's reading rides the message the item is drawn from - the very payload
+// FullText reads, so one fetch serves both. `card` false: not on the table, nothing asked
+function useItemAsk(card, kind) {
+  const doc = useFetched(card && card.mid ? `/api/messages/${card.mid}` : null, card ? card.presentation_revision : undefined);
+  return card ? { key: card.key, kind, title: card.title, reading: doc?.reading || null } : null;
+}
 const secs = (ms) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`);
 // a section's facts, a label and its value a row: only those that have something to say
 const Facts = ({ rows }) => <div className="tq-card-facts">{rows.filter(([, v]) => v).map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>;
@@ -912,10 +918,10 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
       summaryWhy: "a summary is written from a task's work - a report is its own result; Email the result sends it" });
   // ON THE TABLE, IN A TASK'S THREE SECTIONS (ItemSections; the owner, 2026-10-28): the report itself open in the middle, what produced it
   // and what happens next the slim tabs either side - its moves are the same ones, on the same row
-  const src = useReportSource(table != null ? card.source_id : null);
+  const src = useReportSource(table != null ? card.source_id : null), ask = useItemAsk(table != null && card, "report");
   if (table != null) {
     const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
-    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="report" lays
+    return <ItemSections kind="report" itemKey={card.key} label={card.bad ? "Report failed" : "Report"} height={table} about="report" lays ask={ask}
       title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{rest}</span></>}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
       sections={[
@@ -978,14 +984,14 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
   const [name] = nameAndRest(card.title, card.who), day = dayLabel(card.when), at = got?.data?.at ? fmtTime12(got.data.at) : "";
   // ON THE TABLE, IN A TASK'S THREE SECTIONS, as a report is (ItemSections): the dashboard open in the middle, what produced it and what
   // happens next the slim tabs either side, its moves the same ones on the same row
-  const src = useReportSource(table != null ? card.source_id : null);
+  const src = useReportSource(table != null ? card.source_id : null), ask = useItemAsk(table != null && card, "dashboard");
   const drawn = <div className="tq-dash-canvas" data-tq-dash-canvas="">
     {got?.data ? <Dashboard spec={got.config} data={got.data} /> : <div className="tq-card-excerpt">{err || (got ? DASH.never : DASH.loading)}</div>}
   </div>;
   if (table != null) {
     const ran = [card.when && fmtDateTime(card.when), src.run?.ms && `took ${secs(src.run.ms)}`].filter(Boolean).join(" · ");
     const edit = card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>{DASH.edit} ↗</Button></div>;
-    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="report" lays
+    return <ItemSections kind="dashboard" itemKey={card.key} label="Dashboard" height={table} about="report" lays ask={ask}
       title={<>{name}<span style={{ fontWeight: 400 }} data-tq-report-day={day || undefined}>{day && ` · ${day}`}{at && ` · ${DASH.updated} ${at}`}</span></>}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
       sections={[
@@ -1573,8 +1579,8 @@ export function FyiMessage({ item, onHead = null, open: held = null, moved = nul
 // Close out the slim tabs. Nothing in here is a new move: a message's own are under it, the item's ride the row (`foot`), said in Close out
 function FyiSections({ card, table, items, msgs, foot, err, next }) {
   const nav = React.useContext(CardNav), n = items.length, batch = card.kind === "fyis";
-  const handOff = !batch && (nav.also || []).some((a) => /agent|coder/.test(a.verb || ""));
-  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch}
+  const handOff = !batch && (nav.also || []).some((a) => /agent|coder/.test(a.verb || "")), ask = useItemAsk(!batch && card, "fyi");
+  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask}
     title={batch ? `${plural(n, "message")} - nothing to decide` : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
     sections={[

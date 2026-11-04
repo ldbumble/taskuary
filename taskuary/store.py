@@ -5000,6 +5000,14 @@ class SQLiteStore:
                         "AND Decision<>'attach' ORDER BY RouteId DESC LIMIT 1", (task_id,))
         try: return json.loads(row['VerdictJson']) if row else None
         except Exception: return None
+    def message_thread(self, mid):
+        """Triage's newest reading of a message no task holds (a filed FYI, a report): off its own routes, the newest that has one -
+        a later verdict without it (a CLI brain, an older TRIAGE.md) leaves the last reading standing. None when there never was one."""
+        for r in self._rows('SELECT VerdictJson FROM route WHERE MessageId=? AND VerdictJson IS NOT NULL ORDER BY RouteId DESC', (mid,)):
+            try: t = json.loads(r['VerdictJson']).get('thread')
+            except Exception: continue
+            if isinstance(t, dict): return t
+        return None
     def task_thread(self, task_id):
         row = self._one('SELECT ThreadJson FROM task WHERE TaskId=?', (task_id,))
         try: t = json.loads(row['ThreadJson']) if row and row['ThreadJson'] else None

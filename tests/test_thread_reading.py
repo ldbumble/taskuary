@@ -64,3 +64,16 @@ def test_the_chat_payload_carries_the_reading():
     assert server._assistant_payload(tid)['thread'] is None
     s._exec('UPDATE task SET ThreadJson=? WHERE TaskId=?', (json.dumps({'asking': 'Ray wants the export date', 'your_part': 'Confirm'}), tid))
     assert server._assistant_payload(tid)['thread']['asking'] == 'Ray wants the export date'
+
+
+def test_a_filed_mail_keeps_its_reading():
+    """An FYI or a report has no task to hold triage's reading: it stays on the message's own route, and the item's payload carries it."""
+    from taskuary import server
+    s = server.store
+    mid = s.add_message({'Channel': 'email', 'Subject': 'Regional newsletter', 'BodyText': 'Sharing for visibility.', 'FromName': 'Erin Blake', 'Status': 'filed'})
+    assert s.message_thread(mid) is None and server.get_message(mid)['reading'] is None
+    s.add_route(mid, None, 'file', None, 'triage: fyi', [], 'triage', verdict={'intent': 'fyi', 'thread': {'asking': 'Erin shares the newsletter', 'your_part': 'Nothing - the Lakeview move is in it', 'asks': [], 'aside': [{'mid': 0, 'why': 'shared only'}]}})
+    th = server.get_message(mid)['reading']
+    assert th['asking'] == 'Erin shares the newsletter' and th['aside'][0]['mid'] == mid and s.message_thread(mid) == th
+    s.add_route(mid, None, 'file', None, 'retriaged', [], 'triage', verdict={'intent': 'fyi'})   # a newer verdict with no reading: the last one stands
+    assert s.message_thread(mid)['asking'] == 'Erin shares the newsletter'

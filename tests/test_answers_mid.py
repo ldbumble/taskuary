@@ -127,7 +127,14 @@ def test_no_reading_outbound_last_keeps_the_prompt_from_the_last_message():
 def test_a_wrapped_why_is_all_taken_off():
     from taskuary import responder
     nl = chr(10)
-    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'WHY: he asked' + nl + 'for a date.', 's', 'u', 10) == ('Hi.', None, 'he asked for a date.')
-    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'FILES PROMISED: a.pdf' + nl + 'WHY: one' + nl + 'two', 's', 'u', 10) == ('Hi.', ['a.pdf'], 'one two')
-    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'WHY: one' + nl + 'two' + nl + 'FILES PROMISED: a.pdf', 's', 'u', 10) == ('Hi.', ['a.pdf'], 'one two')
-    assert responder._answer(lambda *a, **k: 'NO REPLY' + nl + 'WHY: nothing owed' + nl + 'to them.', 's', 'u', 10) == ('NO REPLY', None, 'nothing owed to them.')
+    assert responder._answer(lambda *a, **k: 'Hi.' + nl + nl + 'WHY: he asked' + nl + 'for a date.', 's', 'u', 10) == ('Hi.', None, 'he asked for a date.')
+    assert responder._answer(lambda *a, **k: 'Hi.' + nl + 'FILES PROMISED: a.pdf' + nl + nl + 'WHY: one' + nl + 'two', 's', 'u', 10) == ('Hi.', ['a.pdf'], 'one two')
+    assert responder._answer(lambda *a, **k: 'Hi.' + nl + nl + 'WHY: one' + nl + 'two' + nl + 'FILES PROMISED: a.pdf', 's', 'u', 10) == ('Hi.', ['a.pdf'], 'one two')
+    assert responder._answer(lambda *a, **k: 'NO REPLY' + nl + nl + 'WHY: nothing owed' + nl + 'to them.', 's', 'u', 10) == ('NO REPLY', None, 'nothing owed to them.')
+
+
+def test_a_why_heading_inside_the_body_is_not_a_why():
+    from taskuary import responder
+    nl = chr(10); body = nl.join(['Hi Ray.', 'Why: the run moved.', 'It is Friday now and the file goes Thursday.', 'Thanks, Alex'])
+    assert responder._answer(lambda *a, **k: body, 's', 'u', 10) == (body, None, None)
+    assert responder._answer(lambda *a, **k: body + nl + 'WHY: he asked.', 's', 'u', 10) == (body, None, 'he asked.')

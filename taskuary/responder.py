@@ -161,7 +161,7 @@ FILES_RULE = (f'If your reply tells them a file is attached, enclosed or sent wi
 # WHY THE REPLY SAYS WHAT IT SAYS is the writer's one line for the owner: what it read in the mail and why the reply answers so. Taken off the
 # draft like FILES, kept on the review (store.DraftWhy), never sent.
 WHY = 'WHY:'
-WHY_RULE = (f'End your reply with one more line for the owner, never sent: {WHY} <one or two sentences on what you read and why the reply says this>' + chr(10))
+WHY_RULE = (f'End your reply with a blank line and then one more line for the owner, never sent: {WHY} <one or two sentences on what you read and why the reply says this>' + chr(10))
 
 
 class NoReply(Exception):
@@ -440,9 +440,12 @@ def _answer(llm, system, user, max_tokens, images=None, guard=False, sig=''):
 def why_said(out: str) -> tuple:
     """(the reply, the writer's own WHY line - None for none), the line taken off."""
     ls = out.rstrip().split(chr(10))
-    i = next((i for i in range(len(ls) - 1, -1, -1) if ls[i].strip().upper().startswith(WHY)), None)     # a WHY that wraps is one block, to the end
+    ne = [i for i, l in enumerate(ls) if l.strip() and not l.strip().upper().startswith(FILES)]     # FILES lines are control lines: not counted
+    # a WHY is the last line, or one or two lines set off by a blank line (the rule asks for one): "Why: ..." inside the reply is the reply's
+    i = next((i for i in reversed(ne[-2:]) if ls[i].strip().upper().startswith(WHY) and (i == ne[-1] or (len(ne) - ne.index(i) <= 2 and (i == 0 or not ls[i - 1].strip())))), None)
     if i is None: return out, None
-    return chr(10).join(ls[:i]).rstrip(), ' '.join(' '.join(ls[i:]).strip()[len(WHY):].split()) or None
+    end = ne[-1] + 1
+    return chr(10).join(ls[:i] + ls[end:]).rstrip(), ' '.join(' '.join(ls[i:end]).strip()[len(WHY):].split()) or None
 
 
 def files_said(out: str) -> tuple:

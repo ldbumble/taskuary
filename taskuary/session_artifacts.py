@@ -52,9 +52,10 @@ def result(store, tid: int, text: str, actor='agent') -> dict:
     return _write(store, tid, 'agent-result', f'# {task_ref(tid)} — {task.get("Title") or "Agent result"}\n\n{str(text).strip()}', 'agent_result', actor)
 
 
-# what a chat may put in front of the owner (selfclose.SHOW_LINE): pictures, pages and tables
+# what a chat may put in front of the owner (selfclose.SHOW_LINE): pictures, pages and tables - and a PDF, read in place (2026-11-04)
 SHOWN_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-               '.svg': 'image/svg+xml', '.html': 'text/html', '.htm': 'text/html', '.md': 'text/markdown', '.csv': 'text/csv'}
+               '.svg': 'image/svg+xml', '.html': 'text/html', '.htm': 'text/html', '.md': 'text/markdown', '.csv': 'text/csv',
+               '.pdf': 'application/pdf'}
 SHOWN_MAX = 16 * 1024 * 1024
 
 

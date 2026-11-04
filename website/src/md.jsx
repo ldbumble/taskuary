@@ -10,10 +10,11 @@ import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 import { linkRefs, looksMd, refParts } from "./mdText.js";
 import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
 import { plainCitations } from "./taskOutputs.js";
-import { attUrl, saveFile } from "./Attachments.jsx";
+import { attUrl, isPdf, PdfView, saveFile } from "./Attachments.jsx";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
+const fileName = (u) => { const n = String(u).split(/[?#]/)[0].split("/").pop() || "PDF"; try { return decodeURIComponent(n); } catch { return n; } };
 // `onTask` (the chat's): a task link opens it as a press of its rail row does, and a bare ref keeps its own words
 const A = ({ href, children, onTask }) => {
   // ...BY ITS ROAD (appLinks.linkRoad, the owner 2026-11-02): the web alone opens a new tab - the system browser, from the desktop window -
@@ -27,19 +28,24 @@ const A = ({ href, children, onTask }) => {
   // ...SAVED where it is (Attachments.saveFile), never a new tab: the desktop window handed that tab to the system browser, and a file
   // moved or deleted since the link was written opened a raw 404 there - now it is a line beside the link
   const [err, setErr] = React.useState(""), [saved, setSaved] = React.useState(""), raw = file ? own : href;
+  // ...but a PDF is READ under the link, Download beside it (Attachments.PdfView; the owner, 2026-11-04)
+  const [view, setView] = React.useState(false), pdf = file && isPdf({ name: fileName(raw) });
   if (file) href = attUrl({ url: own }, true);
   return (<>
-    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
       onClick={(e) => {
         if (m) { e.preventDefault(); if (onTask) onTask(Number(m[1])); else openAppLink(`task=${m[1]}`); }
         else if (page) { e.preventDefault(); openAppLink(page); }
+        else if (pdf) { e.preventDefault(); setView((v) => !v); }
         else if (file) { e.preventDefault(); setErr(""); setSaved(""); saveFile({ url: raw }).then(setSaved, (x) => setErr(x.message)); }
       }}>
       {m && !bare ? `open TQ-${String(m[1]).padStart(4, "0")} →` : children}
     </a>
     {err && <span data-tq-file-error="" style={{ color: DIM, fontWeight: 400 }}> — {err}</span>}
     {saved && <span data-tq-file-saved="" style={{ color: DIM, fontWeight: 400 }}> — {saved}</span>}
+    {view && <span data-tq-file-link-view="" style={{ display: "block" }}>
+      <PdfView file={{ url: raw, name: fileName(raw) }} onClose={() => setView(false)} /></span>}
   </>);
 };
 

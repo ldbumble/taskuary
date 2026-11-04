@@ -400,7 +400,7 @@ def attach_markers(text: str) -> tuple:
 # stuff not"). Nothing it writes on the way is shown: only a file it names this way lands in the chat, under this turn.
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
 SHOW_LINE = ('SHOWING YOUR ANSWER: when a chart, an image, a table or a small page makes your answer easier to understand than '
-             'words alone, make it as a file in your working folder (.png .jpg .svg .html .md .csv) and name it on its own line: '
+             'words alone, make it as a file in your working folder (.png .jpg .svg .html .md .csv .pdf) and name it on its own line: '
              '[[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. Only when it truly '
              'helps; never your working files, test data or drafts. An .html page runs with no network: put its data and scripts in it.')
 

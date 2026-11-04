@@ -3688,7 +3688,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         from .memoryedit import find
         _r, _l, _own = find(store.get_doc('learned') or '', str(params.get('key') or ''))
         named = named or str((_l or {}).get('text') or (store._one('SELECT Text FROM learned_line WHERE Key=?', (str(params.get('key') or ''),)) or {}).get('Text') or '')[:120].rstrip('.')
-    if tk == 'task' and (wrote := _task_writes(store, tid, kind, int(target or 0), params, named, actor)) is not None: return wrote
+    if tk == 'task' and (wrote := _task_writes(store, tid, kind, int(target or 0), params, named, actor, said=text)) is not None: return wrote
     if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
     # A PHONE ASKS YES OR NO ONLY FOR WHAT THE ROW CAN DO (2026-11-02): the desk refuses a tool whose button the row cannot carry (cannot) or
     # does not draw (_label_on); the phone skipped both, so "keep going" over an agent with no saved session asked "Continue: TQ-0006?",
@@ -3792,7 +3792,7 @@ CONN_SAYS = {'connection.pause': 'switch it off', 'connection.resume': 'switch i
 ON_TASK = {'task.check': 'tick it on its checklist', 'task.checklist': 'its checklist is on it'}
 
 
-def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: str, actor: str) -> dict | None:
+def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: str, actor: str, said: str = '') -> dict | None:
     """THE TASK PAGE'S OWN WRITES, run by the Assistant and said - on the desk and on a phone alike (the owner, 2026-10-20: "anything you can do,
     you can do via the Assistant"; the phone keeps its yes/no only for what goes out or closes). None when the call is not one of them."""
     # A NOTE AND A DUE DAY RUN HERE, said (the owner, 2026-10-20): neither has a button on the row - a note is typed on the task page and the
@@ -3809,7 +3809,9 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
     # the vendor notes" was answered "press Try again or Run another agent"): its row draws no Continue - its own box is the way on, and these
     # are the same owner's words - so it is the page's Continue with them as the note, run and said
     if kind == 'agent.continue' and target and general.handles(store.get_task(target) or {}) and continuable(store, target):
-        note = ' '.join(str(params.get('note') or '').split())
+        # ...with what they said: a call that left its note out lost "skip the zip file" from "carry on, and skip the zip file" - the owner's
+        # own words go with it then, as the page's Continue box would carry them
+        note = ' '.join(str(params.get('note') or params.get('text') or said or '').split())
         r = run_proposal(store, operations.propose(store, 'agent.continue', target, {'note': note}, actor), actor)
         if r.get('status') != 'done': raise CallMiss(f"{r.get('error') or 'it did not pick up'} - say so in plain words. Nothing was started.")
         return _did(store, tid, f"Picked up {task_ref(target)} again" + (f" with your note: “{_title_cut(note, 120)}”." if note else '.'),

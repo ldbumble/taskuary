@@ -265,6 +265,11 @@ class DeskRoutes(unittest.TestCase):
             go.assert_called_once()
             self.assertEqual((go.call_args[0][0], go.call_args[0][1].note), (tid, 'carry on, but skip the mail search'), model)
             self.assertNotIn('nothing would hear', out['say'])
+        # ...and a continue called with no note carries the owner's own words (the re-check: "skip the zip file" was lost)
+        with mock.patch.object(concierge, '_agent_running', return_value=False), \
+             mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
+            say(s, 'carry on with this one, and skip the zip file', item['key'], 'CALL: {"kind": "agent.continue", "params": {}}')
+        self.assertEqual(go.call_args[0][1].note, 'carry on with this one, and skip the zip file')
 
     def test_a_held_step_let_run_is_named_approve_not_send(self):
         "The overnight run, 2026-11-03: Approve on a held delete came back as \"Done - Send · TQ-0006.\" - nothing was sent."

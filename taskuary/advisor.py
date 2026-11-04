@@ -749,6 +749,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         if todo: lines.append('STILL TO DO ON THE TASK: ' + ' | '.join(' '.join(str(x).split())[:160] for x in todo[:6]))
         # ...and a list with nothing left on it, said: with no line at all the model could not tell it from a task with no list
         elif (ticked := [c for c in _checklist(t) if c.get('done')]): lines.append(f'EVERY TODO ON THE TASK IS TICKED ({len(ticked)} of {len(ticked)})')
+        if (sl := summary_line(store, target_id)): lines.append(sl)
     # THE FULL CONTEXT (the deep dive, 2026-10-20): the draft, the thread, the tasks that may already cover it, the owner's notes on
     # the sender, the playbook - each bounded, each read the same for a mail, a chat line or anything the chat put on the table
     for f_ in (draft_line, thread_line, related_line, notes_line):
@@ -866,6 +867,21 @@ def goal_line(store, t: dict) -> str:
 def _checklist(t: dict) -> list:
     try: return [c for c in json.loads((t or {}).get('Checklist') or '[]') if isinstance(c, dict)]
     except (TypeError, ValueError): return []
+
+
+def summary_line(store, tid) -> str:
+    """What the agent's newest turn summary says (general.SUMMARY_TYPE): nothing left to do (and no draft waiting, no step still on the owner),
+    or what is on the owner. The Advisor lights Mark done on the first; nothing presses it. '' with no summary."""
+    from . import general
+    try:
+        last = next((c for c in reversed(store.list_comments(int(tid))) if c.get('ActorType') == general.SUMMARY_TYPE), None)
+        summ = json.loads(last['Body']) if last else None
+    except (TypeError, ValueError, KeyError): summ = None
+    if not isinstance(summ, dict): return ''
+    todo = [str(c.get('text')) for c in _checklist(store.get_task(int(tid))) if c.get('on_you') and not c.get('done') and c.get('text')]
+    if todo: return "THE AGENT'S LAST SUMMARY: on you - " + '; '.join(' '.join(x.split())[:160] for x in todo[:6])
+    if summ.get('nothing_left') and not _draft(store, {}, 'task', tid): return "THE AGENT'S LAST SUMMARY: nothing left to do here"
+    return ''
 
 
 def sent_line(store, target_kind, target_id) -> str:

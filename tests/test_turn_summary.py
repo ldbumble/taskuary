@@ -214,3 +214,21 @@ def test_corrections_ride_the_summary_block_and_stay_off_the_screen():
     c = [{'kind': 'ask', 'review': None, 'said': 'the pay date'}, {'kind': 'redraft', 'review': 7, 'said': 'Cc Gail'}, {'kind': 'x', 'said': 'no'}, 'junk']
     text, summ = selfclose.summary_marker(f'Done.\n{block(corrections=c)}')
     assert text == 'Done.' and summ['corrections'] == c[:2]
+
+
+def test_the_advisor_is_told_nothing_is_left():
+    from taskuary import advisor
+    s = MemoryStore(); tid = task(s)
+    assert advisor.summary_line(s, tid) == ''
+    turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
+    assert advisor.summary_line(s, tid) == "THE AGENT'S LAST SUMMARY: nothing left to do here"
+    turn(s, tid, f'Still Friday.\n{block()}')
+    assert advisor.summary_line(s, tid) == f"THE AGENT'S LAST SUMMARY: on you - {STEP}"
+
+
+def test_a_pending_draft_is_not_nothing_left():
+    from taskuary import advisor
+    s = MemoryStore(); tid = task(s)
+    turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
+    with mock.patch.object(advisor, '_draft', return_value={'DraftText': 'Hi Gail'}):
+        assert 'nothing left' not in advisor.summary_line(s, tid)

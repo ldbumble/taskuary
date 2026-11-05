@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.4 - 2026-11-05
+
+- Fix built-in Windows dictation recovery and add voice selection card
+- A held press is the owner's own click on the real page, not an Approve card
+- Each connector declares its act's card; one card draws it, with per-connection defaults - LinkedIn audience and post now or draft first
+- A Slack line is answered in Slack: in its thread, in Slack's own markup, through the card that read it
+- Every hand-over on the page is watched; a desktop press is a line in the chat
+- The agent keeps going when a way fails, and a payment's last press is the owner's on the real page
+- An Advisor idea reads as its finding and what to do in one line, with no Whose move row; Based on stays
+- The Advisor's looking-out pass runs each morning and proposes up to four ideas across families
+- The demo world gets a general agent's finished working day
+- The static demo is re-recorded with the agent's day, and carries the files it made
+- README and docs show a task as one chat, reshot against the demo world
+
 ## 0.3.11.3 - 2026-11-05
 
 - A trusted repo's own steps go through: a push, a pull request or a workflow run on a repo whose card may act no longer asks

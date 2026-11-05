@@ -168,7 +168,7 @@ ASKS = [
     Ask('reply', "answer them: we'll have the audit list by Wednesday", 'msg:15', d('reply', text="we'll have the audit list by Wednesday"),
         draft(tid=11), fault=drafter(''), note='drafter returns nothing'),
     # change To/Cc
-    Ask('cc', 'copy Gail Moreno on this reply', 'review:2', d('reply', text='', cc=['Gail Moreno']), cc_has(2, 'gail')),
+    Ask('cc', 'copy Gail Moreno on this reply', 'review:2', d('reply', text='', cc=['Gail Moreno']), cc_has(2, 'moreno')),
     # mark done, remind me, watch it, not a task
     Ask('put-down', 'mark this done', 'msg:1', d('close'), task(1, 'Status', 'done')),
     Ask('put-down', 'done with this one', 'msg:2', d('close'), task(2, 'Status', 'done'), fault=raises_op('task.complete'), note='the close raises'),

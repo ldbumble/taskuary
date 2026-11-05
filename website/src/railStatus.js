@@ -30,7 +30,13 @@ export const agentGone = (item, page) => !!page && AGENT_LANES.has(item?.lane) &
 // "ready to send" over a reply nothing had written - it reads "reply owed" until the draft lands (funnel: `draft: false`)
 const OWED = "owed";
 export const owedNoDraft = (item) => item?.lane === "approve" && item.kind === "review" && item.draft === false && !item.not_sent;
-export const railStatus = (item, cantSend = false, page = null) => {
+// A CHAT TASK'S WAITING MOVE IS THE AGENT'S (the owner, 2026-11-05: "we can remove reply ready for you since it can be any action"): its
+// "agent waiting on you" and "ready to send" both say "agent ready for you" (lanes.json `chat_ready`; funnel marks the row `chat`) - the
+// lane, its badge and its rules stay; only the words change. A coding task keeps its own
+const CHAT_READY = new Set(["blocked", "approve"]);
+export const chatReady = (st, chat) => (chat && st && CHAT_READY.has(st.key) ? { ...st, word: KIND_META.chat_ready.word, hint: KIND_META.chat_ready.hint } : st);
+export const railStatus = (item, cantSend = false, page = null) => chatReady(railStatus_(item, cantSend, page), !!item?.chat);
+const railStatus_ = (item, cantSend = false, page = null) => {
   if (agentGone(item, page)) return taskStatus({ state: page.state, cantSend });
   if (!item?.lane) return null;
   if (owedNoDraft(item)) return said(OWED, { ...rowMeta(item), ...KIND_META[OWED] }, false);
@@ -56,7 +62,9 @@ export const stateStatus = (key) => {
 // `page`: the task's own read, newer than the rail's (agentGone) - the same reading the rail row takes, so the two still cannot disagree
 // `owed`: whether the task's pending reply has no draft yet (TaskPage's pendingReview; null when it has none) - the task's own read
 // is newer than the rail's, so a draft that just landed lifts "reply owed" and one not written yet puts it there
-export const taskStatus = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null, owed = null } = {}) => {
+// `chat`: the task is a general chat task (chatReady)
+export const taskStatus = ({ chat = false, ...o } = {}) => chatReady(taskStatus_(o), chat);
+const taskStatus_ = ({ live = null, rail = null, state = null, closed = false, cantSend = false, page = null, owed = null } = {}) => {
   // ...unless the server read the parked session as the reply it drafted waiting (taskstate: `approve`) - one state, as the Board's
   if (live?.alive && !(live.waiting && state === "approve")) return railStatus({ lane: live.waiting ? "blocked" : "working" });
   if (closed && stateStatus(state)) return stateStatus(state);

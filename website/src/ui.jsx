@@ -1,6 +1,8 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
+import { chatReady } from "./railStatus.js";
+import { isGeneralKind } from "./autostart.js";
 import { AGENT, NOT_SENT, READY } from "./taskLifecycle.js";
 import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
@@ -1147,7 +1149,8 @@ export const stateOf = (t) => {
   return laneState(taskLane(t));
 };
 export const StateChip = ({ task }) => {
-  const st = stateOf(task);
+  // ...a chat task's waiting move reads "agent ready for you" (railStatus.chatReady) - the key, and the filter it files under, stay
+  const s0 = stateOf(task), st = { ...s0, label: chatReady({ key: s0.state || s0.key, word: s0.label }, isGeneralKind(task?.Kind)).word };
   // the rail's mark leads the word, as it does on the rail (⏳ waiting to start, 👋 agent waiting on you)
   return <Chip size="small" label={st.mark && st.mark !== "spinner" ? `${st.mark} ${st.label}` : st.label}
     sx={{ bgcolor: st.c.bg, color: st.c.fg, border: `1px solid ${st.c.bd}`, height: 19, fontSize: 10.5, fontWeight: 600 }} />;

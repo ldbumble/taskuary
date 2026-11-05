@@ -10,7 +10,7 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.equal(layoutOf({ sessionView: true }), "full");
   const src = taskSource();
   // the page's own "the session fills the page" decides it: a live session (term.alive - a terminal or a general agent's chat)
-  assert.match(src, /const sessionView = liveSession && !peek;/);
+  assert.match(src, /const sessionView = \(liveSession \|\| chatKept\) && !peek;/);
   // ...and only a live session since 2026-10-25 (the owner: "keep the 2 columns for when agent is not working")
   assert.match(src, /const layout = layoutOf\(\{ sessionView \}\), wide = layout === "full";/);
   // ...the columns box steps aside but on a phone's stacked page; on the desk the THREE SECTIONS (the owner, 2026-10-27) are its children

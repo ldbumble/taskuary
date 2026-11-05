@@ -387,15 +387,16 @@ function TurnBar({ turn, onHandBack }) {
     try { await onHandBack?.(); } catch (e) { setErr(failed(e)); setBusy(false); }
   };
   useEffect(() => { setBusy(false); setErr(""); }, [turn?.request_id]);
-  // a press handed over is said by its own line, and the press that matters is the page's: Done stays, quiet, for a page Taskuary cannot read
+  // a press handed over is said by its own line, and the press that matters is the page's; every hand-over is watched and goes on by itself
+  // when the page moves on (the owner, 2026-11-05) - Done stays, quiet, for a page Taskuary cannot read
   const pressing = isPress(turn);
   return (
     <Box data-tq-browser-turn={turn.request_id} data-tq-browser-press={pressing ? "" : undefined} sx={bar}>
       <Typography sx={barText}>
         <Box component="span" sx={{ color: CATPPUCCIN.yellow, fontWeight: 600 }}>{turn.text || "Your turn in the browser"}</Box>
-        {!pressing && <Box component="span" sx={{ color: "#a8a196" }}> · click the page and do it, then hand it back</Box>}
+        {!pressing && <Box component="span" sx={{ color: "#a8a196" }}> · do it on the page, and the agent goes on when it moves on</Box>}
       </Typography>
-      <Box component="button" onClick={back} disabled={busy} sx={pressing ? press : primary}
+      <Box component="button" onClick={back} disabled={busy} sx={press}
         title="The agent looks at the page as you left it and carries on">{busy ? "handing back…" : "Done — hand back to the agent"}</Box>
       {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
     </Box>

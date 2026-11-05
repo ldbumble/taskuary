@@ -86,6 +86,12 @@ class OnePress(unittest.TestCase):
         kept = json.loads(server.store.get_review(rv['ReviewId'])['FinalText'])
         self.assertEqual(kept['result']['url'], 'https://www.linkedin.com/feed/update/urn:li:share:42')
 
+    def test_a_picture_named_by_its_full_path_is_kept_by_its_name(self):
+        """A real turn named the picture by its full path; the card builds its address from the name in the folder."""
+        r = self.propose(text='Hi', image=str(outputs.folder(self.tid) / 'gas-prices.png'))
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(json.loads(server.store.get_review(r.json()['review'])['DraftText'])['image'], 'gas-prices.png')
+
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')
         self.assertEqual(r.status_code, 422, r.text)

@@ -289,7 +289,19 @@ class ReadsTests(unittest.TestCase):
             return 'Again.' + chr(10) + 'CALL: {"kind":"task.read","params":{"ref":"TQ-0001"}}'
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             concierge.say(s, 'tell me everything', llm=greedy)
-        self.assertLessEqual(len(calls), concierge.READ_ROUNDS + 1, calls)
+        self.assertLessEqual(len(calls), concierge.READ_ROUNDS + 2, calls)       # ...and one last answer, with no tools (last_word)
+
+    def test_out_of_look_ups_the_model_answers_with_what_it_found(self):
+        """The owner, 2026-11-05: the canned "I could not finish looking that up" stood over everything the look-ups had found. The last
+        call has no tools and its answer is the reply; only one that is still a look-up is the canned line."""
+        s = self._task()
+        def brain(system, user, **kw):
+            if concierge.FINAL_READ in user: return 'TQ-0001 is the nightly export dropping rows; nobody is on it yet.'
+            return 'Again.' + chr(10) + 'CALL: {"kind":"task.read","params":{"ref":"TQ-0001"}}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'tell me everything', llm=brain)
+        self.assertIn('nightly export dropping rows', out['say']); self.assertNotIn(concierge.OUT_OF_READS, out['say'])
+        self.assertGreaterEqual(concierge.READ_ROUNDS, 6); self.assertGreaterEqual(concierge.LOOKUP_ROUNDS, 4)
 
     def test_the_last_look_up_says_it_is_the_last_and_a_research_ask_becomes_a_hand_off(self):
         """The owner, 2026-09-24: "i asked it to research for me which should open a agent card but it did

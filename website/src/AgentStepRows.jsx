@@ -27,3 +27,6 @@ export const StepRow = ({ step }) => {
       {failed ? <details className="tq-aui-step-raw"><summary>Raw output</summary><pre>{step.detail}</pre></details> : <pre>{step.detail}</pre>}</details>
     : <div className={cls}><div className="tq-aui-step-line">{head}</div></div>;
 };
+export const AgentSteps = ({ data }) => (
+  <div className="tq-aui-steps">{(data?.steps || []).map((st) => <StepRow key={st.id} step={st} />)}</div>
+);

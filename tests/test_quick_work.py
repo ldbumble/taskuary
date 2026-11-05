@@ -189,7 +189,7 @@ def test_a_report_that_writes_the_draft_out_keeps_only_its_own_words():
 def test_a_report_that_is_only_the_draft_says_where_it_waits():
     s = home(); tid, _ = arrived(s)
     filed(s, tid, {**ANSWER, 'report': LETTER, 'draft': LETTER})
-    assert 'Close out' in general.history(s, tid)[1]['content'][0]['text']
+    assert 'under Next steps' in general.history(s, tid)[1]['content'][0]['text']      # the chat's own card; a chat task has no Close out
 
 def test_without_draft_leaves_an_answer_that_never_quotes_it():
     from taskuary import selfclose

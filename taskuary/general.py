@@ -314,7 +314,7 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
 NO_AI = 'No AI is connected'
 
 
-DRAFTED = 'The reply is drafted - it waits in Close out for your yes.'
+DRAFTED = 'The reply is drafted - it waits for your Send under Next steps.'
 def _split(store, tid: int) -> tuple[list, list]:
     "The task's chat as (before the current run, the current run), split at the last RUN_TYPE row if there is one."
     from . import selfclose

@@ -46,7 +46,7 @@ ALLOWED_METHODS = {'POST', 'PATCH'}
 ALLOWED_WRITES = (
     r'^/api/tasks$',                                   # make a task
     r'^/api/tasks/\d+$',                               # ...and change it
-    r'^/api/tasks/\d+/(comments|waitroom|not-a-task|assistant/(session|messages|stream|cancel))$',
+    r'^/api/tasks/\d+/(comments|waitroom|not-a-task|assistant/(session|messages|stream|cancel|seen))$',
     r'^/api/prompt-image$',                            # a picture for a prompt: saved in the demo's own home
     r'^/api/messages/\d+/(file|promote|read)$',        # the triage verdicts: the whole funnel
     r'^/api/reviews?/\d+/(hold|drop|edit)$',           # ...but never /send

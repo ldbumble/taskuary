@@ -533,6 +533,15 @@ def no_advisor_in_the_background():
     calibrate.clear()
 
 
+@pytest.fixture(autouse=True)
+def no_sessions_left_behind():
+    """A test that puts a stand-in session in terminal.SESSIONS and never takes it out handed it to every test after it: on CI's order a
+    Mock left there broke the agent-load count (blackboard.subagent_count) of a test three files on. Each test gets the table it found."""
+    from taskuary import terminal
+    was = dict(terminal.SESSIONS); yield
+    terminal.SESSIONS.clear(); terminal.SESSIONS.update(was)
+
+
 @pytest.fixture(autouse=True, scope='session')
 def agents_can_start():
     """A bare store connects no brain, so every agent button would be greyed and the Advisor's check refuse them all (advisor.checked) -

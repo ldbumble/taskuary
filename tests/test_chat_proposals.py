@@ -86,7 +86,7 @@ class ProposalTests(unittest.TestCase):
     def test_confirming_runs_it_once_and_a_second_click_is_the_same_receipt(self):
         s, tid, mid, item = asked()
         out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')
-        with mock.patch.object(server, 'dispatch_message', return_value={'taskId': tid, 'ref': f'TQ-{tid:04d}', 'dispatch': 'started'}) as dispatch:
+        with mock.patch.object(server, 'dispatch_message', return_value={'taskId': tid, 'ref': f'TQ-{tid:04d}', 'dispatch': 'started', 'started': True}) as dispatch:
             r1 = run(s, out['proposal']); r2 = run(s, out['proposal'])
         self.assertEqual((r1.status_code, r1.json()['status']), (200, 'done'))
         self.assertEqual((r2.status_code, r2.json()['status'], r2.json()['duplicate']), (200, 'done', True))
@@ -206,7 +206,7 @@ class InterpretationTests(unittest.TestCase):
         s, tid, mid, item = asked()
         with mock.patch('taskuary.outbound.reply_to_message') as send:
             out = say(s, 'reply and tell them the export is fixed', key=item['key'], model="I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"tell them the export is fixed\"}}")
-        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'tell them the export is fixed'}); self.assertIsNone(out.get('proposal'))
+        self.assertEqual({k: out['decision'][k] for k in ('verb', 'text')}, {'verb': 'reply', 'text': 'tell them the export is fixed'}); self.assertIsNone(out.get('proposal'))
         send.assert_not_called()
 
 

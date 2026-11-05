@@ -87,7 +87,7 @@ class SharedSessionTests(unittest.TestCase):
         def answer(system, user, **kwargs):
             seen.update(system=system, user=user, kwargs=kwargs); return 'Zoho is open beside us.'
         session = general.GeneralSession(store, tid, pick='cli:claude')
-        with mock.patch.object(browserview, 'start', return_value=True), \
+        with mock.patch.object(browserview, 'start', return_value=True), mock.patch.object(browserview, 'installed', return_value=True), \
              mock.patch.object(llm, 'build_llm', return_value=answer) as build:
             session.send_prompt('Open Zoho', pick='cli:claude')
         self.assertTrue(build.call_args.kwargs['cli_tools'])

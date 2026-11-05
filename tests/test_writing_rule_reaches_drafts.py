@@ -41,7 +41,7 @@ def test_the_style_rule_reaches_the_drafter_prompt():
 def test_the_assistant_says_where_it_saved_it():
     s = MemoryStore()
     tid = Factory(s).task(title='chat')
-    with mock.patch.object(concierge, '_did', side_effect=lambda store, t, said, kind: said):
+    with mock.patch.object(concierge, '_did', side_effect=lambda store, t, said, kind, *a: said):
         said = concierge._memory(s, tid, 'memory.remember', {'note': RULE, 'section': 'style'})
         fact = concierge._memory(s, tid, 'memory.remember', {'note': 'Gail moved to Ops', 'section': 'people', 'about': 'Gail Moreno'})
     assert said.startswith('Saved to your writing style:') and 'Mrs <surname>' in said

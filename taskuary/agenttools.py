@@ -16,6 +16,8 @@ Results that carry other people's words are fenced (terminal.fence), scrubbed (r
 import json
 from loguru import logger
 
+from . import words
+
 SERVER = 'taskuary'
 CAP = 12000                                         # one result; past it the agent is told to narrow, never handed half silently
 
@@ -75,7 +77,7 @@ TOOLS = {
                   "(points from the bottom left); `date`: true writes today's date beside it, or a field name to put it in. The signed copy "
                   "lands in your folder and shows in the chat. When a mail brings a form to fill or sign, fill and sign it here, show it, "
                   "and propose the reply with it in `attach` for the owner's Send - never send it yourself. With no signature saved it says "
-                  "so: ask the owner to add one in Settings -> Your signature; never make one up.",
+                  "so: ask the owner to add one in " + words.name('replies') + " (Your signature); never make one up.",
                   _S({'attachment': _INT, 'file': _STR, 'fields': {'type': 'object', 'additionalProperties': True},
                       'sign': {'type': 'object', 'properties': {'field': _STR, 'near': _STR, 'page': _INT,
                                                                  'box': {'type': 'array', 'items': {'type': 'number'}}}},

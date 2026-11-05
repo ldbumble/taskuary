@@ -7,6 +7,7 @@ Here each act names what it promised, as a look at the store after it ran: `snap
 the reason in plain words ("TQ-0002 is still open"). operations.execute asks it for every operation (the chat, the task page and the phone
 take that road alike), concierge asks it for the writes the chat makes itself; a reply's draft is the reply door's (server._rewritten). An act with no
 promise here is unchecked - its handler's word stands, as before."""
+from . import kinds
 from .store import task_ref
 
 CLOSED = ('done', 'dropped')
@@ -98,7 +99,7 @@ PROMISES = {
     'review.approve': (_T, _approved), 'message.file': (lambda s, n, p: (s.get_message(int(n)) or {}).get('Status') if n else None, _filed),
 }
 # ...and a message handed to an agent: a start like any other - a to-do made for the owner promises only its task
-AGENT_KINDS = ('general', 'coding')
+AGENT_KINDS = kinds.AGENT
 
 
 def snap(store, kind: str, target, params: dict | None):

@@ -94,7 +94,9 @@ class TheGeneralAgentsBrowserIsHeld(unittest.TestCase):
         sess = general.GeneralSession(s, tid, pick=pick)
         seen = {'sid': sess.sid}
         def answer(system, user, **kw): seen.update(system=system); return 'Done.'
-        with mock.patch.object(browserview, 'start', return_value=True), mock.patch.object(llm, 'build_llm', return_value=answer) as build:
+        # agent-browser installed, as on a desk that drives one (CI's runners have none): a chat with no page yet is offered it
+        with mock.patch.object(browserview, 'start', return_value=True), mock.patch.object(browserview, 'installed', return_value=True), \
+             mock.patch.object(llm, 'build_llm', return_value=answer) as build:
             sess.send_prompt('Pay it', pick=pick)
         seen['kw'] = build.call_args.kwargs
         return seen

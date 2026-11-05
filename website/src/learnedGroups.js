@@ -29,7 +29,7 @@ export const byPerson = (ls) => {
 export const SECTIONS = [
   { slug: "people", title: "Your people", reads: "read by triage (priority only) · drafts · the Advisor · the Assistant · agents" },
   { slug: "care", title: "What you care about", reads: "read by triage · the Advisor · the Assistant · agents" },
-  { slug: "work", title: "How you work", reads: "read by triage · the Advisor · the Assistant · agents" },
+  { slug: "work", title: "How you work", reads: "read by triage · drafts · the Advisor · the Assistant · agents" },
   { slug: "promises", title: "Promises", reads: "read by triage · the Advisor · the Assistant · agents" },
   { slug: "bring", title: "What to bring up", reads: "read by triage · the Assistant · agents" },
 ];

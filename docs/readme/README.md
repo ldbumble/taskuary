@@ -4,8 +4,8 @@ The README and product guide share these images. The hero is kept separately at
 `docs/hero.webp`: the Assistant's Game view, opening on the whole office and zooming into each room.
 Regenerate it with `npm exec --yes --package=node@22 -- node website/capture-hero.mjs` (FFmpeg as below). It is an
 animated WebP because smooth camera flights cost 20 MB as a GIF; the capture steps the scene's clock one frame per
-screenshot, so every frame is exactly 50 ms apart. `--encode` re-encodes the last frames without a browser. These images follow one invented
-vendor-spend request through the current React interface, then show a few key
+screenshot, so every frame is exactly 50 ms apart. `--encode` re-encodes the last frames without a browser. These images follow the general agent's invented working day
+(taskuary/demo.py `seed_agent_day`) through the current React interface, then show a few key
 features. The calendar GIF replays the app's meeting entrance and clock pulse.
 `06-morning.png` is its static alternative. The privacy SVG is an illustrated flow.
 
@@ -21,12 +21,13 @@ npm exec --yes --package=node@22 -- node website/capture-readme-app.mjs
 npm exec --yes --package=node@22 -- node website/render-readme.mjs
 ```
 
-The task-view pictures - 02 the task in its three sections, 03 the agent's Result, 04 Close out on the drafted reply,
-05 the chat window over the row, 12 an FYI batch, 13 a report, 14 the dashboard - come from `capture-readme-app.mjs`. It
-starts the browser harness (`website/browser/harness.mjs`): the real backend on a scratch home seeded with the demo world,
-outbound sockets blocked. `website/readme_seed.py` writes Ruth's request into that home, then the agent's finished run on
-it - its report, the workbook it made, the reply drafted. Each is the Taskuary pane at 1440x900, the rail left out. To
-frame only those, add `--app-only` to the render.
+The task-view pictures - 02 a task as one chat, 03 the LinkedIn post the agent set up, 04 Next steps holding the
+reply after a second mail joined the thread, 05 the chat window over the row, 12 an FYI batch, 13 a report, 14 the dashboard
+the agent built, 15 the agent recommending closing after the owner answered, 16 a browser hand-over - come from
+`capture-readme-app.mjs`. It starts the browser harness (`website/browser/harness.mjs`): the real backend on a scratch home
+seeded with the demo world, outbound sockets blocked. Every one of those tasks is part of the demo world itself, so
+`taskuary --demo` and taskuary.com/demo show the same chats. Each is the Taskuary pane at 1440 wide, the rail left out, at the
+height its chat needs. To frame only those, add `--app-only` to the render.
 
 The capture starts and closes its own local Vite server and browser. It uses demo
 mode, with a capture-only fixture for the calendar, morning digest, current

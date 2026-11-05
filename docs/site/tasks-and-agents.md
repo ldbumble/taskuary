@@ -4,18 +4,23 @@ the word "done" meaning three different things.
 
 ## A task's three lives
 
-The task page shows them as three sections, left to right — **1 Came from → 2 Agent → 3 Close
+A **coding** task shows them as three sections, left to right — **1 Came from → 2 Agent → 3 Close
 out**. The section the task is up to opens; the other two fold to slim columns beside it that still
 say where they stand. Each section carries its own moves: on its spine while folded, on a strip
 across its top while open.
 
+A **general** or **reply** task has two: **Came from** and **Agent**, and its Agent section is one chat.
+There is no Close out on it: the reply, the post or the file the agent set up sits in the chat, under
+that turn's **Next steps** ([A general task is one chat](#a-general-task-is-one-chat)). **Mark done** is
+on the task's own bar.
+
 | Section | What it records | Its moves | What it never does by itself |
 |---|---|---|---|
 | **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not a task**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
-| **Agent** | One or more runs by a coding or general agent, and the Result each left | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** | Ending a session does not mark the task done or send a reply |
-| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve and close**, **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Approve and close** does the same after the merge or the issue's close; **Send** and **Approve** never close it — the task stays open until you **Mark done** |
+| **Agent** | One or more runs by a coding agent, and the Result each left - on a general task, the one chat | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** on a coding task; on a general task, the box under the chat | Ending a session does not mark the task done or send a reply |
+| **Close out** (coding tasks) | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve and close**, **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Approve and close** does the same after the merge or the issue's close; **Send** and **Approve** never close it — the task stays open until you **Mark done** |
 
-**Mark done** always comes first on Close out and is never folded away. When a strip runs out of
+**Mark done** always comes first on Close out, or on a chat task's bar, and is never folded away. When a strip runs out of
 room, the rest of its moves fold into a **▾** at its end. The task's title bar holds only its status,
 **Expand** and **×**.
 
@@ -23,7 +28,7 @@ Under the task is one small bar, **Nav**: **Back** and **Next**, each greyed whe
 go. The chat is a separate pill in the corner; type there and a window opens out of it, about the
 task on the table.
 
-While an agent's session is live, it takes the whole width: Came from and Close out fold to their
+While a coding agent's session is live, it takes the whole width: Came from and Close out fold to their
 spines, and the Agent strip holds only **Stop and save**. Its Result, and **Continue**, come back
 when it stops.
 
@@ -104,11 +109,51 @@ and topic history, the learned profile, and reports from related closed tasks.
 |---|---|
 | **Send to agent** | Hands the work to an agent; the card lets you change which one |
 | **Stop and save** | Ends the session and writes its result; the task stays open until you mark it done |
-| **Continue** | Picks the work up where it left off, with what you add or as it is (**Try again** after a failed run) |
-| **Run another agent** | Starts a second agent on the same task |
+| **Continue** (coding) | Picks the work up where it left off, with what you add or as it is (**Try again** after a failed run) |
+| **Run another agent** (coding) | Starts a second agent on the same task |
+| The box under a general task's chat | Carries the same conversation on - there is no Continue or Run another there |
 
 **Mark done** is stronger than all of them: it closes the task *and* ends any live session,
 because a finished task should not leave an orphan process running.
+
+## A general task is one chat
+
+A general or reply task's Agent section is one regular chat, oldest at the top, the box always at the
+bottom.
+
+| Where | What sits there |
+|---|---|
+| **Right** | What came in: the mail or message that started the task, with its channel's mark, who sent it and when - "Email from Erin Blake · 2:48 PM · sent to Taskuary"; later mail that joined the thread, each where it arrived; what you type, under **You**; and Taskuary's short triggers, such as "Signed in to the site" or "Pressed Pay on the page" |
+| **Left** | The agent's turns, each with its time and how long it ran ("1:01 PM · ran 1m 42s"). While a turn works, its steps show live - a line per tool call, the newest at the foot - under a running clock; once it answers they fold into one "N steps" line |
+
+Each turn reads as three short sections:
+
+- **What this is about** - the ask, in a sentence.
+- **What I did** - the result itself first: the figure, the link, the file. A file it made shows under it and
+  opens in a preview - a workbook as a table, a picture, a PDF - with **Download**.
+- **Next steps** - the action it set up for one press, or what is left to you: a draft email with its To, Cc,
+  attachments and **Send**; a LinkedIn, Bluesky or Mastodon post drawn as the post, with its picture and
+  **Post to LinkedIn**; a step only you can take ("For you to do: ..."); or "Nothing left to do here".
+
+A turn keeps its own draft. When a newer turn comes - a mail that joined the thread, a line you typed - the
+older turn folds to its "What I did" line and keeps the draft it wrote, read-only, with where it went since
+(sent, not sent). Only the newest turn's card can be sent. Nothing goes out until you press it.
+
+**Typing always continues.** What you type in the box goes to the same agent, in the same conversation, whether
+it is working, finished or stopped; a closed task's chat reopens it. There is no Continue, Run another or
+"Earlier runs" fold on a general task: every run reads as one chat.
+
+**The agent never closes the task.** You do, with **Mark done**. When you answer the thread yourself, outside
+Taskuary, the agent sees your reply, thinks again, and says so - "I see you answered Ruth there; I recommend
+closing" - leaving its own draft unsent.
+
+**The browser shows only when you have a part.** A general agent can work in a browser out of sight. The page
+appears beside the chat when it needs you: a sign-in, a one-time code, or a press that is yours on the real page.
+For a payment or a form, the agent fills it in and hands the press over - "Your turn on the page: press Pay" - and
+your press comes back into the chat as a trigger, "Pressed Pay on the page", which wakes its next turn.
+
+A report, an FYI or an Advisor idea opens the same way, but its chat box is on the Agent tab only; Came from
+shows the item itself.
 
 ### What an agent is doing
 
@@ -149,7 +194,7 @@ the terminal.
 ### When the agent opens a browser
 
 With the optional `agent-browser` tool installed, the page the agent is on appears live beside
-the terminal. **Take over** hands you the mouse and keyboard for a password or a 2FA code the
+the terminal - or, for a general agent, beside the chat when you have a part in it. **Take over** hands you the mouse and keyboard for a password or a 2FA code the
 agent must never type; **Snapshot** keeps the frame on the task as an attachment. On the Wall, a
 narrow tile shows a "browser" chip that opens the page over the session.
 
@@ -179,8 +224,8 @@ for you.
 ## Coding agents and general agents
 
 Not every job is code. A `coding` task goes to a coding agent, in a terminal in your repository. A
-`general` task goes to a general agent, in a conversation instead: research, planning, writing,
-weighing an option, working out what to ask. No system is touched.
+`general` task goes to a general agent, in a chat instead: research, planning, writing, a post, a
+spreadsheet or a dashboard, a form filled in a browser. Whatever it sets up waits for your press.
 
 Both run on a **brain** - a CLI such as Claude Code or Codex, or an API connection, with the model
 chosen on it - and follow a **profile** of instructions laid on that brain: `CODING.md` for code,
@@ -213,7 +258,7 @@ When triage reads a general task as quick, it is answered in a single call inste
 session. The call reads what the agent would - the message, the task, `LEARNED.md`, today's calendar,
 `AGENT.md` and the profile - may use only read-only look-ups, and leaves the same things a finished
 run does: what it found, a draft when a reply is owed, or a question to you. Nothing on the task page
-changes: the same Result, the same **Continue** and **Run another agent**, which open a full session.
+changes: it is the same chat, and what you type in its box opens a full session.
 
 These always take a full agent session: hard work, work that needs a browser, a sender Taskuary does
 not know, several emails owed, a routine's run, and a task that has already had one. A quick call that
@@ -235,8 +280,9 @@ the agent at ⚙️ **agent working** rather than waiting on you, until those jo
 
 ## Sessions and transcripts
 
-Unfinished tasks with saved agent work stay under Tasks on the rail. **Continue** on the Agent
-section carries on; a session already running is opened rather than duplicated.
+Unfinished tasks with saved agent work stay under Tasks on the rail. **Continue** on a coding task's
+Agent section, or typing in a general task's chat, carries on; a session already running is opened
+rather than duplicated.
 
 Reopening a pane seeds it from a render of the session, not from raw bytes, so a pane you come
 back to shows what the screen actually looked like.
@@ -270,9 +316,10 @@ state.
 
 ## Replies
 
-Close out holds the reply whenever the task has an incoming sender. It shows one of three things:
-no draft yet (**Draft reply**), a draft ready (**Send**, **Redraft**), or a reply sent. Type your own
-or generate one, edit it, send it.
+On a coding task, Close out holds the reply whenever the task has an incoming sender. It shows one of three
+things: no draft yet (**Draft reply**), a draft ready (**Send**, **Redraft**), or a reply sent. Type your own
+or generate one, edit it, send it. On a general or reply task the draft is a card under the newest turn's
+**Next steps** in the chat, with its To, Cc, attachments and **Send**; ask in the box for a different one.
 
 One reply is special. A **clarification** stops the active agent when it is sent and moves the
 task to waiting, because an external answer is now required. An ordinary reply from an

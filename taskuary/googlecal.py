@@ -8,10 +8,9 @@ loopback port - fileaccess's round rides the same road) with PKCE and a one-time
 sealed (store seals google_refresh_token inside ConfigJson, vault.py), where calendar.agenda reads it as it read a pasted one.
 
 TASKUARY'S OWN GOOGLE CLIENT (the owner, 2026-10-26: "don't want to create my own google client, want to use their own"): nobody
-creates or pastes an OAuth client. The sign-in rides ONE Desktop-app client Taskuary ships, as msauth rides Taskuary's Microsoft app
-id (msauth.PUBLIC_CLIENT_ID) - BUILTIN_CLIENT_ID below, overridable per install with TASKUARY_GOOGLE_CLIENT_ID / _SECRET for
-development, or per card with its own google_client_id / google_client_secret (the card's admin fold, where the Outlook card keeps
-its client_id). A build with none says so in one line (UNAVAILABLE) instead of sending anyone to Google Cloud console."""
+creates or pastes an OAuth client. The sign-in rides ONE Desktop-app client Taskuary ships (Microsoft is the
+other way round since 2026-11-05: each company's own app, msauth.py) - BUILTIN_CLIENT_ID below, overridable per install with TASKUARY_GOOGLE_CLIENT_ID / _SECRET for
+development, or per card with its own google_client_id / google_client_secret (the card's admin fold). A build with none says so in one line (UNAVAILABLE) instead of sending anyone to Google Cloud console."""
 import base64, hashlib, json, os, secrets, threading, time
 from urllib.parse import urlencode
 from . import net as requests     # pooled Session + (connect, read) timeouts, same call shape

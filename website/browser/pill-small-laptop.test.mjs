@@ -6,7 +6,9 @@ import { askWidth, startHarness } from "./harness.mjs";
 /* THE SMALL PILL LEAVES A LAPTOP ITS BUTTONS (the owner, 2026-10-27: "yes shrink the chat box"). At 220px the one-row bar's chat pill took
    the room Mark done and Send to agent need, and on a 1366-1600px laptop they folded behind a ▾ - two clicks each, and Mark done's next
    card ~500-800 ms instead of ~200. The chat is its own small pill in the corner now (the owner, 2026-10-29), the bar ending before it: Mark
-   done stays on the bar, on one line, at every laptop width - and Send to agent, a stage move, is on Agent's spine, never the bar's. */
+   done stays on the bar, on one line, at every laptop width - and Send to agent, a stage move, is on Agent's spine, never the bar's.
+   The demo's invoice is a reply, whose chat is home (the closeout-in-chat spec, 2026-11-04): Mark done is on the Agent's strip, where Close
+   out's strip held it, and Send to agent is the open Agent's own box - neither on the bar, neither behind a ▾. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and 1600px", { timeout: 300000 }, async (t) => {
@@ -32,8 +34,10 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
       const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
       return { pill: Math.round(pill.getBoundingClientRect().width), line: Math.round(line.getBoundingClientRect().height),
         // ...the task's own moves on its title bar now (the owner, 2026-10-29: the bar is Back and Next)
-        verbs: [...document.querySelectorAll("[data-tq-row] button[data-tq-verb], :is([data-tq-spine-moves=close], [data-tq-pane-moves=close]) button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()),
-        spine: [...document.querySelectorAll("[data-tq-spine-moves=agent] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb")) };
+        verbs: [...document.querySelectorAll("[data-tq-row] button[data-tq-verb], :is([data-tq-spine-moves=close], [data-tq-pane-moves=close], [data-tq-pane-strip=agent]) button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb").split(":").pop()),
+        spine: [...document.querySelectorAll("[data-tq-spine-moves=agent] button[data-tq-verb]")].filter(vis).map((b) => b.getAttribute("data-tq-verb")),
+        box: [...document.querySelectorAll("[data-tq-agent-box] button")].filter(vis).some((b) => /^Send to agent$/.test(b.textContent.trim())),
+        bar: [...document.querySelectorAll(".tq-dock button")].filter(vis).some((b) => /Send to agent/.test(b.textContent)) };
     });
     const say = `${width}px ${JSON.stringify(s)}`;
     assert.ok(Math.abs(s.pill - askWidth(width)) <= 1, `the ask bar its one width (the owner, 2026-10-29: "freeze the size of chat") ${say}`);
@@ -41,7 +45,8 @@ test("at rest the pill is small and Mark done stays on the row at 1366, 1440 and
     console.log(`# ${say}`);
     // ...and Close folds last (the owner, 2026-10-27: "if there is no space"): Mark done is on the row at every laptop width
     assert.ok(s.verbs.includes("done"), `Mark done is on Close out, not behind a ▾ ${say}`);
-    assert.ok(s.spine.some((v) => /agent/.test(v)), `Send to agent is on Agent's spine ${say}`);
+    assert.ok(s.spine.some((v) => /agent/.test(v)) || s.box, `Send to agent is on Agent's spine, or the open Agent's own box ${say}`);
+    assert.ok(!s.bar, `never on the bar ${say}`);
   }
   assert.deepEqual(errors, []);
 });

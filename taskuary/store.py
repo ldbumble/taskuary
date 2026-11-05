@@ -638,6 +638,12 @@ CREATE INDEX IF NOT EXISTS idx_brainroute_task ON brainroute(TaskId, Id);
 -- How hard a task's work is, whether its reader could tell, and what kind of data it carries - triage's judgements, apart from the
 -- priority, kept per task (brainroute.judged). `By` is 'owner' once they correct one: their word stands until they change it again.
 CREATE TABLE IF NOT EXISTS task_judged (TaskId INTEGER PRIMARY KEY, Difficulty TEXT, Sure INTEGER, DataClass TEXT, By TEXT, At TEXT);
+-- THE DRAFT AS A TURN LEFT IT (the owner, 2026-11-05: "keep the original draft in that turn, and then in next turn show the next draft"): the
+-- agent rewrites one review in place, so a turn that kept only the review's id drew the LATER words. One row per turn that wrote or rewrote
+-- it (CommentId: that turn's answer), apart from the summary - the words to a sender never sit in the summary (2026-11-04)
+CREATE TABLE IF NOT EXISTS draft_snapshot (Id INTEGER PRIMARY KEY, TaskId INTEGER, ReviewId INTEGER, CommentId INTEGER, Text TEXT,
+  ToName TEXT, Subject TEXT, CreatedAt TEXT);
+CREATE INDEX IF NOT EXISTS idx_draft_snapshot ON draft_snapshot(TaskId, CommentId);
 """
 # the knowledge base's search index (knowledge.py). A VIRTUAL table, kept out of SCHEMA: a Python
 # built without FTS5 must still open the store - search then falls back to LIKE over kb_chunk.
@@ -2523,7 +2529,7 @@ class SQLiteStore:
                    "(json_extract(ActionJson,'$.tid')=? OR IdeaId IN (SELECT CAST(substr(SourceRef,16) AS INTEGER) FROM task "
                    "WHERE TaskId=? AND SourceRef LIKE 'assistant:idea:%'))", (_now(), task_id, task_id))
         for q in ("UPDATE message SET TaskId=NULL, Status='filed' WHERE TaskId=?", 'UPDATE route SET TaskId=NULL WHERE TaskId=?',
-                  'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?',
+                  'DELETE FROM review WHERE TaskId=?', 'DELETE FROM comment WHERE TaskId=?', 'DELETE FROM draft_snapshot WHERE TaskId=?',
                   'DELETE FROM run WHERE TaskId=?', 'DELETE FROM task_artifact WHERE TaskId=?',
                   'DELETE FROM session_resume WHERE TaskId=?',
                   # ...and its worker's events: a question it asked stayed open, and a deleted task still raised its toast (email walk 2026-10-29)
@@ -5047,6 +5053,23 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
             return cur.lastrowid
     def list_comments(self, task_id): return self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
+    def snap_draft(self, review_id, comment_id) -> bool:
+        """Keep review `review_id` as it stands, under the turn `comment_id` that left it - only when its words changed since the last turn
+        kept it: a turn that left the draft untouched did not write it, so it is not drawn there again. True when one was kept."""
+        rv = self._one('SELECT rv.TaskId, rv.DraftText, m.FromName, m.FromEmail, m.Subject FROM review rv LEFT JOIN message m '
+                       'ON m.MessageId=COALESCE(rv.AnswersMid, rv.MessageId) WHERE rv.ReviewId=?', (review_id,))
+        if not rv or not str(rv.get('DraftText') or '').strip(): return False
+        last = self._one('SELECT Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (review_id,))
+        if last and last['Text'] == rv['DraftText']: return False
+        self._exec('INSERT INTO draft_snapshot (TaskId, ReviewId, CommentId, Text, ToName, Subject, CreatedAt) VALUES (?,?,?,?,?,?,?)',
+                   (rv['TaskId'], review_id, comment_id, rv['DraftText'], rv.get('FromName') or rv.get('FromEmail') or '', rv.get('Subject') or '', _now()))
+        return True
+    def draft_snapshots(self, task_id) -> dict:
+        "Each turn's kept drafts, by the turn's CommentId: [{review, text, to, subject, at}], oldest first."
+        out = {}
+        for r in self._rows('SELECT * FROM draft_snapshot WHERE TaskId=? ORDER BY Id', (task_id,)):
+            out.setdefault(r['CommentId'], []).append({'review': r['ReviewId'], 'text': r['Text'], 'to': r['ToName'] or '', 'subject': r['Subject'] or '', 'at': r['CreatedAt']})
+        return out
     def set_comment_body(self, comment_id, body):
         """Rewrite one turn where it stands: the day's opener is drawn at once and filled when the mail is in (welcome.arrive)."""
         self._exec('UPDATE comment SET Body=? WHERE CommentId=?', (body, comment_id))

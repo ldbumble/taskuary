@@ -1208,6 +1208,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // sat on the rail as an open task already seen: under For later (the owner, 2026-10-01: "it first went to Later ... and
   // did not disappear right away"). Held until the pile no longer carries it, so a reopened task is never hidden.
   const [leavingTid, setLeavingTid] = useState(null);
+  // NOTHING IS ON THE TABLE WHILE THE CANVAS SHOWS SOMETHING ELSE (the owner, 2026-11-05: "When new is on the canvas nothing is on the table"): a
+  // page over it (table.place) or a pull on its way to another row (`opening`, the pulled key) takes the rail's mark off the row at once
+  const [opening, setOpening] = useState(null);
   const leavingWas = useRef(null);                   // the row being put down, as it stood at the press (funnelPile.putDownLanded)
   // ...and the rows a walk press READS (rule 4), by key: {keys, coming, after} - `coming` the fyi batch below them, `after` the rail they
   // wait out when the answer brought none (surface)
@@ -1391,6 +1394,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // WHAT IS ON THE TABLE, by key: the walk's item, or the task opened by name. The advice is read for this key and shown only
   // when it was read for it - the last item's line never stands over the next one
   const onTable = current || cardKey;
+  useEffect(() => { setOpening(null); }, [current]);
+  useEffect(() => { if (!busy) setOpening(null); }, [busy]);
   useEffect(() => { if (!tableKey) return; setExpanded(false); setFoldedKey(null); }, [tableKey]);
   // ONE ROAD ONTO THE TABLE (2026-10-18): Next, a chip, a rail click, the Board's open, a reopen, a browse card, the card after a
   // receipt or a failed act - every way something reaches the table comes through here, so the rail's "on the table" mark, the
@@ -3101,6 +3106,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     navHow.current = "push";
     if (setupOn.current) setOverSetup(true);                // during setup it opens over setup, which waits where it was (W2)
+    // ...and the row it leaves is off the table at the press (`opening`): New's Send put the new task's pull out and the FYI under New wore
+    // "on the table" again until the task loaded (the owner, 2026-11-05)
+    setOpening(key && key !== currentRef.current?.key ? key : null);
     setRailOpen(false); if (old) setOld(null); browseDown(); surface(key, asUser || null);
   };
   pullRef.current = pull;
@@ -3916,7 +3924,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // ...unless the press read them: then they are off the pile already (readGone), the ring would only put them back (onTable), and
         // the fyi batch below them takes the bracket at the press - the answer puts the same one on the table
         current={old ? null : readGone?.keys.includes(currentItem?.key) ? (readGone.coming ? { key: readGone.coming, kind: "fyis", members: readGone.coming.slice(5).split(",") } : null)
-          : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem} coming={nextComing || busy}
+          : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) || table.place || (opening && opening !== currentItem?.key) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} moved={movedTo} /></>}

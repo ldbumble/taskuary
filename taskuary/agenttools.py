@@ -84,7 +84,8 @@ TOOLS = {
                       'date': {'type': ['boolean', 'string']}}), ('POST', '/api/agent/sign-form')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
                 "comment), close_issue, open_pr, land, run_tool {type, connector_id, ...} (a send, post or order on one of their "
-                "systems), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
+                "systems - a post: {type: linkedin_post, text, image: a picture in your task folder}, drawn for the owner as the post with "
+                "its Post button), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
                 "jira_comment {body}, jira_move {status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` "
                 "is the one this task came from unless you name another. Always give `why`. It puts an Approve button in front of "
                 "the owner - nothing happens until they press it.",

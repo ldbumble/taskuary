@@ -7,6 +7,7 @@ import { Box, IconButton, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps } from "./agentSummary.js";
+import { isPostReview } from "./reviewProposal.js";
 import { Md } from "./md.jsx";
 import { readingOf } from "./threadReading.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
@@ -36,7 +37,11 @@ const OnYou = ({ items }) => {
 // meaning review the file then send it"): one head, what is on the owner first, then the draft with its Send
 const DraftHead = () => <Head>Next steps</Head>;
 
-export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false, lastAnswered = false }) {
+// `lead`: what this turn SET UP for the owner's press, drawn as itself (a post, PostCard) - it leads Next steps, the action section (the owner,
+// 2026-11-05: "Next steps is the action section"). `made`: the files the turn made, inline under What I did (TurnFiles). `kept`: the drafts this
+// turn wrote, as it wrote them (draft_snapshot)
+export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false, lastAnswered = false,
+  kept = null, lead = null, made = null }) {
   if (!summary) return null;
   const did = String(summary.did || "").trim(), about = String(summary.about || "").trim();
   // ...a turn that is history keeps the draft it left, read-only: what was drafted and to whom, no Send (the owner, 2026-11-05)
@@ -45,7 +50,12 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
   // the original message")
   const ids = summary.drafted ? summary.drafted.map((x) => x?.review)
     : lastAnswered ? (reviews || []).filter((r) => r?.Status === "pending" && r.Kind !== "action" && r.Kind !== "slot").map((r) => r.ReviewId) : [];
-  const drafted = ids.map((id) => (reviews || []).find((r) => r.ReviewId === id)).filter((r) => r && String(r.DraftText || "").trim());
+  // ...in the words THIS turn left (general.shown_history's `drafts_then`, the owner, 2026-11-05: "keep the original draft in that turn"): the
+  // agent rewrites one draft in place, and the review's own text is the newest turn's. A turn filed before that kept nothing reads the review
+  const drafted = ids.map((id) => {
+    const r = (reviews || []).find((x) => x.ReviewId === id), k = (kept || []).filter((x) => x?.review === id).at(-1);
+    return k ? { ...(r || {}), ReviewId: id, DraftText: k.text, FromName: k.to || r?.FromName, FromEmail: r?.FromEmail } : r;
+  }).filter((r) => r && String(r.DraftText || "").trim());
   const fate = (r) => r.Status === "sent" || r.DeliveryState === "sent" ? "sent" : r.Status === "pending" ? "" : "not sent";
   const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
@@ -58,20 +68,24 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
         What I did<Box component="span" sx={{ fontWeight: 400, color: DIM, ml: 0.75 }}>{did.split("\n")[0]}</Box></Box>
       <Box sx={{ ...LINE, color: DIM }}><Md text={did} /></Box>
     </Box>}
-    <Drafted /></>) : null;
-  const { drafts, onYou, held, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
+    {made}{lead}
+    <Drafted /></>) : made || lead ? <>{made}{lead}</> : null;
+  const { drafts, onYou, held: heldAll, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
+  const held = heldAll.filter((r) => !isPostReview(r));        // a post is its own card, leading Next steps - never "a step waits, below"
   return (
     <Box data-tq-summary="open" className="tq-aui-summary">
       {!!about && <><Head first>What this is about</Head><Typography data-tq-summary-about="" sx={LINE}>{about}</Typography></>}
       {!!did && <><Head first={!about}>What I did</Head><Box data-tq-summary-did="" sx={LINE}><Md text={did} /></Box></>}
-      {(next && hasReply(reviews)) || (drafts.length && !next) || held.length || onYou.length || nothing ? <DraftHead /> : null}
+      {made}
+      {lead || (next && hasReply(reviews)) || (drafts.length && !next) || held.length || onYou.length || (nothing && !lead) ? <DraftHead /> : null}
+      {lead}
       <OnYou items={onYou} />
       {!!held.length && <Typography data-tq-summary-held={held.length} sx={LINE}>
         {held.length === 1 ? "One step waits for your Approve, below." : `${held.length} steps wait for your Approve, below.`}</Typography>}
       {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
         {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
       {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}
-      {nothing && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
+      {nothing && !lead && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
     </Box>
   );
 }

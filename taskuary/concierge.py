@@ -4309,10 +4309,12 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
     if kind == SETUP_KIND and not agent_job: store.add_comment(tid, actor, general.USER_TYPE, text)
     else: store.add_comment(tid, actor, 'human', f'Asked in the Assistant chat: {text}')
     store.audit('task', tid, 'create_from_assistant_setup', actor)
+    # ...and says whether its agent started, which the receipt checks (effects._started) before telling the owner it is on it
+    started = False
     if kind == 'coding':
-        try: ingest._spawn(ingest._auto_code, store, tid)
+        try: ingest._spawn(ingest._auto_code, store, tid); started = True
         except Exception as e: logger.warning(f'setup task {tid}: the agent did not start - {e}')
-    return {'taskId': tid, 'ref': task_ref(tid), 'title': title, 'kind': kind}
+    return {'taskId': tid, 'ref': task_ref(tid), 'title': title, 'kind': kind, **({'started': True} if started else {})}
 
 
 def card_for(item: dict) -> dict:
@@ -4569,6 +4571,7 @@ def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', t
             _read_outputs(store, made, job, actor)
             session.send_prompt(brief)
         threading.Thread(target=first_turn, daemon=True).start()
+        made['started'] = True
     return made
 
 

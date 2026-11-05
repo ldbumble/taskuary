@@ -10,10 +10,19 @@ import { startHarness } from "./harness.mjs";
    carries a two-column toggle: pressed, the pane and its partner each take half the work area - Agent beside Close out, Came from beside
    Agent - each under its own strip with its own moves, the third a spine; pressed again, one pane. Not where two halves would be cramped,
    nor over a live agent. Invented people (fixture chat-saved: a stopped agent's answer and the reply it drafted).
+   ...ON A TASK OF THREE SECTIONS (the closeout-in-chat spec, 2026-11-04): a chat task is Came from | Agent with its drafts inside the chat
+   (browser/closeout-in-chat.test.mjs), so the pairs are a three-section task's - chat-saved's world, made a to-do (Kind task) by its own PATCH.
    TASKUARY_SHOT_DIR: where the 1440x900 and 1920x1080 frames go. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const DRAFT = "Ray Colton signs the snag list on Thursday - keys are at reception from 7.";
 let CUR = "[data-tq-canvas-item]";
+// chat-saved's stopped agent and its draft, on a to-do: Came from | Agent | Close out
+const made3 = (page, draft) => page.evaluate(async (draft) => {
+  const headers = { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" };
+  const { taskId } = await (await fetch("/api/fixture/task/chat-saved", { method: "POST", body: JSON.stringify({ draft }), headers })).json();
+  await fetch(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ Kind: "task" }), headers });
+  return taskId;
+}, draft);
 const openTask = async (page, id) => {
   CUR = `[data-tq-canvas-item]:has([data-tq-task-page="${id}"])`;
   await page.evaluate((id) => { location.hash = ""; location.hash = `task=${id}`; }, id);
@@ -61,9 +70,7 @@ test("side by side: Agent beside Close out and Came from beside Agent, each with
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await page.goto(hz.ui, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("[data-tq-rail] .tq-pile-row", { timeout: 30000 });
-  const made = await page.evaluate(async (draft) => (await fetch("/api/fixture/task/chat-saved", { method: "POST", body: JSON.stringify({ draft }),
-    headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json(), DRAFT);
-  const tid = made.taskId;
+  const tid = await made3(page, DRAFT);
   // the demo sends nothing: Send's answer is played here
   let decided = 0;
   page.off("request", page.fixtureRequestGuard);
@@ -147,8 +154,7 @@ test("side by side: Agent beside Close out and Came from beside Agent, each with
   });
 
   await t.test("narrow: no toggle, and side by side falls back to one pane", async () => {
-    const t2 = (await page.evaluate(async () => (await fetch("/api/fixture/task/chat-saved", { method: "POST", body: JSON.stringify({ draft: "Thursday works." }),
-      headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json())).taskId;
+    const t2 = await made3(page, "Thursday works.");
     await openTask(page, t2);
     await openSec(page, "agent");
     await flip(page, "agent");
@@ -172,8 +178,7 @@ test("side by side: Agent beside Close out and Came from beside Agent, each with
 
   await t.test("1920x1080: both pairs", async () => {
     await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 });
-    const t3 = (await page.evaluate(async (draft) => (await fetch("/api/fixture/task/chat-saved", { method: "POST", body: JSON.stringify({ draft }),
-      headers: { "X-Taskuary-Token": localStorage.getItem("taskuary_token"), "Content-Type": "application/json" } })).json(), DRAFT)).taskId;
+    const t3 = await made3(page, DRAFT);
     await openTask(page, t3);
     await openSec(page, "agent");
     await flip(page, "agent");

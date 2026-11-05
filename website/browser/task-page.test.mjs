@@ -34,7 +34,7 @@ const settled = async (page) => {
   return l;
 };
 
-test("the task page: three sections at rest, the agent nearly the whole width while it works, its Result when it stopped", { timeout: 360000 }, async (t) => {
+test("the task page: three sections at rest (two where the chat is home), the agent nearly the whole width while it works, its Result when it stopped", { timeout: 360000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -43,34 +43,37 @@ test("the task page: three sections at rest, the agent nearly the whole width wh
   await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
   const tasks = (await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json()).data || [];
 
-  // ONE MAIN VIEW (the owner, 2026-10-26), THREE SECTIONS (2026-10-27): a reply drafted opens on Close out, Came from its tab on the left
-  await t.test("an email task: Close out is open, Came from behind its tab, what triage made of it in Came from, no chips by the title", async () => {
+  // ONE MAIN VIEW (the owner, 2026-10-26), THREE SECTIONS (2026-10-27) - and where the chat is home, TWO (the closeout-in-chat spec,
+  // 2026-11-04): a reply drafted is Came from | Agent, opening on the agent's chat with the draft's card in it, Came from its tab on the left
+  await t.test("an email reply: the chat is open with the draft in it, Came from behind its tab, what triage made of it in Came from, no chips by the title", async () => {
     const mail = tasks.find((x) => x.Source === "email" && x.Status === "open" && x.State === "approve");
     assert.ok(mail, "the demo world has an email reply waiting to send");
     await open(page, mail.TaskId);
     await page.waitForSelector("[data-tq-section-tab=from]", { timeout: 20000 });
     const shut = await settled(page);
     assert.equal(shut.layout, "sections");
-    assert.equal(shut.main, "close");
-    assert.ok(!shut.from && shut.closeout, `the reply alone, Came from shut: ${JSON.stringify(shut)}`);
+    assert.equal(shut.main, "agent", "a chat task opens on its chat");
+    assert.ok(!shut.from && shut.work, `the chat alone, Came from shut: ${JSON.stringify(shut)}`);
+    assert.deepEqual(await page.$$eval("[data-tq-slot]", (els) => els.map((e) => e.dataset.tqSlot)), ["from", "agent"], "Came from | Agent: no Close out");
+    assert.equal(await page.$("[data-tq-section-tab=close]"), null, "no Close out tab");
     await page.click("[data-tq-section-tab=from] [data-tq-tab-arrow]");
     await page.waitForSelector("[data-tq-from] [data-tq-sorted]", { visible: true, timeout: 20000 });
     const l = await settled(page);
-    assert.ok(l.from && !l.closeout, `Came from open, Close out its tab: ${JSON.stringify(l)}`);
-    assert.ok(l.from.x < shut.closeout.x, `Came from is on the left: ${JSON.stringify(l)}`);
+    assert.ok(l.from && !l.work, `Came from open, the Agent its tab: ${JSON.stringify(l)}`);
+    assert.ok(l.from.x < shut.work.x, `Came from is on the left: ${JSON.stringify(l)}`);
     assert.match(l.sorted, /What triage made of it\s+a reply to send · \w+ priority/, "what triage made of it, in Came from");
     assert.equal(l.statusKey, "approve");
     assert.match(l.status, /ready to send$/, "the status is the rail's word");
     assert.equal(await page.$$eval("[data-tq-task-head] [data-tq-fact], [data-tq-task-head] .MuiChip-root", (els) => els.length), 0, "no chips by the title");
     // the header is the bold title alone and the ask is the task's first part (the owner, 2026-10-27: "top border on task is too big. It
     // should just have the bolded task name the rest should be in the task"); where it is the one message's own words From does not open
-    // them again (a lone message opened whole before); the draft stays in Close out, kept while it is shut
+    // them again (a lone message opened whole before); the draft's card is in the chat, kept while it is shut
     assert.equal(await page.$("[data-tq-task-head] + [data-tq-ask]"), null, "nothing under the title in the header");
     assert.ok(await page.$("[data-tq-from] [data-tq-ask]"), "the ask is in the task");
     assert.equal(await page.$("[data-tq-from] [data-tq-conversation-row][aria-expanded=true]"), null, "the ask's words are read once");
-    assert.ok(await page.$("[data-tq-closeout] textarea"), "the draft is in Close out");
-    await page.click("[data-tq-section-tab=close] [data-tq-tab-arrow]");
-    await page.waitForSelector("[data-tq-closeout] textarea", { visible: true, timeout: 5000 });
+    assert.ok(await page.$("[data-tq-slot=agent] [data-tq-draft-box] textarea"), "the draft's card is in the Agent section");
+    await page.click("[data-tq-section-tab=agent] [data-tq-tab-arrow]");
+    await page.waitForSelector("[data-tq-slot=agent] [data-tq-draft-box] textarea", { visible: true, timeout: 5000 });
     // ...and the header's status is the rail row's own: the same words on the row's icon
     await page.waitForSelector(".tq-pile-row.current .tq-mark[role=img]", { timeout: 20000 });
     assert.equal(await page.$eval(".tq-pile-row.current .tq-mark", (e) => e.getAttribute("aria-label")),

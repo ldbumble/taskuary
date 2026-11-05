@@ -63,37 +63,39 @@ const held = (s) => JSON.stringify({ main: s.main, open: s.open, stage: s.stage,
    The owner's rulings (trust audit, 2026-10-28): a failed general run shows only its reason and its fix, the conversation behind "The
    whole conversation" (S1); a task its agent closed opens on the Agent section - who closed it and why (S2). */
 const CELLS = (ids) => [
-  ["fresh task", ids.fresh, { section: "from", here: null, ran: false, not: /Loading/ }],
-  ["reply owed, nothing drafted", ids.owed, { section: "from", here: null, ran: false }],
-  ["draft waiting for Send", ids.draft, { section: "close", ran: false, draft: true, moves: [/^Send/] }],
+  ["fresh task", ids.fresh, { section: "agent", here: null, ran: false, not: /Loading/ }],
+  ["reply owed, nothing drafted", ids.owed, { section: "agent", here: null, ran: false }],
+  ["draft waiting for Send", ids.draft, { section: "agent", ran: false, draft: true, moves: [/^Send/] }],
   // ...the reply went and nothing newer came: Mark done is the lit move, Reply stands unlit, Hand it to a person waits in the ▾ (the owner, 2026-10-28)
-  ["sent reply", ids.sent, { section: "close", ran: false, has: /Attached - signed this morning/, not: /while its agent is still working/, lit: /^Mark done/,
+  ["sent reply", ids.sent, { section: "agent", ran: false, has: /Attached - signed this morning/, not: /while its agent is still working/, lit: /^Mark done/,
     unlit: /^Reply/, hidden: /^Hand it to a person/ }],
   ["agent working (general)", ids.working, { section: "agent", ran: true, quiet: true, has: /is working/, result: false, moves: [/Stop/] }],
   ["agent working (coding)", ids.coding_working, { section: "agent", ran: true, quiet: true, xterm: true, moves: [/Stop/] }],
   ["agent waiting on you (asked)", ids.asked, { section: "agent", ran: true, has: /close both cards today/ }],
   ["coding agent waiting at its prompt", ids.blocked, { section: "agent", ran: true, xterm: true }],
   ["agent stopped mid-work", ids.stopped, { section: "agent", ran: true, result: true, chat: false, agentBox: false }],
-  ["agent stopped and saved (general)", ids.saved, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Ray Colton signs it/ }],
+  // ...a general one is a chat task (the closeout-in-chat spec, 2026-11-04): what it found is shown, and the pane is its chat - a box at its
+  // foot, its draft's card in it - so neither its chat nor a box is a fault there (browser/closeout-in-chat.test.mjs pins the chat's cards)
+  ["agent stopped and saved (general)", ids.saved, { section: "agent", ran: true, has: /Ray Colton signs it/ }],
   ["agent stopped and saved (coding)", ids.coding_saved, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Census sync no longer stops/ }],
   ["agent finished", ids.finished, { section: "agent", ran: true, result: true, chat: false, agentBox: false, has: /Three people are missing/ }],
   ["agent failed", ids.failed, { section: "agent", ran: true, tryAgain: true, chat: false, agentBox: false, has: /could not start/ }],
   ["agent closed the task", ids.agent_closed, { section: "agent", ran: true, quiet: true, has: /missing secret/ }],
-  ["closed by owner (done)", ids.done, { section: "close", ran: false, quiet: true, has: /Mark done/ }],
-  ["closed by owner (with a note)", ids.note, { section: "close", ran: false, quiet: true, has: /loose cable/ }],
+  ["closed by owner (done)", ids.done, { section: "agent", ran: false, quiet: true, has: /Mark done/ }],
+  ["closed by owner (with a note)", ids.note, { section: "agent", ran: false, quiet: true, has: /loose cable/ }],
   ["closed by owner (not a task)", ids.removed, { gone: true }],
   ["waiting on a person", ids.waiting, { section: "from", ran: false, has: /Waiting on Ray/ }],
-  ["deferred (Remind me)", ids.deferred, { section: "from", ran: false, has: /^(?=[\s\S]*PhishGuard seats)(?=[\s\S]*Put away until \S)/ }],   // S3: it says it is put away
+  ["deferred (Remind me)", ids.deferred, { section: "agent", ran: false, has: /^(?=[\s\S]*PhishGuard seats)(?=[\s\S]*(?:Put away until \S|Back \w{3}, \w{3} \d))/ }],   // S3: it says it is put away - on a chat task Came from's tab says when it is back
   ["goal with steps", ids.goal, { section: "from", ran: false, has: /Inventory the fields/ }],
   ["to-do list", ids.todo, { section: "from", ran: false, has: /Print the August bank reconciliations/ }],
-  ["calendar invite", ids.invite, { section: "from", ran: false, has: /AP cutover dry run/, moves: [/^(Accept|Decline|Propose a new time)/] }],   // the answer in view; the others in its ▾
+  ["calendar invite", ids.invite, { section: "agent", ran: false, has: /AP cutover dry run/, moves: [/^(Accept|Decline|Propose a new time)/] }],   // the answer in view; the others in its ▾
   // ...a rail row, by its words: the first of these still on the rail (an item read at the desk has left it by the phone's pass)
   ["report item", /Headcount by site|AP ageing over 30 days|Helpdesk tickets by day/, { card: true, has: /REPORT/i }],
   // ...an FYI batch the desk pass walked has left the rail too, and the one after it (by thread, sized to the screen) is the phone pass's
   ["FYI item", /Regional operations newsletter|Riverside export ran clean|badge printer is back|Statement of account|Quarterly newsletter/, { card: true, has: /FYI|read/i }],
   ["FYI batch", /Regional operations newsletter|Riverside export ran clean|badge printer is back|Statement of account|Quarterly newsletter/, { card: true, batch: true, lit: /All read/ }],
   ["Advisor idea", /weekly report could send it/, { card: true, has: /AP ageing/ }],
-  ["news (sender wrote again after a result)", ids.news, { section: "from", ran: true, has: /Ray is away this week/, not: /record is below/, result: false }],
+  ["news (sender wrote again after a result)", ids.news, { section: "agent", ran: true, has: /Ray is away this week/, not: /record is below/, result: false }],
 ];
 
 function judge(name, w, a, b, errs, want) {

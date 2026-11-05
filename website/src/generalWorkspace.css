@@ -137,3 +137,10 @@
 .tq-aui-arrived-words { color: #3d3a33; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* the ask, as the chat's first plain paragraph before any turn (GeneralWorkspace `reading`, the owner 2026-11-05: no boxes, no lines) */
 .tq-aui-ask { font-size: 13.5px; line-height: 1.55; color: #2b2925; margin: 0 0 14px; overflow-wrap: anywhere; }
+/* WHERE THE CHAT IS THE TASK'S HOME it reads as a chat (the owner, 2026-11-05: "show the chat like normal left side is them right side is
+   ours"): the people on the thread on the left, the owner's own words on the right, the agent's answer the full width between them, no role column */
+.tq-aui-chat .tq-aui-message { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.tq-aui-chat .tq-aui-message > .tq-aui-role { display: none; }
+.tq-aui-chat .tq-aui-user { justify-items: end; }
+.tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: #e7efe6; border-color: #cfdccd; }
+.tq-aui-chat .tq-aui-arrived { justify-self: start; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #f1eee8; border-radius: 13px; }

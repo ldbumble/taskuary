@@ -607,7 +607,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} starting={starting} />;
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadPrimitive.Root className="tq-aui-thread">
+      <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
           {chat && !messages?.length && reading}

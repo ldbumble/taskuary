@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { Box, IconButton, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
-import { nextSteps } from "./agentSummary.js";
+import { hasReply, nextSteps } from "./agentSummary.js";
 import { Md } from "./md.jsx";
 import { readingOf } from "./threadReading.js";
 import { MicButton } from "./ui.jsx";
@@ -46,7 +46,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     <Box data-tq-summary="open" className="tq-aui-summary">
       {!!about && <><Head first>What this is about</Head><Typography data-tq-summary-about="" sx={LINE}>{about}</Typography></>}
       {!!did && <><Head first={!about}>What I did</Head><Box data-tq-summary-did="" sx={LINE}><Md text={did} /></Box></>}
-      {next ? <Box><DraftHead />{next}</Box> : null}
+      {next ? <Box>{hasReply(reviews) && <DraftHead />}{next}</Box> : null}
       {(drafts.length && !next) || held.length || onYou.length || nothing ? <Head>Next steps</Head> : null}
       {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
         {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
@@ -80,7 +80,7 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
       <Box sx={{ pb: 1 }}>
         {!!ask && <><Head first>What this is about</Head><Typography data-tq-chat-ask="" sx={LINE}>{ask}</Typography></>}
         {!!why && <><Head first={!ask}>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
-        {cards ? <Box><DraftHead />{cards}</Box> : null}
+        {cards ? <Box>{hasReply(reviews) && <DraftHead />}{cards}</Box> : null}
         {onYou.length ? <><Head>Next steps</Head><OnYou items={onYou} /></> : null}
       </Box>
       {box && <Box component="form" onSubmit={(e) => { e.preventDefault(); send(); }}

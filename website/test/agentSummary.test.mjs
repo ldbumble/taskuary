@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { chatReplyShown, foldedSummaries, nextSteps } from "../src/agentSummary.js";
+import { chatReplyShown, foldedSummaries, hasReply, nextSteps } from "../src/agentSummary.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -81,4 +81,12 @@ test("a chat task's chat keeps its height while its agent starts: the box sits a
   const page = read("TaskPage.jsx"), at = page.indexOf('"&:has([data-tq-starting])"');
   assert.ok(at > 0);
   assert.match(page.slice(at - 80, at), /!chatPane/, "the one-line starting room is for a pane that is not the task's chat");
+});
+
+test("Suggested reply heads only a reply, never a closed task's Mark done line or a proposal", () => {
+  assert.equal(hasReply([]), false);
+  assert.equal(hasReply([{ Kind: "action", Status: "pending" }]), false);
+  assert.equal(hasReply([{ Kind: "draft_reply", Status: "pending" }]), true);
+  assert.equal(hasReply([{ Kind: "draft", Status: "approved" }]), true);
+  assert.match(read("AgentSummary.jsx"), /hasReply\(reviews\)/);
 });

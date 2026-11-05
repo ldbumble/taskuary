@@ -11,16 +11,16 @@ const fn = (name) => { const at = cv.indexOf(`function ${name}(`); return cv.sli
 test("a data card's Save and Use it save settings, never switch the card on", () => {
   const dd = fn("DataDetail");
   assert.doesNotMatch(dd, /Active: true/, "no post of DataDetail's turns the card on by itself");
-  assert.match(dd, /const body = \{ ConnectorId: conn\.ConnectorId, ConfigJson: JSON\.stringify\(cfg\) \};/);
-  assert.match(dd, /api\.post\("\/api\/connectors", \{ ConnectorId: conn\.ConnectorId, ConfigJson: JSON\.stringify\(next\) \}\)/);
+  assert.match(dd, /const boxes = useBoxesSave\(\{ cid: conn\?\.ConnectorId, cfg, setCfg, base, rebase: setBase, secret, setSecret, writeOnly:/);
+  assert.match(dd, /api\.post\("\/api\/connectors", \{ ConnectorId: conn\.ConnectorId, ConfigPatch: cfgPatch\(cfg, next\) \}\)/);
 });
 
-test("a data card has its own on/off switch, beside Save, saved on the press like a channel card's (splitNow)", () => {
+test("a data card has its own on/off switch, beside Test, saved on the press like a channel card's (splitNow)", () => {
   const dd = fn("DataDetail");
   assert.match(dd, /const setActive = \(on\) => draft\.ctx\.stageConn\(\{ ConnectorId: conn\.ConnectorId, Active: on \}\);/);
   assert.match(dd, /<Switch data-tq-card-on="" checked=\{!!conn\.Active\} disabled=\{draft\.flipping\} onChange=\{\(e\) => setActive\(e\.target\.checked\)\} \/>/);
-  // on the Setup tab, after the Save row - where the person who just saved is looking
+  // on the Setup tab, after the Test row - where the person who just tested is looking
   const tab = dd.slice(dd.indexOf('{tab === "Setup" && ('));
-  assert.ok(tab.indexOf("data-tq-card-on") > tab.indexOf('"Save"}</Button>'), "the switch comes after Save");
+  assert.ok(tab.indexOf("data-tq-card-on") > tab.indexOf('"Test & discover" : "Test"}</Button>'), "the switch comes after Test");
   assert.ok(tab.indexOf("data-tq-card-on") < tab.indexOf("<CloudObjects"), "...on the Setup tab");
 });

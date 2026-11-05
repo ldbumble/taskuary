@@ -23,7 +23,7 @@ test("a dot is a checkbox the owner can tick, saved with the card's config", () 
 
 test("Test fills the dots from what answered, without waiting for a reload", () => {
   const dd = fn("DataDetail");
-  assert.match(dd, /if \(Array\.isArray\(t\?\.apis\)\) setCfg\(\(c\) => \(\{ \.\.\.c, apis: t\.apis \}\)\);/);
+  assert.match(dd, /if \(Array\.isArray\(t\?\.apis\)\) \{ setCfg\(\(c\) => \(\{ \.\.\.c, apis: t\.apis \}\)\); setBase\(\(c\) => \(\{ \.\.\.c, apis: t\.apis \}\)\); \}/);
 });
 
 test("Amazon Business purchases is a report on the Amazon card", () => {

@@ -2308,7 +2308,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // WHAT THE OPEN AGENT PANE ALREADY DRAWS, so its heading's stage moves (PaneMoves) never say a press twice: the start box stands open
   // (RunForm) and its own button is the start; a failed general run's Try again stands under its reason (data-tq-failed-fix) - unless
   // its fix (Connect an AI) stands there instead
-  const runFormOpen = restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted));
+  // ...never on its own for a chat task no agent has started (the owner, 2026-11-05: "when no agent starts you should just show what the incoming
+  // message was on top right like all other input prompts. then prompt box on bottom will trigger or start the agent. No need for the box") - the
+  // chat's own box starts it; a press of Send to agent (a coding one too) still opens this
+  const runFormOpen = restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted) && !(home && isGeneral));
   const failedFix = failedRun && isGeneral && !resultOpen && !sessionView && !runFix && canContinue;
   // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise) - once it is
   // SENT (continued), not at the press that opens the box: unfolding there swapped the summary for the full record under the new box, the
@@ -3612,9 +3615,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Typography>
                     )}
                   </>
-                ) : cardsIn && workspaceMode === "empty" && (!isGeneral || chatCards) ? (
+                ) : (cardsIn || (home && isGeneral)) && workspaceMode === "empty" && !runFormOpen && (!isGeneral || chatCards || (home && !generalStarted)) ? (
                   /* WHEN NO AGENT RAN (a reply the drafter wrote): triage's reading, the drafter's why and the card, and a box that starts the agent */
-                  <NoAgentChat task={t} reviews={detail?.reviews || []} checklist={detail?.checklist || []} mails={storedMessages} cards={chatCards} box={!isGeneral}
+                  <NoAgentChat task={t} reviews={detail?.reviews || []} checklist={detail?.checklist || []} mails={storedMessages} cards={chatCards} box
                     onStarted={(data) => { const o = outcomeOf(data); if (o.state === "started" || o.state === "existing") setTerm(data?.session || null);
                       askTaken(t.TaskId); loadDetail(selected); loadTasks(); onChanged?.(); }} />
                 ) : null}

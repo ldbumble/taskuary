@@ -9,6 +9,8 @@ import api from "./api.js";
 import { hasReply, nextSteps } from "./agentSummary.js";
 import { Md } from "./md.jsx";
 import { readingOf } from "./threadReading.js";
+import { dayLabel, fmtTime12 } from "./dates.js";
+const dayWord = (at) => { const d = dayLabel(at); return d && d !== "Today" ? `${d} ` : ""; };
 import { MicButton } from "./ui.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
@@ -86,8 +88,18 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
     catch (e) { setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }
     finally { setBusy(false); }
   };
+  // WHAT CAME IN, ON THE RIGHT, as every input in the chat is (the owner, 2026-11-05): each message of the task, oldest first - theirs by name,
+  // the owner's own as You - with its time; the read of it and the box under them
+  const said = (mails || []).filter((m) => m && (m.OwnText || m.ReadText || m.BodyText || m.Subject)).slice(-8);
+  const mine = (m) => m.Direction === "out" || m.Status === "context";
   return (
-    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", mt: 1 }}>
+    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", mt: 1, flex: "1 1 auto", minHeight: 0 }}>
+      {!!said.length && <div className="tq-aui-chat" style={{ display: "contents" }}><div className="tq-aui-message tq-aui-brief" data-tq-no-agent-inputs="">
+        {said.map((m) => <div key={m.MessageId} className="tq-aui-arrived" data-tq-chat-arrived="">
+          <span className="tq-aui-arrived-head">{[mine(m) ? "You" : (m.FromName || m.FromEmail || "Someone"), m.SentAt && `${dayWord(m.SentAt)}${fmtTime12(m.SentAt)}`].filter(Boolean).join(" · ")}</span>
+          <span className="tq-aui-arrived-words" title={String(m.OwnText || m.ReadText || m.BodyText || "")}>{String(m.OwnText || m.ReadText || m.BodyText || m.Subject || "").trim().slice(0, 600)}</span>
+        </div>)}
+      </div></div>}
       <Box sx={{ pb: 1 }}>
         {!!ask && <><Head first>What this is about</Head><Typography data-tq-chat-ask="" sx={LINE}>{ask}</Typography></>}
         {!!why && <><Head first={!ask}>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
@@ -95,7 +107,7 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
         {onYou.length ? <><Head>Next steps</Head><OnYou items={onYou} /></> : null}
       </Box>
       {box && <Box component="form" onSubmit={(e) => { e.preventDefault(); send(); }}
-        sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff" }}>
+        sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff", mt: "auto" }}>
         <Box component="textarea" data-tq-no-agent-box="" rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder="Tell me what's wrong, or ask about anything here…"

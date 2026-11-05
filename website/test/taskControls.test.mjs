@@ -221,7 +221,7 @@ test("run another agent is on the bar, live sessions and general tasks included"
 
 test("its agent step opens on a general task and beside a live session", () => {
   // ...and on a general task nobody has started, the same box (it had pickers and a button of its own that started at once)
-  assert.match(tasks, /const runFormOpen = restartOpen \|\| \(!term\?\.alive && !liveRun && !report && !detail\?\.transcript && \(!isGeneral \|\| !generalStarted\)\);/);
+  assert.match(tasks, /const runFormOpen = restartOpen \|\| \(!term\?\.alive && !liveRun && !report && !detail\?\.transcript && \(!isGeneral \|\| !generalStarted\) && !\(home && isGeneral\)\);/);
   assert.match(tasks, /\{runFormOpen\s+&& /);
   assert.doesNotMatch(tasks, /\{isGeneral && !generalStarted && \(/);
 });

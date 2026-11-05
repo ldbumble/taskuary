@@ -140,3 +140,13 @@ export const deliverables = (rows) => {
   }
   return { made, working };
 };
+
+// WHAT A TURN MADE, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files placed on this
+// answer by when they were made (the server's `after`, as a shown page's) and the ones its words or its summary name - each thing once, the
+// newest of a family, never the agent's working files - less `skip` (a post's own picture, drawn on the post)
+export const turnFiles = ({ listed = [], id, words = "", did = "", tid, skip = [] } = {}) => {
+  const no = new Set((skip || []).map(baseName)), by = new Map();
+  for (const r of (listed || []).filter((x) => x?.after != null && x.after === id)) by.set(r.path, r);
+  for (const rel of outputRefs(`${words || ""}\n${did || ""}`, tid, listed).files) if (!by.has(rel)) by.set(rel, outputRow(tid, rel, listed));
+  return deliverables([...by.values()].filter((r) => !no.has(baseName(r.path || r.name)) && !r.missing)).made;
+};

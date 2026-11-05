@@ -40,11 +40,18 @@ MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 # for "USER: " while this said "The owner says:", so it never saw the question and gave every ask one line (2026-10-19 UI walk)
 OWNER_SAYS = 'The owner says: '
 NO_ANSWER = "I didn't get an answer to that one - say it again, or put it another way."
-READ_ROUNDS = 3          # a bucket, then a look-up, then one more - never an open-ended crawl (tools are disclosed on demand)
+# a bounded crawl, never an open-ended one (tools are disclosed on demand). Three ran out on ordinary asks - a bucket, a look-up, one more -
+# and the owner got a canned line over what it had read (the owner, 2026-11-05: "is there hard coded things"): six, and then it answers
+READ_ROUNDS = 6
 LAST_READ = ('That was your last look-up for this turn - there is no other. Answer now with what you have. If nothing '
              'written down here answers it and it needs somebody to go and find out - research, a repository, a website - '
              'say so in one line and CALL the hand-off: regular_agent to research or read, coding_agent for work in a repository.')
 NEWLINE = chr(10)
+# ...and when the rounds still run out, one last call WITHOUT tools answers with what the look-ups found (last_word); only an answer that is
+# still nothing but another look-up reads this
+OUT_OF_READS = "I could not finish looking that up - ask me again, a little more narrowly."
+FINAL_READ = ('Your look-ups for this turn are used up and none runs now. Answer the owner with what they found - say what you found, and '
+              'in one line what is still unknown and where it could be found. No CALL.')
 # A SUMMARY IS A LONGER ANSWER, NOT A CARD (the owner's ruling, 2026-10-28): pipe.read takes the whole rail in, and 380 tokens cut what it
 # said of it short - the answer after it gets room, grouped by the rail's sections. The model chose the read; no word of theirs is matched
 SUMMARY_TOKENS, SUMMARY_READS = 900, frozenset({'pipe.read'})
@@ -3073,6 +3080,20 @@ def look_rounds(store, item: dict | None, call: dict | None, ask, rounds: int = 
     return ans, call, reads
 
 
+def last_word(llm, system: str, table: str, text: str, reads) -> tuple:
+    """(reply, options) once the look-ups ran out: the model answers from what they found, in one call with no tools (FINAL_READ). An answer
+    that is still only a look-up - its words a preamble ("Checking.") - or none at all is OUT_OF_READS."""
+    seen = '\n\n'.join(f"{c['kind']} said:\n{_cut(f, read_chars(c['kind']))}" for c, f in reads[-3:])
+    try: raw = _view_lines(str(llm(system, f"{table}What your look-ups found:\n{seen}\n\nThe owner asked: {text}\n{FINAL_READ}",
+                                   max_tokens=MAX_TOKENS) or '').strip())
+    except Exception as e: logger.warning(f'concierge: the last answer pass failed - {e}'); raw = ''
+    raw, call = parse_call(raw)
+    raw, _ = parse_decision(raw)
+    reply, options = parse_options(raw)
+    reply, broken = gate(reply)
+    return (reply, options) if reply and not broken and not call else (OUT_OF_READS, [])
+
+
 def _read(store, item: dict | None, call: dict) -> str:
     """A look-up in a turn: a task or message that does not exist, asked for over an item with no thread, says why."""
     found = read_op(store, call['kind'], call['params'])
@@ -3314,7 +3335,7 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
 
 
 # the passes a turn gets to fix a missed call (a look-up for the right name, then the action again)
-LOOKUP_ROUNDS = 2
+LOOKUP_ROUNDS = 4
 
 
 def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: str = 'owner') -> dict:
@@ -6007,7 +6028,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if broken and not call and not decision: reply, options = LOST, []
         # ...and the words it wrote around that last call are a PREAMBLE, never the answer: "I'm handing it to the analyst -
         # you'll confirm it on the card" was shown with no card behind it (2026-10-06)
-        if out_of_reads and not decision: reply, options = "I could not finish looking that up - ask me again, a little more narrowly.", []
+        if out_of_reads and not decision: reply, options = last_word(llm, system, f'{table}\n\n{on_page}', text, reads)
         _remember_sid(store, tid, llm)
     except Exception as e:
         logger.warning(f'concierge: the model pass failed - {e}'); failed = e

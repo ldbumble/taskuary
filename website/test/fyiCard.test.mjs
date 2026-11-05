@@ -27,7 +27,9 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(fyis, /propose\("mine", i\)/);
   // ...and Send to agent on a line opens the agent box under that line first - it never proposes a start at the press (2026-10-23)
   assert.doesNotMatch(fyis, /propose\("(coding|regular)_agent", i\)/);
-  assert.match(fyis, /setAsking\(\{ key: i\.key, coding: true \}\)/); assert.match(fyis, /setAsking\(\{ key: i\.key, coding: false \}\)/);
+  assert.match(fyis, /onClick=\{\(\) => ask\(i, true\)\}/); assert.match(fyis, /onClick=\{\(\) => ask\(i, false\)\}/);
+  // ...on the table the handful goes on the Agent tab's box, a chip a line (ItemSections.handToItem; the owner, 2026-11-05) - off it, the box under the line
+  assert.match(fyis, /const ask = \(i, coding\) => \{ if \(!\(table != null && handAll\(i, coding\)\)\) setAsking\(\{ key: i\.key, coding \}\); \};/);
   // ...the one line's moves (actsOf), drawn only under the line opened - on the card and in the three sections alike (ItemSections, 2026-10-28) - never under a line made a task (2026-11-03)
   assert.match(fyis, /\{asking\?\.key === i\.key && \(\s*<AgentAsk [^\n]*coding=\{asking\.coding\}/);
   assert.equal((fyis.match(/\{open === i\.key && !movedTo\[i\.key\] && actsOf\(i\)\}/g) || []).length, 2);

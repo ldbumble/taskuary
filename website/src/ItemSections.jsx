@@ -10,11 +10,13 @@
 // fold arrows - and an item that `lays` its moves has every one of them on the strip of the section it is about, and on that section's spine
 // folded; the bar is Back and Next. A phone's stacked sections keep the row as it was
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Box, CircularProgress, IconButton, InputBase, Typography } from "@mui/material";
+import { Box, Chip, CircularProgress, IconButton, InputBase, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
-import { Md } from "./md.jsx";
+import { LinkPopups, Md } from "./md.jsx";
 import { MicButton } from "./ui.jsx";
+import { label as btn } from "./buttons.js";
+import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { FOCUS, FOCUS_EDGE, MINI_W, OPEN_MIN, PaneStrip, SECTION, SHADE, SLOT, STRIP_H, SectionHead, SectionTab, tabW, useStackBelow } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
@@ -31,38 +33,62 @@ export const ItemLay = React.createContext(null);
 // ...THE BOX ONLY ANSWERS (the owner, 2026-11-04: "question on report should not start task"): it is the dock's own door (concierge.say)
 // with the item in the turn's view, area 'item', which the server answers from the item and nothing more (concierge.asked_on_item)
 const SAYS = { says: "What this says", matters: "What matters to you" };
-export function ItemAsk({ ask }) {
+// ...AND SEND TO AGENT IS THIS BOX, ONE ROAD (the owner, 2026-11-05: "maybe attach the report or fyi list to the prompt box on bottom and make them
+// type in when they hit send to agent?"): the press opens the Agent tab with the item ON the box as a chip - an FYI handful's every line, each
+// one removable - and the cursor in it. With a chip on, Send starts the agent: the item and the owner's words, through the road the old agent box
+// took (`hand.start`, AssistantView.startOnItem); with none, the box answers from the item as it did. Removing the last chip goes back to that.
+// `hand`: { verb, items: [{ key, title }], start({ verb, text, files, items }) } - set by handToItem, through the item's own ItemSections
+const HANDS = new Map();
+export const handToItem = (key, hand) => { const f = key && HANDS.get(key); if (!f) return false; f(hand); return true; };
+const ASK_ONLY = "the answer here reads the item only";
+export function ItemAsk({ ask, hand = null, onHand = null }) {
   const ls = itemLines(readingOf(ask?.reading));
   const [text, setText] = useState(""), [said, setSaid] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState("");
-  useEffect(() => { setText(""); setSaid([]); setErr(""); }, [ask?.key]);
+  const pics = usePromptImages({ files: true }), input = useRef(null);
+  useEffect(() => { setText(""); setSaid([]); setErr(""); pics.clear(); }, [ask?.key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (hand) setTimeout(() => input.current?.focus(), 0); }, [hand]);
+  const title = typeof ask?.title === "string" ? ask.title : "";
+  const drop = (k) => { const left = hand.items.filter((i) => i.key !== k); onHand?.(left.length ? { ...hand, items: left } : null); };
   const send = async () => {
     const q = text.trim();
-    if (!q || busy) return;
+    if (!q || busy || pics.busy) return;
     setBusy(true); setErr("");
     try {
+      if (hand) { await hand.start({ verb: hand.verb, text: q, files: pics.paths, items: hand.items }); setText(""); pics.clear(); onHand?.(null); return; }
       const { data } = await api.post("/api/concierge/say", { text: q, key: ask.key,
-        view: { area: "item", title: typeof ask.title === "string" ? ask.title : "", item: { kind: ask.kind, id: ask.key, title: typeof ask.title === "string" ? ask.title : "", section: "ask" } } });
+        view: { area: "item", title, item: { kind: ask.kind, id: ask.key, title, section: "ask" } } });
       setSaid((w) => [...w, { q, a: String(data?.say || "") }]); setText("");
-    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That did not go through - try again."); }
+    } catch (e) { setErr(e?.response?.data?.detail || e?.message || (hand ? "It did not start - press Send again." : "That did not go through - try again.")); }
     finally { setBusy(false); }
   };
   // ...A CHAT, as a task's is (the owner, 2026-11-05: "add the reports/advisor/fyi to chat thing as well without close out"): what it says and what
   // matters as plain paragraphs, the owner's words a right-hand bubble, the answer the full width - no labels, no card around it, the box the one box
-  return <Box data-tq-item-ask={ask.kind || ""} sx={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0, minWidth: 0, px: { xs: 0.5, sm: 1 } }}>
+  return <Box data-tq-item-ask={ask?.kind || (hand ? "agent" : "")} data-tq-item-hand={hand ? hand.items.length : undefined}
+    sx={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0, minWidth: 0, px: { xs: 0.5, sm: 1 } }}>
     {ls.map((l) => <Typography key={l.k} data-tq-item-reading={l.k} title={SAYS[l.k]}
       sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
     {said.map((t, i) => <React.Fragment key={i}>
       <Typography data-tq-item-said="" sx={{ alignSelf: "flex-end", maxWidth: "75%", fontSize: 13.5, lineHeight: 1.48, color: INK, overflowWrap: "anywhere",
         bgcolor: "#e7efe6", border: "1px solid #cfdccd", borderRadius: "13px", px: 1.5, py: 1 }}>{t.q}</Typography>
-      <Box data-tq-item-answer="" sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere", "& p": { my: 0.25 } }}><Md text={t.a} /></Box>
+      <Box data-tq-item-answer="" sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere", "& p": { my: 0.25 } }}><LinkPopups><Md text={t.a} /></LinkPopups></Box>
     </React.Fragment>)}
-    <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, border: `1px solid ${BORDER}`, borderRadius: "8px", px: 1, py: 0.25, bgcolor: "#fff" }}>
-      <InputBase multiline maxRows={5} value={text} disabled={busy} placeholder="Ask about anything here…" inputProps={{ "aria-label": "Ask about this" }}
-        onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-        sx={{ flex: 1, minWidth: 0, fontSize: 13.5, py: 0.5 }} />
-      <MicButton size={16} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
-      <IconButton size="small" aria-label="Ask" disabled={busy || !text.trim()} onClick={send} sx={{ p: 0.5 }}>
-        {busy ? <CircularProgress size={14} /> : <SendIcon sx={{ fontSize: 17 }} />}</IconButton>
+    <Box {...pics.drop} sx={{ border: `1px solid ${hand ? "#b9c3cb" : BORDER}`, borderRadius: "8px", px: 1, py: 0.25, bgcolor: "#fff" }}>
+      {!!(hand || pics.imgs.length || pics.busy || pics.err) && <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.5, pt: 0.5 }}>
+        {hand?.items.map((i) => <Chip key={i.key} size="small" data-tq-item-chip={i.key} label={`📎 ${i.title}`} onDelete={busy ? undefined : () => drop(i.key)}
+          title={`${btn(hand.verb)} - it gets ${i.title}`} sx={{ maxWidth: "100%", bgcolor: "#e4e9ee", fontSize: 12.5 }} />)}
+        <ImageTray pics={pics} cannot={hand ? null : () => ASK_ONLY} />
+      </Box>}
+      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5 }}>
+        <InputBase inputRef={input} multiline maxRows={5} value={text} disabled={busy}
+          placeholder={hand ? `What should the agent do with ${hand.items.length > 1 ? "these" : "it"}?` : "Ask about anything here…"}
+          inputProps={{ "aria-label": hand ? btn(hand.verb) : "Ask about this" }}
+          onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          sx={{ flex: 1, minWidth: 0, fontSize: 13.5, py: 0.5 }} />
+        <AttachImage pics={pics} size={16} sx={{ width: 26, height: 26 }} />
+        <MicButton size={16} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
+        <IconButton size="small" aria-label={hand ? btn(hand.verb) : "Ask"} data-tq-item-send={hand ? "agent" : "ask"} disabled={busy || pics.busy || !text.trim()}
+          onClick={send} sx={{ p: 0.5 }}>{busy ? <CircularProgress size={14} /> : <SendIcon sx={{ fontSize: 17 }} />}</IconButton>
+      </Box>
     </Box>
     {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "#a33" }}>{err}</Typography>}
   </Box>;
@@ -72,12 +98,21 @@ export function ItemAsk({ ask }) {
 // folds to a full tab); `here`: the section it is up to; `height`: the canvas's (CanvasItem wordsCap) - one height, like a task's three;
 // `lays`: its moves ride the `about` section on a desk (ItemLay); `ask`: what it says and the box, in the AGENT section only (the owner, 2026-11-05:
 // "chat is on the came from tab. that's weird ... chat box is only on the agent tab") - the item still opens on what came in, never on Agent
-export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null }) {
+// `hands`: it takes a Send to agent with no box of its own to answer from (an FYI handful: ask null) - the box is drawn while a chip is on
+export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null, hands = false }) {
   // NO CLOSE OUT ON AN ITEM (the owner, 2026-11-05: "reports/advisor/fyi to chat thing as well without close out"): every one said "Nothing
   // owed". Its body stays mounted, unseen - the moves it registers (RowMoves, Foot) still ride the item's strip and the row
   const sections = all.filter((s) => s.key !== "close"), closed = all.find((s) => s.key === "close");
-  const [open, setOpen] = useState(about);
-  useEffect(() => { setOpen(about); }, [itemKey, about]);
+  const [open, setOpen] = useState(about), [hand, setHand] = useState(null);
+  useEffect(() => { setOpen(about); setHand(null); }, [itemKey, about]);
+  const takes = (!!ask || hands) && sections.some((s) => s.key === "agent");
+  useEffect(() => {
+    if (!takes) return undefined;
+    const f = (h) => { setHand(h); setOpen("agent"); };
+    HANDS.set(itemKey, f);
+    return () => { if (HANDS.get(itemKey) === f) HANDS.delete(itemKey); };
+  }, [itemKey, takes]);
+  const box = (ask || hand) && <ItemAsk ask={ask} hand={hand} onHand={setHand} />;
   const body = useRef(null), [w, setW] = useState(0);
   useLayoutEffect(() => {
     const el = body.current;
@@ -119,7 +154,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
             <Box role="region" aria-label={s.name} className="tq-item-sec" sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
               <SectionHead sec={s} moves={s.moves} />
               {s.body}
-              {s.key === "agent" && ask && <ItemAsk ask={ask} />}
+              {s.key === "agent" && box}
             </Box>
           </Box>
         ) : (
@@ -132,7 +167,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
             <Box role="region" aria-label={s.name} aria-hidden={open !== s.key ? true : undefined} className="tq-item-sec"
               sx={{ ...SECTION(open === s.key, w ? openW(s.key) : "100%"), gap: 1.5 }}>
               {s.body}
-              {s.key === "agent" && ask && <ItemAsk ask={ask} />}
+              {s.key === "agent" && box}
             </Box>
           </Box>
         ))}

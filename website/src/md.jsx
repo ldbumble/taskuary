@@ -4,7 +4,8 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Box } from "@mui/material";
+import { Box, Button, Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { linkRefs, looksMd, refParts } from "./mdText.js";
@@ -14,6 +15,36 @@ import { attUrl, isPdf, PdfView, saveFile } from "./Attachments.jsx";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
+// A WEB LINK IN A CHAT'S ANSWER OPENS OVER IT, as a file the agent made does (the owner, 2026-11-05: "links should show in popup view as well
+// like preview of all other files"): inside a LinkPopups - an agent's turns, an item's answers - an http(s) link is a framed page with its
+// address for a title, Open in browser and Close. A site that refuses framing stays blank, which the page cannot always tell, so it says so
+const LinkPop = React.createContext(null);
+export const isWebLink = (h) => /^https?:\/\//i.test(String(h || "").trim());
+export function LinkDialog({ url, onClose }) {
+  if (!url) return null;
+  const out = () => { window.open(url, "_blank", "noopener,noreferrer"); onClose(); };
+  return (
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth data-tq-link-dialog={url}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, fontSize: 14 }}>
+        <span title={url} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{url}</span>
+        <Button size="small" onClick={out} data-tq-link-out="">Open in browser</Button>
+        <IconButton size="small" aria-label="Close" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ p: 0, display: "flex", flexDirection: "column" }}>
+        <iframe src={url} title={url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer"
+          style={{ border: 0, width: "100%", height: "70vh", background: "#fff" }} />
+        <Box data-tq-link-blank="" sx={{ px: 1.5, py: 0.75, fontSize: 12, color: DIM, borderTop: `1px solid ${BORDER}` }}>
+          If it stays blank, this site won't show inside Taskuary - <Box component="button" type="button" onClick={out}
+            sx={{ border: 0, p: 0, bgcolor: "transparent", color: "#55697a", fontWeight: 600, cursor: "pointer", font: "inherit" }}>Open in browser</Box>
+        </Box>
+      </DialogContent>
+    </Dialog>
+  );
+}
+export function LinkPopups({ children }) {
+  const [url, setUrl] = React.useState("");
+  return <LinkPop.Provider value={setUrl}>{children}<LinkDialog url={url} onClose={() => setUrl("")} /></LinkPop.Provider>;
+}
 const fileName = (u) => { const n = String(u).split(/[?#]/)[0].split("/").pop() || "PDF"; try { return decodeURIComponent(n); } catch { return n; } };
 // `onTask` (the chat's): a task link opens it as a press of its rail row does, and a bare ref keeps its own words
 const A = ({ href, children, onTask }) => {
@@ -30,13 +61,15 @@ const A = ({ href, children, onTask }) => {
   const [err, setErr] = React.useState(""), [saved, setSaved] = React.useState(""), raw = file ? own : href;
   // ...but a PDF is READ under the link, Download beside it (Attachments.PdfView; the owner, 2026-11-04)
   const [view, setView] = React.useState(false), pdf = file && isPdf({ name: fileName(raw) });
+  const pop = React.useContext(LinkPop), web = !!pop && road === "outside" && isWebLink(href);
   if (file) href = attUrl({ url: own }, true);
   return (<>
-    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
+    <a href={href} target={road === "outside" ? "_blank" : undefined} data-tq-file-link={file ? "" : undefined} data-tq-web-link={web ? "" : undefined} aria-expanded={pdf ? view : undefined} data-tq-road={road} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
       data-tq-task-link={m ? m[1] : undefined}
       onClick={(e) => {
         if (m) { e.preventDefault(); if (onTask) onTask(Number(m[1])); else openAppLink(`task=${m[1]}`); }
         else if (page) { e.preventDefault(); openAppLink(page); }
+        else if (web) { e.preventDefault(); pop(String(href).trim()); }
         else if (pdf) { e.preventDefault(); setView((v) => !v); }
         else if (file) { e.preventDefault(); setErr(""); setSaved(""); saveFile({ url: raw }).then(setSaved, (x) => setErr(x.message)); }
       }}>

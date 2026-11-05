@@ -6454,6 +6454,23 @@ async def prompt_image(request: Request):
     return await _save_prompt_image(None, request)
 
 
+@app.post('/api/prompt-file')
+async def prompt_file(request: Request):
+    """ANY FILE for a prompt (the owner, 2026-11-05: "does drop in the prompt box attach it in all prompt boxes?"): a PDF, a sheet, a log,
+    dropped, pasted or picked into any box - the image road's bytes-as-body contract and its 12 MB cap, the name in X-File-Name. Saved
+    under attachments/prompt/ like a picture, so the same prompt_images check is the one that lets its path reach a prompt."""
+    from urllib.parse import unquote
+    data = await request.body()
+    if not data: raise HTTPException(422, 'no file in the request')
+    if len(data) > IMG_MAX: raise HTTPException(413, 'file over 12 MB - send a smaller one')
+    name = re.sub(r'[^\w.\- ]+', '_', Path(unquote(request.headers.get('x-file-name') or 'file')).name).strip(' .')[:80] or 'file'
+    d = config.home() / 'attachments' / 'prompt' / time.strftime('%Y%m')
+    p = d / f'{time.strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(3)}-{name}'
+    def keep(): d.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
+    await run_in_threadpool(keep)
+    return {'path': str(p), 'size': len(data), 'name': name}
+
+
 def prompt_images(paths) -> list[str]:
     """The paths a prompt may name: only files this server saved under attachments/ - a path from the page is never a read of
     anything else on the disk."""
@@ -6468,8 +6485,9 @@ def prompt_images(paths) -> list[str]:
 
 def with_images(text: str, paths) -> str:
     """The words, then the files - how a CLI agent is shown a picture: it reads the path (general.py says it the same way)."""
+    from .general import files_head
     ps = prompt_images(paths)
-    return (text or '') + ('\n\nATTACHED IMAGES (read these files)\n' + '\n'.join(ps) if ps else '')
+    return (text or '') + (f'\n\n{files_head(ps)} (read these files)\n' + '\n'.join(ps) if ps else '')
 
 
 async def _save_prompt_image(tid: int | None, request: Request):

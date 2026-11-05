@@ -223,6 +223,37 @@ class Asking(unittest.TestCase):
         # ...and a site that asks AGAIN minutes later is not tried twice
         with on_page('https://www.bank.example/signin'): self.assertFalse(signin.needs(self.s, t2, 'sess2', fill=lambda *a: typed.append(a))['auto'])
 
+    def test_a_saved_sign_in_goes_straight_in_and_never_asks_the_owner(self):
+        """The owner's ruling (2026-11-05): with the sign-in saved, the run goes straight in. An open `signin:` ask is what draws the
+        browser on the owner's screen, so none is ever raised - not even for the seconds the server types."""
+        signin.save(self.s, 'bank.example', USER, PW)
+        class Chat:
+            sid, alive, task_id = 'sess1', True, None
+            def __init__(self): self.said = []
+            def send_prompt(self, text, as_owner=True): self.said.append(text)
+        sess, typed, raised, rec = Chat(), [], [], ws.record
+        sess.task_id = self.tid
+        def spy(store, tid, sid, kind, request_id=None, *a, **k):
+            if kind == 'input_needed': raised.append(request_id)
+            return rec(store, tid, sid, kind, request_id, *a, **k)
+        def fill(*a, **k):
+            raised.append(('open while typing', signin.pending(self.s, self.tid))); typed.append(a)
+        with on_page('https://login.bank.example/'), mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}),              mock.patch.object(ws, 'record', spy):
+            self.assertTrue(signin.needs(self.s, self.tid, 'sess1', 'bank.example', fill=fill)['auto'])
+            self.wait_for(lambda: sess.said)
+        self.assertEqual(typed, [('sess1', 'bank.example', USER, PW)])
+        self.assertEqual(raised, [('open while typing', None)])
+        self.assertIsNone(signin.pending(self.s, self.tid))
+        self.assertEqual(sess.said, ['Signed in to bank.example - continue.'])
+
+    def test_a_saved_sign_in_that_does_not_go_in_asks_the_owner_after_all(self):
+        signin.save(self.s, 'bank.example', USER, PW)
+        def boom(*a, **k): raise signin.NotAccepted('bank.example kept its sign-in form up')
+        with on_page('https://login.bank.example/'): self.assertTrue(signin.needs(self.s, self.tid, self.sid, fill=boom, watch=None)['auto'])
+        self.wait_for(lambda: signin.pending(self.s, self.tid))
+        self.assertEqual(signin.pending(self.s, self.tid)['request_id'], 'signin:bank.example')
+        self.assertIn('did not work', ' '.join(r['Body'] for r in self.s._rows('SELECT * FROM comment WHERE TaskId=?', (self.tid,))))
+
     def test_a_saved_sign_in_is_never_typed_on_another_site(self):
         signin.save(self.s, 'bank.example', USER, PW)
         typed = []

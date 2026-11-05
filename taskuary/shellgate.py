@@ -267,12 +267,51 @@ def asks(store, t) -> bool:
     return (store.get_task(t.task_id) or {}).get('Source') != 'workflow'
 
 
+# A TRUSTED REPO'S OWN STEPS GO THROUGH (the owner, 2026-11-05, a coding agent's push and deploy promote stopped by the ask: "i thought for
+# trusted things we don't need this??"). The repo the command runs in, by its origin, and the GitHub card that reaches it - by that repo's own
+# source row, never the default card's trust - grant what its Authority covers: `write` a push (a deploy branch too - the owner: "same as a
+# push"), a pull request opened, commented or reviewed, a workflow run; `admin` also a merge, a close, a release. Never trusted, on any repo:
+# a delete of something on the host, a secret, a package published, a mail - and a delete on the owner's computer (they keep their own `why`).
+WRITE_OK = {'push the agent\'s commits out of this computer', 'open a pull request', 'post a public comment on a pull request',
+            'post a review on a pull request', 'mark a pull request ready', 'post a public comment on an issue', 'open an issue',
+            'start a workflow run', 'cancel a workflow run', 'open a merge request', 'post a public comment'}
+ADMIN_OK = WRITE_OK | {'merge a pull request', 'close a pull request', 'close an issue', 'merge a merge request', 'publish a release',
+                       'upload files to a release', 'change something on the code host through its API'}
+RANK = {'read': 0, 'write': 1, 'admin': 2}
+
+
+def repo_of(cwd: str) -> str:
+    "owner/repo of the checkout the command runs in, from its origin - '' when it is not one."
+    if not cwd: return ''
+    try: url = subprocess.run(['git', '-C', cwd, 'remote', 'get-url', 'origin'], capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError): return ''
+    m = re.search(r'[:/]([^/:]+/[^/]+?)(?:\.git)?/?$', url)
+    return m.group(1) if m and ('github' in url or 'gitlab' in url) else ''
+
+
+def trusted(store, cwd: str, todo: list) -> str:
+    "The repo whose card's Authority covers every step in `todo` - '' when any step is not covered."
+    repo = repo_of(cwd)
+    if not repo: return ''
+    src = next((s for s in store.list_sources(active_only=False) if s.get('Channel') in ('github', 'gitlab') and s.get('ConnectorId')
+                and str(s.get('Address') or '').lower() == repo.lower()), None)
+    card = store.get_connector(src['ConnectorId']) if src else None
+    if not card: return ''
+    level = RANK.get(str(card.get('Scope') or card.get('ScopeDefault') or 'read').lower(), 0)
+    ok = ADMIN_OK if level >= 2 else WRITE_OK if level >= 1 else set()
+    return repo if all(a.get('what') in ok and a.get('why') == OUT for a in todo) else ''
+
+
 def check(store, tid: int, sid: str, cmd: str, shell: str = 'Bash', cwd: str = '', ask: bool = False) -> dict:
     """The hook's answer for one shell command: {} lets it run; `ask` hands it to the CLI's own prompt (never an allow); else a refusal
     holds it and puts the step on the task. ONE step holds the whole command - the line is the agent's, and half of it is not what it asked."""
     todo = acts(cmd, cwd)
     if not todo: return {}
     what, why = ('; '.join(dict.fromkeys(a[k] for a in todo)) for k in ('what', 'why'))
+    if (repo := trusted(store, cwd, todo)):
+        store.audit('task', tid, 'shell_act_trusted', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what, 'repo': repo})
+        store.add_comment_once(tid, 'taskuary', 'agent', f"The agent went on to {what} on {repo} - a repo you trust to act on its own.")
+        return {}
     if ask:
         store.audit('task', tid, 'shell_act_asked', 'taskuary', 'system', {'tools': [a['tool'] for a in todo], 'what': what})
         store.add_comment_once(tid, 'taskuary', 'agent', f"The agent asked to {what}: `{str(cmd)[:300]}` - its terminal asks you to allow it.")

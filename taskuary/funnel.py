@@ -906,6 +906,9 @@ def paused_conversation(store, item: dict) -> dict:
     try:
         from . import general
         if not general.handles(task) or tid in general.OPENING or general.session_for(tid): return item
+        # ...nor one that IDLED OUT (general.idle_out): nothing stopped and nothing was saved - its agent is just not running until the next
+        # input, and the task reads as the task (a reply ready, on you), never "agent stopped" or "conversation saved" (the owner, 2026-11-05)
+        if general.idled(tid, store): return item
     except Exception:
         return item
     replies = [c for c in store.list_comments(tid) if c.get('ActorType') == 'assistant_agent']

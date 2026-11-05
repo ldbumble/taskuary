@@ -21,9 +21,11 @@ test("a newest answer with no summary folds every summary, so the cards follow i
   assert.deepEqual([...foldedSummaries(msgs)], ["a"]);
   assert.equal(lastAnswerSummed(msgs), false);
   assert.equal(lastAnswerSummed([...msgs, { id: "c", role: "assistant", summary: {} }]), true);
-  // ...and a mail that came in after the answer moves the chat on: the answer folds, its draft waits for the re-think
+  // ...and anything after the answer (a mail, the owner's words) makes that turn history: it folds and its card goes (the owner, 2026-11-05:
+  // "the draft card is part of the chat response ... next turn if i ask something or new input that turn is gone")
   assert.equal(lastAnswerSummed([{ id: "a", role: "assistant", summary: {} }, { id: "w", role: "user", brief: true }]), false);
   assert.deepEqual([...foldedSummaries([{ id: "a", role: "assistant", summary: {} }, { id: "w", role: "user", brief: true }])], ["a"]);
+  assert.equal(lastAnswerSummed([{ id: "a", role: "assistant", summary: {} }, { id: "t", role: "user", content: [] }]), false);
 });
 
 test("Next steps: nothing left only when no draft waits and no On you step is unticked", () => {

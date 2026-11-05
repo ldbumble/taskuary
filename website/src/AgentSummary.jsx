@@ -36,13 +36,22 @@ const DraftHead = () => <Head>Next steps</Head>;
 export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false }) {
   if (!summary) return null;
   const did = String(summary.did || "").trim(), about = String(summary.about || "").trim();
-  if (folded) return did ? (
-    <Box component="details" data-tq-summary="folded" className="tq-aui-summary" sx={{ mt: 0.75 }}>
+  // ...a turn that is history keeps the draft it left, read-only: what was drafted and to whom, no Send (the owner, 2026-11-05)
+  // ...read from the draft itself (its id is all the turn keeps), with where it went since: sent, set aside, or still waiting
+  const drafted = (summary.drafted || []).map((x) => (reviews || []).find((r) => r.ReviewId === x?.review)).filter((r) => r && String(r.DraftText || "").trim());
+  const fate = (r) => r.Status === "sent" || r.DeliveryState === "sent" ? "sent" : r.Status === "pending" ? "" : "not sent";
+  const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
+    <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
+      {["Drafted", who(r) && `to ${who(r)}`, fate(r)].filter(Boolean).join(" · ")}</Typography>
+    <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
+  if (folded) return did || drafted.length ? (<>
+    {did && <Box component="details" data-tq-summary="folded" className="tq-aui-summary" sx={{ mt: 0.75 }}>
       {/* ...one line: what it did, cut where the line ends - the whole of it a press away */}
       <Box component="summary" sx={{ ...HEAD, mt: 0, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", "&:hover": { color: INK } }}>
         What I did<Box component="span" sx={{ fontWeight: 400, color: DIM, ml: 0.75 }}>{did.split("\n")[0]}</Box></Box>
       <Box sx={{ ...LINE, color: DIM }}><Md text={did} /></Box>
-    </Box>) : null;
+    </Box>}
+    <Drafted /></>) : null;
   const { drafts, onYou, held, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
   return (
     <Box data-tq-summary="open" className="tq-aui-summary">

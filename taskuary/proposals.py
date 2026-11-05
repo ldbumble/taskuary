@@ -246,6 +246,13 @@ def collect(store, task_id: int, transcript: str, actor='agent') -> list:
 WHERE_KEYS = ('path', 'to', 'folder', 'table', 'url', 'bucket', 'key', 'container', 'blob', 'channel', 'list', 'database', 'item')
 
 
+# A REFUSAL THAT STEERS (the owner, 2026-11-05, from the open-source assistants: a tool's error says what to try next): "the reason is on
+# the task" sent the agent to a page it cannot read - it is told the reason, and the next move
+def refusal_line(why) -> str:
+    return (f"the proposal was refused: {why or 'it did not validate'}. Fix that and propose it again - or, if it cannot be fixed from "
+            "here, say in your answer what is missing and who could supply it.")
+
+
 def tool_words(store, p: dict) -> str:
     from . import reports, scopes, trackers
     t = str(p.get('type') or '')
@@ -261,8 +268,9 @@ def tool_words(store, p: dict) -> str:
     return f"{verb} {what}" + (f" on {on}" if on else '')
 
 
-def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
-    """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not."""
+def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = None) -> dict | None:
+    """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not - its reason appended to
+    `refused`, so the agent that proposed it is told why and can fix it (refusal_line)."""
     from . import trackers
     # an agent's comment or move on "the ticket" means the item this task came from: named on the proposal, so the card says which
     if p.get('action') == 'run_tool' and p.get('type') in trackers.TYPES and not str(p.get('item') or '').strip():
@@ -290,6 +298,7 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
+        if refused is not None: refused.append(why)
         return None
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task

@@ -5438,8 +5438,8 @@ def agent_propose(body: AgentProposeBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     try: p = agenttools.proposal_of(body.model_dump())
     except ValueError as e: raise HTTPException(403, str(e))
-    q = proposals.queue(store, body.task_id, p, 'agent')
-    if not q: raise HTTPException(422, 'the proposal was refused - the reason is on the task')
+    q = proposals.queue(store, body.task_id, p, 'agent', refused=(miss := []))
+    if not q: raise HTTPException(422, proposals.refusal_line(miss[0] if miss else ''))
     return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}
 
 class AgentSignBody(BaseModel):
@@ -8037,8 +8037,8 @@ def _agent_proposes(request: Request, t: str, conn: dict, body: dict, why: str):
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     p = {**{k: v for k, v in query_only(body).items() if k not in _NOT_PROPOSED},
          'action': 'run_tool', 'type': t, 'connector_id': conn['ConnectorId'], 'why': str((body or {}).get('why') or '')[:300]}
-    q = proposals.queue(store, tid, p, 'agent')
-    if not q: raise HTTPException(403, 'the proposal was refused - the reason is on the task')
+    q = proposals.queue(store, tid, p, 'agent', refused=(miss := []))
+    if not q: raise HTTPException(403, proposals.refusal_line(miss[0] if miss else ''))
     store.audit('tool', conn['ConnectorId'], 'run_proposed', 'agent', detail={'type': t, 'task': tid, 'review': q['reviewId']})
     return JSONResponse({'ok': True, 'queued': True, 'review': q['reviewId'],
                          'says': f"Waiting on the owner's press: this {why}. Nothing was sent; it runs only when they press Approve."},

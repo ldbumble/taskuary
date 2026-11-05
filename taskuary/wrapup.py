@@ -338,7 +338,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
         if not rv: return {'ok': False, 'why': 'there is no pending reply to attach to - save one with --reply first'}
         return {'ok': True, 'review_id': rv['ReviewId'], **_told(store, rv['ReviewId'], attach_files(store, rv['ReviewId'], files, agent))}
-    if not text: return {'ok': False, 'why': 'no reply text'}
+    if not text: return {'ok': False, 'why': "no reply text - put the letter's words in the reply and save it again"}
     # THE SAME LETTER TWICE IS A MISTAKE, never a new draft: a resumed session saved its first session's reply again after the
     # owner had sent it, and it went back on the table aimed at the sender's "Thanks!" (2026-10-16) - one press from a resend
     if (sent := already_sent(store, task_id, text)):
@@ -356,7 +356,7 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if answers:
         a = store.get_message(answers) or {}
         if a.get('TaskId') != task_id or a.get('Status') in ('context', 'skipped') or str(a.get('Direction') or 'in') == 'out' or from_owner(store, a):
-            return {'ok': False, 'why': f'#{answers} is not a mail on this task'}
+            return {'ok': False, 'why': f'#{answers} is not a mail on this task - use a number from THE MAIL ON THIS TASK in your brief, or leave --answers out'}
     # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's
     # answer IS the result, and filing it as a reply "waiting on your approval" addressed it to them (2026-09-23).
     # Refusing it outright threw the answer away - a whole review the owner asked for, gone (2026-10-06) - so keep it.

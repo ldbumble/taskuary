@@ -8,6 +8,9 @@
     "_": "Systems the owner signs into that hold their own records - their databases and their books. A report source on one of these groups' cards is marked 'my own system' unless the owner turns it off, and a report run whose every source is marked is trusted (reports.is_own, origin.report_rests_on). Everything else - news, the web, social timelines, a free REST URL - starts unmarked.",
     "groups": ["Databases", "Corporate systems"]
   },
+  "actions": {
+    "_": "WHAT THE OWNER PRESSES, PER CONNECTOR (the owner, 2026-11-05: \"each connector should have settings what the action view looks like no?\"). A card's `actions` lists the acts it can be set up for under a chat turn's Next steps, and one card (ActionCard.jsx) draws whatever is declared. Each: `kind` (post, email, chat, tracker), `road` (run_tool: a proposal on `tool`; reply: propose_reply / propose_email), the press words (`press`, `busy`, `done`, `undone`, `note`) and `fields`. A field has a `key` (the proposal's own), a `label` and a `type` (text, line, image, choice, people, files); `edit`: the owner may change it on the card before pressing; `agent`: the agent may propose it (general.roads tells it which); `setting`: a per-connection default on the Connections card, saved as default_<key> on the card and filled into the agent's proposal when it names none (connectorcatalog.with_defaults); a choice's own `press` / `busy` / `done` replace the act's while it is picked."
+  },
   "cards": [
     {
       "type": "outlook",
@@ -18,6 +21,51 @@
       "match": [
         "outlook mail",
         "outlook"
+      ],
+      "actions": [
+        {
+          "kind": "email",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "people",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "cc",
+              "label": "Cc",
+              "type": "people",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "subject",
+              "label": "Subject",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "attachments",
+              "label": "Attached",
+              "type": "files",
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -30,6 +78,31 @@
         "microsoft teams",
         "microsoft",
         "teams"
+      ],
+      "actions": [
+        {
+          "kind": "chat",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "text",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -40,6 +113,31 @@
       "desc": "Ingest Slack channels with a bot token - messages land on your work rail through triage.",
       "match": [
         "slack"
+      ],
+      "actions": [
+        {
+          "kind": "chat",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "text",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -169,6 +267,31 @@
       "desc": "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
       "match": [
         "telegram"
+      ],
+      "actions": [
+        {
+          "kind": "chat",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "text",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -179,6 +302,31 @@
       "desc": "Your own WhatsApp, via a small bridge that runs beside Taskuary (Baileys, installed separately) - chats flow through triage, approved replies go back into the chat.",
       "match": [
         "whatsapp"
+      ],
+      "actions": [
+        {
+          "kind": "chat",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "text",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -205,6 +353,51 @@
         "gmail",
         "google",
         "workspace"
+      ],
+      "actions": [
+        {
+          "kind": "email",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "people",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "cc",
+              "label": "Cc",
+              "type": "people",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "subject",
+              "label": "Subject",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "attachments",
+              "label": "Attached",
+              "type": "files",
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -218,6 +411,51 @@
         "any",
         "mailbox",
         "imap"
+      ],
+      "actions": [
+        {
+          "kind": "email",
+          "road": "reply",
+          "press": "Send",
+          "busy": "Sending…",
+          "done": "Sent",
+          "undone": "Not sent",
+          "fields": [
+            {
+              "key": "to",
+              "label": "To",
+              "type": "people",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "cc",
+              "label": "Cc",
+              "type": "people",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "subject",
+              "label": "Subject",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Message",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            },
+            {
+              "key": "attachments",
+              "label": "Attached",
+              "type": "files",
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -364,6 +602,33 @@
       "desc": "Jira issues ASSIGNED TO YOU land on your work rail through triage — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
       "match": [
         "jira"
+      ],
+      "actions": [
+        {
+          "kind": "tracker",
+          "road": "run_tool",
+          "tool": "jira_comment",
+          "press": "Post comment",
+          "busy": "Posting…",
+          "done": "Commented",
+          "undone": "Not posted",
+          "note": "Nothing is posted on Jira until you press it.",
+          "fields": [
+            {
+              "key": "item",
+              "label": "On",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Comment",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -384,6 +649,33 @@
       "desc": "Monday.com items ASSIGNED TO YOU (any People column naming you) land on your work rail through triage.",
       "match": [
         "monday.com"
+      ],
+      "actions": [
+        {
+          "kind": "tracker",
+          "road": "run_tool",
+          "tool": "monday_comment",
+          "press": "Post comment",
+          "busy": "Posting…",
+          "done": "Commented",
+          "undone": "Not posted",
+          "note": "Nothing is posted on Monday until you press it.",
+          "fields": [
+            {
+              "key": "item",
+              "label": "On",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Comment",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -437,6 +729,33 @@
       "desc": "Linear issues ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "linear"
+      ],
+      "actions": [
+        {
+          "kind": "tracker",
+          "road": "run_tool",
+          "tool": "linear_comment",
+          "press": "Post comment",
+          "busy": "Posting…",
+          "done": "Commented",
+          "undone": "Not posted",
+          "note": "Nothing is posted on Linear until you press it.",
+          "fields": [
+            {
+              "key": "item",
+              "label": "On",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Comment",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
+          ]
+        }
       ]
     },
     {
@@ -2237,6 +2556,73 @@
       "desc": "Publish to your own LinkedIn feed - an agent drafts it, you approve it, it posts. Nothing comes in.",
       "match": [
         "linkedin"
+      ],
+      "actions": [
+        {
+          "kind": "post",
+          "road": "run_tool",
+          "tool": "linkedin_post",
+          "press": "Post to LinkedIn",
+          "busy": "Posting…",
+          "done": "Posted",
+          "undone": "Not posted",
+          "note": "Nothing is posted until you press it.",
+          "fields": [
+            {
+              "key": "text",
+              "label": "Post",
+              "type": "text",
+              "edit": true,
+              "agent": true,
+              "max": 3000
+            },
+            {
+              "key": "image",
+              "label": "Picture",
+              "type": "image",
+              "agent": true
+            },
+            {
+              "key": "visibility",
+              "label": "Who sees it",
+              "type": "choice",
+              "choices": [
+                {
+                  "value": "PUBLIC",
+                  "label": "Anyone"
+                },
+                {
+                  "value": "CONNECTIONS",
+                  "label": "Connections only"
+                }
+              ],
+              "edit": true,
+              "setting": true,
+              "default": "PUBLIC"
+            },
+            {
+              "key": "publish",
+              "label": "When",
+              "type": "choice",
+              "choices": [
+                {
+                  "value": "now",
+                  "label": "Post now"
+                },
+                {
+                  "value": "draft",
+                  "label": "Save as draft",
+                  "press": "Save as draft",
+                  "busy": "Saving…",
+                  "done": "Saved as a draft"
+                }
+              ],
+              "edit": true,
+              "setting": true,
+              "default": "now"
+            }
+          ]
+        }
       ]
     },
     {
@@ -2250,6 +2636,28 @@
         "bsky",
         "at protocol",
         "atproto"
+      ],
+      "actions": [
+        {
+          "kind": "post",
+          "road": "run_tool",
+          "tool": "bluesky_post",
+          "press": "Post to Bluesky",
+          "busy": "Posting…",
+          "done": "Posted",
+          "undone": "Not posted",
+          "note": "Nothing is posted until you press it.",
+          "fields": [
+            {
+              "key": "text",
+              "label": "Post",
+              "type": "text",
+              "edit": true,
+              "agent": true,
+              "max": 300
+            }
+          ]
+        }
       ]
     },
     {
@@ -2262,6 +2670,60 @@
         "mastodon",
         "fediverse",
         "toot"
+      ],
+      "actions": [
+        {
+          "kind": "post",
+          "road": "run_tool",
+          "tool": "mastodon_post",
+          "press": "Post to Mastodon",
+          "busy": "Posting…",
+          "done": "Posted",
+          "undone": "Not posted",
+          "note": "Nothing is posted until you press it.",
+          "fields": [
+            {
+              "key": "text",
+              "label": "Post",
+              "type": "text",
+              "edit": true,
+              "agent": true,
+              "max": 500
+            },
+            {
+              "key": "spoiler",
+              "label": "Content warning",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "visibility",
+              "label": "Who sees it",
+              "type": "choice",
+              "choices": [
+                {
+                  "value": "public",
+                  "label": "Public"
+                },
+                {
+                  "value": "unlisted",
+                  "label": "Unlisted"
+                },
+                {
+                  "value": "private",
+                  "label": "Followers only"
+                },
+                {
+                  "value": "direct",
+                  "label": "Mentioned people only"
+                }
+              ],
+              "edit": true,
+              "setting": true,
+              "default": "public"
+            }
+          ]
+        }
       ]
     },
     {

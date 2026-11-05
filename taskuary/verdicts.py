@@ -468,7 +468,7 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
 
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
-           actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False) -> dict:
+           actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False, fields: dict = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
     call (the API hands FastAPI's background task runner in); None runs it inline.
 
@@ -603,14 +603,14 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
         if verb in ('approve', 'edit', 'merge_anyway'):
             try:
-                out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway')
+                out = proposals.execute(store, rv, actor, final, skip_checks=verb == 'merge_anyway', fields=fields)
             except Exception as e:
                 store.add_comment(rv['TaskId'], actor, 'human', f'PROPOSAL FAILED: {str(e)[:300]}')
                 return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300],
                         **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
                         # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
                         **({'needs': e.needs} if getattr(e, 'needs', '') else {})}
-            if not store.decide_review(rid, VERB2STATUS['approve'], proposals.receipt(rv, final, out), actor, note): return _delivery_busy(store, rid)
+            if not store.decide_review(rid, VERB2STATUS['approve'], proposals.receipt(rv, final, out, fields), actor, note): return _delivery_busy(store, rid)
             proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
             return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
         if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)

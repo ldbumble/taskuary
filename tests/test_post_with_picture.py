@@ -76,7 +76,7 @@ class OnePress(unittest.TestCase):
             rv = server.store.get_review(r.json()['review'])
             self.assertNotIn('image_path', json.loads(rv['DraftText']))      # a path is Taskuary's to resolve, never the agent's
             got = c.get(f'/api/tasks/{self.tid}/assistant').json()
-            post = next(p for p in got['posts'] if p['ReviewId'] == rv['ReviewId'])
+            post = next(p for p in got['cards'] if p['ReviewId'] == rv['ReviewId'])
             self.assertEqual((post['network'], post['as'], post['Status']), ('LinkedIn', 'Alex Doyle', 'pending'))
             out = verdicts.decide(server.store, rv, 'approve', 'Gas rose 4 cents this week - here is why.')
         self.assertTrue(out['ok'], out)

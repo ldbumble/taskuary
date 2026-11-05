@@ -9,8 +9,9 @@ import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { holdInView } from "./inView.js";
 import { filesPromised, filesShort } from "./replyFiles.js";
-import { postOf, proposalPresentation, reviewText } from "./reviewProposal.js";
-import PostCard from "./PostCard.jsx";
+import { proposalPresentation, reviewText } from "./reviewProposal.js";
+import { cardOf } from "./actionCard.js";
+import ActionCard from "./ActionCard.jsx";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
@@ -109,10 +110,11 @@ export const CalendarLine = ({ meta }) => (
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
 // `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
 // `answered`: "You already answered <who> at <time>: ..." (agentDraftAsk.alreadyAnswered) - said over the draft, and its Send a second reply.
-// ...a POST is drawn as the post it will be (PostCard.jsx), wherever its proposal shows - the same decide road, its own face
+// ...an act a connector declares a card for (a post, a tracker comment) is drawn as that card (ActionCard.jsx), wherever its proposal shows -
+// the same decide road, its own face
 export default function ReviewDecision(props) {
-  const post = postOf(props.review);
-  return post ? <PostCard row={post} tid={props.review?.TaskId} onChanged={props.onChanged} /> : <Decision {...props} />;
+  const act = cardOf(props.review);
+  return act ? <ActionCard row={act} tid={props.review?.TaskId} onChanged={props.onChanged} /> : <Decision {...props} />;
 }
 function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, closeOnSend = false, liveWork = "", toRow = false, simulated = false, onDrop = null, onEmailInstead = null, why = "",
   answered = "" }) {

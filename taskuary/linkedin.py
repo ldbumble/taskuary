@@ -185,7 +185,8 @@ def run_linkedin_me(cfg):
 
 
 def run_linkedin_post(cfg):
-    """Publish to the member's own feed. A WRITE - reached by proposal, never by an agent alone."""
+    """{"text", "image", "visibility": PUBLIC|CONNECTIONS, "publish": now|draft} - publish to the member's own feed, or save it there as
+    a draft. A WRITE - reached by proposal, never by an agent alone."""
     text = str(cfg.get('text') or '').strip()
     if not text:
         raise RuntimeError('a LinkedIn post needs `text`')
@@ -199,10 +200,14 @@ def run_linkedin_post(cfg):
     visibility = str(cfg.get('visibility') or 'PUBLIC').upper()
     if visibility not in ('PUBLIC', 'CONNECTIONS'):
         raise RuntimeError("visibility must be PUBLIC or CONNECTIONS")
+    # POST NOW OR SAVE AS A DRAFT (the action card's `publish`, its default the card's own under Connections): a draft is the same post in
+    # LinkedIn's DRAFT state - nobody sees it until it is published there
+    publish = str(cfg.get('publish') or 'now').lower()
+    if publish not in ('now', 'draft'): raise RuntimeError('publish must be now or draft')
     body = {'author': author, 'commentary': text, 'visibility': visibility,
             'distribution': {'feedDistribution': 'MAIN_FEED',
                              'targetEntities': [], 'thirdPartyDistributionChannels': []},
-            'lifecycleState': 'PUBLISHED', 'isReshareDisabledByAuthor': False}
+            'lifecycleState': 'DRAFT' if publish == 'draft' else 'PUBLISHED', 'isReshareDisabledByAuthor': False}
     # the picture goes up FIRST, and only after every check above: an upload LinkedIn keeps is a stray if the post is then refused here
     if cfg.get('image_path'):
         body['content'] = {'media': {'id': upload_image(cfg, author, cfg['image_path']),
@@ -211,10 +216,11 @@ def run_linkedin_post(cfg):
     if not r.ok: _fail(r)
     # the id comes back in a header, not the body - the body is empty on a 201
     post_id = r.headers.get('x-restli-id') or r.headers.get('X-RestLi-Id') or ''
-    return {'rows': [{'id': post_id, 'author': author, 'visibility': visibility,
+    # ...a draft has no place on the feed to link to yet
+    return {'rows': [{'id': post_id, 'author': author, 'visibility': visibility, 'publish': publish,
                       'characters': len(text), 'image': (body.get('content') or {}).get('media', {}).get('id', ''),
-                      'url': f'https://www.linkedin.com/feed/update/{post_id}' if post_id else ''}],
-            'columns': ['id', 'author', 'visibility', 'characters', 'image', 'url']}
+                      'url': f'https://www.linkedin.com/feed/update/{post_id}' if post_id and publish == 'now' else ''}],
+            'columns': ['id', 'author', 'visibility', 'publish', 'characters', 'image', 'url']}
 
 
 # A PICTURE ON A POST (the owner, 2026-11-05: a post made with its image is shown as the post and posted on one press). LinkedIn takes it

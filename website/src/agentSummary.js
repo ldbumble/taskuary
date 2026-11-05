@@ -7,7 +7,9 @@ const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Stat
 // the newest summary stays open; every earlier one folds to what it did
 // ...and when the newest answer has no summary of its own, every one folds: the cards then follow that answer (GeneralWorkspace `lastSummed`),
 // never an older turn's summary up the chat (the owner, 2026-11-05: "where is the email ui to send it out?")
-export const lastAnswerSummed = (messages) => !![...(messages || [])].reverse().find((m) => m?.role === "assistant" || m?.summary)?.summary;
+// ...and the newest ENTRY, of any kind: a mail that came in after an answer (a brief) moves the chat on, and the answer above it folds - its draft
+// is not shown under a re-think that is answering something newer (the owner, 2026-11-05: "This came in in middle of the past chat")
+export const lastAnswerSummed = (messages) => { const m = (messages || []).filter((x) => x && !x.held).at(-1); return !!m?.summary; };
 export const foldedSummaries = (messages) => {
   const ids = (messages || []).filter((m) => m?.summary).map((m) => m.id);
   return new Set(lastAnswerSummed(messages) ? ids.slice(0, -1) : ids);

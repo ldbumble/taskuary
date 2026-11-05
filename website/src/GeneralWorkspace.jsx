@@ -55,6 +55,11 @@ import AgentSummary from "./AgentSummary.jsx";
 import { foldedSummaries, lastAnswerSummed } from "./agentSummary.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
+import MailOutlineIcon from "@mui/icons-material/MailOutline";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import TelegramIcon from "@mui/icons-material/Telegram";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -183,16 +188,32 @@ const CameIn = ({ mail }) => mail.map((x, i) => (
 // over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
 const ChatCtx = React.createContext(false);
 const when = (at) => { const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" "); };
-// ...the owner's own reply sent outside Taskuary draws nothing of its own (the owner, 2026-11-05: "not bubbles"): the agent's re-think under it
-// says what it saw ("I saw you replied ... I recommend closing it")
-const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i) => (
+// IT IS A CHAT (the owner, 2026-11-05: "show the taskuary stuff on left. the inputs on right meaning little email logo like the rail ... that
+// shows trigger says something emails came in from x and was sent to agent.. then as new one comes in another one on right side"): each mail that
+// started or woke a turn is a prompt on the RIGHT - its channel's mark, who, when - with the answer it woke under it on the left. The owner's own
+// reply sent outside Taskuary draws nothing of its own ("not bubbles"): the re-think under it says what it saw
+const CHANNEL_WORD = { email: "Email", whatsapp: "WhatsApp message", teams: "Teams message", slack: "Slack message", telegram: "Telegram message", sms: "Text" };
+const ChannelMark = ({ channel }) => {
+  const c = String(channel || "").toLowerCase();
+  const Icon = c === "whatsapp" ? WhatsAppIcon : c === "telegram" ? TelegramIcon : c === "email" || !c ? MailOutlineIcon : ChatBubbleOutlineIcon;
+  return <Icon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />;
+};
+const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i) => (
   <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
-    <span className="tq-aui-arrived-head">↓ {[when(x.at), `${x.who || "Someone"} wrote again`].filter(Boolean).join(" · ")}:</span>
+    <span className="tq-aui-arrived-head"><ChannelMark channel={x.channel} />
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
-  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
+  const agent = React.useContext(AgentNameCtx), at = useAuiState((s) => s.message.createdAt);
+  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} agent={agent} /></MessagePrimitive.Root> : null;
+  // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
+  if (chat) return (
+    <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
+      <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{at ? ` · ${when(new Date(at).toISOString())}` : ""}</div>
+      <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
+    </MessagePrimitive.Root>);
   return brief ? (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
       <CameIn mail={mail || []} />
@@ -243,13 +264,25 @@ const AtWork = (props) => {
   return folded ? null : <AgentBand {...props} />;
 };
 const Nothing = () => null;
+// WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
+// each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
+const tookFor = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
+const RanFor = () => {
+  const at = useAuiState((s) => s.message.createdAt), id = useAuiState((s) => s.message.id);
+  const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? ms[i - 1].createdAt : null; });
+  const t = at ? new Date(at) : null;
+  if (!t || Number.isNaN(+t)) return null;
+  const ran = before ? +t - +new Date(before) : 0;
+  return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
+    · {when(t.toISOString())}{ran > 0 && ran < 6 * 3600 * 1000 ? ` · ran ${tookFor(ran)}` : ""}</span>;
+};
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);
   const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
   const { rest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
-      <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
+      <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
       <div className="tq-aui-agent-body">
         {/* ...where the chat is home, a turn that ended in its summary IS that summary: the agent's own prose above it said the same at
             length (the owner, 2026-11-05: "short text as possible") */}
@@ -697,7 +730,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           </ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: what Close out held, under the thread (Task 4.2) */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
-          {!dock && nextAt?.next && !summed && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
+          {!dock && nextAt?.next && !summed && !working && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
               whose press opens Close out at it - working or not, since the agent saves it mid-turn */}

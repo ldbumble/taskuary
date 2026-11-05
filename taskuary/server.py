@@ -7316,9 +7316,11 @@ def task_reason_ask(tid: int, payload: dict):
 
 # ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
 @app.get('/api/voice/status')
-def voice_status(request: Request):
+def voice_status(request: Request, builtin: bool = False, refresh: bool = False):
     from . import voice
     out = voice.ready(store)
+    if builtin and refresh: out['builtin'] = voice.builtin(refresh=True)
+    elif builtin and out['ready']: out['builtin'] = voice.builtin()
     # Windows voice typing hears THIS computer's microphone: a page on another device never gets it
     if (out.get('builtin') or {}).get('live') and not _is_loopback(request.client.host if request.client else ''): out['builtin'] = None
     return out

@@ -188,11 +188,15 @@ SPEECH_ASK = ("Windows' speech recognition is off on this computer. Turn it on s
 # looks real and is not. It is gone. Voice typing with its setting off is no longer a reason to fall back: the mic ASKS to turn it on.
 _HAS = {}
 
-def builtin():
+def builtin(refresh: bool = False):
     """The computer's own recogniser: Windows voice typing (LIVE) when it is here and Online speech recognition is on; here with the
     setting off, LIVE with `ask` - the mic asks the owner to turn it on (turn_on_speech) before it listens; else None, and the mic asks
     for a voice AI. The setting is read each time, so it takes effect at the next press, no restart."""
-    if 'live' not in _HAS: _HAS['live'] = sys.platform == 'win32' and _live_ok()
+    # Privacy can prevent compilation. Keep the enable prompt reachable and retry
+    # transient failures after a cooldown rather than requiring an app restart.
+    if refresh or 'live' not in _HAS or (not _HAS['live'] and time.monotonic() - _HAS.get('checked', 0) >= 30):
+        _HAS['live'] = sys.platform == 'win32' and (not speech_on() or _live_ok())
+        _HAS['checked'] = time.monotonic()
     if not _HAS['live']: return None
     return LIVE if speech_on() else {**LIVE, 'ask': SPEECH_ASK}
 

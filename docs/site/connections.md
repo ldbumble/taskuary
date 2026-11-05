@@ -469,13 +469,20 @@ run; **Local Whisper** runs on this computer with no key, and the audio never le
 (`pip install taskuary[voice]`). With no voice card a voice note still lands, filed with a line
 saying it was not transcribed and why, its audio attached so one click transcribes it later.
 
-With no voice card the microphone still works, using the computer's own voice typing. In a
-browser tab that is the browser's recogniser. In the Windows app it is **Windows voice typing**
-(the one behind Win+H), which needs **Online speech recognition** on under Settings > Privacy &
-security > Speech; with that off, the mic falls back to Windows' older offline recogniser, which is far
-less accurate, and its hover says how to turn the better one on. On a Mac, the app window cannot
-call Apple's recogniser: click in the box and press the Dictation key (or Fn twice). A voice card
-is still more accurate, and it is what transcribes voice notes.
+Open **Windows / browser voice** under **AI · voice** to choose and test built-in dictation.
+**Windows speech recognition** uses the microphone on the computer running Taskuary;
+**Browser speech recognition** uses the current tab's speech service where supported, such as
+Edge or Chrome. The Windows app's embedded browser has no browser speech service, so choose Windows
+there. Neither choice needs an API key or another voice provider. An explicit choice applies to
+microphone buttons in this browser or app window and overrides a connected voice AI card for
+dictation. **Automatic** uses a connected card first, then browser speech, then Windows speech.
+
+Windows needs **Online speech recognition** under Settings > Privacy & security > Speech and
+desktop microphone access under Microphone. If speech recognition is off, pressing the mic asks
+before enabling it. Failed availability checks can be retried on the card without restarting the
+app. Windows and browser speech may use their own online services. The microphone test keeps its
+words on the card. These built-in services handle live dictation; voice-note files still use a
+transcription card. On a Mac, click in the box and press the Dictation key (or Fn twice).
 
 ## A system with no card
 

@@ -35,7 +35,7 @@ import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
-import PostCard from "./PostCard.jsx";
+import ActionCard from "./ActionCard.jsx";
 import { SessionPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
 import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
@@ -330,14 +330,14 @@ const AssistantMessage = () => {
   const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id && !live(s.message));
   // the newest turn that ANSWERED (a summary, not at work): its draft stays on it when something newer comes
   const lastAnswered = useAuiState((s) => [...s.thread.messages].reverse().find((m) => m.role === "assistant" && !live(m) && m.metadata?.custom?.summary)?.id === s.message.id);
-  // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and a post it proposed drawn as the post
-  // under its Next steps - live on the newest turn, read-only (posted, or not) on the ones before
+  // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and an act it proposed drawn as its
+  // connector declares it (a post as the post, ActionCard) under its Next steps - live on the newest turn, read-only (gone, or not) before
   const id = useAuiState((s) => s.message.id);
-  const posts = work && chat ? (work.posts || []).filter((p) => p.after === id) : [];
+  const posts = work && chat ? (work.cards || []).filter((p) => p.after === id) : [];
   const made = at && chat ? turnFiles({ listed: at.listed, id, words, did: custom?.summary?.did, tid: at.tid,
-    skip: (work?.posts || []).map((p) => p.post?.image).filter(Boolean) }) : [];
+    skip: (work?.cards || []).map((p) => p.post?.image).filter(Boolean) }) : [];
   const madeNames = new Set(made.map((f) => f.name));
-  const lead = posts.length ? posts.map((p) => <PostCard key={p.ReviewId} row={p} tid={at?.tid} live={newest} onChanged={work.refresh} />) : null;
+  const lead = posts.length ? posts.map((p) => <ActionCard key={p.ReviewId} row={p} tid={at?.tid} live={newest} onChanged={work.refresh} />) : null;
   const files = made.length ? <TurnFiles files={made} /> : null;
   const { rest: shownRest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   // ...nor a picture its post card already carries (the owner saw the chart twice: shown by the turn, and on the post)
@@ -1102,13 +1102,13 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const thread = (
     <ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
-      posts: data?.posts || [], refresh }}>
+      cards: data?.cards || [], refresh }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)
           // ...a file its turn draws, or a post's own picture, is not one more row at the foot of a chat
-          .filter((r) => !(chat && (shownMessages.some((m) => m.id === r.after) || (data?.posts || []).some((p) => p.post?.image === r.path))))]}
+          .filter((r) => !(chat && (shownMessages.some((m) => m.id === r.after) || (data?.cards || []).some((p) => p.post?.image === r.path))))]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}

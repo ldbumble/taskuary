@@ -41,3 +41,41 @@ def connected_count(store, cli_connections: dict) -> int:
     """How many connections Connections says are connected: the cards, and every connected AI CLI agent beside them. The page counted
     the cards alone and said "0 connected" over its own AI CLI agents card reading Connected (2026-10-19 UI walk)."""
     return sum(map(is_connected, store.list_connectors() or [])) + len(cli_connections or {})
+
+
+# WHAT THE OWNER PRESSES, PER CONNECTOR (the catalogue's `actions`, the owner 2026-11-05): the fields an act's card shows, which the owner
+# may change before the press, which the agent may name, and the per-connection defaults. One card draws them all (ActionCard.jsx).
+def actions(t: str) -> list: return list((by_type(t) or {}).get('actions') or [])
+def action_for(tool: str) -> dict | None:
+    "The declared act a run_tool on `tool` is, with the card it belongs to - None for a tool no card sets up for a press."
+    return next(({**a, 'card': c['type']} for c in cards() for a in c.get('actions') or [] if a.get('tool') == tool), None) if tool else None
+def field(act: dict, key: str) -> dict | None: return next((f for f in (act or {}).get('fields') or [] if f['key'] == key), None)
+def text_key(act: dict) -> str | None:
+    "The act's words the owner edits in its box (a post's `text`, a tracker comment's `body`)."
+    return next((f['key'] for f in (act or {}).get('fields') or [] if f['type'] == 'text' and f.get('edit')), None)
+def choice_ok(f: dict, v) -> bool: return f.get('type') != 'choice' or str(v) in {str(c['value']) for c in f.get('choices') or []}
+
+
+def with_defaults(p: dict, conf: dict) -> dict:
+    """An agent's proposal, its unnamed choices filled: the connection's own default (`default_<key>` on its card, set under Connections),
+    else the catalogue's. What the agent named stays - the card shows the result, and the owner may change it before pressing."""
+    act = action_for((p or {}).get('type'))
+    if not act: return p
+    mine = lambda f: (conf or {}).get(f'default_{f["key"]}')
+    fill = {f['key']: mine(f) if mine(f) not in (None, '') and choice_ok(f, mine(f)) else f.get('default') for f in act['fields'] if f.get('setting') or f.get('default')}
+    return {**{k: v for k, v in fill.items() if v not in (None, '')}, **{k: v for k, v in p.items() if v not in (None, '')}}
+
+
+def owner_edits(p: dict, fields: dict) -> dict:
+    """The owner's changes on the card, at the press: only the fields its act declares editable (never the tool, the connection or a path),
+    a choice only among its own values. Anything else is refused, not dropped - the owner pressed for what the card said."""
+    act = action_for((p or {}).get('type'))
+    if not fields: return p
+    if not act: raise ValueError('this step has no card to change it on')
+    out = dict(p)
+    for k, v in fields.items():
+        f = field(act, k)
+        if not (f and f.get('edit')) or f['type'] in ('text', 'image', 'files', 'people'): raise ValueError(f'{k} cannot be changed on this card')
+        if not choice_ok(f, v): raise ValueError(f'{v!r} is not one of the choices for {f["label"]}')
+        out[k] = v
+    return out

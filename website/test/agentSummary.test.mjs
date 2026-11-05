@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { chatReplyShown, foldedSummaries, hasReply, nextSteps } from "../src/agentSummary.js";
+import { chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps } from "../src/agentSummary.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -14,6 +14,13 @@ test("every summary but the newest folds", () => {
   assert.ok(!f.has("b"));
   assert.equal(foldedSummaries([]).size, 0);
   assert.equal(foldedSummaries(undefined).size, 0);
+});
+// ...but a newest answer with no summary of its own folds them all: its drafts follow it, not a turn up the chat (the owner, 2026-11-05)
+test("a newest answer with no summary folds every summary, so the cards follow it", () => {
+  const msgs = [{ id: "a", role: "assistant", summary: {} }, { id: "u", role: "user" }, { id: "b", role: "assistant" }];
+  assert.deepEqual([...foldedSummaries(msgs)], ["a"]);
+  assert.equal(lastAnswerSummed(msgs), false);
+  assert.equal(lastAnswerSummed([...msgs, { id: "c", role: "assistant", summary: {} }]), true);
 });
 
 test("Next steps: nothing left only when no draft waits and no On you step is unticked", () => {

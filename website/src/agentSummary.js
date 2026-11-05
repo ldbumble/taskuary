@@ -5,7 +5,13 @@
 const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Status === "pending";
 
 // the newest summary stays open; every earlier one folds to what it did
-export const foldedSummaries = (messages) => new Set((messages || []).filter((m) => m?.summary).map((m) => m.id).slice(0, -1));
+// ...and when the newest answer has no summary of its own, every one folds: the cards then follow that answer (GeneralWorkspace `lastSummed`),
+// never an older turn's summary up the chat (the owner, 2026-11-05: "where is the email ui to send it out?")
+export const lastAnswerSummed = (messages) => !![...(messages || [])].reverse().find((m) => m?.role === "assistant" || m?.summary)?.summary;
+export const foldedSummaries = (messages) => {
+  const ids = (messages || []).filter((m) => m?.summary).map((m) => m.id);
+  return new Set(lastAnswerSummed(messages) ? ids.slice(0, -1) : ids);
+};
 
 const isHeld = (r) => !!r && r.Kind === "action" && r.Status === "pending";
 

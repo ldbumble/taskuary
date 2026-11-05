@@ -3448,7 +3448,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* A FAILED GENERAL RUN IS ITS REASON AND ITS FIX (trust audit S1, 2026-10-28): the conversation under the reason said it twice -
                       it is one quiet link, the Result's own (ResultSummary), and one press back */}
                   {/* ...its fix under the reason: the chat's own Try again went with the chat (on the row it may fold into its menu) */}
-                  {failedRun && isGeneral && !resultOpen && !sessionView && (runFix || canContinue) && (
+                  {/* ...and never a Try again on a chat task (the owner, 2026-11-05: "what is this garbage try again button? never want to see
+                      that"): what is typed is the retry - only a fix it cannot do without (Connect an AI) is offered */}
+                  {failedRun && isGeneral && !resultOpen && !sessionView && (runFix || (canContinue && !chatPane)) && (
                     <Box data-tq-failed-fix="" sx={{ mt: 1, display: "flex", gap: 0.75, flexWrap: "wrap" }}>
                       {runFix ? <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix="" onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>
                         : <span title={noAiWhy || undefined}><Button size="small" variant="contained" disableElevation sx={primaryBtn} disabled={!!startingAgent || !!noAiWhy}

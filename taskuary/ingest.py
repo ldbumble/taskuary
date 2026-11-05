@@ -1720,7 +1720,7 @@ def agent_on(store, tid) -> dict | None:
     from . import general, terminal
     from .context import _latest
     s = next((x for x in list(terminal.SESSIONS.values()) if x.task_id == tid and getattr(x, 'alive', False)), None)
-    try: waiting = bool(s and live != 'run' and s.waiting())
+    try: waiting = bool(s and live != 'run' and s.waiting()) or (s is None and live == 'general' and general.idled(tid, store))
     except Exception: waiting = False
     t = store.get_task(tid) or {}
     try: brief = next((m['content'][0]['text'] for m in general.history(store, tid) if m.get('brief')), '') if live == 'general' else ''
@@ -2036,7 +2036,8 @@ def live_agent(store, tid) -> str:
     """'general' / 'coding' when a session that can hear a next turn is on the task (or opening), 'run' for a headless run that
     cannot, '' when nothing is."""
     from . import general, terminal
-    if tid in general.OPENING or general.session_for(tid): return 'general'
+    # ...and one that IDLED OUT is still the task's agent (general.idle_out): what comes in is its next turn, and starts it again (_pass_general)
+    if tid in general.OPENING or general.session_for(tid) or general.idled(tid, store): return 'general'
     if tid in CODING_OPENING or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
     return 'run' if any(x['Status'] == 'running' for x in store.list_runs(tid)) else ''
 
@@ -2329,6 +2330,10 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     # past the deadline while a quick call is in flight, whose session opens only once its answer is in (a wait for a quick slot plus the call)
     while (time.time() < end or tid in quickwork.RUNNING) and tid in general.OPENING and not getattr(general.session_for(tid), 'busy', False): time.sleep(.25)
     ses = general.session_for(tid)
+    # an agent that idled out is started again, as the same run on its saved conversation, to take the line (general.idle_out)
+    if not ses and general.idled(tid, store):
+        try: ses = general.start_session(store, tid, actor='router')
+        except Exception as e: logger.warning(f'task {tid}: the idle agent was not started again for a new line - {e}')
     if not ses:
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - Continue picks it up.")
         return

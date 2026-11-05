@@ -35,5 +35,9 @@ const ROOMS = ["whatsapp", "teams", "slack", "telegram", "discord", "imessage"];
 export const replyContext = (review) => {
   const channel = String(review?.Channel || "").toLowerCase();
   if (!ROOMS.includes(channel)) return deliveryTo(review);
-  return `${deliveryTo(review)} in ${review.SourceName || (channel === "whatsapp" ? "the chat" : channel)}`;
+  // ...by the person's name: a chat's address is a phone or chat id ("Ray Colton <15550000332@s.whatsapp.net>"), nothing a person reads;
+  // and a one-to-one chat is named after them, so it is no room to name ("Ray Colton in Ray Colton", the stress run 2026-11-05)
+  const who = review?.FromName || deliveryTo(review), room = review?.SourceName;
+  if (room && room === review?.FromName) return who;
+  return `${who} in ${room || (channel === "whatsapp" ? "the chat" : channel)}`;
 };

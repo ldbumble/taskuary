@@ -256,7 +256,9 @@ def tick(store) -> int:
     """Every task with notes waiting: deliver where its agent has stopped."""
     # The same clock also backs chat hand-raises. It must look at every session, not only tasks
     # with queued notes, and it is separate so note delivery remains deterministic.
-    from . import handraise
+    from . import general, handraise
+    try: general.idle_sweep()                  # a chat agent idle past its period closes quietly (general.idle_out)
+    except Exception as e: logger.warning(f'idle sweep failed: {e}')
     try: handraise.tick(store)
     except Exception as e: logger.warning(f'hand raise tick failed: {e}')
     n = 0

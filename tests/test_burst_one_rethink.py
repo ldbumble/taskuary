@@ -54,3 +54,6 @@ def test_a_change_on_the_thread_is_said_plainly_first():
     own = ingest.replan_turn(mail('Done - sent it over this morning.'), own=True)
     assert 'I see you answered' in own and 'took care of it' in own and 'nothing left' in own
     assert own.startswith("THE THREAD CHANGED: you already answered")
+    # ...and in the summary too: a chat task draws a turn's summary in place of its words, and the line that said "I see you answered Ray
+    # there" was in the words alone - the re-think read as if it had not seen the owner's reply (the chat-model stress run, 2026-11-05)
+    assert '''Start the summary's "did" with that same line''' in own

@@ -2430,7 +2430,8 @@ def desktop_status():
 @app.post('/api/tasks/{task_id}/assistant/seen')
 def assistant_seen(task_id: int):
     """The task is on screen (the page posts every 60 s while it is open): its agent's CLI stays open - nothing here starts one."""
-    from . import clipool
+    from . import clipool, general
+    if (s := general.session_for(task_id)): s.seen = time.time()       # ...and its session is not idled out from under the owner (idle_out)
     return {'warm': clipool.touch(f'general:{task_id}') > 0}
 
 @app.post('/api/tasks/{task_id}/assistant/cancel')

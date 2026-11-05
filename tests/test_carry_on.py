@@ -159,7 +159,8 @@ class PassInTests(unittest.TestCase):
     def test_a_running_assistant_gets_the_line_queued_as_its_next_turn(self):
         s = store(); tid = finished_task(s)
         ses = mock.Mock(busy=True)
-        with mock.patch.object(general, 'session_for', return_value=ses):
+        # ...its running turn ends while the line waits for it: the line goes in then, as the next turn (and with any that joined it)
+        with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest.time, 'sleep', lambda _s: setattr(ses, 'busy', False)):
             _out, spawned = ingested(s, mail(**AGAIN))
             self.assertEqual(spawned, ['_pass_general'])                    # not a carry-on, not a second agent
             ingest._pass_general(s, tid, mail(**AGAIN))
@@ -171,8 +172,8 @@ class PassInTests(unittest.TestCase):
     def test_a_line_during_a_carried_on_turn_waits_for_that_turn_then_follows_it(self):
         s = store(); tid = finished_task(s)
         ses, looks = mock.Mock(busy=False), []
-        def session_for(t):                     # the carried-on turn takes the session on the third look
-            looks.append(1); ses.busy = len(looks) >= 3; return ses
+        def session_for(t):                     # the carried-on turn takes the session on the third look, and ends two looks on
+            looks.append(1); ses.busy = 3 <= len(looks) < 5; return ses
         general.OPENING.add(tid)
         try:
             with mock.patch.object(general, 'session_for', side_effect=session_for), mock.patch.object(ingest.time, 'sleep'):
@@ -220,7 +221,8 @@ class PassInTests(unittest.TestCase):
 
     def test_nothing_is_ever_sent(self):
         s = store(); tid = finished_task(s)
-        with mock.patch.object(general, 'session_for', return_value=mock.Mock(busy=True)), \
+        ses = mock.Mock(busy=True)
+        with mock.patch.object(general, 'session_for', return_value=ses), mock.patch.object(ingest.time, 'sleep', lambda _s: setattr(ses, 'busy', False)), \
              mock.patch('taskuary.outbound.send_out') as send:
             ingested(s, mail(**AGAIN)); ingest._pass_general(s, tid, mail(**AGAIN))
         send.assert_not_called()

@@ -33,6 +33,22 @@ class PromptImageTests(unittest.TestCase):
         self.assertIn(str(Path(saved).resolve()), text)
         self.assertEqual(server.with_images('as is', []), 'as is')
 
+    def test_any_file_is_saved_by_its_name_and_named_as_a_file(self):
+        r = c.post('/api/prompt-file', content=b'%PDF-1.4 hello', headers={'X-File-Name': 'q3%20report.pdf'})
+        self.assertEqual(r.status_code, 200, r.text)
+        p = Path(r.json()['path'])
+        self.assertTrue(p.is_file() and p.name.endswith('q3 report.pdf'))
+        self.assertEqual(server.prompt_images([str(p)]), [str(p.resolve())])
+        self.assertIn('ATTACHED FILES (read these files)', server.with_images('read it', [str(p)]))
+
+    def test_a_file_name_never_climbs_out_of_its_folder(self):
+        p = Path(c.post('/api/prompt-file', content=b'x', headers={'X-File-Name': '..%2F..%2Fconfig.toml'}).json()['path'])
+        self.assertTrue(p.resolve().is_relative_to((config.home() / 'attachments' / 'prompt').resolve()))
+
+    def test_an_empty_or_huge_file_is_refused(self):
+        self.assertEqual(c.post('/api/prompt-file', content=b'').status_code, 422)
+        self.assertEqual(c.post('/api/prompt-file', content=b'0' * (server.IMG_MAX + 1)).status_code, 413)
+
 
 if __name__ == '__main__':
     unittest.main()

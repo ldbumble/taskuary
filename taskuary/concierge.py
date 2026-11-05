@@ -5956,7 +5956,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + ((f"{adv}\n\n" if (adv := _advice_block(store, item, adv_d)) else '') if item else '')
                       + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
-                      + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
+                      + (f"{general.files_head(images)} (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + 'Answer them, briefly.')                        # the rest of how is the instructions' (TURN_GUIDE)
         raw = _view_lines(str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip())
         rail_read(llm, tid, rail, rail_sent)

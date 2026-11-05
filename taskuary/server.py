@@ -2273,11 +2273,26 @@ def _assistant_payload(task_id: int, session=None):
     published = [{**r, 'after': next((mid for at, mid in answers if at >= str(r.get('created_at') or '')), None)}
                  for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
     from . import outputs
+    at_turn = lambda at: next((mid for a, mid in answers if a >= str(at or '')), None)
+    # A POST IS DRAWN IN THE TURN THAT MADE IT (the owner, 2026-11-05): every post proposal on the task, waiting or answered, with the
+    # answer it belongs to and who it posts as - the card shows it as the post, and once posted, that it went and where
+    posts = []
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' ORDER BY ReviewId", (task_id,)):
+        try: p = json.loads(r.get('FinalText') or r.get('DraftText') or '{}')
+        except ValueError: continue
+        if not _proposals.is_post(p): continue
+        c = store.get_connector(int(p['connector_id'])) if str(p.get('connector_id') or '').isdigit() else None
+        try: who = json.loads((c or {}).get('ConfigJson') or '{}').get('member_name') or ''
+        except ValueError: who = ''
+        posts.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
+                      'network': _proposals.POSTS[p['type']], 'as': who or (c or {}).get('Name') or ''})
     return {'messages': messages,
+            'posts': posts,
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
             'earlier': [],
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
-            'outputs': outputs.listing(task_id),
+            # ...each under the answer of the turn that made it (`after`, as a published page), so the turn shows what it made
+            'outputs': [{**o, 'after': at_turn(o.get('at'))} for o in outputs.listing(task_id)],
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
             # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
             'providers': general.brain_options(store, keep=general.default_pick(store, task)),

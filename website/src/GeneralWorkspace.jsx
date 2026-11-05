@@ -33,7 +33,9 @@ import { LinkPopups, Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
-import { outputRefs, outputRow, shownOnce, uncited } from "./taskOutputs.js";
+import { outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
+import TurnFiles from "./TurnFiles.jsx";
+import PostCard from "./PostCard.jsx";
 import { SessionPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
 import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
@@ -70,7 +72,7 @@ const textOf = (message) => (message?.content || []).filter((p) => p.type === "t
 const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
-    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id) } : {}) };
+    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}) };
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
@@ -173,10 +175,12 @@ const AssistantText = ({ text }) => {
   // an answer that was only its summary block is filed as the summary's "did" (general._file): said once, under What I did
   const did = useAuiState((s) => String(s.message.metadata?.custom?.summary?.did || "").trim());
   const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
+  const chat = React.useContext(ChatCtx);
   if (did && String(text || "").trim() === did && !files.length) return null;
   return <>
     {!!said && <div ref={box} onClick={open}><LinkPopups><Md text={said} /></LinkPopups></div>}
-    {files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
+    {/* ...in a chat the turn draws the files it made itself, once, inline (TurnFiles) */}
+    {!chat && files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
     <FileDialog file={viewing} onClose={() => setViewing(null)} />
   </>;
 };
@@ -304,7 +308,19 @@ const AssistantMessage = () => {
   const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id && !live(s.message));
   // the newest turn that ANSWERED (a summary, not at work): its draft stays on it when something newer comes
   const lastAnswered = useAuiState((s) => [...s.thread.messages].reverse().find((m) => m.role === "assistant" && !live(m) && m.metadata?.custom?.summary)?.id === s.message.id);
-  const { rest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
+  // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and a post it proposed drawn as the post
+  // under its Next steps - live on the newest turn, read-only (posted, or not) on the ones before
+  const id = useAuiState((s) => s.message.id);
+  const posts = work && chat ? (work.posts || []).filter((p) => p.after === id) : [];
+  const made = at && chat ? turnFiles({ listed: at.listed, id, words, did: custom?.summary?.did, tid: at.tid,
+    skip: (work?.posts || []).map((p) => p.post?.image).filter(Boolean) }) : [];
+  const madeNames = new Set(made.map((f) => f.name));
+  const lead = posts.length ? posts.map((p) => <PostCard key={p.ReviewId} row={p} tid={at?.tid} live={newest} onChanged={work.refresh} />) : null;
+  const files = made.length ? <TurnFiles files={made} /> : null;
+  const { rest: shownRest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
+  // ...nor a picture its post card already carries (the owner saw the chart twice: shown by the turn, and on the post)
+  const postPics = new Set(posts.map((p) => String(p.post?.image || "").split(/[\\/]/).pop()).filter(Boolean));
+  const rest = chat ? shownRest.filter((p) => !madeNames.has(p.name) && !postPics.has(String(p.name || "").split(/[\\/]/).pop())) : shownRest;
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
@@ -315,11 +331,14 @@ const AssistantMessage = () => {
             2026-11-05: "it should say where the link is. this is just patting itself on the back and not showing the link") */}
         <MessagePrimitive.Parts components={{ Text: chat && custom?.summary && !answerWords(words) ? Nothing : AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
+        {!custom?.summary && files}
+        {!custom?.summary && lead && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
+          <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{lead}</Box>}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
         {work && !custom?.summary && newest && work.next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={custom.folded ? null : work.next} lastAnswered={lastAnswered} />}
+          acts={work.acts} next={custom.folded ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} />}
       </div>
     </MessagePrimitive.Root>
   );
@@ -1060,11 +1079,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
     <ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
-    <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next }}>
+    <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
+      posts: data?.posts || [], refresh }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
-        published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)]}
+        published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)
+          // ...a file its turn draws, or a post's own picture, is not one more row at the foot of a chat
+          .filter((r) => !(chat && (shownMessages.some((m) => m.id === r.after) || (data?.posts || []).some((p) => p.post?.image === r.path))))]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}

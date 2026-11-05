@@ -1022,8 +1022,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {/* ...and none at all on a card whose session is not live (`noTools`, the owner 2026-10-25): a failed or closed agent's heading carried
           the agent picker, "provider default" and Full screen for a chat nothing is running in - the bar's Run another agent starts one */}
       {/* ...in a fragment: a portal straight under a Box failed its `children` check, a console error on every live agent (2026-10-26) */}
-      {!dock && !noTools && toolsAt && !full && <>{createPortal(tools, toolsAt)}</>}
-      {!dock && !noTools && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
+      {/* ...and none in a chat task's chat (the owner's ruling, 2026-11-05: "remove as much as possible ui components in the chat unless it's
+          actions"): the agent picker, "provider default" and Full screen are settings, not a step of the task - the chat is the ask, the work, the reply */}
+      {!dock && !noTools && !chat && toolsAt && !full && <>{createPortal(tools, toolsAt)}</>}
+      {!dock && !noTools && !chat && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         {/* the strip named the window after the concierge; it belongs to the agent working in it */}

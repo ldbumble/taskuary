@@ -90,3 +90,10 @@ test("Suggested reply heads only a reply, never a closed task's Mark done line o
   assert.equal(hasReply([{ Kind: "draft", Status: "approved" }]), true);
   assert.match(read("AgentSummary.jsx"), /hasReply\(reviews\)/);
 });
+
+test("a chat task's chat carries no agent picker, model box or Full screen - only actions", () => {
+  // the owner's ruling on the stress run (2026-11-05): "remove as much as possible ui components in the chat unless it's actions"
+  const view = read("GeneralWorkspace.jsx");
+  assert.match(view, /!dock && !noTools && !chat && toolsAt && !full && <>\{createPortal\(tools, toolsAt\)\}<\/>/);
+  assert.match(view, /!dock && !noTools && !chat && !\(toolsAt && !full\) && <Box/);
+});

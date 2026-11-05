@@ -13,7 +13,8 @@ test("a key or mailbox being checked says so beside its button", () => {
 
 test("a save clears the last Test's verdict and says to press Test, on the mail card and the generic card", () => {
   assert.equal((src.match(/data-tq-saved-test=""[^>]*>Saved - press Test to check it\./g) || []).length, 2);
-  assert.match(src, /setSecret\(""\); setCfg\(withoutWriteOnly\(conn, cfg\)\); setCfgSaved\(withoutWriteOnly\(conn, cfg\)\); setTest\(null\); setFresh\(!d\?\.error\); reload\(\);/);
-  assert.match(src, /setMsg\("saved ✓"\); setSecret\(""\); setTest\(null\); setFresh\(true\); reload\(\);/);
+  // each box's own save does it (useBoxesSave onSaved), on the mail card and on the generic card
+  assert.match(src, /const d = data\?\.discovery;\n\s*setTest\(null\); setFresh\(!d\?\.error\);/);
+  assert.match(src, /onSaved: \(\) => \{ setTest\(null\); setFresh\(true\); reload\(\); \} \}\);/);
   assert.equal((src.match(/setBusy\("test"\); setFresh\(false\);/g) || []).length, 2, "a Test pressed is the news again");
 });

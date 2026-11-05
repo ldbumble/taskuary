@@ -23,11 +23,11 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { takeLists } from "./connectorLists.js";
-import { usedBy } from "./connectorUses.js";
+import { removeWords, usedBy } from "./connectorUses.js";
 import { nothingMatches } from "./searchHits.js";
 import { connectName, connectionWish, openBugReport } from "./bugReportOpen.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm, ConfirmDelete } from "./ui.jsx";
 import { UndoLine, removeNow } from "./Removed.jsx";
 import { AllowFiles, GoogleFiles, MS_FILES_HINT } from "./FileAccess.jsx";
 import { GoogleCalendar } from "./GoogleCalendar.jsx";
@@ -42,8 +42,8 @@ import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { namesRestart, pairAgain, restartBridge } from "./waBridge.js";
 import { waLine } from "./waStatus.js";
-import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
-import { editedBoxes, syncState } from "./connectorDraft.js";
+import { DraftProvider, Tick, useBoxesSave, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
+import { cfgPatch, editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
 import SavedSignins from "./SavedSignins.jsx";
@@ -779,7 +779,7 @@ const DATA_META = {
       text: "Opens Intuit's sign-in in a new tab. Pick the company; the token lands on this card and never reaches the browser." },
     howto: ["developer.intuit.com → Dashboard → Create an app → QuickBooks Online and Payments → scope Accounting. Keys & credentials has a Development (sandbox) and a Production tab — production keys need the app's short questionnaire; sandbox keys work the same day against Intuit's test company.",
       "On that same page add the REDIRECT URI shown on this card (http://localhost:<port>/api/quickbooks/callback) — Intuit refuses a sign-in whose redirect is not registered, character for character.",
-      "Paste the client id and secret here, choose production or sandbox, Save, then Connect to QuickBooks: Intuit's sign-in opens, you pick the company, and the browser comes back to Taskuary with the token. Test reads the company name and a vendor list.",
+      "Paste the client id and secret here, choose production or sandbox (each saves as you go), then Connect to QuickBooks: Intuit's sign-in opens, you pick the company, and the browser comes back to Taskuary with the token. Test reads the company name and a vendor list.",
       "Reads (queries, vendors, accounts) run at the card's default scope. The two WRITES — a bill, a paid expense — need scope write on this card; below that an agent can only PROPOSE one, which lands on the task with the vendor, amount and account, and approving it posts it. That is the design: nothing reaches the books without a click until you say otherwise.",
       "Build the reports on the REPORTS tab: 'QuickBooks Online' with a query in QBO's SQL (SELECT * FROM Bill WHERE TxnDate >= '2026-08-01'), or the vendor / account lists as their own reports."],
     agent: ["GET {base}/api/connectors/{cid}/quickbooks/status{hdr}: has_app says whether the Intuit keys are saved; connected says whether a token is. Neither is yours to make - the owner creates the app at developer.intuit.com and presses Connect (a browser sign-in). Ask for the client id and secret, save them in ConfigJson, tell them the redirect URI from status to register, then ask them to press Connect on the card.",
@@ -802,7 +802,7 @@ const DATA_META = {
       "Once approved, Add new app client: any name, API type SP API, the same roles. Nothing to publish — a self-authorized app works while it is still a draft.",
       "In the app list, LWA credentials → View: copy the Client identifier and the Client secret into this card.",
       "Then the app's Edit App ▾ → Authorize → Authorize app. Amazon shows a refresh token (it starts Atzr|) — paste it into the refresh token box. It does not expire, and Taskuary trades it for an hour-long access token as needed.",
-      "Pick the region your marketplaces live in (na, eu or fe) and, if you only want some of them, their marketplace ids (ATVPDKIKX0DER is amazon.com, A2EUQ1WTGCTBG2 amazon.ca, A1F83G8C2ARO7P amazon.co.uk). Save, then Test: it lists the marketplaces this account sells in.",
+      "Pick the region your marketplaces live in (na, eu or fe) and, if you only want some of them, their marketplace ids (ATVPDKIKX0DER is amazon.com, A2EUQ1WTGCTBG2 amazon.ca, A1F83G8C2ARO7P amazon.co.uk). Each box saves itself; then Test: it lists the marketplaces this account sells in.",
       "Build the reports on the REPORTS tab: 'Amazon — sales & traffic', 'orders', 'FBA inventory', 'settlement', or 'Amazon — any report' with a report type name from Amazon's list (developer-docs.amazon.com/sp-api/docs/report-type-values). Dashboards take the same sources.",
       "Vendor Central works the same way: Integration → API Integration to register and authorize; vendor reports (GET_VENDOR_SALES_REPORT and friends) go through 'any report'.",
       "Buying on Amazon Business instead (or as well)? The same client id, secret and refresh token work when the app holds the Business Purchase Reconciliation role. Test tries both APIs and fills a dot for each one that answered — a 403 from one is fine while the other works. Then build 'Amazon — Business purchases': every charge and refund in a window, matched to its invoice or credit memo number.",
@@ -910,7 +910,7 @@ const DATA_META = {
     // IN PLAIN WORDS, each saying where it comes from (the owner, 2026-10-21: "LinkedIn is not working") - the two keys are the
     // app's, the token is what Sign in brings back, and nothing here asks for a token as if one had to be fetched by hand
     fields: [["Client ID", "client_id", "", "developer.linkedin.com/apps → your app → Auth tab → Client ID"],
-      ["Client Secret", "client_secret", "", "The same Auth tab → Primary Client Secret. Paste both, press Save, then Sign in with LinkedIn above."],
+      ["Client Secret", "client_secret", "", "The same Auth tab → Primary Client Secret. Paste both - each saves itself - then Sign in with LinkedIn above."],
       ["API version (optional)", "version", "", "Leave blank - 202609 is used. LinkedIn dates its API by month."]],
     secretLabel: "Access token — Sign in with LinkedIn fills it in",
     secretHelp: "Nothing to paste here: Sign in with LinkedIn brings the token back on its own. A token from the developer portal's OAuth token generator works too. Write-only - never shown again.",
@@ -921,7 +921,7 @@ const DATA_META = {
     howto: ["Create an app at developer.linkedin.com/apps. It must be associated with a LinkedIn Page you are an admin of — that is LinkedIn's rule, not ours, and there is no way around it.",
       "On the app's Products tab add BOTH: 'Share on LinkedIn' (which lets it post) and 'Sign In with LinkedIn using OpenID Connect' (which lets it read who you are). Both are self-serve and granted immediately. With only the first, the sign-in is refused with “Scope openid is not authorized for your application”.",
       "Do NOT request Community Management. That one needs a registered legal entity and a narrated screencast, and a rejection is terminal for the app — you would have to make a new one.",
-      "On the Auth tab, add the redirect URL shown here EXACTLY, then paste the client id and secret below and Save.",
+      "On the Auth tab, add the redirect URL shown here EXACTLY, then paste the client id and secret below - each saves itself.",
       "Press Sign in with LinkedIn. Consent opens in a new tab and the token comes back on its own — nothing to copy.",
       "Tokens last 60 days and the card says how many are left. When one runs out, Reconnect is the whole of it.",
       "Your author id is never typed in: it is read from the token when a post goes out."],
@@ -1031,7 +1031,7 @@ const DATA_META = {
     connect: { label: "Connect to Zoho Invoice", status: (cid) => `/api/connectors/${cid}/zoho/status`, start: (cid) => `/api/connectors/${cid}/zoho/authorize`,
       text: "Opens Zoho sign-in in a new tab. The refresh token returns directly to Taskuary." },
     howto: ["At api-console.zoho.com create a Server-based application and add the redirect URI shown here exactly.",
-      "Paste the client id and secret, Save, then Connect. For a non-US account use its accounts host, such as accounts.zoho.eu.",
+      "Paste the client id and secret - each saves itself - then Connect. For a non-US account use its accounts host, such as accounts.zoho.eu.",
       "Test reads the organization and active customers. Then open Reports and create a Monthly Zoho invoices routine; its schedule opens a batch but never sends it.",
       "Confirm amounts, Prepare drafts, and approve customer emails on the task. The customer/month reference prevents duplicate invoices on retries."],
     agent: ["The owner connects Zoho in the browser. Do not ask for or print refresh tokens.",
@@ -1046,7 +1046,7 @@ const DATA_META = {
     connect: { widget: "teller", label: "Connect a bank", status: (cid) => `/api/connectors/${cid}/teller/status`, enroll: (cid) => `/api/connectors/${cid}/teller/enroll`,
       text: "Opens the bank's own sign-in (Teller Connect). The token for that login lands on this card; the browser never keeps it." },
     howto: ["teller.io → sign up → create an application. The dashboard hands you an application id and, for development and production, a certificate.pem and private_key.pem — save both somewhere on this machine and put their paths on the card. Sandbox needs no certificate and accepts any login at its fake banks, which is how to try the loop first.",
-      "Paste the application id, pick the environment, Save, then Connect a bank: the bank's sign-in opens in a modal, you sign in, and the access token for that login lands on this card. One card is one bank login - Add another for a second bank.",
+      "Paste the application id and pick the environment - each saves itself - then Connect a bank: the bank's sign-in opens in a modal, you sign in, and the access token for that login lands on this card. One card is one bank login - Add another for a second bank.",
       "Test lists the accounts under the login. Build the reports on the REPORTS tab: 'Bank & card — transactions' for one account (its last four digits) or all of them, so many days back; switch on 'can become work (triage decides)' and every new transaction arrives as a message - the front door of the card-to-books playbook (docs/beyond-code.md).",
       "The development environment is free up to 100 bank logins; production is the same code with production keys and Teller's pricing.",
       "Spend as a number, not a list: the 'teller_spend' report totals what left each card over a window (days 0 = today) and adds a TOTAL row. Its headline starts with the total on purpose — an alert of 'more than 500' on this report therefore compares DOLLARS, not the number of rows, which is how you get 'tell me if I spend over 500 today'. Cents are ignored by that comparison."],
@@ -1288,7 +1288,7 @@ const DATA_META = {
       ["File kinds (blank = txt, md, csv, json, html, docx, pptx, xlsx, pdf)", "exts"]],
     desc: "Your documents, searchable by everything here: a kb_search report answers a question from them on a schedule, agents call the same search as a tool, and the reply drafter, the assistant and coding sessions get the passages that bear on a thread. Indexed on this machine — nothing leaves it.",
     howto: ["Name where the documents live: SharePoint library folders (access comes from the SharePoint card, or the Outlook card's tenant app — nothing to configure here) and/or folders on this machine.",
-      "Save, then Reindex now. docx, pptx, xlsx, html and text need nothing at all, and pdf reading (pypdf) ships with the desktop build - where it is missing, the Install button on this card adds it. Unchanged files are skipped on later runs, deleted ones drop out.",
+      "Each box saves itself; then Reindex now. docx, pptx, xlsx, html and text need nothing at all, and pdf reading (pypdf) ships with the desktop build - where it is missing, the Install button on this card adds it. Unchanged files are skipped on later runs, deleted ones drop out.",
       "Keep it fresh with a scheduled kb_reindex report under Reports (nightly is plenty); answer questions from it with a kb_search report.",
       "Agents reach it as a tool (type kb_search) when the tool role is on; the reply drafter and the assistant use it automatically once anything is indexed. Passages are quoted as facts, never as instructions."],
     agent: ["GET {base}/api/connectors{hdr}, find the knowledge card. Ask the owner which SharePoint library folders and local folders to index; save them as sharepoint_paths / folders in ConfigJson (POST {base}/api/connectors{hdr} with ConnectorId, ConfigJson, Active:true).",
@@ -1359,11 +1359,13 @@ const savedOn = (c, key) => !!(parse(c?.ConfigJson)[key] || (c?.ConfigSaved || [
 // ONE FIELD OF A CARD'S CONFIG, drawn the same on every card: a write-only one (an app's client secret, a refresh token) is masked
 // and empty once saved, its label saying so - the Gmail card's OAuth secret and refresh token came back readable in plain boxes
 // (the UI audit, 2026-10-21) because only one card drew them masked
-export function ConfigField({ conn, field: [label, key, ph, help], cfg, setCfg, ...rest }) {
+// ...its quiet "Saved" tick (useBoxesSave) at the end of the box: `tick`
+export function ConfigField({ conn, field: [label, key, ph, help], cfg, setCfg, tick = null, ...rest }) {
   const onChange = (e) => setCfg({ ...cfg, [key]: e.target.value });
+  const end = tick ? { InputProps: { endAdornment: tick } } : {};
   if (!(conn?.WriteOnlyKeys || []).includes(key))
-    return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }} onChange={onChange} {...rest} />;
-  return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }} {...rest}
+    return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }} onChange={onChange} {...end} {...rest} />;
+  return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }} {...end} {...rest}
     label={(conn.ConfigSaved || []).includes(key) ? `${label} — saved, type to replace` : label} placeholder={ph || ""}
     helperText={help ? `${help} Never shown again once saved.` : "Never shown again once saved."}
     value={cfg[key] || ""} onChange={onChange} />;
@@ -1974,6 +1976,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
       query: q, empty: "Nothing in this section yet.", noneAction: <RequestConnection q={q} />,
+      // a card removed is gone, and the page back on the list: its Undo stands here (RemoveConnection)
+      tools: <UndoLine kinds={["connection"]} onRestored={load} sx={{ mt: 1.25, mb: 0 }} />,
     });
   }
 
@@ -1984,6 +1988,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       value={group} onChange={setGroup}
       note="Keys and connection settings are stored locally, in the same SQLite file as your tasks.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
+      <UndoLine kinds={["connection"]} onRestored={load} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
           {q ? `Matches for “${q}”` : shown.title}
@@ -2028,19 +2033,27 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [named, setNamed] = useState(null);       // the name's own tick (ConnectorDraft.jsx Tick)
   useEffect(() => setName(conn.Name || ""), [conn.Name]);
   const one = oneOf(conn.Type);
   // ...ONLY ONCE THIS ONE IS CONNECTED (the setup sweep, 2026-10-28): "Add another Outlook mailbox" under a first one not yet signed in
   // offered a second before there was a first
   const connected = !!(conn.HasSecret || conn.LastSyncAt);
+  // THE NAME SAVES ITSELF (the owner, 2026-11-05): once the typing pauses, or the box is left - a blank one is never saved
   const rename = async () => {
+    clearTimeout(renameAt.current);
     const value = name.trim();
-    if (!value || value === conn.Name) return;
-    setBusy("rename"); setErr("");
-    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Name: value }); await reload(); }
-    catch (e) { setErr(e?.response?.data?.detail || "could not rename the connector"); }
-    setBusy("");
+    if (value === conn.Name) return;
+    if (!value) { setNamed({ state: "error", why: "a connection needs a name" }); return; }
+    setNamed({ state: "saving" });
+    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Name: value }); setNamed({ state: "saved", at: Date.now() }); await reload(); }
+    catch (e) { setNamed({ state: "error", why: e?.response?.data?.detail || "could not rename the connector" }); }
   };
+  const renameAt = useRef(null);
+  useEffect(() => {
+    if (name.trim() === (conn.Name || "")) return undefined;
+    renameAt.current = setTimeout(rename, 900); return () => clearTimeout(renameAt.current);
+  }, [name]);   // eslint-disable-line react-hooks/exhaustive-deps
   const add = async () => {
     const value = newName.trim();
     if (!value) return;
@@ -2055,10 +2068,9 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
   return (
     <Box data-tq-add-another={conn.Type} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: addOnly ? 0 : 1.5, maxWidth: 720 }}>
       {!addOnly && <>
-        <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)}
+        <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)} onBlur={rename}
           onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
-        <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
-          onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
+        <Tick st={named} sx={{ ml: 0 }} />
       </>}
       {!one || !connected ? null : !adding ? (
         <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another {one}</Button>
@@ -2115,34 +2127,35 @@ function CardPlaybooks({ type }) {
   );
 }
 
-// REMOVE IS AT ONCE (the owner, 2026-10-21: no "are you sure"): its credentials and settings are wiped and its sources switched off
-// on the press, and "Removed <it> - Undo" stays on the card in its place. The sealed sign-in is kept only for the Undo line's minutes
-// (recentlydeleted.UNDO_SECONDS), then forgotten. `onBack` is kept for the callers; the card no longer leaves on a Remove.
-function RemoveConnection({ conn, reload }) {
-  const [err, setErr] = useState("");
-  // what leans on it, beside the button: read before the press, never asked after it (#238)
+// REMOVE IS ONE PRESS AND ONE QUESTION (the owner, 2026-11-05: "going through each step of a connection to remove it and it should go
+// away"): the question says what stays, what goes and what stops working with it (#238); on yes the card is gone - an added one off the
+// list, the last of its kind wiped back to the catalogue's blank card (recentlydeleted.remove_connection) - and the page is back on the
+// list, where "Removed <it> - Undo" stands for the Undo line's minutes. Before 2026-11-05 it removed on the press, without asking.
+function RemoveConnection({ conn, reload, onBack, channel = "" }) {
+  const [asking, setAsking] = useState(false);
+  // what leans on it, beside the button and in the question: read before the press (#238)
   const [uses, setUses] = useState(null);
   useEffect(() => {
     let live = true;
     api.get(`/api/connectors/${conn.ConnectorId}/uses`).then(({ data }) => { if (live) setUses(data.data); }).catch(() => {});
     return () => { live = false; };
   }, [conn.ConnectorId]);
-  const line = usedBy(uses);
+  const line = usedBy(uses), words = removeWords(conn, channel, uses);
+  // a refusal is said in the question (ConfirmDelete), which stays open on it
   const remove = async () => {
-    setErr("");
-    try { await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/reset`), "connection", conn.Name || conn.Type); await reload(); }
-    catch (e) { setErr(e?.response?.data?.detail || "It could not be removed."); }
+    await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/reset`), "connection", conn.Name || conn.Type);
+    onBack?.(); await reload();
   };
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, maxWidth: 720 }}>
-      <UndoLine kinds={["connection"]} onRestored={reload} />
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
-          title="Wipes its saved sign-in and settings and switches its sources off - Undo puts them back"
-          onClick={remove}>Remove connection</Button>
+          title="Asks once, then wipes its saved sign-in and settings and switches its sources off - Undo puts them back"
+          onClick={() => setAsking(true)}>Remove connection</Button>
         {line && <Typography data-tq-used-by="" variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>{line}</Typography>}
-        {err && <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>✗ {err}</Typography>}
       </Box>
+      <ConfirmDelete open={asking} title={words.title} consequence={words.text} confirmLabel="Remove" undoable
+        onConfirm={remove} onClose={() => setAsking(false)} />
     </Box>
   );
 }
@@ -2279,10 +2292,10 @@ const SIMPLE_HINT = {
 };
 
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected, chatsAsk = null }) {
-  // ONE SAVE FOR THE CARD (ConnectorDraft.jsx): every control below draws from the draft and stages into it
+  // EVERY FIELD SAVES ITSELF (ConnectorDraft.jsx): every control below draws from the draft and stages into it, and the draft saves it
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
-  const onBack = leave;      // the unsaved changes stay in the card's draft for when it is opened again (keepDraft) - leaving never asks
+  const onBack = leave;      // leaving saves what was still waiting to save (useCardDraft, useBoxesSave)
   const m = META[conn.Type] || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
@@ -2296,30 +2309,21 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [srcBad, setSrcBad] = useState("");
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
-  // WHAT SAVE SAYS STAYS UNDER SAVE (the 2026-10-19 UI walk): a refused save, or a GitHub token the service turned down, was written
-  // into the Test step - folded shut under the one the owner was looking at - so they pressed Save and saw nothing happen
+  // WHAT A SAVE SAYS STAYS BY THE BOXES (the 2026-10-19 UI walk): a GitHub token the service turned down was written into the Test
+  // step - folded shut under the one the owner was looking at - so the save looked like nothing happened
   const [saveSaid, setSaveSaid] = useState(null);
 
   const mine = sources.filter((s) => s.ConnectorId === conn.ConnectorId);   // owned, never channel-shared
 
-  const saveCreds = async () => {
-    setBusy("save"); setMsg(""); setSaveSaid(null);
-    try {
-      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) };
-      if (secret) body.Secret = secret;
-      const { data } = await api.post("/api/connectors", body);
-      const d = data.discovery;
-      setSecret(""); setCfg(withoutWriteOnly(conn, cfg)); setCfgSaved(withoutWriteOnly(conn, cfg)); setTest(null); setFresh(!d?.error); reload();
-      if (d?.error) setSaveSaid({ ok: false, detail: d.error });     // saved, but the key was refused: the fix is here, not a step on
-      else {
-        setMsg("saved ✓");
-        if (d) setTest({ ok: true, detail: `authenticated as ${d.login} · ${d.repos} repos discovered · ${d.added} sources added · repo map written to SOUL.md` });
-        setStep(1);
-      }
-    } catch (e) { setSaveSaid({ ok: false, detail: plainError(e, "That didn't save. Try again in a moment.") }); }
-    setBusy("");
-  };
+  // THE CREDENTIALS SAVE THEMSELVES (the owner, 2026-11-05): each box once its typing pauses, the key when its box is left (useBoxesSave);
+  // the next step is Test. A saved key that discovers (GitHub) says what it found, or why the service refused it, here by the boxes
+  // ...never on the first run's simple card (`simple`), whose one Connect saves, tests and starts reading together
+  const boxes = useBoxesSave({ off: simple, cid: conn.ConnectorId, cfg, setCfg, base: cfgSaved, rebase: setCfgSaved, secret, setSecret,
+    writeOnly: conn.WriteOnlyKeys || [], onSaved: (data) => {
+      const d = data?.discovery;
+      setTest(null); setFresh(!d?.error); setSaveSaid(d?.error ? { ok: false, detail: d.error } : null); reload();
+      if (d && !d.error) setTest({ ok: true, detail: `authenticated as ${d.login} · ${d.repos} repos discovered · ${d.added} sources added · repo map written to SOUL.md` });
+    } });
   const [fresh, setFresh] = useState(false);     // saved since the last Test: its old failure is not said under the new save
   const runTest = async () => {
     setBusy("test"); setFresh(false);
@@ -2406,27 +2410,22 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         )}
         {(adminFields || ownFields.length > 0) && (
           <>
-            {need.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
+            {need.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush} />)}
             {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
             {adminFields && m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
-                value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-                helperText={SECRET_HELP} />
+                value={secret} onChange={(e) => setSecret(e.target.value)} onBlur={boxes.flush} sx={{ bgcolor: "#fff" }}
+                onKeyDown={(e) => { if (e.key === "Enter") boxes.flush(); }}
+                InputProps={{ endAdornment: boxes.tick("Secret") }} helperText={SECRET_HELP} />
             )}
-            {maybe.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
+            {maybe.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush} />)}
             {late.length > 0 && <>
               <Button size="small" variant="text" data-tq-advanced="" onClick={() => setAdvanced((v) => !v)}
                 endIcon={advanced ? <ExpandLessIcon sx={{ fontSize: 16 }} /> : <ExpandMoreIcon sx={{ fontSize: 16 }} />}
                 sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>Advanced</Button>
-              {/* mounted while folded, so a value already saved is still the one Save sends */}
               <Collapse in={advanced} data-tq-advanced-fold=""><Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 0.5 }}>
-                {late.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}</Box></Collapse>
+                {late.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush} />)}</Box></Collapse>
             </>}
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
-                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-              {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
-            </Box>
             <TestLine test={saveSaid} mt={0} />
           </>
         )}
@@ -2523,7 +2522,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
               : "Off — flip on once Test passes."}
           </Typography>)}
         {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock. It is there once the SERVER has the
-            card on (syncState), and greyed - the reason in its hover - while a box or the Save bar holds an edit it would not read */}
+            card on (syncState), and greyed - the reason in its hover - while a box or a pick is still saving an edit it would not read */}
         {sync.show && !isAI && (
           <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex" }}>
             <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync || !sync.ok}
@@ -2602,7 +2601,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   }
   return (
     <DraftProvider value={draft.ctx}>
-    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+    {/* a box left saves what its typing was waiting to save */}
+    <Box sx={{ maxWidth: 980, mx: "auto" }} onBlur={draft.flush}>
       {note}
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
@@ -2622,9 +2622,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {tab === "Agent" && <AgentTab steps={m.agent} />}
       {tab === "Setup" && (
         <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
+          {/* a pick saved on the open step says so by the step's name: only the open step's body is drawn, so it is the pick's */}
           {steps.map((s, i) => (
             <Step key={s.label} completed={s.done}>
-              <StepButton onClick={() => setStep(i)}>{s.label}</StepButton>
+              <StepButton onClick={() => setStep(i)}>{s.label}{i === step && <Tick st={draft.st} />}</StepButton>
               <StepContent>{s.body}</StepContent>
             </Step>
           ))}
@@ -2634,9 +2635,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {/* ...nor a sign-in card (Outlook, Teams, Gmail): under its one-button sign-in, a greyed Get AI to set it up and its Connect an AI
           were two more things to read for nothing (the setup sweep, 2026-10-28) */}
       {!NO_AI_WALK.includes(conn.Type) && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
-      <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
-      <RemoveConnection conn={conn} reload={reload} onBack={leave} />
+      <RemoveConnection conn={conn} reload={reload} onBack={leave} channel={m.channel} />
     </Box>
     </DraftProvider>
   );
@@ -2663,7 +2663,7 @@ function MssqlDetail({ conn, reload, onBack, onCreated }) {
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <CardPlaybooks type={conn.Type} />
-      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} channel="data" />
     </Box>
   );
 }
@@ -2671,23 +2671,15 @@ function MssqlDetail({ conn, reload, onBack, onCreated }) {
 /* ── the SQL Server CONNECTION (set up once; reports inherit it) ────────── */
 function MssqlConnection({ conn, drivers, reload }) {
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
+  const [base, setBase] = useState(cfg);
   const [secret, setSecret] = useState("");
   const [step, setStep] = useState(conn.LastSyncAt && !conn.LastError ? 1 : 0);
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
   const sqlAuth = (cfg.auth || "windows") === "sql";
-
-  const save = async () => {
-    setBusy("save"); setMsg("");
-    try {
-      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true };
-      if (secret) body.Secret = secret;
-      await api.post("/api/connectors", body);
-      setMsg("saved ✓"); setSecret(""); setStep(1); reload();
-    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
-    setBusy("");
-  };
+  // each box saves itself (useBoxesSave); a save switches the card on, as its Save did - the card has no switch of its own
+  const boxes = useBoxesSave({ cid: conn.ConnectorId, cfg, setCfg, base, rebase: setBase, secret, setSecret, extra: { Active: true }, onSaved: () => reload() });
+  const box = (k) => ({ onBlur: boxes.flush, InputProps: { endAdornment: boxes.tick(k) } });
   const runTest = async () => {
     setBusy("test");
     try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
@@ -2702,26 +2694,23 @@ function MssqlConnection({ conn, drivers, reload }) {
         <StepContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
             <TextField label="server" placeholder="localhost  ·  localhost\SQLEXPRESS  ·  HOST\INSTANCE" value={cfg.server || ""}
-              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, server: e.target.value })} />
+              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, server: e.target.value })} {...box("server")} />
             <TextField label="database" placeholder="master" value={cfg.database || ""}
-              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, database: e.target.value })} />
-            <Select value={cfg.auth || "windows"} sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, auth: e.target.value })}>
+              sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, database: e.target.value })} {...box("database")} />
+            <Select value={cfg.auth || "windows"} sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, auth: e.target.value })}
+              endAdornment={<Box sx={{ mr: 3 }}>{boxes.tick("auth")}</Box>}>
               <MenuItem value="windows" sx={{ fontSize: 12.5 }}>Windows auth (local, trusted)</MenuItem>
               <MenuItem value="sql" sx={{ fontSize: 12.5 }}>SQL login</MenuItem>
             </Select>
             {sqlAuth && <TextField label="username" value={cfg.username || ""} sx={{ bgcolor: "#fff" }}
-              onChange={(e) => setCfg({ ...cfg, username: e.target.value })} />}
+              onChange={(e) => setCfg({ ...cfg, username: e.target.value })} {...box("username")} />}
             {sqlAuth && <TextField label={conn.HasSecret ? "password (saved — type to replace)" : "password"} type="password"
-              value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }} />}
-            <Select value={cfg.driver || ""} displayEmpty sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, driver: e.target.value })}>
+              value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }} {...box("Secret")} />}
+            <Select value={cfg.driver || ""} displayEmpty sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, driver: e.target.value })}
+              endAdornment={<Box sx={{ mr: 3 }}>{boxes.tick("driver")}</Box>}>
               <MenuItem value="" sx={{ fontSize: 12.5 }}>(auto — newest installed driver)</MenuItem>
               {drivers.map((d) => <MenuItem key={d} value={d} sx={{ fontSize: 12.5 }}>{d}</MenuItem>)}
             </Select>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
-                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
-              {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
-            </Box>
           </Box>
         </StepContent>
       </Step>
@@ -2810,19 +2799,12 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
 function WinrmDetail({ conn, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Setup");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
+  const [base, setBase] = useState(cfg);
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
+  // the machine name saves itself and switches the card on, as its Save did (useBoxesSave)
+  const boxes = useBoxesSave({ cid: conn?.ConnectorId, cfg, setCfg, base, rebase: setBase, extra: { Active: true }, onSaved: () => reload() });
   if (!conn) return null;
-
-  const save = async () => {
-    setBusy("save"); setMsg("");
-    try {
-      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true });
-      setMsg("saved ✓"); reload();
-    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
-    setBusy("");
-  };
   const runTest = async () => {
     setBusy("test");
     try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
@@ -2844,13 +2826,10 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       {tab === "Setup" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
           <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
-            onChange={(e) => setCfg({ ...cfg, host: e.target.value })} />
+            onChange={(e) => setCfg({ ...cfg, host: e.target.value })} onBlur={boxes.flush} InputProps={{ endAdornment: boxes.tick("host") }} />
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-            <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
-              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
-            <Button variant="outlined" disabled={busy === "test" || !cfg.host} onClick={runTest}
-              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-            {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
+            <Button variant="contained" disableElevation disabled={busy === "test" || !cfg.host} onClick={runTest}
+              startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
           </Box>
           <TestLine test={test} mt={0} />
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
@@ -2858,7 +2837,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       )}
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <CardPlaybooks type={conn.Type} />
-      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} channel="data" />
     </Box>
   );
 }
@@ -2867,7 +2846,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
    pickers, and the same reason: one bucket is a report source, the next should put every
    new file on the Timeline - that is a per-OBJECT decision, not a per-connection one.
    'report' is the default and polls nothing: the object is simply available on the
-   Reports tab. A pick waits for the card's Save bar. ── */
+   Reports tab. A pick saves itself, as every field on the card does (useCardDraft). ── */
 const CLOUD_MODES = [
   ["report", "report only — selectable under Reports, never polled"],
   ["feed", "feed — new items show up to read, never become work"],
@@ -3087,12 +3066,12 @@ function OAuthConnect({ conn, meta, reload }) {
         )}
         <Button variant="contained" disableElevation onClick={go}
           disabled={busy || !st?.has_app || (meta.connect.widget === "token" && !token.trim())}
-          title={st?.has_app ? meta.connect.text : "save the app's client id and secret first"}>
+          title={st?.has_app ? meta.connect.text : "paste the app's client id and secret below first"}>
           {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> {meta.connect.widget === "token" ? "claiming…" : "waiting for the sign-in…"}</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
           ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.member ? ` as ${st.member}` : ""}{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}{st.days_left != null ? ` · ${plural(st.days_left, "day")} left on the sign-in` : ""}</Typography>
-          : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
+          : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below first"}</Typography>}
         {busy && url && !st?.connected && (
           <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexBasis: "100%" }}>
             Finish in the tab that opened — this box turns green by itself.
@@ -3141,12 +3120,13 @@ function ApiDots({ apis, cfg, setCfg }) {
 }
 
 function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload, onBack: leave, onCreated, byType = {} }) {
-  // the same one Save as a channel card: what each discovered object is used for is held until the bar saves it
+  // as on a channel card, every field saves itself: what each discovered object is used for through the draft, the boxes on their own
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
-  const onBack = leave;      // the unsaved changes stay in the card's draft for when it is opened again (keepDraft) - leaving never asks
+  const onBack = leave;      // leaving saves what was still waiting to save (useCardDraft, useBoxesSave)
   const [tab, setTab] = useState("Setup");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
+  const [base, setBase] = useState(cfg);
   const [secret, setSecret] = useState("");
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
@@ -3154,6 +3134,9 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   // the AI setup: its button in the row below, its walk under it; a field it asks for brings the Connection tab up to be lit
   const ai = useAiWalk({ conn: conn || {}, steps: meta.howto || [], fields: meta.fields || [], secretLabel: meta.secretLabel,
     agentSteps: meta.agent || [], reload });
+  // the settings only: a save never switches the card on - the switch below does that (#242)
+  const boxes = useBoxesSave({ cid: conn?.ConnectorId, cfg, setCfg, base, rebase: setBase, secret, setSecret, writeOnly: conn?.WriteOnlyKeys || [],
+    onSaved: () => { setTest(null); setFresh(true); reload(); } });
   if (!conn) return null;
   const objects = (sources || []).filter((s) => s.Channel === conn.Type && s.ConnectorId === conn.ConnectorId);
   // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
@@ -3162,9 +3145,9 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const useShared = async () => {
     // ...a write-only one is cleared by name (null): left out, the server keeps the one it holds (guard.keep_write_only)
     const next = { ...cfg }; (meta.reuse.clear || []).forEach((k) => { if ((conn.WriteOnlyKeys || []).includes(k)) next[k] = null; else delete next[k]; });
-    setCfg(next); setBusy("save"); setMsg("");
+    setCfg(next); setBase(next); setBusy("save"); setMsg("");
     try {
-      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) });
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigPatch: cfgPatch(cfg, next) });
       setMsg(`saved — using the ${meta.reuse.from} card's app ✓`);
       setBusy("test");
       setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data);
@@ -3172,25 +3155,13 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
     setBusy(""); reload();
   };
 
-  const save = async () => {
-    setBusy("save"); setMsg("");
-    try {
-      // the settings only: it switched the card on too, so editing a card turned off turned it back on (#242) - the switch below does that
-      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) };
-      if (secret) body.Secret = secret;
-      await api.post("/api/connectors", body);
-      // a write-only value typed is the server's now: the box goes back to empty, its label says saved
-      if ((conn.WriteOnlyKeys || []).some((k) => cfg[k])) setCfg(withoutWriteOnly(conn, cfg));
-      setMsg("saved ✓"); setSecret(""); setTest(null); setFresh(true); reload();
-    } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
-    setBusy("");
-  };
   const runTest = async () => {
     setBusy("test"); setFresh(false);
     try {
       const t = (await api.post(`/api/connectors/${conn.ConnectorId}/test`, onScreen(conn, cfg, parse(conn.ConfigJson), secret))).data;
       setTest(t);
-      if (Array.isArray(t?.apis)) setCfg((c) => ({ ...c, apis: t.apis }));   // the server saved the dots that answered; show them now
+      // the server saved the dots that answered; show them now - as saved, so they are not saved again
+      if (Array.isArray(t?.apis)) { setCfg((c) => ({ ...c, apis: t.apis })); setBase((c) => ({ ...c, apis: t.apis })); }
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
@@ -3201,7 +3172,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
 
   return (
     <DraftProvider value={draft.ctx}>
-    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+    <Box sx={{ maxWidth: 980, mx: "auto" }} onBlur={draft.flush}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
@@ -3216,24 +3187,23 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{meta.reuse.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mb: 0.75 }}>{meta.reuse.text}</Typography>
-              <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it — save and test</Button>
+              <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it and test</Button>
             </Box>
           )}
           {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} />}
           {/* a field's 4th entry says where to get what it asks for, under the box */}
           {/* ...and a write-only one (an app's client secret, guard.WRITE_ONLY_CONFIG) is masked: once saved the server never sends it
               back, so the box is empty and says it is saved - typed, it replaces the stored one */}
-          {meta.fields.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg}
+          {meta.fields.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush}
             {...(f[1] === "conn_str" && !(conn.WriteOnlyKeys || []).includes(f[1]) ? { multiline: true, minRows: 2 } : {})} />)}
           {meta.apis && <ApiDots apis={meta.apis} cfg={cfg} setCfg={setCfg} />}
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
+            onBlur={boxes.flush} onKeyDown={(e) => { if (e.key === "Enter") boxes.flush(); }} InputProps={{ endAdornment: boxes.tick("Secret") }}
             helperText={meta.secretHelp || SECRET_HELP} />}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-            <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
-              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
-            <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
-              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
+            <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
+              startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
               {meta.discovers ? "Test & discover" : "Test"}</Button>
             {/* a card's own verbs (the knowledge base's Reindex): one POST, the answer said in a line */}
             {(meta.actions || []).map((a) => (
@@ -3251,6 +3221,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
             <Typography variant="body2" sx={{ color: DIM }}>
               {conn.Active ? "On — reports, routines and agents can use it." : "Off — flip on once Test passes."}
+              <Tick st={draft.st} />
             </Typography>
           </Box>
           {meta.search && <KbSearch conn={conn} />}
@@ -3262,9 +3233,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       {tab === "Setup" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
-      <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
-      <RemoveConnection conn={conn} reload={reload} onBack={leave} />
+      <RemoveConnection conn={conn} reload={reload} onBack={leave} channel="data" />
     </Box>
     </DraftProvider>
   );
@@ -3553,19 +3523,6 @@ const TASK_PROMPT = [["task_prompt", "For every task from this connection",
 const PROMPTABLE = new Set(["outlook", "teams", "slack", "telegram", "whatsapp", "imessage", "gmail", "imap",
   "jira", "asana", "monday"]);
 const promptsFor = (t) => (t === "github" ? GH_PROMPTS : PROMPTABLE.has(t) ? TASK_PROMPT : []);
-
-// what the card's Save bar calls each setting, in the words the card itself uses (ConnectorDraft.jsx SaveBar)
-const DRAFT_LABELS = {
-  ...Object.fromEntries(GITHUB_PERMS.map(([k, label]) => [k, label])),
-  ...Object.fromEntries([...GH_PROMPTS, ...TASK_PROMPT].map(([k]) => [k, k === "prompt_pr" ? "Prompt for pull requests" : k === "prompt_issue" ? "Prompt for issues" : "Prompt for tasks"])),
-  Active: "Connection", Roles: "Inbound", Scope: "Permission", bulk: "Processing", bulk_head: "Read at once",
-  closeout: "Close-out", assistant_chat: "Assistant chat", poll_seconds: "Check every (seconds)",
-  mode: "Use", folders: "Folders", issues: "issues", prs: "PRs", auto: "agent",
-};
-const DRAFT_WORDS = {
-  bulk: { rank: "Ranked together", clear: "One by one", "": "One by one" },
-  Roles: { "": "off", trigger: "creates work", feed: "timeline only" },
-};
 
 const ghInboundExplicit = (mine) => mine.some((s) => {
   const c = parse(s.ConfigJson);
@@ -4415,7 +4372,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
             <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.
-            A picker set here pulls that repo whatever the switches above say; nothing changes until you press Save below.
+            A picker set here pulls that repo whatever the switches above say; it saves as soon as it is picked.
           </Typography>
           {mine.filter((s) => s.Active).map((s) => {
             const gc = parse(s.ConfigJson);

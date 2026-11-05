@@ -5,9 +5,14 @@ database, a bank feed. Each card on the **Connections** page is one named connec
 Nothing is polled without an enabled role. A card with no role is a saved credential and nothing
 more.
 
-A card's settings - its roles, what each repository or source does, processing, the agent's prompts -
-wait for its **Save** bar, which lists every change before it is kept; **Discard** puts them back.
-Leaving the card with changes unsaved asks first. Test, sign-in and a new credential still act at once.
+Every field on a card saves itself - its name, credentials, roles, what each repository or source does,
+processing, the agent's prompts. A switch or a pick saves at once; typing saves once it pauses or the
+box is left; a password or key saves when its box is left, and is never shown again. A quiet **Saved**
+appears by what was saved, or **Not saved** and why. There is no Save button: the last step is **Test**.
+
+**Remove connection** asks once, saying what stays (what it brought in), what goes (its sign-in and
+settings) and what stops working with it; on yes the card is gone and the page is back on the list,
+where **Undo** brings it back for ten minutes.
 
 ## What a connection is
 

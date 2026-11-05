@@ -1,22 +1,24 @@
 // A REMOVE ACTS AT ONCE, AND UNDO TAKES IT BACK (the owner, 2026-10-21: no "are you sure"). Remove, Sign out, Disconnect and Not ours
 // each asked first; now each runs on the press and leaves "Removed <it> - Undo" in place, and Recently deleted keeps a report, a
-// workflow, a rule and a profile for 30 days (recentlydeleted.py).
+// workflow, a rule and a profile for 30 days (recentlydeleted.py). The one exception is a connection card's Remove, which asks once
+// (the owner, 2026-11-05: one press, one confirm) - connectorUses.test.mjs pins its question.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { announceRemoved, clearRemoved, fromAnswer, lastRemoved, onRemoved, removedLine, showsRemoved, UNDO_MS } from "../src/removed.js";
-import { keepDraft, keptDraft } from "../src/connectorDraft.js";
 import { followUps } from "../src/proposalCard.js";
 
 const SRC = new URL("../src/", import.meta.url);
 const read = (f) => readFileSync(new URL(f, SRC), "utf8");
 
-test("no page asks before it removes: no confirm dialog and no browser confirm box anywhere", () => {
+test("no page asks before it removes but a connection card: no confirm dialog and no browser confirm box anywhere else", () => {
   const bad = [];
   for (const f of readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f) && f !== "ui.jsx")) {
     const s = read(f);
-    if (/<ConfirmDelete\b/.test(s)) bad.push(`${f}: <ConfirmDelete>`);
+    const asks = (s.match(/<ConfirmDelete\b/g) || []).length;
+    const allowed = f === "ConnectorsView.jsx" && asks === 1 && /function RemoveConnection\([\s\S]*?<ConfirmDelete open=\{asking\}/.test(s);
+    if (asks && !allowed) bad.push(`${f}: <ConfirmDelete>`);
     if (/window\.confirm\(/.test(s)) bad.push(`${f}: window.confirm`);
   }
   assert.deepEqual(bad, []);
@@ -50,13 +52,13 @@ test("the Undo line: announced by the press, drawn by the list that holds its ki
   assert.deepEqual(fromAnswer({ deleted: 3, title: "AP ageing", kind: "workflow" }, "report"), { did: 3, title: "AP ageing", kind: "workflow" });
 });
 
-test("leaving a card with unsaved changes keeps them in its draft - nothing asks, nothing is saved behind the owner's back", () => {
-  assert.deepEqual(keptDraft(5), { want: null, wantSrc: {} });
-  keepDraft(5, { Active: false }, {});
-  assert.deepEqual(keptDraft(5).want, { Active: false });
-  keepDraft(5, null, {});                                  // saved or discarded: gone
-  assert.deepEqual(keptDraft(5), { want: null, wantSrc: {} });
-  assert.match(read("ConnectorDraft.jsx"), /useState\(\(\) => keptDraft\(id\)\.want\)/);
+// ...and leaving a card loses nothing: every field saves itself, so what was still waiting to save goes as the card closes
+// (the owner, 2026-11-05) - a draft kept for later, with a bar to save it from, is gone with the Save bar
+test("leaving a card saves what was still waiting to save - nothing asks, nothing is kept unsaved", () => {
+  const d = read("ConnectorDraft.jsx");
+  assert.match(d, /useEffect\(\(\) => \(\) => \{ if \(timer\.current\) save\(\); \}, \[save\]\);/);
+  assert.match(d, /if \(s \|\| Object\.keys\(cfgPatch\(b, c\)\)\.length\) post\(true\);/);
+  assert.doesNotMatch(d, /keptDraft/);
 });
 
 test("Not ours runs as just this once, and offers From now on after it - never before", () => {

@@ -14,7 +14,10 @@ test("one field draws a card's config, masked when it is write-only, on the mail
   assert.match(src, /const shownFields = ownFields;/);
   for (const part of ["need", "maybe", "late"]) assert.match(src, new RegExp(`\\{${part}\\.map\\(\\(f\\) => <ConfigField key=\\{f\\[1\\]\\} conn=\\{conn\\} field=\\{f\\}`), part);
   assert.match(src, /\{meta\.fields\.map\(\(f\) => <ConfigField key=\{f\[1\]\} conn=\{conn\} field=\{f\}/);
-  assert.match(src, /setSecret\(""\); setCfg\(withoutWriteOnly\(conn, cfg\)\);/, "a typed secret empties its box once saved");
+  // a typed secret, and a write-only key, empty their boxes once saved (useBoxesSave)
+  const draft = readFileSync(new URL("../src/ConnectorDraft.jsx", import.meta.url), "utf8");
+  assert.match(draft, /if \(gone\.length\) putCfg\(\(v\) => Object\.fromEntries\(Object\.entries\(v\)\.filter\(\(\[k\]\) => !gone\.includes\(k\)\)\)\);/, "a write-only key empties its box once saved");
+  assert.match(draft, /if \(withSecret\) putSecret\(""\);/, "a typed secret empties its box once saved");
 });
 
 test("reusing the Gmail card's client reads a saved secret it is never sent, and clears its own by name", () => {

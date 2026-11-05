@@ -60,6 +60,7 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import TelegramIcon from "@mui/icons-material/Telegram";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import KeyIcon from "@mui/icons-material/VpnKeyOutlined";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -207,7 +208,13 @@ const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i) => (
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
   const agent = React.useContext(AgentNameCtx), at = useAuiState((s) => s.message.createdAt);
-  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} agent={agent} /></MessagePrimitive.Root> : null;
+  // ...a brief with no mail but a SHORT line of its own is a trigger of Taskuary's ("Signed in to the site") - on the right, with the time;
+  // a long one is Taskuary's instructions to the agent, never drawn
+  const words = useAuiState((s) => textOf(s.message));
+  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} agent={agent} /></MessagePrimitive.Root>
+    : words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
+      <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[at && when(new Date(at).toISOString()), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+      <span className="tq-aui-arrived-words">{words}</span></div></MessagePrimitive.Root> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
   if (chat) return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-user">

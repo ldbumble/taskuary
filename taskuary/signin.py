@@ -454,6 +454,11 @@ def _continue(store, tid, rid, site, actor, code=False):
     if not sess:
         store.add_comment(tid, actor, 'agent', f'{did}, but no agent is running on this task to tell - open it to continue.')
         return False
+    # ...and the chat shows what woke the agent's next answer (the owner, 2026-11-05: "why is there taskuary twice"): a short trigger line
+    try:
+        from .general import BRIEF_ACTOR, USER_TYPE
+        if hasattr(sess, 'send_prompt'): store.add_comment(tid, BRIEF_ACTOR, USER_TYPE, f'{did}.')
+    except Exception as e: logger.debug(f'signin: the trigger line for task {tid} was not filed - {e}')
     try:
         if hasattr(sess, 'send_prompt'): sess.send_prompt(said, as_owner=False)
         else: term.type_into(sess, said)
@@ -524,6 +529,10 @@ CAPTURE = r'''(() => {
 })()'''
 WATCH_FOR = 30 * 60             # a sign-in ask is watched this long, then left to the owner's word
 WATCH_EVERY = 1.5
+# ...and PAST ONLY ONCE IT STAYS PAST (the owner, 2026-11-05, a site that asks for the user name, then the password on a page of its own: the
+# password page, still loading, read as no user box and no password box at another address - "signed in", the agent was woken on the
+# password page, and when the owner did sign in nothing was watching any more). This many readings in a row, ~4.5 s at WATCH_EVERY
+PAST_STEADY = 3
 _TYPED = {}                     # tid -> {'user', 'pw', 'site'}: what the owner sent on the page, until the sign-in is past - memory only
 SAVED_LINE = 'Saved your {site} sign-in to the vault - remove it under {where}, Saved sign-ins.'
 
@@ -575,7 +584,7 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             c.call('Page.addScriptToEvaluateOnNewDocument', {'source': CAPTURE})
             c.js(CAPTURE)
         except SignInError as e: logger.debug(f'signin: the {site} page of task {tid} could not be listened to - {e}')
-        start, end = (c.fields('') or {}).get('href') or '', time.time() + until
+        start, end, steady = (c.fields('') or {}).get('href') or '', time.time() + until, 0
         while time.time() < end and _asked(store, tid, rid):
             time.sleep(every)
             for ev in c.drain():
@@ -584,7 +593,8 @@ def watch(store, tid: int, sid: str, site: str, rid: str, conn=None, every: floa
             if sid in browserview.FILLING: continue
             try: f = c.fields('')
             except SignInError: continue                         # mid-navigation: the page cannot be read for a moment
-            if past(f, site, start) and _asked(store, tid, rid):
+            steady = steady + 1 if past(f, site, start) else 0
+            if steady >= PAST_STEADY and _asked(store, tid, rid):
                 kept = keep_typed(store, tid, site)
                 _audit(store, tid, site, 'page', True, saved=kept)
                 _continue(store, tid, rid, site, 'owner')

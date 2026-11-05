@@ -334,6 +334,19 @@ class TheOwnerSignsInOnThePage(Asking):
             def send_prompt(s, text, as_owner=True): s.said.append(text)
         return Chat(self.tid)
 
+    def test_a_password_page_still_loading_is_not_taken_for_signed_in(self):
+        """The owner, 2026-11-05: between a site's user-name page and its password page, one look found no user box and no password box at
+        another address - the agent was told "signed in" on the password page, and nothing watched when the owner did sign in. Past is
+        past only once it stays past (PAST_STEADY looks in a row)."""
+        sess = self.chat(); p = self.ask(sess)
+        loading = form('https://login.bank.example/password', False, False)
+        page = WatchPage([form('https://login.bank.example/signin', password=False), loading, form('https://login.bank.example/password', user=False), form('https://login.bank.example/password', user=False)]
+                         + [form('https://app.bank.example/home', False, False)] * signin.PAST_STEADY)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'sess1': sess}):
+            self.assertTrue(signin.watch(self.s, self.tid, 'sess1', 'bank.example', p['request_id'], conn=page, every=0))
+        self.assertEqual(len(sess.said), 1)                         # told once - after the real sign-in, not on the loading page
+        self.assertEqual(page.pages, [form('https://app.bank.example/home', False, False)])   # ...it read through to the page past it
+
     def test_a_two_step_sign_in_typed_on_the_page_is_seen_saved_and_used_next_time(self):
         sess = self.chat(); p = self.ask(sess)
         self.assertEqual((p['text'], ws.status(self.s, self.tid)['requests'][-1]['choices']), ('Sign in to bank.example to continue', []))

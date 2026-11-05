@@ -284,9 +284,11 @@ const tookFor = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}
 const RanFor = () => {
   const at = useAuiState((s) => s.message.createdAt), id = useAuiState((s) => s.message.id);
   const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? ms[i - 1].createdAt : null; });
+  // ...a turn still running has not "ran" anything yet: its stamp read "ran 0s" over "Working on this…" (the chat-model stress run, 2026-11-05)
+  const running = useAuiState((s) => live(s.message));
   const t = at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
-  const ran = before ? +t - +new Date(before) : 0;
+  const ran = before && !running ? +t - +new Date(before) : 0;
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
     · {when(t)}{ran > 0 && ran < 6 * 3600 * 1000 ? ` · ran ${tookFor(ran)}` : ""}</span>;
 };
@@ -1171,7 +1173,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           line is that no AI is connected - the banner was the same fact a third time under it */}
       {!data?.providers?.length && !noAiSaid && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
         action={<ConnectAi variant="outlined" />}>No AI is connected, so this work cannot run yet - connect one under {placeName("ai")}.</Alert>}
-      {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
+      {/* ...never in a chat task (the owner, 2026-11-05: no banners): a conversation picked back up reads as the same conversation */}
+      {session?.resume_notice && !(chat && !dock) && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
       {/* A SECOND AGENT'S CONVERSATION IS ITS OWN (Run another agent, general.new_run): the earlier agent's stays on the task, folded
           above it and read only - the thread below is the new one's, never the old one picked back up */}
       {!dock && !!data?.earlier?.length && <Box component="details" data-tq-earlier-run="" sx={{ px: 1.5, py: 0.4, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>

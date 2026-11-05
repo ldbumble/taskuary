@@ -297,7 +297,12 @@ def owner_closes_line() -> str:
     from .buttons import label
     return (f'ENDING THE TASK: closing this task is the owner\'s, not yours - they close it with {label("close")} once they have what they '
             f'need. When the work is complete, say so plainly and that it is ready for {label("close")}. Never say you could not close it '
-            f'or tried to: that is not something you do here, so nothing failed.')
+            f'or tried to: that is not something you do here, so nothing failed. '
+            # ...and where what it drafts is (the owner, 2026-11-05: "it also says mindy draft is in close out, no that's wrong. there is no
+            # close out"): earlier turns of the conversation may still say Close out - the page they were written for is gone
+            f'WHERE YOUR DRAFTS ARE: this task is one chat. Every email or reply you draft shows as a card under your answer, with its own '
+            f'{label("approve")} - say it is "below" or "ready to send". There is no Close out here; never send the owner to one, even where an '
+            f'earlier turn of this conversation did.')
 
 
 # ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between

@@ -283,7 +283,8 @@ RANK = {'read': 0, 'write': 1, 'admin': 2}
 def repo_of(cwd: str) -> str:
     "owner/repo of the checkout the command runs in, from its origin - '' when it is not one."
     if not cwd: return ''
-    try: url = subprocess.run(['git', '-C', cwd, 'remote', 'get-url', 'origin'], capture_output=True, text=True, timeout=5).stdout.strip()
+    from . import spawn
+    try: url = spawn.run(['git', '-C', cwd, 'remote', 'get-url', 'origin'], capture_output=True, text=True, timeout=5).stdout.strip()
     except (OSError, subprocess.SubprocessError): return ''
     m = re.search(r'[:/]([^/:]+/[^/]+?)(?:\.git)?/?$', url)
     return m.group(1) if m and ('github' in url or 'gitlab' in url) else ''
@@ -291,10 +292,12 @@ def repo_of(cwd: str) -> str:
 
 def trusted(store, cwd: str, todo: list) -> str:
     "The repo whose card's Authority covers every step in `todo` - '' when any step is not covered."
+    # ...asked of git only when some code-host card trusts its repos at all: a command on a machine with none never runs `git remote`
+    srcs = [s for s in store.list_sources(active_only=False) if s.get('Channel') in ('github', 'gitlab') and s.get('ConnectorId')]
+    if not any(RANK.get(str((store.get_connector(s['ConnectorId']) or {}).get('Scope') or 'read').lower(), 0) >= 1 for s in srcs): return ''
     repo = repo_of(cwd)
     if not repo: return ''
-    src = next((s for s in store.list_sources(active_only=False) if s.get('Channel') in ('github', 'gitlab') and s.get('ConnectorId')
-                and str(s.get('Address') or '').lower() == repo.lower()), None)
+    src = next((s for s in srcs if str(s.get('Address') or '').lower() == repo.lower()), None)
     card = store.get_connector(src['ConnectorId']) if src else None
     if not card: return ''
     level = RANK.get(str(card.get('Scope') or card.get('ScopeDefault') or 'read').lower(), 0)

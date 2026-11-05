@@ -65,7 +65,10 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
 
   // started, answered, stopped and saved: the agent the owner came back to
-  await visible(page, "Send to agent"); await click(page, "Send to agent");
+  // ...a chat task opens on its Agent section with the start box already up, whose own Send to agent is the start (phase 4.1): the
+  // opener is pressed only where the box is not - pressing the box's start there began the agent with nothing said
+  await visible(page, "Send to agent");
+  if (!(await page.evaluate(() => !!document.querySelector("[data-tq-run-form] textarea")?.offsetParent))) await click(page, "Send to agent");
   await page.waitForSelector("[data-tq-run-form] textarea", { visible: true, timeout: 15000 });
   await click(page, "Send to agent", "[data-tq-run-form]");
   await inTask(page, /Payworth is cheapest/);

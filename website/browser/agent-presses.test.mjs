@@ -88,6 +88,12 @@ const working = (page) => page.evaluate(() => {
   const pane = document.querySelector("[data-tq-task-page]");
   return !!pane && (/working|thinking|Starting|Continuing…/i.test(pane.innerText) || !!pane.querySelector(".tq-typing, [data-tq-starting], .xterm-rows"));
 });
+// Send to agent's box: a chat task opens on its Agent section with the box already up, whose own Send to agent is the start (phase 4.1) -
+// the opener is pressed only where the box is not, or it began the agent with nothing said
+async function openBox(page) {
+  await visible(page, "Send to agent");
+  if (!(await page.evaluate(() => !!document.querySelector("[data-tq-run-form] textarea")?.offsetParent))) await click(page, "Send to agent");
+}
 // the box under Send to agent / Run another agent: the ask typed, then its own start
 async function startFromBox(page, ask, kind) {
   await page.waitForSelector("[data-tq-run-form] textarea", { visible: true, timeout: 15000 });
@@ -105,7 +111,8 @@ const writtenUp = (page) => page.waitForFunction(() => !document.querySelector("
 // Run another agent's box does - never under the canvas
 async function continueInsideAgent(page) {
   for (const from of ["spine", "pane"]) {
-    const key = from === "spine" ? "close" : "agent";
+    // ...Agent's spine shows while another section is open: Close out on a coding task, Came from on a chat task, which has no Close out
+    const key = from === "spine" ? ((await page.$("[data-tq-section-tab=close]")) ? "close" : "from") : "agent";
     if (!(await page.$(`[data-tq-slot=${key}][data-tq-open]`))) {
       await page.click(`[data-tq-section-tab=${key}] [data-tq-tab-name]`);
       await page.waitForSelector(`[data-tq-slot=${key}][data-tq-open]`, { timeout: 5000 });
@@ -171,7 +178,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
   const { page, errors } = await openTask(t, "general");
 
   await t.test("(a) Send to agent starts it: the ask, working, the answer", async () => {
-    await press(page, "Send to agent");
+    await openBox(page);
     await startFromBox(page, "compare them on price per head", "general");
     await inTask(page, /compare them on price per head/, 5000);
     assert.ok(await working(page), `nothing says it works:\n${(await pageText(page)).slice(-600)}`);
@@ -220,7 +227,7 @@ test("a coding agent on an open task: Send to agent, Continue, Run another agent
   const { w, page, errors, tid } = await openTask(t, "coding");
 
   await t.test("(a) Send to agent starts it: the ask, working, the answer", async () => {
-    await press(page, "Send to agent");
+    await openBox(page);
     await startFromBox(page, "find the export bug", "coding");
     await page.waitForSelector("[data-tq-task-page] .xterm-rows", { timeout: 30000 })
       .catch(async () => assert.fail(`no agent pane:\n${(await pageText(page)).slice(-1500)}\n--- server:\n${w.backend.output().slice(-3000)}`));

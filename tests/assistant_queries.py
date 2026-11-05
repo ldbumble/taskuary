@@ -1295,10 +1295,23 @@ def _scripted(answers, seen):
     return llm
 
 
+_SEEDED = []   # run_all's demo world, built once: each of its turns gets a copy (_copy)
+
+
+def _copy(t):
+    """A new store over a copy of t's rows. Its own __init__ runs - every lock, cache and counter is its own - but over a database
+    that already has the schema, so the ~700 schema statements a blank store runs find nothing to do (0.01 s, not 0.09 s)."""
+    import sqlite3
+    from taskuary import store as S
+    cx = sqlite3.connect(':memory:', check_same_thread=False, timeout=5.0); t.cx.backup(cx)
+    with mock.patch.object(S.sqlite3, 'connect', lambda *a, **k: cx): return S.MemoryStore()
+
+
 def _world():
     from taskuary import demo, funnel, terminal
     from taskuary.store import MemoryStore
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
+    if _SEEDED: s = _copy(_SEEDED[0]); funnel.invalidate(); return s
     s = MemoryStore()
     with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(s)
     for k in ('auto_draft_enabled',): s.set_setting(k, '0', 't')
@@ -1442,10 +1455,12 @@ def demo_turn(q: Q) -> dict:
 
 
 def run_all() -> list:
-    rows = []
-    for q in CASES:
-        rows.append({'q': q, 'ideal': ideal_turn(q), 'demo': demo_turn(q)})
-    return rows
+    # One seeding, not two a turn: seeding ~1,200 worlds was most of run_all's 3 minutes, and past pytest's faulthandler_timeout
+    # (120 s) its watchdog dumps every thread's stack while the main thread runs - which on Windows CI crashed the run with an
+    # access violation in whatever the main thread was doing (_strptime, a store read), or left it too slow for the job's 25 minutes
+    _SEEDED[:] = [_world()]
+    try: return [{'q': q, 'ideal': ideal_turn(q), 'demo': demo_turn(q)} for q in CASES]
+    finally: _SEEDED.clear()
 
 
 def table(rows) -> str:

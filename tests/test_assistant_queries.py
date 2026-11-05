@@ -2,8 +2,9 @@
 "Next." - the owner's "Clear all the FYI, please." was answered "Next." (2026-10-20). No real model is ever asked: the scripted brains
 answer, and the CLI and API builders raise if anything reaches for one."""
 import unittest
+from unittest import mock
 
-from taskuary import concierge
+from taskuary import concierge, demo
 from tests import assistant_queries as Q
 
 # what no tool or desk button does today - a new tool takes its ask off this list on purpose (ASK OWNER before building one)
@@ -17,7 +18,19 @@ PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach', 'copy', 'share_r
 
 class EverydayAsks(unittest.TestCase):
     @classmethod
-    def setUpClass(cls): cls.rows = Q.run_all()
+    def setUpClass(cls):
+        seed, cls.seeds = demo.seed, []
+        with mock.patch.object(demo, 'seed', lambda s: cls.seeds.append(s) or seed(s)): cls.rows = Q.run_all()
+
+    def test_the_demo_world_is_seeded_once_and_each_turn_has_its_own_copy(self):
+        # two seedings a turn took run_all past faulthandler's 120 s on Windows CI, where the watchdog's dump of the running main
+        # thread crashed the job with an access violation (0.3.11.2)
+        self.assertEqual(len(self.seeds), 1)
+        Q._SEEDED[:] = self.seeds[:1]
+        try: a, b = Q._world(), Q._world()
+        finally: Q._SEEDED.clear()
+        a.set_setting('auto_draft_enabled', '1', 't')
+        self.assertEqual(b.get_setting('auto_draft_enabled'), '0'); self.assertEqual(len(a.list_tasks()), len(self.seeds[0].list_tasks()))
 
     def test_there_are_enough_of_them_in_every_category(self):
         self.assertGreaterEqual(len(self.rows), 240)

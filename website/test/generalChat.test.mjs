@@ -61,8 +61,8 @@ test("on the canvas the chat's brain and Full screen sit in the agent step's hea
   assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && liveSession\s*\? <Box ref=\{setChatTools\}/);
   assert.match(tasks, /noTools=\{!liveSession\}/);
   assert.match(tasks, /toolsAt=\{canvas \? chatTools : null\}/);
-  assert.match(workspace, /\{!dock && !noTools && toolsAt && !full && <>\{createPortal\(tools, toolsAt\)\}<\/>\}/);
-  assert.match(workspace, /\{!dock && !noTools && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
+  assert.match(workspace, /\{!dock && !noTools && !chat && toolsAt && !full && <>\{createPortal\(tools, toolsAt\)\}<\/>\}/);
+  assert.match(workspace, /\{!dock && !noTools && !chat && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
 });
 
 test("the chat box names the agent the pane names, never \"the assistant\" over an analyst (email walk 2026-10-29)", () => {

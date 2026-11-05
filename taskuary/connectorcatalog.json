@@ -14,7 +14,7 @@
       "title": "Outlook mail",
       "group": "Messaging",
       "planned": false,
-      "desc": "Your Microsoft mailbox on your work rail through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
+      "desc": "Your Microsoft mailbox on your work rail through triage, through your company's own Microsoft app - its IT registers it once, then you sign in.",
       "match": [
         "outlook mail",
         "outlook"
@@ -25,7 +25,7 @@
       "title": "Microsoft Teams",
       "group": "Messaging",
       "planned": false,
-      "desc": "Your Teams chats, read and answered as you. Sign in with your own Microsoft account, like Outlook - each Teams card is one account.",
+      "desc": "Your Teams chats, read and answered as you, through your company's own Microsoft app - like Outlook, each Teams card is one account.",
       "match": [
         "microsoft teams",
         "microsoft",

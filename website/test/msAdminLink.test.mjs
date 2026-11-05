@@ -12,7 +12,7 @@ const box = () => { const i = flat.indexOf("Approval link for your Microsoft 365
 // http://localhost/api/ms/callback - so after Accept the admin's browser may not connect
 test("the approval box tells the admin what to do and that a page that won't load afterwards is expected", () => {
   for (const w of ["They open the link, sign in, and click Accept", "If the page after Accept says it can't connect, that's expected: the approval is done.",
-    "Nothing to set up in Azure."]) assert.ok(box().includes(w), w);
+    "Grant admin consent on the app's API permissions page does the same."]) assert.ok(box().includes(w), w);
   assert.ok(!box().includes("nativeclient"));
 });
 
@@ -31,5 +31,20 @@ test("the card says plainly what AADSTS900971 means, wherever it comes back", ()
 
 test("the own-registration steps no longer ask for the nativeclient redirect", () => {
   assert.ok(!cv.includes("oauth2/nativeclient"));
-  assert.match(cv, /the admin-approval link returns to the same address\) → Register\./);
+  assert.match(cv, /redirect URI \{code\(MS_REDIRECT\)\}/);
+});
+
+// THE COMPANY'S OWN APP (the owner, 2026-11-05: "i don't want it to go through my azure"): no app id ships, the card asks for the
+// company's two ids and shows IT the steps, and both roads - the browser and the code - wait for them
+const own = () => { const i = flat.indexOf("const MsOwnApp = "); return flat.slice(i, flat.indexOf("export const MsSignIn", i)); };
+test("the Microsoft card asks for the company's own app, with the steps IT follows", () => {
+  assert.match(cv, /export const MS_REDIRECT = "http:\/\/localhost\/api\/ms\/callback";/);
+  for (const w of ["New registration", "single tenant", "Mobile and desktop applications", "Allow public client flows: <b>Yes</b>",
+    "Microsoft Graph → Delegated: {code(conn.MsScopes || \"\")}", "<b>Grant admin consent</b>", "Application (client) ID", "Directory (tenant) ID",
+    "in the browser, or with a code", "onClick={() => copy(MS_REDIRECT)}", "conn.MsRedirect"]) assert.ok(own().includes(w), w);
+  assert.equal((own().match(/<li>/g) || []).length, 5, "one numbered list of five");
+  assert.doesNotMatch(own(), /<Button|<Dialog/, "the fields, the Copy and the words - nothing more");
+  assert.match(flat, /disabled=\{busy \|\| needsApp\} onClick=\{\(\) => start\(\)\}/, "the browser sign-in waits for the ids");
+  assert.match(flat, /disabled=\{busy \|\| needsApp\} onClick=\{\(\) => start\(files, true\)\}/, "...and so does the code");
+  assert.match(flat, /This card signed in through the Microsoft app Taskuary used to ship/, "a card from before says what to do");
 });

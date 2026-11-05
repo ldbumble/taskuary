@@ -1,12 +1,16 @@
-"""Sign in with Microsoft - Graph for a regular user, no Azure portal.
+"""Sign in with Microsoft - Graph for a regular user, through the company's OWN app registration.
 
-The Outlook card used to need an app registration of the user's own: tenant id, client id, a
-client secret, admin-consented APPLICATION permissions. Fine for a tenant owner; impossible
-for an employee. This is the other road, the one Thunderbird / Apple Mail / rclone take:
-Taskuary ships ONE public client registration (no secret - it is public by design) and the
-user signs in to it in the system browser - the OAuth authorization-code flow with PKCE, coming back to this
-server on a loopback redirect (REDIRECT_PATH) - their own account, consent to THEIR OWN mailbox. We keep the
-refresh token as the card's secret and mint access tokens from it silently from then on.
+The Outlook card used to need an app registration with a client secret and admin-consented APPLICATION permissions - a
+tenant owner's road. This is the other one, the one Thunderbird / Apple Mail / rclone take: a PUBLIC client (no secret)
+that the person signs in to in the system browser - the OAuth authorization-code flow with PKCE, coming back to this
+server on a loopback redirect (REDIRECT_PATH) - their own account, consent to THEIR OWN mailbox. We keep the refresh token
+as the card's secret and mint access tokens from it silently from then on.
+
+THE APP IS THE COMPANY'S (the owner, 2026-11-05: "i want companies to be able to access their own taskuary and connect
+themselves. they can create their own app"). Taskuary ships no Microsoft app id: a company's IT registers one in its own
+Entra ID (single tenant, "Mobile and desktop applications" redirect http://localhost/api/ms/callback, public client flows
+on, the delegated scopes below) and the card carries its client_id and tenant_id. A self-hoster may set one for the whole
+install with TASKUARY_MS_CLIENT_ID. Nothing set: the card says what to enter (NO_APP) - that is setup, not a fault.
 
 DEVICE CODE IS THE FALLBACK, never the default (an enterprise IT, 2026-10-27: Conditional Access blocks the device-code
 flow as a known phishing vector). It stays for a Taskuary the browser cannot reach on localhost - another machine, a
@@ -17,12 +21,12 @@ the pollers, sender and calendar reader do not change - they get a token from gr
 as before, and graph_token asks here when the card says auth=user.
 
 Caveats the card states: a tenant that forbids user consent ends the sign-in at "Need admin
-approval" - the admin approves ONCE for everyone (a consent grant, not an app registration).
+approval" - the admin approves ONCE for everyone (Grant admin consent on the app, or the card's approval link).
 Teams chat reading (getAllMessages) is app-only in Graph, so the Outlook sign-in covers mail, send and calendar (reading
 it, and answering invites - Calendars.ReadWrite). A TEAMS card signs in the same way with chat scopes of its own
 (TEAMS_SCOPES): its chats are read one by one (channels._teams_user_delta) and a reply is posted as the person.
 """
-import base64, hashlib, os, secrets, time, threading
+import base64, hashlib, os, re, secrets, time, threading
 from urllib.parse import quote, urlencode
 import requests
 from loguru import logger
@@ -64,10 +68,15 @@ def granted(cfg, scope: str):
     if not g: return None
     return scope.lower() in {s.lower().rpartition('/')[2] for s in g.split()}
 def card_of(cfg) -> str: return 'Teams' if (cfg or {}).get('_kind') == 'teams' else 'Outlook'   # whose sign-in this is, said
-# Taskuary's own registration (multi-tenant + personal accounts, public client; "Mobile and desktop applications" platform
-# with the loopback redirect below, and public client flows on for the device-code fallback). Overridable per install with
-# TASKUARY_MS_CLIENT_ID, or per card with client_id.
-PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', 'd32e53c9-f00d-49fc-8b93-227b3e0190f0')
+# NO SHARED DEFAULT: a company signs in through its own registration (the card's client_id and tenant_id); a self-hoster may name
+# one for the whole install. A card that signed in before this through the app Taskuary used to ship keeps its token, but its
+# refresh now asks for the company's own app (NO_APP) - a line on the card, never a crash.
+PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', '').strip()
+NO_APP = ("the {card} card needs your company's own Microsoft app - enter its Application (client) ID and Directory (tenant) ID "
+          "on the card (the steps are there), then sign in with Microsoft")
+GUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+TENANT = re.compile(r'^(common|organizations|consumers|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+                    r'|[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+)$', re.I)
 
 _CACHE, _LOCK = {}, threading.Lock()      # refresh token -> (access, expires_at, current refresh token)
 on_rotate = None                          # set by the server: (connector id, new refresh token) -> None
@@ -88,7 +97,7 @@ class CompanyPolicy(RuntimeError):
 
 
 # THE BROWSER SIGN-IN comes back here. Entra ignores the port of an http://localhost redirect on a public client, so the one
-# URI registered on the app - http://localhost/api/ms/callback - matches whatever port this install listens on. The admin-approval
+# URI the company registers on its app - http://localhost/api/ms/callback - matches whatever port this install listens on. The admin-approval
 # link sends exactly that registered URI, no port (ADMIN_REDIRECT): it is what the registration lists, and the port rule is the
 # sign-in's - so after Accept the browser tries port 80, and a Taskuary on another port is simply not there (the approval stands).
 REDIRECT_PATH = '/api/ms/callback'
@@ -97,8 +106,8 @@ ADMIN_REDIRECT, ADMIN_STATE = f'http://localhost{REDIRECT_PATH}', 'admin-consent
 
 def admin_consent_url(cfg: dict, scope: str = SCOPES) -> str:
     """The link the user forwards to their Microsoft 365 admin. One click + Accept grants the
-    delegated scopes for the whole organisation - a consent grant on OUR app id, so nobody on
-    their side registers anything.
+    delegated scopes for the whole organisation - a consent grant on the company's own app, the same as
+    Grant admin consent on its API permissions page.
     NOT v2.0/adminconsent: that endpoint returns only to a Web-platform reply URL, and Taskuary's one redirect is on the
     "Mobile and desktop" platform, so Microsoft stopped there with AADSTS900971 "No reply address provided" for a customer's
     admin even with the registered URI. The authorize endpoint takes a public client's redirect as it is; prompt=admin_consent
@@ -130,10 +139,15 @@ def admin_return(consented: str = None, error: str = None, desc: str = '', code:
 
 def _need_client(cfg):
     cid = client_id(cfg)
-    if not cid:
-        raise RuntimeError("Taskuary's Microsoft app id is not set on this install - set TASKUARY_MS_CLIENT_ID "
-                           "(or enter a client_id under the admin fields) and try again")
+    if not cid: raise RuntimeError(NO_APP.format(card=card_of(cfg)))
     return cid
+
+
+def check_app(client: str, tenant_id: str) -> str:
+    "What is wrong with the ids typed on the card, in a line - '' when both read right. Microsoft's own check comes at sign-in."
+    if not GUID.match(client or ''): return "the Application (client) ID is the GUID on the app's Overview page in Entra ID, like 1b2c3d4e-0000-0000-0000-000000000000"
+    if not TENANT.match(tenant_id or ''): return "the Directory (tenant) ID is the GUID on the same Overview page (or your domain, like northwind.example)"
+    return ''
 
 
 def redirect_uri(port) -> str: return f'http://localhost:{int(port or 7787)}{REDIRECT_PATH}'
@@ -289,8 +303,20 @@ def _friendly(desc: str) -> str:
     if _needs_admin(d):
         return ('your company asked for an admin\'s approval ("Need admin approval") - your IT admin approves Taskuary once with the '
                 'approval link below, then sign in again')
+    if 'AADSTS50011' in d:            # the redirect the sign-in sent is not one the company's app lists
+        sent = re.search(r"redirect URI '([^']+)'", d)
+        return ("Microsoft says the redirect URI does not match (AADSTS50011). In your company's app in Entra ID: Authentication → "
+                f"Add a platform → Mobile and desktop applications → add {ADMIN_REDIRECT}"
+                + (f" (this sign-in sent {sent.group(1)})" if sent and sent.group(1) != ADMIN_REDIRECT else '') + ', then sign in again')
     if 'AADSTS700016' in d or 'AADSTS90002' in d:
-        return "Taskuary's Microsoft app is not visible to this account's tenant - check TASKUARY_MS_CLIENT_ID"
+        return ("Microsoft finds no such app in that directory (AADSTS700016) - the Application (client) ID or the Directory (tenant) ID "
+                "on the card is wrong. Copy both again from the app's Overview page in Entra ID")
+    if 'AADSTS50194' in d:            # a single-tenant app asked through /common
+        return ("your company's app is single-tenant, so the card needs its Directory (tenant) ID (AADSTS50194) - copy it from the "
+                "app's Overview page in Entra ID")
+    if 'AADSTS7000218' in d:          # the redirect is on the Web platform, or public client flows are off: Microsoft wants a secret
+        return ("Microsoft wants a client secret from this app (AADSTS7000218) - in your company's app, put the redirect under "
+                "Mobile and desktop applications (not Web) and set Allow public client flows to Yes")
     if 'AADSTS50076' in d or 'AADSTS50079' in d: return 'your organisation needs multi-factor sign-in - complete it in the browser and try again'
     if _policy(d):
         return ('your company\'s policy stops this sign-in until your IT admin allows Taskuary - your IT admin approves Taskuary once with the '

@@ -6961,6 +6961,16 @@ def connectors(request: Request):
     from .peoplesearch import missing
     rows = [c | {'PeopleMissing': missing(c.get('ConfigJson'), c['Type'])} if c['Type'] in ('outlook', 'teams', 'gmail') else c
             for c in rows]
+    # MsApp: whose Microsoft app this card signs in through - 'card' (the company's own, on the card), 'install' (TASKUARY_MS_CLIENT_ID)
+    # or '' (none yet: the card shows the setup steps). MsRedirect: this install's own redirect, the one with its port
+    from . import msauth
+    def _ms_app(c): return 'card' if str(json.loads(c.get('ConfigJson') or '{}').get('client_id') or '').strip() else 'install' if msauth.PUBLIC_CLIENT_ID else ''
+    # MsScopes: the delegated Graph permissions the company's app lists - exactly what this card's sign-in asks for
+    def _ms_row(c):
+        k = json.loads(c.get('ConfigJson') or '{}')
+        return {'MsApp': _ms_app(c), 'MsRedirect': msauth.redirect_uri(cfg['server'].get('port')),
+                'MsScopes': msauth.scopes_for(c['Type'], bool(k.get('allow_files')))}
+    rows = [c | _ms_row(c) if c['Type'] in ('outlook', 'teams') else c for c in rows]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
     rows = [guard.masked_config(c) for c in rows]
@@ -7519,13 +7529,15 @@ def chatgpt_signout(cid: int):
     store.audit('connector', cid, 'chatgpt_signout', ACTOR)
     return {'ok': True, **out}
 
-# ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
+# ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, through the company's own app ──
 _MSFLOWS = {}   # flow id -> a sign-in in progress (a device code being polled, or a browser round awaiting its callback); minutes, then gone
 MS_TTL = 600    # a browser round not back in ten minutes is over: its state answers nothing after that
 
 class MsSignInBody(BaseModel):
     files: bool | None = None        # Allow saving files: this sign-in asks for Files.ReadWrite too (None: as the card already says)
     code: bool = False               # the fallback the owner picks: a device code, for a Taskuary the browser cannot reach on localhost
+    client_id: str | None = None     # the company's own app, as typed on the card: kept on the card from this press on
+    tenant_id: str | None = None
 
 
 @app.post('/api/connectors/{cid}/ms/signin')
@@ -7540,6 +7552,15 @@ def ms_signin(cid: int, body: MsSignInBody | None = None):
     cfg_ = json.loads(c.get('ConfigJson') or '{}')
     body = body or MsSignInBody()
     if body.files is not None: cfg_['allow_files'] = bool(body.files)
+    # THE COMPANY'S OWN APP (msauth.py): the ids typed on the card ride the press, and the card keeps them whatever the sign-in
+    # answers - a refusal names what to fix in that app, and the next press starts from what was typed
+    typed = {k: str(getattr(body, k) or '').strip() for k in ('client_id', 'tenant_id')}
+    if any(typed.values()):
+        why = msauth.check_app(typed['client_id'] or cfg_.get('client_id'), typed['tenant_id'] or cfg_.get('tenant_id'))
+        if why: raise HTTPException(409, why[0].upper() + why[1:])
+        typed = {k: v for k, v in typed.items() if v}
+        cfg_.update(typed)
+        store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**json.loads(c.get('ConfigJson') or '{}'), **typed})}, ACTOR)
     # a tenant that refused the people scopes once is not asked for them on every sign-in (_ms_retry_base)
     scope = msauth.scopes_for(c['Type'], bool(cfg_.get('allow_files')), people=not cfg_.get('people_refused'))
     for k, v in list(_MSFLOWS.items()):

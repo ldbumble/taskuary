@@ -261,8 +261,8 @@ class TwoTeamsCards(unittest.TestCase):
         def post(url, data, timeout): asked.append(data['scope']); return R(200, {'access_token': f"A:{data['scope'][:30]}", 'expires_in': 3600})
         try:
             with mock.patch('requests.post', side_effect=post):
-                mail = msauth.access_token({'auth': 'user', 'granted_scope': msauth.SCOPES}, 'RT')
-                chat = msauth.access_token({'auth': 'user', '_scope': msauth.TEAMS_SCOPES}, 'RT')
+                mail = msauth.access_token({'auth': 'user', 'client_id': 'app-1', 'granted_scope': msauth.SCOPES}, 'RT')
+                chat = msauth.access_token({'auth': 'user', 'client_id': 'app-1', '_scope': msauth.TEAMS_SCOPES}, 'RT')
             self.assertNotEqual(mail, chat); self.assertEqual(asked[1], msauth.TEAMS_SCOPES)
         finally: msauth._CACHE.clear()
 

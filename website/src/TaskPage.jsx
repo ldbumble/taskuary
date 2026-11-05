@@ -106,7 +106,7 @@ import { ASK_TAG, BROWSER_TAG } from "./newTask.js";
 import { completionFact, completionLine, owedEmails, waitingEmails, wentOut,
   AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, reopenedDetail, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
-import { closeoutOf } from "./reviewProposal.js";
+import { closeoutOf, isPostReview } from "./reviewProposal.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import EarlierRounds from "./CloseoutRounds.jsx";
 import MoreDrafts from "./MoreDrafts.jsx";
@@ -2766,7 +2766,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // WHAT CLOSE OUT HOLDS - the hand-off card, the close, the write-up, Answering, the invite, the emails owed, the draft and the drafts beside it,
   // what already went out and its envelope, the proposals, the earlier rounds - drawn in Close out's section, or, where the chat is home
   // (`inChat`, cardsIn), in the agent's newest summary (AgentSummary's Next steps) or its no-agent chat: one of the two, never both
-  const closeBody = (inChat) => { const coOn = inChat || shows("reply"); return <>
+  // ...in the chat a post is drawn in the turn that made it, as the post (GeneralWorkspace, PostCard) - never a second time in Close out's body
+  const chatAsks = proposals.filter((p) => !isPostReview(p));
+  const closeBody = (inChat) => { const coOn = inChat || shows("reply"); const asks = inChat ? chatAsks : proposals; return <>
       {/* HAND IT TO A PERSON, IN CLOSE OUT (the owner, 2026-10-29: "you click the button and the matching UI opens in its pane"): on
           the canvas the hand-off is a compose card here - who, the forward the AI drafts, and Send it - where the drawer stood;
           "sending" keeps it mounted behind, so a send that fails brings back what was typed */}
@@ -2960,12 +2962,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {/* A PROPOSAL IS THE SAME KIND OF ASK, so it shares this section rather than
               taking a fourth stage: lanes.json has one `approve` lane for a reply and an
               action alike, and one lane on the rail is one section on the page. */}
-          {proposals.length > 0 && (
+          {/* ...in the chat a post is drawn in the turn that made it, as the post (GeneralWorkspace, PostCard) - never a second time here */}
+          {asks.length > 0 && (
             <Box sx={{ mt: 1.4, pt: 1.1, borderTop: `1px solid ${BORDER}` }}>
               <Typography sx={{ ...label, display: "block", mb: 0.5 }}>
-                {proposals.length === 1 ? "Also waiting on you" : `Also waiting on you · ${proposals.length}`}
+                {asks.length === 1 ? "Also waiting on you" : `Also waiting on you · ${asks.length}`}
               </Typography>
-              {proposals.map((p) => (
+              {asks.map((p) => (
                 <ReviewDecision key={p.ReviewId} review={p} toRow={inRow && !pendingReview && proposals.length === 1}
                   onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
               ))}

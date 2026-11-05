@@ -281,6 +281,7 @@ const AtWork = (props) => {
   return folded ? null : <AgentBand {...props} />;
 };
 const Nothing = () => null;
+const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.length <= 500 || /https?:\/\/|\b[A-Za-z]:\\|(^|\s)\/(Users|home|mnt|tmp)\/|\\\\\S+/.test(t)); };
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
 const tookFor = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
@@ -310,7 +311,9 @@ const AssistantMessage = () => {
       <div className="tq-aui-agent-body">
         {/* ...where the chat is home, a turn that ended in its summary IS that summary: the agent's own prose above it said the same at
             length (the owner, 2026-11-05: "short text as possible") */}
-        <MessagePrimitive.Parts components={{ Text: chat && custom?.summary ? Nothing : AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
+        {/* ...but never when the words ARE the answer: short, or carrying a link or a file path the summary may only describe (the owner,
+            2026-11-05: "it should say where the link is. this is just patting itself on the back and not showing the link") */}
+        <MessagePrimitive.Parts components={{ Text: chat && custom?.summary && !answerWords(words) ? Nothing : AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
         {work && !custom?.summary && newest && work.next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>

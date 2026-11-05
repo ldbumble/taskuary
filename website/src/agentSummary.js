@@ -38,3 +38,9 @@ export const chatReplyShown = ({ replyMessage, pendingReview, sentReview, unsent
 // ...and "Suggested reply" heads Close out's body in the chat only over a reply - a draft, or one sent or closed unsent. Over a closed task's
 // "✓ Mark done just now" it named a reply there never was (the stress run's browser task, 2026-11-05)
 export const hasReply = (reviews) => (reviews || []).some((r) => r && r.Kind !== "action" && r.Kind !== "slot");
+// IS THE AGENT'S PROSE THE RESULT? The agent says so itself (the owner, 2026-11-05: "no hardcoded words; the model reads intent"): its summary's
+// `answer_is_result`. A turn filed before it could say - or one that did not - reads by the length-or-link rule the pane used until then, so
+// history draws as it always did
+const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.length <= 500 || /https?:\/\/|\b[A-Za-z]:\\|(^|\s)\/(Users|home|mnt|tmp)\/|\\\\\S+/.test(t)); };
+export const answerShown = (summary, words) => !String(words || "").trim() ? false
+  : typeof summary?.answer_is_result === "boolean" ? summary.answer_is_result : answerWords(words);

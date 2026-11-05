@@ -39,7 +39,10 @@ FAMILIES = {
     'leverage': "who depends on the owner, who to loop in, an introduction that would unblock something"}
 KEY = 'idea:lookout-'
 EVERY_DAYS, RETRY_H = 1, 6           # a day between passes (setting lookout_every_days); a pass that got no answer tries again in 6 hours
-DAYS, MAX_IDEAS, MAX_OPEN, CALLS = 30, 2, 2, 3     # CALLS: the two, and one re-ask of an answer that was not JSON (llm.ask_json)
+# FOUR, NOT TWO (the owner, 2026-11-05: "where is the advisor ideas about your pain points ... don't see any in my advisor today"): two
+# proposals a day, both held by the check, left the Advisor empty for days. MORNING_H: the day's pass runs from the morning, not 24 hours
+# after the last one - it had drifted to 5:53 PM
+DAYS, MAX_IDEAS, MAX_OPEN, CALLS, MORNING_H = 30, 4, 4, 3, 7     # CALLS: the two, and one re-ask of an answer that was not JSON (llm.ask_json)
 GROUPS, OWN_GROUPS, PEOPLE, WEEKS = 40, 20, 12, 6
 TASKS_SHOWN, GIST, WINDOW_CHARS = 25, 200, 22000
 PROPOSE_TOKENS, CHECK_TOKENS = 1800, 700
@@ -73,6 +76,7 @@ SYSTEM = (
     "counts and dates, in plain words - no ids), refs (the ids from the window it rests on, like msg12 or task7 - at least one), why "
     "(one sentence: why it matters, at what scale), next_step (concrete enough for an agent to start: a draft, a query, a fix to build), "
     "pitch (one sentence the owner could say to their boss: what they noticed and what they propose). "
+    "Spread them: one idea per theme, and different families where the evidence allows - never two takes on the same threads. "
     "Fewer is better; none is a good answer when nothing clears the bar. "
     'Answer JSON only: {"ideas": [{"family": "...", "title": "...", "evidence": "...", "refs": ["msg1"], "why": "...", "next_step": "...", "pitch": "..."}]}')
 WANT = {'name': 'lookout', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['ideas'], 'properties': {'ideas': {
@@ -86,7 +90,7 @@ CHECK = (
     "Keep an idea only when ALL of these hold: (1) SPECIFIC - it names counts, dates or items, not a general practice; (2) SUPPORTED - the "
     "cited lines really show what it claims, nothing is invented or stretched; (3) NON-OBVIOUS - the owner could not see it from one "
     "message, and their own sent words do not show them already on it; (4) WORTH A BOSS'S TIME - money, time, risk or credit at a scale "
-    "that matters; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since; (7) STILL TRUE TODAY - a person it names still works with the owner (the window has no departure notice, account removal or 'no longer with' reply, and they still write or are written to), and a process it names still runs. Reject anything generic "
+    "that matters - for a CREDIT idea, the work and its size must be in the cited lines; that leadership has not seen it is the idea's premise, not something the lines must prove; (5) about a person: factual, private and kind - no diagnosis, motive, blame or private life; (6) NEW - not the same point as one under ALREADY RAISED, however reworded, unless the cited lines show something has changed since; (7) STILL TRUE TODAY - a person it names still works with the owner (the window has no departure notice, account removal or 'no longer with' reply, and they still write or are written to), and a process it names still runs. Reject anything generic "
     "('communicate more', 'hold a meeting', 'document it', 'monitor more') however well it is worded. "
     'Answer JSON only: {"keep": [<numbers of the ideas to keep>], "why": {"<number>": "<one line: why it was rejected>"}}')
 CHECK_WANT = {'name': 'lookout_check', 'schema': {'type': 'object', 'additionalProperties': False, 'required': ['keep', 'why'], 'properties': {
@@ -105,7 +109,12 @@ def due(store) -> bool:
     than MAX_OPEN of these waiting at once."""
     if len(open_ideas(store)) >= MAX_OPEN: return False
     last, tried = store.get_setting(LAST_KEY) or '', store.get_setting(TRIED_KEY) or ''
-    return (not last or last <= _ago(days=_every(store))) and (not tried or tried <= _ago(hours=RETRY_H))
+    if tried and tried > _ago(hours=RETRY_H): return False
+    if not last: return True
+    every = _every(store)
+    # once a calendar day, from the morning: not run today and it is past MORNING_H, or a whole day has gone by whatever the hour
+    if every <= 1: return last[:10] < _ts(_now())[:10] and (_now().hour >= MORNING_H or last <= _ago(days=1))
+    return last <= _ago(days=every)
 
 
 # ── WHAT IT READS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

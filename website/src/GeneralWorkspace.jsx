@@ -53,6 +53,7 @@ import BriefLine from "./BriefLine.jsx";
 import AgentSummary from "./AgentSummary.jsx";
 import { foldedSummaries } from "./agentSummary.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
+import { readingOf } from "./threadReading.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -225,15 +226,18 @@ const AtWork = (props) => {
     return m?.role === "assistant" && live(m) && (m.content || []).some((p) => p.type === "data" && p.name === "agent_steps"); });
   return folded ? null : <AgentBand {...props} />;
 };
+const Nothing = () => null;
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);
-  const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom);
+  const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
   const { rest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
       <div className="tq-aui-agent-body">
-        <MessagePrimitive.Parts components={{ Text: AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
+        {/* ...where the chat is home, a turn that ended in its summary IS that summary: the agent's own prose above it said the same at
+            length (the owner, 2026-11-05: "short text as possible") */}
+        <MessagePrimitive.Parts components={{ Text: chat && custom?.summary ? Nothing : AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
@@ -606,7 +610,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       <ThreadPrimitive.Root className="tq-aui-thread">
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
-          {chat && reading}
+          {chat && !messages?.length && reading}
           {!messages?.length && !starting && !(chat && reading) && (
             <div className="tq-aui-welcome">
               <TaskuaryMark size={22} />
@@ -952,8 +956,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
-        chat={chat && !dock} reading={chat && !dock ? <ThreadReading reading={data?.thread || task?.ThreadJson} mails={mails} variant="chat"
-          sx={{ mb: 2.25, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }} /> : null} />
+        chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
+          ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null} />
     </OutputsCtx.Provider>
     </WorkCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider>

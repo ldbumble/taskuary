@@ -94,7 +94,7 @@ test("Close out says what the draft answers in one line, and the line opens the 
   assert.doesNotMatch(closeOut, /<ChatThread/, "never the full bubbles twice");
   assert.doesNotMatch(page, /mailThread|data-tq-mail-thread/);
   assert.doesNotMatch(closeOut, /<ConversationRows /, "no condensed rows in Close out");
-  assert.match(closeOut, /\{closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
+  assert.match(closeOut, /\{closeGroup && answering && !inChat && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
   assert.match(closeOut, /Answering <Box component="span"[^>]*>\{answering\.who\}<\/Box>/);
   // ...and in the three sections it opens Came from with its message history out (2026-10-27)
   assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setCameInFull\(true\); setFromOpen\(true\); setHistOpen\(true\); if \(fromDrawer\) setFromSide\(true\); if \(threeUp\) openSection\("from"\); setSeekCameFrom\(true\); \};/);

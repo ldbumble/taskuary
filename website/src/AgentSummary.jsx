@@ -8,16 +8,28 @@ import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { nextSteps } from "./agentSummary.js";
 import { Md } from "./md.jsx";
-import ThreadReading from "./ThreadReading.jsx";
+import { readingOf } from "./threadReading.js";
 import { MicButton } from "./ui.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
-const HEAD = { display: "block", color: FAINT, fontSize: 11.5, fontWeight: 700, mt: 1, mb: 0.25 };
+// ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
+const HEAD = { display: "block", color: INK, fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 };
+const Head = ({ children, first }) => <Typography component="span" sx={{ ...HEAD, ...(first ? { mt: 0 } : {}) }}>{children}</Typography>;
 const LINE = { fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" };
 const who = (r) => r.FromName || r.FromEmail || "";
 
-const OnYou = ({ items }) => items.map((i) => <Typography key={i.id || i.text} data-tq-on-you={i.id || ""} sx={LINE}>
-  <Box component="span" title="Only you can do this one" sx={{ color: FAINT, fontWeight: 700, fontSize: 12, mr: 0.6 }}>On you:</Box>{i.text}</Typography>);
+const PARA = { ...LINE, mt: 1 };
+// A REGULAR CHAT (the owner, 2026-11-05: "it's just a chat with it summarizing in different paragraphs (short text as possible) this is the chat,
+// this is what i did about it and this is what i suggest" - "hate all the boxes ... no lines"): plain paragraphs, no rules, no boxes, no
+// "On you:" line per step - the steps only the owner can take are ONE sentence, the first three and how many more the To do holds
+const ONYOU_SHOWN = 3;
+const OnYou = ({ items }) => {
+  if (!items.length) return null;
+  const shown = items.slice(0, ONYOU_SHOWN).map((i) => i.text.replace(/[.\s]+$/, "")), more = items.length - shown.length;
+  return <Typography data-tq-on-you={items.map((i) => i.id || "").join(" ")} sx={LINE}>
+    {`For you to do: ${shown.join("; ")}${more > 0 ? `, and ${more} more on the To do` : ""}.`}</Typography>;
+};
+const DraftHead = () => <Head>Suggested reply</Head>;
 
 export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false }) {
   if (!summary) return null;
@@ -31,19 +43,17 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     </Box>) : null;
   const { drafts, onYou, held, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
   return (
-    <Box data-tq-summary="open" className="tq-aui-summary" sx={{ mt: 1, pt: 0.5, borderTop: `1px solid ${BORDER}` }}>
-      {!!about && <><Typography component="span" sx={HEAD}>What this is about</Typography><Typography sx={LINE}>{about}</Typography></>}
-      {!!did && <><Typography component="span" sx={HEAD}>What I did</Typography><Box sx={LINE}><Md text={did} /></Box></>}
-      {(next || drafts.length || onYou.length || held.length || nothing) ? <>
-        <Typography component="span" sx={HEAD}>Next steps</Typography>
-        {next}
-        {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
-          {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
-        {!!held.length && <Typography data-tq-summary-held={held.length} sx={LINE}>
-          {held.length === 1 ? "One step waits for your Approve, below." : `${held.length} steps wait for your Approve, below.`}</Typography>}
-        <OnYou items={onYou} />
-        {nothing && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
-      </> : null}
+    <Box data-tq-summary="open" className="tq-aui-summary">
+      {!!about && <><Head first>What this is about</Head><Typography data-tq-summary-about="" sx={LINE}>{about}</Typography></>}
+      {!!did && <><Head first={!about}>What I did</Head><Box data-tq-summary-did="" sx={LINE}><Md text={did} /></Box></>}
+      {next ? <Box><DraftHead />{next}</Box> : null}
+      {(drafts.length && !next) || held.length || onYou.length || nothing ? <Head>Next steps</Head> : null}
+      {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
+        {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
+      {!!held.length && <Typography data-tq-summary-held={held.length} sx={LINE}>
+        {held.length === 1 ? "One step waits for your Approve, below." : `${held.length} steps wait for your Approve, below.`}</Typography>}
+      <OnYou items={onYou} />
+      {nothing && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
     </Box>
   );
 }
@@ -55,6 +65,8 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
   const { onYou } = nextSteps({ reviews, checklist, cards: false });
+  // ...the ask in one plain paragraph: what the thread wants (triage's reading), never its labelled lines
+  const ask = readingOf(task?.ThreadJson)?.asking || "";
   const send = async () => {
     const words = text.trim();
     if (!words || busy) return;
@@ -64,14 +76,15 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
     finally { setBusy(false); }
   };
   return (
-    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5, mt: 1 }}>
-      <ThreadReading reading={task?.ThreadJson} mails={mails} variant="chat" />
-      <Box sx={{ px: 1.5, pb: 1 }}>
-        {!!why && <><Typography component="span" sx={HEAD}>What I did</Typography><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
-        {(cards || onYou.length) ? <><Typography component="span" sx={HEAD}>Next steps</Typography>{cards}<OnYou items={onYou} /></> : null}
+    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", mt: 1 }}>
+      <Box sx={{ pb: 1 }}>
+        {!!ask && <><Head first>What this is about</Head><Typography data-tq-chat-ask="" sx={LINE}>{ask}</Typography></>}
+        {!!why && <><Head first={!ask}>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
+        {cards ? <Box><DraftHead />{cards}</Box> : null}
+        {onYou.length ? <><Head>Next steps</Head><OnYou items={onYou} /></> : null}
       </Box>
       {box && <Box component="form" onSubmit={(e) => { e.preventDefault(); send(); }}
-        sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, px: 1, py: 0.75, borderTop: `1px solid ${BORDER}` }}>
+        sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff" }}>
         <Box component="textarea" data-tq-no-agent-box="" rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder="Tell me what's wrong, or ask about anything here…"

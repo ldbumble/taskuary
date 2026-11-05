@@ -2785,7 +2785,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {/* WHAT THE DRAFT ANSWERS, IN ONE LINE (the task-view cleanup, owner-approved 2026-10-25 - it replaces the 2026-10-16 condensed
               rows here): "Answering <who>: <their words>", and the line opens the whole conversation in From. Four rows of the
               conversation over the draft were the same messages From shows beside it, said a second time. */}
-          {closeGroup && answering && <Box component="button" type="button" data-tq-answering="" onClick={seeWholeConversation}
+          {closeGroup && answering && !inChat && <Box component="button" type="button" data-tq-answering="" onClick={seeWholeConversation}
             title="Read the whole conversation in From"
             sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0,
               cursor: "pointer", p: 0, mb: 1, fontSize: 12.5, color: FAINT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",

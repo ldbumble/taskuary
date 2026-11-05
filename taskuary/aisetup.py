@@ -250,10 +250,7 @@ def collect(store, tid: int, reply: str) -> str:
             if _secretish(key):
                 note(store, tid, f'✗ Not saved by the agent: {labels.get(key) or key} is yours to paste into its field on the card.')
                 continue
-            row = store.get_connector(cid) or {}
-            try: cfg = json.loads(row.get('ConfigJson') or '{}')
-            except ValueError: cfg = {}
-            store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**cfg, key: value})}, SETUP_ACTOR)
+            store.merge_connector_config(cid, {key: value})       # its key alone: the owner's own fields stay as they saved them
             note(store, tid, f'✓ Saved on the card: {labels.get(key) or key}')
         elif verb == 'TEST': st['test'] = True
         elif verb == 'DONE': st['done'] = True

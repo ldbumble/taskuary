@@ -69,8 +69,8 @@ def google_callback(store, server: dict, code: str, state: str, error: str = Non
     if not j.get('refresh_token'): return False, 'Google returned no refresh token - nothing was changed.'
     granted = str(j.get('scope') or '')
     if f['on'] and DRIVE_FILE not in granted.split(): return False, 'Google did not grant file access - the box for it was left unticked. Nothing was changed.'
-    cfg.update({'google_refresh_token': j['refresh_token'], 'allow_files': f['on'], 'google_scope': granted})
-    store.save_connector({'ConnectorId': f['cid'], 'ConfigJson': json.dumps(cfg)}, 'owner')
+    # the sign-in's own keys merged over the card as it is NOW, not the copy read before Google answered (merge_config)
+    store.merge_connector_config(f['cid'], {'google_refresh_token': j['refresh_token'], 'allow_files': f['on'], 'google_scope': granted})
     store.audit('connector', f['cid'], 'google_files', 'owner', detail={'on': f['on'], 'scope': granted})
     from . import sharing
     sharing._CACHE.clear()

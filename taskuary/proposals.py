@@ -531,9 +531,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
             if c.get('connector'):
                 conn = store.get_connector_by_type(c['connector'])
                 if not conn: raise RuntimeError(f"no {c['connector']} connector to change")
-                cfg = json.loads(conn.get('ConfigJson') or '{}')
-                cfg[c['name']] = c['value']
-                store.save_connector({**dict(conn), 'ConfigJson': json.dumps(cfg)}, actor)
+                store.merge_connector_config(conn['ConnectorId'], {c['name']: c['value']})
                 done.append(f"{c['connector']}.{c['name']} = {c['value']}")
             else:
                 store.set_setting(c['name'], str(c['value']), actor)

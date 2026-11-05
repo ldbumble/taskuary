@@ -172,7 +172,7 @@ def test_asana(store, c) -> str:
     if not ws: raise RuntimeError('the token reaches no workspace')
     cfg = _cfg(c)
     if not cfg.get('workspace_gid'):     # remembered so the poller never guesses
-        store.set_connector_config(c['ConnectorId'], {**cfg, 'workspace_gid': ws[0]['gid']})
+        store.merge_connector_config(c['ConnectorId'], {'workspace_gid': ws[0]['gid']})
     _seed_source(store, c, ws[0].get('name') or 'Asana')
     return f"authenticated as {me.get('name')} in {ws[0].get('name')} - tasks assigned to you flow in on the next sync"
 
@@ -214,7 +214,7 @@ def test_monday(store, c) -> str:
     me = _monday(c, '{ me { id name } }')['me']
     cfg = _cfg(c)
     if str(cfg.get('me_id') or '') != str(me['id']):     # who "assigned to you" means, kept local
-        store.set_connector_config(c['ConnectorId'], {**cfg, 'me_id': str(me['id'])})
+        store.merge_connector_config(c['ConnectorId'], {'me_id': str(me['id'])})
     _seed_source(store, c, me.get('name') or 'Monday')
     return f"authenticated as {me.get('name')} - items assigned to you flow in on the next sync"
 
@@ -282,7 +282,7 @@ def test_clickup(store, c) -> str:
     cfg = _cfg(c)
     # remembered so the poller never guesses who "me" is or which Workspace to walk
     if str(cfg.get('user_id') or '') != str(me.get('id')) or not cfg.get('team_id'):
-        store.set_connector_config(c['ConnectorId'], {**cfg, 'user_id': str(me.get('id')), 'team_id': str(teams[0]['id'])})
+        store.merge_connector_config(c['ConnectorId'], {'user_id': str(me.get('id')), 'team_id': str(teams[0]['id'])})
     _seed_source(store, c, teams[0].get('name') or 'ClickUp')
     return (f"authenticated as {me.get('username') or me.get('email')} in {teams[0].get('name')} - "
             'tasks assigned to you flow in on the next sync')

@@ -373,7 +373,7 @@ def save_settings(store, c, actor: str = 'owner', **kw) -> dict:
     try: cfg = json.loads(c.get('ConfigJson') or '{}')
     except ValueError: cfg = {}
     cfg = {**(cfg if isinstance(cfg, dict) else {}), **kw}
-    store.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps(cfg)}, actor)
+    store.merge_connector_config(c['ConnectorId'], kw)
     return settings({'ConfigJson': json.dumps(cfg)})
 
 

@@ -7517,9 +7517,12 @@ def chatgpt_poll(cid: int, body: dict):
         logger.warning(f'chatgpt sign-in poll failed: {e!r}')
         return failed(f'the answer from OpenAI could not be read ({type(e).__name__})')
     if t.get('pending'): return {'status': 'pending'}
-    cfg = {**cfg, 'auth': 'user', 'client_id': t['client_id'], 'host_id': t['host_id'], 'account': t['email'], 'name': t['name'],
-           'sub': t['sub'], 'granted_scope': t['scope']}
-    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    # the sign-in's own keys merged over the card as it is NOW: the copy read before OpenAI answered is not written back (merge_config)
+    signed = {'auth': 'user', 'client_id': t['client_id'], 'host_id': t['host_id'], 'account': t['email'], 'name': t['name'],
+              'sub': t['sub'], 'granted_scope': t['scope']}
+    cfg = {**cfg, **signed}
+    store.save_connector({'ConnectorId': cid, 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    store.merge_connector_config(cid, signed)
     store.audit('connector', cid, 'chatgpt_signin', ACTOR, detail={'account': t['email']})
     store.touch_connector(cid)                                  # the last failure is over
     # ...and with no brain chosen, the one just signed in IS the brain, now - "Pick it as a brain under Settings" sent a
@@ -7583,12 +7586,13 @@ def ms_signin(cid: int, body: MsSignInBody | None = None):
         if why: raise HTTPException(409, why[0].upper() + why[1:])
         typed = {k: v for k, v in typed.items() if v}
         cfg_.update(typed)
-        store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**json.loads(c.get('ConfigJson') or '{}'), **typed})}, ACTOR)
+        store.merge_connector_config(cid, typed)            # the typed ids alone, over the card as it is after the app check
     # a tenant that refused the people scopes once is not asked for them on every sign-in (_ms_retry_base)
     scope = msauth.scopes_for(c['Type'], bool(cfg_.get('allow_files')), people=not cfg_.get('people_refused'))
     for k, v in list(_MSFLOWS.items()):
         if time.time() - v.get('at', 0) > 1800: _MSFLOWS.pop(k, None)
-    flow, f = _secrets.token_urlsafe(12), {'cid': cid, 'kind': c['Type'], 'cfg': cfg_, 'at': time.time()}
+    # `was`: the card as read here - what the sign-in itself changes (the files choice, a refused scope) is told from it at the finish
+    flow, f = _secrets.token_urlsafe(12), {'cid': cid, 'kind': c['Type'], 'cfg': cfg_, 'at': time.time(), 'was': json.loads(c.get('ConfigJson') or '{}')}
     if not body.code:
         redirect = msauth.redirect_uri(cfg['server'].get('port'))
         try: b = msauth.browser_start(cfg_, scope, redirect)
@@ -7733,9 +7737,14 @@ def _ms_finish(cid, f, t) -> dict:
     if other:
         return {'status': 'error', 'detail': f"{who['account']} is already signed in on the {other['Name']} card - sign in here "
                                              "with a different Microsoft account (choose Use another account on Microsoft's page)"}
-    cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name'],
-           **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
-    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    # the sign-in's own keys - and what the round itself changed (the files choice, a refused scope) - merged over the card as it is
+    # NOW: f['cfg'] is the card as it was when the sign-in STARTED, minutes ago, and writing it back undid every field saved since
+    was = f.get('was') or {}
+    signed = {**{k: v for k, v in f['cfg'].items() if was.get(k) != v}, 'auth': 'user', 'account': who['account'],
+              'name': who['name'], **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
+    cfg = {**f['cfg'], **signed}
+    store.save_connector({'ConnectorId': cid, 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
+    store.merge_connector_config(cid, signed)
     # the account signed in is what the card reads: its mailbox, or for a Teams card its chats (the UPN a source names)
     chan = 'teams' if kind == 'teams' else 'email'
     had = next((s for s in store.list_sources(active_only=False) if s['Channel'] == chan
@@ -8297,9 +8306,8 @@ def teller_enroll(cid: int, body: TellerEnrollBody):
     c = store.get_connector(cid)
     if not c or c['Type'] != 'teller': raise HTTPException(404, 'not a Teller connector')
     if not body.access_token.strip(): raise HTTPException(422, 'no access token in the enrolment')
-    conf = json.loads(c.get('ConfigJson') or '{}')
-    conf.update({k: v for k, v in (('enrollment_id', body.enrollment_id), ('institution', body.institution)) if v})
-    store.save_connector({'ConnectorId': cid, 'Secret': body.access_token.strip(), 'ConfigJson': json.dumps(conf), 'Active': True}, ACTOR)
+    store.save_connector({'ConnectorId': cid, 'Secret': body.access_token.strip(), 'Active': True}, ACTOR)
+    store.merge_connector_config(cid, {k: v for k, v in (('enrollment_id', body.enrollment_id), ('institution', body.institution)) if v})
     store.audit('connector', cid, 'teller_enrolled', ACTOR, detail={'institution': body.institution or ''})
     return {'ok': True}
 

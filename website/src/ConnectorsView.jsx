@@ -2316,13 +2316,15 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const mine = sources.filter((s) => s.ConnectorId === conn.ConnectorId);   // owned, never channel-shared
 
   // THE CREDENTIALS SAVE THEMSELVES (the owner, 2026-11-05): each box once its typing pauses, the key when its box is left (useBoxesSave);
-  // the next step is Test. A saved key that discovers (GitHub) says what it found, or why the service refused it, here by the boxes
+  // the next step is Test, and it opens once the key is saved - never on a box's own pause, which would fold the boxes away mid-typing.
+  // A saved key that discovers (GitHub) says what it found, or why the service refused it, here by the boxes, and stays on them
   // ...never on the first run's simple card (`simple`), whose one Connect saves, tests and starts reading together
   const boxes = useBoxesSave({ off: simple, cid: conn.ConnectorId, cfg, setCfg, base: cfgSaved, rebase: setCfgSaved, secret, setSecret,
-    writeOnly: conn.WriteOnlyKeys || [], onSaved: (data) => {
+    writeOnly: conn.WriteOnlyKeys || [], onSaved: (data, keys) => {
       const d = data?.discovery;
       setTest(null); setFresh(!d?.error); setSaveSaid(d?.error ? { ok: false, detail: d.error } : null); reload();
       if (d && !d.error) setTest({ ok: true, detail: `authenticated as ${d.login} · ${d.repos} repos discovered · ${d.added} sources added · repo map written to SOUL.md` });
+      if (keys.includes("Secret") && !d?.error) setStep(1);
     } });
   const [fresh, setFresh] = useState(false);     // saved since the last Test: its old failure is not said under the new save
   const runTest = async () => {
@@ -2678,7 +2680,9 @@ function MssqlConnection({ conn, drivers, reload }) {
   const [busy, setBusy] = useState("");
   const sqlAuth = (cfg.auth || "windows") === "sql";
   // each box saves itself (useBoxesSave); a save switches the card on, as its Save did - the card has no switch of its own
-  const boxes = useBoxesSave({ cid: conn.ConnectorId, cfg, setCfg, base, rebase: setBase, secret, setSecret, extra: { Active: true }, onSaved: () => reload() });
+  // ...and its password saved, Test opens (the owner, 2026-11-05)
+  const boxes = useBoxesSave({ cid: conn.ConnectorId, cfg, setCfg, base, rebase: setBase, secret, setSecret, extra: { Active: true },
+    onSaved: (data, keys) => { reload(); if (keys.includes("Secret")) setStep(1); } });
   const box = (k) => ({ onBlur: boxes.flush, InputProps: { endAdornment: boxes.tick(k) } });
   const runTest = async () => {
     setBusy("test");

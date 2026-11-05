@@ -465,14 +465,18 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
 
 
 MODEL_SETTINGS = ('assistant_model', 'concierge_model')
+MODEL_KEYS = ('model', 'strong_model')            # what aidefaults.apply writes on an AI card
 
 
 def _models(store, cid: int, put: dict = None) -> dict:
     """The models an AI card's jobs run on - its own model box, the Assistant's and the general agent's - read, or put back."""
     if put is None: return {'card': (store.get_connector(cid) or {}).get('ConfigJson') or '{}', **{k: store.get_setting(k) or '' for k in MODEL_SETTINGS}}
+    # ...only the model keys the jobs' pick wrote: the whole card put back from its earlier read undid a field saved in between
     if (store.get_connector(cid) or {}).get('ConfigJson') != put['card']:
-        try: store.set_connector_config(cid, json.loads(put['card']))
-        except ValueError: pass
+        try: was, now = json.loads(put['card']) or {}, json.loads((store.get_connector(cid) or {}).get('ConfigJson') or '{}') or {}
+        except ValueError: was = now = {}
+        back = {k: was.get(k) for k in MODEL_KEYS if was.get(k) != now.get(k)}
+        if back: store.merge_connector_config(cid, back)
     for k in MODEL_SETTINGS:
         if (store.get_setting(k) or '') != put[k]: store.set_setting(k, put[k], 'owner')
     return put

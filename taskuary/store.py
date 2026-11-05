@@ -5826,6 +5826,13 @@ class SQLiteStore:
                 return new
             except BaseException:
                 self.cx.rollback(); raise
+    def merge_connector_config(self, cid, patch: dict) -> bool:
+        """THE KEYS A POLL OR A JOB CHANGED, merged over the config as it is now (merge_config) - never the whole config from its own
+        earlier read, which put back whatever the owner's field saved in between (the owner, 2026-11-05: every field saves itself).
+        None removes a key. False when the card is gone."""
+        merged = self.merge_config('connector', cid, patch) is not None
+        self._processing_ignored_writes += 1
+        return merged
     def patch_connector_poll_state(self, connector_id, *, config_set=None, config_remove=(),
                                    expect_fields=None, expect_config=None):
         """Atomically merge only poll-owned config keys while checking mailbox identity."""

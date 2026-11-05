@@ -364,7 +364,7 @@ def poll(store, c, sources: list, llm=None, file_only=False) -> int:
         cursor = cfg.get('imessage_rowid')
         if cursor is None:
             cursor = initial_cursor(cx, cfg.get('lookback_days'))
-            store.set_connector_config(c['ConnectorId'], {**cfg, 'imessage_rowid': cursor})
+            store.merge_connector_config(c['ConnectorId'], {'imessage_rowid': cursor})
             cfg = {**cfg, 'imessage_rowid': cursor}
             if not cfg.get('lookback_days'): return 0
         sql = _select(cols)
@@ -380,7 +380,7 @@ def poll(store, c, sources: list, llm=None, file_only=False) -> int:
                     logger.warning(f'imessage: row {row["rowid"]} unreadable, skipped ({type(e).__name__})'); continue
                 n += _ingest(store, m, want, llm, file_only, ingest_message, ingest_own_message)
             cursor = rows[-1]['rowid']
-            store.set_connector_config(c['ConnectorId'], {**cfg, 'imessage_rowid': cursor})
+            store.merge_connector_config(c['ConnectorId'], {'imessage_rowid': cursor})
             if len(rows) < POLL_LIMIT: break
     finally: cx.close()
     return n

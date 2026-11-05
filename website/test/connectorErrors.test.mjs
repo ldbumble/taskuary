@@ -18,7 +18,9 @@ test("what a save says is drawn by the boxes, and a refused key does not move on
   const save = src.slice(at, src.indexOf("const [fresh, setFresh]", at));
   assert.match(save, /setSaveSaid\(d\?\.error \? \{ ok: false, detail: d\.error \} : null\)/);
   assert.doesNotMatch(save, /setTest\(\{ ok: false/, "a save's failure is not written into the Test step");
-  assert.doesNotMatch(save, /setStep\(/, "a box saving itself never moves the card on a step");
+  // a box's own pause never moves the card on a step; the key saved opens Test, unless the service refused it (the owner, 2026-11-05)
+  assert.equal((save.match(/setStep\(/g) || []).length, 1);
+  assert.match(save, /if \(keys\.includes\("Secret"\) && !d\?\.error\) setStep\(1\);/);
   // a refused save says the server's sentence, or a plain one, in the box's own tick (connectorDraft.whyNot)
   assert.match(readFileSync(new URL("../src/connectorDraft.js", import.meta.url), "utf8"), /export const whyNot = \(e\) => String\(e\?\.response\?\.data\?\.detail/);
   assert.match(src, /onBlur=\{boxes\.flush\} \/>\)\}<\/Box><\/Collapse>\s*<\/>\}\s*<TestLine test=\{saveSaid\} mt=\{0\} \/>/, "right under the boxes");

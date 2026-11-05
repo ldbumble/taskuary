@@ -145,7 +145,10 @@
 .tq-aui-chat .tq-aui-agent > .tq-aui-role { padding-top: 0; margin-bottom: 4px; }
 .tq-aui-chat .tq-aui-user { justify-items: end; }
 .tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: #e7efe6; border-color: #cfdccd; }
-.tq-aui-chat .tq-aui-arrived { justify-self: start; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #f1eee8; border-radius: 13px; }
+.tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #fff; border: 1px solid #dfdbd3; border-radius: 13px; }
+.tq-aui-chat .tq-aui-brief { justify-items: end; }
+.tq-aui-chat .tq-aui-arrived-head { color: #6b6559; font-weight: 600; font-size: 11.5px; }
+.tq-aui-chat .tq-aui-user-head { justify-self: end; color: #6b6559; font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
 /* ...THE CHAT TAKES THE ROOM (the owner, 2026-11-05: "let's make the ui components as minimal as possible to leave space for that chat"): its box
    sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),
    no line explaining the two Sends */

@@ -373,10 +373,11 @@ def shown_history(store, tid: int) -> list:
     each answer with the `summary` filed after it."""
     from .triage import own_words
     rows = chat_rows(store, tid, run=True); msgs = _as_messages(rows)
-    mail = store._rows(JOINED, (tid,)) if any(m.get('brief') for m in msgs[1:]) else []
+    # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
+    mail = store._rows(JOINED, (tid,)) if any(m.get('brief') for m in msgs) else []
     for i, (m, c) in enumerate(zip(msgs, rows)):
-        if not i or not m.get('brief'): continue
-        got = [x for x in mail if str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
+        if not m.get('brief'): continue
+        got = [x for x in mail if (not i or str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt'])) and str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
         if got: m['mail'] = [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
                               'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
                               'words': own_words(str(x.get('BodyText') or '')).strip()[:3000] or x.get('Subject') or ''} for x in got[-5:]]

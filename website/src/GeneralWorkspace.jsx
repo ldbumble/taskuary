@@ -188,6 +188,8 @@ const CameIn = ({ mail }) => mail.map((x, i) => (
 // a agent thinking"): triage's reading opens it, Taskuary's instructions are not drawn, and the mail that woke a turn is a timestamped line
 // over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
 const ChatCtx = React.createContext(false);
+// a database stamp (UTC, "YYYY-MM-DD HH:MM:SS") as the ISO the turns' times are read from - one clock for the whole chat
+const utcIso = (s) => { const t = String(s || ""); return new Date(t.replace(" ", "T") + (/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? "" : "Z")).toISOString(); };
 const when = (at) => { const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" "); };
 // IT IS A CHAT (the owner, 2026-11-05: "show the taskuary stuff on left. the inputs on right meaning little email logo like the rail ... that
 // shows trigger says something emails came in from x and was sent to agent.. then as new one comes in another one on right side"): each mail that
@@ -202,7 +204,7 @@ const ChannelMark = ({ channel }) => {
 const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i) => (
   <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
     <span className="tq-aui-arrived-head"><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(utcIso(x.at)), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {

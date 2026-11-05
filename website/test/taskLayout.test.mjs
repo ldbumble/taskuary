@@ -72,8 +72,8 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   // ...(and in the three sections it is the third section, beside a live agent too as a slim tab - 2026-10-27)
   assert.match(src, /\{\(!sessionView \|\| threeUp\) && slotKeys\.includes\("close"\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/);
   // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")
-  assert.match(src, /\{!sessionView && hasRecord && !resultRest && \(/);
-  assert.match(src, /\{resultRest && !sessionView && <ResultSummary /);
+  assert.match(src, /\{!sessionView && hasRecord && !resultRest && !chatPane && \(/);
+  assert.match(src, /\{resultRest && !sessionView && !chatPane && <ResultSummary /);
 });
 
 // ...and the tab reads as a press (the owner, 2026-10-22: the line looked like plain grey text; 2026-10-26: "make it with arrow and more
@@ -176,7 +176,7 @@ test("Close out under a Result on a task nobody sent: no 'Nobody sent this one',
   // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
   assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
   assert.match(src, /coOn && co\.writeupAt === "closeout" && <WriteupBlock/);
-  assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest \? "record" : "top";/);
+  assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest && !chatPane \? "record" : "top";/);
   assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
   assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
   assert.match(src, /\{lineAt === "record" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);

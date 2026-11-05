@@ -3146,7 +3146,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* A TASK PUT AWAY SAYS SO (trust audit S3, 2026-10-28): opened before its day, nothing on it said Remind me was pressed */}
                       {remindWaiting(t) && <Typography data-tq-put-away="" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Put away until {remindDay(t.RemindAt)}</Typography>}
                       {threeUp && fromCards()}
-                      {t?.ThreadJson && <ThreadReading reading={t.ThreadJson} mails={storedMessages} variant="from" />}
+                      {/* ...no "What's going on" here (the owner, 2026-11-05: "it's useless ... just a mess"): What came in, the Conversation and
+                          the To do already say it - triage's reading opens the agent's chat only */}
                       {flow && fromConversation()}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
                       {(askBand || waitFor || detail?.offer) && <Part label="The ask" data-tq-ask="" data-tq-quoted={askQuoted ? "" : undefined}>

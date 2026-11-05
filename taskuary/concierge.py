@@ -4225,6 +4225,13 @@ def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
     if not t: raise ValueError('task not found')
     if t.get('Status') in ('done', 'dropped'): return {'status': t['Status'], 'closed': False, 'kept_open': []}
     kept = waiting_on_owner(store, tid)
+    # ...but an agent PARKED at its prompt is not work still going (the owner's ruling, 2026-11-05): on a chat task the session stays open
+    # after every turn, and Send and close never closed once an agent had run. The owner's press stops it - saved as Mark done saves it
+    # (close_task) - and closes; an agent still working keeps it open, and nothing closes a task on its own
+    from . import workerstate as ws
+    live = ws._live(tid)
+    parked = getattr(live, 'mode', '') == 'assistant' and getattr(live, 'busy', None) is False      # a chat agent at rest; a terminal never reads as one
+    if ws.LIVE_SESSION in kept and parked: kept = [k for k in kept if k != ws.LIVE_SESSION]
     if not kept: return {'status': 'done', 'closed': close_task(store, tid, actor), 'kept_open': []}
     said = '; '.join(kept)
     store.add_comment(tid, actor, 'human', f'Sent. Kept open: {said[0].upper()}{said[1:]}.')

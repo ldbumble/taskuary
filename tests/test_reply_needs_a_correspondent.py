@@ -40,7 +40,7 @@ class NoOneToAnswerTests(unittest.TestCase):
     def test_a_channel_that_cannot_CARRY_a_reply_still_drafts_one(self):
         """PW-237: a real person wrote it. Where the answer leaves from is a different question."""
         _tid, mid = self._message('github', FromEmail='dana@users.noreply.github.com')
-        with mock.patch.object(responder, 'write_draft', return_value='Thanks - looking now.') as drafted:
+        with mock.patch.object(responder, 'write_draft', side_effect=lambda st, t, rid, **k: st.update_review_draft(rid, 'Thanks - looking now.', None) or 'Thanks - looking now.') as drafted:
             r = self.c.post(f'/api/messages/{mid}/reply', json={'draft': True, 'ai': True})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertTrue(drafted.called, 'the draft is written; only sending is gated')

@@ -358,7 +358,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the developer, Friday')); self.assertIsNone(out.get('proposal'))
         told = lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"mention the Friday delivery\"}}"
         out = concierge.say(s, 'can you mention the Friday delivery in the response', key=f'review:{r}', llm=told)
-        self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'mention the Friday delivery'})
+        self.assertEqual(_verb(out['decision']), ('reply', 'mention the Friday delivery'))
         # a remark is not a decision
         out = concierge.say(s, 'who is Dana again?', key=f'review:{r}', llm=lambda *a, **k: 'Dana is the vendor contact on the export.')
         self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal'))

@@ -56,7 +56,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual((prop['kind'], prop['target'], prop['params']['kind']), ('task.create_from_message', m, 'coding'))
         self.assertIn('old fix did not stick', prop['params']['instructions'])
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.terminal.live_sessions', return_value=[]), \
-             mock.patch.object(server, 'dispatch_message', return_value={'taskId': t, 'ref': f'TQ-{t:04d}', 'dispatch': 'started'}) as dispatch:
+             mock.patch.object(server, 'dispatch_message', return_value={'taskId': t, 'ref': f'TQ-{t:04d}', 'dispatch': 'started', 'started': True}) as dispatch:
             ran = TestClient(server.app).post(f"/api/operations/{prop['id']}/execute", json={'version': prop['version']}).json()
         self.assertEqual(ran['status'], 'done'); self.assertEqual(dispatch.call_count, 1)
         # ...the introduction is the model's when there is one (PW-153); this walk has none, so the facts spoke

@@ -13,10 +13,10 @@ import io, os, re, struct, zlib
 from datetime import date
 from pathlib import Path
 
-from . import config
+from . import config, words
 
 MAX_BYTES, MAX_SIDE, MAX_PX = 2 * 1024 * 1024, 2000, 1_200_000
-NONE = ("There is no saved signature yet, so nothing was signed. Ask the owner to add one in Settings -> Your signature (draw it, or "
+NONE = (f"There is no saved signature yet, so nothing was signed. Ask the owner to add one in {words.name('replies')} - Your signature (draw it, or "
         "upload a picture of it), then sign again. Never draw, type or imitate a signature in its place.")
 NO_PYPDF = "Filling a PDF needs pypdf, which this install does not have - tell the owner: pip install pypdf"
 _PNG = b'\x89PNG\r\n\x1a\n'

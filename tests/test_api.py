@@ -1320,7 +1320,7 @@ class ApiTests(unittest.TestCase):
                                         'ConversationId': 'chat-fyi-ai', 'Subject': 'Team update',
                                         'FromName': 'Robin', 'BodyText': 'Taking today off.', 'Status': 'filed'})
         rid = c.post(f'/api/messages/{mid}/reply', json={'draft': False}).json()['reviewId']
-        with mock.patch.object(server.responder, 'draft_for_message', return_value='Feel better soon.') as draft:
+        with mock.patch.object(server.responder, 'draft_for_message', side_effect=lambda st, m, rid, **k: st.update_review_draft(rid, 'Feel better soon.', None) or 'Feel better soon.') as draft:
             out = c.post(f'/api/reviews/{rid}/draft').json()
         self.assertEqual(out['draft'], 'Feel better soon.')
         self.assertEqual(draft.call_args.args[2], rid)
@@ -1441,7 +1441,7 @@ class ApiTests(unittest.TestCase):
         tid = c.post('/api/tasks', json={'Title': 'an agent finished this', 'Kind': 'coding'}).json()['taskId']
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:REPLY1', 'Channel': 'email',
                                         'FromEmail': 'asker@corp.com', 'BodyText': 'is it fixed?', 'Status': 'routed'})
-        with mock.patch('taskuary.responder.write_draft', return_value='Fixed - deploys again tonight.') as wd:
+        with mock.patch('taskuary.responder.write_draft', side_effect=lambda st, t, rid, **k: st.update_review_draft(rid, 'Fixed - deploys again tonight.', None) or 'Fixed - deploys again tonight.') as wd:
             out = c.post(f'/api/messages/{mid}/reply', json={}).json()
         self.assertEqual(out['draft'], 'Fixed - deploys again tonight.')
         self.assertEqual(wd.call_args.args[2], out['reviewId'])
@@ -1459,7 +1459,7 @@ class ApiTests(unittest.TestCase):
                                         'FromName': 'J. D. Ortiz', 'ConversationId': 'telegram:-100123',
                                         'BodyText': 'It was just his demo. Ready to move over.', 'Status': 'filed'})
         tasks_before = len(server.store.list_tasks())
-        with mock.patch('taskuary.responder.draft_for_message', return_value='Got it - send it over.'):
+        with mock.patch('taskuary.responder.draft_for_message', side_effect=lambda st, m, rid, **k: st.update_review_draft(rid, 'Got it - send it over.', None) or 'Got it - send it over.'):
             out = c.post(f'/api/messages/{mid}/reply', json={}).json()
         self.assertIsNone(out['taskId'])
         self.assertEqual(len(server.store.list_tasks()), tasks_before)          # no task materialized

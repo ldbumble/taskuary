@@ -12,7 +12,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import ArrayObject, BooleanObject, DecodedStreamObject, DictionaryObject, FloatObject, NameObject, NumberObject, TextStringObject
-from taskuary import config, guard, handsign, server
+from taskuary import config, guard, handsign, server, words
 from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
@@ -123,7 +123,7 @@ class SigningASlip(Base):
 
     def test_with_no_saved_signature_it_signs_nothing_and_says_where_to_add_one(self):
         text, err = self.tool(attachment=self.att, fields={'child_name': 'Sam Doyle'}, sign={'field': 'parent_signature'})
-        self.assertIn('Settings -> Your signature', text); self.assertIn('Never draw', text)
+        self.assertIn(f"{words.name('replies')} - Your signature", text); self.assertIn('Never draw', text)
         self.assertEqual(list(self.home.rglob('*-signed.pdf')), [])
         self.assertEqual([a for a in self.s.list_task_artifacts(self.tid) if a.get('Kind') == 'shown'], [])
 

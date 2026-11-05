@@ -268,6 +268,10 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     if ok and p.get('action') == 'run_tool':
         p = {k: v for k, v in p.items() if k != 'image_path'}
         if why := picture_why(task_id, p): ok = False
+        elif p.get('image'):                     # ...kept as its name in the folder: an agent names it by its full path as often as not
+            from . import outputs
+            f = outputs.named(int(task_id), p['image'])
+            p = {**p, 'image': f.relative_to(outputs.folder(int(task_id))).as_posix()}
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})

@@ -821,18 +821,24 @@ GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
 _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever part of the work you can do yourself, do it, rather than "
            "handing it back. When the work calls for an act - an email, a post, a payment, a form, a report - set it up through Taskuary's "
            "own roads, done up to the one press that sends it; it shows under Next steps as what it is (the email with its Send, the post "
-           "as a post with its Post button, the held step with its Approve), and nothing goes before the owner presses:\n"
+           "as a post with its Post button, the form filled up to its last button), and nothing goes before the owner presses:\n"
            "- a reply or an email: propose_reply / propose_email, with any file it carries in `attach`\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
            "(the propose tool; with no tools, a line TASKUARY-PROPOSE {{...}}) - a post's words in `text` and its picture in `image` (a file "
            "in your task folder), not in a file beside it. {roads}\n"
-           "- a payment, booking or form on a website: fill it in your browser up to the last press; that press is held for the owner's "
-           "Approve\n"
+           "- a payment, booking or form on a website: fill it in your browser up to the last press, then run that press as usual - "
+           "Taskuary stops it, hands the real page to the owner to press themselves, and tells you when they have\n"
            "- a report, sheet or picture: make it in your task folder - it shows in the chat with your answer\n"
            "Never hand the owner a copy-and-paste job (\"paste this into LinkedIn\", \"post it yourself\") for a road that exists. Next steps "
            "may instead be the one question you need answered first, or a part that is the owner's to do - say why (no road reaches it: "
            "name the connection that would; or it is theirs to decide). When the work is an answer, a finding or a check, answer it "
-           "plainly: no act is owed.")
+           "plainly: no act is owed.\n"
+           "KEEP GOING WHEN A WAY FAILS. A failed tool, a site that blocks you, a file that will not open, an empty search is a reason to "
+           "try the next way, not to stop: another source, another tool, the browser instead of the API, the file read another way, a "
+           "narrower or wider search. Each time, ask what the failure told you and change one thing - never the same call again "
+           "unchanged. Hand it back only when the ways you can think of are used up, or the next one needs the owner (a sign-in, a "
+           "decision, money); then say in one or two plain lines what you tried, what stopped each, and the one thing that would "
+           "unblock it. A turn that quits at the first error, or calls a half-done job done, is the failure.")
 
 
 def roads(store) -> str:

@@ -356,9 +356,18 @@ def history(store, tid: int) -> list:
 # news, then Resume's words - and the second mail of a thread was readable only inside the folded "Taskuary's instructions". On the
 # pane a brief after the run's first turn carries the mail that JOINED the task between the turn before it and it, each by its sender.
 # Joined, not stored: a mail read in while the agent worked waits for triage, and is put on the task after the turn it arrived during
-JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM route r WHERE r.MessageId=m.MessageId AND r.TaskId=m.TaskId), '')) AS JoinedAt "
-          "FROM message m WHERE m.TaskId=? AND IFNULL(m.Direction,'in')<>'out' AND m.Status NOT IN ('context','history','skipped') "
+# ...the OWNER'S OWN reply on the thread too (Direction 'out', or a sent mail read as 'context'), marked `own`: the chat draws it as theirs, on
+# the right (the owner, 2026-11-05: "i saw you reply" - their answer sent outside Taskuary never showed in the chat at all)
+JOINED = ("SELECT m.*, MAX(m.CreatedAt, IFNULL((SELECT MAX(r.CreatedAt) FROM route r WHERE r.MessageId=m.MessageId AND r.TaskId=m.TaskId), '')) AS JoinedAt, "
+          "(IFNULL(m.Direction,'in')='out' OR m.Status='context') AS Own "
+          "FROM message m WHERE m.TaskId=? AND m.Status NOT IN ('history','skipped') "
           "AND IFNULL(m.Channel,'')<>'report' ORDER BY JoinedAt, m.MessageId")
+
+
+def owner_answered_last(store, tid: int) -> bool:
+    "The newest message on the task's thread is the owner's own: they answered it themselves, outside Taskuary."
+    rows = store._rows(JOINED, (tid,))
+    return bool(rows) and bool(rows[-1].get('Own'))
 def shown_history(store, tid: int) -> list:
     """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
     each answer with the `summary` filed after it."""
@@ -368,7 +377,8 @@ def shown_history(store, tid: int) -> list:
     for i, (m, c) in enumerate(zip(msgs, rows)):
         if not i or not m.get('brief'): continue
         got = [x for x in mail if str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
-        if got: m['mail'] = [{'who': x.get('FromName') or x.get('FromEmail') or '', 'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
+        if got: m['mail'] = [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
+                              'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
                               'words': own_words(str(x.get('BodyText') or '')).strip()[:3000] or x.get('Subject') or ''} for x in got[-5:]]
     # ...and each answer with the summary filed after it (SUMMARY_TYPE): the turn's three parts, drawn under it
     summ, last = {}, None
@@ -947,6 +957,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # THE AGENT NEVER CLOSES A CHAT TASK (the owner, 2026-11-05: "agent should never close once it's open until we hit close"): every
     # general task is told the owner ends it - Mark done, Send and close, Close with a note - never CHAT_LINE's closing marker
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
+    if not dock and owner_answered_last(store, tid): system = system + '\n\n' + selfclose.OWNER_ANSWERED_LINE
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
@@ -1694,7 +1705,8 @@ class GeneralSession:
         # manually is still a conversation after one answer. Enforce that boundary here,
         # even if a resumed model remembers an older close instruction and emits the marker.
         has_source = bool((self.store.task_detail(self.task_id) or {}).get('messages'))
-        # ...and a closing marker it writes anyway is read and dropped, never acted on: only the owner closes (2026-11-05)
+        # ...and a closing marker it writes anyway is read and dropped, never acted on: only the owner closes (2026-11-05) - even after the
+        # owner answered the thread themselves, the agent RECOMMENDS closing and the owner does it ("so i recommend close it")
         if closing is not None and has_source: logger.info(f'task {self.task_id}: its agent said it was done - the task stays open for the owner to close')
         return reply
 

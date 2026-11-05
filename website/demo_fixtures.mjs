@@ -68,6 +68,14 @@ for (const t of (out["/api/tasks"]?.data || [])) {
   if (r && r.ok) out["/api/tasks/detail"][t.TaskId] = await r.json();
   const a = await fetch(`${BASE}/api/tasks/${t.TaskId}/assistant`).catch(() => null);
   if (a && a.ok) out["/api/tasks/detail"][`${t.TaskId}:assistant`] = await a.json();
+  // ...and the pictures and PDFs its agent made, as data: addresses - the static demo has no server to fetch them from (taskOutputs.STATIC_OUTPUTS)
+  const box = out["/api/tasks/detail"][`${t.TaskId}:assistant`];
+  for (const o of (box?.outputs || []).filter((o) => /^(image\/|application\/pdf)/.test(o.content_type || "") && o.size < 400000)) {
+    const f = await fetch(BASE + o.url).catch(() => null);
+    if (!f || !f.ok) continue;
+    o.url = `data:${o.content_type};base64,${Buffer.from(await f.arrayBuffer()).toString("base64")}`;
+    (out["/api/task-outputs"] ||= {})[`${t.TaskId}/${o.path}`] = o.url;
+  }
   const diff = await fetch(`${BASE}/api/tasks/${t.TaskId}/diff`).catch(() => null);
   if (diff && diff.ok) out[`/api/tasks/${t.TaskId}/diff`] = await diff.json();
 }

@@ -375,17 +375,39 @@ def shown_history(store, tid: int) -> list:
     rows = chat_rows(store, tid, run=True); msgs = _as_messages(rows)
     # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
     mail = store._rows(JOINED, (tid,))
-    # `at`: when it CAME IN - its CreatedAt, stamped by this database in UTC as the turns are, so the page reads both alike (the owner,
-    # 2026-11-05: "time is wrong": a sender's SentAt in UTC was read as local, 7:24 AM said 12:24 PM). `words`: the text Taskuary kept of it
+    # `at`: when it was sent, in this server's zone like every stamp here (store.norm_stamp) - the page reads it through the zone setting.
+    # `words`: the text Taskuary kept of it
     # (OwnText - no "sent from outside" banner, no quoted history), else its own words read from the body
     def shown(got): return [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
-                             'channel': x.get('Channel') or '', 'at': x.get('CreatedAt') or x.get('SentAt'),
+                             'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
                              'words': (str(x.get('OwnText') or '').strip() or own_words(str(x.get('BodyText') or '')).strip())[:3000] or x.get('Subject') or ''}
                             for x in got[-5:]]
+    placed = set()
     for i, (m, c) in enumerate(zip(msgs, rows)):
         if not m.get('brief'): continue
         got = [x for x in mail if (not i or str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt'])) and str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
-        if got: m['mail'] = shown(got)
+        if got: m['mail'] = shown(got); placed.update(x['MessageId'] for x in got)
+    # ...and NONE IS LOST (the owner, 2026-11-05: "There was one at 12:58pm but then another one at 12:58 as well. i only see one input"): a
+    # mail that came in while the agent was at work falls between a brief and its answer - it joins the next brief, or stands at the foot as
+    # an input of its own until a turn answers it
+    first_turn = str(rows[0].get('CreatedAt')) if rows else ''
+    loose = [x for x in mail if x['MessageId'] not in placed and str(x['JoinedAt']) > first_turn]
+    # ...right above the FIRST entry after it: a brief takes it into its own mail; an answer (a re-think woken without a brief of its own) gets
+    # it as the input drawn over it - two answers in a row read as a restart, with the mail that woke the second nowhere
+    # ...the turn it woke is the next BRIEF after it (a re-think starts on its own brief once the turn it came in under ends); only with no
+    # brief after it does it stand over the next answer, else at the foot
+    before = {}
+    for x in loose:
+        brief = next((i for i, c in enumerate(rows) if msgs[i].get('brief') and str(c.get('CreatedAt')) >= str(x['JoinedAt'])), None)
+        if brief is not None: msgs[brief]['mail'] = (msgs[brief].get('mail') or []) + shown([x]); continue
+        at = next((i for i, c in enumerate(rows) if str(c.get('CreatedAt')) >= str(x['JoinedAt'])), None)
+        before.setdefault(at, []).append(x)
+    for at in sorted(before, key=lambda k: -1 if k is None else k, reverse=True):
+        got = before[at]
+        item = {'id': f'came-in-{got[0]["MessageId"]}', 'role': 'user', 'content': [{'type': 'text', 'text': ''}], 'brief': True,
+                'createdAt': got[-1].get('JoinedAt') or got[-1].get('CreatedAt'), 'mail': shown(got)}
+        if at is None: msgs.append(item)
+        else: msgs.insert(at, item)
     # INPUT FIRST (the owner, 2026-11-05: "input should always be first?"): a run that opens on an answer - a conversation picked back up -
     # opens on the mail that started the task, drawn above that answer as its trigger
     if msgs and not msgs[0].get('brief') and msgs[0].get('role') == 'assistant':
@@ -1701,6 +1723,13 @@ class GeneralSession:
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         if summ:
             take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
+            # ...and WHICH draft this turn left - its id, never its words: what goes to the sender lives in the draft alone (2026-11-04). Once a
+            # newer entry comes, the turn is history and that draft stays in it read-only (the owner, 2026-11-05: "it's there but no longer
+            # clickable. it was a draft that is part of the history of the chat")
+            try:
+                rv = self.store.pending_review(self.task_id)
+                if rv and str(rv.get('DraftText') or '').strip(): summ['drafted'] = [{'review': int(rv['ReviewId'])}]
+            except Exception as e: logger.debug(f'task {self.task_id}: the turn draft id was not kept with it - {e}')
             self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
             if 'on_you' in summ: self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now

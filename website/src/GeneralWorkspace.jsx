@@ -53,7 +53,7 @@ import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary from "./AgentSummary.jsx";
 import { foldedSummaries, lastAnswerSummed } from "./agentSummary.js";
-import { dayLabel, fmtTime12 } from "./dates.js";
+import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
@@ -71,7 +71,9 @@ const initial = (messages) => {
   return (messages || []).map((m) => {
     const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id) } : {}) };
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
-      createdAt: m.createdAt ? new Date(String(m.createdAt).replace(" ", "T") + (String(m.createdAt).includes("Z") ? "" : "Z")) : undefined };
+      // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
+      // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
+      createdAt: m.createdAt ? (String(m.createdAt).includes("Z") ? new Date(m.createdAt) : asUtc(m.createdAt)) : undefined };
   });
 };
 
@@ -188,9 +190,12 @@ const CameIn = ({ mail }) => mail.map((x, i) => (
 // a agent thinking"): triage's reading opens it, Taskuary's instructions are not drawn, and the mail that woke a turn is a timestamped line
 // over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
 const ChatCtx = React.createContext(false);
-// a database stamp (UTC, "YYYY-MM-DD HH:MM:SS") as the ISO the turns' times are read from - one clock for the whole chat
-const utcIso = (s) => { const t = String(s || ""); return new Date(t.replace(" ", "T") + (/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? "" : "Z")).toISOString(); };
-const when = (at) => { const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" "); };
+
+const when = (at) => {
+  if (at instanceof Date) { const y = at.getFullYear(), p = (n) => String(n).padStart(2, "0");
+    at = `${y}-${p(at.getMonth() + 1)}-${p(at.getDate())} ${p(at.getHours())}:${p(at.getMinutes())}:${p(at.getSeconds())}`; }
+  const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" ");
+};
 // IT IS A CHAT (the owner, 2026-11-05: "show the taskuary stuff on left. the inputs on right meaning little email logo like the rail ... that
 // shows trigger says something emails came in from x and was sent to agent.. then as new one comes in another one on right side"): each mail that
 // started or woke a turn is a prompt on the RIGHT - its channel's mark, who, when - with the answer it woke under it on the left. The owner's own
@@ -204,7 +209,7 @@ const ChannelMark = ({ channel }) => {
 const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i) => (
   <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
     <span className="tq-aui-arrived-head"><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(utcIso(x.at)), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {
@@ -215,12 +220,12 @@ const UserMessage = () => {
   const words = useAuiState((s) => textOf(s.message));
   if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} agent={agent} /></MessagePrimitive.Root>
     : words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
-      <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[at && when(new Date(at).toISOString()), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+      <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[at && when(new Date(at)), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
       <span className="tq-aui-arrived-words">{words}</span></div></MessagePrimitive.Root> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
   if (chat) return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
-      <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{at ? ` · ${when(new Date(at).toISOString())}` : ""}</div>
+      <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{at ? ` · ${when(new Date(at))}` : ""}</div>
       <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
     </MessagePrimitive.Root>);
   return brief ? (
@@ -283,11 +288,12 @@ const RanFor = () => {
   if (!t || Number.isNaN(+t)) return null;
   const ran = before ? +t - +new Date(before) : 0;
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    · {when(t.toISOString())}{ran > 0 && ran < 6 * 3600 * 1000 ? ` · ran ${tookFor(ran)}` : ""}</span>;
+    · {when(t)}{ran > 0 && ran < 6 * 3600 * 1000 ? ` · ran ${tookFor(ran)}` : ""}</span>;
 };
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);
   const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
+  const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id);   // the turn is the chat's last entry: it carries its card
   const { rest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
@@ -298,6 +304,8 @@ const AssistantMessage = () => {
         <MessagePrimitive.Parts components={{ Text: chat && custom?.summary ? Nothing : AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
         {/* ...and where the chat is the task's home, the newest one's Next steps holds the draft cards (`next`, Task 4.2) */}
+        {work && !custom?.summary && newest && work.next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
+          <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
           acts={work.acts} next={custom.folded ? null : work.next} />}
       </div>
@@ -660,6 +668,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     const c = runtime.thread.composer, w = c.getState().text.trim();
     if (!w || answering.current) return;
     answering.current = true; setAskErr(""); c.setText("");
+    // ...drawn at once at the foot as the owner's (the owner, 2026-11-05: "send it messages and it did not appear right away")
+    const id = `held-${Date.now()}`, after = (messages || []).filter((m) => m?.role === "user").length;
+    setHeld((h) => [...h, { id, text: w, after }]);
     Promise.resolve(onAnswer?.(w)).catch((x) => { c.setText(w); setAskErr(errText(x)); }).finally(() => { answering.current = false; });
   };
   /* TALK WHILE IT WORKS (the owner's stress run, 2026-11-05): Enter while the turn runs put a newline in the box and the line never left -
@@ -739,7 +750,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           </ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: what Close out held, under the thread (Task 4.2) */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
-          {!dock && nextAt?.next && !summed && !working && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
+          {!dock && !chat && nextAt?.next && !summed && !working && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
               whose press opens Close out at it - working or not, since the agent saves it mid-turn */}

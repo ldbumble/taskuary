@@ -43,7 +43,9 @@ def test_agent_md_no_longer_tells_a_general_agent_to_stop_hunting_wait_or_close(
 
 
 def test_the_windows_are_large():
-    assert general.MAX_CONTEXT >= 200_000 and general.MAX_REPLY_TOKENS >= 8_000 and general.DOCK_REPLY_TOKENS >= 3_000
+    # lean by default, the rest on ask (the owner, 2026-11-05): the brief stays small; answers have room
+    assert general.MAX_CONTEXT <= 40_000 and 'reads any mail in full' in general.READ_WHOLE
+    assert general.MAX_REPLY_TOKENS >= 8_000 and general.DOCK_REPLY_TOKENS >= 3_000
     assert general.WAIT_TURN is None
 
 

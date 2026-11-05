@@ -88,12 +88,12 @@ EXTERNAL_WALK = (
     "automation that has to run on a schedule with nobody watching is exactly the sort of thing to "
     "name now rather than at the end.")
 SCROLLBACK = 200_000
-# ROOM TO READ (the owner, 2026-11-05: "is there hard coded things in the agent workings?"): 24,000 characters, twelve mails of 3,000 and
-# thirty turns of 4,000 were sized for small API windows, and a CLI model with a large one was handed a third of a long thread. What still
-# has to be cut is said, with how to read it whole (READ_WHOLE) - the model chooses what to open
-MAX_CONTEXT = 200_000
-SOURCE_MAILS, SOURCE_CHARS = 40, 12_000
-TURNS, TURN_CHARS = 200, 20_000
+# LEAN BY DEFAULT, THE REST ON ASK (the owner, 2026-11-05: "in general we should limit the amount of text as possible but it can search
+# the full context if it needs"): the brief carries the newest mails and turns, the older ones compacted to a line each, and every cut
+# says how to read it whole (READ_WHOLE) - the model opens what it needs instead of being handed everything
+MAX_CONTEXT = 30_000
+SOURCE_MAILS, SOURCE_CHARS = 8, 4_000
+TURNS, TURN_CHARS = 30, 4_000
 READ_WHOLE = 'read_message (or `taskuary --message ID`) reads any mail in full, search_messages (`taskuary --search`) finds the rest'
 OWNER_ASK_CHARS = 2_000          # the owner's words at the head of the prompt (_prompt): the whole of them, short of a pasted essay
 MAX_REPLY_TOKENS = 8_000
@@ -1239,6 +1239,7 @@ class GeneralSession:
         self.spoke = False                   # a turn of this session has ended: before one, a session being opened is not an answer
         self.rows, self.cols = 32, 110
         self._input, self._lock = '', threading.Lock()
+        self._waiting, self._wlock = [], threading.Lock()     # the owner's lines waiting for the turn ahead (send_prompt: taken together)
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
         from . import continuity
@@ -1431,13 +1432,33 @@ class GeneralSession:
         text = str(text or '').strip()
         if not text: raise ValueError('empty message')
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        # LINES TYPED WHILE IT WORKS ARE ONE TURN (the owner, 2026-11-05: "either or what the model decides if it's clarification"): each
+        # waits here; the first to get the turn files them all and the model reads them together - a later one may correct an earlier one.
+        # The others find theirs already taken and end quietly: the turn that took them answers for them.
+        mine = object() if as_owner and not brief and not kept else None
+        if mine is not None:
+            with self._wlock: self._waiting.append((mine, text))
         if not self._take(WAIT_TURN, cancel):
+            if mine is not None:
+                with self._wlock: self._waiting = [w for w in self._waiting if w[0] is not mine]
             # ...it gave up only because the session ended under it (the caller's 'has ended' road starts a fresh one) or was cancelled
             if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
             raise RuntimeError('the assistant was still answering the previous question when this one was cancelled - send it again.')
         # ...it idled out while this waited for the lock (idle_out): the caller's 'has ended' road starts it again (server.assistant_stream)
         if not self.alive:
+            if mine is not None:
+                with self._wlock: self._waiting = [w for w in self._waiting if w[0] is not mine]
             self._lock.release(); raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        lines = [text]
+        if mine is not None:
+            with self._wlock:
+                if not any(w[0] is mine for w in self._waiting): self._lock.release(); return ''     # an earlier turn took it with its own
+                lines, self._waiting = [w[1] for w in self._waiting], []
+            text = '\n\n'.join(lines)
+        if len(lines) > 1:
+            together = (f"THE OWNER SENT {len(lines)} MESSAGES while you worked - the last {len(lines)} USER turns. Read them together: a later "
+                        "one may correct or clarify an earlier one. Answer them in one reply, or each in turn, as fits.")
+            delivery_instructions = f'{delivery_instructions}\n\n{together}' if delivery_instructions else together
         self.quick = False                   # a real turn: from here the session is a desk like any other
         if as_owner: self.woke = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.busy, self.last = True, time.time()
@@ -1459,10 +1480,12 @@ class GeneralSession:
                     self.cli_sid = ''
                     self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
                     self._remember_session()
-            if echo and as_owner: self._emit(f'\x1b[1;34m{"taskuary" if brief else "you"}>\x1b[0m {text}\r\n')
+            if echo and as_owner:
+                for w in lines: self._emit(f'\x1b[1;34m{"taskuary" if brief else "you"}>\x1b[0m {w}\r\n')
             # the owner's words are kept FIRST, and the run says it is working only once it has an AI: with none, the message was
             # lost under "Started the selected agent" and a `working` record for an agent that never could start (2026-10-22 walk)
-            if as_owner and not kept: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else "owner", USER_TYPE, text)   # `kept`: the door wrote them already (continue-work)
+            if as_owner and not kept:
+                for w in lines: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else "owner", USER_TYPE, w)   # `kept`: the door wrote them already (continue-work)
             if not self.pick:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)

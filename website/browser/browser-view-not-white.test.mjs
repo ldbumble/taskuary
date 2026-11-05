@@ -53,9 +53,11 @@ test("a page that finished painting while the owner looked away is drawn when th
   const call = (url, body, method = "POST") => page.evaluate(async (url, body, method) => (await fetch(url, { method, ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
     headers: { "Content-Type": "application/json", "X-Taskuary-Token": localStorage.getItem("taskuary_token") } })).json(), url, body, method);
 
-  // 1. the agent opened the page: its first frame is the page still loading, and the view draws it - white
+  // 1. the agent opened the page and asks to be signed in: its first frame is the page still loading, and the view draws it - white
+  // (only the ask puts it on screen: a chat task's browser shows when the owner has a part on it, 2026-11-05)
   const made = await call("/api/fixture/browser/view", { step: "open", frame: loading });
   assert.ok(made.taskId, JSON.stringify(made));
+  await call("/api/fixture/browser/view", { step: "signin", taskId: made.taskId });
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
   await page.waitForFunction(() => document.querySelector("[data-tq-browser-layout] canvas")
     || (document.querySelector("[data-tq-section-tab=agent]")?.click(), false), { timeout: 30000, polling: 500 });

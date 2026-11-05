@@ -944,8 +944,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # ...and a connector card's walk owes nobody an answer: it ends when the card's Test passes (aisetup.CARD_TOOLS), never by
     # closing the task and drafting a reply to a sender there is not
     owed = sources and task.get('SourceRef') != 'connector:setup'
-    if owed and selfclose.mode(store) != 'off' and not selfclose.stays_open(store, tid): system = system + '\n\n' + selfclose.CHAT_LINE
-    elif not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
+    # THE AGENT NEVER CLOSES A CHAT TASK (the owner, 2026-11-05: "agent should never close once it's open until we hit close"): every
+    # general task is told the owner ends it - Mark done, Send and close, Close with a note - never CHAT_LINE's closing marker
+    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
@@ -1693,8 +1694,8 @@ class GeneralSession:
         # manually is still a conversation after one answer. Enforce that boundary here,
         # even if a resumed model remembers an older close instruction and emits the marker.
         has_source = bool((self.store.task_detail(self.task_id) or {}).get('messages'))
-        if closing is not None and has_source:
-            threading.Timer(0.1, self._close_out, args=(closing,), kwargs={'turn': getattr(self, 'turn_no', 0)}).start()
+        # ...and a closing marker it writes anyway is read and dropped, never acted on: only the owner closes (2026-11-05)
+        if closing is not None and has_source: logger.info(f'task {self.task_id}: its agent said it was done - the task stays open for the owner to close')
         return reply
 
     def _close_out(self, summary: str, turn: int = None):

@@ -34,10 +34,13 @@ test("keys typed on the view reach the page's box, Backspace and Ctrl+A included
 
   const made = await call("/api/fixture/browser/view", { step: "open", frame });
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
-  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-browser-layout] p")].some((p) => p.textContent.trim() === "LIVE")
+  await page.waitForFunction(() => document.querySelector("[data-tq-browser-layout]")
     || (document.querySelector("[data-tq-section-tab=agent]")?.click(), false), { timeout: 30000, polling: 500 });
-  // the agent hands the page over: it is the owner's to type on, no Take over first
+  // the agent hands the page over: it is the owner's to type on, no Take over first - and only now is the page drawn (a chat task's
+  // browser shows only when the owner has a part on it, 2026-11-05)
   const turn = await call("/api/fixture/browser/view", { step: "turn", taskId: made.taskId });
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-browser-layout] p")].some((p) => p.textContent.trim() === "LIVE"),
+    { timeout: 30000 });
   await page.waitForSelector(`[data-tq-browser-turn="${turn.requestId}"]`, { visible: true, timeout: 30000 });
 
   // ONE click on the box, and the keys go to the page from the first one

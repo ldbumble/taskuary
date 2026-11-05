@@ -9,8 +9,10 @@ import { startHarness } from "./harness.mjs";
    conversation (`fresh`, general.new_run - pinned in tests/test_run_another_general.py), and the pane draws the new agent's thread with
    the earlier agent's folded above it. The demo refuses starts, so the dispatch and the new run's reads are answered here. */
 const OLD = "The rerun produced", NEW = "Starting over on the parcel list with the county file.";
-
-test("Run another agent on a stopped general agent starts a new conversation and shows it", { timeout: 180000 }, async (t) => {
+/* ...AND ON A CHAT TASK THERE IS NO RUN ANOTHER AT ALL (the owner, 2026-11-05: "we can remove those 2 buttons like continue agent or start new
+   agent. Just type and it continues"): a stopped general agent's chat shows its turns and keeps its box, and neither Run another agent, its
+   stronger twin nor Continue is on the row, the strip or behind a menu. Typing on is continue-shows-turn's. */
+test("a stopped general agent's chat offers no Run another or Continue - its box is the way on", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -56,36 +58,18 @@ test("Run another agent on a stopped general agent starts a new conversation and
   // a general task's Agent section is ONE chat (the owner, 2026-11-04): the finished agent's turns are on screen, no Result to press first
   await page.waitForFunction((old) => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes(old)), { timeout: 30000 }, OLD);
 
-  // Run another agent rides in the row's More - the row is up once it has its ▾ (Mark done folds into it beside Back, the nav pill)
   await page.waitForSelector('[data-tq-row] [data-tq-more], [data-tq-row] [data-tq-next], [data-tq-pane-moves] button', { timeout: 20000 });
   await new Promise((r) => setTimeout(r, 1000));
-  // ...a stage move: in the open Agent pane's heading or on its spine (the owner, 2026-10-29), else on the row or behind a ▾ there
-  let press = await page.$('[data-tq-pane-moves] button[data-tq-verb$="run-another"], [data-tq-spine-moves] button[data-tq-verb$="run-another"], [data-tq-row] button[data-tq-verb$="run-another"]');
+  const gone = '[data-tq-verb$="run-another"], [data-tq-verb$="strong-again"], [data-tq-verb$="continue"]';
+  const seen = [];
+  const look = async () => seen.push(...await page.evaluate((sel) => [...document.querySelectorAll(sel)].map((b) => b.getAttribute("data-tq-verb") + "=" + b.innerText), gone));
+  await look();
   for (const more of await page.$$("[data-tq-row] [data-tq-more]")) {
-    if (press) break;
-    await more.click();
-    press = await page.waitForSelector('[role=menuitem][data-tq-verb$="run-another"]', { timeout: 1500 }).catch(() => null);
-    if (!press) { await page.keyboard.press("Escape"); await new Promise((r) => setTimeout(r, 400)); }
+    await more.click(); await new Promise((r) => setTimeout(r, 600)); await look();
+    await page.keyboard.press("Escape"); await new Promise((r) => setTimeout(r, 300));
   }
-  assert.ok(press, `no Run another agent on a stopped general agent: ${await page.evaluate(() => [...document.querySelectorAll("[data-tq-row] button, [role=menuitem]")].map((b) => `${b.getAttribute("data-tq-verb")}=${b.innerText}`).join(", "))}`);
-  assert.equal(await press.evaluate((el) => el.getAttribute("aria-disabled")), null, "Run another agent is greyed with an AI connected");
-  await new Promise((r) => setTimeout(r, 400));     // the menu is still opening
-  await press.click();
-  await page.waitForSelector("[data-tq-run-form] [data-tq-agent-start=general]:not([disabled])", { timeout: 20000 })
-    .catch(async () => assert.fail(`no box to start the new agent from: ${await page.evaluate(() => document.querySelector("[data-tq-run-form]")?.outerHTML.slice(0, 3000))}`));
-  // ...the box scrolls itself into view smoothly, so the press is the button's own click, not a point that may have moved
-  await page.$eval("[data-tq-run-form] [data-tq-agent-start=general]", (b) => b.click());
-
-  await page.waitForFunction(() => document.querySelector("[data-tq-earlier-run]"), { timeout: 30000 })
-    .catch(async () => assert.fail(`the new run was not drawn: dispatched ${JSON.stringify(dispatched)}`));
-  assert.equal(dispatched?.fresh, true, `Run another agent did not ask for a new agent: ${JSON.stringify(dispatched)}`);
-  await page.waitForFunction((now) => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes(now)), { timeout: 30000 }, NEW);
-  const seen = await page.evaluate(() => ({
-    thread: [...document.querySelectorAll(".tq-aui-thread .tq-aui-agent, .tq-aui-thread .tq-aui-user")].map((m) => m.innerText).join("\n"),
-    fold: document.querySelector("[data-tq-earlier-run] summary")?.innerText || "",
-    folded: document.querySelector("[data-tq-earlier-run]")?.textContent || "" }));
-  assert.ok(!seen.thread.includes(OLD), `the earlier agent's chat is still the thread: ${seen.thread}`);
-  assert.match(seen.fold, /The earlier agent's conversation · 2 messages/);
-  assert.ok(seen.folded.includes(OLD), "the earlier agent's conversation is kept on the task");
+  assert.deepEqual(seen, [], "no Run another, stronger twin or Continue on a chat task");
+  assert.ok(await page.$(".tq-aui-chat .tq-aui-input"), "the chat's box is there to type on");
+  assert.equal(dispatched, null, "nothing was started");
   assert.deepEqual(errors, []);
 });

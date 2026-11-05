@@ -2335,7 +2335,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
       {runFix && <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix=""
         onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>}
-      {barContinue && !(chatPane && !failedRun) && <Button size="small" variant={runFix ? "outlined" : "contained"} disableElevation disabled={!!startingAgent} sx={runFix ? barBtn : primaryBtn}
+      {barContinue && !chatPane && <Button size="small" variant={runFix ? "outlined" : "contained"} disableElevation disabled={!!startingAgent} sx={runFix ? barBtn : primaryBtn}
         startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : failedRun ? <RefreshIcon sx={{ fontSize: 16 }} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
         title={failedRun ? btnHint("try_again") : isGeneral
           ? "Reopens the saved provider conversation and continues from its existing context."
@@ -2551,12 +2551,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(!pendingReview ? [stopSave] : []),
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
         ...(pendingReview ? [stopSave] : []),
-        ...(notDone ? [runAnother] : []),
+        ...(notDone && !chatPane ? [runAnother] : []),
       ] : continueHere ? [
         // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
         // setup the whole thing doesn't work"): the Result's line says why and points at Connections
         ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
-        ...(chatPane && !failedRun ? [] : [{ id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
+        ...(chatPane ? [] : [{ id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
           run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }])]
       // EVERY START OPENS THE BOX FIRST (the owner, 2026-10-23: "you need to write prompt what about the email or attachment is the
       // issue"): Send to agent on a general task, on a goal, with no coding tool - each started at the press with nothing said. It
@@ -2591,8 +2591,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand"), tucked: !!sentReview },
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
-      ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
-      ...(!liveSession && notDone && detail?.strongAgain && (failedRun || ((ranBefore || generalStarted) && detail?.judged?.sure === false))
+      // ...never on a chat task (the owner, 2026-11-05: "we can remove those 2 buttons like continue agent or start new agent. Just type and it
+      // continues") - nor its stronger-model twin
+      ...(!chatPane && !liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
+      ...(!chatPane && !liveSession && notDone && detail?.strongAgain && (failedRun || ((ranBefore || generalStarted) && detail?.judged?.sure === false))
         ? [{ id: "strong-again", group: "more", label: strongGoing ? "Starting…" : labelOfRow("strong-again"), disabled: strongGoing || !!startingAgent,
           run: strongAgain, title: `${hintOfRow("strong-again")} - on ${detail.strongAgain.brain}, ${detail.strongAgain.model}` }] : []),
       // WHAT THE PILLS USED TO CHANGE, on the row now that the pills only read (section 1's redesign, 2026-10-16): the same PATCHes
@@ -3361,8 +3363,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
                     onRecord={threeUp ? () => { if (!shows("agent")) setOpenStage("agent"); setResultOpen(true); } : null} />}
                   {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown
-                      (BrowserPane.LastView, the owner 2026-10-28) */}
-                  {workspaceMode === "general" && !sessionView && !term?.alive && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
+                      (BrowserPane.LastView, the owner 2026-10-28) - but not in a chat task, whose answer is in the chat (the owner, 2026-11-05:
+                      "for browser we don't really want to show it unless they need login") */}
+                  {workspaceMode === "general" && !sessionView && !term?.alive && !chatPane && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
                   {/* ...opened, one press back to the result */}
                   {resultShown && !failedRun && !sessionView && threeUp && !resultRest && !chatPane && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}

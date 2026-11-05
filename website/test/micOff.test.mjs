@@ -11,25 +11,27 @@ const ui = readFileSync(new URL("../src/ui.jsx", import.meta.url), "utf8");
 const mic = ui.slice(ui.indexOf("export const MicButton"), ui.indexOf("export const ChoiceRow"));
 
 test("with no voice AI and no voice found the mic is crossed out, and its press asks instead of recording", () => {
-  assert.match(mic, /const off = !!\(voice && !voice\.ready && !viaBrowser && !viaBuiltin\)/);
+  assert.match(mic, /const off = !!\(voice && route !== "connector" && !viaBrowser && !viaBuiltin\)/);
   assert.match(mic, /off \? <MicOffIcon/);
   assert.match(mic, /const press = \(e\) => \{ if \(!off && !\(viaBuiltin && speechAsk\)\) return start\(\); setAsk\(e\.currentTarget\)/);
 });
 
 test("a browser recogniser or the computer's own is used at once, with no opt-in to press", () => {
-  assert.match(mic, /viaBrowser = !!\(voice && !voice\.ready && SR && !\(srDown && builtin\)\)/, "the browser's recogniser whenever there is one");
-  assert.match(mic, /viaBuiltin = !!\(builtin && !viaBrowser\)/, "else the computer's own, as the server reports it");
+  // the order lives in micRoute (voiceChoice.js, its own tests): Automatic = a voice card, else the browser's, else the computer's own
+  assert.match(mic, /route = micRoute\(voice, SR, voice\?\.choice\)/);
+  assert.match(mic, /viaBrowser = !!\(voice && route === "browser" && !\(srDown && builtin && voice\.choice === "auto"\)\)/, "the browser's recogniser whenever there is one");
+  assert.match(mic, /viaBuiltin = !!\(builtin && !viaBrowser && \(route === "windows" \|\| \(route === "browser" && voice\?\.choice === "auto"\)\)\)/, "else the computer's own, as the server reports it");
   assert.doesNotMatch(ui, /tq-voice-browser|useBrowser|this browser's own \(free\)/, "the opt-in step is gone");
   assert.doesNotMatch(mic, /toWav/, "no WAV clip for the 2006 offline dictation: it is gone (TQ-1283)");
 });
 
 test("a tab whose speech service will not answer hands over to the computer's own", () => {
-  assert.match(mic, /builtin && \[dictationError\("network"\), dictationError\("service-not-allowed"\)\]\.includes\(line\)/);
+  assert.match(mic, /builtin && voice\.choice === "auto" && \[dictationError\("network"\), dictationError\("service-not-allowed"\)\]\.includes\(line\)/);
   assert.match(mic, /setSrDown\(true\)/);
 });
 
 test("the popup opens the voice section of Connections, and that link lands there", () => {
-  assert.match(mic, /Set up voice AI<\/Button>/);
+  assert.match(mic, /"Set up voice AI"\}<\/Button>/);
   assert.match(mic, /openAppLink\(place\("voice"\)\.href\)/);     // the place's link, from words.json
   const r = canvasRequestFromHash(place("voice").href);
   assert.deepEqual([r.area, r.state], ["connections", { section: "AI — voice", open: null }]);

@@ -1689,7 +1689,9 @@ def thread_task(store, tid) -> dict | None:
     t = store.get_task(tid) if tid else None
     if not t: return None
     rep = next((wrapup.report_body(c['Body']) for c in reversed(store.list_comments(tid)) if wrapup.is_report(c['Body'])), '')
-    return with_agent(store, {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(t.get('Summary') or '').split())[:300],
+    # a batch's title and summary say only how many it holds: its items' own titles are what a line about one of them matches
+    items = ' ; '.join(b.get('Title') or '' for b in store.batch_items(tid))
+    return with_agent(store, {'tid': tid, 'ref': task_ref(tid), 'title': t.get('Title') or '', 'ask': ' '.join(str(items or t.get('Summary') or '').split())[:300],
             'status': 'closed' if t.get('Status') == 'done' else 'open',
             # what triage last made of the whole thread, and what the agent last said it did: a new mail is measured against both
             **({'reading': r} if (r := store.task_thread(tid)) else {}), **({'agent_said': rep[:600]} if rep else {}),

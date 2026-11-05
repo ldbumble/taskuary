@@ -2968,11 +2968,15 @@ class SQLiteStore:
             " GROUP BY t.TaskId ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC LIMIT ?", (limit,))
     def tasks_open_brief(self, limit=40):
         """The OPEN tasks and Watching items, newest activity first, each with what triage read it to ask (ThreadJson), the channel and the
-        name it first came from - one line each of the list every arrival is shown (context.open_items)."""
+        name it first came from - one line each of the list every arrival is shown (context.open_items). Senders is who wrote on it, as
+        tasks_open_linked has it, so a task someone sent is never read as the owner's own (context._own); Items are a batch's own titles,
+        best first, since its title and summary are only a count."""
         first = "(SELECT m.{} FROM message m WHERE m.TaskId=t.TaskId AND IFNULL(m.Direction,'')<>'out' ORDER BY m.MessageId LIMIT 1)"
         return self._rows(
             "SELECT t.TaskId, t.Title, t.Summary, t.ThreadJson, t.WatchedAt, t.Source, t.OriginBase, t.CreatedAt, "
-            f"       IFNULL(t.UpdatedAt, t.CreatedAt) Touched, {first.format('Channel')} Channel, {first.format('FromName')} FromName "
+            f"       IFNULL(t.UpdatedAt, t.CreatedAt) Touched, {first.format('Channel')} Channel, {first.format('FromName')} FromName, "
+            "       (SELECT GROUP_CONCAT(DISTINCT lower(IFNULL(m.FromEmail, m.FromName))) FROM message m WHERE m.TaskId=t.TaskId) Senders, "
+            "       (SELECT GROUP_CONCAT(Title, ' ; ') FROM (SELECT b.Title FROM batch_item b WHERE b.TaskId=t.TaskId ORDER BY b.Place, b.ItemId)) Items "
             "  FROM task t WHERE t.Status NOT IN ('done','dropped') ORDER BY IFNULL(t.UpdatedAt, t.CreatedAt) DESC, t.TaskId DESC LIMIT ?", (limit,))
     def task_people(self, tids) -> dict:
         """{TaskId: [{name, email, channel}]} - who wrote on each task, by display name, never the owner's own lines: what a name on

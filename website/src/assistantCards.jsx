@@ -57,7 +57,8 @@ import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
 import { dayLabel, fmtTime } from "./dates.js";
 import { useShare } from "./Share.jsx";
-import ItemSections, { ItemLay, ItemPart } from "./ItemSections.jsx";
+import ItemSections, { ItemLay, ItemPart, handToItem } from "./ItemSections.jsx";
+import { withImages } from "./promptImages.jsx";
 import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS, reportSchedule } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's three sections, by name (ItemSections)
@@ -1590,7 +1591,7 @@ export function FyiMessage({ item, onHead = null, open: held = null, moved = nul
 function FyiSections({ card, table, items, msgs, foot, err, next }) {
   const nav = React.useContext(CardNav), n = items.length, batch = card.kind === "fyis";
   const handOff = !batch && (nav.also || []).some((a) => /agent|coder/.test(a.verb || "")), ask = useItemAsk(!batch && card, "fyi");
-  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask}
+  return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask} hands={batch}
     title={batch ? `${plural(n, "message")} - nothing to decide` : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
     sections={[
@@ -1604,7 +1605,7 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
         body: <ItemPart data-tq-fyi-agent="">
           <div className="tq-thr-h"><b>No agent yet</b></div>
           <div className="tq-thr-did muted">Nobody is working on {n === 1 ? "this" : "these"}.</div>
-          {(batch || handOff) && <div className="tq-item-note">{batch ? `To hand one to an agent, press its line under Came from - ${btn("regular_agent")} is among its moves.`
+          {(batch || handOff) && <div className="tq-item-note">{batch ? `To hand them to an agent, press a line under Came from - ${btn("regular_agent")} is among its moves; every line comes here, and you take off the ones it should not read.`
             : `${btn("regular_agent")} hands it to one - it gets the message and its attachments.`}</div>}
         </ItemPart> },
       { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
@@ -1655,12 +1656,22 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
   };
   // ...and acting on it belongs to the ONE you opened, through the same proposal road the words take (PW-151) - never on the handful, never
   // marking its siblings; and an entry already filed under a task is never offered to be made one (the owner, 2026-10-01)
+  // ...ON THE TABLE THE LINE'S SEND TO AGENT IS THE AGENT TAB'S BOX, the handful a chip each, the pressed one first (ItemSections.handToItem; the
+  // owner, 2026-11-05: "attach the report or fyi list to the prompt box"): ONE agent starts on the first chip left, the rest named for it to read
+  const handAll = (i, coding) => handToItem(card.key, { verb: coding ? "coding_agent" : "regular_agent",
+    items: [i, ...items.filter((x) => x.key !== i.key)].filter((x) => x.mid && !x.tid && !movedTo[x.key]).map((x) => ({ key: x.key, title: `${whoName(x.who)}: ${x.title || ""}` })),
+    start: async (o) => {
+      const [lead, ...rest] = o.items.map((c) => items.find((x) => x.key === c.key)).filter(Boolean);
+      const also = rest.length ? `\n\nTHE OTHER MESSAGES OF THIS LIST IT IS ABOUT (read each with read_message)\n${rest.map((x) => `m${x.mid} - ${whoName(x.who)}: ${x.title || ""}`).join("\n")}` : "";
+      await onAgent?.(lead, { verb: o.verb, text: withImages(`${o.text}${also}`, o.files) });
+    } });
+  const ask = (i, coding) => { if (!(table != null && handAll(i, coding))) setAsking({ key: i.key, coding }); };
   const actsOf = (i) => (<>
             <div className="tq-card-actions tq-fyi-acts">
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine", "fyi")} sx={quiet}>{btn("mine", "fyi")}</Button>}
-              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setAsking({ key: i.key, coding: true })} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => setAsking({ key: i.key, coding: false })} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
+              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => ask(i, true)} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy || !!noAi} onClick={() => ask(i, false)} title={noAi || btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title={btnHint("not_ours")} sx={quiet}>{btn("not_ours")}</Button>}
               {canUnsubscribe(i) && (left[i.key] ? <span className="tq-pressed" data-tq-pressed={btn("unsubscribe")}>✓ {btn("unsubscribe")}</span>

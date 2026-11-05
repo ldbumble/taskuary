@@ -2421,7 +2421,8 @@ REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may nee
           '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - it stays for the owner, never deleted), new research, a '
           'corrected or an added draft, or nothing left at all. Open with one plain line on what changed, in the owner\'s terms - "I see you answered '
           'Ray there", "Gail took care of it" - then either that we are good, nothing left (nothing_left true), or what is still open as next '
-          'steps. You never send or close anything. End with the [[TASKUARY-SUMMARY]] block.')
+          'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. You never send or close '
+          'anything. End with the [[TASKUARY-SUMMARY]] block.')
 _QUIET_WAKE = ('the task is closed', 'not an assistant task', 'no agent conversation', 'triage could not read it',
                'passing lines to the agent is switched off')
 

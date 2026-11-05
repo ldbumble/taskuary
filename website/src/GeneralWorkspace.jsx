@@ -70,7 +70,7 @@ const textOf = (message) => (message?.content || []).filter((p) => p.type === "t
 const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
-    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id) } : {}) };
+    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}) };
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
@@ -319,7 +319,7 @@ const AssistantMessage = () => {
         {work && !custom?.summary && newest && work.next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={custom.folded ? null : work.next} lastAnswered={lastAnswered} />}
+          acts={work.acts} next={custom.folded ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} />}
       </div>
     </MessagePrimitive.Root>
   );

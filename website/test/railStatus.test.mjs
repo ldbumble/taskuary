@@ -127,3 +127,16 @@ test("a newer read of the task takes back the rail's agent lane - on the row, it
   // a live session on the page still leads everything
   assert.equal(taskStatus({ live: { alive: true, waiting: false }, rail: row, page: { live: false, state: "approve" } }).key, "working");
 });
+
+// A CHAT TASK'S WAITING MOVE IS THE AGENT'S (the owner, 2026-11-05: "we can remove reply ready for you since it can be any action")
+test("a chat task's waiting agent and its ready reply both say agent ready for you; a coding task keeps its words", () => {
+  for (const lane of ["blocked", "approve"]) {
+    const st = railStatus({ lane, kind: lane === "approve" ? "review" : "agent", chat: true });
+    assert.equal(st.word, "agent ready for you"); assert.equal(st.key, lane); assert.equal(st.badge, BADGE[lane]);
+    assert.notEqual(railStatus({ lane, kind: lane === "approve" ? "review" : "agent" }).word, "agent ready for you");
+  }
+  assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: true } }).word, "agent ready for you");
+  assert.equal(taskStatus({ live: { alive: true, waiting: true } }).word, LANE_META.blocked.word);
+  assert.equal(taskStatus({ chat: true, live: { alive: true, waiting: false } }).word, LANE_META.working.word);
+  assert.equal(railStatus({ lane: "approve", kind: "review", not_sent: true, chat: true }).word, rowMeta({ lane: "approve", kind: "review", not_sent: true }).word);
+});

@@ -176,6 +176,13 @@
       "hint": "a reply is owed and nothing is drafted yet"
     },
     {
+      "key": "chat_ready",
+      "word": "agent ready for you",
+      "role": "you",
+      "mark": "👋",
+      "hint": "the agent on this chat task is done for now and its next move is yours - a draft to send, a step to approve, or an answer"
+    },
+    {
       "key": "goal",
       "word": "on track",
       "role": "info",

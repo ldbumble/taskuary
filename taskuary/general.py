@@ -423,9 +423,15 @@ def shown_history(store, tid: int) -> list:
         elif c.get('ActorType') == SUMMARY_TYPE and last:
             try: summ[f'comment-{last}'] = json.loads(c.get('Body') or '')
             except ValueError: continue
+    # ...and the drafts each turn left, in its own words (store.snap_draft) - never inside the summary
+    snaps = store.draft_snapshots(tid)
     for m in msgs:
         if m['id'] in summ: m['summary'] = summ[m['id']]
+        if (got := snaps.get(_cid(m['id']))): m['drafts_then'] = got
     return msgs
+def _cid(mid):
+    try: return int(str(mid).removeprefix('comment-'))
+    except ValueError: return None
 
 
 def earlier(store, tid: int) -> list:
@@ -1744,10 +1750,13 @@ class GeneralSession:
             # ...and WHICH draft this turn left - its id, never its words: what goes to the sender lives in the draft alone (2026-11-04). Once a
             # newer entry comes, the turn is history and that draft stays in it read-only (the owner, 2026-11-05: "it's there but no longer
             # clickable. it was a draft that is part of the history of the chat")
+            # ...and the draft's words as this turn left them, in a table of their own (store.snap_draft): the next turn rewrites it in place.
+            # A turn that left it untouched names none (`[]`), so one draft is drawn once per turn that wrote it, with that turn's words
             try:
                 rv = self.store.pending_review(self.task_id)
-                if rv and str(rv.get('DraftText') or '').strip(): summ['drafted'] = [{'review': int(rv['ReviewId'])}]
-            except Exception as e: logger.debug(f'task {self.task_id}: the turn draft id was not kept with it - {e}')
+                if rv and str(rv.get('DraftText') or '').strip():
+                    summ['drafted'] = [{'review': int(rv['ReviewId'])}] if self.store.snap_draft(int(rv['ReviewId']), rid) else []
+            except Exception as e: logger.debug(f'task {self.task_id}: the turn draft was not kept with it - {e}')
             self.store.add_comment(self.task_id, 'assistant', SUMMARY_TYPE, json.dumps(summ))
             if 'on_you' in summ: self.store.set_on_you(self.task_id, summ['on_you'], 'assistant')     # no list said: the steps stay as they are
         # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now

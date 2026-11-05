@@ -3324,7 +3324,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     {/* AN EMPTY AGENT WORK ROW IS QUIET (the owner, 2026-10-25: Agent work stays where it is, the reply is what the eye should
                         land on): no agent ran, nothing to say - a smaller, dimmer line, the same press opening it */}
-                    <WorkflowHeading number="2" sec={threeUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={<span title={instructionsHint(runRole) || undefined}>{!term?.alive ? (resultShown ? "Result" : "Agent work")
+                    <WorkflowHeading number="2" sec={threeUp && !sessionView ? SECTIONS[1] : null} here={hereSec === "agent"} quiet={agentEmpty} title={<span title={instructionsHint(runRole) || undefined}>{!term?.alive ? (chatPane && hasGeneralHistory ? `${agentName(t)} answered` : resultShown ? "Result" : "Agent work")
                       : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}</span>}

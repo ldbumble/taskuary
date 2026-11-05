@@ -105,8 +105,8 @@ def _exchange(store, server, f, code, error) -> tuple:
     if SCOPE not in granted.split() and 'https://www.googleapis.com/auth/calendar' not in granted.split():
         return False, 'Google did not grant calendar access - the box for it was left unticked. Nothing was changed.'
     own = f['client'] == (cfg.get('google_client_id') or '', cfg.get('google_client_secret') or '')
-    cfg.update({'google_refresh_token': j['refresh_token'], 'google_scope': granted, 'google_signin': 'own' if own else 'builtin'})
-    store.save_connector({'ConnectorId': f['cid'], 'ConfigJson': json.dumps(cfg)}, 'owner')
+    # the sign-in's own keys merged over the card as it is NOW: the card read before Google answered is not written back (merge_config)
+    store.merge_connector_config(f['cid'], {'google_refresh_token': j['refresh_token'], 'google_scope': granted, 'google_signin': 'own' if own else 'builtin'})
     store.audit('connector', f['cid'], 'google_calendar', 'owner', detail={'scope': granted})
     with _LOCK: _TOK[j['refresh_token']] = (j.get('access_token') or '', time.time() + int(j.get('expires_in') or 3600))
     from . import calendar

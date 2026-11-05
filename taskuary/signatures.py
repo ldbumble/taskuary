@@ -115,7 +115,7 @@ def save_mailbox(store, address: str, sig: str) -> dict:
     cfg = _cfg(c)
     per = dict(cfg.get('signatures') or {}) if isinstance(cfg.get('signatures'), dict) else {}
     per[box['address'].lower()] = str(sig or '').strip()
-    store.set_connector_config(box['connector_id'], {**cfg, 'signatures': per})
+    store.merge_connector_config(box['connector_id'], {'signatures': per})
     return {'address': box['address'], 'signature': per[box['address'].lower()]}
 
 

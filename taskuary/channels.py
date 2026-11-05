@@ -120,7 +120,7 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     if login:
         try: cfg0 = json.loads(c.get('ConfigJson') or '{}')
         except ValueError: cfg0 = {}
-        if cfg0.get('login') != login: store.set_connector_config(c['ConnectorId'], {**cfg0, 'login': login})
+        if cfg0.get('login') != login: store.merge_connector_config(c['ConnectorId'], {'login': login})
     repos = list_accessible_repos(tok)
     # only THIS card's repos (and unowned ones): a second GitHub card's repos are another token's to keep or drop
     have = {s['Address']: s for s in store.list_sources(active_only=False)
@@ -139,7 +139,7 @@ def github_discover(store, c: dict, actor='owner') -> dict:
             try: gc = json.loads(s.get('ConfigJson') or '{}')
             except ValueError: gc = {}
             if gc.get('private') != rp.get('private', False):
-                store.save_source({'SourceId': s['SourceId'], 'ConfigJson': json.dumps({**gc, 'private': rp.get('private', False)})}, actor)
+                store.merge_config('source', s['SourceId'], {'private': rp.get('private', False)})
     # a repo the CURRENT token cannot see is REMOVED: the list is what this token reaches, period
     # (owner's call - a fine-grained PAT scoped to one repo sat over 57 rows another token had
     # found). A repo the token covers again later is rediscovered with fresh pickers.
@@ -236,6 +236,8 @@ class DraftStore:
         if int(cid) != self._cid: return self._store.touch_connector(cid, *a, **k)
     def set_connector_config(self, cid, *a, **k):
         if int(cid) != self._cid: return self._store.set_connector_config(cid, *a, **k)
+    def merge_connector_config(self, cid, *a, **k):
+        if int(cid) != self._cid: return self._store.merge_connector_config(cid, *a, **k)
 
 
 def test_connector(store, cid: int, draft: dict | None = None) -> dict:
@@ -295,7 +297,7 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             a = _slack(c['Secret'], 'auth.test')
             detail = f"authenticated as {a.get('user')} in {a.get('team')}"
             # its own workspace, kept: its members are known like Teams' own organisation (slack_own_team)
-            if a.get('team_id'): store.set_connector_config(c['ConnectorId'], {**_cfg(c), 'team_id': str(a['team_id']), 'team_name': str(a.get('team') or '')})
+            if a.get('team_id'): store.merge_connector_config(c['ConnectorId'], {'team_id': str(a['team_id']), 'team_name': str(a.get('team') or '')})
             src = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'slack'), None)
             if src:
                 _slack(c['Secret'], 'conversations.history', channel=src['Address'], limit=1)
@@ -384,7 +386,7 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             # the Test fills the card's dots - which Amazon APIs these credentials reach - and the card shows them at once
             from .amazon_sp import probe_apis, connection
             detail, apis = probe_apis(connection(store, cid))
-            store.set_connector_config(cid, {**_cfg(c), 'apis': apis}); extra['apis'] = apis
+            store.merge_connector_config(cid, {'apis': apis}); extra['apis'] = apis
         elif c['Type'] == 'stripe':
             from .stripe import probe, connection
             detail = probe(connection(store, cid))
@@ -1334,7 +1336,7 @@ def slack_own_team(store, c: dict, tok: str) -> str:
     try: a = _slack(tok, 'auth.test')
     except Exception as e:
         logger.info(f'slack: the workspace of this connection could not be read - {e}'); return ''
-    if a.get('team_id'): store.set_connector_config(c['ConnectorId'], {**cfg, 'team_id': str(a['team_id']), 'team_name': str(a.get('team') or '')})
+    if a.get('team_id'): store.merge_connector_config(c['ConnectorId'], {'team_id': str(a['team_id']), 'team_name': str(a.get('team') or '')})
     return str(a.get('team_id') or '')
 
 

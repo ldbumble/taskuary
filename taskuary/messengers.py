@@ -44,7 +44,7 @@ def tg_test(store, c) -> str:
     if not c.get('Secret'): raise RuntimeError('no bot token saved - paste the token @BotFather gave you under Credentials')
     me = tg(c['Secret'], 'getMe')
     # the bot's handle is part of who the owner is on Telegram (About you reads it back)
-    if me.get('username'): store.set_connector_config(c['ConnectorId'], {**_cfg(c), 'bot_username': me['username']})
+    if me.get('username'): store.merge_connector_config(c['ConnectorId'], {'bot_username': me['username']})
     if not any(s['Channel'] == 'telegram' for s in store.list_sources(active_only=False)):
         store.save_source({'Channel': 'telegram', 'Address': '*', 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'connector-test')
     return (f"authenticated as @{me.get('username')} - message the bot (or add it to a group), Sync, "
@@ -188,7 +188,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
             try: save_attachments(store, out['message_id'], atts, f"telegram:{cid}:{m.get('message_id')}")
             except Exception as e: logger.warning(f'telegram attachments failed: {e}')
     if ups:
-        store.set_connector_config(c['ConnectorId'], {**cfg, 'tg_offset': ups[-1]['update_id'] + 1})
+        store.merge_connector_config(c['ConnectorId'], {'tg_offset': ups[-1]['update_id'] + 1})
     return n
 
 
@@ -678,7 +678,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         except Exception as e: logger.warning(f'marking whatsapp read failed: {e}')
     # only a sequence that moved: an idle check-in rewrote the same number ~2/s, and every write moved the rail (2026-10-12)
     if out.get('seq') is not None and (out['seq'] != cfg.get('wa_seq') or (out.get('boot') and out['boot'] != cfg.get('wa_boot'))):
-        store.set_connector_config(c['ConnectorId'], {**cfg, 'wa_seq': out['seq'], **({'wa_boot': out['boot']} if out.get('boot') else {})})
+        store.merge_connector_config(c['ConnectorId'], {'wa_seq': out['seq'], **({'wa_boot': out['boot']} if out.get('boot') else {})})
     return n
 
 

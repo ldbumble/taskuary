@@ -147,7 +147,7 @@ def set_listens(store, channel: str, how: str) -> dict:
     if how not in LISTEN: raise ValueError(f'unknown listening rule {how!r} - one of {", ".join(LISTEN)}')
     c = next((x for x in (store.connectors_by_type(channel, with_secret=True) or []) if x and x.get('Active')), None)
     if not c: raise ValueError(f'no {channel} connection is switched on')
-    store.set_connector_config(c['ConnectorId'], {**_config(c), 'assistant_listen': how})
+    store.merge_connector_config(c['ConnectorId'], {'assistant_listen': how})
     return {'channel': channel, 'listens': how}
 
 
@@ -217,7 +217,7 @@ def use_chat(store, channel: str, chat: str) -> dict:
     if chat and not any(o['to'] == chat for o in candidates(store, c)):
         raise ValueError(f'{chat} is not a chat you are alone in - the assistant can only live in one of those')
     cfg = _config(c)
-    store.set_connector_config(c['ConnectorId'], {**cfg, 'assistant_chat': chat})
+    store.merge_connector_config(c['ConnectorId'], {'assistant_chat': chat})
     return {'channel': channel, 'chat': chat}
 
 

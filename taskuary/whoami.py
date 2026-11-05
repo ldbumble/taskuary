@@ -102,7 +102,7 @@ def _learn_github(store, gh):
         if not tok: return
         r = requests.get('https://api.github.com/user', headers=_h(tok), timeout=8); r.raise_for_status()
         login = r.json().get('login')
-        if login: store.set_connector_config(gh['ConnectorId'], {**_cfg(gh), 'login': login}); gh['ConfigJson'] = json.dumps({**_cfg(gh), 'login': login})
+        if login: store.merge_connector_config(gh['ConnectorId'], {'login': login}); gh['ConfigJson'] = json.dumps({**_cfg(gh), 'login': login})
     except Exception: pass
 
 
@@ -112,7 +112,7 @@ def _learn_telegram(store, tg):
         tok = (store.get_connector(tg['ConnectorId'], with_secret=True) or {}).get('Secret')
         if not tok: return
         me = _tg(tok, 'getMe')
-        if me.get('username'): store.set_connector_config(tg['ConnectorId'], {**_cfg(tg), 'bot_username': me['username']}); tg['ConfigJson'] = json.dumps({**_cfg(tg), 'bot_username': me['username']})
+        if me.get('username'): store.merge_connector_config(tg['ConnectorId'], {'bot_username': me['username']}); tg['ConfigJson'] = json.dumps({**_cfg(tg), 'bot_username': me['username']})
     except Exception: pass
 
 

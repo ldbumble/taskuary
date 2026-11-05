@@ -40,7 +40,7 @@ jobs:
         python: ["3.12"]
     runs-on: ${{ matrix.os }}
     # a hung test fails the job in minutes, with its logs, instead of holding a runner for six hours (2026-10-16)
-    timeout-minutes: 25
+    timeout-minutes: 35   # Windows runs 20-24 min of 25 (2026-11-05): a slow runner was cancelled, not failed
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6

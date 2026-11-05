@@ -82,6 +82,7 @@ import { Divider, ListItemText } from "@mui/material";
 import { TerminalPane } from "./TerminalView.jsx";
 import AgentDraftNotice from "./AgentDraftNotice.jsx";
 import { NoAgentChat } from "./AgentSummary.jsx";
+import { chatReplyShown } from "./agentSummary.js";
 import ThreadReading from "./ThreadReading.jsx";
 import { agentAsks, alreadyAnswered, answeredLine, askWhere, autoPair, draftKey, latestDrafts } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
@@ -2868,7 +2869,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   once the item has ended, where it named a sender nothing is going to
                   ...and beside an email the task owes it is the REPLY's To, said so (the owner, 2026-11-02): under the owed
                   address it read as that email's To. The email wears its own (SlotList) */}
-              {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && (
+              {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && (!inChat || chatReplyShown({ replyMessage, pendingReview, sentReview, unsentReview })) && (
               <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
                 <Typography sx={{ ...label, flexShrink: 0 }} data-tq-reply-to="">{owesEmails ? "Reply to" : "To"}</Typography>
                 <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
@@ -2978,7 +2979,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...in the chat, only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result
   // keeps the chat that holds it on screen (`data-tq-waits`, the agent room's :has)
   const waits = !!(pendingReview || moreDrafts.length || proposals.length || owesEmails || handoff);
-  const chatCards = cardsIn && (waits || t?.Status === "done" || co.writeupAt === "closeout" || replyMessage || sentReview || unsentReview || ended || sentOutside.length
+  const chatCards = cardsIn && (waits || t?.Status === "done" || co.writeupAt === "closeout" || chatReplyShown({ replyMessage, pendingReview, sentReview, unsentReview }) || sentReview || unsentReview || ended || sentOutside.length
     || calAsk?.invite || rounds.length > 1 || (advisorNote && adviceIn === "close")) ? <Box ref={closeOutRef} data-tq-closeout="chat" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{closeBody(true)}</Box> : null;
   return (
@@ -3526,8 +3527,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                      never a scroll below a chat as tall as its words (the owner, 2026-11-04: "where is the prompt box") */
                   <Box data-tq-agent-room={liveSession ? "live" : chatPane ? "chat" : "rest"} sx={liveSession || chatPane ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: canvas && !chatPane ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
-                    // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
-                    "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
+                    // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`) - never
+                    // a chat task's chat, whose box stays at the card's foot from the first second (the stress run, 2026-11-05: 485px empty under it)
+                    ...(!chatPane ? { "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } } : {}) }
                     : { flex: "0 0 auto", mb: canvas ? 1 : 0, display: "flex", flexDirection: "column", "& > *": { flex: "0 0 auto" },
                       ...(chatBelow ? { bgcolor: "#fff", border: `1px solid ${FOCUS_EDGE}`, borderTop: 0, borderRadius: "0 0 10px 10px", overflow: "hidden" } : {}),
                       // ...a finished agent's chat is the rest of its Result, behind the Result heading while the Result rests on its summary

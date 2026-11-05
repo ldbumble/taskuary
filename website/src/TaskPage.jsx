@@ -1688,6 +1688,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // WHERE THE CHAT IS HOME (taskLayout.chatHome): a general or reply task is Came from | Agent and opens on the agent - a general agent's
   // own live chat ("assistant" mode) is still home; a coding terminal is not
   const home = chatHome({ kind: t?.Kind, terminal: liveTerminal(term) }), secs = taskSections(home);
+  // ...AND THERE THE AGENT SECTION IS ONE CHAT (the owner, 2026-11-04: "i want this to be a chat? where is the prompt box"): the reading, each
+  // turn, the owner's words, each new mail, and the box under them - always, Continue's own road. The Result's summary, "The whole
+  // conversation", the record under it and the Continue press are not drawn: the chat is all of them (GeneralWorkspace `chat`)
+  const chatPane = home && workspaceMode === "general";
   // THE RESULT (the redesign, owner-approved 2026-10-21): an agent that has stopped and saved - or finished, or stopped - with a record
   // to show; the work column's agent half is its result then, the session one "Replay the session" line in it
   // ...never when the sender wrote AGAIN after it (`news`): that result answers what came before, and the page leads with what is on
@@ -1861,7 +1865,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: shows("agent") && !sessionView, hasRecord });
   // ...and the write-up's line stands in ONE place of the Agent pane: in the open record, else under the Result's summary or the step's top
-  const lineAt = co.writeupAt !== "result" ? null : shows("agent") && !sessionView && hasRecord && !resultRest ? "record" : "top";
+  const lineAt = co.writeupAt !== "result" ? null : shows("agent") && !sessionView && hasRecord && !resultRest && !chatPane ? "record" : "top";
   // the Agent work row with nothing in it: no agent at work, none ran, no story to tell, and not the open half
   const agentEmpty = !term?.alive && !wide && !shows("agent") && !hasRecord && !["line", "story", "summary"].includes(storyAt);
   // A HELD STEP CARRIES ITS TRUST PRESSES (the owner, 2026-10-26: "we should have button on untrusted user to either trust user or trust
@@ -2326,7 +2330,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
       {runFix && <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix=""
         onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>}
-      {barContinue && <Button size="small" variant={runFix ? "outlined" : "contained"} disableElevation disabled={!!startingAgent} sx={runFix ? barBtn : primaryBtn}
+      {barContinue && !(chatPane && !failedRun) && <Button size="small" variant={runFix ? "outlined" : "contained"} disableElevation disabled={!!startingAgent} sx={runFix ? barBtn : primaryBtn}
         startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : failedRun ? <RefreshIcon sx={{ fontSize: 16 }} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
         title={failedRun ? btnHint("try_again") : isGeneral
           ? "Reopens the saved provider conversation and continues from its existing context."
@@ -2546,8 +2550,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
         // setup the whole thing doesn't work"): the Result's line says why and points at Connections
         ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
-        { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
-          run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }]
+        ...(chatPane && !failedRun ? [] : [{ id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent || !!noAiWhy, why: noAiWhy,
+          run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }])]
       // EVERY START OPENS THE BOX FIRST (the owner, 2026-10-23: "you need to write prompt what about the email or attachment is the
       // issue"): Send to agent on a general task, on a goal, with no coding tool - each started at the press with nothing said. It
       // opens the agent box now - what to do, typed or a voice note, pictures, which agent - and only the box's own Start starts it
@@ -3345,15 +3349,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
                   {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} onTrust={trustPress} trusting={trusting} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
-                  {storyAt === "summary" && !resultShown && <AgentRecord {...recordProps} story={story} folded />}
-                  {resultRest && !sessionView && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""} ended={story?.kind === "interrupted" ? story.line || "" : ""}
+                  {storyAt === "summary" && !resultShown && !chatPane && <AgentRecord {...recordProps} story={story} folded />}
+                  {resultRest && !sessionView && !chatPane && <ResultSummary taskId={selected} stamp={recordProps.stamp} said={story?.said || ""} ended={story?.kind === "interrupted" ? story.line || "" : ""}
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
                     onRecord={threeUp ? () => { if (!shows("agent")) setOpenStage("agent"); setResultOpen(true); } : null} />}
                   {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown
                       (BrowserPane.LastView, the owner 2026-10-28) */}
                   {workspaceMode === "general" && !sessionView && !term?.alive && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
                   {/* ...opened, one press back to the result */}
-                  {resultShown && !failedRun && !sessionView && threeUp && !resultRest && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
+                  {resultShown && !failedRun && !sessionView && threeUp && !resultRest && !chatPane && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}
                     sx={{ borderRadius: 999, px: 2, fontSize: 13, fontWeight: 600, textTransform: "none", color: INK, borderColor: "#c9c3b8" }}>
                     ‹ Back to the result</Button></Box>}
@@ -3409,7 +3413,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       two blocks (a saved answer with no report, or the report) reading two different stores. */}
                   {/* ...and a session that ENDED is this one block too - its state, what happened, More - where a "Session closed"
                       card under the step told the same run a second time, and the story above it a third (the owner, 2026-10-12) */}
-                  {!sessionView && hasRecord && !resultRest && (() => {
+                  {!sessionView && hasRecord && !resultRest && !chatPane && (() => {
                     // A RESULT'S DIFF IS FOLDED (the task-view cleanup, owner-approved 2026-10-25): "N files changed +a −b · Show diff" in What
                     // it made, so Close out stays on screen at a laptop - the raw diff pushed it under the dock. Once the card is 1200px wide
                     // the diff stands open beside the report instead, where the room is
@@ -3441,7 +3445,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <RefreshIcon sx={{ fontSize: 16 }} />}
                             title={noAiWhy || btnHint("try_again")} onClick={continuePress}>{continueWord}</Button></span>}
                     </Box>)}
-                  {failedRun && isGeneral && hasGeneralHistory && !sessionView && (
+                  {failedRun && isGeneral && hasGeneralHistory && !sessionView && !chatPane && (
                     <Box sx={{ mt: 0.75 }}><Button size="small" data-tq-full-result="" aria-expanded={resultOpen ? "true" : "false"}
                       onClick={() => { if (!resultOpen && !shows("agent")) setOpenStage("agent"); setResultOpen(!resultOpen); }}
                       sx={{ fontSize: 11, minHeight: 0, p: 0, minWidth: 0, textAlign: "left" }}>
@@ -3512,7 +3516,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   /* ...A LIVE ONE (the owner, 2026-10-25: "when agent is open we want to maximize space to agent working"). Finished, failed or
                      closed, the room is as tall as what is in it, so the card fits its content and the canvas is not ~350px of empty chat
                      well (CanvasItem keeps the whole height only for data-tq-agent-room="live") */
-                  <Box data-tq-agent-room={liveSession ? "live" : "rest"} sx={liveSession ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
+                  /* ...AND A CHAT TASK'S CHAT IS A PANE AT REST TOO ("chat"): its box stays on screen under the newest turn, as any chat app's,
+                     never a scroll below a chat as tall as its words (the owner, 2026-11-04: "where is the prompt box") */
+                  <Box data-tq-agent-room={liveSession ? "live" : chatPane ? "chat" : "rest"} sx={liveSession || chatPane ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
                     "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }
@@ -3522,13 +3528,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // (the owner, 2026-10-27) - unless it holds a question the agent is waiting on you for, which is the move itself
                       // ...or that is at work again - a turn under way is the move, never a rest (2026-10-28, CI: a working agent's chat stood hidden)
                       // ...or says the agent's draft waiting in Close out (AgentDraftNotice.jsx), where its questions are asked
-                      ...(resultRest || (failedRun && !resultOpen) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
+                      ...(!chatPane && (resultRest || (failedRun && !resultOpen)) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
-                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere}
+                        toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere && !chatPane} chat={home}
                         opening={agentOpening}
                         approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
                     </React.Suspense>

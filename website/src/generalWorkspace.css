@@ -131,3 +131,7 @@
 /* on a phone the recurring-report offer stacks: side by side the text squeezed into a one-word column */
 @media (max-width: 600px) {
   }
+/* a new line on the task's thread, where the chat is home (GeneralWorkspace Arrived): a rule across the stream with when and who, then their words */
+.tq-aui-arrived { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 12px; padding-top: 8px; border-top: 1px dashed #d6cfc2; font-size: 12.5px; line-height: 1.45; color: #5f5a50; }
+.tq-aui-arrived-head { color: #8b6f3a; font-weight: 600; font-size: 11.5px; }
+.tq-aui-arrived-words { color: #3d3a33; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }

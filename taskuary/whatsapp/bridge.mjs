@@ -93,9 +93,15 @@ const lockPairing = () => {
 };
 for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => process.exit(0));     // so the lock goes with a plain stop
 
-const text = (m) => m.conversation || m.extendedTextMessage?.text
-  || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
-const context = (m) => Object.values(m || {}).find((v) => v?.contextInfo)?.contextInfo;
+// Disappearing messages and captioned documents arrive inside envelopes, including nested ones.
+// Read the same content Baileys downloads; otherwise the bridge forwards an empty message that Python drops.
+const content = (m) => WA.normalizeMessageContent?.(m) || m || {};
+const text = (m) => {
+  m = content(m);
+  return m.conversation || m.extendedTextMessage?.text
+    || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
+};
+const context = (m) => Object.values(content(m)).find((v) => v?.contextInfo)?.contextInfo;
 // WhatsApp names one person twice: by phone in a direct chat and, in a group, often by LID. Whichever form the key's
 // sender is not, Baileys may carry beside it - sent on as `senderAlt`, so Taskuary knows the group member it answered
 // for weeks is the person it talks with directly, not a stranger (2026-10-20).
@@ -242,7 +248,9 @@ async function connect() {
   });
   // every message stanza, picked chat or not, before Baileys' own handler decides to ignore it: the sender's push name and
   // other id off its attributes (roster.observeStanza) - the body is never touched here
-  thisSock.ws?.on?.("CB:message", (node) => {
+  // Baileys registered its own synchronous shouldIgnoreJid check inside makeWASocket. An ordinary
+  // .on runs AFTER that check has acknowledged and discarded the first unknown LID's message.
+  thisSock.ws?.prependListener?.("CB:message", (node) => {
     if (thisSock !== sock) return;
     try {
       const a = node?.attrs || {}, who = (String(a.from || "").endsWith("@g.us") ? a.participant : a.from) || "";
@@ -291,7 +299,8 @@ async function connect() {
       chatRoster.observeMessage(m);
       // A VOTE on the Assistant's poll is the owner picking one of its choices: it goes on as that choice's
       // own words, the same as typing them. A vote on anything else (another poll, an older one) is nothing.
-      const pu = m.message?.pollUpdateMessage;
+      const inner = content(m.message);
+      const pu = inner.pollUpdateMessage;
       if (pu) {
         const mine = [meJid, thisSock.user?.id, thisSock.user?.lid];
         const picked = polls.vote(pu, { creators: mine, voters: [m.key.participant, m.key.remoteJid, ...(m.key.fromMe ? mine : [])] });
@@ -310,13 +319,12 @@ async function connect() {
       }
       const body = text(m.message || {}), quoted = text(context(m.message || {})?.quotedMessage || {});
       if (!body && !m.message) continue;
-      const am = m.message?.audioMessage, im = m.message?.imageMessage;
+      const am = inner.audioMessage, im = inner.imageMessage;
       // ...and a DOCUMENT. Only audio and images were ever fetched, so a .docx dropped into
       // the chat had no text, no audio and no image - and messengers.py, which requires one
       // of those three, discarded the whole message. A file somebody sent you simply never
       // existed. (documentWithCaptionMessage is the same thing wearing a caption.)
-      const dm = m.message?.documentMessage
-        || m.message?.documentWithCaptionMessage?.message?.documentMessage;
+      const dm = inner.documentMessage;
       // A PHOTO is the message. Downloading only the audio meant a screenshot arrived as its
       // caption or as nothing at all - "on my laptop, words look weird" with the picture of the
       // broken words dropped on the floor, and triage ruling on a sentence about nothing.

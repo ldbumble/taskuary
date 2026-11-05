@@ -1058,8 +1058,8 @@ class GeneralSession:
     agent = 'assistant'
     cli = 'taskuary'
 
-    def __init__(self, store, task_id: int, connector_id=None, model=None, pick=None):
-        self.sid = uuid.uuid4().hex[:12]
+    def __init__(self, store, task_id: int, connector_id=None, model=None, pick=None, sid=None):
+        self.sid = sid or uuid.uuid4().hex[:12]         # `sid`: an idled-out session's own, brought back as the same run (idle_out)
         self.store, self.task_id = store, task_id
         saved = store.saved_session(task_id) or {}
         if connector_id is None and not pick:
@@ -1069,7 +1069,7 @@ class GeneralSession:
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
-        self.buf, self.n, self.ended, self.last = deque(), 0, None, time.time()
+        self.buf, self.n, self.ended, self.last, self.seen = deque(), 0, None, time.time(), 0.0
         self.subs, self.taps = [], []
         self.alive, self.busy = True, False
         self.spoke = False                   # a turn of this session has ended: before one, a session being opened is not an answer
@@ -1268,6 +1268,9 @@ class GeneralSession:
         if not self._take(WAIT_TURN, cancel):
             raise RuntimeError(f'the assistant has been answering the previous question for over '
                                f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
+        # ...it idled out while this waited for the lock (idle_out): the caller's 'has ended' road starts it again (server.assistant_stream)
+        if not self.alive:
+            self._lock.release(); raise RuntimeError('this assistant session has ended - reload the page and ask again')
         self.quick = False                   # a real turn: from here the session is a desk like any other
         self.busy, self.last = True, time.time()
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
@@ -1771,6 +1774,50 @@ class GeneralSession:
         if not (out or {}).get('closed') and why and why != selfclose.OWNER_ENDS:
             self.store.add_comment(self.task_id, 'assistant', 'agent', f'The agent said it was finished, but the task was not closed: {why}.')
 
+    def idle_why(self, now: float = None, locked: bool = False) -> str:
+        "'' when this session may idle out now (idle_out), else why it stays: a turn on or waiting, an input on its way, the owner's part on its page."
+        if not self.alive: return 'ended'
+        if is_dock(self.store.get_task(self.task_id)): return "the dock is the app's own chat"
+        if self.busy or getattr(self, 'waiting_turns', 0) or (not locked and self._lock.locked()): return 'a turn is on'
+        if ((now or time.time()) - max(self.last, self.seen)) < idle_for(): return 'not idle long enough'
+        from . import ingest, quickwork, workerstate as ws
+        if self.task_id in OPENING or self.task_id in quickwork.RUNNING or self.task_id in ingest._PASSING: return 'an input is on its way'
+        if self.store.waiting_notes(self.task_id): return 'notes wait for it'
+        if ws.held_for(self.task_id): return 'a question is held for the owner'
+        # ...nor while the owner has a part on its page (a sign-in, a step handed over, a held act): the browser stays up until the agent answers
+        from . import browserview, proposals, signin
+        req = ws.asking_of(self.store, self) or {}
+        if str(req.get('request_id') or '').startswith((browserview.TURN_PREFIX, signin.PREFIX)): return 'the owner has a part on its page'
+        if any(proposals._action(r) in proposals.HELD_ACTS for r in self.store._rows(
+                "SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.task_id,))): return 'an act waits for the owner'
+        return ''
+
+    def idle_out(self, now: float = None) -> bool:
+        """Close QUIETLY after idle_for() with nothing going on (the owner, 2026-11-05: "instead of keeping it open forever it should just shut
+        down keeping the chat same ui ... restart in backend"). Not a close: no report, no learning, no held reply released, no line in the chat,
+        no worker event, the task's state untouched. Its CLI stops, its conversation stays saved, and the next typed line or joined mail starts
+        it again as this same run (IDLED, start_session). Idle time only - a turn running is never cut off."""
+        if not self._lock.acquire(blocking=False): return False
+        try:
+            if self.idle_why(now, locked=True): return False
+            self.alive, self.ended = False, time.time()
+        finally: self._lock.release()
+        from . import browserview, clipool, handraise, terminal
+        clipool.close(f'general:{self.task_id}')
+        try:
+            st = browserview.state(self.sid, fresh=True)
+            if st.get('open'): browserview.keep_page(self.task_id, st.get('url')); browserview.close(self.sid, self.task_id)
+        except Exception as e: logger.debug(f'the browser of task {self.task_id} was not closed on idle: {e}')
+        IDLED[self.task_id] = self.sid
+        terminal.SESSIONS.pop(self.sid, None)
+        for loop, q in list(self.subs):
+            try: loop.call_soon_threadsafe(q.put_nowait, None)
+            except RuntimeError: pass
+        self.store.audit('task', self.task_id, 'agent_idled_out', 'assistant', 'agent', {'sid': self.sid})
+        logger.info(f'task {self.task_id}: its agent was idle for {int(idle_for())}s and closed quietly - the next input starts it again')
+        handraise.moved(self.task_id)
+        return True
+
     def stop(self) -> bool:
         """Stop the answer being written now - the STOP BUTTON, and nothing else.
 
@@ -1878,6 +1925,35 @@ def _opening_moved(tid):
 OPENING = _Opening()
 
 
+# QUIET WHEN IDLE (the owner, 2026-11-05: "Just good hygiene"): a chat agent nobody has spoken to for clipool's idle period closes without a
+# word (GeneralSession.idle_out) and the next input brings it back. A task here has no agent running and reads so - not working, not waiting
+# on you - while its chat stays exactly as it was.
+IDLED = {}                   # task id -> the sid of its session that idled out
+
+
+def idle_for() -> float:
+    "The same period a live CLI process is kept open for (clipool.IDLE_SECONDS) - read now, so a test can shorten it."
+    from . import clipool
+    return clipool.IDLE_SECONDS
+
+
+def idled(tid, store=None) -> bool:
+    "Did this task's agent idle out, with nothing since? A closed task's is over, not idled (with `store`)."
+    if tid not in IDLED or session_for(tid): return False
+    return store is None or (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped')
+
+
+def idle_sweep(now: float = None) -> list:
+    "Every chat session idle past idle_for(), closed quietly - [task ids]. Run on the waiting room's clock (waitroom.tick)."
+    from . import terminal
+    out = []
+    for s in [x for x in list(terminal.SESSIONS.values()) if isinstance(x, GeneralSession)]:
+        try:
+            if s.idle_out(now): out.append(s.task_id)
+        except Exception as e: logger.debug(f'task {s.task_id}: idle check failed - {e}')
+    return out
+
+
 def session_for(tid: int):
     from . import terminal
     return next((s for s in list(terminal.SESSIONS.values())
@@ -1932,7 +2008,11 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     other = next((s for s in list(terminal.SESSIONS.values()) if s.task_id == tid and s.alive), None)
     if other: raise ValueError(f'this task already has a live {getattr(other, "agent", "") or "terminal"} '
                                'session - close it (the ✕ on its pane) and ask again here')
-    session = GeneralSession(store, tid, connector_id, model, pick)
+    # ...an agent that IDLED OUT comes back as the same run (idle_out): its sid, so its drafts and questions are still its own, and no
+    # "continuing from the saved conversation" - to the owner nothing stopped
+    back = IDLED.pop(tid, None)
+    session = GeneralSession(store, tid, connector_id, model, pick, sid=back)
+    if back: session.resume_notice, session.spoke = '', True
     # a quick answer's session is quick BEFORE it is registered: set after, it was one more live agent for an instant, and the width
     # (ingest.agent_load) then held back the quick calls and agent starts that read it in that instant
     session.quick = quick

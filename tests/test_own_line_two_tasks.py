@@ -45,6 +45,17 @@ class TwoTasksOneRoom(unittest.TestCase):
         q = 'The Tuesday shift has nobody on it'
         self.assertEqual(_own(self.s, 'o4', '2026-10-29 11:45:00', 'Paula can take it', quoted=q), self.a)
 
+    def test_the_other_task_on_the_thread_hears_it_too(self):
+        """The stress run, 2026-11-05: Ray's follow-up was a new ask, so his thread held two tasks; the owner's own answer to the first was
+        filed on the newer one, and the first's agent never heard it - its draft sat waiting as if nobody had answered. The line still
+        lands on the task it answers; each other open task on the thread is woken to re-plan as well, and says whether it is left."""
+        from unittest import mock
+        from taskuary import ingest
+        woke = []
+        with mock.patch.object(ingest, 'thread_moved', lambda store, tid, *a, **k: woke.append((tid, k.get('own')))):
+            self.assertEqual(_own(self.s, 'o5', '2026-10-29 11:43:00', 'interesting one..'), self.b)
+        self.assertEqual(sorted(woke), sorted([(self.a, True), (self.b, True)]))
+
     def test_a_room_with_one_task_keeps_it(self):
         s = MemoryStore()
         t = s.create_task({'Title': 'Rota', 'Kind': 'task', 'Status': 'open'}, 'o')

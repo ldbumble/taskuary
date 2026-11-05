@@ -28,7 +28,7 @@ test("every connector detail draws Add another, on the card's own identity row",
 test("setup's mailbox cards keep Add another, so a second Outlook account has a way in from the first run", () => {
   const cv = read("ConnectorsView.jsx"), fr = read("FirstRun.jsx");
   assert.match(cv, /const another = MAIL_CARDS\.includes\(conn\.Type\) && <ConnectorIdentity conn=\{conn\} reload=\{reload\} onCreated=\{onCreated\} addOnly \/>;/);
-  assert.match(cv, /<MsSignIn conn=\{conn\} cfg=\{cfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>\s+\{reads\}\s+\{another\}/, "under the Microsoft sign-in");
+  assert.match(cv, /<MsSignIn conn=\{conn\} cfg=\{cfg\} setCfg=\{setCfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>\s+\{reads\}\s+\{another\}/, "under the Microsoft sign-in");
   assert.match(cv, /<TestLine test=\{test\} mt=\{0\} \/>\s+\{another\}\s+<\/Box>\s+\);\s+\}\s+return \(/, "under Gmail's and IMAP's Connect");
   assert.match(cv, /const MAIL_CARDS = \["outlook", "gmail", "imap"\];/);
   // addOnly draws the door alone - setup has no name to edit

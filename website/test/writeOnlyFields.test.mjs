@@ -11,7 +11,7 @@ test("one field draws a card's config, masked when it is write-only, on the mail
   assert.match(field, /\(conn\?\.WriteOnlyKeys \|\| \[\]\)\.includes\(key\)/);
   assert.match(field, /type="password" data-tq-write-only=\{key\}/);
   assert.match(field, /saved, type to replace/);
-  assert.match(src, /const shownFields = adminFields && MS_SIGNIN\.includes\(conn\.Type\) \? m\.fields : ownFields;/);
+  assert.match(src, /const shownFields = ownFields;/);
   for (const part of ["need", "maybe", "late"]) assert.match(src, new RegExp(`\\{${part}\\.map\\(\\(f\\) => <ConfigField key=\\{f\\[1\\]\\} conn=\\{conn\\} field=\\{f\\}`), part);
   assert.match(src, /\{meta\.fields\.map\(\(f\) => <ConfigField key=\{f\[1\]\} conn=\{conn\} field=\{f\}/);
   assert.match(src, /setSecret\(""\); setCfg\(withoutWriteOnly\(conn, cfg\)\);/, "a typed secret empties its box once saved");

@@ -374,13 +374,24 @@ def shown_history(store, tid: int) -> list:
     from .triage import own_words
     rows = chat_rows(store, tid, run=True); msgs = _as_messages(rows)
     # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
-    mail = store._rows(JOINED, (tid,)) if any(m.get('brief') for m in msgs) else []
+    mail = store._rows(JOINED, (tid,))
+    # `at`: when it CAME IN - its CreatedAt, stamped by this database in UTC as the turns are, so the page reads both alike (the owner,
+    # 2026-11-05: "time is wrong": a sender's SentAt in UTC was read as local, 7:24 AM said 12:24 PM). `words`: the text Taskuary kept of it
+    # (OwnText - no "sent from outside" banner, no quoted history), else its own words read from the body
+    def shown(got): return [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
+                             'channel': x.get('Channel') or '', 'at': x.get('CreatedAt') or x.get('SentAt'),
+                             'words': (str(x.get('OwnText') or '').strip() or own_words(str(x.get('BodyText') or '')).strip())[:3000] or x.get('Subject') or ''}
+                            for x in got[-5:]]
     for i, (m, c) in enumerate(zip(msgs, rows)):
         if not m.get('brief'): continue
         got = [x for x in mail if (not i or str(rows[i - 1].get('CreatedAt')) < str(x['JoinedAt'])) and str(x['JoinedAt']) <= str(c.get('CreatedAt'))]
-        if got: m['mail'] = [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
-                              'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
-                              'words': own_words(str(x.get('BodyText') or '')).strip()[:3000] or x.get('Subject') or ''} for x in got[-5:]]
+        if got: m['mail'] = shown(got)
+    # INPUT FIRST (the owner, 2026-11-05: "input should always be first?"): a run that opens on an answer - a conversation picked back up -
+    # opens on the mail that started the task, drawn above that answer as its trigger
+    if msgs and not msgs[0].get('brief') and msgs[0].get('role') == 'assistant':
+        got = [x for x in mail if str(x['JoinedAt']) <= str(rows[0].get('CreatedAt'))]
+        if got: msgs.insert(0, {'id': f'came-in-{tid}', 'role': 'user', 'content': [{'type': 'text', 'text': ''}], 'brief': True,
+                                'createdAt': got[-1].get('CreatedAt'), 'mail': shown(got)})
     # ...and each answer with the summary filed after it (SUMMARY_TYPE): the turn's three parts, drawn under it
     summ, last = {}, None
     for c in store.list_comments(tid):

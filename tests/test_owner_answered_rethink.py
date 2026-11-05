@@ -27,3 +27,13 @@ def test_the_agent_is_told_to_recommend_the_close_never_to_make_it():
     system, _ = general._prompt(s, tid)
     assert selfclose.OWNER_ANSWERED_LINE in system
     assert 'recommend they close the task' in selfclose.OWNER_ANSWERED_LINE and selfclose.MARKER not in selfclose.OWNER_ANSWERED_LINE
+
+
+def test_a_chat_that_opens_on_an_answer_opens_on_the_mail_that_started_it_first():
+    """The owner, 2026-11-05: "input should always be first?" - a conversation picked back up opened on an answer with nothing above it."""
+    s = MemoryStore(); tid = _task(s)
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Here is the badge list.')
+    shown = general.shown_history(s, tid)
+    assert shown[0].get('brief') and shown[0]['mail'][0]['who'] == 'Gail Moreno'
+    assert shown[0]['mail'][0]['words'].startswith('Can you send the badge list')
+    assert shown[1]['role'] == 'assistant'

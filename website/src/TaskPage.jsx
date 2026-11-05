@@ -533,7 +533,9 @@ const stageBtn = (v, word = v.label, head = false) => <button key={v.id} type="b
 // ...and ON THE AGENT'S where the chat is home (taskLayout.chatHome, phase 4 - the owner ruled Mark done and Close with a note live there)
 function useTaskMoves(sec, home = false) {
   const head = useSpineVerbs("head"), share = useSpineVerbs("share"), change = useSpineVerbs("change"), close = home ? sec === "agent" : sec === "close";
-  return { done: close ? head.filter(isDoneMove) : NO_MOVES, task: close ? [...head.filter((v) => !isDoneMove(v)), ...share] : NO_MOVES,
+  // ...and a closed chat task's Reopen stands where its Mark done stood (the owner, 2026-11-05: closed, the chat keeps its live layout)
+  const lead = (v) => isDoneMove(v) || (home && /(^|:)reopen$/.test(String(v.id)));
+  return { done: close ? head.filter(lead) : NO_MOVES, task: close ? [...head.filter((v) => !lead(v)), ...share] : NO_MOVES,
     change: sec === "from" ? change : NO_MOVES };
 }
 const NO_MOVES = [];
@@ -1401,7 +1403,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   // ...AND A CHAT TASK'S CONVERSATION KEEPS ITS PAGE when its agent idles out or the app restarts (the owner, 2026-11-05: the layout never
   // changes with the session): the chat, its box and its strip stay as they are while live - only the header line and the status move
-  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t && !["done", "dropped"].includes(t.Status) && !wrapping;
+  // ...AND A CLOSED ONE TOO (the owner, 2026-11-05): done or dropped, the same chat, its box - typing reopens it (server._refuse_closed_chat) -
+  // and its strip, where Reopen stands in Mark done's place (actionRow.splitRow)
+  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t && !wrapping;
   const sessionView = (liveSession || chatKept) && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
   // finishes, its wrap-up writes the reply (wrapup.wrap), and the page went on showing the closed

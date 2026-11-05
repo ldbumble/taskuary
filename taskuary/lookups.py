@@ -257,7 +257,7 @@ def pipe_read(store, p: dict) -> str:
     for k, i in enumerate(xs):
         own = _own(store, i)
         row = (f"- {task_ref(i['tid']) + ' · ' if i.get('tid') else ''}{'m' + str(i['mid']) + ' · ' if i.get('mid') else ''}{shows(i)['who']} · "
-               f"{_cut(i.get('title'), 120)} [{funnel.LANE_WORDS.get(i.get('lane'), (i.get('lane'),))[0]}, {ago(i.get('since') or i.get('when')) or '?'}]"
+               f"{_cut(i.get('title'), 120)} [{funnel.lane_word(i) or i.get('lane')}, {ago(i.get('since') or i.get('when')) or '?'}]"
                + (f"{NL}  {own[:n] + ' […]' if len(own) > n else own}" if own else ''))
         if used + len(row) > RAIL_READ_CHARS: left = len(xs) - k; break
         out.append(row); used += len(row) + 1

@@ -12,7 +12,7 @@ const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "ut
 
 test("a Codex or Gemini browser step reads as what it did, not 'Ran agent-browser click'", () => {
   const say = (command) => describeCall("shell", { command }).summary;
-  assert.equal(say("agent-browser open https://billing.vendor.example/invoices"), "Opened billing.vendor.example");
+  assert.equal(say("agent-browser open https://billing.vendor.example/invoices"), "Opened billing.vendor.example in the browser");
   assert.equal(say("agent-browser snapshot -i -c"), "Looked at the page");
   assert.equal(say("agent-browser click '@e2'"), "Clicked on the page");
   assert.equal(say('agent-browser find role button "Pay now" click'), "Clicked 'Pay now'");

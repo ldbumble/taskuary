@@ -2278,7 +2278,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // next "mark this done" went out about nothing while the rail still said ON THE TABLE (verify, 2026-10-19). Both go; the words say which
       // ...except a DOOR's ask ("Get AI to set it up"), which is about the page it was pressed on: sent with the task on the table, "Help me
       // set up Any mailbox (IMAP)" was answered with that task's story (TQ-1251)
-      const subject = how.door ? null : tableKey || current || cardRef.current;
+      // ...and NOW NO PAGE CARRIES THE TASK UNDER IT (the owner, 2026-11-05): with Settings, Connections, Reports, the Hub or New on the canvas
+      // the question is about that page alone - its view goes, the task beneath does not
+      const subject = how.door || browsing ? null : tableKey || current || cardRef.current;
       const ask = () => turn({ mode: "say", text: t, key: subject, context_mid: currentItem?.mid && subject === current ? currentItem.mid : null,
                                open_card: openCardRef.current, images, ...(view ? { view } : {}), ...(react ? { react } : {}) });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
@@ -3804,7 +3806,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               ref={popRef} hidden={!popOpen} style={{ height: isMini ? Math.round(popH / 2) : popH }} onKeyDown={escShut}>
               {/* ...folded, the head is all there is - and a press anywhere on it brings the window back */}
               <div className="tq-chat-pop-head" onClick={isMini ? expand : undefined} title={isMini ? "Open the chat" : undefined}>
-                <TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && <span>{`· ${currentItem.ref}`}</span>}
+                {/* ...a page over the task is what the chat is about, and the task under it is not named (the owner, 2026-11-05) */}
+                <TaskuaryMark size={16} /><b>Taskuary</b>{currentItem?.ref && !browsing && <span>{`· ${currentItem.ref}`}</span>}
                 {isMini && unseen > 0 && <i className="tq-chat-unseen in-head" data-tq-unseen={unseen} aria-label={`${unseen} new in the chat`}>{unseen}</i>}<span style={{ flex: 1 }} />
                 {!isMini && <Tooltip title="Past chats"><IconButton size="small" aria-label="Past chats" onClick={openChats}><HistoryIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></Tooltip>}
                 {isMini
@@ -3823,7 +3826,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 </div>
               )}
               <div className="tq-chat-pop-body" ref={popBodyRef}>
-                {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
+                {!winLines.length && !popPending && !popErr && <p className="tq-chat-pop-empty">{browsing ? "Ask about this page, or anything on your list." : currentItem?.ref ? `Ask about ${currentItem.ref}, or anything on your list.` : "Ask about anything on your list."}</p>}
                 {winLines.map(([m, i]) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={false} last={!old && i === lastSaidIdx} further={!old && i === furtherIdx} tableChips={tableChips} barHolds={barHolds} pageOver={pageOver}
                   actions={actions} fresh={currentItem} canvas={canvasState} />)}
                 {popPending && pendingLine}

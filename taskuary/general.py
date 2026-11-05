@@ -1913,7 +1913,8 @@ class GeneralSession:
         sub = ws.sub_state(waiting, False, req)
         base = {'sid': self.sid, 'label': self.label, 'cwd': '', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': 'taskuary', 'mode': self.mode, 'alive': self.alive,
-                'busy': self.busy,
+                # ...and the TURN's own start while one runs (self.last is set as it takes): the chat's counter ticks from it (GeneralWorkspace RanFor)
+                'busy': self.busy, 'turn_started': self.last if self.busy else None,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
                 'waiting': waiting, 'request': req, 'state': sub, 'line': ws.says(sub, ws.SHOWN, (req or {}).get('text')) if sub else None,
                 'cmd': f'{self.provider or "AI connector"} {self.model}'.strip(),

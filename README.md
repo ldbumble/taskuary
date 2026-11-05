@@ -175,6 +175,7 @@ An agent leaves a note; the next one reads it before picking up the work.
   authenticator keys are under **Settings → Agent permissions**.
 - **Your phone.** Over WhatsApp or Telegram, the same Assistant walks your tasks with the same buttons. It
   speaks only while you are talking to it. See [On your phone](https://taskuary.com/docs/phone).
+  WhatsApp intake reads disappearing-message text, quotes and media from the chats you select.
 
 ### Memory that learns how you work
 

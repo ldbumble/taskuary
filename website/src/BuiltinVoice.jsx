@@ -50,6 +50,6 @@ export default function BuiltinVoice({ onBack }) {
       <TextField fullWidth multiline minRows={3} label="Microphone test" value={text} onChange={(e) => setText(e.target.value)} />
       {interim && <Typography sx={{ mt: 1 }}>{interim}</Typography>}
     </>}
-    <Typography sx={{ mt: 2 }}>If Windows cannot listen, check Settings → Privacy &amp; security → Speech (Online speech recognition) and Microphone (desktop app access). In a browser, allow microphone access for this page.</Typography>
+    <Typography sx={{ mt: 2 }}>If Windows cannot listen, check Windows Settings → Privacy &amp; security → Speech (Online speech recognition) and Microphone (desktop app access). In a browser, allow microphone access for this page.</Typography>
   </Box>;
 }

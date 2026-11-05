@@ -497,6 +497,7 @@ class DecideBody(BaseModel):
     cc: list[str] | None = None      # loop somebody in on this answer (email only)
     reply_text: str | None = None    # on a close-out: the task's pending reply, sent once the merge/close succeeded
     anyway: bool = False             # Send anyway: past a delivery nobody can confirm (verdicts._deliver_review)
+    fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -2274,20 +2275,23 @@ def _assistant_payload(task_id: int, session=None):
                  for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
     from . import outputs
     at_turn = lambda at: next((mid for a, mid in answers if a >= str(at or '')), None)
-    # A POST IS DRAWN IN THE TURN THAT MADE IT (the owner, 2026-11-05): every post proposal on the task, waiting or answered, with the
-    # answer it belongs to and who it posts as - the card shows it as the post, and once posted, that it went and where
-    posts = []
+    # AN ACT IS DRAWN IN THE TURN THAT SET IT UP (the owner, 2026-11-05): every proposal on a tool a catalogue card declares an action view
+    # for (a post, a tracker comment - connectorcatalog.action_for), waiting or answered, with the answer it belongs to and who it goes out
+    # as - ActionCard draws what the card declares, and once it went, that it did and where
+    from . import connectorcatalog as _cat
+    cards = []
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' ORDER BY ReviewId", (task_id,)):
         try: p = json.loads(r.get('FinalText') or r.get('DraftText') or '{}')
         except ValueError: continue
-        if not _proposals.is_post(p): continue
+        if p.get('action') != 'run_tool' or not (act := _cat.action_for(p.get('type'))): continue
         c = store.get_connector(int(p['connector_id'])) if str(p.get('connector_id') or '').isdigit() else None
         try: who = json.loads((c or {}).get('ConfigJson') or '{}').get('member_name') or ''
         except ValueError: who = ''
-        posts.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
-                      'network': _proposals.POSTS[p['type']], 'as': who or (c or {}).get('Name') or ''})
+        cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
+                      'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
+                      'as': who or (c or {}).get('Name') or ''})
     return {'messages': messages,
-            'posts': posts,
+            'cards': cards,
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
             'earlier': [],
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
@@ -4856,7 +4860,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                       + '; review it and approve again.' if draft
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
-                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway)
+                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields)
 
 @app.get('/api/reviews/{rid}/closeout')
 def closeout_state(rid: int):

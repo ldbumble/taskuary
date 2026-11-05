@@ -10,26 +10,6 @@ export const proposalFrom = (review) => {
   }
 };
 
-// A POST IS DRAWN AS THE POST (proposals.POSTS, the owner 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me
-// if i want to post it"): its words, its picture and who it posts as, with "Post to LinkedIn" - and once it went, that it did and where
-export const POSTS = { linkedin_post: "LinkedIn", bluesky_post: "Bluesky", mastodon_post: "Mastodon" };
-export const isPost = (p) => p?.action === "run_tool" && !!POSTS[p?.type];
-export const isPostReview = (review) => isPost(proposalFrom(review));
-// a review as the post card reads it - the shape the assistant payload's `posts` carries (server._assistant_payload)
-export const postOf = (review) => {
-  if (review?.Kind !== "action") return null;
-  let p = null;
-  try { p = JSON.parse(review.FinalText || review.DraftText || ""); } catch { return null; }
-  return isPost(p) ? { ReviewId: review.ReviewId, Status: review.Status, CreatedAt: review.CreatedAt, Reason: review.Reason, post: p, network: POSTS[p.type], as: "" } : null;
-};
-// where the card stands: waiting on the press (live only on the newest turn), posted with its link, or not posted
-export const postState = (row, live = true) => {
-  const s = row?.Status;
-  if (s === "approved" || s === "edited") return { posted: true, url: row?.post?.result?.url || "" };
-  if (s === "pending" && live) return { live: true };
-  return { posted: false, said: s === "pending" ? "Not posted" : "Not posted · dismissed" };
-};
-
 // THE CLOSE-OUT (the owner, 2026-09-27): what finishes a task where it lives - merge the PR the agent opened, close
 // the issue it came from. Its text is the summary a merge is squashed with, or the comment the issue closes with.
 // ONE SET OF WORDS FOR EVERY SYSTEM (the owner, 2026-09-27: "if we have button to close out per system it will be

@@ -844,7 +844,19 @@ def roads(store) -> str:
     try: cards = [c for c in store.list_connectors() if c.get('Active')]
     except Exception: return ''
     return '; '.join(f"{c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture' if t in MEDIA else '')
-                     for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type'])
+                     + takes(t) for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type'])
+
+
+def takes(tool) -> str:
+    """What the agent may name on an act its card declares (connectorcatalog `actions`): the fields it fills, and the choices the owner's
+    defaults on the connection fill - named only when the owner asked for one, since the card shows them and the owner may change them."""
+    from . import connectorcatalog as cat
+    act = cat.action_for(tool)
+    if not act: return ''
+    mine = [f['key'] for f in act['fields'] if f.get('agent')]
+    theirs = [f"`{f['key']}` ({' or '.join(str(c['value']) for c in f['choices'])})" for f in act['fields'] if f.get('setting')]
+    return (f"; it takes {', '.join(f'`{k}`' for k in mine)}" if mine else '') + (
+        f"; {' and '.join(theirs)} come from the owner's defaults - name one only when the owner asked for it" if theirs else '')
 
 
 def action_line(store) -> str:

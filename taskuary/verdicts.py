@@ -610,7 +610,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                         **({'offers': e.offers, 'refused': True} if isinstance(e, proposals.ChecksRed) else {}),
                         # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
                         **({'needs': e.needs} if getattr(e, 'needs', '') else {})}
-            if not store.decide_review(rid, VERB2STATUS['approve'], rv.get('DraftText'), actor, note): return _delivery_busy(store, rid)
+            if not store.decide_review(rid, VERB2STATUS['approve'], proposals.receipt(rv, final, out), actor, note): return _delivery_busy(store, rid)
             proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
             return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
         if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)

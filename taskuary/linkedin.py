@@ -203,11 +203,40 @@ def run_linkedin_post(cfg):
             'distribution': {'feedDistribution': 'MAIN_FEED',
                              'targetEntities': [], 'thirdPartyDistributionChannels': []},
             'lifecycleState': 'PUBLISHED', 'isReshareDisabledByAuthor': False}
+    # the picture goes up FIRST, and only after every check above: an upload LinkedIn keeps is a stray if the post is then refused here
+    if cfg.get('image_path'):
+        body['content'] = {'media': {'id': upload_image(cfg, author, cfg['image_path']),
+                                     **({'altText': str(cfg['alt'])[:4000]} if cfg.get('alt') else {})}}
     r = requests.post(f'{API}/rest/posts', headers=_headers(cfg), json=body, timeout=TIMEOUT)
     if not r.ok: _fail(r)
     # the id comes back in a header, not the body - the body is empty on a 201
     post_id = r.headers.get('x-restli-id') or r.headers.get('X-RestLi-Id') or ''
     return {'rows': [{'id': post_id, 'author': author, 'visibility': visibility,
-                      'characters': len(text),
+                      'characters': len(text), 'image': (body.get('content') or {}).get('media', {}).get('id', ''),
                       'url': f'https://www.linkedin.com/feed/update/{post_id}' if post_id else ''}],
-            'columns': ['id', 'author', 'visibility', 'characters', 'url']}
+            'columns': ['id', 'author', 'visibility', 'characters', 'image', 'url']}
+
+
+# A PICTURE ON A POST (the owner, 2026-11-05: a post made with its image is shown as the post and posted on one press). LinkedIn takes it
+# in three steps, none of which is the post: initializeUpload names an upload address and the image's urn, the bytes go there with a PUT,
+# and the post carries the urn as its media. `path` is Taskuary's own resolution of a file in the task's folder (proposals.execute),
+# never a path an agent wrote.
+IMAGE_TYPES = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif'}
+IMAGE_MAX = 36 * 1024 * 1024                         # LinkedIn's own ceiling for a feed image
+
+
+def upload_image(cfg, author: str, path) -> str:
+    from pathlib import Path
+    p = Path(path)
+    if p.suffix.lower() not in IMAGE_TYPES: raise RuntimeError(f'LinkedIn takes a PNG, JPG or GIF picture - {p.name} is not one')
+    data = p.read_bytes()
+    if len(data) > IMAGE_MAX: raise RuntimeError(f'{p.name} is {len(data) // 1048576} MB - LinkedIn takes a picture up to 36 MB')
+    r = requests.post(f'{API}/rest/images?action=initializeUpload', headers=_headers(cfg),
+                      json={'initializeUploadRequest': {'owner': author}}, timeout=TIMEOUT)
+    if not r.ok: _fail(r)
+    v = (r.json() or {}).get('value') or {}
+    if not (v.get('uploadUrl') and v.get('image')): raise RuntimeError('LinkedIn did not hand back an address for the picture - nothing was posted')
+    up = requests.put(v['uploadUrl'], data=data, timeout=TIMEOUT * 4,
+                      headers={'Authorization': _headers(cfg)['Authorization'], 'Content-Type': IMAGE_TYPES[p.suffix.lower()]})
+    if not up.ok: _fail(up)
+    return v['image']

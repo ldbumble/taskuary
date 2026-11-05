@@ -94,7 +94,7 @@ function DocPreview({ page }) {
   );
 }
 
-function Preview({ page }) {
+export function Preview({ page }) {
   const [body, setBody] = useState(null), [err, setErr] = useState("");
   const sheet = isOutput(page) && page.preview === "sheet", pdf = isPdf(page), doc = isOutput(page) && page.preview === "document";
   const picture = isPicture(page) || pdf, text = isOutput(page) && page.preview === "text" && !/markdown/.test(type(page));

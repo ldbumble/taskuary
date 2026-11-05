@@ -810,6 +810,46 @@ LOGIN_SENTENCE = ("A login or secret you find in their files goes only in the re
 # (the floor blocks credential folders for them too)
 STRANGER_GOAL_LINE = _GOAL.format(look='', login='')
 GOAL_LINE = _GOAL.format(look=LOOK_CLAUSE, login=LOGIN_SENTENCE)
+
+
+# DO WHAT YOU CAN DO (the owner, 2026-11-05, over a LinkedIn post left as "For you to do: paste the post into LinkedIn" on a task with LinkedIn
+# connected: "the goal is the action either email or post or web browser pay something, fill out form, generate report etc.. that's the main
+# goal help the user" - then: "next steps some times is not action as well. it can be clarifying question or i will leave this for you to do
+# for whatever reason. but if there is something it can do which is it's core job, be helpful assistant then do it"). Next steps holds one of
+# three: the act set up for the owner's one press, the question it needs answered first, or the part that is theirs and why. The roads are
+# what THIS owner has connected (roads), never a list of words to match.
+_ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever part of the work you can do yourself, do it, rather than "
+           "handing it back. When the work calls for an act - an email, a post, a payment, a form, a report - set it up through Taskuary's "
+           "own roads, done up to the one press that sends it; it shows under Next steps as what it is (the email with its Send, the post "
+           "as a post with its Post button, the held step with its Approve), and nothing goes before the owner presses:\n"
+           "- a reply or an email: propose_reply / propose_email, with any file it carries in `attach`\n"
+           "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
+           "(the propose tool; with no tools, a line TASKUARY-PROPOSE {{...}}) - a post's words in `text` and its picture in `image` (a file "
+           "in your task folder), not in a file beside it. {roads}\n"
+           "- a payment, booking or form on a website: fill it in your browser up to the last press; that press is held for the owner's "
+           "Approve\n"
+           "- a report, sheet or picture: make it in your task folder - it shows in the chat with your answer\n"
+           "Never hand the owner a copy-and-paste job (\"paste this into LinkedIn\", \"post it yourself\") for a road that exists. Next steps "
+           "may instead be the one question you need answered first, or a part that is the owner's to do - say why (no road reaches it: "
+           "name the connection that would; or it is theirs to decide). When the work is an answer, a finding or a check, answer it "
+           "plainly: no act is owed.")
+
+
+def roads(store) -> str:
+    """The connected systems an act can go out on for this owner: each card that is on and runs an executor that posts, sends or
+    orders (scopes.REACHES), by its own name and id. The generic ones (an MCP tool, a GraphQL call) are no road of their own."""
+    from . import scopes
+    from .proposals import MEDIA
+    from .reports import REGISTRY, card_of
+    try: cards = [c for c in store.list_connectors() if c.get('Active')]
+    except Exception: return ''
+    return '; '.join(f"{c.get('Name') or c['Type']} (connector_id {c['ConnectorId']}): {t} - {scopes.REACHES[t]}" + (', with a picture' if t in MEDIA else '')
+                     for c in cards for t in sorted(REGISTRY) if t in scopes.REACHES and t not in ('mcp', 'graphql') and card_of(t) == c['Type'])
+
+
+def action_line(store) -> str:
+    r = roads(store)
+    return _ACTION.format(roads=f'Connected for this owner: {r}.' if r else 'Nothing that posts or sends is connected for this owner yet.')
 READING_CHARS = 1_500
 
 
@@ -1005,7 +1045,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
-        system += f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}\n\n{selfclose.SUMMARY_LINE}'
+        system += f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}') + f'\n\n{selfclose.SUMMARY_LINE}'
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words

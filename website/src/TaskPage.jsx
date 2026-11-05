@@ -3361,8 +3361,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     pages={(detail?.artifacts || []).filter((a) => isPublished(a) || a.kind === "shown")}
                     onRecord={threeUp ? () => { if (!shows("agent")) setOpenStage("agent"); setResultOpen(true); } : null} />}
                   {/* ...and the page its browser last stood on: the view outlives the session, under whichever way the ended agent is shown
-                      (BrowserPane.LastView, the owner 2026-10-28) */}
-                  {workspaceMode === "general" && !sessionView && !term?.alive && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
+                      (BrowserPane.LastView, the owner 2026-10-28) - but not in a chat task, whose answer is in the chat (the owner, 2026-11-05:
+                      "for browser we don't really want to show it unless they need login") */}
+                  {workspaceMode === "general" && !sessionView && !term?.alive && !chatPane && <Box sx={{ mt: 1, "&:empty": { display: "none" } }}><LastView taskId={t.TaskId} narrow={narrow} /></Box>}
                   {/* ...opened, one press back to the result */}
                   {resultShown && !failedRun && !sessionView && threeUp && !resultRest && !chatPane && <Box sx={{ mt: 1.5 }}><Button size="small" variant="outlined"
                     data-tq-full-result="" aria-expanded="true" onClick={() => setResultOpen(false)}

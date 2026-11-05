@@ -35,7 +35,7 @@ import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, shownOnce, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
-import { heldOn, isTurn, TURN_BACK, waitsOnPage } from "./browserSplit.js";
+import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
@@ -1115,7 +1115,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
             or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
         <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy && !streaming}
           stack={!dock} taskId={dock ? null : task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
-          onView={viewShownIs}>{thread}</SessionPane>
+          onView={viewShownIs} quiet={chat && !dock} need={needsOwner(asking, viewActs)}>{thread}</SessionPane>
       </Box>
     </Box>
   );

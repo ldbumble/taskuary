@@ -22,7 +22,7 @@ import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane, { LastView } from "./BrowserPane.jsx";
 import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage, isBlankPage,
-  splitRatio, viewOnScreen, PHONE_BELOW } from "./browserSplit.js";
+  splitRatio, viewOnScreen, PHONE_BELOW, quietLayout, quietRatio } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -731,9 +731,11 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
 // seen it stays on its last frame when it closes; with no browser showing, the task's kept last view (LastView). `held`, `turn`,
 // `onHandBack`, `onDecided`: what waits on the owner, drawn on the view (BrowserPane). `onView(bool)`: whether the view is on screen to
 // draw them - when it is not (a phone's chip), the conversation keeps their cards.
+// `quiet` (a chat task's conversation, 2026-11-05): the browser is drawn only while `need` - the owner has a part on the page (needsOwner)
+// - and then BESIDE the chat (quietLayout); no last frame, no kept view, no "closed" line: the agent's answer is in the chat.
 export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus = true,
                              canFull = false, yourTurn = false, idle = false, stack = false, taskId = null, held = [], turn = null,
-                             onHandBack, onDecided, onView }) => {
+                             onHandBack, onDecided, onView, quiet = false, need = false }) => {
   const slot = useRef(null);
   const [browser, setBrowser] = useState({ open: false, url: "" });
   const [width, setWidth] = useState(0);
@@ -785,9 +787,10 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   }, []);
   // ...and the agent's canvas keeps the view once seen, on its last frame, while the session lives (`ended`)
   // ...and an empty tab is no view and no chip: only a page the agent opened is shown (showsBrowser)
-  const showingBrowser = !!sid && (showsBrowser(browser.open, browser.url) || (stack && seen));
-  const ended = stack && seen && !browser.open;
-  const layout = layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
+  const showingBrowser = !!sid && (quiet ? need && showsBrowser(browser.open, browser.url) : showsBrowser(browser.open, browser.url) || (stack && seen));
+  const ended = !quiet && stack && seen && !browser.open;
+  const layout = quiet ? quietLayout(width, showingBrowser, folded) : layoutFor(width, showingBrowser, folded || (isLocalPage(browser.url) && !localOk), stack);
+  const share = quiet ? quietRatio(ratio) : splitRatio(ratio, width);
   const onScreen = showingBrowser && viewOnScreen(layout);
   useEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
   const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
@@ -824,7 +827,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   );
   /* A BROWSER THAT WAS OPEN AND CLOSED says so, where its chip or half sat: the pane just vanished, so a crash, a close and a glitch
      looked the same (2026-10-25). Words only - it comes back by itself when the agent opens a page again. */
-  const closedLine = !!sid && seen && !browser.open && !ended && (
+  const closedLine = !quiet && !!sid && seen && !browser.open && !ended && (
     <Typography data-tq-browser-closed="" sx={{ ...mono, flex: "0 0 auto", fontSize: 10.5, color: "#a8a196", m: "5px 0 0 10px" }}>
       {`The browser closed${lastPage.current ? ` (last on ${shortUrl(lastPage.current, 36)})` : ""}. It reopens when the agent next needs it.`}
     </Typography>
@@ -849,13 +852,13 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
             yourTurn={yourTurn} onFold={() => fold(true)} waiting={held} turn={turn} onHandBack={onHandBack} onDecided={onDecided} ended={ended} />
         </Box>
       )}
-      <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - splitRatio(ratio, width)) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
+      <Box sx={{ flex: layout === "split" ? `0 0 calc(${((1 - share) * 100).toFixed(2)}% - 4px)` : 1, minWidth: 0, minHeight: 0,
         display: "flex", flexDirection: "column", position: "relative",
         // the terminal takes what is left after the chip's row; only IT stretches
         "& > .tq-term-slot": { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
         "& > .tq-term-slot > *": { flex: 1, minHeight: 0 } }}>
         {chip}{closedLine}
-        {!showingBrowser && stack && taskId && sid && <LastView taskId={taskId} sid={sid} narrow={width > 0 && width < PHONE_BELOW} />}
+        {!showingBrowser && stack && !quiet && taskId && sid && <LastView taskId={taskId} sid={sid} narrow={width > 0 && width < PHONE_BELOW} />}
         <Box className="tq-term-slot">{children || <TermOnly sid={sid} height="100%" onExit={onExit} autoFocus={autoFocus} />}</Box>
       </Box>
       {layout === "split" && (

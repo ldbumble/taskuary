@@ -211,3 +211,18 @@ test("an empty tab is not a page: the view folds to its chip until the agent ope
   assert.equal(waitsOnPage({ request_id: "571e07b97197", text: "First month free, or a price now?" }), false);
   assert.equal(waitsOnPage(null), false);
 });
+
+// A CHAT TASK'S BROWSER (the owner, 2026-11-05): drawn only when the owner has a part on the page, and then beside the chat
+test("a chat task's browser shows only when the owner is needed, side by side", async () => {
+  const { needsOwner, quietLayout, quietRatio, CHAT_SHARE } = await import("../src/browserSplit.js");
+  assert.equal(needsOwner(null), false);                                                   // the agent just browsing
+  assert.equal(needsOwner({ request_id: "q:where" }), false);                              // a question asked in words: the chat's box
+  assert.equal(needsOwner({ request_id: "signin:bank.example" }), true);                   // a sign-in (or its code) the vault does not keep
+  assert.equal(needsOwner({ request_id: "yourturn:captcha" }), true);                      // a captcha handed over
+  assert.equal(needsOwner(null, [{ id: 7 }]), true);                                       // a held step: Approve / Dismiss
+  assert.equal(quietLayout(1200, false), "none");
+  for (const w of [555, 600, 700, 900, 1400]) assert.equal(quietLayout(w, true), "split");     // never stacked at a desktop's width
+  assert.equal(quietLayout(380, true), "chip");                                            // a phone's width: the view as a link
+  assert.equal(quietLayout(900, true, true), "folded");                                    // the owner's own Fold
+  for (const r of [0.3, 0.58, 0.8, NaN]) assert.ok(1 - quietRatio(r) >= CHAT_SHARE - 1e-9 && quietRatio(r) >= 0.3);
+});

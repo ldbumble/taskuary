@@ -506,6 +506,7 @@ class SettingBody(BaseModel): name: str; value: str
 class SourceBody(BaseModel):
     SourceId: int | None = None; ConnectorId: int | None = None; Channel: str | None = None
     Address: str | None = None; ConfigJson: str | None = None; Active: bool | None = None
+    ConfigPatch: dict | None = None                # as on a connector: only the keys changed, merged over the stored config
 class DispatchBody(BaseModel):
     # `agent` is the ROLE that works it; `brain` is WHICH CLI runs it. Two questions, and
     # answering both with one name is what sent TQ-0588's coding work to Copilot. `pick` is the
@@ -535,6 +536,7 @@ class ConnectorBody(BaseModel):
     ConfigJson: str | None = None; Secret: str | None = None; Active: bool | None = None
     Roles: str | None = None                       # csv of trigger,report,tool - see store.ROLES
     Scope: str | None = None                       # read | write | admin - see scopes.SCOPES
+    ConfigPatch: dict | None = None                # the config keys one field changed, merged over what is stored (None removes one)
 class AiSetupBody(BaseModel):
     guide: list[str] = []; fields: list = []; secret_label: str | None = None   # the card's Guide + form, as the UI has them
     agent_steps: list[str] = []                                                  # the card's Agent tab: steps written FOR the agent
@@ -6760,6 +6762,14 @@ def save_source(body: SourceBody):
         raise HTTPException(422, 'WhatsApp takes named chats only - add the person or the group you want, '
                                  'not every chat on the account')
     was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None
+    patch = fields.pop('ConfigPatch', None)
+    if patch is not None and (not was or fields.get('ConfigJson') is not None):
+        raise HTTPException(422, 'a config patch is for a saved source, and never beside a whole ConfigJson')
+    # a report's card is checked whole (below): its patch is laid over what is stored and saved the old way
+    if patch is not None and channel == 'report':
+        try: base = json.loads(was.get('ConfigJson') or '{}') or {}
+        except ValueError: base = {}
+        fields['ConfigJson'] = json.dumps({k: v for k, v in {**base, **patch}.items() if v is not None}); patch = None
     # a workflow's steps are checked before they are kept: a broken list would only fail on its first scheduled run (flow.validate)
     if fields.get('ConfigJson') and channel == 'report':
         try: rcfg = json.loads(fields['ConfigJson']) or {}; flow_cfg = rcfg.get('flow')
@@ -6776,7 +6786,8 @@ def save_source(body: SourceBody):
             from . import flow
             ok, why = flow.validate(store, flow_cfg)
             if not ok: raise HTTPException(422, f'The steps cannot be saved yet: {why}.')
-    sid = store.save_source(fields, ACTOR)
+    sid = store.save_source(fields, ACTOR) if set(fields) - {'SourceId'} else fields['SourceId']
+    if patch: store.merge_config('source', sid, patch)
     # A NEW WORKFLOW STARTS ON ITS NEXT SLOT, not on the next tick. A source never run is due at once (reports.is_due) - right
     # for a report you want to see, wrong for a job that opens tasks and drafts mail: a weekly Monday workflow saved on a
     # Wednesday ran seconds later, beside the editor's "Saved - runs Mon at 08:00", and again beside its own Save & run now -
@@ -7038,6 +7049,10 @@ def brains():
 @app.post('/api/connectors')
 def save_connector(body: ConnectorBody):
     fields = {k: (int(v) if k == 'Active' else v) for k, v in body.model_dump().items() if v is not None}
+    # ...a field's own save carries only its keys (store.merge_config): never beside a whole ConfigJson, never before the card exists
+    patch = fields.pop('ConfigPatch', None)
+    if patch is not None and (not fields.get('ConnectorId') or fields.get('ConfigJson') is not None):
+        raise HTTPException(422, 'a config patch is for a saved connector, and never beside a whole ConfigJson')
     if fields.get('Name') is not None:
         fields['Name'] = fields['Name'].strip()
         if not fields['Name']: raise HTTPException(422, 'connector name cannot be blank')
@@ -7071,8 +7086,16 @@ def save_connector(body: ConnectorBody):
         if isinstance(conf, dict) and conf.get('base_url'):
             try: fields['ConfigJson'] = json.dumps({**conf, 'base_url': llm.gateway_url(conf['base_url'])})
             except ValueError as e: raise HTTPException(422, str(e))
+    if not current and patch is not None: raise HTTPException(404, 'connector not found')
+    if typ == 'hipaa_ai' and (patch or {}).get('base_url'):
+        from . import llm
+        try: patch = {**patch, 'base_url': llm.gateway_url(patch['base_url'])}
+        except ValueError as e: raise HTTPException(422, str(e))
     cid = store.save_connector(fields, ACTOR)
-    safe = {k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
+    if patch: store.merge_config('connector', cid, patch, keep=guard.WRITE_ONLY_CONFIG.get(typ, ()))
+    # the keys a patch changed, never their values: a field's save may be a client secret
+    safe = ({k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
+            | ({'config_keys': sorted(patch)} if patch else {}))
     store.audit('connector', cid, 'edit' if body.ConnectorId else 'create', ACTOR, detail=safe)
     discovery = None
     # a new GitHub PAT is all the config there is: saving the token IS connecting - and

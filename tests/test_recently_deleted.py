@@ -98,8 +98,9 @@ class RecentlyDeletedTests(unittest.TestCase):
         sealed = self.s._one('SELECT Secret FROM connector WHERE ConnectorId=?', (cid,))['Secret']
         with mock.patch.object(vault, 'forget') as forget:
             out = self.c.post(f'/api/connectors/{cid}/reset').json()
-            c = self.s.get_connector(cid)
-            self.assertEqual((c['HasSecret'], c['Active'], c['ConfigJson'], self.s.get_source(box)['Active']), (0, 0, None, 0))
+            # a card added beside the catalogue's own is taken off the list whole (the owner, 2026-11-05: "it should go away")
+            self.assertTrue(out['gone'])
+            self.assertEqual((self.s.get_connector(cid), self.s.get_source(box)['Active']), (None, 0))
             self.assertEqual(self.c.get('/api/deleted').json()['data'], [])          # an Undo line's, never Recently deleted's
             self.c.post(f"/api/deleted/{out['deleted']}/restore")
             forget.assert_not_called()

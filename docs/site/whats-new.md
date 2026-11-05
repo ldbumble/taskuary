@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.2 - 2026-11-05
+
+- The agent never closes a chat task: only the owner's Mark done, Send and close or Close with a note does
+- A saved sign-in goes straight in and raises no ask, so no browser is shown for it
+- Typing in a chat task is the way on: it reopens a closed one and carries on, and Continue and Run another are gone
+- A chat task draws the agent's browser only when the owner has a part on it, beside the chat
+
 ## 0.3.11.1 - 2026-11-05
 
 - A chat task draws no Advisor line: its agent is the advisor

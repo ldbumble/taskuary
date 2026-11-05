@@ -95,6 +95,52 @@ ACTIONS = {
 }
 HELD_ACTS = ('browser_act', 'shell_act', 'desktop_act')     # raised by a hook before the act ran - never an agent's marker
 
+# A POST IS DRAWN AS THE POST (the owner, 2026-11-05: "it's not showing the post and the image as a linkedin post and asking me if i want to
+# post it"): a run_tool on one of these is the owner's words on a network, so its card shows them as a post, editable, with the picture
+# where the network takes one - and what the owner left in the box is what goes. MEDIA: the ones that carry a picture from here.
+POSTS = {'linkedin_post': 'LinkedIn', 'bluesky_post': 'Bluesky', 'mastodon_post': 'Mastodon'}
+MEDIA = {'linkedin_post'}
+
+
+def is_post(p: dict) -> bool: return (p or {}).get('action') == 'run_tool' and (p or {}).get('type') in POSTS
+
+
+def picture_why(tid, p: dict) -> str:
+    """'' when a post's `image` is a picture in the task's own folder it can carry; else what is wrong, said to the agent."""
+    if not p.get('image'): return ''
+    from . import linkedin, outputs
+    if p.get('type') not in MEDIA: return f"{POSTS.get(p.get('type'), p.get('type'))} posts carry no picture from here - post the words alone"
+    f = outputs.named(int(tid), p['image']) if tid else None
+    if not f: return f"{p['image']} is not a file in your task folder - save the picture there first"
+    if f.suffix.lower() not in linkedin.IMAGE_TYPES: return f'{f.name} is not a PNG, JPG or GIF picture'
+    return ''
+
+
+def _edited(p: dict, final_text) -> dict:
+    """A post's box IS its words: what the owner left there is what goes (an empty box is not a post, so it stays as proposed)."""
+    t = str(final_text or '').strip()
+    return {**p, 'text': t} if is_post(p) and t and not t.startswith('{') else p
+
+
+def _ran(res) -> dict:
+    """An executor's answer as the card reads it: (headline, body), or the {rows, columns} a connector returns - its first row's
+    link the place it landed. Unpacking that dict as a pair read its two KEYS: a LinkedIn post said "rows" / "columns"."""
+    if isinstance(res, dict):
+        rows = res.get('rows') or []
+        first = rows[0] if rows and isinstance(rows[0], dict) else {}
+        return {k: v for k, v in {'headline': str(res.get('headline') or f"{len(rows)} row{'s' * (len(rows) != 1)}")[:200],
+                                  'output': json.dumps(rows, default=str)[:2000], 'url': first.get('url') or ''}.items() if v}
+    head, body = res
+    return {'headline': str(head)[:200], 'output': (body or '')[:2000]}
+
+
+def receipt(rv: dict, final_text, out: dict) -> str:
+    """What an approved proposal keeps as its FinalText: as proposed, with the owner's edit and what it did - so a post still says
+    "Posted" and its link when the chat is read again."""
+    try: p = json.loads(rv.get('DraftText') or '{}')
+    except ValueError: return rv.get('DraftText')
+    return json.dumps({**_edited(p, final_text), 'result': out}, default=str) if p.get('action') == 'run_tool' else rv.get('DraftText')
+
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
 SETTING_ALLOW = {
@@ -218,6 +264,10 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
         it = trackers.item_of(store, task_id)
         if it and it['tracker'] == trackers.TYPES[p['type']][0]: p = {**p, 'item': it['item']}
     ok, why = validate(store, p)
+    # ...a picture on a post is one in the task's own folder, named - never a path the agent wrote (execute resolves it again)
+    if ok and p.get('action') == 'run_tool':
+        p = {k: v for k, v in p.items() if k != 'image_path'}
+        if why := picture_why(task_id, p): ok = False
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
@@ -474,6 +524,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         p['text'] = final_text.strip()
     # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
+    p = _edited(p, final_text)
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']
@@ -568,8 +619,12 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card
-        head, body = REGISTRY[p['type']](resolve_cfg(store, {**{k: v for k, v in p.items() if k not in ('action', 'flow_run')}, '_write': True}))
-        out = {'headline': str(head)[:200], 'output': (body or '')[:2000]}
+        cfg = {k: v for k, v in p.items() if k not in ('action', 'flow_run', 'image_path', 'result')}
+        if p.get('image'):
+            from . import outputs
+            if why := picture_why(tid, p): raise RuntimeError(f'{why} - nothing was posted')
+            cfg['image_path'] = str(outputs.named(int(tid), p['image']))
+        out = _ran(REGISTRY[p['type']](resolve_cfg(store, {**cfg, '_write': True})))
     if tid: store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')   # a task-less one has no card to say it on
     store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})
     # a workflow run that stopped for this yes goes on from that step (flow.resume) - on its own thread, as a run starts: a last

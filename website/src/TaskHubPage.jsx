@@ -16,7 +16,7 @@ import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import PowerSettingsNewIcon from "@mui/icons-material/PowerSettingsNew";
 import api from "./api";
-import { inDesktop, quitTitle, stoppedLines } from "./appQuit.js";
+import { quitTitle, stoppedLines } from "./appQuit.js";
 import { track } from "./demoTrack";
 import { fmtStamp } from "./dates.js";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
@@ -292,7 +292,7 @@ export const ViewSwitch = ({ view, onView }) => (
 );
 
 // QUIT, ON THE TOP LINE (the owner, 2026-10-25: "Quit is an explicit option ... in the browser version's top line"). In the browser
-// nothing else stops the server; the desktop window has the tray's Quit, so it is not drawn there. No box asks: the hover says what
+// nothing else stops the server; the desktop window draws it too (2026-11-05), beside the tray's Quit. No box asks: the hover says what
 // stops with it, read when the pointer arrives (GET /api/quit), and the press is the decision.
 // `read`: what stops with it, asked when the pointer (or the phone's Help menu) arrives; `err`: a Quit that did not stop it says why
 function useQuit(onStopped) {
@@ -305,7 +305,9 @@ function useQuit(onStopped) {
     try { onStopped((await api.post("/api/quit", {})).data.stopped || []); }
     catch (e) { setBusy(false); setErr(e?.response?.data?.detail || "Taskuary did not stop - close the terminal that runs it"); }
   };
-  return { can: !inDesktop() && !DEMO, running, busy, err, read, quit };
+  // ...and in the desktop window too (the owner, 2026-11-05: "don't see the quit button on the desktop app"): the server stops, and the
+  // window closes with it (desktop.gone_with) - the tray's Quit is still there
+  return { can: !DEMO, running, busy, err, read, quit };
 }
 function QuitButton({ onStopped }) {
   const q = useQuit(onStopped);

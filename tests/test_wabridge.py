@@ -627,3 +627,14 @@ class LinkCheckTests(unittest.TestCase):
         wabridge.check_link(None, self.C, read=lambda: n.append(1) or {'connected': True}, now=1000)
         wabridge.check_link(None, self.C, read=lambda: n.append(1) or {'connected': True}, now=1030)
         self.assertEqual(len(n), 1)
+
+
+def test_a_bridge_that_cannot_resolve_whatsapp_says_it_is_the_network_not_a_restart():
+    """A user's bridge, 2026-11-05: "WebSocket Error (getaddrinfo ENOTFOUND web.whatsapp.com)". Restart bridge fixes nothing there."""
+    from taskuary import wabridge
+    wabridge._LINK.update(at=0.0, down=0.0, restarted=0.0, err=None)
+    st = {'connected': False, 'reconnect': {'reason': 'WebSocket Error (getaddrinfo ENOTFOUND web.whatsapp.com)'}}
+    assert wabridge.check_link(None, {'ConnectorId': 1}, read=lambda: st, now=1000.0) is None, 'inside the grace: nothing yet'
+    err = wabridge.check_link(None, {'ConnectorId': 1}, read=lambda: st, now=1000.0 + wabridge.LINK_GRACE + wabridge.LINK_EVERY)
+    assert 'cannot reach WhatsApp' in err and 'company network' in err and 'Restart bridge' not in err
+    wabridge._LINK.update(at=0.0, down=0.0, restarted=0.0, err=None)

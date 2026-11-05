@@ -9,7 +9,7 @@ bridge. So the card has a button and the API has a verb: start() installs when n
 missing, spawns `node bridge.mjs` detached with its output in a log, and state() says which phase
 it is in. The bridge outlives the request and the browser tab; only the machine rebooting stops it.
 """
-import json, os, secrets, shutil, subprocess, sys, threading, time
+import json, os, re, secrets, shutil, subprocess, sys, threading, time
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
@@ -630,6 +630,13 @@ def check_link(store, c: dict, read=None, now: float = None):
         logger.warning('whatsapp bridge stopped reconnecting - restarting it')
         threading.Thread(target=restart, kwargs={'filter_policy': filter_policy(store, c['ConnectorId'])}, daemon=True).start()
     elif now - _LINK['down'] >= LINK_GRACE:
-        _LINK['err'] = (f"WhatsApp has not been connected since {datetime.fromtimestamp(_LINK['down']).strftime('%b %d %H:%M')} - "
-                        'nothing is coming in; Restart bridge on the WhatsApp card')
+        since = datetime.fromtimestamp(_LINK['down']).strftime('%b %d %H:%M')
+        # THE COMPUTER CANNOT REACH WHATSAPP (a user's bridge, 2026-11-05: "getaddrinfo ENOTFOUND web.whatsapp.com"): no restart fixes
+        # a name that does not resolve - the network does (offline, a VPN, a company filter that blocks WhatsApp Web). Node's own
+        # error codes, not words: the bridge keeps retrying and comes back by itself once the address resolves again.
+        why = str((st.get('reconnect') or {}).get('reason') or '')
+        _LINK['err'] = (f"WhatsApp has not been connected since {since} - this computer cannot reach WhatsApp's servers ({why[:80]}). "
+                        "Check the internet connection, a VPN, or a company network that blocks WhatsApp Web; it reconnects by itself once it can"
+                        if re.search(r'ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ETIMEDOUT|ECONNRESET', why) else
+                        f"WhatsApp has not been connected since {since} - nothing is coming in; Restart bridge on the WhatsApp card")
     return _LINK['err']

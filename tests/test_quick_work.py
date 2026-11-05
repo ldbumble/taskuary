@@ -569,3 +569,13 @@ def test_a_quick_answer_opens_no_browser():
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch('taskuary.general.threading.Thread') as th:
         opened(s, tid, quick=True)
         assert not any(c.kwargs.get('target') is browserview.start for c in th.call_args_list)
+
+def test_a_quick_turn_ends_in_the_same_three_parts_as_an_agent_turn():
+    """The stress run, 2026-11-05: a quick answer filed no summary, so a chat task's quick turn read as the agent's whole prose with no
+    "What this is about" / "What I did" - every other turn there ends in those sections. Its report is what it did; the ask is triage's reading."""
+    s = home(); tid, _ = arrived(s, thread={'asking': 'Erin Blake asks whether to go to the partner day on Friday', 'your_part': 'Decide',
+                                            'others': [], 'asks': [], 'aside': [], 'on_you': []})
+    filed(s, tid, ANSWER)
+    summ = [m for m in general.shown_history(s, tid) if m.get('summary')]
+    assert summ and summ[-1]['summary']['about'].startswith('Erin Blake asks whether') and summ[-1]['summary']['did'] == ANSWER['report']
+    assert 'on_you' not in summ[-1]['summary']                       # the owner's own steps stay as they were

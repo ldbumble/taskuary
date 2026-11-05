@@ -1559,7 +1559,7 @@ class GeneralSession:
             if as_owner: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else 'owner', USER_TYPE, ask)
             self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]; self.trace_revision += 1
             for kind, name, detail in steps or []: self._remember_trace(kind, name, detail)
-            return self._file(quickwork.as_reply(out), [], t0)
+            return self._file(quickwork.as_reply(out, (self.store.task_thread(self.task_id) or {}).get('asking') or ''), [], t0)
         except Exception as e:
             try: ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='quick')
             except Exception as skipped: logger.debug(f'quick worker event skipped: {skipped}')

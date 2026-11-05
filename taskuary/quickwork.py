@@ -114,10 +114,16 @@ def report_of(text) -> str:
     try: return _clean(json.loads('"' + re.sub(r'\\u?[0-9a-fA-F]{0,3}$|\\$', '', m.group(1)) + '"'))
     except ValueError: return _clean(m.group(1).replace('\\n', '\n'))
 
-def as_reply(out: QuickAnswer) -> str:
-    "The answer as the markers a general turn writes, so GeneralSession._file reads it exactly as it reads one."
+def as_reply(out: QuickAnswer, about: str = '') -> str:
+    """The answer as the markers a general turn writes, so GeneralSession._file reads it exactly as it reads one - its summary too (the stress
+    run, 2026-11-05: a quick turn was the one turn on a chat task with no "What this is about" / "What I did"). `about`: triage's reading of
+    the ask. A report too long for the summary's field stays the turn's prose instead, never cut mid-sentence."""
+    own = selfclose.without_draft(out.report, out.draft) if out.draft else out.report      # a report that is only the letter has done nothing to say
+    summ = own and len(' '.join(own.split())) <= 600 and \
+        f"{selfclose.SUMMARY_OPEN}{json.dumps({'about': about, 'did': own, 'nothing_left': bool(out.done and not out.draft)})}{selfclose.SUMMARY_CLOSE}"
     return '\n\n'.join(x for x in (out.report, out.draft and f'[[TASKUARY-REPLY]]{out.draft}[[/TASKUARY-REPLY]]',
-                                   out.question and f'[[TASKUARY-ASK]] {out.question}', out.done and f"{selfclose.MARKER} {' '.join(out.why.split())}") if x)   # the close reads one line
+                                   out.question and f'[[TASKUARY-ASK]] {out.question}', out.done and f"{selfclose.MARKER} {' '.join(out.why.split())}",
+                                   summ) if x)   # the close reads one line
 
 def prompt(store, tid, ask: str, lookups: bool) -> tuple:
     "(system, user): what the general agent reads, the mail history it would have had searched for it, and the ask."

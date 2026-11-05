@@ -202,12 +202,22 @@ def test_not_the_ask_is_an_owner_correction():
     lf.assert_called_once(); assert 'owner_correction' in lf.call_args[0][1] and 'the pay date, not the bonus' in lf.call_args[0][1]
 
 
-def test_words_the_owner_never_said_are_dropped():
+def test_the_models_statement_of_a_correction_is_trusted():
+    "The owner, 2026-11-05: the model reads intent - a correction it states in its own words is kept, not only one quoted word for word."
     s = MemoryStore(); tid = task(s); rid = draft_for(s, tid, 'ray@northwind.example')
-    s.add_comment(tid, 'owner', general.USER_TYPE, 'Looks fine, thanks')
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Gail should see this one too')
+    assert general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': 'Cc Gail on the reply'}]) == 1
+    assert 'Cc Gail on the reply' in review(s, rid)['Instructions']
+
+
+def test_an_empty_or_secret_correction_or_one_with_no_owner_message_is_dropped():
+    s = MemoryStore(); tid = task(s); rid = draft_for(s, tid, 'ray@northwind.example')
     with mock.patch('taskuary.learn.learn_from') as lf:
-        assert general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': 'Always cc Gail'}, {'kind': 'ask', 'review': None, 'said': 'wrong ask'}]) == 0
-    lf.assert_not_called(); assert 'Gail' not in (review(s, rid).get('Instructions') or '')
+        assert general.take_corrections(s, tid, [{'kind': 'ask', 'review': None, 'said': 'wrong ask'}]) == 0      # nobody corrected anything
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Use the new portal key')
+        assert general.take_corrections(s, tid, [{'kind': 'redraft', 'review': None, 'said': '  '},
+                                                 {'kind': 'redraft', 'review': None, 'said': 'api_key: sk-abcdefghijklmnop1234'}]) == 0
+    lf.assert_not_called(); assert 'sk-' not in (review(s, rid).get('Instructions') or '')
 
 
 def test_corrections_ride_the_summary_block_and_stay_off_the_screen():

@@ -117,5 +117,5 @@ def test_the_agent_keeps_going_when_a_way_fails_and_hands_the_page_over():
     from taskuary import general
     from taskuary.store import MemoryStore
     said = general.action_line(MemoryStore())
-    assert 'KEEP GOING WHEN A WAY FAILS' in said and 'never the same call again unchanged' in said and 'what you tried' in said
+    assert 'KEEP GOING WHEN A WAY FAILS' in said and 'same failing call unchanged more than twice' in said and 'one line per way you tried' in said
     assert 'hands the real page to the owner' in said and "owner's Approve" not in said

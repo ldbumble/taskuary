@@ -2349,8 +2349,9 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         return
     store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it is the assistant's next turn.")
     try:
-        end = time.time() + general.WAIT_TURN
-        while getattr(ses, 'busy', False) is True and getattr(ses, 'alive', True) is not False and time.time() < end:
+        # ...however long the turn ahead runs (general.WAIT_TURN None): a line is never dropped for waiting behind a long turn
+        end = None if general.WAIT_TURN is None else time.time() + general.WAIT_TURN
+        while getattr(ses, 'busy', False) is True and getattr(ses, 'alive', True) is not False and (end is None or time.time() < end):
             time.sleep(.25); ses = general.session_for(tid) or ses
         time.sleep(PASS_GATHER)                    # ...and the rest of a burst still landing
     finally:

@@ -88,11 +88,19 @@ EXTERNAL_WALK = (
     "automation that has to run on a schedule with nobody watching is exactly the sort of thing to "
     "name now rather than at the end.")
 SCROLLBACK = 200_000
-MAX_CONTEXT = 24_000
+# ROOM TO READ (the owner, 2026-11-05: "is there hard coded things in the agent workings?"): 24,000 characters, twelve mails of 3,000 and
+# thirty turns of 4,000 were sized for small API windows, and a CLI model with a large one was handed a third of a long thread. What still
+# has to be cut is said, with how to read it whole (READ_WHOLE) - the model chooses what to open
+MAX_CONTEXT = 200_000
+SOURCE_MAILS, SOURCE_CHARS = 40, 12_000
+TURNS, TURN_CHARS = 200, 20_000
+READ_WHOLE = 'read_message (or `taskuary --message ID`) reads any mail in full, search_messages (`taskuary --search`) finds the rest'
 OWNER_ASK_CHARS = 2_000          # the owner's words at the head of the prompt (_prompt): the whole of them, short of a pasted essay
-MAX_REPLY_TOKENS = 2_000
-DOCK_REPLY_TOKENS = 1_000       # a one-item walkthrough should answer quickly, not write an essay
-WAIT_TURN = 240.0        # how long a new question waits behind the one being answered
+MAX_REPLY_TOKENS = 8_000
+DOCK_REPLY_TOKENS = 3_000       # a one-item walkthrough should answer quickly, not write an essay
+# NO WAIT LIMIT ON A TURN BEHIND A TURN (the owner, 2026-11-05: talking to the agent while it works, several messages at once): a message
+# waited 240 s behind a long turn and then failed "something is stuck". It queues until the turn ahead ends, the session ends, or Stop
+WAIT_TURN = None
 _IMAGE_PATH = re.compile(r'(?P<path>(?:[A-Za-z]:\\|/)[^\r\n<>|"?*]+?\.(?:png|jpe?g|gif|webp))', re.I)
 
 # The conversation IS the teaching surface. An assistant that quietly guesses at a customised
@@ -417,12 +425,7 @@ def shown_history(store, tid: int) -> list:
         if got: msgs.insert(0, {'id': f'came-in-{tid}', 'role': 'user', 'content': [{'type': 'text', 'text': ''}], 'brief': True,
                                 'createdAt': got[-1].get('CreatedAt'), 'mail': shown(got)})
     # ...and each answer with the summary filed after it (SUMMARY_TYPE): the turn's three parts, drawn under it
-    summ, last = {}, None
-    for c in store.list_comments(tid):
-        if c.get('ActorType') == ASSISTANT_TYPE: last = c['CommentId']
-        elif c.get('ActorType') == SUMMARY_TYPE and last:
-            try: summ[f'comment-{last}'] = json.loads(c.get('Body') or '')
-            except ValueError: continue
+    summ = {f'comment-{k}': v for k, v in turn_summaries(store, tid).items()}
     # ...and the drafts each turn left, in its own words (store.snap_draft) - never inside the summary
     snaps = store.draft_snapshots(tid)
     for m in msgs:
@@ -473,14 +476,17 @@ def _cut(text, n):
 def take_corrections(store, tid: int, corrections) -> int:
     """What the owner corrected in the chat reaches the learning paths, quietly (no chip, no "Remembered" line): a `redraft` word is kept
     on the pending draft like the draft box's (byrecipient.keep_instruction), an `ask` ("not the ask") is an owner_correction for
-    learn.learn_from. Kept only when `said` is in the owner's newest message - the agent reports, it never invents. Returns how many."""
+    learn.learn_from. The model's statement of the correction is trusted (the owner, 2026-11-05: "the model reads intent") - it used to count
+    only when quoted word for word from the owner's newest message, so "make it warmer" said as "warmer, please" was lost. It still needs an
+    owner's message to correct from, words, and no credential in them (redact.scrub): what is learned is kept for good. Returns how many."""
     try:
-        norm = lambda s: ' '.join(str(s or '').lower().split())
+        from .redact import scrub
         last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') == USER_TYPE and not is_brief(c)), None)
-        n, kept = norm((last or {}).get('Body')), 0
+        if not last: return 0
+        kept = 0
         for c in corrections or []:
             said = ' '.join(str((c or {}).get('said') or '').split())
-            if not said or norm(said) not in n: continue
+            if not said or scrub(said) != said: continue
             if c.get('kind') == 'redraft':
                 rv = store.pending_review(tid, 'draft_reply')
                 if c.get('review') is not None and (not rv or rv.get('ReviewId') != c['review']): rv = next((r for r in store._rows('SELECT * FROM review WHERE ReviewId=? AND TaskId=?', (c['review'], tid))), None)
@@ -704,6 +710,10 @@ SOCIAL_LINE = HUB_LINE
 FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: nothing wakes you again until they write. Do not start "
                "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
                "it to finish\" - wait for it now, or do it now, then answer. If part of it cannot be done, say which part and why.")
+# ...and a turn that ended on that anyway is woken once to finish it (GeneralSession.wake): what the judge says it still waits on, said back
+WAKE = ("TASKUARY: your last answer ended still waiting on {why}. Nothing wakes you once a turn ends, so that result would never come "
+        "back. Do it now, in this turn - wait for it here, or do the work yourself - and answer with the result. If part of it truly cannot "
+        "be done, say which part and why.")
 # THE OWNER'S OWN HISTORY FIRST (mailsearch.py): a researcher asked about a colleague's email wrote code of its own to find the mail
 # instead of reading what Taskuary already holds (the owner, 2026-10-21). Told only to a session with a shell, on the owner's task.
 HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anything about the owner's mail, messages, tasks or people, "
@@ -833,12 +843,28 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "may instead be the one question you need answered first, or a part that is the owner's to do - say why (no road reaches it: "
            "name the connection that would; or it is theirs to decide). When the work is an answer, a finding or a check, answer it "
            "plainly: no act is owed.\n"
+           # ...A LADDER WITH A BOUND (the owner, 2026-11-05: "look at open source assistants online and adapt the best parts"): a loop that
+           # retries one call forever burns the turn, one that quits at the first error hands the job back - the bound is the middle
            "KEEP GOING WHEN A WAY FAILS. A failed tool, a site that blocks you, a file that will not open, an empty search is a reason to "
-           "try the next way, not to stop: another source, another tool, the browser instead of the API, the file read another way, a "
-           "narrower or wider search. Each time, ask what the failure told you and change one thing - never the same call again "
-           "unchanged. Hand it back only when the ways you can think of are used up, or the next one needs the owner (a sign-in, a "
-           "decision, money); then say in one or two plain lines what you tried, what stopped each, and the one thing that would "
-           "unblock it. A turn that quits at the first error, or calls a half-done job done, is the failure.")
+           "try the next way, not to stop. Read what the failure told you and change something real: another source, tool or connection, "
+           "the browser instead of the API, the file read another way, a narrower or wider search. Never run the same failing call "
+           "unchanged more than twice. Give a route up only after three genuinely different ways have failed, or when the next one needs "
+           "the owner (a sign-in, a decision, money); then hand back one line per way you tried and what it returned, and the one thing "
+           "only the owner can unblock. A turn that quits at the first error, or calls a half-done job done, is the failure.")
+# HOW A TURN WORKS (the owner, 2026-11-05: "adapt the best parts" of the open-source assistants): a question does not stop the work, each
+# step is judged by what came back, and done is the goal met - not the boxes ticked. Rides with the goal on every task the agent works
+WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: ask your one question, then do everything that does not hang on its answer - drafts, "
+             "lookups, forms filled - and say which assumption each rests on, so the answer only confirms or swaps it. Never end a turn "
+             "with only a plan or a promise.\n"
+             "CHECK EACH STEP BEFORE THE NEXT: judge it by what the tool returned - the page after the click, the file after the save, the "
+             "record after the write. Never assume a click, an upload or a form fill landed.\n"
+             "DONE MEANS THE GOAL IS MET AND CHECKED, not boxes ticked. A part that is unmet, or that you could not check, is named in your "
+             "summary - nothing_left is false then. You still never close the task: the owner does.")
+# ...and AGENT.md AS THE OWNER'S COPY MAY STILL READ IT: an edited copy stops tracking its template (store.py), and older wording told every
+# worker to stay at the prompt for an answer, keep to the brief and run `taskuary --done` - a coding session's way, not this agent's
+GENERAL_OVER = ("WHERE AGENT.md READS OTHERWISE, FOR YOU: you never run `taskuary --done` or close the task; a question you ask does not "
+                "stop the work that does not hang on it; and the brief is where you start, not the edge of where you may look for what the "
+                "job needs.")
 
 
 def roads(store) -> str:
@@ -955,7 +981,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         # nothing wakes this session once its answer is filed (hooks.judge_ended reads a turn that ended short)
         f"{FINISH_LINE}\n\n"
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
-        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
+        + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\n{GENERAL_OVER}\n\nASSISTANT STYLE\n{counsel}"
     )
     # ...and none on a connector card's walk: it edits no code and has no repository to look in (aisetup.WALK_REF)
     repos = '' if outsider or task.get('SourceRef') == 'connector:setup' else repos_block(store)
@@ -1010,17 +1036,22 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     sources = []
     from . import origin
     stranger = origin.of_task(store, tid)[0] == 'stranger'   # the reviewer reads this as the owner's words: theirs go in a file
-    for m in (detail.get('messages') or [])[-12:]:
+    mails = detail.get('messages') or []
+    # ...each by its id, so a mail cut here is one the agent can open whole
+    if len(mails) > SOURCE_MAILS: sources.append(compacted_mail(mails[:-SOURCE_MAILS]))
+    for m in mails[-SOURCE_MAILS:]:
         who = m.get('FromName') or m.get('FromEmail') or m.get('SourceName') or m.get('Channel') or 'source'
         files = store.list_attachments(m['MessageId'])
         file_line = ('\nATTACHMENTS: ' + '; '.join(
             str(a.get('Name') or 'file') + (f" ({a.get('Path')})" if a.get('Path') else '')
             for a in files[:8])) if files else ''
-        sources.append(f"FROM {who} ({m.get('SentAt') or ''})\n{_cut(m.get('BodyText'), 3_000)}{file_line}")
-    turns = []
-    for c in chat_rows(store, tid, run=True)[-30:]:
+        long = len(str(m.get('BodyText') or '')) > SOURCE_CHARS
+        body = _cut(m.get('BodyText'), SOURCE_CHARS) + (f" - read_message m{m['MessageId']} reads it whole" if long else '')
+        sources.append(f"FROM {who} ({m.get('SentAt') or ''}) [m{m['MessageId']}]\n{body}{file_line}")
+    turns, said = [], chat_rows(store, tid, run=True)
+    for c in said[-TURNS:]:
         role = 'ASSISTANT' if c.get('ActorType') == ASSISTANT_TYPE else 'USER'
-        turns.append(f"{role}: {_cut(c.get('Body'), 4_000)}")
+        turns.append(f"{role}: {_cut(c.get('Body'), TURN_CHARS)}")
     # ...a SECOND agent (new_run) has a conversation of its own, and is told where the earlier one got to: its last answer, not its chat
     before = next((c for c in reversed(_split(store, tid)[0]) if c.get('ActorType') == ASSISTANT_TYPE), None)
     prior = (f"WHERE THE EARLIER AGENT ON THIS TASK GOT TO - its last answer. You are a new agent on the task, with a conversation of "
@@ -1063,7 +1094,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
-        system += f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}') + f'\n\n{selfclose.SUMMARY_LINE}'
+        system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}')
+                   + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}')
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
@@ -1092,12 +1124,73 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # first, then the oldest source material. _cut(user) kept the head and dropped exactly the
     # conversation and the instruction, so a task seeded from eight long mails answered the mails
     # and not the owner (audit 2026-09-02).
-    while len(turns) > 1 and len(head) + len('\n\n'.join(turns)) + len(tail) > MAX_CONTEXT: turns.pop(0)
-    conv = "CONVERSATION\n" + '\n\n'.join(turns) + tail
+    # ...and what goes is COMPACTED, not lost (the owner, 2026-11-05: "some sort of compaction if the chats get too long"): the room for it is
+    # kept back first, then the cut turns are read from what the task already holds (compacted_turns)
+    room_for = lambda: len(head) + len('\n\n'.join(turns)) + len(tail) + (COMPACT_CHARS if len(turns) < len(said) else 0)
+    while len(turns) > 1 and room_for() > MAX_CONTEXT: turns.pop(0)
+    earlier = compacted_turns(store, tid, said[:len(said) - len(turns)])
+    conv = "CONVERSATION\n" + (f'{earlier}\n\n' if earlier else '') + '\n\n'.join(turns) + tail
     src, room = '\n\n'.join(sources), MAX_CONTEXT - len(head) - len(conv) - 20
     if stranger and sources: src, room = origin.SEED_LINE.format(path=origin.stranger_file(store, tid, sources)), MAX_CONTEXT
-    if len(src) > room: src = ('[older source material trimmed]\n\n' + src[-room:]) if room > 400 else ''
+    if len(src) > room:
+        cut = f'[older source material trimmed - its first {len(src) - room + 300:,} characters; {READ_WHOLE}]\n\n'
+        src = (cut + src[-(room - 300):]) if room > 700 else ''
     return system, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
+
+
+# COMPACTION (the owner, 2026-11-05: "we probably should have some sort of compaction if the chats get too long ... don't make a new parallel
+# system"): what a long task's brief cannot hold is fed to the model as a short running account built from what the task ALREADY keeps -
+# each turn's own summary (SUMMARY_TYPE: what was asked about, what it did, what was left on the owner) and the owner's words - never a new
+# store, and no model call to write it. The chat still shows every turn; this is only what the model reads. What holds beyond the task (a
+# preference, a correction) goes to LEARNED.md the one road it always has: the summary's `corrections` (take_corrections -> learn.learn_from)
+COMPACT_CHARS, COMPACT_LINE = 8_000, 400
+def _flat(x, n=COMPACT_LINE) -> str:
+    t = ' '.join(str(x or '').split())
+    return t if len(t) <= n else t[:n - 1] + '…'
+
+
+def _lines_fit(head: str, lines: list, budget: int = COMPACT_CHARS) -> str:
+    "`head` and as many of the NEWEST `lines` as fit in `budget`, saying how many older ones were left out."
+    kept, room = [], budget - len(head) - 80
+    for l in reversed(lines):
+        if room - len(l) - 1 < 0: break
+        kept.insert(0, l); room -= len(l) + 1
+    gone = len(lines) - len(kept)
+    return head + (f'\n({gone} older not listed)' if gone else '') + ('\n' + '\n'.join(kept) if kept else '')
+
+
+def turn_summaries(store, tid: int) -> dict:
+    "{an answer's CommentId: its turn summary} - the summaries filed after each answer (SUMMARY_TYPE), as shown_history reads them."
+    out, last = {}, None
+    for c in store.list_comments(tid):
+        if c.get('ActorType') == ASSISTANT_TYPE: last = c['CommentId']
+        elif c.get('ActorType') == SUMMARY_TYPE and last:
+            try: out[last] = json.loads(c.get('Body') or '')
+            except ValueError: continue
+    return out
+
+
+def compacted_turns(store, tid: int, rows) -> str:
+    """The conversation turns the brief had no room for, compacted: one line each - the owner's words (their asks, their decisions), and
+    each answer as its own summary said it (what it did, the paths and figures in it, what it left on the owner). '' with none cut."""
+    if not rows: return ''
+    summ, lines = turn_summaries(store, tid), []
+    for c in rows:
+        if c.get('ActorType') != ASSISTANT_TYPE:
+            lines.append(f"- {'Taskuary' if is_brief(c) else 'the owner'} ({_md(c.get('CreatedAt'), True)}): {_flat(c.get('Body'))}"); continue
+        s = summ.get(c.get('CommentId'))
+        if not isinstance(s, dict): lines.append(f"- you answered: {_flat(c.get('Body'))}"); continue
+        left = '; '.join(_flat(o, 120) for o in s.get('on_you') or [] if isinstance(o, str))
+        lines.append(f"- you did: {_flat(s.get('did'))}" + (f' | left on the owner: {left}' if left else '') + (' | nothing left' if s.get('nothing_left') else ''))
+    return _lines_fit(f'EARLIER IN THIS CONVERSATION, COMPACTED - {len(rows)} older turns, one line each (the full turns are kept on the '
+                      'task; a resumed session still holds them):', lines)
+
+
+def compacted_mail(mails) -> str:
+    "The task's older mails the brief has no room for: one line each, by id, so the agent opens the one it needs whole (READ_WHOLE)."
+    lines = [f"- [m{m['MessageId']}] {m.get('FromName') or m.get('FromEmail') or m.get('Channel') or 'source'} ({_md(m.get('SentAt'), True)}): "
+             f"{_flat(m.get('BodyText'), 200)}" for m in mails]
+    return _lines_fit(f'EARLIER MAIL ON THIS TASK, COMPACTED - {len(mails)} older messages, one line each; {READ_WHOLE}:', lines)
 
 
 # ...a file that is no picture is named as a file (server.prompt_file): "ATTACHED IMAGES" over a PDF told the agent to look at it as one
@@ -1293,8 +1386,10 @@ class GeneralSession:
 
         A person asked a second question while you are mid-sentence expects to be answered
         next, not ignored. So: queue. In slices, so a browser that gives up stops waiting too.
+        `wait` None (WAIT_TURN) is no deadline: it waits out the turn ahead however long it runs, and gives up only on `cancel` or a
+        session that ended under it.
         """
-        end = time.time() + max(0.0, wait)
+        end = None if wait is None else time.time() + max(0.0, wait)
         self.waiting_turns = getattr(self, 'waiting_turns', 0) + 1
         try:
             while True:
@@ -1302,7 +1397,7 @@ class GeneralSession:
                     self.turn_no = getattr(self, 'turn_no', 0) + 1
                     return True
                 if cancel is not None and cancel.is_set(): return False
-                if time.time() >= end: return False
+                if not self.alive or (end is not None and time.time() >= end): return False
         finally: self.waiting_turns -= 1
 
     def write(self, data):
@@ -1337,12 +1432,14 @@ class GeneralSession:
         if not text: raise ValueError('empty message')
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
         if not self._take(WAIT_TURN, cancel):
-            raise RuntimeError(f'the assistant has been answering the previous question for over '
-                               f'{int(WAIT_TURN)}s - something is stuck. Press stop, or reload the page.')
+            # ...it gave up only because the session ended under it (the caller's 'has ended' road starts a fresh one) or was cancelled
+            if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
+            raise RuntimeError('the assistant was still answering the previous question when this one was cancelled - send it again.')
         # ...it idled out while this waited for the lock (idle_out): the caller's 'has ended' road starts it again (server.assistant_stream)
         if not self.alive:
             self._lock.release(); raise RuntimeError('this assistant session has ended - reload the page and ask again')
         self.quick = False                   # a real turn: from here the session is a desk like any other
+        if as_owner: self.woke = False       # ...and a turn the owner's words began may be woken once again (wake)
         self.busy, self.last = True, time.time()
         # A NEW TURN MAY FINISH AGAIN (the email walk, 2026-10-29): the mark a self-close leaves stops two hooks wrapping one turn,
         # and it outlived the turn - Continue on an agent that had closed once refused its next [[TASKUARY-DONE]], parked "waiting on you"
@@ -1677,8 +1774,7 @@ class GeneralSession:
         self.quick = True                    # before any event: every event of this turn says 'quick' (quickwork.only_quick)
         if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
         # outside the try: without the lock this turn never began - its finally would release a lock it does not hold, and the live turn is no failure
-        if not self._take(WAIT_TURN):
-            raise RuntimeError(f'the assistant has been answering the previous question for over {int(WAIT_TURN)}s - something is stuck.')
+        if not self._take(WAIT_TURN): raise RuntimeError('this assistant session has ended - reload the page and ask again')
         self.busy, self.last = True, time.time()
         selfclose.forget(self.task_id)
         t0 = self.last
@@ -1805,11 +1901,11 @@ class GeneralSession:
             from . import browserview
             try: browserview.your_turn(self.store, self.task_id, self.sid, turn)
             except Exception as e: logger.warning(f'task {self.task_id}: the page the agent handed over was not raised - {e}')
-        # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it is filed as the run
-        # failing with its reason, and the session ends with its conversation saved - never parked as "waiting on you"
+        # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it wakes the agent once to
+        # do what it said it would - never a failure in the chat (the owner, 2026-11-05: "failure means nothing to the user")
         if not asks and signing is None and turn is None and closing is None and not is_dock(self.store.get_task(self.task_id)):
             from . import hooks
-            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
+            hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake)
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         if summ:
             take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
@@ -1920,6 +2016,16 @@ class GeneralSession:
         if c is None: return False
         c.set()
         return True
+
+    def wake(self, why: str):
+        """Wake the agent ONCE after a turn that ended still waiting on work of its own (hooks.judge_ended): it is told to do it now. Never
+        filed as the owner's words, never again until the owner writes - a woken turn that ends short again stays the answer it gave."""
+        if getattr(self, 'woke', False) or not self.alive: return
+        self.woke = True
+        def go():
+            try: self.send_prompt(WAKE.format(why=why or 'work of its own'), as_owner=False, echo=False)
+            except Exception as e: logger.info(f'task {self.task_id}: the agent was not woken to finish - {e}')
+        self.waking = threading.Thread(target=go, daemon=True, name=f'wake-{self.sid}'); self.waking.start()
 
     def close(self, learn=True, report=True):
         self.closing = True          # a turn running now ends because of this, not on its own (send_prompt: stopped, not failed)

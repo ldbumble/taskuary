@@ -334,14 +334,16 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'conversation this is on and what it is about, who asked, for whom and why they want it - read from the whole thread, naming only people '
                 f'the thread itself shows in that role>", "did": "<the RESULT ITSELF first - the file path, the link, the figure or the name '
                 f'you found, never only that you gave it - then what '
-                f'you researched, found or did>", "on_you": ["<each step left for the owner, one short line each>"], "nothing_left": '
-                f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. A drafted reply is '
+                f'you researched, found or did; a part unmet or unchecked is named here>", "on_you": ["<each step left for the owner, one short line '
+                f'each>"], "nothing_left": <true only when the goal is met and you checked it, and nothing is left for them but to close>, '
+                f'"answer_is_result": <true when your words above the block ARE what the owner asked for - the answer, the list, the link - so they '
+                f'show beside it; false when this block says it all>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. A drafted reply is '
                 f'already its own card with Send under Next steps, and so is a post or any act you proposed; a question you ask is shown on its own: none '
                 f'is ever an on_you step - on_you is only what is truly the owner\'s, with why. When you '
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
                 f'(through [[TASKUARY-ASK]]) only when there are real ones. When the owner\'s newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you read what the task wants wrongly), "review": <the draft\'s id or null>, '
-                f'"said": "<their exact words>"}}] - never show them as anything.')
+                f'"said": "<what they corrected, in their words where you can>"}}] - never show them as anything.')
 _SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
 # ...and one that never closed: a live line is cut to 300-400 characters before it is drawn (agents.py), and a turn can end without
 # the closing tag - the opening tag through to the end goes, and so does a tag cut off part-way at the very end ("[[TASKUA")
@@ -368,6 +370,8 @@ def summary_marker(text: str, letters=()) -> tuple:
     if not isinstance(j, dict): return bare()
     flat = lambda x, n: without_letters(' '.join(str(x or '').split()), letters)[:n]
     out = {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600), 'nothing_left': j.get('nothing_left') is True}
+    # ...and the agent's own say on whether its prose is the deliverable (GeneralWorkspace: agentSummary.answerShown) - kept only when it said
+    if isinstance(j.get('answer_is_result'), bool): out['answer_is_result'] = j['answer_is_result']
     if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, 200) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
     if cs := [{'kind': c['kind'], 'review': c['review'] if isinstance(c.get('review'), int) else None, 'said': ' '.join(c['said'].split())[:1000]}
               for c in j.get('corrections') or [] if isinstance(c, dict) and c.get('kind') in ('redraft', 'ask') and isinstance(c.get('said'), str) and c['said'].strip()]:
@@ -401,13 +405,22 @@ def reply_marker(text: str) -> tuple:
 # A model that wrote the reply out in its answer as well as filing it left the whole letter in the agent's pane over the same letter in
 # Close out (the overnight run, 2026-11-03) - its words around the letter stay, the letter's own paragraphs and their rules go
 _RULE = re.compile(r'^\s*([-*_=~])(\s*\1){2,}\s*$')
+# ...only the letter itself: a run of paragraphs that together are substantially the whole draft. Any paragraph found anywhere in a draft
+# used to go, so "Thanks, Gail." - the agent's own line, and the draft's sign-off too - vanished from its answer (the owner, 2026-11-05)
+DRAFT_WHOLE = 0.6
 def without_draft(text: str, draft: str) -> str:
-    "`text` with every paragraph that is part of `draft` taken out - '' when it was nothing else."
+    "`text` with the run of paragraphs that IS `draft` (with the rules inside it) taken out - '' when it was nothing else."
     flat = lambda s: ' '.join(str(s or '').split()).lower()
     d, paras = flat(draft), [p for p in re.split(r'\n\s*\n', str(text or '')) if flat(p)]
-    kept = [p for p in paras if flat(p) not in d]
-    if not d or len(kept) == len(paras): return str(text or '').strip()
-    return '\n\n'.join(p.strip('\r\n') for p in kept if not _RULE.match(p)).strip()
+    if not d: return str(text or '').strip()
+    runs, cur = [], []
+    for i, p in enumerate(paras):
+        if _RULE.match(p) or flat(p) in d: cur.append(i)
+        elif cur: runs.append(cur); cur = []
+    if cur: runs.append(cur)
+    gone = {i for r in runs if sum(len(flat(paras[i])) for i in r if not _RULE.match(paras[i])) >= DRAFT_WHOLE * len(d) for i in r}
+    if not gone: return str(text or '').strip()
+    return '\n\n'.join(p.strip('\r\n') for i, p in enumerate(paras) if i not in gone and not _RULE.match(p)).strip()
 
 
 # ...and the files that go with it. A chat brain has no `taskuary --attach` it can use: an API provider has no shell, and a

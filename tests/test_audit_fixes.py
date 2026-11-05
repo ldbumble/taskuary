@@ -103,11 +103,13 @@ class BrainTests(unittest.TestCase):
             s.add_message({'ExternalId': f'm{i}', 'TaskId': tid, 'Channel': 'email', 'FromName': f'Sender {i}', 'FromEmail': f'sender{i}@northwind.example', 'Subject': 'thread',
                            'BodyText': f'mail {i} ' + ('lorem ' * 600), 'SentAt': f'2026-09-01 0{i % 9}:00:00'})
         s.add_comment(tid, 'owner', general.USER_TYPE, 'What is the one thing they are all asking for?')
-        _system, user = general._prompt(s, tid)
-        self.assertLessEqual(len(user), general.MAX_CONTEXT + 200)
+        self.assertIn('mail 0 ', general._prompt(s, tid)[1])           # a large window takes all twelve (the owner, 2026-11-05)
+        with mock.patch.object(general, 'MAX_CONTEXT', 24_000): _system, user = general._prompt(s, tid)
+        self.assertLessEqual(len(user), 24_000 + 200)
         self.assertIn('What is the one thing they are all asking for?', user)
         self.assertTrue(user.rstrip().endswith('Do not repeat the task context.'))
-        self.assertIn('older source material trimmed', user); self.assertIn('mail 11', user)       # newest source kept
+        self.assertIn('older source material trimmed', user); self.assertIn('mail 8 ', user)       # newest source kept (by SentAt)
+        self.assertIn(general.READ_WHOLE, user)                         # ...and what was cut is said, with how to read it whole
 
 
 class MailTests(unittest.TestCase):

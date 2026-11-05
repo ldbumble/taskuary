@@ -372,7 +372,9 @@ def shown_history(store, tid: int) -> list:
     """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
     each answer with the `summary` filed after it."""
     from .triage import own_words
-    rows = chat_rows(store, tid, run=True); msgs = _as_messages(rows)
+    # ...EVERY RUN, in order: a chat task is one conversation (the owner, 2026-11-05: "the chat not showing prior runs as there is only one run per
+    # task") - an earlier run is not folded away as "the earlier agent's conversation"; the next turn still continues the current run (history)
+    rows = chat_rows(store, tid); msgs = _as_messages(rows)
     # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
     mail = store._rows(JOINED, (tid,))
     # `at`: when it was sent, in this server's zone like every stamp here (store.norm_stamp) - the page reads it through the zone setting.

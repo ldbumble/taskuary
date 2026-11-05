@@ -167,7 +167,9 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
     </Box> : null;
   }
   if (!rec) return history ? null : <CircularProgress size={12} />;
-  const runs = runHeads(rec.sessions, live), earlier = <EarlierRuns runs={runs.slice(1)} />;
+  // ...no "Earlier runs" under a run any more (the owner, 2026-11-05: "there is only one run per task ... remove the prior run section of the
+  // app"): a task is one conversation - its runs are read in order in the chat, never a fold of their own
+  const runs = runHeads(rec.sessions, live), earlier = null;
   if (history) return <EarlierRuns runs={runs} title={title} first folded={!!live} />;
   if (!now && !pages.length) return story ? <AgentStory story={story} /> : null;
   const { state, since } = recordHead(story, rec.ended);
@@ -221,7 +223,6 @@ export const ResultSummary = ({ taskId, stamp, pages = [], said = "", ended = ""
       {/* the conversation it came out of is one quiet link under it, never the page (2026-10-28) */}
       {onRecord && <Box><Button size="small" data-tq-full-result="" aria-expanded="false" onClick={onRecord}
         sx={{ ...link, textAlign: "left" }}>The whole conversation ›</Button></Box>}
-      <EarlierRuns runs={runHeads(rec.sessions).slice(1)} />
     </Box>);
 };
 

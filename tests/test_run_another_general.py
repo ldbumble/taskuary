@@ -52,13 +52,16 @@ class RunAnotherTests(unittest.TestCase):
         self.assertIn('WHERE THE EARLIER AGENT ON THIS TASK GOT TO', user)
         self.assertIn(ANSWERED, user)
 
-    def test_the_pane_reads_the_new_conversation_and_the_earlier_one_apart(self):
+    def test_the_pane_reads_every_run_in_one_conversation(self):
+        # the owner, 2026-11-05: "there is only one run per task ... remove the prior run section" - the earlier run reads in the chat, in order
         self.dispatch(fresh=True)
         self.s.add_comment(self.tid, 'assistant', general.ASSISTANT_TYPE, 'Starting fresh on the snag list.')
         with mock.patch.object(general, 'session_for', return_value=None):
             data = self.c.get(f'/api/tasks/{self.tid}/assistant').json()
-        self.assertEqual([m['content'][0]['text'] for m in data['messages']], ['Starting fresh on the snag list.'])
-        self.assertEqual([m['content'][0]['text'] for m in data['earlier']], [ASKED, ANSWERED])
+        said = [m['content'][0]['text'] for m in data['messages']]
+        self.assertEqual([x for x in said if x in (ASKED, ANSWERED, 'Starting fresh on the snag list.')], [ASKED, ANSWERED, 'Starting fresh on the snag list.'])
+        self.assertEqual(data['earlier'], [])
+        self.assertEqual([m['content'][0]['text'] for m in general.history(self.s, self.tid)][-1:], ['Starting fresh on the snag list.'])   # the next turn: this run
 
     def test_continue_still_picks_the_same_conversation_up(self):
         out, session = self.dispatch()

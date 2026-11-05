@@ -14,5 +14,5 @@ test("a card's Send to agent on the row reads the same check as the task page's"
   assert.match(view, /const off = c\.verb === "regular_agent" \? actions\.noAi \|\| "" : "";/);
   assert.match(view, /title: off \|\| c\.hint, disabled: actions\.busy \|\| !!off,/);
   // ...and an FYI handful's own Send to agent under one of its lines
-  assert.match(src("assistantCards.jsx"), /disabled=\{!!busy \|\| !!noAi\} onClick=\{\(\) => setAsking\(\{ key: i\.key, coding: false \}\)\}/);
+  assert.match(src("assistantCards.jsx"), /disabled=\{!!busy \|\| !!noAi\} onClick=\{\(\) => ask\(i, false\)\}/);
 });

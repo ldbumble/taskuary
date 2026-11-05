@@ -17,6 +17,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
+import { IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
@@ -28,7 +29,7 @@ import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, turnStart, elapsedText } from "./agentWork.js";
 import { instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
-import { Md } from "./md.jsx";
+import { LinkPopups, Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
@@ -174,7 +175,7 @@ const AssistantText = ({ text }) => {
   const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
   if (did && String(text || "").trim() === did && !files.length) return null;
   return <>
-    {!!said && <div ref={box} onClick={open}><Md text={said} /></div>}
+    {!!said && <div ref={box} onClick={open}><LinkPopups><Md text={said} /></LinkPopups></div>}
     {files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
     <FileDialog file={viewing} onClose={() => setViewing(null)} />
   </>;
@@ -774,7 +775,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               {/* ...where the chat is home the box below IS Continue: Reopen alone brings it back */}
               This task is closed. Press {btn("reopen")}{chat ? "" : <>, then {btn("continue")},</>} to pick the conversation back up.</div> : noComposer ? null : <>
             <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
-              <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
+              <IconButton size="small" onClick={onAttach} title="Attach a file - or paste or drop one here" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
               </IconButton>
               <ComposerPrimitive.Input
@@ -797,7 +798,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               <ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>
             </ComposerPrimitive.Root>
             {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}
-            <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste or attach an image</div></>}
+            <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste, drop or attach a file</div></>}
           </div>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
@@ -870,13 +871,16 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       accept(r.data);
     } catch (e) { setError(errText(e)); }
   };
+  // ...ANY FILE, not pictures only (the owner, 2026-11-05: "does drop in the prompt box attach it in all prompt boxes?"): a picture keeps the
+  // task's own image road, anything else the prompt's file road (promptImages.savePromptFile) - the agent reads either from its path
   const upload = async (files) => {
-    const images = [...(files || [])].filter((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
-    if (!images.length) return;
+    const list = [...(files || [])];
+    if (!list.length) return;
     setUploading(true); setError("");
     try {
       const added = [];
-      for (const file of images) {
+      for (const file of list.slice(0, MAX_IMAGES)) {
+        if (!IMAGE_TYPES.test(file.type)) { const got = await savePromptFile(file); added.push({ name: got.name, path: got.path }); continue; }
         const r = await api.post(`/api/tasks/${task.TaskId}/waitroom/image`, file, { headers: { "Content-Type": file.type } });
         added.push({ name: file.name || "pasted image", path: r.data.path });
       }
@@ -969,9 +973,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and when the page learns a start is under way: the session it opens is read now, not a poll later
   useEffect(() => { if (loaded && opening && !dock) refresh(); }, [opening]);  // eslint-disable-line react-hooks/exhaustive-deps
   const pasted = (e) => {
-    const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (images.length) { e.preventDefault(); upload(images); }
+    const files = [...(e.clipboardData?.files || [])];
+    if (files.length) { e.preventDefault(); upload(files); }
   };
+  const dropped = (e) => { const files = [...(e.dataTransfer?.files || [])]; if (files.length) { e.preventDefault(); upload(files); } };
+  const dragging = (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); };
   const startNewChat = async () => {
     if (!onDockNewChat || busy || newChatBusy || !shownMessages.length) return;
     setConfirmNewChat(false); setNewChatBusy(true); setError("");
@@ -1091,7 +1097,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     </Button>
   </>);
   return (
-    <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} data-tq-starting={quiet ? "" : undefined} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
+    <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} onDrop={dropped} onDragOver={dragging} data-tq-starting={quiet ? "" : undefined} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
       ...(compact ? { height: quiet ? "auto" : "100%" } : { flex: quiet ? "0 0 auto" : "1 1 auto" }),
       ...(full && !dock ? FULL_SX : null) }}>
@@ -1184,8 +1190,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
               <Md text={textOf(m)} /></>}</Box>)}
         </Box>
       </Box>}
-      <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
-      {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
+      <input ref={fileRef} hidden type="file" multiple onChange={(e) => upload(e.target.files)} />
+      {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching…</Box>}
       {!dock && !chat && <ThreadReading reading={data?.thread} mails={mails} variant="chat" />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not

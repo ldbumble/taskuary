@@ -1034,6 +1034,11 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     return system, head + (f"SOURCE MATERIAL\n{src}\n\n" if src else '') + conv
 
 
+# ...a file that is no picture is named as a file (server.prompt_file): "ATTACHED IMAGES" over a PDF told the agent to look at it as one
+def files_head(paths) -> str: return 'ATTACHED IMAGES' if all(_IMAGE_FILE.search(str(p)) for p in paths) else 'ATTACHED FILES'
+_IMAGE_FILE = re.compile(r'\.(png|jpe?g|gif|webp)$', re.I)
+
+
 def _images(paths) -> list:
     out = []
     for raw in paths or []:

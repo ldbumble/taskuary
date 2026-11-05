@@ -72,7 +72,8 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import { ASK_MEETING, ASK_REPORT, AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
-import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
+import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
+import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
 import { FYI_PAGE, ageHover, fyiCap, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameKey, sameRow, sentChips } from "./funnelPile.js";
@@ -944,10 +945,14 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
   return null;
 }
 
+// WHAT THE CHAT'S ROAD CANNOT CARRY, said on the chip (the owner, 2026-11-05): the turn names a file's path - an AI on this computer opens it,
+// an API one is handed pictures only (general._images)
+const dockCannot = (i) => (i.image ? "" : "read only by an AI on this computer");
 function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, pageOver = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
-      <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
+      s.url ? <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />
+        : <span key={s.path} data-tq-file-sent={s.name} style={{ fontSize: 12, padding: "2px 8px", borderRadius: 11, border: "1px solid #ddd6cb", background: "#f6f4f1" }}>📎 {s.name}</span>))}</div>}</div></div>;
   // the day's opener draws the welcome, once - an earlier day's sits under it as nothing (actions.welcome)
   if (m.card?.kind === "brief") return lastBrief ? actions.welcome(m) : null;
   // BROWSING (the canvas redesign, 2026-09-29): Connections, Settings, Reports or Hub, walked by clicks on this line
@@ -1276,7 +1281,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and the owner's notes the Assistant lit it with ("rerun it with these notes: ..."): its box opens holding them, for that task
   const continueNote = useRef(null);
   const noteFor = (tid) => (continueNote.current && Number(continueNote.current.tid) === Number(tid) ? continueNote.current.note : "");
-  const pics = usePromptImages();                        // pictures sent with the chat line
+  // pictures sent with the chat line - and any file (the owner, 2026-11-05): the turn names its path; an API AI is handed pictures only
+  const pics = usePromptImages({ files: true });
   // ...A CONTINUE IN THE AGENT PANE (the owner, 2026-10-29: "Continue box should be inside the canvas always"): a Continue for the task on
   // the table - the walk's, or the Assistant's lit with notes - is the task view's own card, in its Agent pane, when it lays its panes
   // (TaskPage claims it, tq-continue-here); only a view that does not (a phone) leaves it to the card under the item here
@@ -2608,6 +2614,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (item?.tid && showsTask(item, cardFor(item))) { window.dispatchEvent(new CustomEvent("tq-agent-ask", { detail: { tid: item.tid, coding } })); return; }
     if (!item?.key) return;
     setContinueOn(null); setNoteOn(null);
+    // ...a report, an FYI, a dashboard or an Advisor item takes it in ITS OWN box, the item a chip on it (ItemSections.handToItem; the owner,
+    // 2026-11-05: "attach the report or fyi list to the prompt box on bottom and make them type in"): no second box. Its Send is this Start
+    const v = coding ? "coding_agent" : "regular_agent";
+    if (handToItem(item.key, { verb: v, items: [{ key: item.key, title: item.title || item.ref || "this item" }],
+      start: (o) => startOnItem(item, { verb: o.verb, text: withImages(o.text, o.files) }) })) { setAgentOn(null); return; }
     setAgentOn({ item, coding });
   };
   // ...and its Start: the hand-off's own proposal, carrying what was said and the agent chosen (concierge.propose_direct), run at
@@ -3832,7 +3843,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 by it (advice.stripWord's quiet pick), so it leaves the same mark */}
             {!shownAdvice && !litNow && stripPick?.verb === "next" && advice?.none && advice.for === onTable && <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb="next" />}
           </>}
-          {!firstRun && !chatApart && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
+          {!firstRun && !chatApart && <ImageTray pics={pics} cannot={dockCannot} sx={{ width: "100%", mb: 0.75 }} />}
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
@@ -3845,7 +3856,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {!chatApart && composeBox}
           </div>
           </div>
-          {chatApart && <div className="tq-chat-unit" data-tq-chat-unit=""><ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />{composeBox}</div>}
+          {chatApart && <div className="tq-chat-unit" data-tq-chat-unit=""><ImageTray pics={pics} cannot={dockCannot} sx={{ width: "100%", mb: 0.75 }} />{composeBox}</div>}
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
             slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>

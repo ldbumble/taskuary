@@ -10,6 +10,7 @@ import { hasReply, nextSteps } from "./agentSummary.js";
 import { Md } from "./md.jsx";
 import { readingOf } from "./threadReading.js";
 import { MicButton } from "./ui.jsx";
+import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 // ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
@@ -74,15 +75,19 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
 // own words; from its first turn on the chat is the agent's. `box` off where the task's own agent form already starts it (a general task not begun).
 export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], cards = null, box = true, onStarted }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const pics = usePromptImages({ files: true });          // ...a dropped, pasted or picked file goes with the words (the owner, 2026-11-05)
   const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
   const { onYou } = nextSteps({ reviews, checklist, cards: false });
   // ...the ask in one plain paragraph: what the thread wants (triage's reading), never its labelled lines
   const ask = readingOf(task?.ThreadJson)?.asking || "";
   const send = async () => {
     const words = text.trim();
-    if (!words || busy) return;
+    if ((!words && !pics.paths.length) || busy || pics.busy) return;
     setBusy(true); setErr("");
-    try { const { data } = await api.post(`/api/tasks/${task.TaskId}/dispatch`, { kind: "general", instruction: words }); setText(""); onStarted?.(data); }
+    try {
+      const { data } = await api.post(`/api/tasks/${task.TaskId}/dispatch`, { kind: "general", instruction: withImages(words, pics.paths) });
+      setText(""); pics.clear(); onStarted?.(data);
+    }
     catch (e) { setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }
     finally { setBusy(false); }
   };
@@ -94,14 +99,16 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
         {cards ? <Box>{hasReply(reviews) && <DraftHead />}{cards}</Box> : null}
         {onYou.length ? <><Head>Next steps</Head><OnYou items={onYou} /></> : null}
       </Box>
-      {box && <Box component="form" onSubmit={(e) => { e.preventDefault(); send(); }}
+      {box && <ImageTray pics={pics} sx={{ mb: 0.75 }} />}
+      {box && <Box component="form" onSubmit={(e) => { e.preventDefault(); send(); }} {...pics.drop}
         sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff" }}>
         <Box component="textarea" data-tq-no-agent-box="" rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder="Tell me what's wrong, or ask about anything here…"
           sx={{ flex: 1, minWidth: 0, resize: "none", border: 0, outline: 0, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent", py: 0.5 }} />
+        <AttachImage pics={pics} size={17} sx={{ width: 28, height: 28 }} />
         <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
-        <IconButton type="submit" size="small" data-tq-no-agent-send="" aria-label="Send to the agent" disabled={busy || !text.trim()}
+        <IconButton type="submit" size="small" data-tq-no-agent-send="" aria-label="Send to the agent" disabled={busy || pics.busy || !(text.trim() || pics.imgs.length)}
           title="Starts the agent on this task with your words"><SendIcon fontSize="small" /></IconButton>
       </Box>}
       {!!err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}

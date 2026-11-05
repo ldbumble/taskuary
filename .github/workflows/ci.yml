@@ -13,7 +13,7 @@ jobs:
   ci-required:
     name: ci-required
     if: always()
-    # ...the layout-pinning browser parts and the walk REPORT and no longer block (the owner, 2026-10-29: "I need to iterate quicker");
+    # ...the browser suites and the walk are gone (the owner, 2026-11-05: "remove the browser test suites"); a release is gated by the smoke set
     # what blocks a release is the smoke set - the app loads and the agent buttons work end to end
     needs: [test, build-web, smoke, docker]
     runs-on: ubuntu-24.04
@@ -111,7 +111,7 @@ jobs:
 
   smoke:
     # THE BROWSER GATE (2026-10-29): a handful of files that prove the app loads and Send to agent / Continue / Run another work,
-    # coding and general - the rest of the browser suite and the walk still run below and report, but a moved button no longer stops a release
+    # coding and general - the only browser tests left (the owner removed the rest, 2026-11-05)
     name: browser smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -126,102 +126,6 @@ jobs:
         working-directory: website
       - run: node --test --test-concurrency=1 browser/loads-once.test.mjs browser/general-starting.test.mjs browser/continue-shows-turn.test.mjs browser/run-another-general.test.mjs
         working-directory: website
-
-  browser:
-    continue-on-error: true   # reports, never blocks a release (2026-10-29, the smoke set is the gate)
-    # Real Chromium + the disposable fixture backend; never targets the owner's server.
-    # ...in three parts at once (2026-10-21): file after file on one machine it outgrew 10 minutes and was cut off mid-run.
-    # browser/shard.mjs deals package.json's test:browser list out, so the list stays the one place a test is named.
-    # ...in four (2026-10-27): the one-row dock's and the drawers' tests took part 1 past its 15 minutes, and it was cancelled mid-run.
-    # ...and in six, with 20 minutes each (2026-10-27, later): a day's new browser tests took part 1 of four past its 15 again.
-    # ...and in eight (2026-11-01): part 1 of six stood at 19 of its 20 minutes, and a day's new tests took it past (cancelled twice).
-    # ...and 25 minutes (2026-11-03): part 1, which opens with the walk table, ran 18.5-19.3 of its 20 and was cancelled mid-walk twice.
-    strategy:
-      fail-fast: false
-      matrix:
-        part: [1, 2, 3, 4, 5, 6, 7, 8]
-    name: browser (${{ matrix.part }} of 8)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with: { python-version: "3.12" }
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: "22" }
-      - run: pip install -e .[dev]
-      - run: npm ci
-        working-directory: website
-      - run: node browser/shard.mjs ${{ matrix.part }} 8
-        working-directory: website
-
-  walk-table:
-    # The walk table on its own (2026-11-04): 61 cases, ~12 minutes alone - inside browser part 1 with 17 other files it ran past 25
-    # minutes and was cancelled twice. shard.mjs leaves it out of the eight parts.
-    name: walk table
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with: { python-version: "3.12" }
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: "22" }
-      - run: pip install -e .[dev]
-      - run: npm ci
-        working-directory: website
-      - run: node --test --test-concurrency=1 browser/walk-table.test.mjs
-        working-directory: website
-
-  walk:
-    continue-on-error: true   # reports, never blocks a release (2026-10-29, the smoke set is the gate)
-    # The dead-end walk on its own: it presses every button on the list and forces each failure (2026-10-18), which takes
-    # longer than the rest of the browser suite together - inside the 10-minute browser job it was cancelled, not failed.
-    # ...and in four parts at once (2026-10-20): one 15-minute walk held every run; its passes share nothing but the build
-    strategy:
-      fail-fast: false
-      matrix:
-        passes: ["walk", "sweep", "faults", "cards,links,based", "search,table,stopsave"]
-    name: walk (${{ matrix.passes }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with: { python-version: "3.12" }
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: "22" }
-      - run: pip install -e .[dev]
-      - run: npm ci
-        working-directory: website
-      - run: npm run test:walk
-        working-directory: website
-        env: { WALK_ONLY: "${{ matrix.passes }}" }
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with: { name: "walk-pressed-${{ strategy.job-index }}", path: website/browser/walk-pressed-*.json, if-no-files-found: ignore }
-
-  walk-cover:
-    continue-on-error: true   # reports, never blocks a release (2026-10-29, the smoke set is the gate)
-    # COVER - every button on the list pressed at least once - needs every part's presses: checked here, over all four
-    needs: walk
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with: { node-version: "22" }
-      - run: npm ci
-        working-directory: website
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with: { pattern: walk-pressed-*, path: pressed, merge-multiple: true }
-      - name: Every button pressed somewhere in the walk
-        working-directory: website
-        run: |
-          out=$(node deadend_check.mjs --cover "$(ls ../pressed/*.json | paste -sd, -)" | tail -1)
-          echo "$out"
-          node -e 'const o=JSON.parse(process.argv[1]); if (o.found.length) { console.error(o.found.join(String.fromCharCode(10))); process.exit(1) }' "$out"
-
 
   docker:
     # proves the image builds, serves the UI, persists across restart, and the

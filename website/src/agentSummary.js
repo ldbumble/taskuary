@@ -23,3 +23,7 @@ export const nextSteps = ({ summary, reviews = [], checklist = [], acts = [], ca
 // is a reply in it: a draft waiting, or one that was sent or closed unsent
 export const chatReplyShown = ({ replyMessage, pendingReview, sentReview, unsentReview } = {}) =>
   !!replyMessage && !!(pendingReview || sentReview || unsentReview);
+
+// ...and "Suggested reply" heads Close out's body in the chat only over a reply - a draft, or one sent or closed unsent. Over a closed task's
+// "✓ Mark done just now" it named a reply there never was (the stress run's browser task, 2026-11-05)
+export const hasReply = (reviews) => (reviews || []).some((r) => r && r.Kind !== "action" && r.Kind !== "slot");

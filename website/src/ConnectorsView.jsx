@@ -4,6 +4,7 @@
 // connectors (Outlook, Teams, Slack, GitHub), cloud AI APIs (Anthropic, OpenAI, Azure
 // OpenAI - wired into intent triage), AI CLI agents, and scheduled report connections.
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import BuiltinVoice from "./BuiltinVoice.jsx";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, MenuItem, Popover, Radio, Select, Step,
   Slider, StepButton, StepContent, Stepper, Switch, TextField, Typography,
@@ -1796,6 +1797,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const conn = open?.kind === "connector" ? connectors.find((c) => c.ConnectorId === open.id) : null;
   const shared = conn ? { conn, reload: load, onBack: back, onCreated: (id) => setOpen({ kind: "connector", id }) } : null;
   const page = open?.kind === "agents" ? <CliConnectionsPage onBack={back} />
+    : open?.kind === "builtin-voice" ? <BuiltinVoice onBack={back} />
     : open?.kind === "voice-vocabulary" ? <VoiceVocabulary onBack={back} />
     : open?.kind === "signins" ? <SavedSignins />
     : open?.kind === "alchemy-wallet" ? <AlchemyWalletGuide onBack={back}
@@ -1856,6 +1858,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       // what happens with NO card here is not visible anywhere else, and it looked like something was missing
       note: "Without a card here the mic still works where a voice is found: in Edge or Chrome it uses the browser's own recognition at once, and in the Taskuary window on Windows it uses Windows' own dictation (on this computer, no key) — free, live microphone only. With neither it shows crossed out. Voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
       cards: [
+        { key: "builtin-voice", title: "Windows / browser voice", channel: "ai",
+          desc: "Choose built-in dictation and test the microphone. No API key.",
+          haystack: "windows browser edge chrome built in speech microphone dictation voice",
+          go: () => setOpen({ kind: "builtin-voice" }) },
         { key: "voice-vocabulary", title: "Shared voice vocabulary", channel: "ai",
           desc: "one system-wide list used by every voice connector and mic",
           haystack: "custom shared voice vocabulary words phrases domain names acronyms",

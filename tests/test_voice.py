@@ -63,9 +63,40 @@ class BuiltinVoiceTests(unittest.TestCase):
             self.assertEqual(voice.builtin(), {**voice.LIVE, 'ask': voice.SPEECH_ASK})
             with mock.patch.object(voice, 'speech_on', return_value=True): self.assertEqual(voice.builtin(), voice.LIVE, 'on at the next press, no restart')
         a, b, c = win(False)
-        with a, b, c: self.assertIsNone(voice.builtin(), 'no voice typing: the mic asks for a voice AI, nothing worse stands in')
+        with a, b, c, mock.patch.object(voice, 'speech_on', return_value=True):
+            self.assertIsNone(voice.builtin(), 'no voice typing: nothing worse stands in')
         self.assertIn('Microsoft', voice.SPEECH_ASK)
         self.assertEqual(voice._why('the speech privacy policy was not accepted'), "Voice typing stopped: " + voice._LIVE_WHY['privacy'])
+
+    def test_privacy_does_not_hide_the_enable_prompt_when_compilation_would_fail(self):
+        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), \
+             mock.patch.object(voice, 'speech_on', return_value=False), mock.patch.object(voice, '_live_ok', return_value=False) as probe:
+            self.assertEqual(voice.builtin()['ask'], voice.SPEECH_ASK)
+            probe.assert_not_called()
+
+    def test_a_failed_probe_recovers_without_restarting_after_the_cooldown(self):
+        with mock.patch.dict(voice._HAS, clear=True), mock.patch.object(voice.sys, 'platform', 'win32'), \
+             mock.patch.object(voice, 'speech_on', return_value=True), mock.patch.object(voice, '_live_ok', side_effect=[False, True]) as probe, \
+             mock.patch.object(voice.time, 'monotonic', side_effect=[100, 110, 131, 131]):
+            self.assertIsNone(voice.builtin())
+            self.assertIsNone(voice.builtin())
+            self.assertEqual(voice.builtin(), voice.LIVE)
+            self.assertEqual(probe.call_count, 2)
+
+    def test_explicit_builtin_status_is_available_even_with_a_connected_voice_card(self):
+        here = TestClient(server.app, client=('127.0.0.1', 5000))
+        there = TestClient(server.app, client=('192.168.1.20', 5000))
+        with mock.patch.object(server, 'store', _voice_store()), mock.patch.object(voice, 'builtin', return_value=voice.LIVE):
+            self.assertIsNone(here.get('/api/voice/status').json()['builtin'])
+            self.assertEqual(here.get('/api/voice/status?builtin=true').json()['builtin'], voice.LIVE)
+            self.assertIsNone(there.get('/api/voice/status?builtin=true').json()['builtin'])
+
+    def test_a_manual_refresh_retries_a_recent_failed_probe(self):
+        with mock.patch.dict(voice._HAS, {'live': False, 'checked': voice.time.monotonic()}, clear=True), \
+             mock.patch.object(voice.sys, 'platform', 'win32'), mock.patch.object(voice, 'speech_on', return_value=True), \
+             mock.patch.object(voice, '_live_ok', return_value=True) as probe:
+            self.assertEqual(voice.builtin(refresh=True), voice.LIVE)
+            probe.assert_called_once()
 
     def test_a_yes_writes_the_setting_windows_own_toggle_writes(self):
         vals = {}

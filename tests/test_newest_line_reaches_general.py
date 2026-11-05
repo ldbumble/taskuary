@@ -133,7 +133,9 @@ class NextTurn(unittest.TestCase):
         self.carried_on(s, tid)
         shown = general.shown_history(s, tid)
         first, carried = [m for m in shown if m.get('brief')][0], [m for m in shown if m.get('brief')][-1]
-        self.assertNotIn('mail', first)                                         # the opening brief's mail is Came from's
+        # ...and the opening brief carries the mail that started the task (the owner, 2026-11-05: "the inputs on right ... email came in
+        # from x and was sent to agent"): the chat opens on it, the carried-on brief has only what came after
+        self.assertNotIn(ASK, [x['words'] for x in first.get('mail') or []])
         self.assertEqual([(x['who'], x['words']) for x in carried['mail']], [('Gail Moreno', ASK)])
         self.assertEqual([m['content'] for m in shown], [m['content'] for m in general.history(s, tid)])      # the turns themselves unchanged
 

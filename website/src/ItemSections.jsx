@@ -70,7 +70,8 @@ export function ItemAsk({ ask }) {
 
 // `sections`: [{ key, n, name, body, lines, foot, icon, moves }] in the flow's order; `about`: the key the item is about (it opens there, and only it
 // folds to a full tab); `here`: the section it is up to; `height`: the canvas's (CanvasItem wordsCap) - one height, like a task's three;
-// `lays`: its moves ride the `about` section on a desk (ItemLay); `ask`: what it says and the box, atop the middle section (ItemAsk)
+// `lays`: its moves ride the `about` section on a desk (ItemLay); `ask`: what it says and the box, UNDER the section the item opens on (ItemAsk) -
+// never in the Agent tab of an item no agent was sent to (the owner, 2026-11-05: "if they are not sent to agent they should not open on agent tab")
 export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null }) {
   // NO CLOSE OUT ON AN ITEM (the owner, 2026-11-05: "reports/advisor/fyi to chat thing as well without close out"): every one said "Nothing
   // owed". Its body stays mounted, unseen - the moves it registers (RowMoves, Foot) still ride the item's strip and the row
@@ -117,8 +118,8 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
           <Box key={s.key} data-tq-slot={s.key} data-tq-open="" sx={{ minWidth: 0, flexShrink: 0 }}>
             <Box role="region" aria-label={s.name} className="tq-item-sec" sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
               <SectionHead sec={s} moves={s.moves} />
-              {i === 1 && ask && <ItemAsk ask={ask} />}
               {s.body}
+              {s.key === about && ask && <ItemAsk ask={ask} />}
             </Box>
           </Box>
         ) : (
@@ -130,8 +131,8 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
             {open === s.key && <PaneStrip sec={s.key} name={s.name} keys={keys} fold={(to) => (s.key === about ? to : about)} onFold={setOpen} />}
             <Box role="region" aria-label={s.name} aria-hidden={open !== s.key ? true : undefined} className="tq-item-sec"
               sx={{ ...SECTION(open === s.key, w ? openW(s.key) : "100%"), gap: 1.5 }}>
-              {i === 1 && ask && <ItemAsk ask={ask} />}
               {s.body}
+              {s.key === about && ask && <ItemAsk ask={ask} />}
             </Box>
           </Box>
         ))}

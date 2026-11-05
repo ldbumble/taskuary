@@ -44,6 +44,15 @@
 .tq-aui-working-fold[open] > summary::after { content: "▾"; }
 .tq-aui-working-fold > summary:hover { color: #292824; }
 .tq-aui-working-fold > .tq-aui-steps { margin-top: 6px; }
+/* a turn at work shows its steps open (GeneralWorkspace WorkSteps): the last six, the earlier ones one quiet line above them */
+.tq-aui-live-steps { margin: 0 0 8px; }
+.tq-aui-live-steps > .tq-aui-steps { margin: 0; }
+.tq-aui-live-earlier > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px; color: #8b877e; list-style: none; }
+.tq-aui-live-earlier > summary::-webkit-details-marker { display: none; }
+.tq-aui-live-earlier > summary::after { content: "▸"; font-size: 10px; color: #a9a294; }
+.tq-aui-live-earlier[open] > summary::after { content: "▾"; }
+.tq-aui-live-earlier > summary:hover { color: #292824; }
+.tq-aui-live-earlier > .tq-aui-steps { margin: 2px 0 0; }
 /* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
    it to one word a line in a half-width chat (the 2026-10-08 portal run) */
 .tq-aui-progress { margin: 0 0 8px; border: 1px dashed #ddd7cd; border-radius: 9px; color: #77766f; font-size: 11.5px; }

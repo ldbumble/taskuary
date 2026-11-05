@@ -26,7 +26,7 @@ import { AgentSteps } from "./AgentStepRows.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
-import { agentName, workOf, doingNow, turnStart, elapsedText } from "./agentWork.js";
+import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp } from "./agentWork.js";
 import { instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, Md } from "./md.jsx";
@@ -72,7 +72,8 @@ const textOf = (message) => (message?.content || []).filter((p) => p.type === "t
 const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
-    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}) };
+    const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
+      ...(m.since ? { since: m.since } : {}) };
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")
@@ -93,7 +94,9 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
   const trace = session?.trace;
   if (!stepsOf(trace, { keepStart }).length) return out;
   if (session?.busy) {
-    out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
+    // ...with the turn's own start (general.info `turn_started`): its id is new at every step, and so was the time the runtime gave it
+    out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }),
+      ...(session.turn_started ? { since: session.turn_started * 1000 } : {}) });
     return out;
   }
   // The trail belongs to the NEWEST turn. When that turn filed an answer the trail is its
@@ -256,6 +259,7 @@ const live = (m) => m?.status?.type === "running" || String(m?.id || "").startsW
 // ...and a fold the owner opened stays open: the server's live message is `live-<sid>-<trace revision>` - a new id at every step - and the pane
 // itself mounts again when the owner comes back to the task. Kept by the turn, never by the message's id or the DOM
 const OPEN_FOLDS = new Set();
+const LIVE_SHOWN = 6;
 const foldKey = (id) => String(id || "").replace(/^(live-.+)-\d+$/, "$1");
 const WorkSteps = ({ data }) => {
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
@@ -270,10 +274,19 @@ const WorkSteps = ({ data }) => {
   const chat = React.useContext(ChatCtx), keepOut = !chat;
   const all = data?.steps || [], bad = keepOut ? all.filter((s) => s.kind === "error" || s.status === "error") : [], n = all.filter(isWork).length;
   const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
+  const calm = chat ? all.map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) : all;
+  // WHILE IT RUNS ITS STEPS ARE OPEN (the owner, 2026-11-05: "it has to show what it's working on a little more than this like pulling from url's
+  // etc.. look how other chat libraries show intermediately the tool calls"): a quiet line a step, the newest at the foot with its spinner, the
+  // last LIVE_SHOWN of them - those before fold into "N earlier steps". Once it has answered they fold into one "N steps" line, as ever
+  if (now) { const cut = Math.max(0, calm.length - LIVE_SHOWN);
+    return <div className="tq-aui-live-steps" data-tq-live-steps="" role="status" aria-live="polite">
+      {!!cut && <details className="tq-aui-live-earlier"><summary>{plural(cut, "earlier step")}</summary><AgentSteps data={{ steps: calm.slice(0, cut) }} /></details>}
+      <AgentSteps data={{ steps: calm.slice(cut) }} />
+    </div>; }
   return <>
-    <details className="tq-aui-working-fold" data-tq-working={now ? "" : undefined} open={open} onToggle={toggle}>
-      <summary>{now ? <><span className="tq-aui-band-dot" />Working on this…</> : n ? plural(n, "step") : "Along the way"}</summary>
-      <AgentSteps data={{ steps: (chat ? all.map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) : all).filter((s) => !bad.includes(s)) }} />
+    <details className="tq-aui-working-fold" open={open} onToggle={toggle}>
+      <summary>{n ? plural(n, "step") : "Along the way"}</summary>
+      <AgentSteps data={{ steps: calm.filter((s) => !bad.includes(s)) }} />
     </details>
     {!!bad.length && <AgentSteps data={{ steps: bad }} />}
   </>;
@@ -288,17 +301,26 @@ const Nothing = () => null;
 const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.length <= 500 || /https?:\/\/|\b[A-Za-z]:\\|(^|\s)\/(Users|home|mnt|tmp)\/|\\\\\S+/.test(t)); };
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
-const tookFor = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
+// ...and WHILE IT RUNS, its clock from the turn's own start (the owner, 2026-11-05: "it should show right when it starts the counter on top, then
+// it stops when response is generated"): one second's tick, only in a turn at work, gone with it (agentWork.turnStamp)
+const Ticking = ({ since }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const said = turnStamp({ running: true, start: since, now });
+  return said ? <span data-tq-working-for="">{` · ${said}`}</span> : null;
+};
 const RanFor = () => {
   const at = useAuiState((s) => s.message.createdAt), id = useAuiState((s) => s.message.id);
   const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? ms[i - 1].createdAt : null; });
   // ...a turn still running has not "ran" anything yet: its stamp read "ran 0s" over "Working on this…" (the chat-model stress run, 2026-11-05)
-  const running = useAuiState((s) => live(s.message));
-  const t = at ? new Date(at) : null;
+  // ...and the live message is drawn anew at every step, so its own time is the latest step's: the turn began at the server's `since`, else
+  // at the line it answers
+  const running = useAuiState((s) => live(s.message)), since = useAuiState((s) => s.message.metadata?.custom?.since);
+  const start = running ? since || before : before, t = running && start ? new Date(start) : at ? new Date(at) : null;
   if (!t || Number.isNaN(+t)) return null;
-  const ran = before && !running ? +t - +new Date(before) : 0;
+  const ran = running ? "" : turnStamp({ start: before, end: t });
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    · {when(t)}{ran > 0 && ran < 6 * 3600 * 1000 ? ` · ran ${tookFor(ran)}` : ""}</span>;
+    · {when(t)}{ran ? ` · ${ran}` : ""}{running && start && <Ticking since={start} />}</span>;
 };
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);

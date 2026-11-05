@@ -494,7 +494,8 @@ export function splitRow(row, on, list = []) {
   // ...and its Mark done on Close out (the owner, 2026-11-02: "Mark done always shows on Close out, which will save the result and move on"):
   // a parked agent's task offered only Stop and save, and Mark done came back only once it had stopped. The press stops and saves first
   if (on.live) { const all = [...row.decide, ...row.agent, ...row.more];
-    return { row: nav, by: { live: all.filter((v) => String(v.id).split(":").pop() === "save-end"), head: all.filter(isDone) } }; }
+    // ...and a CLOSED chat task keeps that layout (the owner, 2026-11-05): its Reopen stands where Mark done stood
+    return { row: nav, by: { live: all.filter((v) => String(v.id).split(":").pop() === "save-end"), head: all.filter((v) => isDone(v) || String(v.id).split(":").pop() === "reopen") } }; }
   // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar and leaves it the rest
   if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
     return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }

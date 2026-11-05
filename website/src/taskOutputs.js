@@ -13,7 +13,11 @@ const ADDRESS = /^(?:https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?)?\/o
 const ON_DISK = /(?:^|\/)scratch\/outputs\/TQ-0*(\d+)\/(.+)$/i;
 
 export const baseName = (p) => String(p || "").replace(/\\/g, "/").split("/").filter(Boolean).pop() || String(p || "");
-export const outputUrl = (tid, rel) => `/api/task-outputs/${Number(tid)}/${String(rel).split("/").map(encodeURIComponent).join("/")}`;
+// THE STATIC DEMO CARRIES ITS OWN BYTES (demo_fixtures.mjs): taskuary.com/demo has no server behind /api/task-outputs, so a picture or a PDF
+// the recorded agent made rides in the recording as a data: address, put here by demoApi.js - its post's chart draws there too
+export const STATIC_OUTPUTS = {};
+export const outputUrl = (tid, rel) => STATIC_OUTPUTS[`${Number(tid)}/${rel}`]
+  || `/api/task-outputs/${Number(tid)}/${String(rel).split("/").map(encodeURIComponent).join("/")}`;
 
 // {tid, rel} for an address or a path into any task's outputs folder, or null. rel is a name inside the folder - no `..`, no drive
 // ...and only an ADDRESS is decoded (a URL, or any markdown link's target: `link`), its query and fragment cut first. A path on disk

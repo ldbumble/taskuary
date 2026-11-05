@@ -13,7 +13,7 @@ and whatever part of the app is in use opens inside it.
 | Under the buttons | **Search** (or Ctrl+K anywhere), then the **filter** - the row's one control, saying what the rail is narrowed to (*All items*, *Email*, one mailbox) - then the day's count and **Sync now** |
 | Search | One box over everything, open or closed: tasks, mail, chats, pull requests and issues, Advisor posts, reports and your sources. Each result wears a pill saying what it is; the strip above them narrows to one kind (**Tab** steps through it). **Enter** opens the result - a task on the canvas, a message in full, a source as the rail's filter - and the task number on a message opens the task it is on |
 | The rail | **Tasks** (every open task; a ring spins round the icon of one an agent is working), **For later**, **Reports**, **Advisor**, **FYI** - click a heading to walk that section |
-| The canvas | The item on the table: a task opens as its full task view - Task, Agent work, Close out - with **Next** under it |
+| The canvas | The item on the table: a task opens as its full task view - Came from and Agent, the agent's one chat, and on a coding task Close out - with **Next** under it |
 | The top bar | **Board** - every agent and its session, full screen - and back to the Assistant |
 
 **Reports, Connections, Hub and Settings are browsed in the canvas**, by clicks: a button shows that part's sections, a
@@ -64,12 +64,12 @@ Send to agent starts on the agent triage would pick; the other is one click away
 
 ## Pictures, and your voice
 
-Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, and in **Continue**. It
+Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, in a task's chat box, and in **Continue**. It
 goes with your words: the Assistant looks at the picture itself, and a coding agent is handed the file to open. PNG,
 JPEG, GIF and WebP, up to eight at a time. The microphone beside each box dictates into it.
 
-**Continue** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
-add a picture, or continue as is. Moving on with **Next** puts the card away with the item.
+On a coding task, **Continue** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
+add a picture, or continue as is. Moving on with **Next** puts the card away with the item. A general task has no Continue: what you type in its chat box carries the same conversation on.
 
 ## Remind me
 

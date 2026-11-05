@@ -23,6 +23,7 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from loguru import logger
 
@@ -902,8 +903,240 @@ def seed(store) -> int:
         elif kind == 'technical_solve':
             store.lore_comment(lid, 'The same elapsed-time budget should apply to report polling.', 'assistant')
     seed_dashboard(store)
+    made += seed_agent_day(store, f)
     made += seed_tour(store, f)
     logger.info(f'demo: seeded {made} items of invented work')
+    return made
+
+
+# ── a day of the general agent's work, finished (the owner, 2026-11-05: "make the general agent fake data showing results like LinkedIn
+# posts, all false data but showing what Taskuary can do") ──────────────────────────────────────────────────────────────────────────────
+# The demo has no AI, so nothing here runs: every turn is written out as the chat files it - the mail that came in on the right, the
+# agent's answer on the left with its three parts (general.SUMMARY_TYPE), and what it set up for one press: a LinkedIn post with its chart,
+# a reply with a workbook on it, a dashboard, an invoice paid on a vendor's site. Each thread is a believable morning's ask with figures that add up.
+SITES_OT = (('Lakeview', 412, 14830, 380, 13680), ('Riverside', 288, 10080, 301, 10540), ('Fairhaven', 596, 22350, 452, 16950),
+            ('Oak Ridge', 174, 5920, 190, 6460), ('Millbrook', 351, 12640, 333, 11990))      # site, Sep hours, Sep cost, Aug hours, Aug cost
+SPEND_VENDORS = (('Alvarez Supply', 'Supplies', 15800), ('Northline Linen', 'Linen', 7400), ('Kesler Medical', 'Medical', 9100),
+                 ('BrightPath IT', 'IT', 5200), ('Cardinal Food Svc', 'Food', 6900))        # vendor, category, a usual week
+POST = ("A year and six weeks. Fairhaven has now gone 412 days without a lost-time injury - and across all five Northwind sites, "
+        "nobody lost a day to an injury this quarter.\n\nThe number we are proudest of is the one that went up: near-miss reports rose 38% "
+        "on the quarter before. People are telling us about the close calls, which is how the next injury never happens.\n\n"
+        "Thank you to every shift at Fairhaven, Lakeview, Riverside, Oak Ridge and Millbrook.\n\n#safety #facilities #teamwork")
+# (who, channel, subject, body, minutes ago) per thread; then its turns: ('mail', ...) a later message, ('own', ...) the owner's own reply,
+# ('trigger', mins, words) Taskuary's short line, ('turn', mins, ran secs, words, summary)
+AGENT_DAY = {
+    'post': ('Priya Shah', 'pshah@northwind.example', 'email', 'Fairhaven safety milestone - LinkedIn post?',
+             'Fairhaven passed a full year without a lost-time injury last week. Could we put something on LinkedIn with the Q3 numbers? '
+             'Nothing too corporate - the site team should recognise themselves in it.', 370),
+    'overtime': ('Erin Blake', 'eblake@northwind.example', 'email', 'September overtime by site',
+                 'Can you pull September overtime hours and cost by site? I need it for the labour review on Thursday.', 330),
+    'dashboard': ('Gail Moreno', 'gmoreno@northwind.example', 'teams', 'Vendor spend as a dashboard?',
+                  'could we have vendor spend as a dashboard instead of the monthly PDF? weekly is plenty, and I mostly look at the top vendors', 290),
+    'research': ('Sam Delgado', '', 'whatsapp', 'Same-day pay - which payroll providers do it?',
+                 'Staff keep asking whether they can get paid the same day they work. Which payroll providers actually do that, and what would it cost us?', 250),
+    'renewal': ('Ruth Bennett', 'rbennett@northwind.example', 'email', 'Trainly renewal - how many seats?',
+                'Can you find the signed Trainly renewal and tell me how many seats we committed to? Finance is asking before the budget call.', 210),
+    'portal': ('Marcus Reed', 'mreed@northwind.example', 'email', 'PhishGuard renewal invoice INV-3391',
+               'PhishGuard sent the renewal invoice - INV-3391, $4,860, due Friday. Can you pay it on their portal with the card on file?', 180),
+}
+
+
+# ...and what is typed into one of those chats: kept, and answered in words that say why nothing ran (server._demo_turn)
+CHAT_TURN = ('This is the demo, so no agent runs here - the turns above were written in advance to show what it does. In your own '
+             'Taskuary, what you type here goes straight to the agent on this task, and its answer lands in this chat.')
+
+
+def _at(mins: float) -> str: return (datetime.now() - timedelta(minutes=mins)).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _sheet(rows) -> tuple:
+    """(extension, bytes): a workbook where openpyxl is installed (the desktop app ships it), else the same rows as CSV."""
+    import csv, io
+    try:
+        from openpyxl import Workbook
+        wb = Workbook(); ws = wb.active; ws.title = 'Overtime'
+        for r in rows: ws.append(list(r))
+        from openpyxl.styles import Font
+        for c in ws[1]: c.font = Font(bold=True)
+        buf = io.BytesIO(); wb.save(buf); return '.xlsx', buf.getvalue()
+    except ImportError:
+        buf = io.StringIO(); csv.writer(buf).writerows(rows); return '.csv', buf.getvalue().encode()
+
+
+def _made(tid: int, name: str, data: bytes, mins: float) -> str:
+    """A file the agent made, in the task's outputs folder, dated when it made it (its turn claims it: server._assistant_payload)."""
+    from . import outputs
+    out = outputs.folder(tid); out.mkdir(parents=True, exist_ok=True)
+    p = out / name; p.write_bytes(data)
+    t = (datetime.now() - timedelta(minutes=mins)).timestamp(); os.utime(p, (t, t))
+    return name
+
+
+def seed_agent_day(store, f) -> int:
+    """The general agent's finished work on six of the morning's asks. Returns how many messages it wrote."""
+    from . import config, general, outputs, reports, verdicts
+    made, tids = 0, {}
+    # ...six more rows on a rail the pipe caps at its default (funnel.knobs): a demo morning shows all of it, the batch of FYI included
+    store.set_setting('funnel_max', '40', 'demo')
+    stamp = lambda table, col, rid, mins: store._exec(f'UPDATE {table} SET CreatedAt=? WHERE {col}=?', (_at(mins), rid))
+    def mail(tid, who, email, channel, subject, body, mins, why='', out=False):
+        nonlocal made
+        mid = f.message(task_id=tid, channel=channel, subject=subject, body=body, from_name=who, from_email=email or None, sent_at=_at(mins),
+                        conversation_id=f'{channel}:demo-agent-{tid}', direction='out' if out else 'in',
+                        source_name={'teams': 'Ops chat', 'whatsapp': f'{who.split()[0]} (whatsapp)'}.get(channel))
+        stamp('message', 'MessageId', mid, mins)
+        stamp('route', 'RouteId', f.route(mid, tid, 'attach' if why == 'same' else 'create', why or 'an ask an agent can work through'), mins)
+        made += 1; return mid
+    def said(tid, mins, kind, body, summary=None):
+        # a turn that ended in its summary IS that summary on the chat (GeneralWorkspace AssistantMessage): its words are the summary's
+        # `did`, as general._file files a reply that was only its summary block - the agent's longer prose is not drawn twice
+        if body is None: body = summary['did']
+        actor, typ = {'brief': (general.BRIEF_ACTOR, general.USER_TYPE), 'owner': ('owner', general.USER_TYPE),
+                      'turn': ('assistant', general.ASSISTANT_TYPE)}[kind]
+        cid = store.add_comment(tid, actor, typ, body); stamp('comment', 'CommentId', cid, mins)
+        if summary is not None:
+            stamp('comment', 'CommentId', store.add_comment(tid, 'assistant', general.SUMMARY_TYPE, json.dumps(summary)), mins - .01)
+        return cid
+    BRIEF = ('THIS TASK CAME IN BY MAIL. Read the thread, do the work it asks, leave anything that goes out as a draft for the owner, '
+             'and end with where the owner stands: what this is about, what you did, and the next steps.')
+    for key, (who, email, channel, subject, body, mins) in AGENT_DAY.items():
+        tid = tids[key] = f.task(title=subject, status='in_progress', kind='general', source=channel, Assignee='agent:general')
+        stamp('task', 'TaskId', tid, mins)
+        mail(tid, who, email, channel, subject, body, mins)
+        said(tid, mins - .5, 'brief', BRIEF)
+
+    # 1. A LINKEDIN POST, with the chart it made: the post waits on the owner's press, as the connector's action card draws it
+    t = tids['post']
+    pic = _made(t, 'fairhaven-safety-q3.png', (Path(__file__).parent / 'demo_assets' / 'fairhaven-safety-q3.png').read_bytes(), 368.5)
+    rv = f.review(t, None, kind='action', reason='a LinkedIn post to approve', draft=json.dumps(
+        {'action': 'run_tool', 'type': 'linkedin_post', 'text': POST, 'image': pic, 'visibility': 'PUBLIC', 'publish': 'now'}))
+    stamp('review', 'ReviewId', rv, 368.4)
+    said(t, 368.2, 'turn', None,
+         {'about': 'Priya wants a LinkedIn post on Fairhaven passing a year without a lost-time injury, with the quarter\'s numbers.',
+          'did': 'Read the Q3 safety log: no lost-time injuries at any site this quarter, Fairhaven at **412 days**, and near-miss reports '
+                 'up **38%** on Q2 (48 to 66). Wrote the post and made its chart.'})
+
+    # 2. A WORKBOOK AND A REPLY, then a second mail on the thread and a second turn: the first turn keeps its draft as it was, read-only
+    t = tids['overtime']
+    tot = lambda i: sum(r[i] for r in SITES_OT)
+    ext, book = _sheet([('Site', 'September hours', 'September cost')] + [(s, h, c) for s, h, c, _, _ in SITES_OT] + [('Total', tot(1), tot(2))])
+    first = _made(t, f'September overtime by site{ext}', book, 327)
+    rv = f.review(t, store.list_messages(t)[0]['MessageId'], kind='draft_reply', reason='the overtime figures Erin asked for',
+                  draft=f'Hi Erin,\n\nSeptember overtime came to {tot(1):,} hours and ${tot(2):,} across the five sites. Fairhaven is about a third '
+                        f'of it (596 hours, $22,350) - two night-shift vacancies covered with overtime since the 8th.\n\nThe breakdown by site is '
+                        f'in the attached workbook.\n\nDana')
+    stamp('review', 'ReviewId', rv, 326.6)
+    c1 = said(t, 326.4, 'turn', None,
+         {'about': 'Erin needs September overtime hours and cost by site for Thursday\'s labour review.',
+               'did': f'Totalled September overtime by site: {tot(1):,} hours, ${tot(2):,}. Fairhaven is a third of it (596 h, $22,350) - '
+                      f'two night-shift vacancies covered since 8 September. Made `{first}`.', 'drafted': [{'review': rv}]})
+    store.snap_draft(rv, c1)
+    mail(t, 'Erin Blake', 'eblake@northwind.example', 'email', 'RE: September overtime by site',
+         'Thanks - could you put August next to it so we can see what changed? The review is Thursday at 10.', 141, why='same')
+    said(t, 140.5, 'brief', BRIEF)
+    dh, dc = tot(1) - tot(3), tot(2) - tot(4)
+    ext, book = _sheet([('Site', 'August hours', 'September hours', 'Change', 'August cost', 'September cost', 'Change')]
+                       + [(s, ah, h, h - ah, ac, c, c - ac) for s, h, c, ah, ac in SITES_OT]
+                       + [('Total', tot(3), tot(1), dh, tot(4), tot(2), dc)])
+    second = _made(t, f'Overtime by site - August and September{ext}', book, 139)
+    store._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (
+        f'Hi Erin,\n\nHere are August and September side by side. Overtime rose {dh} hours ({dh / tot(3):.0%}) and ${dc:,} '
+        f'({dc / tot(4):.1%}) to {tot(1):,} hours and ${tot(2):,}.\n\nFairhaven is nearly all of the increase (+144 hours, +$5,400) - the two '
+        f'night-shift vacancies. Riverside and Oak Ridge came down a little.\n\nThe workbook is attached, by site, with the change for each.\n\nDana', rv))
+    verdicts.attach(store, rv, second, (outputs.folder(t) / second).read_bytes(), 'assistant')
+    c2 = said(t, 138.6, 'turn', None,
+         {'about': 'Erin wrote again: she wants August next to September to see what changed.',
+               'did': f'Put August beside September: overtime is up **{dh} hours ({dh / tot(3):.0%})** and **${dc:,} ({dc / tot(4):.1%})**. '
+                      f'Fairhaven is nearly all of it (+144 h, +$5,400); Riverside and Oak Ridge went down. Made `{second}` and redrafted the reply.',
+               'drafted': [{'review': rv}]})
+    store.snap_draft(rv, c2)
+
+    # 3. A DASHBOARD it set up, on the rows it exported - beside the reports, refreshed every Monday
+    t = tids['dashboard']
+    today = datetime.now().date()
+    days = [d for d in (today - timedelta(days=n) for n in range(182)) if d.weekday() < 5]          # a payment run every working day, two quarters of them
+    rows = [(str(d), v, cat, round(base / 5 * (1 + .18 * ((d.toordinal() * 7 + i * 11) % 9 - 4) / 4)))
+            for d in days for i, (v, cat, base) in enumerate(SPEND_VENDORS)]
+    # ...the AP export it read, where an export lands - not among the task's outputs: the dashboard is what it made
+    export = config.home() / 'exports' / 'ap-payments-daily.csv'; export.parent.mkdir(parents=True, exist_ok=True)
+    export.write_text('day,vendor,category,amount\n' + ''.join(f'{a},{b},{c},{d}\n' for a, b, c, d in rows), encoding='utf-8')
+    week = str(today - timedelta(days=6)); last = sum(d for a, *_, d in rows if a >= week)
+    spec = {'type': 'dashboard', 'title': 'Vendor spend, weekly', 'weekly_at': 'Mon 07:00',
+            'sources': [{'key': 'spend', 'label': 'AP payments', 'type': 'local_file', 'path': str(export), 'date': 'day'}],
+            'filters': {'range': 90},
+            'components': [{'kind': 'stat', 'title': 'Last 90 days', 'source': 'spend', 'agg': 'sum', 'y': 'amount', 'unit': 'USD'},
+                           {'kind': 'stat', 'title': 'Last 7 days', 'source': 'spend', 'agg': 'sum', 'y': 'amount', 'range': 7, 'unit': 'USD'},
+                           {'kind': 'stacked', 'title': 'Spend by day', 'source': 'spend', 'x': 'day', 'y': 'amount', 'agg': 'sum', 'series': 'vendor', 'w': 4},
+                           {'kind': 'bar', 'title': 'Top vendors', 'source': 'spend', 'x': 'vendor', 'y': 'amount', 'agg': 'sum', 'limit': 5, 'w': 2},
+                           {'kind': 'bar', 'title': 'By category', 'source': 'spend', 'x': 'category', 'y': 'amount', 'agg': 'sum', 'w': 2}]}
+    sid = store.save_source({'Channel': 'report', 'Address': spec['title'], 'Active': 1, 'ConfigJson': json.dumps(spec)}, 'demo')
+    try: reports.run_one(store, store.get_source(sid), None, 'schedule')
+    except Exception as e: logger.warning(f'demo: the vendor spend dashboard did not run - {e}')
+    alvarez = sum(d for _, v, _, d in rows if v == 'Alvarez Supply') / sum(d for *_, d in rows)
+    said(t, 285.6, 'turn', None,
+         {'about': 'Gail would rather see vendor spend weekly, on a dashboard, than in the monthly PDF.',
+          'did': f'Built **[Vendor spend, weekly](#report={sid})** on six months of AP payments, beside your reports. It refreshes Mondays at 7:00. '
+                 f'The last 7 days came to **${last:,.0f}**; Alvarez Supply is the biggest vendor, **{alvarez:.0%}** of all spend.',
+          'on_you': ['Share the dashboard with Gail, or say if she would rather get it by mail each Monday']})
+    store.set_on_you(t, ['Share the dashboard with Gail, or say if she would rather get it by mail each Monday'], 'assistant')
+
+    # 4. A RESEARCH ANSWER with its sources, and the decision it leaves with the owner
+    t = tids['research']
+    ask = 'Decide whether to offer same-day pay - it changes what staff pay, so it is yours, not mine. Say if I should ask Payworth for terms for 540 staff'
+    said(t, 247.8, 'turn', None,
+         {'about': 'Sam wants to know which payroll providers offer same-day pay to staff, and what it would cost Northwind.',
+          'did': 'Compared three ways to offer it to our 540 staff, cheapest to switch on first:\n\n'
+                 '- **Payworth Instant** - built into the payroll we already run. No cost to Northwind; staff pay $1.99 per instant transfer, '
+                 'up to half of what they have earned. [payworth.example/instant](https://payworth.example/instant)\n'
+                 '- **Spendly Pay** - a separate app fed from Payworth. Free to staff; we pay $2.50 per enrolled employee a month '
+                 '(about $8,100 a year at half take-up). [spendly.example/pay](https://spendly.example/pay)\n'
+                 '- **ShiftCash** - a pay card, free to both sides, but it needs a new bank file every pay run. '
+                 '[vendor.example/shiftcash](https://vendor.example/shiftcash)', 'on_you': [ask]})
+    store.set_on_you(t, [ask], 'assistant')
+
+    # 5. THE OWNER ANSWERED THE THREAD THEMSELVES: the agent sees it, and recommends closing - it never closes the task
+    t = tids['renewal']
+    rv = f.review(t, store.list_messages(t)[0]['MessageId'], kind='draft_reply', reason='the seat count Ruth asked for',
+                  draft='Hi Ruth,\n\nThe signed Trainly renewal is for 180 seats at $42 a seat a year - $7,560 - renewing on 1 December. '
+                        'Changing the count needs 60 days\' notice, so it is fixed for this term.\n\nDana')
+    stamp('review', 'ReviewId', rv, 208.3)
+    c1 = said(t, 208.1, 'turn', None,
+         {'about': 'Ruth needs the seat count on the signed Trainly renewal before the budget call.',
+               'did': 'Found the signed renewal: 180 seats at $42 a seat a year ($7,560), renewing 1 December, 60 days\' notice to change the count. Drafted the answer to Ruth.',
+               'drafted': [{'review': rv}]})
+    store.snap_draft(rv, c1)
+    mail(t, OWNER, OWNER_EMAIL, 'email', 'RE: Trainly renewal - how many seats?',
+         'Ruth - 180 seats, renews 1 Dec at $7,560 a year. The notice date for changing it has passed, so that is what we budget.', 96, why='same', out=True)
+    store._exec("UPDATE review SET Status='rejected', DecidedAt=?, DecidedBy='owner' WHERE ReviewId=?", (_at(95.9), rv))
+    said(t, 95.5, 'brief', 'You answered Ruth on the thread yourself.')
+    said(t, 95.2, 'turn', None,
+         {'about': 'Ruth asked for the seat count on the Trainly renewal, and you have answered her yourself.', 'did': 'I see you answered Ruth there - 180 seats, $7,560, renewing 1 December. '
+          'The draft I left is not needed. I recommend closing: press **Mark done**.', 'nothing_left': True})
+
+    # 6. A BROWSER HAND-OVER: it signs in through the owner, fills the payment, and hands the Pay press over; then it confirms the payment
+    t = tids['portal']
+    said(t, 177.6, 'turn', None,
+         {'about': 'Marcus wants the PhishGuard renewal invoice paid on their portal before Friday.',
+          'did': 'Opened the PhishGuard billing portal at portal.phishguard.example. It asks for a sign-in before it shows any invoice - '
+                 'sign in on the page beside this chat, or through the secure sign-in link. I never see the password.'})
+    said(t, 171, 'brief', 'Signed in to the site')
+    said(t, 168.7, 'turn', None,
+         {'about': 'Paying PhishGuard invoice INV-3391.', 'did': 'Filled the payment for INV-3391, $4,860.00 on the card ending 4417. '
+          'Your turn on the page: press Pay.'})
+    said(t, 165, 'brief', 'Pressed Pay on the page')
+    said(t, 164.2, 'turn', None,
+         {'about': 'Paying PhishGuard invoice INV-3391.', 'did': 'Paid: **INV-3391, $4,860.00**, confirmation **PG-77120**. PhishGuard shows the '
+                 'invoice as paid and sends its receipt to accounts payable. The browser is closed.',
+          'nothing_left': True})
+    # ...and each run's own word, as a real session's hooks leave it (workerstate.ended): finished, so the rail and the Board say the agent is
+    # done and waiting on the owner - never "waiting to start" over a chat with its answers in it
+    import uuid
+    for tid in tids.values():
+        turns = [c['CreatedAt'] for c in store.list_comments(tid) if c.get('ActorType') == general.ASSISTANT_TYPE]
+        sid = uuid.uuid4().hex[:12]
+        for kind, t in (('working', min(turns)), ('finished', max(turns))):
+            eid = store.add_worker_event({'TaskId': tid, 'Sid': sid, 'Kind': kind, 'Source': 'demo', 'EventId': f'demo-{sid}-{kind}'})
+            store._exec('UPDATE worker_event SET CreatedAt=? WHERE Id=?', (t, eid))
     return made
 
 
@@ -917,10 +1150,11 @@ TOUR_BODY = ('Welcome to the demo. Northwind, its people and their mail are inve
              'The to-do on this task is a short tour - each step is something you can try in the demo. Tick a step as you go; '
              'ticking the last one closes this task.')
 TOUR_STEPS = (                           # in the order they are read: the to-do draws newest first, so they are stored the other way round
-    'Open "Month-end close is short by 4,180": Came from is what arrived, Agent is who works it, Close out is how it ends',
+    'Open "Month-end close is short by 4,180": Came from is what arrived, Agent is one chat - its turns and what it set up for you',
+    'See what an agent sets up for one press: open "Fairhaven safety milestone" - a LinkedIn post with its chart, waiting on Post to LinkedIn',
     'Walk your work with Next and Back - Next goes down the rail, Back comes up it',
     'Watch an agent work: open "northwind/importers#214" and read its run in the Agent pane',
-    'Send a reply from Close out: open "Invoice 88213 - past due", read the draft and press Send - nothing leaves the demo',
+    'Send a reply: open "Invoice 88213 - past due", read the draft under Next steps and press Send - nothing leaves the demo',
     'Put one off from Came from: Remind me, or Not a task, on "New starter on Monday"',
     'Open a report under Reports, then ask the chat pill "What\'s on me right now?"',
 )

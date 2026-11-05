@@ -92,7 +92,7 @@ Taskuary 是一个本地运行的开源任务工作台。它把邮件、工单�
 **Chinese README:** https://github.com/ldbumble/taskuary/blob/master/README.zh-CN.md
 
 **Suggested screenshots:** the [Timeline](readme/01-timeline-sources-and-times.png),
-[CLI connections](readme/07-coding-clis-chinese.png), and [Review](readme/04-review.png).
+[CLI connections](readme/07-coding-clis-chinese.png), and [Next steps](readme/04-next-steps.png).
 
 ## Short community post
 

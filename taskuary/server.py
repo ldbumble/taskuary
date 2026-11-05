@@ -6972,10 +6972,21 @@ def connectors(request: Request):
     from .peoplesearch import missing
     rows = [c | {'PeopleMissing': missing(c.get('ConfigJson'), c['Type'])} if c['Type'] in ('outlook', 'teams', 'gmail') else c
             for c in rows]
+    def _outlook_app():
+        for o in store.list_connectors():
+            if o.get('Type') == 'outlook':
+                k = json.loads(o.get('ConfigJson') or '{}')
+                if str(k.get('client_id') or '').strip(): return {'client_id': k['client_id'], **({'tenant_id': k['tenant_id']} if k.get('tenant_id') else {})}
+        return None
     # MsApp: whose Microsoft app this card signs in through - 'card' (the company's own, on the card), 'install' (TASKUARY_MS_CLIENT_ID)
     # or '' (none yet: the card shows the setup steps). MsRedirect: this install's own redirect, the one with its port
     from . import msauth
-    def _ms_app(c): return 'card' if str(json.loads(c.get('ConfigJson') or '{}').get('client_id') or '').strip() else 'install' if msauth.PUBLIC_CLIENT_ID else ''
+    # ...and a TEAMS card with none of its own signs in through the Outlook card's app ('outlook') - the same company app, one registration
+    # (the owner, 2026-11-05: "for teams you should be able to click auth with outlook oauth as well")
+    def _ms_app(c):
+        if str(json.loads(c.get('ConfigJson') or '{}').get('client_id') or '').strip(): return 'card'
+        if c['Type'] == 'teams' and _outlook_app(): return 'outlook'
+        return 'install' if msauth.PUBLIC_CLIENT_ID else ''
     # MsScopes: the delegated Graph permissions the company's app lists - exactly what this card's sign-in asks for
     def _ms_row(c):
         k = json.loads(c.get('ConfigJson') or '{}')
@@ -7587,6 +7598,13 @@ def ms_signin(cid: int, body: MsSignInBody | None = None):
         typed = {k: v for k, v in typed.items() if v}
         cfg_.update(typed)
         store.merge_connector_config(cid, typed)            # the typed ids alone, over the card as it is after the app check
+    # ...a Teams card with no app of its own signs in through the Outlook card's (the same company registration; its ids are not copied onto
+    # the Teams card, so changing the Outlook card's app moves both)
+    if c['Type'] == 'teams' and not str(cfg_.get('client_id') or '').strip():
+        for o in store.list_connectors():
+            k = json.loads(o.get('ConfigJson') or '{}') if o.get('Type') == 'outlook' else {}
+            if str(k.get('client_id') or '').strip():
+                cfg_ = {**cfg_, 'client_id': k['client_id'], **({'tenant_id': k['tenant_id']} if k.get('tenant_id') else {})}; break
     # a tenant that refused the people scopes once is not asked for them on every sign-in (_ms_retry_base)
     scope = msauth.scopes_for(c['Type'], bool(cfg_.get('allow_files')), people=not cfg_.get('people_refused'))
     for k, v in list(_MSFLOWS.items()):

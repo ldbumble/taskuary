@@ -4000,9 +4000,10 @@ const STALL_MS = 90 * 1000;
 // Taskuary ships no Microsoft app id (msauth.py), so the card asks for the company's - the two ids, and the steps IT follows to make it.
 // The ids ride the Sign in press (server ms_signin keeps them on the card); both roads - the browser and the code - use the same app.
 export const MS_REDIRECT = "http://localhost/api/ms/callback";
-export const msNeedsApp = (conn, cfg) => conn.MsApp !== "install" && !(String(cfg.client_id || "").trim() && String(cfg.tenant_id || "").trim());
+// ...a Teams card with no app of its own uses the Outlook card's ('outlook'): its sign-in is ready at once (the owner, 2026-11-05)
+export const msNeedsApp = (conn, cfg) => !["install", "outlook"].includes(conn.MsApp) && !(String(cfg.client_id || "").trim() && String(cfg.tenant_id || "").trim());
 const MsOwnApp = ({ conn, cfg, setCfg, copy }) => {
-  const install = conn.MsApp === "install", steps = !["card", "install"].includes(conn.MsApp);
+  const install = conn.MsApp === "install" || conn.MsApp === "outlook", steps = !["card", "install", "outlook"].includes(conn.MsApp);
   const box = { "& .MuiInputBase-root": { bgcolor: "#fff" }, "& .MuiFormHelperText-root": { mx: 0 } };   // white is the box's, not its hint's
   const code = (t) => <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{t}</Box>;
   return (
@@ -4023,7 +4024,7 @@ const MsOwnApp = ({ conn, cfg, setCfg, copy }) => {
       )}
       <TextField size="small" label="Application (client) ID" value={cfg.client_id || ""} sx={box} required={!install}
         inputProps={{ spellCheck: false, autoComplete: "off" }} onChange={(e) => setCfg({ ...cfg, client_id: e.target.value.trim() })}
-        helperText={install ? "Blank uses the app this install was set up with." : "Your company's app, from its Overview page in Entra ID."} />
+        helperText={conn.MsApp === "outlook" ? "Blank uses your Outlook card's app - the same sign-in." : install ? "Blank uses the app this install was set up with." : "Your company's app, from its Overview page in Entra ID."} />
       <TextField size="small" label="Directory (tenant) ID" value={cfg.tenant_id || ""} sx={box} required={!install}
         inputProps={{ spellCheck: false, autoComplete: "off" }} onChange={(e) => setCfg({ ...cfg, tenant_id: e.target.value.trim() })}
         helperText="The same Overview page. A work account needs it." />

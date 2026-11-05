@@ -966,6 +966,14 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     : <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the question the answer box below shows is said there only (askOnce.js)
+  // ...AND ONCE IT IS UP FOR THE OWNER IT STAYS UP until the agent answers again (the owner, 2026-11-05, signing in to a site in two steps: "I put
+  // in username then hit next the box disappeared then reopened to put in password. You can leave it open until auth is done"): between a
+  // sign-in's pages there is a moment with no ask open, and the page went away under them
+  const needRaw = needsOwner(asking, viewActs), answers = (data?.messages || []).filter((m) => m?.role === "assistant").length;
+  const [needHeld, setNeedHeld] = useState(null);
+  useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (needHeld != null && !needRaw && (answers > needHeld || !session?.sid)) setNeedHeld(null); }, [answers, needRaw, needHeld, session?.sid]);
+  const needNow = needRaw || needHeld != null;
   const shownMessages = withoutAsked(messagesWithTrace(data?.messages, session, dock),
     !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
   // WHO is on this task, what its turn has done so far, and when the turn began - all three read
@@ -1164,7 +1172,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
             or failed agent's Result, for as long as it stayed open (the agents walk, 2026-10-26) */}
         <SessionPane sid={(!noTools && session?.sid) || null} height="100%" yourTurn={waitsOnPage(asking)} idle={!busy && !streaming}
           stack={!dock} taskId={dock ? null : task.TaskId} held={viewActs} turn={turn} onHandBack={handBack} onDecided={decidedOnView}
-          onView={viewShownIs} quiet={chat && !dock} need={needsOwner(asking, viewActs)}>{thread}</SessionPane>
+          onView={viewShownIs} quiet={chat && !dock} need={needNow}>{thread}</SessionPane>
       </Box>
     </Box>
   );

@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.3 - 2026-11-05
+
+- A trusted repo's own steps go through: a push, a pull request or a workflow run on a repo whose card may act no longer asks
+- A card's field saves only its own keys, merged over the config as stored; Remove takes an added card off the list
+- Every field on a connection card saves itself, and Remove asks once and takes the card away
+- A poll, a Test or a sign-in merges only its own keys over the card, so it never rolls back a field the owner saved meanwhile
+- The chat reads like a chat: local times, every input shown before the turn it woke, a turn's draft kept read-only in its history
+
 ## 0.3.11.2 - 2026-11-05
 
 - The agent never closes a chat task: only the owner's Mark done, Send and close or Close with a note does

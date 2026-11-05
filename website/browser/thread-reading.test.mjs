@@ -4,7 +4,7 @@ import test from "node:test";
 import { startHarness } from "./harness.mjs";
 
 /* TRIAGE'S READING OF THE THREAD IS SEEN (closeout in the agent's chat, task 1.4). On the demo world: the general task whose thread triage
-   read shows it atop its agent section and as "What's going on" in Came from; a coding task, whose agent is a terminal and which has no
+   read shows it atop its agent section (Came from no longer repeats it, 2026-11-05); a coding task, whose agent is a terminal and which has no
    reading, shows none there. Invented people only. */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const open = async (page, id) => {
@@ -29,7 +29,7 @@ test("the reading sits atop the agent's chat and opens Came from; a coding task 
   const id = (re) => tasks.find((x) => re.test(x.Title))?.TaskId;
   const CUR = (n) => `[data-tq-canvas-item]:has([data-tq-task-page="${n}"])`;
 
-  const g = id(/^Reconcile the August GL/), a = id(/^Year-end audit/), c = id(/importers#214/);
+  const g = id(/^Reconcile the August GL/), c = id(/importers#214/);
   assert.ok(g && c, "the demo tasks are there");
   await open(page, g);
   await section(page, g, "agent");
@@ -38,14 +38,8 @@ test("the reading sits atop the agent's chat and opens Came from; a coding task 
   const text = await chat.evaluate((e) => e.innerText);
   assert.match(text, /reconciled against the bank feed/, "it says what is asked");
   await section(page, g, "from");
-  const from = await page.$(`${CUR(g)} [data-tq-from] [data-tq-reading=from]`);
-  assert.ok(from, "Came from carries it");
-  assert.match(await from.evaluate((e) => e.innerText), /What's going on/);
-
-  await open(page, a);
-  await section(page, a, "from");
-  const aside = await page.$eval(`${CUR(a)} [data-tq-from] [data-tq-reading=from] [data-tq-reading-line=aside]`, (e) => e.innerText);
-  assert.match(aside, /1 email is an addition to the list, so the reply answers Priya Shah's \d+\/\d+ email/, "the aside line names whose email the reply answers");
+  // ...and Came from carries no "What's going on" (the owner, 2026-11-05): What came in, the Conversation and the To do say it
+  assert.equal(await page.$(`${CUR(g)} [data-tq-from] [data-tq-reading]`), null, "Came from has no reading");
 
   await open(page, c);
   await section(page, c, "agent");

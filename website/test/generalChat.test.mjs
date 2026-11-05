@@ -49,7 +49,7 @@ test("an ended general session's chat gives the page back to the stage that is f
   // ...a finished one's chat is the rest of its Result, behind the Result heading while the Result rests on its summary - unless it asks (2026-10-27)
   // ...or that is at work again: a turn under way shows (its band, its thinking line, or its "Working on this…")
   // ...and a failed run rests on its reason and fix the same way (2026-10-28)
-  assert.match(src, /\.\.\.\(resultRest \|\| \(failedRun && !resultOpen\) \? \{ "&:not\(:has\(\[data-tq-asking\], \[data-tq-agent-notice\], \.tq-aui-band, \.tq-aui-thinking, \.tq-aui-thread \[data-tq-working\], \[data-tq-waits\], \[data-tq-on-you\]\)\)": \{ display: "none" \} \} : \{\}\)/);
+  assert.match(src, /\.\.\.\(!chatPane && \(resultRest \|\| \(failedRun && !resultOpen\)\) \? \{ "&:not\(:has\(\[data-tq-asking\], \[data-tq-agent-notice\], \.tq-aui-band, \.tq-aui-thinking, \.tq-aui-thread \[data-tq-working\], \[data-tq-waits\], \[data-tq-on-you\]\)\)": \{ display: "none" \} \} : \{\}\)/);
   // ...or that holds what waits on the owner: a draft card or an On you step in its summary (Task 4.2)
 });
 
@@ -66,7 +66,7 @@ test("on the canvas the chat's brain and Full screen sit in the agent step's hea
 });
 
 test("the chat box names the agent the pane names, never \"the assistant\" over an analyst (email walk 2026-10-29)", () => {
-  assert.match(workspace, /placeholder=\{askWords \|\| \(working \? "Add something for it to pick up…" : `Tell \$\{dock \? "Taskuary" : name\} what to do next…`\)\}/);
+  assert.match(workspace, /placeholder=\{askWords \|\| \(working \? "Add something for it to pick up…" : chat \? "Tell me what\'s wrong, or ask about anything here…"\s+: `Tell \$\{dock \? "Taskuary" : name\} what to do next…`\)\}/);
   assert.doesNotMatch(workspace, /Tell the assistant what to do next/);
 });
 

@@ -416,8 +416,8 @@ TURN_PREFIX = 'yourturn:'
 TURN_DONE = 'Done'
 TURN_BACK = 'Done - I finished that in the browser. Look at the page as it is now and continue.'
 
-def your_turn(store, tid: int, sid: str, what: str = '') -> str:
-    "Record the agent's hand-over as an open request on the task. The request id - `yourturn:<hash>`."
+def your_turn(store, tid: int, sid: str, what: str = '', watch=...) -> str:
+    "Record the agent's hand-over as an open request on the task, watched on its page. The request id - `yourturn:<hash>`. `watch`: tests."
     from urllib.parse import urlsplit
     from . import terminal as term, workerstate as ws
     st = state(sid, fresh=True)
@@ -435,7 +435,11 @@ def your_turn(store, tid: int, sid: str, what: str = '') -> str:
     text = f"Your turn in the browser{f' on {host}' if host else ''}: {what or 'the agent needs you to do a step on the page'}"
     rid = f'{TURN_PREFIX}{ws.request_id_for(text)}'
     chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
-    ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[TURN_DONE] if chat else None, source='api')
+    # ...AND WATCHED (the owner, 2026-11-05: "if we need the user we should wait for them to do it"): the page moving on closes it by itself
+    # and the agent goes on - Done stays for a page Taskuary cannot read (browsergate.watch_turn)
+    if ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[TURN_DONE] if chat else None, source='api'):
+        from . import browsergate
+        browsergate.watch_turn(store, tid, sid, rid, what, host or 'the page', watch=watch)
     return rid
 
 

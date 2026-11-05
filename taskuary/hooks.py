@@ -582,8 +582,10 @@ def ended_short(why: str) -> str:
 
 def held_for(store, tid: int, sid: str) -> bool:
     "A step of this session waiting on the task for the owner's Approve or Dismiss - or handed to them on its page (browsergate.hand_over)."
-    from . import browsergate
+    from . import agentdesktop, browsergate, workerstate as ws
     if browsergate.handing(store, tid, sid): return True
+    # ...and a desktop press the owner was told is ready in the app (agentdesktop.ready)
+    if any(str(r.get('RequestId') or '').startswith(agentdesktop.READY) for r in ws.open_requests(ws.events(store, tid, sid))): return True
     for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
         try: d = json.loads(r.get('DraftText') or '{}')
         except ValueError: continue

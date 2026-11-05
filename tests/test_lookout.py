@@ -110,13 +110,13 @@ def test_what_the_owner_and_the_check_turned_down_comes_back_as_evidence():
     assert '[early_warning] Gail went quiet - held by the check: one message, no pattern' in user
 
 
-def test_the_cost_is_two_calls_a_day_capped_at_three_and_never_more_than_two_ideas_waiting():
+def test_the_cost_is_two_calls_a_day_capped_at_three_and_never_more_than_four_ideas_waiting():
     s, ids = world()
     a, b = ids['dup']
-    llm = brain({'ideas': [idea('money', f'Idea {n}', [f'msg{a}']) for n in range(5)]}, {'keep': [1, 2, 3, 4]})
+    llm = brain({'ideas': [idea('money', f'Idea {n}', [f'msg{a}']) for n in range(9)]}, {'keep': [1, 2, 3, 4, 5]})
     out = lookout.tick(s, llm)
-    assert out['calls'] == 2 and len(out['raised']) == lookout.MAX_IDEAS == 2, 'at most two proposed, checked in one call'
-    assert lookout.due(s) is False and lookout.tick(s, brain())['ran'] is False, 'two waiting: no pass, no call'
+    assert out['calls'] == 2 and len(out['raised']) == lookout.MAX_IDEAS == 4, 'at most four proposed, checked in one call'
+    assert lookout.due(s) is False and lookout.tick(s, brain())['ran'] is False, 'four waiting: no pass, no call'
     for r in lookout.open_ideas(s): s.set_idea_status(r['IdeaId'], 'done', 'owner')
     assert lookout.due(s) is False, 'and a day between passes'
     s.set_setting(lookout.LAST_KEY, ago(days=2), 't'); s.set_setting(lookout.TRIED_KEY, ago(days=2), 't')
@@ -262,14 +262,28 @@ def test_asking_the_assistant_starts_a_pass_now_and_says_how_many_ideas_it_raise
     assert [r['Key'] for r in lookout.open_ideas(s)] == ['idea:lookout-vendor-billing-sent-invoice-4471-twice'], 'an ordinary Advisor idea row'
 
 
-def test_an_asked_pass_still_keeps_two_waiting_at_most_and_needs_an_ai(monkeypatch):
+def test_an_asked_pass_still_keeps_max_open_waiting_at_most_and_needs_an_ai(monkeypatch):
     s, ids = world()
     for n in range(lookout.MAX_OPEN): s.upsert_idea({'key': f'{lookout.KEY}old-{n}', 'kind': 'money', 'text': f'Old {n}', 'action': {'type': 'lookout'}}, ago(days=1))
     never = brain()                                                         # any call would fail: nothing may be asked
     now, later = asked(s, monkeypatch, never)
-    assert now.startswith('Nothing started: 2 ideas for your job already wait under Advisor') and later is None and not never.seen
+    assert now.startswith(f'Nothing started: {lookout.MAX_OPEN} ideas for your job already wait under Advisor') and later is None and not never.seen
     s2, _ = world()
     now, later = asked(s2, monkeypatch, None)
     assert now.startswith('Nothing started: no AI is connected') and later is None and not s2.get_setting(lookout.TRIED_KEY)
     now, later = asked(s2, monkeypatch, lambda system, user, **k: 'I would rather chat')
     assert later == 'The pass for ideas for your job got no answer from the AI - nothing raised. Ask again in a while.'
+
+
+def test_the_days_pass_runs_from_the_morning_not_a_day_after_the_last(monkeypatch):
+    """It drifted to 5:53 PM: the pass ran 24 hours after the one before (2026-11-05). Once a calendar day, from MORNING_H."""
+    from datetime import datetime
+    s, _ = world()
+    monkeypatch.setattr(lookout, '_now', lambda: datetime(2026, 11, 5, 8, 0))
+    s.set_setting(lookout.LAST_KEY, '2026-11-04 17:53:56', 't'); s.set_setting(lookout.TRIED_KEY, '2026-11-04 17:53:41', 't')
+    assert lookout.due(s) is True, 'yesterday evening, this morning: due'
+    monkeypatch.setattr(lookout, '_now', lambda: datetime(2026, 11, 5, 6, 0))
+    assert lookout.due(s) is False, 'before the morning, and under a day: wait'
+    s.set_setting(lookout.LAST_KEY, '2026-11-05 07:30:00', 't'); s.set_setting(lookout.TRIED_KEY, '2026-11-05 07:30:00', 't')
+    monkeypatch.setattr(lookout, '_now', lambda: datetime(2026, 11, 5, 18, 0))
+    assert lookout.due(s) is False, 'ran today: not again'

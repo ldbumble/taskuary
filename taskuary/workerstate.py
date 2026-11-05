@@ -467,6 +467,11 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     # whatever "type something" field the list offers last. The owner's words stay the owner's words
     # everywhere they are READ (the comment below, the audit); only the keystroke changes.
     send = text
+    # ...and a press handed over on the page, answered in words: the agent hears that it was not pressed (browsergate.owner_said). A chat
+    # hears it from its own send_prompt, which every owner word to it passes through
+    from . import browsergate
+    if str(request_id).startswith(browsergate.PRESS) and not hasattr(sess, 'send_prompt'):
+        if (note := browsergate.owner_said(store, tid, req['sid'], text)): send = f'{text} ({note})'     # one line: a newline typed into a CLI's prompt is its Enter
     # a codex question asked in WORDS is answered through its own queue - a chooser or an approval is still a keystroke
     words = req['kind'] == 'input_needed' and req.get('source') != 'screen' and (not req.get('choices') or _cli(sess) == 'codex')
     # ...and so is a HOOK's chooser once its hold ran out and Claude drew the form (B12, the owner, 2026-10-11): its label

@@ -1109,8 +1109,10 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // LOOKING OUT FOR YOU (lookout.py; the owner, 2026-11-02): its next step and the pitch for the boss stand apart, and each message or task
   // it rests on opens in the app - the canvas's own link road (canvasLinks), never a new window
   const look = a.type === "lookout", cites = look ? citesOf(a.evidence) : null;
-  const rows = [["Whose move", a.whose], ["Suggestion", look ? a.next_step || a.suggest : a.suggest], ["Pitch", look && a.pitch],
-    ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>], ["Rests on", cites]];
+  // THE SUGGESTION IS THE MAIN LINE (the owner, 2026-11-05: "whose move is not useful. it's just suggestion which is the main line on
+  // top"): what to do reads straight under the finding, no label; no Whose move row. Based on stays.
+  const suggest = look ? a.next_step || a.suggest : a.suggest;
+  const rows = [["Pitch", look && a.pitch], ["Based on", (from || why) && <>{from}{from && why && ": "}{why}</>], ["Rests on", cites]];
   const facts = rows.filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";
   const foot = (
@@ -1146,7 +1148,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
       sections={[
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
           body: <><ItemPart data-tq-idea-from="">
-            <div className="tq-card-lead">{card.title}</div>
+            <div className="tq-card-lead">{card.title}{suggest && !habits && <> {suggest}</>}</div>
             {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason; the
                 habits row lists its habits instead, with no Whose move or Suggestion */}
             {habits ? <HabitList card={card} onDone={onDone} />
@@ -1160,6 +1162,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   return (
     <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
       {habits && <HabitList card={card} onDone={onDone} />}
+      {!habits && suggest && <div className="tq-card-lead">{suggest}</div>}
       {!habits && facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
       {foot}
       <CardErr err={err} />

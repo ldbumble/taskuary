@@ -348,6 +348,9 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         if of_task(task): return None                     # the second run of a playbook is not a new kind of job
         # ...nor is a workflow's run (its job is written down already, as the workflow) or a playbook being written by hand
         if task.get('Source') == 'workflow' or task.get('SourceRef') == 'assistant:playbook': return None
+        # ...nor asked again while this task's own proposal still waits: a chat task's agent ends its session after every turn, and each
+        # ending proposed the same kind of job under another slug - three waiting on one task (the stress run, 2026-11-05)
+        if proposals.playbook_pending(store, task_id): return None
         llm = llm or build_llm(store, job='memory')
         if not llm: return None
         books = list_all()

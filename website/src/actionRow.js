@@ -27,8 +27,17 @@ export const navEnd = (on) => { if (!!on === end) return; end = !!on; draw(); };
 let off = "";
 export const navOff = (why) => { if ((why || "") === off) return; off = why || ""; draw(); };
 
+const sameVerbs = (a, b) => a.length === b.length && a.every((v, i) => JSON.stringify(view(v)) === JSON.stringify(view(b[i])));
 export function put(owner, verbs, ref = "", at = null) {
-  const old = owners.get(owner)?.verbs || [];
+  // THE SAME VERBS AGAIN (a card re-rendering) take nothing over and draw nothing: only its handlers are made the latest. Two mounted copies of
+  // one draft card - the turn that drafted it and the turn after it - re-put theirs on every render, took each id from the other and back,
+  // and each redraw rendered both again until React gave up ("Maximum update depth exceeded", the chat-model stress run 2026-11-05)
+  const was = owners.get(owner);
+  if (was && verbs?.length && was.ref === ref && was.at === at && sameVerbs(was.verbs, verbs)) {
+    verbs.forEach((v, i) => { if (live.get(v.id) === was.verbs[i]) live.set(v.id, v); });
+    was.verbs = verbs; return;
+  }
+  const old = was?.verbs || [];
   old.forEach((v) => { if (live.get(v.id) === v) { live.delete(v.id); ofs.delete(v.id); } });   // not one a newer owner has since taken over
   if (verbs?.length) { owners.set(owner, { verbs, ref, at }); verbs.forEach((v) => { live.set(v.id, v); ofs.set(v.id, owner); }); } else owners.delete(owner);
   draw();

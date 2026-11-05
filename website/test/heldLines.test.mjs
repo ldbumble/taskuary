@@ -26,3 +26,12 @@ test("a held line stays drawn until the conversation has it, once", () => {
   const twice = [{ id: "a", text: "yes", after: 0 }, { id: "b", text: "yes", after: 0 }];
   assert.deepEqual(stillHeld(twice, [said("yes")]).map((l) => l.id), ["b"]);
 });
+
+test("a held line the server spelled back with other spacing or quotes is not drawn twice (2026-11-05)", () => {
+  const msg = (text) => ({ role: "user", content: [{ type: "text", text }] });
+  const held = [{ id: "h1", text: "It's over $4. I saw it.", after: 1 }];
+  assert.deepEqual(stillHeld(held, [msg("first"), msg("It\u2019s over $4.  I saw it.\n")]), []);
+  // ...and one the server kept in other words still goes once the owner's line has arrived
+  assert.deepEqual(stillHeld(held, [msg("first"), msg("It is over four dollars")]), []);
+  assert.deepEqual(stillHeld(held, [msg("first")]), held, "not there yet: still held");
+});

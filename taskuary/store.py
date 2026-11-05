@@ -5753,7 +5753,10 @@ class SQLiteStore:
         if not isinstance(cfg, dict): return cj
         try: old = json.loads((self._one('SELECT ConfigJson FROM connector WHERE ConnectorId=?', (cid,)) or {}).get('ConfigJson') or '{}') if cid else {}
         except (TypeError, ValueError): old = {}
-        if not isinstance(old, dict): old = {}
+        return self._seal_cfg(cfg, old if isinstance(old, dict) else {}, cj)
+    def _seal_cfg(self, cfg: dict, old: dict, cj=None):
+        """`cfg` as stored over `old`, the stored config: what _cfg_sealed says, from a config already read."""
+        if cj is None: cj = json.dumps(cfg)
         if not any(cfg.get(k) or old.get(k) for k in self.SEALED_CONFIG): return cj
         for k in self.SEALED_CONFIG:
             v, was = cfg.get(k), old.get(k)
@@ -5796,6 +5799,33 @@ class SQLiteStore:
         offset, the WhatsApp bridge's sequence) without touching secrets or roles."""
         self._exec('UPDATE connector SET ConfigJson=? WHERE ConnectorId=?', (self._cfg_sealed(cid, json.dumps(cfg)), cid))
         self._processing_ignored_writes += 1
+    # A FIELD SAVES ITSELF, AND ONLY ITSELF (the owner, 2026-11-05: "what saves with one click while other hit the save buttons"; #242).
+    # Each control on a card posts the key it changed, and the key is merged into the config as it is NOW - read and written in one
+    # transaction - so a poller's watermark written a moment ago (Telegram's offset, the WhatsApp sequence) is never rolled back by an
+    # edit made from an older read. A value None removes its key; a key in `keep` sent blank keeps what is stored (a write-only
+    # secret the browser never had: guard.keep_write_only). Returns the merged config, or None when the row is gone.
+    def merge_config(self, table, row_id, patch: dict, keep=()):
+        key = {'source': 'SourceId', 'connector': 'ConnectorId'}[table]
+        if not isinstance(patch, dict) or any(not isinstance(k, str) for k in patch): raise TypeError('a config patch is a dict of keys')
+        with self.lock:
+            self._clear_stale(); self.cx.execute('BEGIN IMMEDIATE')
+            try:
+                found = self.cx.execute(f'SELECT ConfigJson FROM {table} WHERE {key}=?', (row_id,)).fetchone()
+                if found is None: self.cx.rollback(); return None
+                try: cur = json.loads(found[0]) if found[0] else {}
+                except (TypeError, ValueError): cur = None
+                if not isinstance(cur, dict): raise ValueError('the stored config is not an object - not merged over')
+                new = dict(cur)
+                for k, v in patch.items():
+                    if v is None: new.pop(k, None)
+                    elif k in keep and v == '': continue
+                    else: new[k] = v
+                cj = self._seal_cfg(new, cur) if table == 'connector' else json.dumps(new)
+                self.cx.execute(f'UPDATE {table} SET ConfigJson=? WHERE {key}=?', (cj, row_id))
+                self.cx.commit(); self._writes += 1
+                return new
+            except BaseException:
+                self.cx.rollback(); raise
     def patch_connector_poll_state(self, connector_id, *, config_set=None, config_remove=(),
                                    expect_fields=None, expect_config=None):
         """Atomically merge only poll-owned config keys while checking mailbox identity."""

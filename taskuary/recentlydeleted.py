@@ -1,4 +1,5 @@
-"""RECENTLY DELETED: a Remove acts at once, and is taken back from here (the owner, 2026-10-21: no "are you sure" on an action).
+"""RECENTLY DELETED: a Remove acts at once, and is taken back from here (the owner, 2026-10-21: no "are you sure" on an action - save
+a connection's Remove, which since 2026-11-05 asks once, saying what removing it leaves behind: ConnectorsView RemoveConnection).
 
 Remove asked "Delete report?" with Cancel first, Not ours asked which kind, and Sign out asked again - and once it was done, nothing
 brought it back. Now each acts on the press and the page shows "Removed <it> - Undo". What it took is kept whole in the store's own
@@ -139,13 +140,17 @@ def forget_hub(store, lid: int) -> None:
 
 
 def remove_connection(store, cid: int, title: str) -> dict:
-    """Remove connection: wiped at once, its sealed sign-in kept for the Undo line's minutes (purge forgets it after)."""
-    row = store._one('SELECT ConfigJson, Secret, Active, Scope, LastSyncAt FROM connector WHERE ConnectorId=?', (cid,)) or {}
+    """Remove connection: wiped at once, its sealed sign-in kept for the Undo line's minutes (purge forgets it after).
+    THE CARD IS GONE (the owner, 2026-11-05: "it should go away"): a card added beside another of its kind is taken off the list
+    whole; the last one of a kind stays as the catalogue's blank card - the start-up seed would only put it back - wiped."""
+    row = store._one('SELECT * FROM connector WHERE ConnectorId=?', (cid,)) or {}
     on = [s['SourceId'] for s in store.list_sources(active_only=False) if s.get('ConnectorId') == cid and s.get('Active')]
-    did = keep(store, 'connection', title, {'cid': cid, 'row': row, 'sources': on})
-    store._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
+    gone = len(store.connectors_by_type(row.get('Type'))) > 1 if row else False
+    did = keep(store, 'connection', title, {'cid': cid, 'row': row, 'sources': on, 'gone': gone})
+    if gone: store._exec('DELETE FROM connector WHERE ConnectorId=?', (cid,))
+    else: store._exec('UPDATE connector SET Secret=NULL, ConfigJson=NULL, Active=0, LastSyncAt=NULL, LastError=NULL, Scope=NULL WHERE ConnectorId=?', (cid,))
     store._exec('UPDATE source SET Active=0 WHERE ConnectorId=?', (cid,))
-    return {'deleted': did, 'title': title, 'kind': 'connection'}
+    return {'deleted': did, 'title': title, 'kind': 'connection', 'gone': gone}
 
 
 def sign_out(store, cid: int, title: str, cfg_after: dict, revoke: str = None, cfg_before: dict = None) -> dict:
@@ -243,6 +248,8 @@ def restore(store, cfg: dict, did: int) -> dict:
     elif kind == 'task': return {'kind': kind, 'title': r['Title'], 'task_id': _restore_task(store, d)}
     elif kind in SHORT:
         row = d.get('row') or {}
+        # a card taken off the list comes back whole, under its own id (its sources still name it)
+        if kind == 'connection' and d.get('gone') and not store.get_connector(d['cid']): store.put_back('connector', row, 'ConnectorId')
         store._exec('UPDATE connector SET ConfigJson=?, Secret=?, Active=?' + (', Scope=?, LastSyncAt=?' if kind == 'connection' else '')
                     + ' WHERE ConnectorId=?',
                     [row.get('ConfigJson'), row.get('Secret'), row.get('Active') or 0]

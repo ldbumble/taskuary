@@ -17,3 +17,9 @@ export const nextSteps = ({ summary, reviews = [], checklist = [], acts = [], ca
   const held = [...new Map([...(reviews || []), ...(acts || [])].filter(isHeld).map((r) => [r.ReviewId, r])).values()];
   return { drafts, onYou, held, nothing: !drafts.length && !onYou.length && !held.length && !!summary?.nothing_left };
 };
+
+// A REPLY OWED IS NOT A SUGGESTED REPLY (the owner's stress run, 2026-11-05): while the agent worked, the chat drew "Suggested reply" over a
+// bare "To Ray Colton" with nothing under it - the envelope of a reply nobody had written yet. In the chat the reply's place stands once there
+// is a reply in it: a draft waiting, or one that was sent or closed unsent
+export const chatReplyShown = ({ replyMessage, pendingReview, sentReview, unsentReview } = {}) =>
+  !!replyMessage && !!(pendingReview || sentReview || unsentReview);

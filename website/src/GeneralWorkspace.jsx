@@ -17,6 +17,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
+import { heldLine, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { isWork, stepsOf } from "./agentSteps.js";
@@ -603,6 +604,21 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     answering.current = true; setAskErr(""); c.setText("");
     Promise.resolve(onAnswer?.(w)).catch((x) => { c.setText(w); setAskErr(errText(x)); }).finally(() => { answering.current = false; });
   };
+  /* TALK WHILE IT WORKS (the owner's stress run, 2026-11-05): Enter while the turn runs put a newline in the box and the line never left -
+     under a placeholder that says "Add something for it to pick up". The line is held: drawn at once as the owner's, and sent to the same
+     session, which takes it as its next turn (send_prompt waits its turn). The thread's own copy replaces it once the server has it. */
+  const [held, setHeld] = useState([]);
+  useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, messages) : h)); }, [messages]);
+  const holdLine = (e) => {
+    if (dock || asking) return;
+    const c = runtime.thread.composer, w = heldLine(e, c.getState().text, runtime.thread.getState().isRunning);
+    if (!w) return;
+    e.preventDefault(); c.setText("");
+    const id = `held-${Date.now()}-${Math.random()}`, after = (messages || []).filter((m) => m?.role === "user").length;
+    setHeld((h) => [...h, { id, text: w, after }]);
+    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w }, { timeout: 0 })
+      .catch((x) => setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))));
+  };
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : `Answer ${name}'s question…`;
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} starting={starting} />;
   return (
@@ -623,6 +639,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </div>
           )}
           <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+          {held.map((l) => <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
+            <div className="tq-aui-role">you</div><div className="tq-aui-user-bubble">{l.text}</div>
+            {l.err && <div className="tq-aui-hint" role="alert">{l.err}</div>}</div>)}
           <ThreadPrimitive.If running>
             {atWork}
           </ThreadPrimitive.If>
@@ -691,6 +710,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               </IconButton>
               <ComposerPrimitive.Input
                 className="tq-aui-input"
+                onKeyDown={holdLine}
                 /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
                 placeholder={askWords || (working ? "Add something for it to pick up…" : chat ? "Tell me what's wrong, or ask about anything here…"
                   : `Tell ${dock ? "Taskuary" : name} what to do next…`)}

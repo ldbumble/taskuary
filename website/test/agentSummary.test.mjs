@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { foldedSummaries, nextSteps } from "../src/agentSummary.js";
+import { chatReplyShown, foldedSummaries, nextSteps } from "../src/agentSummary.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -66,4 +66,19 @@ test("a pending draft is no Next step where the summary draws no cards", () => {
   const reviews = [{ ReviewId: 1, Kind: "reply", Status: "pending", DraftText: "Thanks, Erin" }];
   assert.equal(nextSteps({ summary: { nothing_left: false }, reviews, cards: false }).drafts.length, 0);
   assert.equal(nextSteps({ summary: { nothing_left: false }, reviews }).drafts.length, 1);
+});
+
+test("the chat's Suggested reply stands only once a reply is in it, never over a bare To line", () => {
+  const replyMessage = { MessageId: 1, FromName: "Ray Colton" };
+  assert.equal(chatReplyShown({ replyMessage }), false);
+  assert.equal(chatReplyShown({ replyMessage, pendingReview: { ReviewId: 3 } }), true);
+  assert.equal(chatReplyShown({ replyMessage, sentReview: { ReviewId: 3 } }), true);
+  assert.equal(chatReplyShown({ pendingReview: { ReviewId: 3 } }), false);
+});
+
+test("a chat task's chat keeps its height while its agent starts: the box sits at the card's foot", () => {
+  // the stress run (2026-11-05): while the agent started, the chat shrank to its content and left ~485px of empty card under the box
+  const page = read("TaskPage.jsx"), at = page.indexOf('"&:has([data-tq-starting])"');
+  assert.ok(at > 0);
+  assert.match(page.slice(at - 80, at), /!chatPane/, "the one-line starting room is for a pane that is not the task's chat");
 });

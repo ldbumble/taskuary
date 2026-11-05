@@ -460,6 +460,11 @@ CASES += POWERS
 # THE TASK PAGE, ASKED ABOUT WHILE IT IS UP (the audit, 2026-11-02): Came from, the Agent section, Close out, the action row, the to-dos, the
 # notes, the draft - each ask typed with the task on the table AND its view sent, as the chat does (AssistantView: the table's key + context())
 def _row(*vs): return [{'id': f'row:{v}', 'label': l} for v, l in vs]
+def ticked_step(s):
+    "The 4,180 step already ticked: an untick of an open step changes nothing, and the receipt says so (effects._changed)."
+    s.tick_checklist_item(1, s.task_checklist(1)[1]['id'], True, 'owner')
+
+
 TASK1V = {'area': 'task', 'title': f'{T1} - Month-end close is short by 4,180', 'item': {'kind': 'task', 'id': 1, 'ref': T1, 'title': 'Month-end close is short by 4,180'},
           'fields': [{'key': 'title', 'label': 'Title', 'value': 'Month-end close is short by 4,180'},
                      {'key': 'what_should_the_agent_do', 'label': 'What should the agent do?', 'value': ''}],
@@ -510,7 +515,7 @@ AREA_TASK = [
     Q('task', 'expand this', 'todo', [v(op='press', button='expand_to_the_whole_canvas')], 'view:press:expand_to_the_whole_canvas', tools=('words',), view=TASK1V, freq=2),
     # ── the to-dos and the notes: the task page's own writes, run and said ──
     Q('task', 'tick of the first step', 'todo', c('task.check', item='1'), 'did:task.check', view=TASK1V, freq=4, note='a misspelling: the model reads it'),
-    Q('task', 'untick find the 4,180', 'todo', c('task.check', item='2', done=False), 'did:task.check', view=TASK1V, freq=2),
+    Q('task', 'untick find the 4,180', 'todo', c('task.check', item='2', done=False), 'did:task.check', view=TASK1V, freq=2, seed=ticked_step),
     Q('task', 'add a step: email the bank', 'todo', c('task.checklist', add=['email the bank']), 'did:task.checklist', view=TASK1V, freq=4),
     Q('task', 'add a note: Paula is checking the bank feed', 'todo', c('task.comment', text='Paula is checking the bank feed'), 'did:task.comment', view=TASK1V, freq=4),
     Q('task', 'set the due date to friday', 'todo', c('task.update', due='friday'), 'did:task.update', view=TASK1V, freq=3),

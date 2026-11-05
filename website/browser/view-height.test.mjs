@@ -57,7 +57,8 @@ test("a task of words stays at the canvas's top and one height through Reply, th
     await page.waitForSelector(`[data-tq-canvas-item] [data-tq-task-page="${id}"] [data-tq-task-body]`, { timeout: 20000 });
     await sleep(2500);
     const base = await measure(page);
-    assert.equal(base.main, "from", `a task nothing has worked opens on Came from ${say}`);
+    // ...a task of words is a chat task (taskLayout.chatHome, the closeout-in-chat spec 2026-11-04): it opens on its chat, Came from its tab
+    assert.equal(base.main, "agent", `a chat task opens on its chat ${say}`);
     assert.ok(Math.abs(base.card.top - base.canvas.top) <= 2, `the card is pinned to the canvas's top ${say} ${JSON.stringify(base)}`);
     assert.ok(full(base), `the card takes the canvas ${say} ${JSON.stringify(base)}`);
     // ...each section's tab, and back (where the drawers were)
@@ -114,7 +115,7 @@ test("a task of words stays at the canvas's top and one height through Reply, th
 });
 
 // THE TABS ARE WHITE (the owner, 2026-10-27: "the right side thing should be white as well, like the left sidebar - otherwise you won't
-// notice it's there") - the three sections' closed tabs, on either side of the open one
+// notice it's there") - the closed sections' tabs, on either side of the open one, three sections or a chat task's two
 test("the closed sections' tabs are white at rest", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
@@ -129,11 +130,12 @@ test("the closed sections' tabs are white at rest", { timeout: 180000 }, async (
     await sleep(1500);
     return page.evaluate(() => [...document.querySelectorAll("[data-tq-canvas-item] [data-tq-section-tab]")].map((e) => [e.dataset.tqSectionTab, getComputedStyle(e).backgroundColor]));
   };
-  // a fresh task opens on Came from, Agent and Close out its tabs on the right; a drafted reply's on Close out, the two others on the left
-  const right = await bg(tasks.find((x) => /^New starter on Monday/.test(x.Title)).TaskId);
+  // a to-do of three sections opens on Came from, Agent and Close out its tabs on the right; a chat task (a drafted reply, taskLayout.chatHome)
+  // opens on its chat, Came from its one tab on the left
+  const right = await bg(tasks.find((x) => /^Migrate the census export/.test(x.Title)).TaskId);
   const left = await bg(tasks.find((x) => /^Invoice 88213/.test(x.Title)).TaskId);
   assert.deepEqual(right, [["agent", "rgb(255, 255, 255)"], ["close", "rgb(255, 255, 255)"]]);
-  assert.deepEqual(left, [["from", "rgb(255, 255, 255)"], ["agent", "rgb(255, 255, 255)"]]);
+  assert.deepEqual(left, [["from", "rgb(255, 255, 255)"]]);
 });
 
 // ...AND A STARTED AGENT TAKES THE ROOM: a stand-in claude (tests/fake_claude.py) on a fresh home, as browser/agent-journey.test.mjs

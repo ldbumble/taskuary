@@ -1155,9 +1155,10 @@ def install_processing_changes(app, store):
         hands the page over for a human check (browserview.your_turn); the agent's session ends with the browser on that page.
         {step: 'blank', frame}: a general task marked as needing a browser whose agent answered without one - its Chrome on about:blank,
         and a question for the owner asked in words (the owner's pane, 2026-11-03).
-        {step: 'asked', frame}: the same, with a page the agent opened in it - an invented fares page - and its question asked in words."""
+        {step: 'asked', frame}: the same, with a page the agent opened in it - an invented fares page - and its question asked in words.
+        {step: 'signin', taskId}: the agent ends its turn on the page asking to be signed in (signin.needs' own ask, nothing saved)."""
         step = body.get('step')
-        if step not in ('open', 'hold', 'turn', 'close', 'blank', 'asked') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
+        if step not in ('open', 'hold', 'turn', 'close', 'blank', 'asked', 'signin') or not set(body) <= {'step', 'frame', 'taskId'}: raise HTTPException(422, 'bad step')
         from taskuary import proposals, terminal
         if step in ('blank', 'asked'):
             from taskuary import workerstate as ws
@@ -1197,6 +1198,12 @@ def install_processing_changes(app, store):
             answer_paths.add(f'/api/reviews/{rid}/decide')
             sess.busy = False                                     # ...and the held press ended that turn (browsergate: "End your turn now")
             return {'reviewId': rid}
+        if step == 'signin':
+            from taskuary import workerstate as ws
+            rid = 'signin:trainly.example'
+            ws.record(store, tid, sess.sid, 'input_needed', request_id=rid, text='Sign in to trainly.example to continue', source='api')
+            sess.busy = False
+            return {'requestId': rid}
         if step == 'turn':
             rid = _bv.your_turn(store, tid, sess.sid, 'tick the "I\'m not a robot" box on the form')
             sess.busy = False                                     # the turn it went on with after Approve ends on the hand-over

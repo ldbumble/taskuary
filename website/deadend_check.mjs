@@ -103,6 +103,8 @@ const WALK_SKIP = {
   "redraft:none": "as Redraft: writing a draft is the AI's",
   "reply": "Reply only opens a draft: since the moves left the bar (2026-10-29) a waiting draft's spine says Redraft, its Close out holds Send, "
     + "and nothing drafted says Draft reply (walked) - Reply stands only by a reply already sent on a task still open, which neither world seeds",
+  "reply:none": "Draft reply is Reply's word on a folded pane's spine with nothing drafted - a reply task is a chat task now (phase 4.1): no Close out, "
+    + "and it opens on its Agent, whose open strip says Reply; the word stands only on a coding task with a mail to answer and no draft, which neither world seeds",
   "not_ours_sender": "From now on: the chip under Not ours' receipt (proposalCard.followUps), not a row of its own",
   "block_sender": "a rule in Settings: the card's third answer, now a page of its own, not a chip under Not ours",
   "not_ours_kind": "No more ideas like this: the chip under an idea's Not ours receipt (proposalCard.followUps)",

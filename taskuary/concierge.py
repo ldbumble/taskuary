@@ -546,7 +546,7 @@ def facts(store, item: dict, whole: bool = False) -> str:
     """What the model is handed about ONE item: the item's own words, then the body, the draft,
     the agent's screen or the meeting, whichever it has. Bounded, so a turn stays fast."""
     if not item: return '(no item on the table - the owner is just talking)'
-    lines = [f"ITEM [{item['kind']} / {funnel.LANE_WORDS.get(item['lane'], (item['lane'],))[0]}]: {item['title']}",
+    lines = [f"ITEM [{item['kind']} / {funnel.lane_word(item) or item['lane']}]: {item['title']}",
              f"from: {item.get('who') or '?'} | when: {item.get('when') or '?'} | why it is here: {item.get('why') or ''}"]
     if no_thread(item): lines.append(f"NO THREAD: {NO_THREAD}.")
     if item.get('tid'):
@@ -942,7 +942,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         if proposals.held_pending(store, item['tid']): return ''
     if need and not item.get(need):
         # the item's own line, not "TQ-0006 is assistant asked you: Should I…?." glued into a sentence (2026-10-06)
-        state = str(item.get('why') or funnel.LANE_WORDS.get(item.get('lane'), ('waiting',))[0]).strip().rstrip('.')
+        state = str(item.get('why') or funnel.lane_word(item) or 'waiting').strip().rstrip('.')
         return f"There is nothing to {SAYS_VERB.get(verb, verb)} on {what} - {state}.{OPEN_IT}"
     return ''
 
@@ -1936,7 +1936,7 @@ def _canvas_table(store, item: dict, d: dict) -> list:
                          + (' - its tab lit, the next move is in it' if p['lit'] else ''))
         ask = str(t.get('Summary') or '').strip()
     else:
-        lines.append(f"  card: {item.get('kind')} ({funnel.LANE_WORDS.get(item.get('lane'), (item.get('lane'),))[0]})"
+        lines.append(f"  card: {item.get('kind')} ({funnel.lane_word(item) or item.get('lane')})"
                      + (f" - {len(item.get('items') or [])} notices on one card, of {fyi_waiting(store, item)} FYI waiting in all"
                         if item.get('kind') == 'fyis' else ''))
         ask = ''
@@ -2413,7 +2413,7 @@ def _urgent_line(pile_items: list, item: dict | None) -> str:
     """One line for the prompt when something more pressing waits behind the item on the table."""
     more = funnel.more_urgent(pile_items, (item or {}).get('key'))
     if not more: return ''
-    return ('\nMORE URGENT WAITING (not what we are on): ' + '; '.join(f"{i.get('who') + ' - ' if i.get('who') else ''}{i['title']} ({funnel.LANE_WORDS[i['lane']][0]})" for i in more[:3])
+    return ('\nMORE URGENT WAITING (not what we are on): ' + '; '.join(f"{i.get('who') + ' - ' if i.get('who') else ''}{i['title']} ({funnel.lane_word(i)})" for i in more[:3])
             + ' - mention it in one short clause and offer to switch after this one; do not describe it.\n')
 
 
@@ -5762,7 +5762,7 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
         bits = [x for x in (handle_of(i), i.get('who'), _cut(i.get('title') or '', 90)) if x]
         # ...and whether a DRAFT waits on it: the lane's word alone ("ready to send") left "reject the draft on TQ-0004" answered
         # "there is no draft", and "send the reply to Sam" written as a new one (real-AI check, 2026-10-18)
-        if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]}"
+        if bits: rows.append(f"- {' · '.join(bits)} ({funnel.lane_word(i)}"
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')
     if not rows: return ''
     more = f"\n- ...and {len(items) - cap} more" if len(items) > cap else ''

@@ -20,7 +20,18 @@ export const baseName = (p) => parts(p).pop() || String(p || "");
 // `$d`, `$env:TEMP`, `%TEMP%`: the shell fills these in, so they name nothing a person can read ("Listed the files in $d", 2026-11-03)
 const named = (p) => !!p && !/\$|%\w+%/.test(String(p));
 const parent = (p) => { const x = parts(p); return x.length > 1 ? x[x.length - 2] : ""; };
-const hostOf = (u) => (/^https?:\/\/(?:www\.)?([^/?#:]+)/i.exec(String(u || "")) || [])[1] || "";
+// ...past any `user:password@` the address carries: a host is all a person needs, and a sign-in in a URL is a secret
+const hostOf = (u) => (/^https?:\/\/(?:[^/@\s]*@)?(?:www\.)?([^/?#:@]+)/i.exec(String(u || "")) || [])[1] || "";
+// WHERE A FETCH WENT, host and path (the owner, 2026-11-05: "it has to show what it's working on ... like pulling from url's"): never its query
+// string or fragment, where tokens ride, nor a path segment that reads as a key (long, letters and digits mixed)
+const KEYLIKE = /^(?=.*\d)(?=.*[A-Za-z])[\w~.=-]{24,}$/;
+const unesc = (p) => { try { return decodeURIComponent(p); } catch { return p; } };
+export const pageOf = (u) => {
+  const m = /^https?:\/\/(?:[^/@\s]*@)?(?:www\.)?([^/?#:@]+)(?::\d+)?([^?#\s]*)/i.exec(String(u || "").trim());
+  if (!m) return "";
+  const path = m[2].split("/").filter(Boolean).map((p) => (KEYLIKE.test(p) ? "…" : unesc(p))).join("/");
+  return clip(path ? `${m[1]}/${path}` : m[1], 64);
+};
 const key = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const prog = (w) => String(w || "").split(/[\\/]/).pop().toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, "");
 
@@ -100,7 +111,7 @@ export const browserStep = (args) => {
   }
   const [verb = "", ...rest] = a.map(String), v = verb.toLowerCase();
   const step = (summary, more = {}) => ({ kind: "page", summary, browser: true, ...more });
-  if (["open", "goto", "navigate"].includes(v)) { const host = hostOf(rest[0]) || hostOf(`https://${rest[0] || ""}`); return step(host ? `Opened ${host}` : "Opened a page", { host }); }
+  if (["open", "goto", "navigate"].includes(v)) { const host = hostOf(rest[0]) || hostOf(`https://${rest[0] || ""}`); return step(host ? `Opened ${host} in the browser` : "Opened a page in the browser", { host, doing: host ? `Opening ${host} in the browser` : "Opening a page in the browser" }); }
   if (AB_LOOKS.has(v)) return step("Looked at the page");
   if (v === "find") {
     // find <locator> <value> <action> [text]: a role's own name may sit before the action ("button "Pay now" click") or after it
@@ -136,7 +147,7 @@ const commandStep = (cmd, depth = 0) => {
       if (!url) { found.push({ kind: "run", summary: `Ran ${p}` }); continue; }
       const api = url.indexOf("/api/"), host = hostOf(url);
       if (api >= 0 && (!host || /^(localhost|127\.0\.0\.1)$/i.test(host))) found.push(taskuaryCall(url.slice(api + 5), seg.text));
-      else found.push({ kind: "page", summary: `Read a page on ${host || clip(url, 40)}`, host });
+      else { const at = pageOf(url); found.push({ kind: "page", summary: at ? `Read ${at}` : "Read a web page", doing: at ? `Reading ${at}` : "Reading a web page", host }); }
       continue;
     }
     // `cat > desk.svg` WRITES desk.svg: it read "Read <<EOF" (the stress test, 2026-11-02)
@@ -183,6 +194,27 @@ const TOOLS = {
   plan: ["todowrite", "updateplan", "plan", "todoread"],
   sync: ["syncmessages"],
 };
+const asked = (w) => (w ? ` for ${quoted(w)}` : ""), asking = (w) => (w ? ` for "${clip(w, 60)}"` : "");
+const OWN = {
+  mytask: () => ({ kind: "task", summary: "Looked at the task's emails" }),
+  searchmessages: (a) => ({ kind: "mail", summary: `Searched your mail${asked(a.words || a.subject || a.sender)}`,
+    doing: `Searching your mail${asking(a.words || a.subject || a.sender)}`, q: a.words || a.subject || a.sender || "" }),
+  readmessage: () => ({ kind: "mail", summary: "Read an email" }),
+  readattachment: () => ({ kind: "read", summary: "Read an attachment" }),
+  searchtasks: (a) => ({ kind: "task", summary: `Searched your tasks${asked(a.words)}`, doing: `Searching your tasks${asking(a.words)}` }),
+  person: (a) => ({ kind: "mail", summary: a.name ? `Looked up ${clip(a.name, 40)} in your mail` : "Looked up a person in your mail" }),
+  searchknowledge: (a) => ({ kind: "read", summary: `Searched your documents${asked(a.text)}`, doing: `Searching your documents${asking(a.text)}` }),
+  ownermemory: () => ({ kind: "data", summary: "Read what Taskuary has learned about you" }),
+  calendar: () => ({ kind: "data", summary: "Looked at your calendar" }),
+  listsystems: () => ({ kind: "data", summary: "Looked at your connected systems" }),
+  runsystem: (a) => ({ kind: "data", summary: a.type ? `Looked up data in ${clip(a.type, 30)}` : "Looked up data in a connected system" }),
+  tick: (a) => ({ kind: "plan", summary: a.done === false ? "Unticked a to-do" : "Ticked a to-do" }),
+  proposereply: () => ({ kind: "edit", summary: "Drafted a reply" }),
+  proposeemail: () => ({ kind: "edit", summary: "Drafted an email" }),
+  replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed" }),
+  signform: () => ({ kind: "edit", summary: "Filled in and signed a form" }),
+  propose: () => ({ kind: "plan", summary: "Asked for your yes" }),
+};
 const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => names.map((n) => [n, k])));
 
 export const describeCall = (name, args = {}) => {
@@ -204,8 +236,10 @@ export const describeCall = (name, args = {}) => {
   if (kind === "read") { const f = fileOf(a); return { kind, summary: f ? `Read ${baseName(f)}` : "Read a file", file: f }; }
   if (kind === "search") { const pat = a.pattern || a.query || a.regex; return { kind, summary: pat ? `Searched files for ${quoted(pat)}` : "Searched files", pattern: pat }; }
   if (kind === "list") { const g = a.pattern || a.glob, d = a.path || a.dir_path || a.directory; return { kind, summary: g ? `Looked for files matching ${quoted(g)}` : d ? `Listed the files in ${baseName(d)}` : "Listed the files" }; }
-  if (kind === "web") { const q = a.query || a.q || a.search_term; return { kind, summary: q ? `Searched the web for ${quoted(q)}` : "Searched the web", q }; }
-  if (kind === "page") { const host = hostOf(a.url || firstUrl(a.prompt)); return { kind, summary: host ? `Read a page on ${host}` : "Read a web page", host }; }
+  if (kind === "web") { const q = a.query || a.q || a.search_term;
+    return { kind, summary: q ? `Searched the web for ${quoted(q)}` : "Searched the web", doing: q ? `Searching the web for "${clip(q, 60)}"` : "Searching the web", q }; }
+  if (kind === "page") { const u = a.url || firstUrl(a.prompt), at = pageOf(u);
+    return { kind, summary: at ? `Read ${at}` : "Read a web page", doing: at ? `Reading ${at}` : "Reading a web page", host: hostOf(u) }; }
   if (kind === "edit" || kind === "write") {
     const changes = Array.isArray(a.changes) ? a.changes : [];
     if (changes.length > 1) return { kind: "edit", summary: `Changed ${changes.length} files` };
@@ -215,11 +249,25 @@ export const describeCall = (name, args = {}) => {
   if (kind === "helper") return { kind, summary: a.description ? `Handed part of the work to a helper: ${clip(a.description, 70)}` : "Handed part of the work to a helper" };
   if (kind === "plan") { const n = (a.todos || a.plan || []).length; return { kind, summary: n ? `Updated its plan (${n} steps)` : "Updated its plan" }; }
   if (kind === "sync") return { kind, summary: `Checked for new mail${a.new ? ` (${a.new} new)` : ""}` };
+  // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for: "Used my task (taskuary)" said nothing
+  const own = OWN[key(mcp ? mcp[2] : name)];
+  if (own && (!mcp || key(mcp[1]) === "taskuary")) return own(a);
   // anything else: its own name in words, and the one argument a person would want - a query, a host, a file
   const label = String(mcp ? mcp[2] : a.title || name || "a tool").replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
   const target = a.query ? quoted(a.query) : hostOf(a.url) || (fileOf(a) ? baseName(fileOf(a)) : "");
   return { kind: "tool", summary: `Used ${label}${mcp ? ` (${mcp[1].replace(/[_-]+/g, " ")})` : ""}${target ? ` on ${target}` : ""}` };
 };
+
+// WHAT IT IS DOING NOW, said as it happens (the owner, 2026-11-05: "look how other chat libraries show intermediately the tool calls"): a step's
+// own `doing` where its words differ ("Searching the web for "…""), else its summary's verb in the present - "Read notes.md" is "Reading notes.md"
+const ING = { Read: "Reading", Searched: "Searching", Wrote: "Writing", Edited: "Editing", Ran: "Running", Opened: "Opening", Looked: "Looking",
+  Listed: "Listing", Changed: "Changing", Typed: "Typing", Clicked: "Clicking", Used: "Using", Handed: "Handing", Updated: "Updating",
+  Checked: "Checking", Went: "Going", Reloaded: "Reloading", Scrolled: "Scrolling", Closed: "Closing", Pressed: "Pressing", Ticked: "Ticking",
+  Unticked: "Unticking", Chose: "Choosing", Uploaded: "Uploading", Saved: "Saving", Started: "Starting", Drafted: "Drafting", Marked: "Marking",
+  Filled: "Filling", Asked: "Asking" };
+export const present = (s) => { const t = String(s || ""), m = /^([A-Z][a-z]+)\b/.exec(t); return m && ING[m[1]] ? ING[m[1]] + t.slice(m[1].length) : t; };
+// the row's words: what it is doing while it runs, what it did once done
+export const stepLabel = (s) => (s?.status === "running" ? s.doing || present(s.summary) : s?.summary || "");
 
 // a mail search's own answer says how many it found - read off the JSON it returned, when it is JSON
 const countOf = (out) => {
@@ -349,7 +397,9 @@ function group(steps) {
                || (s.kind === "mail" && s.q !== undefined && steps[j].q !== undefined))) j += 1;
     const run = steps.slice(i, j);
     const summary = run.length > 1 ? together(run) : null;
-    if (run.length > 1 && summary) out.push({ ...s, id: run.map((x) => x.id).join("+"), summary: withCount(summary, run), status: statusOf(run), detail: run.map(detailOf).join("\n\n") });
+    // ...and a run still under way is doing its NEWEST call: "Reading 3 files" said less than "Reading BudgetTable.js"
+    const last = run[run.length - 1], doing = last.status === "running" ? last.doing || present(last.summary) : present(summary || "");
+    if (run.length > 1 && summary) out.push({ ...s, id: run.map((x) => x.id).join("+"), summary: withCount(summary, run), doing, status: statusOf(run), detail: run.map(detailOf).join("\n\n") });
     else for (const x of run) out.push({ ...x, summary: withCount(x.summary, [x]), detail: detailOf(x) });
     i = j;
   }

@@ -1584,8 +1584,10 @@ def in_flight(store) -> list:
         agent = live.get(tid) or (task_kinds.SHOWN if t.get('RunStatus') == 'running' else None)
         last = _dt(store.task_last_activity(tid) or t.get('UpdatedAt') or t.get('CreatedAt'))
         quiet_h = int((datetime.now() - last).total_seconds() // 3600) if last else None
+        # ...a CHAT task's waiting move is the agent's, whatever it is (funnel.lane_word, the owner 2026-11-05): "agent ready for you"
+        from . import general, lanes
         state = (f'{agent} has it' if agent
-                 else 'a reply is drafted and waiting on you' if t.get('ReviewStatus') == 'pending'
+                 else (lanes.word('chat_ready') if general.handles(t) else 'a reply is drafted and waiting on you') if t.get('ReviewStatus') == 'pending'
                  else f'quiet for {quiet_h}h' if quiet_h and quiet_h >= 24
                  else 'nobody is on it')
         out.append({'tid': tid, 'ref': task_ref(tid), 'title': _short(t.get('Title'), 90),

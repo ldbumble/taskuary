@@ -51,7 +51,7 @@ const WORK = [
   "Read 2 files in Budget/",
   "Searched files for 'approvedTotal'",
   "Searched the web for 'northwind budget review policy'",
-  "Read a page on docs.northwind.example",
+  "Read docs.northwind.example/budget/review",
 ];
 const work = (b) => stepsOf(trace(b), { answer: ANSWER, keepStart: false }).filter(isWork);
 // what the canvas shows with every row closed: the summaries, and the agent's own words

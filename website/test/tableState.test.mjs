@@ -25,7 +25,7 @@ test("folded by its X or under a page, the item stays on the table and the Advis
 test("a page over the item: the rail's tag and the box say it is under the page, not in view", () => {
   const under = tableWords(tableOf({ current: "task:3", browsing: "b1" }), "TQ-0003");
   assert.equal(under.tag, "under this page");
-  assert.match(under.box, /^Ask about this page or TQ-0003/);
+  assert.equal(under.box, "Ask about this page…", "the ask is about the page alone, never the task under it (2026-11-05)");
   assert.equal(under.phone, "Ask about this page…");
   const shown = tableWords(tableOf({ current: "task:3" }), "TQ-0003");
   assert.equal(shown.tag, "on the table");
@@ -33,7 +33,7 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   // ...the open box over a task, and a phone's: "Talk to Taskuary…" (the owner, 2026-10-28), the resting pill still "Ask…"
   assert.equal(shown.phone, "Talk to Taskuary…");
   assert.equal(shown.name, "Tell Taskuary what to do with TQ-0003", "the pill names the task its words do not");
-  assert.equal(under.name, "Ask Taskuary about this page or TQ-0003");
+  assert.equal(under.name, "Ask Taskuary about this page");
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
   assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
   assert.match(src, /tag=\{tableSays\.tag\}/, "the rail draws the tag tableWords chose");

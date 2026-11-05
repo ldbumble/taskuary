@@ -84,6 +84,19 @@ export const elapsedText = (ms) => {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
 
+// A CHAT TURN'S STAMP (the owner, 2026-11-05: "it should show right when it starts the counter on top, then it stops when response is generated"):
+// "working 0:42" from the turn's own start while it runs, "ran 1m 12s" once its answer is filed, and nothing it cannot know - no start, or
+// a gap past six hours, which is no turn's run but a chat left and come back to
+export const tookText = (ms) => { const s = Math.round(ms / 1000);
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
+export const clockText = (ms) => { const s = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(s % 60).padStart(2, "0")}`; };
+export const turnStamp = ({ running, start, end, now }) => {
+  const t0 = +new Date(start || NaN), t1 = +new Date((running ? now : end) || NaN), ms = t1 - t0;
+  if (!Number.isFinite(ms) || ms < 0 || ms >= 6 * 3600 * 1000) return "";
+  return running ? `working ${clockText(ms)}` : ms > 0 ? `ran ${tookText(ms)}` : "";
+};
+
 // The Assistant's answer being written: a real brain took 4-51 s behind three silent dots, which read as hung (the owner, 2026-10-20:
 // "working... Ns"). Nothing in the first second - most answers are back by then - and whole seconds after it, floored so it never jumps ahead.
 export const workingLine = (ms) => (ms >= 1000 ? `Working… ${elapsedText(Math.floor(ms / 1000) * 1000)}` : "");

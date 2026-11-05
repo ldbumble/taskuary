@@ -306,8 +306,8 @@ REPLY_OPEN, REPLY_CLOSE = '[[TASKUARY-REPLY]]', '[[/TASKUARY-REPLY]]'
 _REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?REPLY\s*\]\]', re.I | re.S)
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
               f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
-              f'in your words - nothing is sent until they approve it. The owner reads it in Close out, beside your answer, never in it: say the '
-              f'reply is in Close out, not "below". A file it sends rides only if you name it on its own '
+              f'in your words - nothing is sent until they approve it. The owner reads it as its own card under Next steps, after your answer, never '
+              f'in it: say the reply is drafted and waits for their Send - never "in Close out", which a chat task does not have. A file it sends rides only if you name it on its own '
               f'line: [[TASKUARY-ATTACH: <full path>]] - a file you made in your working folder, or one listed under '
               f'ATTACHED FILES. Never say a file is attached unless you named it that way.')
 
@@ -318,7 +318,8 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
 SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"about": "<what this task wants from the owner>", "did": "<what '
                 f'you researched, found or did>", "on_you": ["<each step left for the owner, one short line each>"], "nothing_left": '
-                f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. When you '
+                f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. A drafted reply is '
+                f'already its own card with Send under Next steps: never an on_you step. When you '
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
                 f'(through [[TASKUARY-ASK]]) only when there are real ones. When the owner\'s newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you read what the task wants wrongly), "review": <the draft\'s id or null>, '

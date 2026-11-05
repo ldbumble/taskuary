@@ -23,7 +23,7 @@ test("each fyi line says when it came, on a white box", () => {
 // the owner, 2026-10-14: "we need to have general agent closed until i reopen and then continue session"
 test("a closed task's conversation shows why it cannot be typed into, in place of the composer", () => {
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /const closedChat = !dock && \["done", "dropped"\]\.includes\(String\(task\?\.Status \|\| ""\)\);/);
+  assert.match(ws, /const closedChat = !dock && !chat && \["done", "dropped"\]\.includes\(String\(task\?\.Status \|\| ""\)\);/);
   assert.match(ws, /\{closedChat \? <div className="tq-aui-hint" role="status"[\s\S]*?This task is closed\. Press \{btn\("reopen"\)\}\{chat \? "" : <>, then \{btn\("continue"\)\},<\/>\}[\s\S]*?: <>\s*<ComposerPrimitive\.Root/);
 });
 

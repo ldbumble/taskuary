@@ -590,7 +590,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     own.forEach((e) => v?.addEventListener(e, mine, { passive: true }));
     return () => { ids.forEach(clearTimeout); own.forEach((e) => v?.removeEventListener(e, mine)); };
   }, [dock, said, serverBusy, runtime]);
-  const closedChat = !dock && ["done", "dropped"].includes(String(task?.Status || ""));
+  // ...where the chat is home a closed task keeps its box: what is typed reopens it and carries on (server._refuse_closed_chat, 2026-11-05)
+  const closedChat = !dock && !chat && ["done", "dropped"].includes(String(task?.Status || ""));
   /* WHILE A QUESTION IS OPEN THE COMPOSER ANSWERS IT (the owner, 2026-11-03: the card had a box of its own, and the answer was typed here
      anyway): its words take the road the card's Answer took (onAnswer) - this conversation's next message, or the asking terminal's answer -
      so the card and the "waiting on you" chip clear the same way. A typed answer to a multiple-choice question goes as typed. */

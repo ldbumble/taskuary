@@ -213,3 +213,15 @@ export const QUIET_CHIP_BELOW = 420;
 export const quietLayout = (width, open, folded = false) => (!open ? "none" : width > 0 && width < QUIET_CHIP_BELOW ? "chip" : folded ? "folded" : "split");
 // ...the chat's floor here is its share, not MIN_CHAT_PX: at a laptop's ~555px slot that floor left the page ~190px, too small to sign in on
 export const quietRatio = (r) => Math.min(1 - CHAT_SHARE, clampRatio(r));
+
+// THE TASK LIST FOLDS WHILE A CHAT'S BROWSER NEEDS THE OWNER (the owner, 2026-11-05: on a 1024px laptop the page to sign in on was ~300px wide):
+// a quiet pane showing its page beside the chat asks for the room (SessionPane), and the rail (FeedView) folds the way set-up folds it, coming
+// back when no pane asks any more. One flag for the window, held by whoever asks - two panes asking is still one fold
+const wants = new Set(), heard = new Set();
+export const roomWanted = () => wants.size > 0;
+export const wantRoom = (who, on) => {
+  const was = roomWanted();
+  if (on) wants.add(who); else wants.delete(who);
+  if (was !== roomWanted()) heard.forEach((f) => f(roomWanted()));
+};
+export const onRoom = (f) => { heard.add(f); return () => heard.delete(f); };

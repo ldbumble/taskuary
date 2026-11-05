@@ -22,7 +22,7 @@ import { createPool, paneCap } from "./terminalPool.js";
 import api from "./api.js";
 import BrowserPane, { LastView } from "./BrowserPane.jsx";
 import { layoutFor, ratioFromPointer, rememberFold, rememberRatio, savedFold, savedRatio, shortUrl, showsBrowser, isLocalPage, isBlankPage,
-  splitRatio, viewOnScreen, PHONE_BELOW, quietLayout, quietRatio } from "./browserSplit.js";
+  splitRatio, viewOnScreen, PHONE_BELOW, quietLayout, quietRatio, wantRoom } from "./browserSplit.js";
 
 // Programming fonts first: agent TUIs draw boxes and progress bars out of block glyphs,
 // which only line up in a font with real box-drawing coverage.
@@ -793,6 +793,9 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
   const share = quiet ? quietRatio(ratio) : splitRatio(ratio, width);
   const onScreen = showingBrowser && viewOnScreen(layout);
   useEffect(() => { onView?.(onScreen); }, [onScreen]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and while it shows the page the owner has a part on, the task list folds away to give it the room (browserSplit.wantRoom)
+  const roomFor = quiet && showingBrowser;
+  useEffect(() => { if (!roomFor) return undefined; const who = {}; wantRoom(who, true); return () => wantRoom(who, false); }, [roomFor]);
   const fold = (f) => { setFolded(f); rememberFold(f, sid); if (!f) setLocalOk(true); };
   // the handle: the pointer's place across the slot IS the split, remembered on release
   const startDrag = (e) => {

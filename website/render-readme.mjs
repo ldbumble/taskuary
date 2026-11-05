@@ -12,12 +12,12 @@ const out = path.join(root, 'docs/readme');
 await mkdir(out, { recursive: true });
 // clip: [x,y,w,h] in the capture's CSS pixels, null = the capture is already the card (capture-readme's card()), or a file of one
 const shots = [
-  // 01-06 walk Ruth's request through the Chat and Task views; the rail on the left is the Timeline
+  // 01 and 06 are the opening card in the full static demo (capture-readme.mjs); the rail on the left is every source in one place
   ['01-timeline-sources-and-times','home','Everything lands in one place.',[0,58,1200,942],'01 / ARRIVE'],
-  // 02-05 and 12-14 are the Taskuary pane on the demo world's backend (capture-readme-app.mjs): the card on its warm ground, the row under it
-  ['02-task','task','A request becomes a task.',null,'02 / ORGANIZE'],
-  ['03-agent','agent','The agent shows what it did and made.',null,'03 / WORK'],
-  ['04-review','review','The last word is yours.',null,'04 / APPROVE'],
+  // 02-05 and 12-16 are the Taskuary pane on the demo world's backend (capture-readme-app.mjs): the general agent's finished day
+  ['02-task','task','Every task is one chat.',null,'02 / ORGANIZE'],
+  ['03-agent','agent','The agent sets up the action.',null,'03 / WORK'],
+  ['04-next-steps','next-steps','The last word is yours.',null,'04 / APPROVE'],
   ['05-assistant','assistant','One conversation. One next step.',null,'05 / YOUR ASSISTANT'],
   ['06-morning','home','Your day, before it gets busy.','morning.json','06 / MORNING BRIEF'],
   ['07-coding-clis-chinese','cli','Your tools. Your choice.',null,'KEY FEATURE / CODING CLIS'],
@@ -26,9 +26,11 @@ const shots = [
   ['11-learned-memory','learned','Memory you can read and change.',null,'KEY FEATURE / LEARNED.MD'],
   ['12-fyi','fyi','What needs nothing, read in one go.',null,'KEY FEATURE / FYI'],
   ['13-report','report','Reports land like work.',null,'KEY FEATURE / REPORTS'],
-  ['14-dashboard','dashboard','A dashboard beside your reports.',null,'KEY FEATURE / DASHBOARDS'],
+  ['14-dashboard','dashboard','A dashboard the agent built.',null,'KEY FEATURE / DASHBOARDS'],
+  ['15-owner-answered','owner-answered','It never closes your task.',null,'KEY FEATURE / YOU CLOSE IT'],
+  ['16-handover','handover','You press Pay. It does the rest.',null,'KEY FEATURE / BROWSER HAND-OVER'],
 ];
-const app = ['task','agent','review','assistant','fyi','report','dashboard'];
+const app = ['task','agent','next-steps','assistant','fyi','report','dashboard','owner-answered','handover'];
 const browser = await launch();
 const page = await browser.newPage();
 const escape = text => text.replaceAll('&','&amp;').replaceAll('<','&lt;');

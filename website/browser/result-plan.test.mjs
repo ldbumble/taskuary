@@ -4,9 +4,10 @@ import { startHarness } from "./harness.mjs";
 
 // WHERE IS THE PLAN (the owner, 2026-10-27, a general agent finished on a WhatsApp task, its reply drafted): the Result was the white focus
 // over a draft waiting for Send, folded to "finished its work - its record is below" and the agent's last words, and the plan it wrote was
-// nowhere on the page. Now Close out is the white focus while a draft waits; the Result rests on what it did and what it made - the plan by
-// name with its Open - and the Result heading unfolds the rest.
-test("a finished agent with a draft waiting: Close out is the focus, the Result is its summary and the plan it made, with Open", { timeout: 240000 }, async (t) => {
+// nowhere on the page. The Result rests on what it did and what it made - the plan by name with its Open - and the Result heading unfolds
+// the rest. Since the closeout-in-chat spec (2026-11-04) a general task's chat is home: no Close out section, the draft's card under the
+// Result in the Agent, as its Next steps.
+test("a finished agent with a draft waiting: the Agent holds its Result, the plan it made with Open, and the draft's card under them", { timeout: 240000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -21,20 +22,19 @@ test("a finished agent with a draft waiting: Close out is the focus, the Result 
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
   await page.waitForSelector(`[data-tq-task-page="${made.taskId}"] [data-tq-result-summary] [data-tq-result-made]`, { timeout: 20000 });
   await page.waitForSelector("[data-tq-closeout] textarea[data-tq-draft]", { timeout: 20000 });
-  // ...in the three sections (2026-10-27) the draft waiting is where the task is up to: Close out opens, the Agent its tab - opened to read
-  const focus = await page.evaluate(() => [...document.querySelectorAll("[data-tq-focus]")].map((e) => (e.matches("[data-tq-closeout]") ? "closeout" : e.querySelector("[data-tq-result-summary]") ? "result" : "other")));
-  assert.equal(await page.$eval("[data-tq-task-body]", (e) => e.getAttribute("data-tq-main")), "close", "the draft waiting opens Close out");
-  await page.click("[data-tq-section-tab=agent] [data-tq-tab-arrow]");
-  await page.waitForSelector("[data-tq-result-summary]", { visible: true, timeout: 5000 });
+  // ...the task opens on its chat: the Result, then the draft waiting, one column - Close out is no section of its own
+  assert.equal(await page.$eval("[data-tq-task-body]", (e) => e.getAttribute("data-tq-main")), "agent", "a chat task opens on the Agent");
+  assert.equal(await page.$("[data-tq-slot=close]"), null, "no Close out section");
+  const order = await page.evaluate(() => { const r = document.querySelector("[data-tq-result-summary]"), c = document.querySelector("[data-tq-closeout] textarea[data-tq-draft]");
+    return { below: !!(r.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING), seen: !!r.offsetParent && !!c.offsetParent }; });
+  assert.ok(order.below && order.seen, `the draft's card is under the Result, both in view: ${JSON.stringify(order)}`);
 
-  const at = await page.evaluate((focus) => ({
-    focus,
+  const at = await page.evaluate(() => ({
     summary: document.querySelector("[data-tq-result-summary]").innerText,
     made: [...document.querySelectorAll("[data-tq-result-made] .tq-published-page")].map((e) => e.innerText),
     open: !!document.querySelector("[data-tq-result-made] [data-tq-open]"),
     record: !!document.querySelector("[data-tq-result]"), chat: !!document.querySelector("[data-tq-agent-room]"),
-    page: document.querySelector("[data-tq-work]").innerText }), focus);
-  assert.deepEqual(at.focus, ["closeout"], "the draft waiting for Send is the white section, the Result shaded above it");
+    page: document.querySelector("[data-tq-work]").innerText }));
   assert.match(at.summary, /Ray Colton signs it; the group should be told\./, "what it did, from its write-up");
   assert.match(at.summary, /^Ray Colton signs it[\s\S]*What it found\s+Ray Colton signs the snag list on Thursday\./i, "what it did first, then what it based it on");
   assert.equal(at.made.length, 1, `the plan once - the shown copy and the outputs file are one file: ${JSON.stringify(at.made)}`);

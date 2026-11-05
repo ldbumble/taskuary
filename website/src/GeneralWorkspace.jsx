@@ -30,7 +30,7 @@ import { instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
-import PublishedPages from "./PublishedPages.jsx";
+import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, shownOnce, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
@@ -52,7 +52,7 @@ import ReviewDecision from "./ReviewDecision.jsx";
 import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary from "./AgentSummary.jsx";
-import { foldedSummaries } from "./agentSummary.js";
+import { foldedSummaries, lastAnswerSummed } from "./agentSummary.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 
@@ -150,15 +150,25 @@ const AgentNameCtx = React.createContext("Taskuary");
 // outputs folder comes out of the words and sits under them with Preview and Download. A Codex answer printed the raw marker, and
 // asked to send the workbook it wrote a link to an /outputs/ address the server never had - a 404 (outputs.py).
 const OutputsCtx = React.createContext(null);
+// ...and a file NAMED in the words - `Report.csv` - opens over the chat at a press (FileDialog): the names are marked once drawn
+const nameOf = (s) => String(s || "").trim().replace(/^.*[\\/]/, "");
 const AssistantText = ({ text }) => {
   const at = React.useContext(OutputsCtx), shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
+  const box = React.useRef(null), [viewing, setViewing] = useState(null);
+  const listed = at?.listed || [];
+  const fileNamed = (el) => { const n = nameOf(el?.textContent); return n ? listed.find((f) => f.name === n || nameOf(f.path) === n) : null; };
+  useEffect(() => {
+    box.current?.querySelectorAll("code").forEach((c) => { if (fileNamed(c)) c.setAttribute("data-tq-file-link", ""); else c.removeAttribute("data-tq-file-link"); });
+  });
+  const open = (e) => { const c = e.target.closest?.("code[data-tq-file-link]"), f = c && fileNamed(c); if (f) { e.preventDefault(); setViewing(f); } };
   // an answer that was only its summary block is filed as the summary's "did" (general._file): said once, under What I did
   const did = useAuiState((s) => String(s.message.metadata?.custom?.summary?.did || "").trim());
   const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
   if (did && String(text || "").trim() === did && !files.length) return null;
   return <>
-    {!!said && <Md text={said} />}
+    {!!said && <div ref={box} onClick={open}><Md text={said} /></div>}
     {files.map((f) => <PublishedPages key={f} pages={[outputRow(at.tid, f, at.listed)]} open={isShown(f)} />)}
+    <FileDialog file={viewing} onClose={() => setViewing(null)} />
   </>;
 };
 // WHAT CAME IN IS SAID IN ITS SENDER'S WORDS (general.shown_history; the overnight run, 2026-11-03): the mail that carried this turn on, each
@@ -474,7 +484,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
   const working = !dock && !!serverBusy;
   // ...where the chat has no summary yet, what Close out held (`next`) stands under the thread on its own - a draft is never without its one place
-  const nextAt = React.useContext(WorkCtx), summed = (messages || []).some((m) => m?.summary);
+  const nextAt = React.useContext(WorkCtx), summed = lastAnswerSummed(messages);
   const modelAdapter = useMemo(() => ({
     async *run({ messages: runMessages, abortSignal }) {
       onBusyChange?.(true);

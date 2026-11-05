@@ -5,7 +5,8 @@
 // agent session on bottom as link or if you click in it as rendered in line"). In the chat each sits under the answer that
 // made it, open (2026-10-09: the agent chose to show it); under a terminal they stay one row each until clicked.
 import React, { useState } from "react";
-import { Button, CircularProgress } from "@mui/material";
+import { Button, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api.js";
 import { attUrl, fileError, useSave } from "./Attachments.jsx";
@@ -125,13 +126,33 @@ function Preview({ page }) {
     return (
       <div className="tq-published-table"><table>
         <thead><tr>{(head || []).map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
-        <tbody>{rows.slice(0, 500).map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody>
+        <tbody>{rows.slice(0, 500).map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} title={c.length > 40 ? c : undefined}>{c}</td>)}</tr>)}</tbody>
       </table></div>
     );
   }
   return isHtml(page)
     ? <iframe className="tq-published-frame" title={page.name} sandbox={SANDBOX} srcDoc={lockDown(isImage(page) ? fitSvg(body) : body)} />
     : <div className="tq-published-md"><Md text={body} /></div>;
+}
+
+// A FILE OPENED WHERE IT IS NAMED (the owner, 2026-11-05: "i need to be able to click on this and a pop up will show the file ... without having
+// to hit download then look at it and then come back"): its name in the agent's words opens it over the chat - the card's own Preview, and
+// Download beside it for when it is wanted after all. Esc or the cross closes it, back where the owner was reading
+export function FileDialog({ file, onClose }) {
+  const [, save] = useSave();
+  if (!file) return null;
+  return (
+    <Dialog open onClose={onClose} maxWidth="lg" fullWidth data-tq-file-dialog={file.path || file.name}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, fontSize: 15 }}>
+        <b style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</b>
+        {!file.missing && <Button size="small" onClick={() => save(file)} data-tq-download="">Download</Button>}
+        <IconButton size="small" aria-label="Close" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ p: 0, minHeight: 240 }}>
+        {file.missing ? <div className="tq-published-note">It is not in this task's files any more.</div> : <Preview page={file} />}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // a file the agent made: its name and kind, Preview where it has one, and Download - or, gone from the folder, says so

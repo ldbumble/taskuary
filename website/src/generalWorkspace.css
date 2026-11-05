@@ -149,6 +149,9 @@
 /* ...THE CHAT TAKES THE ROOM (the owner, 2026-11-05: "let's make the ui components as minimal as possible to leave space for that chat"): its box
    sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),
    no line explaining the two Sends */
+/* a file's name in the agent's words, pressable: it opens the file over the chat (GeneralWorkspace AssistantText, FileDialog) */
+.tq-aui-agent-body code[data-tq-file-link] { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.tq-aui-agent-body code[data-tq-file-link]:hover { background: #ece6da; }
 .tq-aui-chat .tq-aui-footer { padding-bottom: 7px; border-top: 0; }
 .tq-aui-chat [data-tq-redraft-warn], .tq-aui-chat [data-tq-redraft-btn], .tq-aui-chat [data-tq-then-line], .tq-aui-chat [data-tq-review-reason],
 [data-tq-no-agent-chat] [data-tq-review-reason],

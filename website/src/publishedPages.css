@@ -14,7 +14,11 @@
 .tq-published-picture img { max-width: 100%; max-height: min(70vh, 640px); height: auto; }
 .tq-published-table { border-top: 1px solid #e3ddd2; max-height: min(70vh, 640px); overflow: auto; font-size: 12.5px; }
 .tq-published-table table { border-collapse: collapse; min-width: 100%; }
-.tq-published-table th, .tq-published-table td { border-bottom: 1px solid #eee9df; padding: 4px 10px; text-align: left; white-space: nowrap; }
+.tq-published-table th, .tq-published-table td { border-bottom: 1px solid #eee9df; padding: 4px 10px; text-align: left; white-space: nowrap;
+  max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+/* ...its own layout, never the chat's fixed one (.tq-aui-agent-body table): fixed columns at 100% with unwrapped cells drew each long value
+   over the next column (the owner, 2026-11-05: "this csv preview is corrupted"). As wide as its columns, the box scrolls sideways */
+.tq-aui-agent-body .tq-published-table table, .tq-published-table table { width: auto; min-width: 100%; table-layout: auto; }
 .tq-published-table th { position: sticky; top: 0; background: #faf8f4; color: #4d514b; font-weight: 600; }
 .tq-aui-agent-body .tq-published { margin: 8px 0 2px; }
 /* a file the agent made for the task (taskOutputs.js): a workbook's sheets as tabs over the table, plain text as itself */

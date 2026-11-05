@@ -2,6 +2,24 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.1 - 2026-11-05
+
+- A chat task draws no Advisor line: its agent is the advisor
+- Reports, FYIs, dashboards and Advisor items have no Close out, and their box reads as a chat; an Advisor item answers questions too
+- An item's ask box sits under what it opens on, never in the Agent tab of an item no agent was sent to
+- The agent says its reply waits under Next steps, never in a Close out a chat task no longer has
+- A quick turn ends in the same What this is about / What I did as an agent turn
+- A burst of mail on a thread is one re-think, and a line is never lost to a session that just ended
+- The chat box takes a line while the agent works, shows no Suggested reply before one exists, and stays at the card's foot
+- One playbook proposal per task while it waits, never one per session ending
+- "Suggested reply" heads a reply in the chat, never a closed task's Mark done line
+- The agent's question is said once: never again as an On you step under it
+- Send and close closes a chat task whose agent is parked: the press stops it, saved, and closes
+- A chat task's chat has no agent picker, model box or Full screen: only the task's own actions
+- A chat reply's To names the person, never their phone or chat id, and no room for a one-to-one chat
+- When the thread moves, the agent says plainly what changed first: "I see you answered Ray there"
+- The owner's own reply on a thread wakes every open task on it, not only the one it is filed on
+
 ## 0.3.11.0 - 2026-11-05
 
 - Triage sees every open item and what the owner's search finds, so a matter joins its task from any source

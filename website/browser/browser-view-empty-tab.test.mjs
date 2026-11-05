@@ -62,7 +62,7 @@ test("a hand-over with no page to hand over is a question in words, never 'your 
   assert.deepEqual(errors, []);
 });
 
-test("a page the agent opened shows, and its question in words still is no turn on it", { timeout: 120000 }, async (t) => {
+test("a page the agent opened, with its question asked in words, is not drawn in a chat task - nothing on the page is the owner's", { timeout: 120000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const painter = await harness.newPage();
@@ -72,7 +72,8 @@ test("a page the agent opened shows, and its question in words still is no turn 
   await painter.close();
   const { page, errors } = await open(harness, "asked", frame);
   const at = await settled(page);
-  assert.ok(["stack", "split"].includes(at.layout), `the page is in the canvas: ${at.layout}`);
+  // the owner, 2026-11-05: "for browser we don't really want to show it unless they need login" - a question in words is answered in the chat
+  assert.equal(at.layout, "none", `the page is not drawn for a question in words: ${at.layout}`);
   assert.ok(!/your turn/i.test(at.text) && !/click the page and type/.test(at.text), "a question in words leaves the page the agent's");
   assert.deepEqual(errors, []);
 });

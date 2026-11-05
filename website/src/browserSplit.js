@@ -198,3 +198,18 @@ export const heldOn = (review, sid) => {
   if (p?.action !== "browser_act" || !sid || String(p.sid) !== String(sid)) return null;
   return { id: review.ReviewId, what: p.what || p.command || "the step the agent held", site: p.site || "", url: p.url || "", why: p.why || "" };
 };
+
+// A CHAT TASK SHOWS THE BROWSER ONLY WHEN THE OWNER IS NEEDED ON IT (the owner, 2026-11-05: "for browser we don't really want to show it
+// unless they need login ... Browser should open side by side not top/bottom"). The agent browsing is a "Working on this…" line in the
+// chat and nothing more; the page is drawn for a sign-in or a code the vault does not keep (a `signin:` ask), a hand-over - a captcha,
+// a step only a person may do (isTurn) - or a step it held for Approve (heldOn). A saved sign-in raises no ask (signin.needs), so it
+// is never drawn. Then it sits BESIDE the chat, never over it: the chat keeps CHAT_SHARE of the width, a phone's width gets the chip.
+export const CHAT_SHARE = 0.45;
+export const needsOwner = (asking, held = []) => waitsOnPage(asking) || !!held?.length;
+// ...folded by the owner's own Fold, it is the chip that says "your turn - open it". A 1024px laptop's chat slot is ~555px - under
+// PHONE_BELOW, where the other layouts chip it - and still split here: hiding the page the owner was asked to sign in on is worse than a
+// small one. Only a phone's slot gets the chip.
+export const QUIET_CHIP_BELOW = 420;
+export const quietLayout = (width, open, folded = false) => (!open ? "none" : width > 0 && width < QUIET_CHIP_BELOW ? "chip" : folded ? "folded" : "split");
+// ...the chat's floor here is its share, not MIN_CHAT_PX: at a laptop's ~555px slot that floor left the page ~190px, too small to sign in on
+export const quietRatio = (r) => Math.min(1 - CHAT_SHARE, clampRatio(r));

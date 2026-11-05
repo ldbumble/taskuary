@@ -16,11 +16,18 @@ import api from "./api.js";
 import { ALERT_INK, DIM } from "./theme.jsx";
 import { sizeText } from "./replyFiles.js";
 import { useVerbs } from "./actionRow.js";
+import { FileDialog } from "./PublishedPages.jsx";
+// a file on the reply as the viewer reads it: its preview by its kind, read back from the reply itself (server review_attachment_read)
+const EXT_PREVIEW = { csv: "text", txt: "text", md: "text", json: "text", xlsx: "sheet", xls: "sheet", docx: "document", pdf: "pdf", png: "picture",
+  jpg: "picture", jpeg: "picture", gif: "picture", webp: "picture" };
+const asViewed = (rid, f) => { const e = String(f.name).split(".").pop().toLowerCase(), u = `/api/reviews/${rid}/attachment?name=${encodeURIComponent(f.name)}`;
+  return { id: `reply:${rid}:${f.name}`, name: f.name, path: f.name, kind: "output", preview: EXT_PREVIEW[e] || null, url: u,
+    content_type: e === "csv" ? "text/csv" : e === "pdf" ? "application/pdf" : "", size: f.size }; };
 
 export default function ReplyFiles({ reviewId, files = [], promised = false, short = [], channel = "email", onChanged, toRow = false, disabled = false }) {
   const pick = useRef(null);
   const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState(""), [viewing, setViewing] = useState(null);
   const mail = String(channel || "email").toLowerCase() === "email";
 
   const add = async (chosen) => {
@@ -57,11 +64,13 @@ export default function ReplyFiles({ reviewId, files = [], promised = false, sho
     run: () => pick.current?.click(), title: hint("attach") }], toRow && mail);
   return (
     <Box sx={{ mb: 0.75 }}>
+      <FileDialog file={viewing} onClose={() => setViewing(null)} />
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
         {files.map((f) => (
           <Chip key={f.name} size="small" icon={<AttachFileIcon sx={{ fontSize: 14 }} />}
             label={`${f.name} · ${sizeText(f.size)}`} disabled={disabled || busy === f.name}
-            onDelete={() => drop(f.name)} sx={{ maxWidth: 320 }} />
+            onDelete={() => drop(f.name)} onClick={() => setViewing(asViewed(reviewId, f))} title="Open it"
+            data-tq-reply-file={f.name} sx={{ maxWidth: 320, cursor: "pointer" }} />
         ))}
         {mail && toRow ? null : mail ? (
           <Button size="small" onClick={() => pick.current?.click()} disabled={disabled || busy === "adding"}

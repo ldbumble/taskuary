@@ -330,7 +330,9 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who
 # each turn closes on a block the page draws as three parts - what the task wants, what the agent did, what is on the owner (the parser
 # is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
-SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"about": "<what this task wants from the owner>", "did": "<what '
+SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"about": "<two or three plain sentences on the situation: which '
+                f'conversation this is on and what it is about, who asked, for whom and why they want it - read from the whole thread, naming only people '
+                f'the thread itself shows in that role>", "did": "<what '
                 f'you researched, found or did>", "on_you": ["<each step left for the owner, one short line each>"], "nothing_left": '
                 f'<true when nothing is left for them but to close>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. A drafted reply is '
                 f'already its own card with Send under Next steps, and a question you ask is shown on its own: neither is ever an on_you step. When you '

@@ -4751,6 +4751,22 @@ async def review_attach(rid: int, request: Request, name: str = ''):
     except ValueError as e: raise HTTPException(422, str(e))
     _owners(rid); return out
 
+@app.get('/api/reviews/{rid}/attachment')
+def review_attachment_read(rid: int, name: str, download: bool = False):
+    """A file on a pending reply, read back for its preview (the owner, 2026-11-05: "can't click the file"): only one named in that reply's
+    envelope, from the path it was stored at - never a path from the request."""
+    import mimetypes, os
+    from fastapi.responses import FileResponse
+    rv = store.get_review(rid)
+    if not rv: raise HTTPException(404, 'no such reply')
+    from . import verdicts
+    env = verdicts._envelope(rv)
+    f = next((x for x in (env.get('attachments') or []) if x.get('name') == name), None)
+    if not f or not f.get('path') or not os.path.isfile(f['path']): raise HTTPException(404, 'that file is not on this reply')
+    kind = mimetypes.guess_type(name)[0] or 'application/octet-stream'
+    return FileResponse(f['path'], media_type=kind, filename=name if download else None,
+                        content_disposition_type='attachment' if download else 'inline')
+
 @app.delete('/api/reviews/{rid}/attachment')
 def review_detach(rid: int, name: str):
     from . import verdicts

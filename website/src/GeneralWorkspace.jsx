@@ -223,7 +223,10 @@ const WorkSteps = ({ data }) => {
   useEffect(() => { setOpen(OPEN_FOLDS.has(key)); }, [key]);
   if (!at || (!now && !ended)) return <AgentSteps data={data} />;
   // a failure is never folded away: it is its own line under the fold (a retried one that worked is "recovered", and folds with the rest)
-  const all = data?.steps || [], bad = all.filter((s) => s.kind === "error" || s.status === "error"), n = all.filter(isWork).length;
+  // ...where the chat is home and the turn ENDED in its summary, a step that failed on the way is part of the way, folded with the rest (the
+  // owner, 2026-11-05: "what are all those failures?") - only a turn that failed keeps its failures out
+  const chat = React.useContext(ChatCtx), keepOut = !(chat && ended);
+  const all = data?.steps || [], bad = keepOut ? all.filter((s) => s.kind === "error" || s.status === "error") : [], n = all.filter(isWork).length;
   const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
   return <>
     <details className="tq-aui-working-fold" data-tq-working={now ? "" : undefined} open={open} onToggle={toggle}>

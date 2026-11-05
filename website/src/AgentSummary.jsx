@@ -29,7 +29,9 @@ const OnYou = ({ items }) => {
   return <Typography data-tq-on-you={items.map((i) => i.id || "").join(" ")} sx={LINE}>
     {`For you to do: ${shown.join("; ")}${more > 0 ? `, and ${more} more on the To do` : ""}.`}</Typography>;
 };
-const DraftHead = () => <Head>Suggested reply</Head>;
+// NEXT STEPS HOLD THE REPLY (the owner, 2026-11-05: "next steps should be above or combined with suggested reply as that's the next steps.
+// meaning review the file then send it"): one head, what is on the owner first, then the draft with its Send
+const DraftHead = () => <Head>Next steps</Head>;
 
 export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false }) {
   if (!summary) return null;
@@ -46,13 +48,13 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     <Box data-tq-summary="open" className="tq-aui-summary">
       {!!about && <><Head first>What this is about</Head><Typography data-tq-summary-about="" sx={LINE}>{about}</Typography></>}
       {!!did && <><Head first={!about}>What I did</Head><Box data-tq-summary-did="" sx={LINE}><Md text={did} /></Box></>}
-      {next ? <Box>{hasReply(reviews) && <DraftHead />}{next}</Box> : null}
-      {(drafts.length && !next) || held.length || onYou.length || nothing ? <Head>Next steps</Head> : null}
-      {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
-        {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
+      {(next && hasReply(reviews)) || (drafts.length && !next) || held.length || onYou.length || nothing ? <DraftHead /> : null}
+      <OnYou items={onYou} />
       {!!held.length && <Typography data-tq-summary-held={held.length} sx={LINE}>
         {held.length === 1 ? "One step waits for your Approve, below." : `${held.length} steps wait for your Approve, below.`}</Typography>}
-      <OnYou items={onYou} />
+      {!next && drafts.map((r) => <Typography key={r.ReviewId} data-tq-summary-draft={r.ReviewId} sx={LINE}>
+        {who(r) ? `A reply to ${who(r)} is drafted and waits for your Send.` : "A reply is drafted and waits for your Send."}</Typography>)}
+      {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}
       {nothing && <Typography data-tq-nothing-left="" sx={{ ...LINE, color: DIM }}>Nothing left to do here.</Typography>}
     </Box>
   );

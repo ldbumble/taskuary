@@ -1072,7 +1072,13 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         # ...and the task's assistant hears that you already answered, wherever you did (Task 4.5): what is left is its to re-plan.
         # Never Taskuary's own acknowledgement, which promises an answer and is not one
         from . import ingest
-        if not ingest.is_ack(store, sent): ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
+        if not ingest.is_ack(store, sent):
+            ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
+            # ...and every OTHER open task on the thread hears it too (the stress run, 2026-11-05): a follow-up that was a new ask made a
+            # second task on one thread, the owner's answer was filed on the newer one, and the first's agent never heard that he had answered
+            for other in sorted(set(on) - {tid}):
+                if (store.get_task(other) or {}).get('Status') not in ('done', 'dropped'):
+                    ingest.thread_moved(store, other, msg, mid, None, 'router', own=True)
     return 1
 
 

@@ -100,6 +100,14 @@ class ThreadChangeReplans(unittest.TestCase):
                                             'from_email': 'erin@northwind.example', 'sent_at': '2026-11-03 10:10'}), intent='fyi')
         self.assertEqual((names(first), names(second)), (['_replan_general'], ['_replan_pass']))   # queued behind the live turn, no second start
 
+    def test_a_new_question_on_a_finished_agents_task_wakes_it(self):
+        # Erin writes again with a question of her own (reply_only, not an aside): the agent re-plans with her words - it was only the
+        # tool-less writer that heard it, and the agent's chat never moved
+        s = store(); tid, rid = drafted_task(s)
+        _out, calls = ingested(s, mail(external_id='x4', body='Also - can it go to the north office instead?', sent_at='2026-11-03 11:00'), intent='reply_only')
+        self.assertIn('_replan_general', names(calls))
+        self.assertIn('can it go to the north office instead', calls[names(calls).index('_replan_general')][0][-1])
+
     def test_a_coding_task_is_not_woken(self):
         s = store(); tid, rid = drafted_task(s)
         s.update_task(tid, {'Kind': 'coding'}, 't')

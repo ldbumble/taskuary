@@ -13,7 +13,8 @@ import { startHarness } from "./harness.mjs";
    (tests/fake_claude.py: stream-json for the regular agent, its interactive mode in a pty for the coding one), the real server - and on
    the canvas, as the owner uses it:
    (a) Send to agent starts an agent: its pane shows it working and the owner's ask, then the answer;
-   (b) Continue on a stopped agent, a note typed and sent: the note at once, the pane working, the new answer in the same conversation;
+   (b) Continue on a stopped agent, a note typed and sent: the note at once, the pane working, the new answer in the same conversation -
+       on the regular agent's chat that is its box, always under it, with no Continue to press (the owner, 2026-11-04: "where is the prompt box");
    (c) Run another agent on a stopped agent: a second, separate run starts and is shown, the first one kept apart from it.
    Invented task and people only. */
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
@@ -187,10 +188,13 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
 
   await t.test("(b) Continue on the stopped agent: the note at once, working, the answer in the same conversation", async () => {
     await press(page, "Stop and save");
-    await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    await page.waitForSelector("[data-tq-agent-room=chat]", { timeout: 30000 });   // stopped, its chat rests with the box under it (2026-11-04)
     await writtenUp(page);
-    await continueInsideAgent(page);
-    const pressed = await continueWith(page, "look at the south office first");
+    const box = await page.waitForSelector("[data-tq-agent-room=chat] .tq-aui-input:not([disabled])", { visible: true, timeout: 30000 });
+    assert.equal(await page.$('[data-tq-row] button[data-tq-verb$="continue"], :is([data-tq-spine-moves], [data-tq-pane-moves], [data-tq-pane-strip]) button[data-tq-verb$="continue"]'),
+      null, "no Continue beside the box");
+    await box.type("look at the south office first"); await page.keyboard.press("Enter");
+    const pressed = Date.now();
     await inTask(page, /look at the south office first/, 1500);
     assert.ok(Date.now() - pressed < 1500, "the note shows with the press's answer");
     assert.ok(await working(page), `nothing says it works:\n${(await pageText(page)).slice(-600)}`);
@@ -202,7 +206,7 @@ test("a regular agent on an open task: Send to agent, Continue, Run another agen
 
   await t.test("(c) Run another agent on the stopped agent: a second run, shown apart from the first", async () => {
     await press(page, "Stop and save");
-    await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });   // resting on its summary, one press from its record (2026-10-27)
+    await page.waitForSelector("[data-tq-agent-room=chat]", { timeout: 30000 });   // stopped, its chat rests with the box under it (2026-11-04)
     await writtenUp(page);
     await rowVerb(page, "run-another");
     await startFromBox(page, "take a fresh look from the north office", "general");

@@ -52,6 +52,7 @@ import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary from "./AgentSummary.jsx";
 import { foldedSummaries } from "./agentSummary.js";
+import { dayLabel, fmtTime12 } from "./dates.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -165,8 +166,19 @@ const CameIn = ({ mail }) => mail.map((x, i) => (
     <div className="tq-aui-role">{x.who}</div>
     <div className="tq-aui-mail-bubble">{x.words}</div>
   </div>));
+// WHERE THE CHAT IS THE TASK'S HOME (taskLayout.chatHome) it is one stream, oldest to newest (the owner, 2026-11-04: "it should be one chat as
+// a agent thinking"): triage's reading opens it, Taskuary's instructions are not drawn, and the mail that woke a turn is a timestamped line
+// over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
+const ChatCtx = React.createContext(false);
+const when = (at) => { const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" "); };
+const Arrived = ({ mail }) => mail.map((x, i) => (
+  <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
+    <span className="tq-aui-arrived-head">↓ {[when(x.at), `${x.who || "Someone"} wrote again`].filter(Boolean).join(" · ")}:</span>
+    <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
+  </div>));
 const UserMessage = () => {
-  const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail);
+  const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
+  if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
   return brief ? (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
       <CameIn mail={mail || []} />
@@ -451,7 +463,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
-  onEnded, approve = null }) {
+  onEnded, approve = null, chat = false, reading = null }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -593,7 +605,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="tq-aui-thread">
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
-          {!messages?.length && !starting && (
+          {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
+          {chat && reading}
+          {!messages?.length && !starting && !(chat && reading) && (
             <div className="tq-aui-welcome">
               <TaskuaryMark size={22} />
               <div>
@@ -664,7 +678,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                 run has ENDED the bar offers Continue - and a box beside it read as a second way in (the owner, 2026-10-26: "before I hit
                 continue it has a space to type into the agent? coding agents don't have that"). `noComposer` is that Continue (TaskPage). */}
             {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
-              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : noComposer ? null : <>
+              {/* ...where the chat is home the box below IS Continue: Reopen alone brings it back */}
+              This task is closed. Press {btn("reopen")}{chat ? "" : <>, then {btn("continue")},</>} to pick the conversation back up.</div> : noComposer ? null : <>
             <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
               <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
@@ -672,7 +687,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               <ComposerPrimitive.Input
                 className="tq-aui-input"
                 /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
-                placeholder={askWords || (working ? "Add something for it to pick up…" : `Tell ${dock ? "Taskuary" : name} what to do next…`)}
+                placeholder={askWords || (working ? "Add something for it to pick up…" : chat ? "Tell me what's wrong, or ask about anything here…"
+                  : `Tell ${dock ? "Taskuary" : name} what to do next…`)}
               />
               {/* the one mic, dictating into the box - every other composer had it and this one did not (the owner,
                   2026-09-29: "where is mic to ask it question?") */}
@@ -697,7 +713,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, approve = null, mails = [], reviews = [],
-  checklist = null, opening = false, next = null }) {
+  checklist = null, opening = false, next = null, chat = false }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -922,7 +938,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
-    <AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
+    <ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
@@ -935,10 +951,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
-        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} />
+        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
+        chat={chat && !dock} reading={chat && !dock ? <ThreadReading reading={data?.thread || task?.ThreadJson} mails={mails} variant="chat"
+          sx={{ mb: 2.25, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }} /> : null} />
     </OutputsCtx.Provider>
     </WorkCtx.Provider>
-    </ShownCtx.Provider></AgentNameCtx.Provider>
+    </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider>
   );
   /* CHIP-SIZED, AND THEY GIVE WAY (the owner, 2026-11-03, Agent beside Close out: "this ui looks weird when split? make the model choice
      smaller"): a 220px brain picker and a 150px model box that never shrank sat on the heading's title - "Tasku… / answ…" - in a ~500px
@@ -1062,7 +1080,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       </Box>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
-      {!dock && <ThreadReading reading={data?.thread} mails={mails} variant="chat" />}
+      {!dock && !chat && <ThreadReading reading={data?.thread} mails={mails} variant="chat" />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not
             change the tree around the thread, or the answer streaming into it is remounted away

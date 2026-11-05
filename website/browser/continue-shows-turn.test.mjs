@@ -12,7 +12,9 @@ import { startHarness } from "./harness.mjs";
    stopped general agent, Continue, a note typed and sent - the header said the agent was working while the pane kept only the old answer,
    no sign of what was said, no reply. On a real start (a stand-in claude on PATH, tests/fake_claude.py) and on the canvas, as the owner
    uses it: the owner's words are on the pane at once, the pane says it is working on them, and the answer lands under them - for the
-   Continue card's note and for a line typed into the conversation's own box after it. Invented task and people only. */
+   first line typed after it stopped and for the next one.
+   ...ON A CHAT TASK THE BOX IS CONTINUE (the owner, 2026-11-04: "i want this to be a chat? where is the prompt box"): the stopped agent's
+   chat keeps its box under it, no press first, and no Continue button or card beside it. Invented task and people only. */
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const SCRIPT = [{ when: "south", first: "Starting with the south office: two sites, both already on Payworth." },
   { when: "north", first: "The north office runs Trainly today; switching saves about 2 a head." },
@@ -73,18 +75,15 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await click(page, "Send to agent", "[data-tq-run-form]");
   await inTask(page, /Payworth is cheapest/);
   await visible(page, "Stop and save"); await click(page, "Stop and save");
-  // ...resting on its summary, one press from its record (the Result rests, 2026-10-27; the three sections, the one record button)
-  await page.waitForSelector("[data-tq-result-summary], [data-tq-full-result]", { timeout: 30000 });
+  // ...stopped, its chat stands with the box under it: no Result block, no "The whole conversation", no Continue to press first
+  const stopped = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room=chat] .tq-aui-input", { visible: true, timeout: 30000 });
+  await page.waitForFunction(() => !document.querySelector("[data-tq-task-page] .tq-aui-input")?.disabled, { timeout: 30000 });
+  assert.equal(await page.$("[data-tq-result-summary], [data-tq-full-result], [data-tq-continue-card]"), null, "the chat is the whole Agent section");
+  assert.ok(!(await page.$$eval("[data-tq-task-page] button, [data-tq-row] button", (bs) => bs.filter((b) => b.offsetParent).map((b) => b.textContent.trim()))).includes("Continue"),
+    "no Continue beside the box");
 
-  // CONTINUE, filled out: the note is on the pane at once, the pane is working on it, and the answer lands
-  await visible(page, "Continue"); await click(page, "Continue");
-  await page.waitForSelector("[data-tq-continue-card] textarea", { visible: true, timeout: 15000 });
-  // ...and opening the box leaves the Result where it rests: the press unfolded it to the full record, which blanked the pane while it
-  // loaded and put a "Back to the result" over the result already on screen (the owner, 2026-10-30)
-  assert.ok(await page.$("[data-tq-result-summary]"), "the Result's summary stays under the Continue box");
-  assert.equal(await page.$("[data-tq-full-result][aria-expanded='true']"), null, "no Back to the result while the box is open");
-  await page.type("[data-tq-continue-card] textarea", "look at the south office first");
-  await click(page, "Continue", "[data-tq-continue-card]");
+  // TYPED IN THE BOX: the words are on the pane at once, the pane is working on them, and the answer lands
+  await stopped.type("look at the south office first"); await page.keyboard.press("Enter");
   const pressed = Date.now();
   await inTask(page, /look at the south office first/, 1500);
   assert.ok(Date.now() - pressed < 1500, "the note shows with the press's answer");
@@ -92,7 +91,7 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await inTask(page, /Starting with the south office/, 30000);
   assert.ok(Date.now() - pressed > 1000, "the answer cannot land with the press: the fake thinks 2.5 s");
 
-  // ...AND A LINE TYPED INTO THE CONVERSATION'S OWN BOX after it: the same - at once, working, the answer
+  // ...AND THE NEXT LINE TYPED INTO THE SAME BOX: the same - at once, working, the answer
   const box = await page.waitForSelector("[data-tq-task-page] .tq-aui-input", { visible: true, timeout: 15000 });
   await page.waitForFunction(() => !document.querySelector("[data-tq-task-page] .tq-aui-input")?.disabled, { timeout: 30000 });
   await box.type("and the north office?"); await page.keyboard.press("Enter");

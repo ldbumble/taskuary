@@ -558,9 +558,9 @@ def judge_turn(store, tid: int, sid: str, said: str, brain=None, wait: bool = Fa
 # ...AND DID A HEADLESS TURN END SHORT? A general agent's CLI is not woken by work it left in the background, so a turn ending "I have
 # the mail side - I'm waiting for the app walkthrough to finish, then I'll write the brief" was filed as its answer, and the task
 # read "researcher answered · agent waiting on you" over a brief that would never come (the owner, 2026-10-21). The same judge reads
-# it - the model, never a phrase list - and a turn that ended without delivering is the run FAILING, with its reason: the one state
-# every surface already reads (workerstate.ended -> failed): R2's "Failed - <reason>" with Try again (funnel.run_failed). `then` ends
-# the session the way a failed turn's does (general.GeneralSession.close, learn=False report=False) - conversation kept, no result filed.
+# it - the model, never a phrase list. It used to file such a turn as the run FAILING and end the session; the owner, 2026-11-05: "failure
+# means nothing to the user". Now it only says what the turn still waits on, to `then(why)` - the general agent wakes itself once to do it
+# (general.GeneralSession.wake). Nothing is recorded: the session stays open and the turn's answer stands.
 ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended. Nothing will wake the agent again until its owner '
                 'writes to it. Decide one thing: did it END WITHOUT DELIVERING what it was asked for, because it says it is still waiting '
                 'on work of its own - something it started in the background, a sub-agent, a job still running - or promises to come '
@@ -574,10 +574,10 @@ _ENDED = {}
 BACKGROUND = True          # the suite turns the read off its own thread (tests/conftest.py), as advisor.BACKGROUND; `wait` still reads
 
 
-def ended_short(why: str) -> str:
-    "The failure's reason, as R2's step reads it: \"Failed - It ended its turn still waiting on ...\" (funnel.run_failed), Try again under it."
-    why = re.sub(r'^\s*(still\s+)?waiting\s+(on|for)\s+', '', str(why or ''), flags=re.I)   # the model's why may begin "waiting for ..." itself
-    return f"it ended its turn still waiting on {why or 'work of its own'}"
+def waits_on(why: str) -> str:
+    "What the turn still waits on, as the wake says it back (general.WAKE) - the model's why may begin \"waiting for ...\" itself."
+    return re.sub(r'^\s*(still\s+)?waiting\s+(on|for)\s+', '', str(why or ''), flags=re.I) or 'work of its own'
+def ended_short(why: str) -> str: return f"it ended its turn still waiting on {waits_on(why)}"
 
 
 def held_for(store, tid: int, sid: str) -> bool:
@@ -594,7 +594,7 @@ def held_for(store, tid: int, sid: str) -> bool:
 
 
 def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None):
-    "Read a headless turn's last message for work it left unfinished; record the run as failed, with why, when it did."
+    "Read a headless turn's last message for work it left unfinished; hand `then` what it still waits on, when it did - never a failure."
     import hashlib
     key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
     def go():
@@ -618,10 +618,9 @@ def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = F
         # ...only while that turn is still the newest word, as judge_turn: the owner may have written since
         evs = [e for e in ws.events(store, tid, sid) if e['Kind'] not in ws.NOTES]
         if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
-        ws.record(store, tid, sid, 'failed', text=ended_short(why), source='judge')
         if then:
-            try: then()
-            except Exception as e: logger.debug(f'task {tid}: the session was not ended after its short turn - {e}')
+            try: then(waits_on(why))
+            except Exception as e: logger.debug(f'task {tid}: the agent was not woken after its short turn - {e}')
     if wait: return go()
     if BACKGROUND: threading.Thread(target=go, daemon=True, name=f'turn-end-judge-{sid}').start()
 

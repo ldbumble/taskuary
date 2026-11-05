@@ -81,7 +81,7 @@ include = ["taskuary*"]
 # screenshots shipped broken. Every new subdirectory under web/ needs its own line, or its files
 # are simply absent from the wheel while the repo tree looks right.
 # help/*.md: the help pages docs.search reads (lookups.SITE_DOCS), copied from docs/site by publish.yml before the build (2026-11-02)
-taskuary = ["*.json", "web/*", "web/assets/*", "web/walk/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*", "help/*.md"]
+taskuary = ["*.json", "demo_assets/*", "web/*", "web/assets/*", "web/walk/*", "templates/*.md", "templates/history/*.md", "skills/*/*.md", "whatsapp/*", "help/*.md"]
 
 # ...but not the bridge's own tests: `whatsapp/*` shipped them in every wheel, and they are fixtures, not
 # something an install runs (2026-09-24: one carried real chat ids for weeks before it was scrubbed)

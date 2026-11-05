@@ -1230,7 +1230,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {/* ...with the button that does it (owner-approved, 2026-10-21): every "no AI" line carries Connect an AI */}
       {/* ...but not where it is already said or no longer matters (`noAiSaid`, the owner 2026-10-25): a closed task, or a failure whose own
           line is that no AI is connected - the banner was the same fact a third time under it */}
-      {!data?.providers?.length && !noAiSaid && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
+      {/* ...nor in the demo, whose turns were written in advance and whose box answers that it is the demo (server._demo_turn) */}
+      {!data?.providers?.length && !noAiSaid && !data?.demo && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
         action={<ConnectAi variant="outlined" />}>No AI is connected, so this work cannot run yet - connect one under {placeName("ai")}.</Alert>}
       {/* ...never in a chat task (the owner, 2026-11-05: no banners): a conversation picked back up reads as the same conversation */}
       {session?.resume_notice && !(chat && !dock) && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}

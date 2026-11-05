@@ -2292,6 +2292,7 @@ def _assistant_payload(task_id: int, session=None):
                       'as': who or (c or {}).get('Name') or ''})
     return {'messages': messages,
             'cards': cards,
+            'demo': demo.enabled(),          # the demo's turns are written in advance: no AI to connect, so no banner asking for one
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
             'earlier': [],
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
@@ -2394,10 +2395,22 @@ def _refresh_for_turn(task_id: int) -> tuple[dict, str]:
         logger.info(f'task {task_id}: follow-up sent without a fresh sync - {e}')
         return {}, FOLLOW_UP_STALE
 
+def _demo_turn(task_id: int, text: str):
+    """THE DEMO HAS NO AI (the owner, 2026-11-05: "of course no prompts work since there is no AI"): what is typed into a task's chat is
+    kept, and the answer under it says so in plain words - never "No AI is connected" over a chat whose turns were all written in
+    advance. None off the demo, and for the Assistant's own chat, which the demo answers from its recordings."""
+    from . import general
+    if not demo.enabled() or general.is_dock(store.get_task(task_id)) or not str(text or '').strip(): return None
+    store.add_comment(task_id, 'owner', general.USER_TYPE, str(text).strip())
+    store.add_comment(task_id, 'assistant', general.ASSISTANT_TYPE, demo.CHAT_TURN)
+    return demo.CHAT_TURN
+
+
 @app.post('/api/tasks/{task_id}/assistant/messages')
 def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import general
     _refuse_closed_chat(task_id)
+    if (said := _demo_turn(task_id, body.text)) is not None: return {'reply': said, **_assistant_payload(task_id)}
     try:
         _refresh_for_turn(task_id)
         session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
@@ -2477,6 +2490,10 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
     """
     from . import general
     await run_in_threadpool(_refuse_closed_chat, task_id)    # before the stream opens: a plain 409 the composer can say (a store read: off the loop)
+    if (said := await run_in_threadpool(_demo_turn, task_id, body.text)) is not None:
+        payload = await run_in_threadpool(_assistant_payload, task_id)
+        line = json.dumps({'type': 'done', 'reply': said, 'payload': payload}) + '\n'
+        return StreamingResponse(iter([line]), media_type='application/x-ndjson')
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
 
     def put(event):

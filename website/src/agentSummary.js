@@ -7,9 +7,12 @@ const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Stat
 // the newest summary stays open; every earlier one folds to what it did
 // ...and when the newest answer has no summary of its own, every one folds: the cards then follow that answer (GeneralWorkspace `lastSummed`),
 // never an older turn's summary up the chat (the owner, 2026-11-05: "where is the email ui to send it out?")
-// ...and the newest ENTRY, of any kind: a mail that came in after an answer (a brief) moves the chat on, and the answer above it folds - its draft
-// is not shown under a re-think that is answering something newer (the owner, 2026-11-05: "This came in in middle of the past chat")
+// THE DRAFT CARD IS PART OF ITS TURN (the owner, 2026-11-05: "the draft card is part of the chat response. So if i ask new question that is no
+// longer applicable. if i ask to update to new email a new email ui pops up. it's part of that taskuary turn. next turn if i ask something or new
+// input that turn is gone ... think chatting with assistant"): only the turn that is the LAST entry carries it. Anything after it - the owner's
+// words, a mail - makes it history: it folds, its card goes, and the turn that answers draws its own card if it drafts one
 export const lastAnswerSummed = (messages) => { const m = (messages || []).filter((x) => x && !x.held).at(-1); return !!m?.summary; };
+export const turnIsLast = (messages, id) => (messages || []).filter((x) => x && !x.held).at(-1)?.id === id;
 export const foldedSummaries = (messages) => {
   const ids = (messages || []).filter((m) => m?.summary).map((m) => m.id);
   return new Set(lastAnswerSummed(messages) ? ids.slice(0, -1) : ids);

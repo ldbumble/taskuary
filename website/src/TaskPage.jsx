@@ -2976,7 +2976,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {/* ...and the Advisor's line here when its move is Close out's (advice `section`): beside the Mark done it is the reason for */}
       {threeUp && advisorNote && adviceIn === "close" && <Box data-tq-advisor-in="close" sx={{ mt: 1.5, flexShrink: 0 }}>{advisorNote}</Box>}
       {/* ...and under all of the current round, the rounds before it, a line each (CloseoutRounds.jsx) - as the Agent's earlier runs */}
-      {coOn && <EarlierRounds rounds={rounds} />}
+      {/* ...never in the chat (the owner, 2026-11-05: "we don't need the earlier rounds any more no? it's just one lone chat") */}
+      {coOn && !inChat && <EarlierRounds rounds={rounds} />}
     </>; };
   // ...in the chat, only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result
   // keeps the chat that holds it on screen (`data-tq-waits`, the agent room's :has)

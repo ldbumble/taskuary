@@ -1714,6 +1714,14 @@ class GeneralSession:
                 ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                           text=q, source=src)
         except Exception as e: logger.debug(f'api worker event skipped: {e}')
+        # ...AND ONE IT ONLY SAID IN WORDS (the owner, 2026-11-05, an agent that wrote "the sign-in page is open" and ended its turn: the browser
+        # shows only for an open sign-in ask, so nothing showed): a turn that ends with its browser on a page asking for a password raises the
+        # ask itself - the vault's sign-in first, else the page beside the chat
+        if signing is None and turn is None and not asks:
+            from . import signin
+            try:
+                if signin.on_signin_page(self.sid): signing = ''
+            except Exception as e: logger.debug(f'task {self.task_id}: the browser could not be read for a sign-in - {e}')
         if signing is not None:
             from . import signin
             try: signin.needs(self.store, self.task_id, self.sid, signing)

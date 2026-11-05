@@ -329,6 +329,19 @@ def _chat(sid) -> bool:
     return hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
 
 
+def on_signin_page(sid: str, conn=None) -> bool:
+    """The agent's browser is open, on a page a password may be typed on (site_of), showing a password box - a sign-in nobody raised.
+    `conn`: the DevTools connection (tests stand one in). False whenever the page cannot be read."""
+    from . import browserview
+    st = browserview.state(sid, fresh=True)
+    if not st.get('open') or not site_of(st.get('url')): return False
+    c = conn or connect(sid)
+    try: f = c.fields('') or {}
+    finally:
+        if conn is None: c.close()
+    return bool(f.get('top') and f.get('password'))
+
+
 def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) -> dict:
     """The agent ended its turn asking to be signed in. Record the ask on the existing road and, when the owner keeps a sign-in for
     the site the browser is actually on, fill it at once on its own thread. `fill`: the filler (tests stand one in)."""

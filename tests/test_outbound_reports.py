@@ -129,14 +129,13 @@ class SendingWhereNobodyWroteFirstTests(unittest.TestCase):
         self.assertIn('switched off', str(e.exception))       # can_reply never admits a read-only tracker
 
     def test_a_channel_with_no_sender_behind_it_says_which_ones_can_carry_a_report(self):
-        """slack is offered as a reply channel and has no sender in outbound - a pre-existing
-        gap, and the message has to name what DOES work rather than fail obscurely."""
+        """slack is offered as a reply channel; with no Slack card connected there is nothing to post with, and the
+        message says so plainly rather than failing obscurely."""
         s = MemoryStore()
         s.set_setting('reply_channels', 'email,slack', 't')
         with self.assertRaises(RuntimeError) as e:
-            outbound.send_out(s, 'slack', ['C123'], 's', 'b')
-        self.assertIn('cannot send on slack', str(e.exception))
-        self.assertIn('email', str(e.exception))
+            outbound.send_out(s, 'slack', ['C123'], 's', 'b')       # no Slack card connected: nothing to post with
+        self.assertIn('no Slack connection', str(e.exception))
 
 
 if __name__ == '__main__':

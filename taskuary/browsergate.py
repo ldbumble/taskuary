@@ -408,15 +408,18 @@ PRESS = 'yourturn:press:'       # browserview.TURN_PREFIX's own kind: the view d
 PRESS_LINE = "Your turn: check it and press {btn} on the page. I'll go on when you're done."
 PRESS_FOR, PRESS_EVERY = 30 * 60, 1.5
 PRESS_STEADY = 2                # readings in a row past the step: a page mid-navigation reads as anything for a moment
-HANDS = {}                      # request id -> {tid, sid, btn, name, site}: what the agent is told when it closes - memory only
+HANDS = {}                      # request id -> {tid, sid, kind, btn, name, what, site}: what the agent is told when it closes - memory only
 _HANDS_LOCK = threading.Lock()
-# what the watch reads of the page: where it is, its title, and whether the control the agent named is still on it, by its own name
+# what the watch reads of the page: where it is, its title, whether the control the agent named is still on it (by its own name), and the
+# boxes and frames it shows - a form or a challenge gone from it is the step done, wherever the page stays
 LOOK = r"""((name) => { %s
   const norm = (t) => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase(), want = norm(name);
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
   const there = !!want && deepAll('button, input[type=submit], input[type=button], input[type=image], [role=button], a').some((e) => vis(e)
     && [e.innerText, e.value, e.getAttribute('aria-label'), e.title].some((t) => norm(t) === want));
-  return { href: location.href, title: document.title, there };
+  const marks = deepAll('input, select, textarea, iframe').filter((e) => vis(e) && e.type !== 'hidden').map((e) => e.tagName === 'IFRAME'
+    ? 'f:' + String(e.src || '').split('?')[0] : 'i:' + (e.name || e.id || e.getAttribute('aria-label') || e.type)).slice(0, 60);
+  return { href: location.href, title: document.title, there, marks };
 })"""
 
 
@@ -468,14 +471,31 @@ def _look(c, name: str) -> dict | None:
 
 
 def past(start: dict, now: dict) -> bool:
-    "Has the page moved past the step: another address, or the control the agent named gone from it?"
+    "Has the page moved past the step: another address, the control the agent named gone, or every box and frame the step showed gone?"
     href = lambda f: str((f or {}).get('href') or '').split('#', 1)[0].rstrip('/')
-    return href(now) != href(start) or bool((start or {}).get('there') and not now.get('there'))
+    was = set((start or {}).get('marks') or [])
+    return (href(now) != href(start) or bool((start or {}).get('there') and not now.get('there'))
+            or bool(was and not was & set(now.get('marks') or [])))
+
+
+def _waits(store, tid: int, sid: str, rid: str) -> bool:
+    "Is this hand-over still open - nobody answered it, and the owner has not spoken to the agent since?"
+    from . import workerstate as ws
+    return any(r['RequestId'] == rid for r in ws.open_requests(ws.events(store, tid, sid)))
+
+
+def watch_turn(store, tid: int, sid: str, rid: str, what: str, site: str, watch=...) -> None:
+    """A step only the owner can do on the page - a captcha, a card number (browserview.your_turn) - watched as a press is (the owner,
+    2026-11-05: "if we need the user we should wait for them to do it"): when the page moves on, the agent hears it and goes on. Done stays."""
+    if watch is ...: watch = globals()['watch']
+    with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'kind': 'turn', 'what': what, 'site': site, 'btn': '', 'name': ''}
+    if watch: threading.Thread(target=watch, args=(store, tid, sid, rid), daemon=True, name=f'turn-watch-{tid}').start()
 
 
 def watch(store, tid: int, sid: str, rid: str, conn=None, every: float = PRESS_EVERY, until: float = PRESS_FOR) -> bool:
-    """While the hand-over is open: the page moved past the step, the owner pressed it - the agent hears what the page shows; the browser
-    closed under it, it was not done. True when it closed the hand-over. `conn`: the DevTools connection (tests stand one in)."""
+    """While the hand-over is open: the page moved past the step, the owner did it - the agent hears what the page shows; the browser
+    closed under it, it was not done. True when it closed the hand-over. Out of time it stays open, and that is said to the agent when the
+    owner next speaks (owner_said). `conn`: the DevTools connection (tests stand one in)."""
     from . import browserview, signin
     name = (HANDS.get(rid) or {}).get('name') or ''
     try: c = conn or signin.connect(sid)
@@ -483,8 +503,8 @@ def watch(store, tid: int, sid: str, rid: str, conn=None, every: float = PRESS_E
     try:
         end, steady = time.time() + until, 0
         start = _look(c, name)
-        while start is None and time.time() < end and handing(store, tid, sid, rid): time.sleep(every); start = _look(c, name)
-        while time.time() < end and handing(store, tid, sid, rid):
+        while start is None and time.time() < end and _waits(store, tid, sid, rid): time.sleep(every); start = _look(c, name)
+        while time.time() < end and _waits(store, tid, sid, rid):
             time.sleep(every)
             now = _look(c, name)
             if now is None:
@@ -492,6 +512,8 @@ def watch(store, tid: int, sid: str, rid: str, conn=None, every: float = PRESS_E
                 continue
             steady = steady + 1 if past(start, now) else 0
             if steady >= PRESS_STEADY: return pressed(store, tid, rid, now)
+        with _HANDS_LOCK:
+            if rid in HANDS and time.time() >= end: HANDS[rid]['expired'] = True
         return False
     finally:
         if conn is None: c.close()
@@ -510,13 +532,19 @@ def _close(store, tid: int, rid: str, said: str) -> dict | None:
 
 def pressed(store, tid: int, rid: str, now: dict) -> bool:
     "The page moved past the step: the owner pressed it. The agent is told what the page shows now, and goes on."
-    h = _close(store, tid, rid, 'pressed on the page')
+    h = _close(store, tid, rid, 'done on the page')
     if not h: return False
     title = ' '.join(str(now.get('title') or '').split())[:160]
     shows = f'"{title}" ({now.get("href")})' if title else str(now.get('href') or 'another page')
-    _trigger(store, tid, h['sid'], f"Pressed {h['btn']} on {h['site']}.")
-    _tell(store, tid, f"The owner pressed {h['btn']} on the page themselves; the page now shows {shows}. Look at it and continue.")
-    store.add_comment(tid, 'owner', 'agent', f"You pressed {h['btn']} on {h['site']} - the agent goes on.")
+    if h.get('kind') == 'turn':
+        _trigger(store, tid, h['sid'], f"Did it on {h['site']}.")
+        _tell(store, tid, f"The owner did the step you handed them ({h.get('what') or 'on the page'}) and the page moved on; it now shows {shows}. "
+                          "Look at it and continue.")
+        store.add_comment(tid, 'owner', 'agent', f"You did the step on {h['site']} - the agent goes on.")
+    else:
+        _trigger(store, tid, h['sid'], f"Pressed {h['btn']} on {h['site']}.")
+        _tell(store, tid, f"The owner pressed {h['btn']} on the page themselves; the page now shows {shows}. Look at it and continue.")
+        store.add_comment(tid, 'owner', 'agent', f"You pressed {h['btn']} on {h['site']} - the agent goes on.")
     store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site']})
     return True
 
@@ -525,8 +553,9 @@ def not_pressed(store, tid: int, rid: str, why: str) -> bool:
     "The hand-over closed without the press: the agent is told it was NOT done."
     h = _close(store, tid, rid, why)
     if not h: return False
-    _tell(store, tid, f"The owner did not press {h['btn']}: {why}. It was NOT done - the page is as you left it. Do not press it yourself "
-                      "or try it another way; carry on without it, or ask the owner what they want instead.")
+    step = f"do the step you handed them ({h.get('what') or 'on the page'})" if h.get('kind') == 'turn' else f"press {h['btn']}"
+    _tell(store, tid, f"The owner did not {step}: {why}. It was NOT done - the page is as you left it. Do not do it yourself or try it "
+                      "another way; carry on without it, or ask the owner what they want instead.")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': why})
     return True
 
@@ -541,6 +570,10 @@ def owner_said(store, tid: int, sid: str, text: str) -> str:
     words = ' '.join(str(text or '').split()).rstrip('.!')
     with _HANDS_LOCK: h = HANDS.pop(req['RequestId'], None) or {}
     if words in (browserview.TURN_DONE, browserview.TURN_BACK.rstrip('.')): return ''
+    # ...and past the watch's half hour nothing saw the page, so nothing is claimed about it (the owner, 2026-11-05: typing continues it)
+    if h.get('expired'):
+        return (f"THE OWNER SPOKE WHILE {h.get('btn') or 'the button'} WAITED FOR THEIR PRESS, after Taskuary had stopped watching the page - "
+                "it cannot say whether they pressed it. Look at the page as it is now before anything else; never press it yourself.")
     store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h.get('site'), 'why': 'answered in words'})
     return (f"THE OWNER ANSWERED IN WORDS INSTEAD OF PRESSING {h.get('btn') or 'the button'} on the page you handed them. As far as Taskuary "
             "saw, it was NOT pressed - the page is as you left it. Do what they say; never press it yourself.")

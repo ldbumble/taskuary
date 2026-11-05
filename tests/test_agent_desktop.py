@@ -137,6 +137,24 @@ class Holding(unittest.TestCase):
         self.assertIn('on your desktop: sends the reply in the mail app', rv['Reason'])
         self.check(); self.assertEqual(len(self.pending()), 1)
 
+    def test_with_the_owner_there_it_is_ready_in_the_app_not_a_card(self):
+        # the owner, 2026-11-05: the app is on their screen - one line, they press it there, and their next typed line goes on
+        from taskuary import hooks, workerstate as ws
+        live = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda *a, **k: None)
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': live}, clear=True):
+            out = self.check(v={'irreversible': True, 'sure': True, 'what': 'sends the reply', 'app': 'Northwind Mail'})
+            self.assertTrue(self.denied(out)); self.assertIn('End your turn now', out['hookSpecificOutput']['permissionDecisionReason'])
+            self.assertEqual(self.pending(), [])
+            [req] = [r for r in ws.open_requests(ws.events(self.s, self.tid, 'run1')) if r['RequestId'].startswith(ad.READY)]
+            self.assertEqual(req['Text'], "It's ready in Northwind Mail; press it there.")
+            self.assertTrue(hooks.held_for(self.s, self.tid, 'run1'))               # waiting on the owner, not a turn that ended short
+            ws.record(self.s, self.tid, 'run1', 'working', source='api')           # the owner's next typed line
+            self.assertFalse(hooks.held_for(self.s, self.tid, 'run1'))
+
+    def test_the_apps_own_flag_names_it(self):
+        self.assertEqual(ad._app({'args': ['click', '@s1:e2', '--app', 'Ledger']}, {'app': 'Other'}), 'Ledger')
+        self.assertEqual(ad._app({'args': ['click', '@s1:e2']}, {}), 'the app')
+
     def test_a_reversible_act_runs_and_nothing_is_queued(self):
         self.assertEqual(self.check("agent-desktop set-value '@s1:e1' 'Dear Erin'", {'irreversible': False, 'sure': True, 'what': 'types'}), {})
         self.assertEqual(self.pending(), [])

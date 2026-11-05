@@ -263,6 +263,28 @@ class HandingOver(unittest.TestCase):
         self.hand('about:blank')                                                      # a session, but no page to show it on
         self.assertEqual(len(self.pending()), 1); self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
 
+    def test_a_captcha_hand_over_is_watched_and_goes_on_by_itself(self):
+        # the owner, 2026-11-05: "if we need the user we should wait for them to do it" - the page moving on closes it, Done stays
+        with mock.patch.object(browserview, 'state', return_value={'open': True, 'url': PAY}):
+            rid = browserview.your_turn(self.s, self.tid, 'run1', 'tick the "I\'m not a robot" box', watch=None)
+        self.assertEqual(bg.HANDS[rid]['kind'], 'turn')
+        self.assertEqual(json.loads(self.ws.events(self.s, self.tid)[-1]['ChoicesJson']), [browserview.TURN_DONE])
+        here = {'href': PAY, 'title': 'Check', 'marks': ['f:https://challenge.example/box', 'i:card']}
+        gone = {'href': PAY, 'title': 'Check', 'marks': ['i:notes']}                  # same address, the challenge and the box gone
+        self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, gone), every=0))
+        self.assertIn('The owner did the step you handed them', self.heard()[0])
+        self.assertIsNone(next((r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'] == rid), None))
+
+    def test_after_the_watch_stops_typing_still_goes_on(self):
+        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
+        here = {'href': PAY, 'title': 'Pay', 'there': True}
+        self.assertFalse(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here), every=0, until=0.05))
+        self.assertTrue(bg.HANDS[rid]['expired'])
+        note = bg.owner_said(self.s, self.tid, 'run1', 'paid it just now')        # the chat's send_prompt, on the owner's next line
+        self.assertIn('stopped watching the page', note); self.assertIn('Look at the page as it is now', note)
+        self.ws.record(self.s, self.tid, 'run1', 'working', source='api')           # ...and that line is the agent's next turn
+        self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+
     def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
         self.assertIn('fill in everything first', browserview.brief(held=True))
         self.assertIn('TASKUARY-YOURTURN', browserview.ASK_FIRST_LINE); self.assertIn('NEVER press it', browserview.ASK_FIRST_LINE)

@@ -97,15 +97,12 @@ class LastWordTests(unittest.TestCase):
         self.assertTrue(closed.called)
         self.assertTrue(any('Final: go with vendor B.' in (c['Body'] or '') for c in s.list_comments(tid)))
 
-    def test_the_regular_agent_files_its_turn_before_it_ever_self_closes(self):
-        """general.py files the reply, then arms the close on a timer explicitly so the record
-        cannot be lost to the session dying inside its own answer."""
+    def test_the_regular_agent_never_arms_a_close_of_its_own(self):
+        """The owner, 2026-11-05: the agent never closes a chat task - its turn is filed and its closing marker dropped."""
         import io, os
         src = io.open(os.path.join('taskuary', 'general.py'), encoding='utf-8').read()
-        i_file = src.index("self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)")
-        i_close = src.index('threading.Timer(0.1, self._close_out')
-        self.assertLess(i_file, i_close, 'the turn must be filed before the close is armed')
-        self.assertIn('AFTER the turn is filed', src)
+        src.index("self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)")
+        self.assertNotIn('threading.Timer(0.1, self._close_out', src)
 
 
 if __name__ == '__main__':

@@ -126,14 +126,22 @@ if __name__ == '__main__':
 
 class ClosedConversationTests(unittest.TestCase):
     """A closed task's conversation is read, not typed into; and a close says only what is true of the reply (2026-10-14)."""
-    def test_a_message_to_a_closed_task_is_refused_until_it_is_reopened(self):
+    def test_a_message_to_a_closed_chat_task_reopens_it_and_carries_on(self):
+        # the owner, 2026-11-05: "typing into chat should continue it or restart it ... Just type and it continues"
         s, tid = reopened()
         s.update_task(tid, {'Status': 'done'}, 'owner')
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session') as start:
-            c = TestClient(server.app)
-            for path in ('messages', 'stream'):
-                r = c.post(f'/api/tasks/{tid}/assistant/{path}', json={'text': 'one more thing'})
-                self.assertEqual((r.status_code, r.json()['detail']), (409, server.CLOSED_CHAT), path)
+            start.return_value.send_prompt.return_value = 'On it.'
+            TestClient(server.app).post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'one more thing'})
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+        start.assert_called_once()
+
+    def test_a_closed_task_that_is_not_a_chat_still_refuses(self):
+        s, tid = reopened()
+        s.update_task(tid, {'Status': 'done', 'Kind': 'coding'}, 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.start_session') as start:
+            r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/messages', json={'text': 'one more thing'})
+        self.assertEqual((r.status_code, r.json()['detail']), (409, server.CLOSED_CHAT))
         start.assert_not_called()
 
     def test_the_writer_is_told_what_went_back_and_who_wrote_since(self):

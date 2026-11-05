@@ -12,10 +12,11 @@ def test_a_task_the_owner_started_tells_the_agent_the_owner_closes_it():
     assert selfclose.CHAT_LINE not in system
 
 
-def test_a_task_someone_wrote_in_about_keeps_the_agents_own_close():
+def test_a_task_someone_wrote_in_about_is_closed_by_the_owner_too():
+    # the owner, 2026-11-05: the agent never closes a chat task - not even one somebody wrote in about
     s = MemoryStore()
     t = s.create_task({'Title': 'March invoice batch', 'Kind': 'general', 'Status': 'open'}, 'owner')
     s.add_message({'TaskId': t, 'Channel': 'email', 'Subject': 'March invoice batch', 'FromName': 'Gail Moreno',
                    'FromEmail': 'gail@northwind.example', 'BodyText': 'Can you check the March batch?', 'Status': 'routed'})
     system, _ = general._prompt(s, t)
-    assert selfclose.CHAT_LINE in system and selfclose.owner_closes_line() not in system
+    assert selfclose.CHAT_LINE not in system and selfclose.owner_closes_line() in system

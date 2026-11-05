@@ -23,7 +23,7 @@ sign-in from the phone was a dead end. Now:
   ~/.agent-browser, which the agent's shell can read.
 - SAVED, IT IS SEALED (vault.seal: DPAPI on Windows, the keychain elsewhere; refused where neither exists), one row per site. The
   next time an agent asks to sign in on that site the server fills it by itself and tells the agent "Signed in - continue": no owner
-  step. A saved sign-in the site asked for AGAIN within a few minutes is not tried twice (a changed password, a lockout) - the ask
+  step, and no ask raised - so nothing is shown (2026-11-05); the ask is raised only when the saved one does not go in. A saved sign-in the site asked for AGAIN within a few minutes is not tried twice (a changed password, a lockout) - the ask
   stays with the owner.
 - EVERY FILL IS AUDITED: site, task, how, whether it went in. Never what was typed.
 
@@ -351,20 +351,27 @@ def needs(store, tid: int, sid: str, claimed: str = '', fill=None, watch=...) ->
     # through signed_in, never the chooser (2026-10-25)
     # NO PRESSES ON IT (the owner, 2026-11-03: "remove that stupid box again ... just have the question and link to fill it out securely"):
     # the ask is its words; Taskuary sees the sign-in happen on the page itself (watch), and "done" typed in the chat's box still tells it
-    ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=None, source='api')
-    if watch: threading.Thread(target=watch, args=(store, tid, sid, site, rid), daemon=True, name=f'signin-watch-{tid}').start()
+    def ask():
+        ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=None, source='api')
+        if watch: threading.Thread(target=watch, args=(store, tid, sid, site, rid), daemon=True, name=f'signin-watch-{tid}').start()
     row, last = saved(store, site), _TRIED.get((tid, site), 0)
-    if row and _now() - last < AGAIN:
+    # A SAVED SIGN-IN GOES STRAIGHT IN, AND NOTHING IS ASKED (the owner, 2026-11-05: "once you have that saved it should save the login and
+    # next time just go in and get the data"). The open `signin:` ask is what puts the browser on the owner's screen; raised before the
+    # fill, it drew the pane for the seconds the server typed - for a step the owner had nothing to do in. It is raised only when the
+    # fill fails, and then the owner is the way on.
+    if row and _now() - last >= AGAIN:
+        _TRIED[(tid, site)] = _now()
+        threading.Thread(target=_auto, args=(store, tid, sid, site, rid, fill or type_in, ask), daemon=True, name=f'signin-{tid}').start()
+        return {'site': site, 'auto': True}
+    ask()
+    if row:
         store.add_comment(tid, 'taskuary', 'agent', f'{site} asked to sign in again within minutes of the saved sign-in - it may be out '
                                                     'of date, so it was not tried twice. Sign in yourself, or update it on the fill page.')
-        return {'site': site, 'auto': False}
-    if not row: return {'site': site, 'auto': False}
-    _TRIED[(tid, site)] = _now()
-    threading.Thread(target=_auto, args=(store, tid, sid, site, rid, fill or type_in), daemon=True, name=f'signin-{tid}').start()
-    return {'site': site, 'auto': True}
+    return {'site': site, 'auto': False}
 
 
-def _auto(store, tid, sid, site, rid, fill):
+def _auto(store, tid, sid, site, rid, fill, ask=None):
+    """Type the saved sign-in. `ask`: raises the owner's ask - called only when the fill did not go in."""
     from . import vault
     row = saved(store, site) or {}
     try:
@@ -381,10 +388,12 @@ def _auto(store, tid, sid, site, rid, fill):
         why = str(e) if 'also asks for' in str(e) else (f'The saved password for {site} did not work - {site} kept its sign-in form up. '
                                                       'Sign in on the page, or fill it in securely with the right one - it is saved when it works.')
         store.add_comment(tid, 'taskuary', 'agent', why[0].upper() + why[1:] + ('.' if not why.endswith('.') else ''))
+        if ask: ask()
     except Exception as e:
         why = str(e) if isinstance(e, SignInError) else 'the browser could not be reached'
         _audit(store, tid, site, 'vault', False, why)
         store.add_comment(tid, 'taskuary', 'agent', f'The saved sign-in for {site} was not used: {why}. Sign in yourself to continue.')
+        if ask: ask()
 
 
 def _code_of(key):

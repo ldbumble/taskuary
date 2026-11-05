@@ -216,17 +216,15 @@ def test_a_quick_question_waits_on_the_owner_like_a_general_one():
         assert req['kind'] == 'input_needed' and req['text'].startswith('Do you want to go Friday')
         assert ses.info()['state'] == 'asking'
 
-def test_done_closes_through_the_agents_own_close():
+def test_done_never_closes_the_task():
+    # the owner, 2026-11-05: "agent should never close once it's open until we hit close" - a quick turn that says done leaves it open
     s = home(); tid, _ = arrived(s)
-    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):               # the close runs on a 0.1s timer: wait inside
+    with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
         ses = opened(s, tid); ses.quick = True
         ses.file_quick(ASK, quickwork.read({**ANSWER, 'draft': None, 'done': True, 'why': 'Answered: worth going.'}), [])
-        end = time.time() + 10
-        said = lambda: any('The agent closed this itself: Answered: worth going.' in c['Body'] for c in s.list_comments(tid))
-        # ...the note is filed AFTER the close (selfclose.declare), so a loaded run read the status before the note was written
-        while time.time() < end and not (s.get_task(tid)['Status'] in ('done', 'waiting') and said()): time.sleep(.05)
-    assert s.get_task(tid)['Status'] == 'waiting'          # closed, as wrapup closes one whose sender is owed a reply: it waits on the draft
-    assert said()
+        time.sleep(.5)                                     # past the 0.1s the close used to wait
+    assert s.get_task(tid)['Status'] not in ('done', 'waiting', 'dropped')
+    assert not any('The agent closed this itself' in (c['Body'] or '') for c in s.list_comments(tid))
 
 def test_markers_in_the_models_fields_do_nothing():
     s = home(); tid, _ = arrived(s)

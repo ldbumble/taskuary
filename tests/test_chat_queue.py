@@ -46,6 +46,21 @@ class TakingTurnsTests(unittest.TestCase):
         said = [c['Body'] for c in general.chat_rows(self.s, self.tid)]
         self.assertEqual(said.count('one') + said.count('two'), 2)
 
+    def test_lines_typed_while_it_works_are_one_turn(self):
+        """The owner, 2026-11-05: several lines typed during a turn are read together - the model decides if a later one clarifies."""
+        sess, patched = _session(self.s, self.tid, 'answered', delay=0.8)
+        got, prompts = [], []
+        with patched, mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: (prompts.append(system), time.sleep(0.8), 'answered')[-1]):
+            first = threading.Thread(target=lambda: got.append(sess.send_prompt('one')))
+            first.start(); time.sleep(0.2)
+            more = [threading.Thread(target=lambda w=w: got.append(sess.send_prompt(w))) for w in ('two', 'actually three')]
+            for t in more: t.start(); time.sleep(0.1)
+            for t in [first, *more]: t.join(15)
+        self.assertEqual(sorted(got), ['', 'answered', 'answered'], 'two turns: the first, and one for both lines behind it')
+        users = [c['Body'] for c in general.chat_rows(self.s, self.tid) if c['ActorType'] == general.USER_TYPE]
+        self.assertEqual(users, ['one', 'two', 'actually three'])
+        self.assertTrue(any('THE OWNER SENT 2 MESSAGES' in p for p in prompts))
+
     def test_the_third_one_lands_too(self):
         """The exact report: two answered, the third silent."""
         sess, patched = _session(self.s, self.tid, 'answered', delay=0.3)

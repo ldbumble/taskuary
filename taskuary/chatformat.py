@@ -153,7 +153,7 @@ def render(text, channel: str) -> str:
     out = '\n'.join(lines)
     out = _SUMMARY.sub(r'\1', out); out = _LI.sub(chr(10) + '- ', out); out = _BR.sub('\n', out); out = _TAG.sub('', out)
     out = _LINK.sub(r'\1', out)                     # the link's words; a chat linkifies bare urls itself
-    if channel == 'whatsapp':
+    if channel in ('whatsapp', 'slack'):
         # ITALIC FIRST. Bold emits a single star, which is precisely what the italic rule matches -
         # the other way round and every *bold* came back out as _italic_.
         out = _ITAL.sub(r'_\1_', out)
@@ -162,7 +162,7 @@ def render(text, channel: str) -> str:
         out = _BOLD.sub(r'\2', out)
         out = _ITAL.sub(r'\1', out)
         out = _UNDER.sub(r'\1', out)
-    out = out.replace('\x01', '*' if channel == 'whatsapp' else '')
+    out = out.replace('\x01', '*' if channel in ('whatsapp', 'slack') else '')
     for i, code in enumerate(kept): out = out.replace(f'\x00{i}\x00', code)
     return re.sub(r'\n{3,}', '\n\n', out).strip()
 

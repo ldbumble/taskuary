@@ -317,7 +317,35 @@ def no_sender(store, ch) -> str:
     """NO_SENDER's sentence for this channel, or '' where a road out exists after all: a Teams card signed in as a person
     (its own Microsoft sign-in, MsSignIn) posts into that person's chats as them - only an APP may not."""
     if ch == 'teams' and any(as_person(store, c) for c in store.connectors_by_type('teams')): return ''
+    # ...and Slack once a card is connected: its token posts with chat.postMessage (the owner, 2026-11-05: "fix slack reply")
+    if ch == 'slack' and _slack_card(store): return ''
     return NO_SENDER.get(ch, '')
+
+
+def _slack_card(store, connector_id=None):
+    """The connected Slack card a reply leaves through: the one that owns the chat, else the first active one with a token."""
+    c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
+        next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.connectors_by_type('slack') if x.get('Active')), None)
+    return c if c and c.get('Type') == 'slack' and c.get('Active') and c.get('Secret') else None
+
+
+# Slack's own words for a token that cannot post here, said as what to do about it
+SLACK_WHY = {'missing_scope': "the Slack token cannot post - add the chat:write scope to the Slack app and reinstall it",
+             'not_in_channel': "the Slack app is not in this channel - invite it (/invite @your-app) and send again",
+             'channel_not_found': "Slack cannot find this conversation for this token - it may be private to someone else",
+             'is_archived': "this Slack channel is archived", 'restricted_action': "this workspace does not let the app post here"}
+
+def send_slack(store, channel: str, body: str, connector_id=None, thread_ts: str = None) -> dict:
+    """Post into a Slack conversation, in the message's thread when one is named. A user token (xoxp) posts as the owner; a bot
+    token (xoxb) posts as the app - Slack decides that, not us."""
+    from .channels import _slack
+    c = _slack_card(store, connector_id)
+    if not c: raise Fixable('no Slack connection is set up to answer from', 'Connect Slack', words.href('connections'))
+    try: j = _slack(c['Secret'], 'chat.postMessage', post=True, channel=channel, text=body, **({'thread_ts': thread_ts} if thread_ts else {}))
+    except RuntimeError as e:
+        code = str(e).rsplit(': ', 1)[-1]
+        raise RuntimeError(SLACK_WHY.get(code) or str(e)) from e
+    return {'channel': 'slack', 'chat': channel, 'ts': j.get('ts'), 'threaded': bool(thread_ts)}
 
 
 def reply_channels(store) -> set:
@@ -526,6 +554,9 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
         from .imessage import send_text
         if not to: raise RuntimeError('no chat id - an Apple Messages message needs the chat guid to land in')
         return send_text(store, to[0], f'{subject}\n\n{body}' if subject else body)
+    if ch == 'slack':
+        if not to: raise RuntimeError('no channel id - a Slack message needs one to land in')
+        return send_slack(store, to[0], f'*{subject}*\n\n{body}' if subject else body)
     if ch == 'discord':
         from .devtools import discord_send
         if not to: raise RuntimeError('no channel id - a Discord message needs one to land in')
@@ -543,7 +574,7 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
 # silent failure at 6am - so the report builder PICKS both the channel and the destination
 # out of what Taskuary can actually reach today. A channel with no connection behind it, or
 # one switched off under Settings → Replies, is not an option at all.
-REPORTABLE = ('email', 'teams', 'telegram', 'whatsapp', 'imessage', 'discord',
+REPORTABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord',
               'mattermost', 'rocketchat', 'matrix', 'google_chat')   # what send_out can carry
 MAILBOXES = ('outlook', 'gmail', 'imap')
 
@@ -878,6 +909,14 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         # send it whole; the first piece is the reply, so its receipt is the one that answers.
         said = [p for p in chatformat.split(chatformat.render(body, ch)) if p.strip()] or [body]
         return _send_parts(lambda p: send(store, chat, p, connector_id) if connector_id else send(store, chat, p), said)
+    if ch == 'slack':
+        from . import chatformat
+        chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'slack:<channel id>'
+        if not chat: raise RuntimeError('this chat message has no channel id to answer in')
+        ts = ext.rsplit(':', 1)[-1] if ext.startswith('slack:') else ''  # 'slack:<channel>:<ts>'
+        connector_id = _source_connector_id(store, 'slack', chat)
+        pieces = [p for p in chatformat.split(chatformat.render(body, 'slack'), 3900) if p.strip()] or [body]
+        return _send_parts(lambda p: send_slack(store, chat, p, connector_id, None if chat.startswith('D') else ts or None), pieces)
     if ch == 'imessage':
         from .imessage import send_text
         chat = str(msg.get('ConversationId') or '')[9:]                 # 'imessage:<chat guid>'

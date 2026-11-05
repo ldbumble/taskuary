@@ -140,7 +140,16 @@
 /* WHERE THE CHAT IS THE TASK'S HOME it reads as a chat (the owner, 2026-11-05: "show the chat like normal left side is them right side is
    ours"): the people on the thread on the left, the owner's own words on the right, the agent's answer the full width between them, no role column */
 .tq-aui-chat .tq-aui-message { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-.tq-aui-chat .tq-aui-message > .tq-aui-role { display: none; }
+/* ...the agent's name over its answer, as any chat names who speaks (the owner, 2026-11-05: "where is the taskuary name"); the owner's bubble needs none */
+.tq-aui-chat .tq-aui-user > .tq-aui-role, .tq-aui-chat .tq-aui-brief > .tq-aui-role { display: none; }
+.tq-aui-chat .tq-aui-agent > .tq-aui-role { padding-top: 0; margin-bottom: 4px; }
 .tq-aui-chat .tq-aui-user { justify-items: end; }
 .tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: #e7efe6; border-color: #cfdccd; }
 .tq-aui-chat .tq-aui-arrived { justify-self: start; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #f1eee8; border-radius: 13px; }
+/* ...THE CHAT TAKES THE ROOM (the owner, 2026-11-05: "let's make the ui components as minimal as possible to leave space for that chat"): its box
+   sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),
+   no line explaining the two Sends */
+.tq-aui-chat .tq-aui-footer { padding-bottom: 7px; border-top: 0; }
+.tq-aui-chat [data-tq-redraft-warn], .tq-aui-chat [data-tq-redraft-btn], .tq-aui-chat [data-tq-then-line], .tq-aui-chat [data-tq-review-reason],
+[data-tq-no-agent-chat] [data-tq-review-reason],
+[data-tq-no-agent-chat] [data-tq-redraft-warn], [data-tq-no-agent-chat] [data-tq-redraft-btn], [data-tq-no-agent-chat] [data-tq-then-line] { display: none !important; }

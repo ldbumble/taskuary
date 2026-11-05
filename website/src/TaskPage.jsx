@@ -3239,7 +3239,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   sx={sessionView || threeUp ? { display: "contents" } : { minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",
                     ...(main === "work" ? MAIN : settled ? { flex: "0 1 auto", minHeight: 0 } : {}) }}>
                 {slot("agent", <Box data-tq-work={threeUp ? "" : undefined} data-tq-agent-section="" role={threeUp ? "region" : undefined} aria-label={threeUp ? "Agent" : undefined}
-                  sx={threeUp ? SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession) : { display: "contents" }}>
+                  sx={threeUp ? { ...SECTION(isOpen("agent"), openW("agent"), sessionView, liveSession), ...(chatPane ? { pb: 0.25 } : {}) } : { display: "contents" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
                     reference material about the same task, folded away. */}
@@ -3523,7 +3523,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                      well (CanvasItem keeps the whole height only for data-tq-agent-room="live") */
                   /* ...AND A CHAT TASK'S CHAT IS A PANE AT REST TOO ("chat"): its box stays on screen under the newest turn, as any chat app's,
                      never a scroll below a chat as tall as its words (the owner, 2026-11-04: "where is the prompt box") */
-                  <Box data-tq-agent-room={liveSession ? "live" : chatPane ? "chat" : "rest"} sx={liveSession || chatPane ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
+                  <Box data-tq-agent-room={liveSession ? "live" : chatPane ? "chat" : "rest"} sx={liveSession || chatPane ? { flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 113px))" : { xs: 360, md: 420 }, mb: canvas && !chatPane ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
                     // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
                     "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }

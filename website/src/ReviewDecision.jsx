@@ -516,7 +516,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       {proposal?.kind === "closeout" ? (
         <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{proposal.context}</Typography>
       ) : r.Reason && (r.DraftText || !/draft/i.test(r.Reason)) && (
-        <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
+        <Typography data-tq-review-reason="" variant="caption" sx={{ color: "#6f8a6e", display: "block", mb: 0.5 }}>{r.Reason}</Typography>
       )}
       {/* the agent re-planned on a change and found no reply needed (Task 4.5): said plainly, the draft and its Send kept - the owner decides */}
       {!!r.NotNeeded && (
@@ -705,7 +705,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Button>
         )}
         {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
-        {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={off} onClick={redraft}
+        {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button data-tq-redraft-btn="" size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={off} onClick={redraft}
           title={btnHint("redraft")}>
           {redraftLabel}</Button>}
         {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}
@@ -727,7 +727,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       </Box>
       {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
       {/* what the one word does HERE - the buttons never change, this line does */}
-      {thenLine && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>{thenLine}</Typography>}
+      {thenLine && <Typography data-tq-then-line="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>{thenLine}</Typography>}
       {(coFail || (gh && (blocked || gh.note))) && (() => {
         const text = coFail ? coFail.text.replace(/ - nothing was merged or sent$/, "") : blocked ? gh.reason : gh.note;
         const offers = coFail ? coFail.offers : gh.offers;

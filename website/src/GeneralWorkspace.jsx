@@ -661,8 +661,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           )}
           </ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: what Close out held, under the thread (Task 4.2) */}
-          {!dock && nextAt?.next && !summed && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 }, pt: 0.5, borderTop: `1px solid ${BORDER}` }}>
-            <Typography component="span" sx={{ display: "block", color: FAINT, fontSize: 11.5, fontWeight: 700, mt: 1, mb: 0.25 }}>Next steps</Typography>{nextAt.next}</Box>}
+          {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
+          {!dock && nextAt?.next && !summed && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
+            <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
               whose press opens Close out at it - working or not, since the agent saves it mid-turn */}
           {!dock && approve}

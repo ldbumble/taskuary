@@ -159,3 +159,6 @@
 .tq-aui-chat [data-tq-redraft-warn], .tq-aui-chat [data-tq-redraft-btn], .tq-aui-chat [data-tq-then-line], .tq-aui-chat [data-tq-review-reason],
 [data-tq-no-agent-chat] [data-tq-review-reason],
 [data-tq-no-agent-chat] [data-tq-redraft-warn], [data-tq-no-agent-chat] [data-tq-redraft-btn], [data-tq-no-agent-chat] [data-tq-then-line] { display: none !important; }
+/* a failed step opened: why first, in plain words; the raw tool output folded under it (AgentStepRows, 2026-11-05) */
+.tq-aui-step-why { font-size: 12.5px; color: #5f5a50; padding: 4px 0 2px 16px; overflow-wrap: anywhere; }
+.tq-aui-step-raw > summary { font-size: 11.5px; color: #8b877e; cursor: pointer; padding-left: 16px; }

@@ -2274,8 +2274,8 @@ def _assistant_payload(task_id: int, session=None):
                  for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
     from . import outputs
     return {'messages': messages,
-            # the conversations of the agents run before this one (Run another agent): kept on the task, read but never continued
-            'earlier': general.earlier(store, task_id),
+            # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
+            'earlier': [],
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
             'outputs': outputs.listing(task_id),
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker

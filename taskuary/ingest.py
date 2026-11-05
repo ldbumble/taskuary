@@ -2027,6 +2027,8 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
 
 
 CODING_OPENING = set()      # coding tasks whose saved CLI conversation is being reopened by carry-on: live already, no pane yet
+PASS_GATHER = 3.0           # seconds a passed-in line waits once the session is free, for the rest of a burst to join it (_pass_general)
+_PASSING, _PASS_LOCK = {}, threading.Lock()     # task id -> the turns waiting together for its session
 PASS_WAIT = 180             # seconds a passed-in line waits for a session still opening before it is said as not passed
 
 
@@ -2330,12 +2332,34 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
     if not ses:
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - Continue picks it up.")
         return
+    # A BURST IS ONE RE-THINK (the owner's stress run, 2026-11-05): five mails in a few seconds were five queued turns, the agent re-reading
+    # one line at a time. A line that finds another already waiting for the session joins it; the one waiting goes in once the session is
+    # free, with every line that joined - one turn
+    with _PASS_LOCK:
+        waiting = _PASSING.get(tid)
+        if waiting is not None: waiting.append(turn or _pass_turn(msg))
+        else: _PASSING[tid] = [turn or _pass_turn(msg)]
+    if waiting is not None:
+        store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it joins the turn already waiting.")
+        return
     store.add_comment(tid, 'router', 'agent', f"Passed {_who_said(msg)}'s new message to the agent - it is the assistant's next turn.")
     try:
+        end = time.time() + general.WAIT_TURN
+        while getattr(ses, 'busy', False) is True and getattr(ses, 'alive', True) is not False and time.time() < end:
+            time.sleep(.25); ses = general.session_for(tid) or ses
+        time.sleep(PASS_GATHER)                    # ...and the rest of a burst still landing
+    finally:
+        with _PASS_LOCK: lines = _PASSING.pop(tid, None) or [turn or _pass_turn(msg)]
+    said = lines[0] if len(lines) == 1 else f'{len(lines)} NEW LINES ON THIS TASK, in the order they came - one turn for all of them:\n\n' + '\n\n---\n\n'.join(lines)
+    try:
         # a session of quick answers re-decides on the task's depth now: still quick, one more call on it; else the turn runs the agent
-        if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, turn or _pass_turn(msg))
-        else: ses.send_prompt(turn or _pass_turn(msg), brief=True)      # Taskuary's brief, shown in the chat as coding's typed line is
+        if ses.quick and quickwork.takes(store, tid): quickwork.again(store, tid, ses, said)
+        else: ses.send_prompt(said, brief=True)      # Taskuary's brief, shown in the chat as coding's typed line is
     except Exception as e:
+        # ...the session ended under it - the agent closed its own at the end of the turn this line waited behind (the stress run,
+        # 2026-11-05): the line is not lost to a Continue, it carries the conversation on in a session of its own, as a mail on a quiet task does
+        if getattr(ses, "alive", True) is False and _open_task(store, tid):
+            general.OPENING.add(tid); _replan_general(store, tid, said); return
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
         store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - Continue picks it up.")
 

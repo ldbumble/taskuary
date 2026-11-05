@@ -1015,7 +1015,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # (agent_on_reply) - which then drafts the reply itself, so the tool-less writer below is not asked for one too
         went = _carry_on(store, tid, msg, mid, follow, actor)
         # ...and an ASIDE (a "thanks", a nudge) leaves the draft as it is, but its agent still hears it and re-plans (thread_moved)
-        if not went and not talking and is_aside(follow): went = thread_moved(store, tid, msg, mid, follow, actor)
+        # ...and so does a fresh QUESTION (reply_only) on a task its assistant already worked: only the tool-less writer heard it, and the
+        # agent's chat never moved under it (the owner, 2026-11-04: "the agent retriggers based off new messages and rethinks")
+        if not went and not talking and (is_aside(follow) or (follow or {}).get('intent') == 'reply_only'):
+            went = thread_moved(store, tid, msg, mid, follow, actor)
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
         # ...unless triage read THIS mail as an aside (a "thanks" on the thread): the draft is no further behind, and stays on what it answers

@@ -2467,7 +2467,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (fix.verb === "continue") { await api.post(`/api/tasks/${id}/continue-work`, { note: fix.note }); continued(); return; }
     if (fix.verb === "redraft" && pendingReview?.ReviewId) { setOpenStage("reply"); await draftBehind(api, pendingReview.ReviewId, fix.note); if (!stale(id)) loadDetail(id); }
   };
-  const advisorNote = warn && !liveSession ? <AdvisorNote note={warn} onFix={advisorFix}
+  // ...never on a task whose home is the chat (the owner, 2026-11-05: "remove the advisor line from the chat ... the agent is the advisor")
+  const advisorNote = warn && !liveSession && !home ? <AdvisorNote note={warn} onFix={advisorFix}
     workstream={{ taskId: selected, value: detail?.workstream, onDone: () => { loadDetail(selected); loadTasks(); } }} onDraft={() => { setOpenStage("reply"); if (threeUp) openSection("close");
     requestAnimationFrame(() => (threeUp ? closeOutRef : workBox).current?.querySelector("textarea")?.scrollIntoView({ block: "center", behavior: "smooth" })); }} /> : null;
   // THE TASKS TAB'S BAR IS ONE LINE (2026-10-23, foldBar.js): Change folds first, then Split or merge, Hand off with its rule, Not a task;

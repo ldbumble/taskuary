@@ -1399,7 +1399,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const markDoneHint = ["Closes the task", liveSession ? "and stops the agent - what it did so far is written up and saved with the task first" : "",
     pendingReplyReview(detail?.reviews || []) ? "- your draft stays on it, to send later if you want" : ""].filter(Boolean).join(" ") + ".";
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
-  const sessionView = liveSession && !peek;
+  // ...AND A CHAT TASK'S CONVERSATION KEEPS ITS PAGE when its agent idles out or the app restarts (the owner, 2026-11-05: the layout never
+  // changes with the session): the chat, its box and its strip stay as they are while live - only the header line and the status move
+  const chatKept = isGeneral && hasGeneralHistory && !liveTerminal(term) && !!t && !["done", "dropped"].includes(t.Status) && !wrapping;
+  const sessionView = (liveSession || chatKept) && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
   // finishes, its wrap-up writes the reply (wrapup.wrap), and the page went on showing the closed
   // pane with that draft folded away below (the owner, 2026-09-22: "when you hit session closed a
@@ -2506,7 +2509,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
   // ...and the rail's agent lane only while no newer read of this task takes it back: a rail built while the agent worked said "agent
   // working" over the Result of the agent that had finished (railStatus.agentGone) - the row beside it takes the same read
-  const status = taskStatus({ live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
+  const status = taskStatus({ chat: isGeneral, live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
     closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend, page: rail?.tid ? pageRead(rail.tid) : null,
     owed: pendingReview ? !String(pendingReview.FinalText || pendingReview.DraftText || "").trim() : null });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
@@ -2606,7 +2609,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ];
   // ...and where the task lays its panes, their STAGE MOVES leave the bar for them (actionRow.splitRow): the verbs say which pane is open
   // and whether an agent is live, whose bar is Stop and save alone
-  const laid = threeUp && active && !!t ? { open: section, live: !!term?.alive, ...(cardsIn ? { home: true } : {}) } : null;
+  const laid = threeUp && active && !!t ? { open: section, live: !!term?.alive || chatKept, ...(cardsIn ? { home: true } : {}) } : null;
   useVerbs("task", laid ? rowVerbs.map((v) => ({ ...v, laid })) : rowVerbs, inRow && !!t, detail?.ref || "");
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27: "when you hit a button on the bottom that relates to a group, the correct
   // section opens"): the reply's, the draft's and the close's presses Close out, the agent's the Agent - never a closed section for the

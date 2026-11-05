@@ -513,8 +513,9 @@ def state_of(i: dict) -> str:
     close-out say the lane's word (the desktop's rule; the phone's own "draft ready" is gone)."""
     # ...an agent's finished task is in a task lane under Tasks until read (the owner, 2026-11-02): it says "agent finished", not "on you"
     if i.get('kind') == 'agentdone': return lanes.word('agentdone')
-    word = _LANE_WORDS.get(str(i.get('lane') or '')) or _LANE_WORDS['fyi']
-    return 'wants a yes' if i.get('lane') == 'approve' and i.get('kind') == 'action' and not i.get('closeout') else word
+    # ...and a chat task's waiting move says "agent ready for you" (funnel.lane_word), as its rail row does
+    word = (lanes.word('chat_ready') if i.get('chat') and i.get('lane') in ('blocked', 'approve') else _LANE_WORDS.get(str(i.get('lane') or ''))) or _LANE_WORDS['fyi']
+    return 'wants a yes' if i.get('lane') == 'approve' and i.get('kind') == 'action' and not i.get('closeout') and not i.get('chat') else word
 
 
 def is_own(item: dict | None) -> bool:

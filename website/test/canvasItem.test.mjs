@@ -67,10 +67,10 @@ test("a new line always shows; only a browse card's own steps hold the bottom", 
   assert.doesNotMatch(view, /holdBottom\.current = !!browsing/);
 });
 
-// ...and both go: a page open beside the item no longer takes the item off the table - the Assistant's own Settings page, opened for
-// "turn off background sync", sent the next "mark this done" out about nothing (verify, 2026-10-19). The model reads which "this" is
-test("a card open in the canvas goes with the turn, beside the item still on the table", () => {
-  assert.match(view, /const subject = how\.door \? null : tableKey \|\| current \|\| cardRef\.current;/);
+// ...and NOW A PAGE ON THE CANVAS IS THE ASK'S ALONE (the owner, 2026-11-05, over the verify of 2026-10-19 that sent both): with Settings,
+// Connections, Reports, the Hub or New open over a task, the question carries the page's view and never the task beneath it
+test("a page open on the canvas goes with the turn alone, never the task under it", () => {
+  assert.match(view, /const subject = how\.door \|\| browsing \? null : tableKey \|\| current \|\| cardRef\.current;/);
   assert.match(view, /key: subject, context_mid: currentItem\?\.mid && subject === current \? currentItem\.mid : null,\n\s+open_card: openCardRef\.current/);
 });
 

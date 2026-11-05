@@ -254,6 +254,11 @@ const COLS = [
   { key: "agentdone", title: `${KIND_META.agentdone.mark} ${KIND_META.agentdone.word}`, dot: "#47654a" },
 ];
 
+// ...and the column of agents waiting on the owner says "agent ready for you" for chat tasks (the owner, 2026-11-05: their next move can be any
+// action - railStatus.chatReady): its own words come back only while a coding task is in it, which keeps them
+const titleOf = (col, cards) => (col.key === "blocked" && !cards.some((t) => !isGeneralKind(t.Kind))
+  ? `${KIND_META.chat_ready.mark} ${KIND_META.chat_ready.word}` : col.title);
+
 export default function BoardView({ onOpenTask, active = true }) {
   const [tasks, setTasks] = useState(null);
   const [err, setErr] = useState("");
@@ -394,7 +399,7 @@ export default function BoardView({ onOpenTask, active = true }) {
                   both to the middle of two lines, out of line with the columns beside it (the 2026-10-27 sweep) */}
               <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.6, px: 0.4, pb: 0.85 }}>
                 <Box sx={{ width: 7, height: 7, mt: "5px", flexShrink: 0, borderRadius: "50%", bgcolor: col.dot }} />
-                <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flex: 1, fontSize: 11.5 }}>{col.title}</Typography>
+                <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flex: 1, fontSize: 11.5 }}>{titleOf(col, cards)}</Typography>
                 <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
@@ -435,7 +440,7 @@ export default function BoardView({ onOpenTask, active = true }) {
                       sx={{ height: 15, fontSize: 8.5, bgcolor: "#e3e6e1", color: "#47654a",
                         "& .MuiChip-label": { px: 0.55 }, "& .MuiChip-icon": { ml: 0.35 } }} />}
                     {t.RunStatus && (
-                      <Chip size="small" label={`${chat ? AGENT_SHOWN : brain || AGENT_SHOWN} · ${t.State === "blocked" ? AGENT.waiting : RUN_WORD[t.RunStatus] || t.RunStatus}`
+                      <Chip size="small" label={`${chat ? AGENT_SHOWN : brain || AGENT_SHOWN} · ${t.State === "blocked" ? (chat ? KIND_META.chat_ready.word : AGENT.waiting) : RUN_WORD[t.RunStatus] || t.RunStatus}`
                         + (live[t.TaskId] ? ` · ${elapsed(live[t.TaskId].StartedAt)}` : "")}
                         sx={{ height: 15, fontSize: 8.5, fontWeight: 600, "& .MuiChip-label": { px: 0.7 },
                           bgcolor: t.RunStatus === "running" ? "#eae4d8" : t.RunStatus === "error" ? "#f0e2e4" : "#dfeade",

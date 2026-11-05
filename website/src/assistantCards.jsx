@@ -1065,6 +1065,8 @@ function citesOf(evidence) {
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, table = null }) {
+  // ...its own box answers questions on it, as a report's and an FYI's do (the owner, 2026-11-05) - no task, no agent
+  const ask = useItemAsk(table != null && card, "idea");
   const a = card.action || {};
   // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
   const [busy, setBusy] = useState(false), [err, setErr] = useState("");
@@ -1130,7 +1132,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // should go in the coming from tab like fyi's"): what the Advisor noticed opens in Came from - the idea, its suggestion and the mail it is
   // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
   if (table != null) return (
-    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays title={card.title}
+    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays ask={ask} title={card.title}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
       sections={[
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",

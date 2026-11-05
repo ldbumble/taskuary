@@ -5804,7 +5804,7 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
 # A QUESTION ON A REPORT, AN FYI OR A DASHBOARD IS ANSWERED, NEVER ACTED ON (the owner, 2026-11-04: "question on report should not start
 # task"): its own box (ItemSections ItemAsk) sends the turn with the item in its view, area 'item'. The model reads the item whole and answers
 # from it; a CALL, a DECIDE or a VIEW line it writes is dropped, so nothing is filed, started or pressed - the item's own moves do that
-ASKED_ON = ('report', 'fyi', 'dashboard')
+ASKED_ON = ('report', 'fyi', 'dashboard', 'idea')   # ...and an Advisor item, answered from it the same way (the owner, 2026-11-05)
 ITEM_ONLY = ("THE OWNER ASKED IN THIS ITEM'S OWN BOX: answer from what is written above, in plain words. Nothing is done from this box - "
              "no task, no agent, no button, no look-up - so never say you started, filed, sent, changed or looked up anything; if what "
              "they want needs doing, say which of the item's own buttons does it.")

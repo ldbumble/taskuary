@@ -46,15 +46,16 @@ export function ItemAsk({ ask }) {
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That did not go through - try again."); }
     finally { setBusy(false); }
   };
-  return <ItemPart data-tq-item-ask={ask.kind || ""} sx={{ display: "flex", flexDirection: "column", gap: 0.75, flexShrink: 0 }}>
-    {ls.map((l) => <Box key={l.k} data-tq-item-reading={l.k} sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: DIM, mb: 0.2 }}>{SAYS[l.k]}</Typography>
-      <Typography sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>
-    </Box>)}
-    {said.map((t, i) => <Box key={i} data-tq-item-said="" sx={{ minWidth: 0, fontSize: 13.5, lineHeight: 1.5, color: INK }}>
-      <Typography sx={{ fontSize: 12.5, color: DIM, overflowWrap: "anywhere" }}><b>You:</b> {t.q}</Typography>
-      <Box data-tq-item-answer="" sx={{ overflowWrap: "anywhere", "& p": { my: 0.25 } }}><Md text={t.a} /></Box>
-    </Box>)}
+  // ...A CHAT, as a task's is (the owner, 2026-11-05: "add the reports/advisor/fyi to chat thing as well without close out"): what it says and what
+  // matters as plain paragraphs, the owner's words a right-hand bubble, the answer the full width - no labels, no card around it, the box the one box
+  return <Box data-tq-item-ask={ask.kind || ""} sx={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0, minWidth: 0, px: { xs: 0.5, sm: 1 } }}>
+    {ls.map((l) => <Typography key={l.k} data-tq-item-reading={l.k} title={SAYS[l.k]}
+      sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
+    {said.map((t, i) => <React.Fragment key={i}>
+      <Typography data-tq-item-said="" sx={{ alignSelf: "flex-end", maxWidth: "75%", fontSize: 13.5, lineHeight: 1.48, color: INK, overflowWrap: "anywhere",
+        bgcolor: "#e7efe6", border: "1px solid #cfdccd", borderRadius: "13px", px: 1.5, py: 1 }}>{t.q}</Typography>
+      <Box data-tq-item-answer="" sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere", "& p": { my: 0.25 } }}><Md text={t.a} /></Box>
+    </React.Fragment>)}
     <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, border: `1px solid ${BORDER}`, borderRadius: "8px", px: 1, py: 0.25, bgcolor: "#fff" }}>
       <InputBase multiline maxRows={5} value={text} disabled={busy} placeholder="Ask about anything here…" inputProps={{ "aria-label": "Ask about this" }}
         onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
@@ -64,13 +65,16 @@ export function ItemAsk({ ask }) {
         {busy ? <CircularProgress size={14} /> : <SendIcon sx={{ fontSize: 17 }} />}</IconButton>
     </Box>
     {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "#a33" }}>{err}</Typography>}
-  </ItemPart>;
+  </Box>;
 }
 
 // `sections`: [{ key, n, name, body, lines, foot, icon, moves }] in the flow's order; `about`: the key the item is about (it opens there, and only it
 // folds to a full tab); `here`: the section it is up to; `height`: the canvas's (CanvasItem wordsCap) - one height, like a task's three;
 // `lays`: its moves ride the `about` section on a desk (ItemLay); `ask`: what it says and the box, atop the middle section (ItemAsk)
-export default function ItemSections({ kind, label, title, aside, sections, about, here = about, height, itemKey, lays = false, ask = null }) {
+export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null }) {
+  // NO CLOSE OUT ON AN ITEM (the owner, 2026-11-05: "reports/advisor/fyi to chat thing as well without close out"): every one said "Nothing
+  // owed". Its body stays mounted, unseen - the moves it registers (RowMoves, Foot) still ride the item's strip and the row
+  const sections = all.filter((s) => s.key !== "close"), closed = all.find((s) => s.key === "close");
   const [open, setOpen] = useState(about);
   useEffect(() => { setOpen(about); }, [itemKey, about]);
   const body = useRef(null), [w, setW] = useState(0);
@@ -132,6 +136,7 @@ export default function ItemSections({ kind, label, title, aside, sections, abou
           </Box>
         ))}
       </Box>
+      {closed && <Box data-tq-item-close-moves="" aria-hidden sx={{ display: "none" }}>{closed.body}</Box>}
     </Box>
     </ItemLay.Provider>
   );

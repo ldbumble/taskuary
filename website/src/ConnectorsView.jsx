@@ -36,6 +36,7 @@ import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
+import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { ALWAYS, ENDS, HI, LO, MARKS, SAYS, clampLevel, combines, defaultLevel, kindOf } from "./combineLevel.js";
@@ -3129,6 +3130,21 @@ function ApiDots({ apis, cfg, setCfg }) {
   );
 }
 
+// WHAT THE AGENT'S ACT STARTS WITH, PER CONNECTION (the owner, 2026-11-05: "each connector should have settings what the action view looks
+// like"): the choices the catalogue marks `setting` on this card's acts (a LinkedIn post's audience, post now or save as a draft), saved on the
+// card as default_<key> like every other box here - no Save. The agent's proposal is filled from them (connectorcatalog.with_defaults), and
+// the owner can still change each on the card before pressing.
+function ActionDefaults({ type, cfg, setCfg, tick }) {
+  const fields = settingsOf(type);
+  if (!fields.length) return null;
+  return <Box data-tq-action-defaults={type} sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+    {fields.map((f) => <TextField key={f.key} select size="small" label={f.label} value={String(cfg[`default_${f.key}`] ?? f.default)} sx={{ bgcolor: "#fff", minWidth: 180 }}
+      data-tq-action-default={f.key} onChange={(e) => setCfg({ ...cfg, [`default_${f.key}`]: e.target.value })} InputProps={{ endAdornment: tick(`default_${f.key}`) }}
+      helperText="What a post an agent sets up starts with - you can change it on the post">
+      {f.choices.map((c) => <MenuItem key={String(c.value)} value={String(c.value)} sx={{ fontSize: 13 }}>{c.label}</MenuItem>)}</TextField>)}
+  </Box>;
+}
+
 function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload, onBack: leave, onCreated, byType = {} }) {
   // as on a channel card, every field saves itself: what each discovered object is used for through the draft, the boxes on their own
   const draft = useCardDraft(savedConn, savedSources, reload);
@@ -3207,6 +3223,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           {meta.fields.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} tick={boxes.tick(f[1])} onBlur={boxes.flush}
             {...(f[1] === "conn_str" && !(conn.WriteOnlyKeys || []).includes(f[1]) ? { multiline: true, minRows: 2 } : {})} />)}
           {meta.apis && <ApiDots apis={meta.apis} cfg={cfg} setCfg={setCfg} />}
+          <ActionDefaults type={conn.Type} cfg={cfg} setCfg={setCfg} tick={boxes.tick} />
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
             onBlur={boxes.flush} onKeyDown={(e) => { if (e.key === "Enter") boxes.flush(); }} InputProps={{ endAdornment: boxes.tick("Secret") }}

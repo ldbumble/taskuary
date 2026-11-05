@@ -116,10 +116,15 @@ def picture_why(tid, p: dict) -> str:
     return ''
 
 
-def _edited(p: dict, final_text) -> dict:
-    """A post's box IS its words: what the owner left there is what goes (an empty box is not a post, so it stays as proposed)."""
-    t = str(final_text or '').strip()
-    return {**p, 'text': t} if is_post(p) and t and not t.startswith('{') else p
+def _edited(p: dict, final_text, fields: dict = None) -> dict:
+    """An act's box IS its words: what the owner left there is what goes (an empty box is not a post, so it stays as proposed) - in the key
+    its catalogue card edits (a post's `text`, a tracker comment's `body`). `fields`: the choices the owner changed on the card (who sees a
+    post, post now or save as draft), only those the card declares editable (connectorcatalog.owner_edits)."""
+    from . import connectorcatalog as cat
+    t, act = str(final_text or '').strip(), cat.action_for((p or {}).get('type')) if (p or {}).get('action') == 'run_tool' else None
+    k = cat.text_key(act) or ('text' if is_post(p) else None)
+    if k and t and not t.startswith('{'): p = {**p, k: t}
+    return cat.owner_edits(p, fields) if fields else p
 
 
 def _ran(res) -> dict:
@@ -134,12 +139,12 @@ def _ran(res) -> dict:
     return {'headline': str(head)[:200], 'output': (body or '')[:2000]}
 
 
-def receipt(rv: dict, final_text, out: dict) -> str:
+def receipt(rv: dict, final_text, out: dict, fields: dict = None) -> str:
     """What an approved proposal keeps as its FinalText: as proposed, with the owner's edit and what it did - so a post still says
     "Posted" and its link when the chat is read again."""
     try: p = json.loads(rv.get('DraftText') or '{}')
     except ValueError: return rv.get('DraftText')
-    return json.dumps({**_edited(p, final_text), 'result': out}, default=str) if p.get('action') == 'run_tool' else rv.get('DraftText')
+    return json.dumps({**_edited(p, final_text, fields), 'result': out}, default=str) if p.get('action') == 'run_tool' else rv.get('DraftText')
 
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
@@ -272,6 +277,16 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
             from . import outputs
             f = outputs.named(int(task_id), p['image'])
             p = {**p, 'image': f.relative_to(outputs.folder(int(task_id))).as_posix()}
+    # ...and what the agent left unnamed on a card's choices comes from the connection's own defaults (Connections), so the card shows them
+    if ok and p.get('action') == 'run_tool':
+        from . import connectorcatalog as cat
+        if act := cat.action_for(p.get('type')):
+            c = store.get_connector(int(p['connector_id'])) if str(p.get('connector_id') or '').isdigit() else store.get_connector_by_type(act['card'])
+            try: conf = json.loads((c or {}).get('ConfigJson') or '{}')
+            except ValueError: conf = {}
+            p = cat.with_defaults(p, conf)
+            if bad := next((f for f in act['fields'] if f['key'] in p and not cat.choice_ok(f, p[f['key']])), None):
+                ok, why = False, f"{bad['key']} must be one of: {', '.join(str(c['value']) for c in bad['choices'])}"
     if not ok:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
@@ -514,7 +529,7 @@ def close_pr(store, rv: dict, actor='owner') -> dict:
 from .ghcloseout import Refused as ChecksRed      # a close-out GitHub's state refuses now, with what the card may offer instead
 
 
-def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks: bool = False) -> dict:
+def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks: bool = False, fields: dict = None) -> dict:
     """Run an APPROVED proposal. Called from the verdict road, and it re-validates: the
     switch may have gone off between proposing and approving, and the approval does not
     grant the permission.
@@ -528,7 +543,7 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         p['text'] = final_text.strip()
     # a tracker close-out's box IS its comment: what the owner left there goes, emptied included (None = pressed off the card, as filed)
     if p.get('action') == 'close_item' and final_text is not None and not str(final_text).lstrip().startswith('{'): p['text'] = str(final_text).strip()
-    p = _edited(p, final_text)
+    p = _edited(p, final_text, fields)
     ok, why = validate(store, p)
     if not ok: raise RuntimeError(f'refused at execution: {why}')
     tid, a = rv.get('TaskId'), p['action']

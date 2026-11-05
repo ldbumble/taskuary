@@ -7,7 +7,7 @@ import { Box, IconButton, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps } from "./agentSummary.js";
-import { isPostReview } from "./reviewProposal.js";
+import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { readingOf } from "./threadReading.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
@@ -37,7 +37,7 @@ const OnYou = ({ items }) => {
 // meaning review the file then send it"): one head, what is on the owner first, then the draft with its Send
 const DraftHead = () => <Head>Next steps</Head>;
 
-// `lead`: what this turn SET UP for the owner's press, drawn as itself (a post, PostCard) - it leads Next steps, the action section (the owner,
+// `lead`: what this turn SET UP for the owner's press, drawn as itself (a post, ActionCard) - it leads Next steps, the action section (the owner,
 // 2026-11-05: "Next steps is the action section"). `made`: the files the turn made, inline under What I did (TurnFiles). `kept`: the drafts this
 // turn wrote, as it wrote them (draft_snapshot)
 export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false, lastAnswered = false,
@@ -71,7 +71,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     {made}{lead}
     <Drafted /></>) : made || lead ? <>{made}{lead}</> : null;
   const { drafts, onYou, held: heldAll, nothing } = nextSteps({ summary, reviews, checklist, acts, cards });
-  const held = heldAll.filter((r) => !isPostReview(r));        // a post is its own card, leading Next steps - never "a step waits, below"
+  const held = heldAll.filter((r) => !isCardReview(r));        // an act with its card (a post) leads Next steps - never "a step waits, below"
   return (
     <Box data-tq-summary="open" className="tq-aui-summary">
       {!!about && <><Head first>What this is about</Head><Typography data-tq-summary-about="" sx={LINE}>{about}</Typography></>}

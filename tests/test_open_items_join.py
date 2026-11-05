@@ -6,7 +6,7 @@ import json, re, unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import context, ingest
+from taskuary import batch, context, ingest
 from taskuary.store import MemoryStore
 from tests import fake_embed
 
@@ -115,6 +115,68 @@ class ClosedTaskFoundTests(unittest.TestCase):
         self.assertFalse(any(f'(tid {self.tid})' in l for l in json.loads(seen[-1]).get('found_by_search') or []))
         self.assertNotEqual(r['task_id'], self.tid)
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+
+
+def shown(j) -> list:
+    "Every task the prompt put in front of triage, as (tid, what it says) - from the one-line lists and the structured ones alike."
+    out = [(int(m), l) for k in ('open_items', 'found_by_search') for l in j.get(k) or [] for m in re.findall(r'\(tid (\d+)\)', l)[:1]]
+    ws = [w for k in ('open_work', 'room_tasks', 'open_goals') for w in j.get(k) or [] if isinstance(w, dict) and w.get('tid')]
+    if (j.get('thread_task') or {}).get('tid'): ws.append(j['thread_task'])
+    return out + [(int(w['tid']), json.dumps(w)) for w in ws]
+
+
+def reader(seen, topic):
+    "Stands in for the model: joins the task whose shown words carry `topic`, else opens its own."
+    def llm(system, user, **k):
+        seen.append(user)
+        j = json.loads(user)
+        out = {'intent': 'task', 'kind': 'task', 'why': 'work on the portal', 'title': 'Portal chat', 'summary': 'About the portal.'}
+        hit = [t for t, txt in shown(j) if topic in txt.lower()]
+        room = {int(w['tid']) for w in j.get('room_tasks') or [] if isinstance(w, dict) and w.get('tid')}
+        # the room's own task is joined as its ask (same_problem); another source's by same_as - as triage is told to
+        if hit and hit[0] in room: out.update(relationship='continues', existing_task_id=hit[0], same_problem=True)
+        elif hit: out['same_as'] = hit[0]
+        return json.dumps(out)
+    return llm
+
+
+def gh_pr(s, repo, n, title):
+    return s.add_message({'ExternalId': f'gh:{repo}#{n}@r1', 'ConversationId': f'gh:{repo}#{n}', 'Channel': 'github', 'SourceName': repo,
+                          'Subject': f'{repo}#{n} {title}', 'FromName': 'outside-dev', 'SentAt': '2026-11-04 09:50:00',
+                          'BodyText': f'[pull request by outside-dev - association: FIRST_TIMER]\n{title}.', 'Status': 'triaging',
+                          'SourceLink': f'https://github.com/{repo}/pull/{n}'})
+
+
+def chat(s, llm, ext, body, at):
+    with mock.patch.object(ingest, '_spawn'):
+        return ingest.ingest_message(s, {'external_id': ext, 'channel': 'whatsapp', 'conversation_id': 'whatsapp:1203630001@g.us',
+                                         'source_name': 'Portal team', 'from_email': 'whatsapp:15550001', 'from_name': 'Erin Blake',
+                                         'subject': '', 'body': body, 'sent_at': at}, llm=llm)
+
+
+class BatchJoinsChatTests(unittest.TestCase):
+    """A pull request lets in as a batch ("1 pull request on <repo>"), then a chat links it, then the same chat writes on the same
+    fix: one matter from two sources in three polls (2026-11-04). The batch's title and summary say only how many it holds, and
+    open_items read it as the owner's own, so the chat line could not be seen to be about it and opened a second task."""
+    def setUp(self):
+        cm = fake_embed.no_embedder(); cm.__enter__(); self.addCleanup(cm.__exit__, None, None, None)
+        self.s = MemoryStore(); self.s.set_setting('owner_email', ALEX, 't')
+        mid = gh_pr(self.s, 'northwind/portal', 41, 'Fix chat message loss on the first delivery')
+        self.tid = batch.create(self.s, 'github', 'northwind/portal', [self.s.get_message(mid)])
+
+    def test_the_batch_is_shown_by_what_it_holds_and_where_it_came_from(self):
+        line = next(l for l in context.open_items(self.s) if f'(tid {self.tid})' in l)
+        self.assertIn('#41 Fix chat message loss', line)
+        self.assertNotIn('yours', line, "a stranger sent it - it is not the owner's own")
+        self.assertIn('outside-dev', line)
+
+    def test_a_chat_link_to_the_pr_and_a_later_line_on_the_fix_join_the_batch(self):
+        seen = []
+        r1 = chat(self.s, reader(seen, '#41'), 'w1', 'https://github.com/northwind/portal/pull/41 says it is fixed', '2026-11-04 09:53:00')
+        self.assertEqual(r1['task_id'], self.tid, seen and json.loads(seen[-1]).get('open_items'))
+        r2 = chat(self.s, reader(seen, 'message loss'), 'w2', 'still losing the first message after the update', '2026-11-04 09:56:00')
+        self.assertEqual(r2['task_id'], self.tid)
+        self.assertEqual(len(self.s.list_tasks()), 1)
 
 
 if __name__ == '__main__': unittest.main()

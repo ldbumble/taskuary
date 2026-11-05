@@ -286,10 +286,12 @@ def _age(at) -> str:
 
 
 def _asks(t: dict) -> str:
-    "What the item asks: triage's own reading of its thread where it made one, else the task's summary."
+    """What the item asks: triage's own reading of its thread where it made one, else a batch's items by their own titles - its title and
+    summary say only how many (2026-11-04: a chat line linking a pull request saw "1 pull request on <repo>" and could not tell it was that
+    one) - else the task's summary."""
     try: th = json.loads(t.get('ThreadJson') or 'null') or {}
     except ValueError: th = {}
-    return (th.get('asking') if isinstance(th, dict) else '') or t.get('Summary') or ''
+    return (th.get('asking') if isinstance(th, dict) else '') or t.get('Items') or t.get('Summary') or ''
 
 
 def open_items(store, skip=(), limit: int = OPEN_ITEMS) -> list:

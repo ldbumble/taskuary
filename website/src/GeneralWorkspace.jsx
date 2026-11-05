@@ -261,13 +261,15 @@ const WorkSteps = ({ data }) => {
   // a failure is never folded away: it is its own line under the fold (a retried one that worked is "recovered", and folds with the rest)
   // ...where the chat is home and the turn ENDED in its summary, a step that failed on the way is part of the way, folded with the rest (the
   // owner, 2026-11-05: "what are all those failures?") - only a turn that failed keeps its failures out
-  const chat = React.useContext(ChatCtx), keepOut = !(chat && ended);
+  // ...IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a internal thought failure, for the user the task is getting done.
+  // failure means nothing"): working or ended, every step rides the one fold as a plain step - a TURN that failed says so in its own words
+  const chat = React.useContext(ChatCtx), keepOut = !chat;
   const all = data?.steps || [], bad = keepOut ? all.filter((s) => s.kind === "error" || s.status === "error") : [], n = all.filter(isWork).length;
   const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
   return <>
     <details className="tq-aui-working-fold" data-tq-working={now ? "" : undefined} open={open} onToggle={toggle}>
       <summary>{now ? <><span className="tq-aui-band-dot" />Working on this…</> : n ? plural(n, "step") : "Along the way"}</summary>
-      <AgentSteps data={{ steps: all.filter((s) => !bad.includes(s)) }} />
+      <AgentSteps data={{ steps: (chat ? all.map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) : all).filter((s) => !bad.includes(s)) }} />
     </details>
     {!!bad.length && <AgentSteps data={{ steps: bad }} />}
   </>;
@@ -294,7 +296,11 @@ const RanFor = () => {
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);
   const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
-  const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id);   // the turn is the chat's last entry: it carries its card
+  // the turn is the chat's last entry AND has answered: it carries its card - a turn still at work never takes the one before it's draft (the owner,
+  // 2026-11-05: "email draft is being shown below the new prompt ... it's connected to the prior agent taskuary thing")
+  const newest = useAuiState((s) => s.thread.messages.at(-1)?.id === s.message.id && !live(s.message));
+  // the newest turn that ANSWERED (a summary, not at work): its draft stays on it when something newer comes
+  const lastAnswered = useAuiState((s) => [...s.thread.messages].reverse().find((m) => m.role === "assistant" && !live(m) && m.metadata?.custom?.summary)?.id === s.message.id);
   const { rest } = shownOnce(at ? outputRefs(words, at.tid, at.listed).files : [], shown);
   return (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
@@ -308,7 +314,7 @@ const AssistantMessage = () => {
         {work && !custom?.summary && newest && work.next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={custom.folded ? null : work.next} />}
+          acts={work.acts} next={custom.folded ? null : work.next} lastAnswered={lastAnswered} />}
       </div>
     </MessagePrimitive.Root>
   );

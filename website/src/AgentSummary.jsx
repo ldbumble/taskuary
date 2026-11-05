@@ -36,12 +36,16 @@ const OnYou = ({ items }) => {
 // meaning review the file then send it"): one head, what is on the owner first, then the draft with its Send
 const DraftHead = () => <Head>Next steps</Head>;
 
-export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false }) {
+export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false, lastAnswered = false }) {
   if (!summary) return null;
   const did = String(summary.did || "").trim(), about = String(summary.about || "").trim();
   // ...a turn that is history keeps the draft it left, read-only: what was drafted and to whom, no Send (the owner, 2026-11-05)
   // ...read from the draft itself (its id is all the turn keeps), with where it went since: sent, set aside, or still waiting
-  const drafted = (summary.drafted || []).map((x) => (reviews || []).find((r) => r.ReviewId === x?.review)).filter((r) => r && String(r.DraftText || "").trim());
+  // ...a turn filed before it kept its draft's id: the NEWEST answered turn keeps the draft still waiting (the owner, 2026-11-05: "keep the draft on
+  // the original message")
+  const ids = summary.drafted ? summary.drafted.map((x) => x?.review)
+    : lastAnswered ? (reviews || []).filter((r) => r?.Status === "pending" && r.Kind !== "action" && r.Kind !== "slot").map((r) => r.ReviewId) : [];
+  const drafted = ids.map((id) => (reviews || []).find((r) => r.ReviewId === id)).filter((r) => r && String(r.DraftText || "").trim());
   const fate = (r) => r.Status === "sent" || r.DeliveryState === "sent" ? "sent" : r.Status === "pending" ? "" : "not sent";
   const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>

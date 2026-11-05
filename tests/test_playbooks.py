@@ -224,6 +224,15 @@ class DraftedOnClose(unittest.TestCase):
         playbooks.write('bill', BILL)
         self.assertIsNone(playbooks.draft(s, self._task(s), SESSION, llm=llm))
 
+    def test_one_proposal_per_task_while_it_waits(self):
+        """The stress run, 2026-11-05: a chat task's agent ends its session after every turn, and each ending asked again - one task piled up
+        three proposals for the same kind of job under three slugs ("Also waiting on you · 3"), and they kept its Send and close open."""
+        s = MemoryStore(); tid = self._task(s)
+        self.assertIsNotNone(playbooks.draft(s, tid, SESSION, llm=_llm_saying({'playbook': {'slug': 'card-bill', 'text': BILL}})[0]))
+        again = BILL.replace('# ', '# Post a card charge as a bill - ', 1)
+        self.assertIsNone(playbooks.draft(s, tid, SESSION, llm=_llm_saying({'playbook': {'slug': 'post-card-charge', 'text': again}})[0]))
+        self.assertEqual(len(s.list_reviews('pending')), 1)
+
     def test_the_switch_and_the_agent_road(self):
         s = MemoryStore(); tid = self._task(s)
         # an agent may propose one itself, in the transcript; the same gate applies

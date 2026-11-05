@@ -938,6 +938,10 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
             {card.mid && <FullText mid={card.mid} revision={card.presentation_revision} report={{ name }} />}
             {share}
           </ItemPart> },
+        // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
+        { key: "agent", n: 3, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
+          body: <ItemPart data-tq-report-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
+            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
         { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the report"],
           body: <ItemPart data-tq-report-close="">
             <RowMoves close={card} on="at the top of the report" />
@@ -1004,6 +1008,10 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
           lines: [card.title], foot: "✓ Landed",
           // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
           body: <div data-tq-dash-body="">{drawn}{share}</div> },
+        // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
+        { key: "agent", n: 3, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
+          body: <ItemPart data-tq-dash-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
+            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
         { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the dashboard"],
           body: <ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart> }]} />;
   }

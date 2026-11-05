@@ -513,3 +513,41 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
         tid = next(t['TaskId'] for t in s.list_tasks() if t['Title'] == demo.TOUR)
         said = demo.brain(store=s)('You are the assistant.', f'{concierge.OWNER_SAYS}Where do I start?')
         self.assertIn(f'(#task={tid})', said)
+
+
+class TheGeneralAgentsDayTests(unittest.TestCase):
+    """The owner, 2026-11-05: "make the general agent fake data showing results like LinkedIn posts". The demo has no AI, so its chats
+    are written out: every turn answered, each ending in its summary, and what it set up waiting for one press."""
+    def seeded(self):
+        from taskuary import terminal
+        s = MemoryStore()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(s)
+        return s, {t['Title']: t['TaskId'] for t in s.list_tasks() if t.get('Assignee') == 'agent:general'}
+
+    def test_every_chat_opens_on_what_came_in_and_every_answer_has_its_summary(self):
+        from taskuary import general
+        s, tids = self.seeded()
+        self.assertEqual(len(tids), len(demo.AGENT_DAY))
+        for title, tid in tids.items():
+            h = general.shown_history(s, tid)
+            self.assertTrue(h[0].get('brief') and h[0].get('mail'), title)
+            self.assertTrue(all(m.get('summary') for m in h if m['role'] == 'assistant'), title)
+            self.assertEqual(s.get_task(tid)['Status'], 'in_progress', 'the agent never closes a task')
+
+    def test_the_post_carries_its_chart_and_the_overtime_reply_its_workbook(self):
+        import json
+        from taskuary import outputs, proposals
+        s, tids = self.seeded()
+        post = next(t for n, t in tids.items() if 'LinkedIn' in n)
+        p = json.loads(next(r for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (post,)))['DraftText'])
+        self.assertTrue(proposals.is_post(p) and (outputs.folder(post) / p['image']).is_file())
+        ot = next(t for n, t in tids.items() if 'overtime' in n)
+        self.assertEqual(len([m for m in s.list_messages(ot) if m.get('Direction') != 'out']), 2, 'a second mail joined the thread')
+        self.assertEqual(len(s.draft_snapshots(ot)), 2, 'each turn keeps the draft it wrote')
+
+    def test_the_owners_own_answer_ends_in_a_recommendation_never_a_close(self):
+        from taskuary import general
+        s, tids = self.seeded()
+        tid = next(t for n, t in tids.items() if 'Trainly' in n)
+        self.assertTrue(general.owner_answered_last(s, tid))
+        self.assertIn('recommend closing', general.shown_history(s, tid)[-1]['summary']['did'])

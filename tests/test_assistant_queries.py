@@ -151,7 +151,8 @@ class EverydayAsks(unittest.TestCase):
         r = next(r for r in self.rows if r['q'].text == 'walk me through the reports')
         self.assertRegex(r['ideal']['say'], r'^Opened a report')
         r = next(r for r in self.rows if r['q'].text == 'go back to the one before')
-        self.assertEqual(r['ideal']['say'], 'Opened TQ-0030.', 'Back from TQ-0001 is the row above it, Start here')
+        # ...the tour, made last in the demo world (demo.seed_tour): 36 since the general agent's day joined it (demo.seed_agent_day)
+        self.assertEqual(r['ideal']['say'], 'Opened TQ-0036.', 'Back from TQ-0001 is the row above it, Start here')
 
     def test_the_habits_row_names_each_habit_and_answers_it_in_the_owners_words(self):
         # the model was told only "Learned 1 habit · 1 to check"; a habit taken back read "Took {{owner_first}} closes..." (2026-11-02)

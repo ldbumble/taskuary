@@ -178,53 +178,77 @@ usually <code>report</code> and <code>tool</code>.</p>
 </tr>
 </tbody></table>
 <h3 id="how-microsoft-sign-in-works">How Microsoft sign-in works<a class="anchor" href="#how-microsoft-sign-in-works" aria-label="Link to this section">#</a></h3>
-<p><strong>Sign in with Microsoft</strong> on the Outlook or Teams card opens Microsoft&#39;s own sign-in page in your
-browser. You sign in there, as you would anywhere else, and accept; the tab comes back to Taskuary
-on this computer and says <em>Signed in - you can close this tab</em>, and the card shows who signed in.
-Taskuary never sees your password.</p>
+<p><strong>Outlook and Teams sign in through your company&#39;s own Microsoft app.</strong> Taskuary ships no
+Microsoft app of its own, so nothing goes through anybody else&#39;s Azure: your IT registers one app
+in your own Microsoft Entra ID, once, and every Outlook and Teams card in your company uses it. The
+card shows these steps until its two IDs are filled in:</p>
+<ol>
+<li>Microsoft Entra ID → <strong>App registrations</strong> → <strong>New registration</strong> → name it Taskuary, accounts
+in this organizational directory only (single tenant) → Register.</li>
+<li><strong>Authentication</strong> → <strong>Add a platform</strong> → <strong>Mobile and desktop applications</strong> → redirect URI
+<code>http://localhost/api/ms/callback</code>. Entra ignores the port of a <code>localhost</code> redirect for a
+public client, so this one entry covers whatever port Taskuary listens on; the card also shows
+this install&#39;s own, <code>http://localhost:&lt;port&gt;/api/ms/callback</code> (7787 unless changed), if
+Microsoft asks for it.</li>
+<li><strong>Authentication</strong> → <strong>Allow public client flows: Yes</strong> → Save.</li>
+<li><strong>API permissions</strong> → Add a permission → Microsoft Graph → <strong>Delegated</strong>, then <strong>Grant admin
+consent</strong>:<ul>
+<li>Outlook: <code>offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read</code></li>
+<li>Teams: <code>offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read</code></li>
+<li>Plus <code>Files.ReadWrite</code> only on a card where the owner turns on <em>Allow saving files</em>.
+One app can serve both cards: list both sets.</li>
+</ul>
+</li>
+<li>From the app&#39;s <strong>Overview</strong>, copy the <strong>Application (client) ID</strong> and the <strong>Directory (tenant)
+ID</strong> into the card. Then sign in, in the browser or with a code.</li>
+</ol>
+<p>No client secret: a sign-in app is public by design. Someone running their own Taskuary for
+several people can name one app for the whole install with the <code>TASKUARY_MS_CLIENT_ID</code> environment
+variable instead; a card&#39;s own IDs still win.</p>
+<p><strong>Sign in with Microsoft</strong> opens Microsoft&#39;s own sign-in page in your browser. You sign in there,
+as you would anywhere else, and accept; the tab comes back to Taskuary on this computer and says
+<em>Signed in - you can close this tab</em>, and the card shows who signed in. Taskuary never sees your
+password.</p>
 <p>Under the hood this is the OAuth 2.0 authorization-code flow with PKCE, for a public client (no
 client secret): the sign-in carries a one-time <code>state</code> and an S256 code challenge, the code comes
 back to <code>http://localhost:&lt;port&gt;/api/ms/callback</code> on the machine Taskuary runs on, and is redeemed
 there with the matching verifier. The return is accepted once, only for the sign-in the card
 started, only from this machine, and only for ten minutes. The tab never shows a token. The
 refresh token is kept as the card&#39;s secret and renews itself from then on.</p>
-<p><strong>Sign in with a code instead</strong> - the small link beside the button - is the fallback for a
-Taskuary your browser cannot reach on <code>localhost</code>: one running on another computer, or a headless
-box. It shows a code to type at microsoft.com/devicelogin. It is never used unless you pick it.</p>
-<p><strong>Microsoft shows &quot;Need admin approval&quot; or error AADSTS900971 (&quot;No reply address provided&quot;)?</strong> Your
-company lets only an IT admin approve a new app, so the sign-in stops on Microsoft&#39;s page and never
-comes back - after a minute and a half the card says so and shows the approval link. Your IT admin
-opens that link once, signs in and clicks Accept; nothing is registered in your tenant and there is
-nothing to set up in Azure. After Accept their browser goes to <code>http://localhost/api/ms/callback</code>:
-if the page says it can&#39;t connect, that is expected - the approval is done. Then press Sign in with
-Microsoft again. An admin who saw AADSTS900971 on the approval link itself had one from an older
-Taskuary - it went to Microsoft&#39;s admin-consent page, which only returns to a web address and so
-had nowhere to send them back; the card&#39;s <em>Get the admin link</em> gives a fresh one, a sign-in page
-that asks for the organisation&#39;s consent. The same link answers AADSTS65001, AADSTS90094, AADSTS50105 (the app
-is limited to people IT assigned) and AADSTS53003 (a Conditional Access policy).</p>
-<div class="callout note"><p class="eyebrow">For an IT admin approving Taskuary</p><ul>
+<p><strong>Sign in with a code instead</strong> - the small link beside the button - is the device-code flow, with
+the same app. It is for a Taskuary your browser cannot reach on <code>localhost</code> (one running on another
+computer, or a headless box) or a company that prefers it, and it needs <em>Allow public client flows:
+Yes</em>. It shows a code to type at microsoft.com/devicelogin. Some organisations block it with a
+Conditional Access policy.</p>
+<p><strong>What Microsoft&#39;s errors mean:</strong></p>
+<ul>
+<li><strong>AADSTS50011</strong> (the redirect URI does not match): the app does not list
+<code>http://localhost/api/ms/callback</code> under <em>Mobile and desktop applications</em> yet. Microsoft stops
+on its own page and never comes back; the card says so while it waits.</li>
+<li><strong>AADSTS700016</strong> (no such app in the directory): the Application (client) ID or the Directory
+(tenant) ID on the card is wrong. Copy both again from the app&#39;s Overview page.</li>
+<li><strong>AADSTS50194</strong>: the app is single-tenant and the card has no Directory (tenant) ID.</li>
+<li><strong>AADSTS7000218</strong> (a client secret is required): the redirect is on the <em>Web</em> platform instead
+of <em>Mobile and desktop applications</em>, or public client flows are off.</li>
+<li><strong>&quot;Need admin approval&quot;</strong>, <strong>AADSTS65001</strong>, <strong>AADSTS90094</strong>, <strong>AADSTS900971</strong> (&quot;No reply address
+provided&quot;), <strong>AADSTS50105</strong> (the app is limited to people IT assigned) or <strong>AADSTS53003</strong> (a
+Conditional Access policy): admin consent has not been granted yet. After a minute and a half
+the card says so and shows an approval link. Your IT admin opens it once, signs in and clicks
+Accept - the same as <em>Grant admin consent</em> on the app&#39;s API permissions page. After Accept their
+browser goes to <code>http://localhost/api/ms/callback</code>: if the page says it can&#39;t connect, that is
+expected - the approval is done. Then press Sign in with Microsoft again.</li>
+</ul>
+<p><strong>A card that signed in before Taskuary stopped shipping a Microsoft app</strong> keeps its sign-in on
+record but reads nothing until its company&#39;s app is on it: the card says so, shows the steps, and
+signing in again with the two IDs picks up where it left off. Nothing already in Taskuary is lost.</p>
+<div class="callout note"><p class="eyebrow">For an IT admin</p><ul>
 <li><strong>No device-code flow by default.</strong> Sign-in is the authorization-code flow with PKCE in the
 system browser, so a Conditional Access policy that blocks device-code authentication does not
 block Taskuary. Only a user who chooses <em>Sign in with a code instead</em> uses the device-code flow.</li>
-<li><strong>Redirect URI:</strong> <code>http://localhost/api/ms/callback</code>, on the <em>Mobile and desktop applications</em>
-platform. Entra ignores the port of a <code>localhost</code> redirect for a public client, so this one
-entry covers whatever port Taskuary listens on (7787 unless changed). The admin-approval link
-returns to the same <code>http://localhost/api/ms/callback</code>, exactly as registered: on the computer
+<li><strong>The approval link</strong> is Microsoft&#39;s standard sign-in page (<code>/oauth2/v2.0/authorize</code>) for your
+app with <code>prompt=admin_consent</code>, returning to <code>http://localhost/api/ms/callback</code>: on the computer
 Taskuary runs on it shows <em>Approved</em>; anywhere else the page does not load, and the approval
-stands all the same. Nothing is signed in by it - the code it brings back is never used.
-Missing, Microsoft&#39;s own page stops with error <strong>AADSTS50011</strong> (the redirect URI does not match) and never returns to
-Taskuary - the card says so while it waits.</li>
-<li><strong>Delegated permissions (Microsoft Graph)</strong>, all a user&#39;s own consent:<ul>
-<li>Outlook: <code>offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read</code></li>
-<li>Teams: <code>offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read</code></li>
-<li>Plus <code>Files.ReadWrite</code> only on a card where the owner turns on <em>Allow saving files</em>.</li>
-</ul>
-</li>
-<li><strong>Approving once for everyone:</strong> the card&#39;s <em>Get the admin link</em> is Microsoft&#39;s standard sign-in
-page (<code>/oauth2/v2.0/authorize</code>) for Taskuary&#39;s app id with <code>prompt=admin_consent</code> - sign in as an
-admin and Accept with <em>Consent on behalf of your organization</em>. Nothing is registered in your tenant.</li>
-<li><strong>Or from the Entra admin center</strong>, once anyone in your organisation has signed in to Taskuary
-(or tried to): Enterprise applications → Taskuary → Permissions → <em>Grant admin consent</em>.</li>
+stands all the same. Nothing is signed in by it - the code it brings back is never used.</li>
 </ul>
 </div><p>Taskuary reads your <strong>Sent</strong> folder as well as your inbox. That is what makes &quot;has this been
 answered?&quot; a real question rather than a guess, and it is what <code>STYLE.md</code>&#39;s <strong>Generate from

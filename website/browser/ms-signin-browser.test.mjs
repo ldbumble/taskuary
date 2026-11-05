@@ -18,6 +18,8 @@ const type = (page, sel, v) => page.evaluate((sel, v) => {
   set.call(i, v); i.dispatchEvent(new Event("input", { bubbles: true }));
 }, sel, v);
 const AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=app&code_challenge_method=S256&state=s";
+// the company's own app (msauth.py ships none): both roads sign in through the ids on the card
+const APP = { client_id: "1b2c3d4e-0000-0000-0000-00000000000a", tenant_id: "1b2c3d4e-0000-0000-0000-00000000000b" };
 
 test("Outlook: Sign in with Microsoft opens the browser sign-in, and the code is the secondary link", { timeout: 600000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
@@ -29,9 +31,10 @@ test("Outlook: Sign in with Microsoft opens the browser sign-in, and the code is
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (r) => {
     const p = new URL(r.url()).pathname, json = (body) => r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    // the card as it is before anyone signed in: no account, no secret
+    // the card as it is before anyone signed in: the company's app on it, no account, no secret
     if (p === "/api/connectors" && r.method() === "GET")
-      return json({ ...list, data: list.data.map((c) => c.ConnectorId === ol.ConnectorId ? { ...c, HasSecret: false, SignedOut: false, ConfigJson: "{}" } : c) });
+      return json({ ...list, data: list.data.map((c) => c.ConnectorId === ol.ConnectorId
+        ? { ...c, HasSecret: false, SignedOut: false, ConfigJson: JSON.stringify(APP), MsApp: "card" } : c) });
     if (p === `/api/connectors/${ol.ConnectorId}/ms/signin`) {
       const body = JSON.parse(r.postData() || "{}"); starts.push(body);
       return json(body.code ? { flow: `f${starts.length}`, mode: "code", user_code: "ABCD-1234", verification_uri: "https://microsoft.com/devicelogin", expires_in: 900, interval: 5 }
@@ -60,6 +63,7 @@ test("Outlook: Sign in with Microsoft opens the browser sign-in, and the code is
   assert.ok(await press(page, "Sign in with Microsoft"));
   await until(page, () => /browser tab that opened/.test(document.querySelector("[data-tq-browse-one]")?.innerText || ""));
   assert.equal(starts.at(-1).code, false, "the default is the browser sign-in");
+  assert.equal(starts.at(-1).client_id, APP.client_id, "through the company's own app");
   assert.deepEqual(await page.evaluate(() => window.__opened), [AUTHORIZE], "Microsoft's page was opened");
   assert.doesNotMatch(await page.evaluate(() => document.querySelector("[data-tq-browse-one]").innerText), /ABCD-1234|devicelogin/);
 

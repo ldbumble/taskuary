@@ -1,5 +1,5 @@
 """Sign in with Microsoft (msauth.py + the /ms endpoints): a regular user connects Outlook
-in the browser (or, as a fallback, a code) with their own account - no tenant id, no secret, no Azure portal."""
+in the browser (or, as a fallback, a code) with their own account, through their company's own app registration - no secret."""
 import base64, hashlib, html, json, unittest
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
@@ -31,7 +31,33 @@ class DeviceFlowTests(unittest.TestCase):
     def test_no_app_id_is_said_plainly(self):
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
             with self.assertRaises(RuntimeError) as e: msauth.device_start({})
-        self.assertIn('TASKUARY_MS_CLIENT_ID', str(e.exception))
+            self.assertIn("your company's own Microsoft app", str(e.exception)); self.assertIn('Outlook card', str(e.exception))
+            # a card signed in through an app Taskuary used to ship: its refresh says the same, before any call to Microsoft
+            with mock.patch('requests.post') as p, self.assertRaises(RuntimeError) as e: msauth.refresh({'auth': 'user', '_kind': 'teams'}, 'RT')
+            p.assert_not_called(); self.assertIn('Teams card needs your company', str(e.exception))
+
+    def test_no_microsoft_app_ships_with_taskuary(self):
+        """The owner, 2026-11-05: a company signs in through its own app, never one in somebody else's Azure."""
+        import importlib, os
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('TASKUARY_MS_CLIENT_ID', None)
+            self.assertEqual(importlib.reload(msauth).PUBLIC_CLIENT_ID, '')
+        importlib.reload(msauth)
+        self.assertEqual(msauth.client_id({'client_id': ' app-9 '}), 'app-9')
+
+    def test_the_ids_typed_on_the_card_are_checked_before_microsoft(self):
+        ok = '1b2c3d4e-0000-0000-0000-000000000000'
+        self.assertEqual(msauth.check_app(ok, ok), ''); self.assertEqual(msauth.check_app(ok, 'northwind.example'), '')
+        self.assertIn('Application (client) ID', msauth.check_app('app-1', ok))
+        self.assertIn('Directory (tenant) ID', msauth.check_app(ok, ''))
+
+    def test_microsoft_errors_about_the_companys_app_say_what_to_fix(self):
+        d = msauth._friendly("invalid_request: AADSTS50011: The redirect URI 'http://localhost:7787/api/ms/callback' specified in the request "
+                             "does not match the redirect URIs configured for the application")
+        self.assertIn('Mobile and desktop applications', d); self.assertIn('http://localhost/api/ms/callback', d); self.assertIn(':7787', d)
+        self.assertIn('client) ID or the Directory (tenant) ID', msauth._friendly('AADSTS700016: Application with identifier was not found'))
+        self.assertIn('Directory (tenant) ID', msauth._friendly('AADSTS50194: Application is not configured as a multi-tenant application'))
+        self.assertIn('Allow public client flows', msauth._friendly('AADSTS7000218: The request body must contain client_assertion or client_secret'))
 
     def test_poll_is_pending_then_tokens_then_friendly_errors(self):
         with mock.patch('requests.post', return_value=R(400, {'error': 'authorization_pending'})):
@@ -170,6 +196,26 @@ class BrowserSignInTests(unittest.TestCase):
 
     def _back(self, q, code='C', client=None, **extra):
         return (client or self.LOCAL).get('/api/ms/callback', params={'code': code, 'state': q['state'][0], **extra})
+
+    def test_the_companys_own_app_typed_on_the_card_is_what_signs_in_and_stays_on_the_card(self):
+        cid, app, tid = self._card(), '1b2c3d4e-0000-0000-0000-00000000000a', '1b2c3d4e-0000-0000-0000-00000000000b'
+        with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
+            r = c.post(f'/api/connectors/{cid}/ms/signin', json={})
+            self.assertEqual(r.status_code, 409); self.assertIn('Application (client) ID', r.json()['detail'])   # setup, said plainly
+            r = c.post(f'/api/connectors/{cid}/ms/signin', json={'client_id': 'not-a-guid', 'tenant_id': tid})
+            self.assertEqual(r.status_code, 409); self.assertNotIn('client_id', json.loads(server.store.get_connector(cid)['ConfigJson'] or '{}'))
+            d = c.post(f'/api/connectors/{cid}/ms/signin', json={'client_id': app, 'tenant_id': tid}).json()
+            u = urlsplit(d['url'])
+            self.assertEqual((parse_qs(u.query)['client_id'][0], u.path), (app, f'/{tid}/oauth2/v2.0/authorize'))
+            self.assertEqual({k: json.loads(server.store.get_connector(cid)['ConfigJson'])[k] for k in ('client_id', 'tenant_id')},
+                             {'client_id': app, 'tenant_id': tid})
+            with mock.patch('taskuary.msauth.requests.post', return_value=R(200, {'device_code': 'D', 'user_code': 'ABCD-1234', 'verification_uri': 'u'})) as p:
+                self.assertEqual(c.post(f'/api/connectors/{cid}/ms/signin', json={'code': True}).json()['user_code'], 'ABCD-1234')
+            self.assertEqual((p.call_args[1]['data']['client_id'], f'/{tid}/oauth2/v2.0/devicecode' in p.call_args[0][0]), (app, True))   # the code road: the same app
+            row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == cid)
+            self.assertEqual(row['MsApp'], 'card'); self.assertTrue(row['MsRedirect'].endswith('/api/ms/callback'))
+            bare = self._card(); row = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == bare)
+            self.assertEqual(row['MsApp'], '')
 
     def test_the_authorize_url_asks_with_pkce_s256_the_cards_scopes_and_a_loopback_return(self):
         d, q = self._start(self._card())

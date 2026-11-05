@@ -2350,7 +2350,14 @@ def _refuse_closed_chat(task_id: int):
     dock - the assistant that runs Taskuary - is never a task you close, so it is never refused."""
     from . import general
     t = store.get_task(task_id) or {}
-    if t.get('Status') in ('done', 'dropped') and not general.is_dock(t): raise HTTPException(409, CLOSED_CHAT)
+    if t.get('Status') not in ('done', 'dropped') or general.is_dock(t): return
+    # ...EXCEPT A CHAT TASK, WHERE TYPING IS THE WAY ON (the owner, 2026-11-05: "typing into chat should continue it or restart it ... we can
+    # remove those 2 buttons like continue agent or start new agent. Just type and it continues"): the words reopen it, as Reopen does
+    # (task.reopen: open, an old Remind me cleared), and start_session picks the saved conversation back up, or starts one
+    if general.handles(t):
+        store.update_task(task_id, {'Status': 'open', 'RemindAt': ''}, ACTOR)
+        store.audit('task', task_id, 'reopened_by_typing', ACTOR); return
+    raise HTTPException(409, CLOSED_CHAT)
 
 FOLLOW_UP_STALE = 'The newest messages could not be read first, so the agent goes on from what it already has'
 

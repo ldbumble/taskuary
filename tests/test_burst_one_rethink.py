@@ -46,3 +46,11 @@ def test_a_line_that_finds_the_session_ended_starts_it_again_instead_of_being_dr
         ingest._pass_general(s, tid, mail('Following up: a late fee was added.'))
     assert len(again) == 1 and 'late fee' in again[0]
     assert not any("couldn't take" in c['Body'] for c in s.list_comments(tid))
+
+
+def test_a_change_on_the_thread_is_said_plainly_first():
+    """The owner, 2026-11-05: "if i respond myself or user in the channel that takes care of the task that should also trigger the chat to
+    say i see you responded there. we are good or whatever they feel like is next steps"."""
+    own = ingest.replan_turn(mail('Done - sent it over this morning.'), own=True)
+    assert 'I see you answered' in own and 'took care of it' in own and 'nothing left' in own
+    assert own.startswith("THE THREAD CHANGED: you already answered")

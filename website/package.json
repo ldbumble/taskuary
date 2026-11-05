@@ -9,6 +9,7 @@
     "build:demo": "vite build --mode demo --outDir ../site/demo --base=./",
     "build:docs": "node tools/build-docs.mjs",
     "test": "node --test \"test/**/*.test.mjs\"",
+    "test:browser:voice": "node --test browser/builtin-voice-card.test.mjs",
     "test:browser": "node --test --test-concurrency=1 browser/loads-once.test.mjs browser/general-starting.test.mjs browser/continue-shows-turn.test.mjs browser/run-another-general.test.mjs",
     "check:deadends": "node deadend_check.mjs",
     "lint:undef": "eslint -c eslint.undef.mjs src/*.jsx src/*.js"

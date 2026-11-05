@@ -232,3 +232,30 @@ def test_a_pending_draft_is_not_nothing_left():
     turn(s, tid, f'Done.\n{block(on_you=[], nothing_left=True)}')
     with mock.patch.object(advisor, '_draft', return_value={'DraftText': 'Hi Gail'}):
         assert 'nothing left' not in advisor.summary_line(s, tid)
+
+
+# ── each turn keeps the draft it wrote (the owner, 2026-11-05) ──────────────────────────────
+def _redraft(s, tid, rid, text): s._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (text, rid))
+
+
+def test_a_turns_draft_keeps_its_own_words_after_a_later_redraft():
+    s = MemoryStore(); tid = task(s)
+    rid = s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail, the run is Friday.'})
+    _, sess = turn(s, tid, f'Drafted it.\n{block()}')
+    _redraft(s, tid, rid, 'Hi Gail, the run moved to Thursday.')
+    turn(s, tid, f'Redrafted it.\n{block()}', sess)
+    turn(s, tid, f'Nothing new on the draft.\n{block()}', sess)
+    answers = [m for m in general.shown_history(s, tid) if m.get('summary')]
+    assert [[d['text'] for d in m.get('drafts_then', [])] for m in answers] == [['Hi Gail, the run is Friday.'], ['Hi Gail, the run moved to Thursday.'], []]
+    assert [m['summary']['drafted'] for m in answers] == [[{'review': rid}], [{'review': rid}], []]
+
+
+def test_the_kept_draft_never_puts_its_words_in_the_summary():
+    s = MemoryStore(); tid = task(s)
+    s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Gail,\nThe code is Tern-Vault-9081.\nAlex'})
+    turn(s, tid, f'Drafted it.\n{block()}')
+    (row,) = summaries(s, tid)
+    assert 'Tern-Vault-9081' not in row['Body']
+    assert 'Tern-Vault-9081' in general.shown_history(s, tid)[-1]['drafts_then'][0]['text']
+    s.delete_task(tid)
+    assert s._rows('SELECT * FROM draft_snapshot WHERE TaskId=?', (tid,)) == []

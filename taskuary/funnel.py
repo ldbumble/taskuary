@@ -168,6 +168,7 @@ def says(r: dict) -> str:
     return _cut(_gist(r.get('Preview') or r.get('BodyText') or '', 240), PILL) or subj
 
 
+CHAT_READY_LANES = ('blocked', 'approve')
 def lane_index(lane: str) -> int: return LANES.index(lane) if lane in LANES else len(LANES)
 
 
@@ -1407,6 +1408,13 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
                     'sid': live.get('sid'), 'tail': live.get('tail') or [],
                     'mode': live.get('mode') or 'terminal'}
     items = [held_item(i) for i in items]
+    # ...and a CHAT task's waiting move is the agent's, whatever it is (the owner, 2026-11-05: "we can remove reply ready for you since it can be
+    # any action"): its row says "agent ready for you" (lanes.json `chat_ready`) - a coding task keeps its own words
+    if (tids := {i['tid'] for i in items if i.get('tid') and i.get('lane') in CHAT_READY_LANES}):
+        from . import general
+        chats = {r['TaskId'] for r in store._rows(f"SELECT TaskId, Kind FROM task WHERE TaskId IN ({','.join('?' * len(tids))})", tuple(tids))
+                 if general.handles(r)}
+        items = [i | {'chat': True} if i.get('tid') in chats and i.get('lane') in CHAT_READY_LANES else i for i in items]
     # the wrap-up on a task an agent still holds is not a question yet either
     seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
     hours, cap = knobs(store)

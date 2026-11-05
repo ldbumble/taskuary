@@ -95,7 +95,7 @@ test("closing the detail shows the list rather than re-opening the first task", 
 test("with a live session, X steps back to the task first and the session keeps running", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = taskSource();
-  assert.match(source, /const sessionView = liveSession && !peek;/);
+  assert.match(source, /const sessionView = \(liveSession \|\| chatKept\) && !peek;/);
   // ...and it drops a hand-picked stage with it, so the reply the wrap-up just wrote is what the
   // page opens on rather than the pane that has finished (2026-09-22)
   assert.match(source, /if \(!liveSession\) \{ setPeek\(false\); setOpenStage\(null\); \}/, "the session ending puts the page back");

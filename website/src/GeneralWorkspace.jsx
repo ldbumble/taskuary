@@ -966,6 +966,16 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     catch (e) { setError(errText(e)); setNewChatBusy(false); }
   };
 
+  // ...AND ONCE IT IS UP FOR THE OWNER IT STAYS UP until the agent answers again (the owner, 2026-11-05, signing in to a site in two steps: "I put
+  // in username then hit next the box disappeared then reopened to put in password. You can leave it open until auth is done"): between a
+  // sign-in's pages there is a moment with no ask open, and the page went away under them
+  const needRaw = needsOwner(data?.asking && data.asking.request_id !== answered ? data.asking : null,
+      (data?.browserActs || []).map((r) => heldOn(r, data?.session?.sid)).filter(Boolean)), answers = (data?.messages || []).filter((m) => m?.role === "assistant").length;
+  const [needHeld, setNeedHeld] = useState(null);
+  useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (needHeld != null && !needRaw && (answers > needHeld || !data?.session?.sid)) setNeedHeld(null); }, [answers, needRaw, needHeld, data?.session?.sid]);
+  const needNow = needRaw || needHeld != null;
+
   // ...a start the page already knows of says so before the conversation's first read lands, never a 520px spinner over nothing
   if (!data && !error) return !dock && opening
     ? <Box data-tq-starting="" sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.75, overflow: "hidden", bgcolor: PANEL2, px: 1.5, pt: 1.5, ...(compact ? { height: "auto" } : { flex: "0 0 auto" }) }}>
@@ -973,14 +983,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     : <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the question the answer box below shows is said there only (askOnce.js)
-  // ...AND ONCE IT IS UP FOR THE OWNER IT STAYS UP until the agent answers again (the owner, 2026-11-05, signing in to a site in two steps: "I put
-  // in username then hit next the box disappeared then reopened to put in password. You can leave it open until auth is done"): between a
-  // sign-in's pages there is a moment with no ask open, and the page went away under them
-  const needRaw = needsOwner(asking, viewActs), answers = (data?.messages || []).filter((m) => m?.role === "assistant").length;
-  const [needHeld, setNeedHeld] = useState(null);
-  useEffect(() => { if (needRaw) setNeedHeld(answers); }, [needRaw]);   // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (needHeld != null && !needRaw && (answers > needHeld || !session?.sid)) setNeedHeld(null); }, [answers, needRaw, needHeld, session?.sid]);
-  const needNow = needRaw || needHeld != null;
   const shownMessages = withoutAsked(messagesWithTrace(data?.messages, session, dock),
     !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
   // WHO is on this task, what its turn has done so far, and when the turn began - all three read

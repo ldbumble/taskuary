@@ -2,6 +2,64 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.0 - 2026-11-05
+
+- Triage sees every open item and what the owner's search finds, so a matter joins its task from any source
+- A row clicked lights Back and Next at once, a watched row included
+- Mark done on a watched row takes it off the rail at the press and keeps it off
+- The rail's age gutter splits the first half hour into < 5m, < 15m and < 30m
+- Triage no longer picks a worker for a task: every general task runs on the one assistant; routines still name theirs
+- A general task whose reply writer says NEEDS starts the assistant on it, as a reply task's does
+- A login the thread asks the owner for, kept in their own files, goes in the drafted reply and never in the conversation
+- A drafted reply's body stays out of the agent's pane, live trace and kept steps
+- A research task handed on by the reply writer's NEEDS keeps its kind, and counts as opening until its start lets go
+- A drafted reply's body stays off the CLI live line and an ACP call named by its kind, and a broken start lets its hold go
+- A Claude hook on the draft call names it by what it is: the worker's tool line and the approval text carry no body
+- A stranger session's permission card names the draft call, never its body
+- The general agent's one goal is to get the owner to done, starting from triage's reading
+- A stranger's task keeps the one goal but is never steered toward a login
+- The login rule lives only in the owner's own goal line, never in a document a stranger's task reads
+- Each agent turn ends with what it is about, what it did and what is on the owner
+- A summary block cut short never reaches the screen, and the owner's On you steps survive ticks, edits and empty summaries
+- The agent's chat says Working on thisâ€¦, and ends each turn in three parts
+- An opened Working on thisâ€¦ stays open, a failure is never folded, and a pending Approve is not Nothing left
+- Profiles are for routines only: the roster and the "Can be given new work" switch go
+- The assistant-tools page is the catalogue as it stands
+- GOAL_LINE is defined once, and the danger check asks the verdict schema without a profile
+- The general agent's goal is a principle: take the work off the owner's hands
+- A PDF clicked in Came from or in the agent's answer is read in place, Download beside it
+- An agent's browser starts at its first navigate, never on an empty tab, and a hand-over with no page is a question in words
+- Only a browser on a page takes room in the agent's canvas: an empty tab is no view and no chip
+- An agent fills and signs a form with the signature the owner saved once
+- Settings has a Your signature card: draw it or upload it once, see it, clear it
+- A task whose home is the chat shows Came from and the agent, and opens on the chat
+- A live general agent's strip carries Mark done where the chat is home, and a coding task never flashes two sections
+- A browser test: an agent started on the open task says Startingâ€¦ within 1.5 s
+- A start on the open task says Startingâ€¦ at once, and a queued one Waiting its turn
+- A correction typed in the chat is learned the way the draft box's words were
+- Drafts read how the owner works, inside the same budget
+- The Advisor reads the agent's last summary, so Nothing left to do lights Mark done
+- The agent's process stays warm while its task is on screen (cold 7 s, warm 3 s)
+- Any change on the thread wakes the task's assistant, which re-plans the whole next step
+- The warm-keeping heartbeat route is the owner's: a session never keeps its own process alive
+- A reply draft is never left empty without saying so, and a rewrite says whether it changed
+- Close out shows a draft filed under the open card, says an empty one plainly, and the Assistant says Rewritten only when it changed
+- An FYI or a report says what it says and what matters to you
+- A question on a report, FYI or dashboard is answered from it - no task, no agent
+- The Assistant says an act is done only when the store shows it: every receipt from the result, never the plan
+- Draft cards, emails owed and On you steps live in the agent's summary; Close out is gone on chat tasks
+- A redraft that says NO REPLY marks the waiting draft Not needed, with the writer's WHY, instead of leaving it ready to send
+- Run now's notice sits under the Reports toolbar, not squeezed beside its buttons
+- Removing the WhatsApp card unpairs its bridge, and the open card stops scrolling to its top
+- CI's Python suite is green again: stale stand-ins, a leaked session, and two sentences that typed a place
+- Fix WhatsApp wrapped messages and first LID delivery (#273)
+- A pull-request row is shown to triage by what it holds and who sent it, so a chat line about that PR joins it
+- The agent-button tests open Send to agent's box only where it is not already up, and the walk says why Draft reply goes unpressed on chat tasks
+- A fresh question on a task its agent already worked reaches that agent's chat, and the demo lets an open task keep its agent warm
+- The Assistant says an agent it handed work to is on it, because the hand-off now says the agent started
+- A chat task's Agent section is one chat: the ask, each turn, a line for each new mail, and the box always under it
+- Came from no longer repeats triage's reading as "What's going on", and the source-text tests follow the one-chat pane
+
 ## 0.3.10.29 - 2026-11-04
 
 - Triage sees every open item and what the owner's search finds, so a matter joins its task from any source

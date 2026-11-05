@@ -122,7 +122,7 @@ class RoadTests(Base):
         def fake_open(store_, agent, tid, repo, cwd, rows, cols, actor, model=None, resume=None, brain=None, seed_fn=None):
             t = FakeTerm(f's{tid}', tid, cwd); terminal.SESSIONS[t.sid] = t
             self.opened.append({'tid': tid, 'model': model, 'brain': brain}); return t
-        def fake_session(store_, tid, connector_id=None, model=None, pick=None):
+        def fake_session(store_, tid, connector_id=None, model=None, pick=None, **kw):
             self.made.append({'tid': tid, 'pick': pick, 'model': model})
             return mock.Mock(sid=f'g{tid}', task_id=tid, alive=True, browser_wanted=False, busy=False, pick=pick or '')
         # the router's start runs for real down to the session it builds (the conftest guard passes an owner's start through)

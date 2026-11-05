@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps } from "../src/agentSummary.js";
+import { answerShown, chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps } from "../src/agentSummary.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -108,4 +108,17 @@ test("a chat task's chat carries no agent picker, model box or Full screen - onl
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /!dock && !noTools && !chat && toolsAt && !full && <>\{createPortal\(tools, toolsAt\)\}<\/>/);
   assert.match(view, /!dock && !noTools && !chat && !\(toolsAt && !full\) && <Box/);
+});
+
+// THE AGENT SAYS WHETHER ITS PROSE IS THE RESULT (the owner, 2026-11-05: "no hardcoded words"): its own `answer_is_result` decides; a turn
+// that never said - every turn filed before - keeps the length-or-link rule, so history draws as it did
+test("the agent's answer_is_result decides whether its prose shows beside the summary", () => {
+  const long = "Here is what I found. ".repeat(40);
+  assert.equal(answerShown({ answer_is_result: true }, long), true);
+  assert.equal(answerShown({ answer_is_result: false }, "Short and done."), false);
+  assert.equal(answerShown({}, "Short and done."), true);
+  assert.equal(answerShown({}, long), false);
+  assert.equal(answerShown({}, long + " https://northwind.example/brief"), true);
+  assert.equal(answerShown({ answer_is_result: true }, "  "), false);
+  assert.doesNotMatch(read("GeneralWorkspace.jsx"), /answerWords/, "the pane asks the agent's say, never its own rule");
 });

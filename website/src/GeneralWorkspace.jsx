@@ -183,14 +183,16 @@ const CameIn = ({ mail }) => mail.map((x, i) => (
 // over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
 const ChatCtx = React.createContext(false);
 const when = (at) => { const d = dayLabel(at); return [d && d !== "Today" ? d : "", fmtTime12(at)].filter(Boolean).join(" "); };
-const Arrived = ({ mail }) => mail.map((x, i) => (
+// ...the owner's own reply sent outside Taskuary draws nothing of its own (the owner, 2026-11-05: "not bubbles"): the agent's re-think under it
+// says what it saw ("I saw you replied ... I recommend closing it")
+const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i) => (
   <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
     <span className="tq-aui-arrived-head">↓ {[when(x.at), `${x.who || "Someone"} wrote again`].filter(Boolean).join(" · ")}:</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
-  if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
+  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root> : null;
   return brief ? (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">
       <CameIn mail={mail || []} />

@@ -102,7 +102,7 @@ class LastWordTests(unittest.TestCase):
         import io, os
         src = io.open(os.path.join('taskuary', 'general.py'), encoding='utf-8').read()
         src.index("self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)")
-        self.assertNotIn('threading.Timer(0.1, self._close_out', src)
+        self.assertNotIn('threading.Timer(0.1, self._close_out', src)   # ...not even after the owner answered: it recommends
 
 
 if __name__ == '__main__':

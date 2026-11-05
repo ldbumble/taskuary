@@ -305,6 +305,15 @@ def owner_closes_line() -> str:
             f'earlier turn of this conversation did.')
 
 
+# THE ONE ENDING THE AGENT SAYS (the owner, 2026-11-05: "it should trigger a new taskuary chat ... saying i saw you reply so i will close the
+# task" - then: "so i recommend close it"): the owner answered the thread themselves, outside Taskuary (general.owner_answered_last); the
+# agent thinks again and RECOMMENDS the close - the owner makes it
+OWNER_ANSWERED_LINE = ('THE OWNER ANSWERED THIS THEMSELVES: the newest message on the thread is their own reply, sent outside Taskuary. Think '
+                       'again about the task in its light. Say in one or two short lines that you saw their reply and what it settled; if that '
+                       'took care of it, recommend they close the task (you never close it yourself); if something is still open, say what. '
+                       'Do not draft a reply they already sent.')
+
+
 # ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between
 # the markers become the task's pending reply as written (wrapup.agent_reply) and stay in the chat too.
 REPLY_OPEN, REPLY_CLOSE = '[[TASKUARY-REPLY]]', '[[/TASKUARY-REPLY]]'

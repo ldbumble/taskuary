@@ -2981,8 +2981,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...in the chat, only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result
   // keeps the chat that holds it on screen (`data-tq-waits`, the agent room's :has)
   const waits = !!(pendingReview || moreDrafts.length || proposals.length || owesEmails || handoff);
-  const chatCards = cardsIn && (waits || t?.Status === "done" || co.writeupAt === "closeout" || chatReplyShown({ replyMessage, pendingReview, sentReview, unsentReview }) || sentReview || unsentReview || ended || sentOutside.length
-    || calAsk?.invite || rounds.length > 1 || (advisorNote && adviceIn === "close")) ? <Box ref={closeOutRef} data-tq-closeout="chat" data-tq-waits={waits ? "" : undefined}
+  // ...IN THE CHAT, ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer,
+  // emails owed - never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
+  const chatCards = cardsIn && !["done", "dropped"].includes(t?.Status) && (waits || co.writeupAt === "closeout"
+    || chatReplyShown({ replyMessage, pendingReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={closeOutRef} data-tq-closeout="chat" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{closeBody(true)}</Box> : null;
   return (
     <>
@@ -3376,9 +3378,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
                       and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
                   {/* AN AGENT CLOSED IT: nothing waits on you (the redesign, owner-approved 2026-10-21) - said first, over who closed it and why */}
-                  {!term?.alive && t?.Status === "done" && rowState === "agentdone" && (
+                  {/* ...never on a chat task (the owner, 2026-11-05: "Don't want the top line nothing to do here"): the agent says it in the chat */}
+                  {!chatPane && !term?.alive && t?.Status === "done" && rowState === "agentdone" && (
                     <Typography data-tq-handled="" sx={{ color: "#47654a", fontSize: 13, fontWeight: 600, mt: 0.9 }}>Nothing to do. It's handled.</Typography>)}
-                  {!term?.alive && t?.Status === "done" && detail?.closedWhy && (
+                  {!chatPane && !term?.alive && t?.Status === "done" && detail?.closedWhy && (
                     <Typography data-tq-closed-why="" sx={{ color: INK, fontSize: 12.5, lineHeight: 1.45, mt: 0.9 }}>{detail.closedWhy}</Typography>)}
                   {/* ...and the note it was closed with, one muted line, whole on hover: opened later on its work, the note stood only under
                       Close out, folded (the owner, 2026-10-23: "write on it marked done with note") */}

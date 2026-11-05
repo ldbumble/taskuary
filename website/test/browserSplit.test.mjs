@@ -21,6 +21,9 @@ import {
   viewOnScreen,
   heldOn,
   isTurn,
+  isPress,
+  needsOwner,
+  PRESS_PREFIX,
   TURN_PREFIX,
   wheelMessage,
 } from "../src/browserSplit.js";
@@ -143,6 +146,13 @@ test("what waits on the view: a held act of THIS browser, and the agent's hand-o
   assert.equal(heldOn(row({ ...act, what: "" }), "s1").what, act.command);
   assert.ok(isTurn({ request_id: `${TURN_PREFIX}abc` }));
   assert.ok(!isTurn({ request_id: "signin:bank.example" }) && !isTurn(null));
+});
+
+test("a press handed over is the owner's turn on the page, and only it is a press", () => {
+  const press = { request_id: `${PRESS_PREFIX}abc`, text: 'Your turn: check it and press "Pay $42.00" on the page.' };
+  assert.ok(isPress(press) && isTurn(press), "drawn on the view as the owner's turn (browsergate.hand_over)");
+  assert.ok(needsOwner(press), "the browser shows beside the chat for it");
+  assert.ok(!isPress({ request_id: `${TURN_PREFIX}abc` }) && !isPress(null), "a captcha's hand-over keeps its own line");
 });
 
 

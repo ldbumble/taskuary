@@ -17,7 +17,10 @@ of ours runs is read here BEFORE it runs:
   Typing is read from the command's verb (TYPES), agent-browser's fixed vocabulary, not judged over words. Text with a line break
   in it is not plain typing: a newline typed into a form can be its Enter.
 - IRREVERSIBLE, OR UNSURE, OR NO VERDICT AT ALL (no brain, a timeout, an unreadable answer): HELD. The tool call is refused with
-  why, and the act goes on the task as a proposal (proposals.ACTIONS 'browser_act') - the existing card with Approve and Dismiss.
+  why. Where the owner watches this session (a live chat or pane, its browser on a page), the PAGE is handed to them (hand_over):
+  left as the agent filled it, scrolled to the control, and the owner presses the site's own button themselves - Taskuary watches
+  it move past the step and tells the agent. A run nobody watches puts the act on the task as a proposal instead (proposals.ACTIONS
+  'browser_act') - the existing card with Approve and Dismiss.
 - APPROVED, Taskuary runs that exact command in that session's browser itself (perform) - only while the browser is still on the
   page the act was held on - and tells the agent what happened. Dismissed, the agent is told it was not done.
 
@@ -26,7 +29,7 @@ whose hook could not reach Taskuary (the hook prints nothing and the call runs -
 Claude is not broken whenever Taskuary is closed); and an agent that reaches Chrome some other way than agent-browser (its own
 DevTools client, a script). This gates the road browser agents are told to take (browserview.brief), not every road there is.
 """
-import json, os, re, shlex, shutil, subprocess, tempfile
+import json, os, re, shlex, shutil, subprocess, tempfile, threading, time
 from pathlib import Path
 from urllib.parse import urlsplit
 from loguru import logger
@@ -207,17 +210,22 @@ _VERB = {'click': 'click', 'dblclick': 'double-click', 'press': 'press', 'fill':
 _REF_LINE = r'^\s*-?\s*(?P<role>[\w-]+)\s*(?:"(?P<name>[^"]*)")?[^\n]*\bref=(?P<ref>{ref})\b'
 
 
+def control(act: dict, pg: dict) -> dict:
+    "{ref, name, role} of the control an act names, off the page's snapshot - {} when it names no @ref; no role when the page no longer shows it."
+    ref = next((t.lstrip('@') for t in act.get('args') or [] if t.startswith('@') and len(t) > 1), '')
+    if not ref: return {}
+    m = re.search(_REF_LINE.format(ref=re.escape(ref)), str(pg.get('elements') or ''), re.M)
+    return {'ref': ref, 'name': (m.group('name') or '').strip() if m else '', 'role': m.group('role') if m else ''}
+
+
 def target(act: dict, pg: dict) -> str:
     "'click the \"Pay $412.50\" button on toll.example' - an act said by the control it names, read off the page's snapshot; '' when it names none."
-    a = list(act.get('args') or [])
-    ref = next((t.lstrip('@') for t in a if t.startswith('@') and len(t) > 1), '')
-    if not ref: return ''
-    m = re.search(_REF_LINE.format(ref=re.escape(ref)), str(pg.get('elements') or ''), re.M)
+    c = control(act, pg)
+    if not c: return ''
     host = urlsplit(str(pg.get('url') or '')).hostname or ''
     on, verb = (f' on {host}' if host else ''), _VERB.get(act.get('verb') or '', act.get('verb') or 'use')
-    if not m: return f'{verb} an element the page no longer shows{on}'
-    name, role = (m.group('name') or '').strip(), m.group('role')
-    return f'{verb} the "{name}" {role}{on}' if name else f'{verb} a {role}{on}'
+    if not c['role']: return f'{verb} an element the page no longer shows{on}'
+    return f'{verb} the "{c["name"]}" {c["role"]}{on}' if c['name'] else f'{verb} a {c["role"]}{on}'
 
 
 def judge(store, act: dict, pg: dict, brain=None, wait: float = None) -> dict:
@@ -287,6 +295,7 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
         try: site = signin.site_of(pg['url']) or signin.registrable(urlsplit(pg['url']).hostname) or 'the page'
         except ValueError: site = 'the page'
         browserview.ended_on(sid, 'held', store, tid)                          # its last frame is kept if the session stops here
+        if shown(tid, sid, pg): return hand_over(store, tid, sid, a, pg, v, site)    # someone watches: the press is theirs, on the page
         if not _pending(store, tid, sid, args):
             from . import proposals
             proposals.queue(store, tid, {'action': 'browser_act', 'sid': str(sid), 'args': args, 'command': ' '.join([EXE, *args]),
@@ -300,8 +309,9 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
 
 
 def waiting(store, tid: int, sid: str) -> bool:
-    "Does an act of this session still wait on the owner's press?"
+    "Does an act of this session still wait on the owner's press - on the task's Approve, or on the page itself (hand_over)?"
     if not store or not tid: return False
+    if handing(store, tid, sid): return True
     for r in store._rows("SELECT DraftText FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,)):
         try: p = json.loads(r.get('DraftText') or '{}')
         except ValueError: continue
@@ -384,3 +394,162 @@ def _tell(store, tid: int, text: str, wait: bool = False) -> None:
             store.add_comment(tid, 'taskuary', 'agent', f'{text} (The agent could not be told: {str(e)[:200]} - open the task and tell it.)')
     th = threading.Thread(target=go, daemon=True); th.start()
     if wait: th.join(30)
+
+
+# ── handed over: the owner presses it ON THE PAGE ─────────────────────────────────────────────────────────────────────────
+# THE OWNER'S OWN CLICK IS THE APPROVAL (the owner, 2026-11-05: "it should be screen in the browser not of the pay screen and you hit pay in
+# the browser instead of a generated ui"). An Approve card that ran `agent-browser click @e12` asked the owner to trust a sentence about a
+# page they could not see. Where someone watches this session, its browser is the better card: the agent's press is refused as before, and
+# the page - filled in, as the agent left it, scrolled to the control - is handed to the owner on the "your turn" road the sign-in uses.
+# They check it and press the site's own button themselves. Taskuary watches the page, as signin.watch does: once it has moved past the
+# step - another address, or the control gone - the hand-over closes and the agent hears what the page shows. The owner's words instead,
+# or the browser closed, tell it it was NOT done. A run nobody watches (no live session of ours, no page) keeps the proposal.
+PRESS = 'yourturn:press:'       # browserview.TURN_PREFIX's own kind: the view draws it as the owner's turn on the page
+PRESS_LINE = "Your turn: check it and press {btn} on the page. I'll go on when you're done."
+PRESS_FOR, PRESS_EVERY = 30 * 60, 1.5
+PRESS_STEADY = 2                # readings in a row past the step: a page mid-navigation reads as anything for a moment
+HANDS = {}                      # request id -> {tid, sid, btn, name, site}: what the agent is told when it closes - memory only
+_HANDS_LOCK = threading.Lock()
+# what the watch reads of the page: where it is, its title, and whether the control the agent named is still on it, by its own name
+LOOK = r"""((name) => { %s
+  const norm = (t) => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase(), want = norm(name);
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
+  const there = !!want && deepAll('button, input[type=submit], input[type=button], input[type=image], [role=button], a').some((e) => vis(e)
+    && [e.innerText, e.value, e.getAttribute('aria-label'), e.title].some((t) => norm(t) === want));
+  return { href: location.href, title: document.title, there };
+})"""
+
+
+def shown(tid: int, sid: str, pg: dict) -> bool:
+    "Is someone there to hand the page to: a live session of ours on this task (a chat, a pane the owner watches), its browser on a page."
+    from . import browserview, terminal as term
+    s = term.SESSIONS.get(str(sid))
+    return bool(s is not None and getattr(s, 'alive', False) and getattr(s, 'task_id', None) == tid and pg.get('open')
+                and browserview._page(pg.get('url')))
+
+
+def handing(store, tid: int, sid: str, rid: str = None) -> dict | None:
+    "The open hand-over of a held press on this session (its request event), or None."
+    from . import workerstate as ws
+    if not store or not tid: return None
+    return next((r for r in reversed(ws.open_requests(ws.events(store, tid, sid)))
+                 if str(r.get('RequestId') or '').startswith(PRESS) and (rid is None or r['RequestId'] == rid)), None)
+
+
+def hand_over(store, tid: int, sid: str, act: dict, pg: dict, v: dict, site: str, watch=...) -> dict:
+    """The held press, handed to the owner on its page: scrolled to the control, the owner's turn raised in one line, the page watched for
+    their press. The agent is refused and told the page is theirs; it is told again when the hand-over closes. `watch`: tests stand one in."""
+    from . import browserview, terminal as term, workerstate as ws
+    if watch is ...: watch = globals()['watch']
+    c = control(act, pg)
+    btn = f'"{c["name"]}"' if c.get('name') else f'the {c["role"]}' if c.get('role') else 'the button'
+    text, url = PRESS_LINE.format(btn=btn), pg.get('url') or ''
+    rid = PRESS + ws.request_id_for(f'{sid} {url} {text}')
+    if not handing(store, tid, sid, rid):
+        if c.get('ref'):
+            try: _run(sid, ['scrollintoview', f"@{c['ref']}"], 15, 'scroll')
+            except Exception as e: logger.debug(f'browsergate: {sid} was not scrolled to {btn} - {e}')
+        chat = hasattr(term.SESSIONS.get(str(sid)), 'send_prompt')
+        with _HANDS_LOCK: HANDS[rid] = {'tid': tid, 'sid': str(sid), 'btn': btn, 'name': c.get('name') or '', 'site': site}
+        ws.record(store, tid, sid, 'input_needed', request_id=rid, text=text, choices=[browserview.TURN_DONE] if chat else None, source='api')
+        store.audit('task', tid, 'browser_act_handed', 'taskuary', 'system', {'verb': act.get('verb'), 'site': site, 'why': v.get('why')})
+        if watch: threading.Thread(target=watch, args=(store, tid, sid, rid), daemon=True, name=f'press-watch-{tid}').start()
+    return _deny(f"{HELD}: {v['what']} ({v['why']}) is the owner's own press. Taskuary handed them the page as you left it, scrolled to "
+                 f"{btn}: they check it and press it themselves in this browser. End your turn now with one short line to the owner (no "
+                 "marker - the page is already theirs) and run no browser command until you are told what happened: that they pressed it "
+                 "and what the page shows then, or that they did not. Never press it yourself or try it another way.")
+
+
+def _look(c, name: str) -> dict | None:
+    from . import signin
+    try: f = c.js(f'{LOOK % signin.DEEP}({json.dumps(name or "")})')
+    except Exception: return None                                          # mid-navigation, or the tab is gone
+    return f if isinstance(f, dict) and f.get('href') else None
+
+
+def past(start: dict, now: dict) -> bool:
+    "Has the page moved past the step: another address, or the control the agent named gone from it?"
+    href = lambda f: str((f or {}).get('href') or '').split('#', 1)[0].rstrip('/')
+    return href(now) != href(start) or bool((start or {}).get('there') and not now.get('there'))
+
+
+def watch(store, tid: int, sid: str, rid: str, conn=None, every: float = PRESS_EVERY, until: float = PRESS_FOR) -> bool:
+    """While the hand-over is open: the page moved past the step, the owner pressed it - the agent hears what the page shows; the browser
+    closed under it, it was not done. True when it closed the hand-over. `conn`: the DevTools connection (tests stand one in)."""
+    from . import browserview, signin
+    name = (HANDS.get(rid) or {}).get('name') or ''
+    try: c = conn or signin.connect(sid)
+    except Exception as e: logger.debug(f'browsergate: the page of task {tid} is not watched for the press - {e}'); return False
+    try:
+        end, steady = time.time() + until, 0
+        start = _look(c, name)
+        while start is None and time.time() < end and handing(store, tid, sid, rid): time.sleep(every); start = _look(c, name)
+        while time.time() < end and handing(store, tid, sid, rid):
+            time.sleep(every)
+            now = _look(c, name)
+            if now is None:
+                if not browserview.state(sid, fresh=True).get('open'): return not_pressed(store, tid, rid, 'the browser was closed before it was pressed')
+                continue
+            steady = steady + 1 if past(start, now) else 0
+            if steady >= PRESS_STEADY: return pressed(store, tid, rid, now)
+        return False
+    finally:
+        if conn is None: c.close()
+
+
+def _close(store, tid: int, rid: str, said: str) -> dict | None:
+    "Close the hand-over ONCE - the watch and the owner's words may race - and record its answer. What it was, or None if it was closed already."
+    from . import workerstate as ws
+    req = next((r for r in ws.open_requests(ws.events(store, tid)) if r['RequestId'] == rid), None)
+    with _HANDS_LOCK: h = HANDS.pop(rid, None)
+    if not h and not req: return None
+    h = h or {'sid': str(req['Sid']), 'btn': 'the button', 'site': 'the page'}
+    if req: ws.record(store, tid, h['sid'], 'answered', request_id=rid, text=said, source='owner')
+    return h
+
+
+def pressed(store, tid: int, rid: str, now: dict) -> bool:
+    "The page moved past the step: the owner pressed it. The agent is told what the page shows now, and goes on."
+    h = _close(store, tid, rid, 'pressed on the page')
+    if not h: return False
+    title = ' '.join(str(now.get('title') or '').split())[:160]
+    shows = f'"{title}" ({now.get("href")})' if title else str(now.get('href') or 'another page')
+    _trigger(store, tid, h['sid'], f"Pressed {h['btn']} on {h['site']}.")
+    _tell(store, tid, f"The owner pressed {h['btn']} on the page themselves; the page now shows {shows}. Look at it and continue.")
+    store.add_comment(tid, 'owner', 'agent', f"You pressed {h['btn']} on {h['site']} - the agent goes on.")
+    store.audit('task', tid, 'browser_act_pressed', 'owner', 'human', {'site': h['site']})
+    return True
+
+
+def not_pressed(store, tid: int, rid: str, why: str) -> bool:
+    "The hand-over closed without the press: the agent is told it was NOT done."
+    h = _close(store, tid, rid, why)
+    if not h: return False
+    _tell(store, tid, f"The owner did not press {h['btn']}: {why}. It was NOT done - the page is as you left it. Do not press it yourself "
+                      "or try it another way; carry on without it, or ask the owner what they want instead.")
+    store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h['site'], 'why': why})
+    return True
+
+
+def owner_said(store, tid: int, sid: str, text: str) -> str:
+    """The owner answered an open hand-over in words - the chat's box, a pane's answer - and it closes. What Taskuary adds for the agent: for
+    their Done nothing (it looks at the page); for anything else what Taskuary saw - it was not pressed. '' when no hand-over is open. Their
+    words are the agent's to read, never matched against a list here."""
+    from . import browserview
+    req = handing(store, tid, sid)
+    if not req: return ''
+    words = ' '.join(str(text or '').split()).rstrip('.!')
+    with _HANDS_LOCK: h = HANDS.pop(req['RequestId'], None) or {}
+    if words in (browserview.TURN_DONE, browserview.TURN_BACK.rstrip('.')): return ''
+    store.audit('task', tid, 'browser_act_not_pressed', 'owner', 'human', {'site': h.get('site'), 'why': 'answered in words'})
+    return (f"THE OWNER ANSWERED IN WORDS INSTEAD OF PRESSING {h.get('btn') or 'the button'} on the page you handed them. As far as Taskuary "
+            "saw, it was NOT pressed - the page is as you left it. Do what they say; never press it yourself.")
+
+
+def _trigger(store, tid: int, sid: str, line: str) -> None:
+    "A chat shows what woke the agent's next answer, as a sign-in's does (signin._continue): one short line by Taskuary."
+    from . import terminal as term
+    try:
+        from .general import BRIEF_ACTOR, USER_TYPE
+        if hasattr(term.SESSIONS.get(str(sid)), 'send_prompt'): store.add_comment(tid, BRIEF_ACTOR, USER_TYPE, line)
+    except Exception as e: logger.debug(f'browsergate: the trigger line for task {tid} was not filed - {e}')

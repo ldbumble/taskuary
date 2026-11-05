@@ -170,6 +170,104 @@ class Holding(unittest.TestCase):
         self.assertIn('did not approve it', self.heard()[0])
 
 
+PAY = 'http://127.0.0.1:8765/checkout'
+PAY_SNAP = '- heading "Pay for your order" [level=1]\n- textbox "Card name" [ref=e3]\n- button "Pay $42.00" [ref=e12]'
+
+
+class Page:
+    "The DevTools connection, stood in: each look at the page reads the next of `reads` (the last repeats); an exception is a page that cannot be read."
+    def __init__(self, *reads): self.reads, self.n = list(reads), 0
+    def js(self, expr):
+        r = self.reads[min(self.n, len(self.reads) - 1)]; self.n += 1
+        if isinstance(r, Exception): raise r
+        return r
+    def close(self): pass
+
+
+class HandingOver(unittest.TestCase):
+    """THE OWNER PRESSES PAY ON THE PAGE (the owner, 2026-11-05): where someone watches the session, the agent's held press is not a card - the
+    page is handed to the owner as the agent filled it, and their own press on it is the approval."""
+    def setUp(self):
+        from taskuary import workerstate as ws
+        self.ws, self.s = ws, MemoryStore(); self.tid = Factory(self.s).task('Pay the course fee')
+        self.told, self.scrolled = [], []
+        self.sess = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, send_prompt=lambda text, as_owner=True: self.told.append(text))
+        self.live = mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': self.sess}, clear=True); self.live.start()
+        self.addCleanup(self.live.stop); self.addCleanup(bg.HANDS.clear)
+
+    def hand(self, url=PAY):
+        with on(url, PAY_SNAP), verdict({'irreversible': True, 'sure': True, 'what': 'pays $42.00 on the course page'}), \
+                mock.patch.object(bg, 'watch', None), mock.patch.object(bg, '_run', lambda sid, a, w, t: self.scrolled.append((sid, a)) or (0, '')):
+            return bg.check(self.s, self.tid, 'run1', "agent-browser click '@e12'", Brain(None))
+
+    def pending(self): return self.s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.tid,))
+    def heard(self):
+        end = time.time() + 5
+        while not self.told and time.time() < end: time.sleep(.01)
+        return self.told
+
+    def test_an_agents_click_on_pay_becomes_a_hand_over_not_a_proposal(self):
+        why = self.hand()['hookSpecificOutput']
+        self.assertEqual(why['permissionDecision'], 'deny')
+        self.assertIn('they check it and press it themselves', why['permissionDecisionReason'])
+        self.assertEqual(self.pending(), [])                                          # no Approve card
+        req = bg.handing(self.s, self.tid, 'run1')
+        self.assertTrue(req['RequestId'].startswith(bg.PRESS) and req['RequestId'].startswith(browserview.TURN_PREFIX))
+        self.assertEqual(req['Text'], 'Your turn: check it and press "Pay $42.00" on the page. I\'ll go on when you\'re done.')
+        self.assertEqual(self.scrolled, [('run1', ['scrollintoview', '@e12'])])        # the page is left on the button
+        self.assertTrue(bg.waiting(self.s, self.tid, 'run1')); self.assertTrue(hooks.held_for(self.s, self.tid, 'run1'))
+        self.hand()                                                                   # tried again: the same hand-over
+        self.assertEqual(len([r for r in self.ws.open_requests(self.ws.events(self.s, self.tid)) if r['RequestId'].startswith(bg.PRESS)]), 1)
+
+    def test_the_page_moving_past_the_step_tells_the_agent_it_was_done(self):
+        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
+        here = {'href': PAY, 'title': 'Pay for your order', 'there': True}
+        done = {'href': 'http://127.0.0.1:8765/checkout/thanks', 'title': 'Thank you - payment received', 'there': False}
+        self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, here, done), every=0))
+        self.assertIn('The owner pressed "Pay $42.00" on the page themselves', self.heard()[0])
+        self.assertIn('Thank you - payment received', self.told[0])
+        self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))                       # the hand-over is closed
+        self.assertFalse(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(done), every=0))   # ...once
+
+    def test_a_button_gone_from_the_same_address_is_past_too(self):
+        here, paid = {'href': PAY, 'title': 'Pay', 'there': True}, {'href': PAY + '#paid', 'title': 'Pay', 'there': False}
+        self.assertTrue(bg.past(here, paid)); self.assertFalse(bg.past(here, {**here, 'href': PAY + '#top'}))
+
+    def test_the_owner_saying_no_tells_the_agent_it_was_not_done(self):
+        self.hand()
+        note = bg.owner_said(self.s, self.tid, 'run1', "don't - wrong card")
+        self.assertIn('NOT pressed', note); self.assertIn('"Pay $42.00"', note)
+        self.hand(); self.assertEqual(bg.owner_said(self.s, self.tid, 'run1', browserview.TURN_BACK), '')     # their Done is theirs, as it is
+
+    def test_a_pane_answered_in_words_hears_it_was_not_done(self):
+        pane = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cli='claude')
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {'run1': pane}, clear=True):
+            self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
+            typed = []
+            with mock.patch('taskuary.terminal.type_into', lambda s, t: typed.append(t)):
+                self.ws.answer(self.s, self.tid, rid, 'not now')
+        self.assertTrue(typed[0].startswith('not now (')); self.assertIn('NOT pressed', typed[0]); self.assertNotIn('\n', typed[0])
+        self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+
+    def test_the_browser_closed_tells_the_agent_it_was_not_done(self):
+        self.hand(); rid = bg.handing(self.s, self.tid, 'run1')['RequestId']
+        here = {'href': PAY, 'title': 'Pay', 'there': True}
+        with mock.patch.object(browserview, 'state', return_value={'open': False}):
+            self.assertTrue(bg.watch(self.s, self.tid, 'run1', rid, conn=Page(here, RuntimeError('gone')), every=0))
+        self.assertIn('did not press "Pay $42.00"', self.heard()[0]); self.assertIn('NOT done', self.told[0])
+
+    def test_a_headless_run_still_gets_a_proposal(self):
+        with mock.patch.dict('taskuary.terminal.SESSIONS', {}, clear=True): self.hand()
+        self.assertEqual(len(self.pending()), 1); self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+        self.s._exec("DELETE FROM review WHERE TaskId=?", (self.tid,))
+        self.hand('about:blank')                                                      # a session, but no page to show it on
+        self.assertEqual(len(self.pending()), 1); self.assertIsNone(bg.handing(self.s, self.tid, 'run1'))
+
+    def test_the_brief_says_to_fill_it_and_leave_the_last_press_to_the_owner(self):
+        self.assertIn('fill in everything first', browserview.brief(held=True))
+        self.assertIn('TASKUARY-YOURTURN', browserview.ASK_FIRST_LINE); self.assertIn('NEVER press it', browserview.ASK_FIRST_LINE)
+
+
 class Hook(unittest.TestCase):
     def test_the_hook_reads_shell_commands_of_our_panes_only(self):
         s = MemoryStore(); tid = Factory(s).task('Pay the toll invoice')

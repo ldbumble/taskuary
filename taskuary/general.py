@@ -1352,6 +1352,14 @@ class GeneralSession:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
                 raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai')} to run this task")
+            # ...a press handed to the owner on its page (browsergate.hand_over) that they answered in words instead: the agent hears it was
+            # not pressed. Before `working`, which overtakes the hand-over
+            if as_owner:
+                from . import browsergate
+                try:
+                    if (note := browsergate.owner_said(self.store, self.task_id, self.sid, text)):
+                        delivery_instructions = f'{delivery_instructions}\n\n{note}' if delivery_instructions else note
+                except Exception as e: logger.debug(f'task {self.task_id}: the hand-over was not read - {e}')
             try:
                 from . import workerstate as ws
                 ws.record(self.store, self.task_id, self.sid, 'working', source='api')

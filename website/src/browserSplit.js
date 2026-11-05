@@ -187,6 +187,11 @@ export const viewOnScreen = (layout) => layout === "split" || layout === "stack"
 // A STEP ONLY THE OWNER CAN DO ON THE PAGE (browserview.TURN_PREFIX): the agent handed the page over - drawn on the view as "Your turn"
 export const TURN_PREFIX = "yourturn:";
 export const isTurn = (asking) => String(asking?.request_id || "").startsWith(TURN_PREFIX);
+// ...and A PRESS HANDED OVER (browsergate.hand_over, the owner 2026-11-05: "you hit pay in the browser instead of a generated ui"): the agent
+// filled the page and stopped on its last button, which is the owner's to press on the page itself. Its line says all of it; the page's own
+// press is the approval, and Taskuary sees it land
+export const PRESS_PREFIX = "yourturn:press:";
+export const isPress = (asking) => String(asking?.request_id || "").startsWith(PRESS_PREFIX);
 // what the owner's Done tells the agent (browserview.TURN_BACK)
 export const TURN_BACK = "Done - I finished that in the browser. Look at the page as it is now and continue.";
 

@@ -136,7 +136,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         from . import attachtext
         x = store.get_attachment(int(a['id']))
         if not x or not store.get_message(x.get('MessageId')) or (store.get_message(x['MessageId']) or {}).get('Channel') == 'assistant':
-            raise ValueError(f"no attachment {a['id']}")
+            raise ValueError(f"no attachment {a['id']} - read_message lists a message's attachments with their ids")
         p = Path(x['Path']) if x.get('Path') else None
         if not p or not p.is_file(): return f"{x.get('Name')}: not kept here - open the original message"
         got = attachtext.read(x.get('Name'), p.read_bytes())
@@ -186,7 +186,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
     if name == 'propose': return _j(doors['propose'](tid, a))
-    raise ValueError(f'no tool {name!r} - tools/list names them')
+    raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
 
 
 def attached(tid: int, names) -> list:
@@ -196,7 +196,8 @@ def attached(tid: int, names) -> list:
     out = []
     for raw in ([names] if isinstance(names, str) else names or []):
         p = outputs.named(tid, raw)
-        if not p: raise ValueError(f'{raw} is not a file in your task folder ({outputs.folder(tid)}) - nothing was saved')
+        if not p: raise ValueError(f'{raw} is not a file in your task folder ({outputs.folder(tid)}) - nothing was saved. Save the file '
+                                   'there first, or name one that is, and call it again')
         out.append({'name': p.name, 'data': base64.b64encode(p.read_bytes()).decode()})
     return out
 

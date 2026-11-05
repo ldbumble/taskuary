@@ -53,7 +53,7 @@ def test_answers_names_the_mail_the_owner_means():
     out = wrapup.agent_reply(s, tid, 'Hi Gail - noted.', 'coding', answers=ids[1])
     assert s.get_review(out['review_id'])['AnswersMid'] == ids[1] and 'gail@northwind.example' in json.dumps(s.review_envelope(out['review_id'])['to'])
     bad = wrapup.agent_reply(s, tid, 'Hi - noted again.', 'coding', answers=999)
-    assert bad == {'ok': False, 'why': '#999 is not a mail on this task'}
+    assert bad['ok'] is False and bad['why'].startswith('#999 is not a mail on this task - use a number from THE MAIL ON THIS TASK')
 
 
 def test_the_cli_and_floor_know_answers():

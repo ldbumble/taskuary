@@ -111,6 +111,7 @@ import { closeoutOf } from "./reviewProposal.js";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import EarlierRounds from "./CloseoutRounds.jsx";
+import AiUsed from "./AiUsed.jsx";
 import MoreDrafts from "./MoreDrafts.jsx";
 import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
 import { closeoutRounds, roundReviews } from "./closeoutRounds.js";
@@ -3029,6 +3030,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {/* ...and under all of the current round, the rounds before it, a line each (CloseoutRounds.jsx) - as the Agent's earlier runs */}
       {/* ...never in the chat (the owner, 2026-11-05: "we don't need the earlier rounds any more no? it's just one lone chat") */}
       {coOn && !inChat && <EarlierRounds rounds={rounds} />}
+      {!inChat && <AiUsed taskId={selected} />}
     </>; };
   // ...in the chat, only where it holds something (an empty Next steps said nothing), and marked while it waits on the owner: a resting Result
   // keeps the chat that holds it on screen (`data-tq-waits`, the agent room's :has)
@@ -3612,6 +3614,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           title: "Where this came from - opens it", onOpen: threeUp ? () => openSection("from") : null } : null}
                         closedLine={t.Status === "done" ? `✓ ${btn(closedNote ? "close_note" : "close")}${t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}${closedNote ? ` - ${closedNote}` : ""}`
                           : t.Status === "dropped" ? "Dropped - nobody works it any more" : ""}
+                        tail={<AiUsed taskId={t.TaskId} />}
                         approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
                     </React.Suspense>
                   </Box>

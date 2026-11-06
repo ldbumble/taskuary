@@ -123,3 +123,10 @@ test("setup reads for someone with no coding tool, and its loops and errors beha
   assert.match(fr, /\{loadErr && <Button size="small" onClick=\{reload\}>\{btnLabel\("try_again"\)\}<\/Button>\}/);
   assert.doesNotMatch(fr, /VOICE_TYPES|voiceDue/, "the speech-to-text offer was never shown");
 });
+
+// the owner, 2026-11-06: "if it's that big center the buttons. it looks insane" - setup's bar ran the whole window, Back/Next far left
+test("setup's bar is as wide as setup's page, centred under its cards", () => {
+  const w = Number(/data-tq-firstrun=\{st\.step\} sx=\{\{[^}]*maxWidth: (\d+)/.exec(read("FirstRun.jsx"))?.[1]);
+  assert.ok(w > 0, "the step's column has a width");
+  assert.ok(read("assistantView.css").includes(`.tq-dock.tq-setup-dock { width: min(${w}px, 100%); margin-inline: auto; }`));
+});

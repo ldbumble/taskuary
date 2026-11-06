@@ -3,8 +3,8 @@ mail, chats, issue trackers, monitoring, your finance system — decides what ea
 is, and brings you the few that need you. Coding jobs go to a coding agent in your repository.
 Answers come back as drafts you approve. Nothing is sent without you.
 
-It keeps its data in a SQLite file in your home directory and serves its interface at
-`http://127.0.0.1:7787`. There is no account to create and no server to rent.
+Getting started is three steps: install it, connect your mail, and open your first task. There is
+no account to create and no server to rent.
 
 ## What Taskuary is
 
@@ -54,6 +54,51 @@ so the terminal, the desktop shell and the agent presets are best exercised ther
 Linux may still have rough edges.
 :::
 
+## Your first run
+
+The first time it opens, the Assistant asks three questions. Each one is answered by clicking a
+card, and the cards are the same ones the [Connections](connections) page shows. The line at the
+top always says what to do next, and so do the Work list and the **Setup** chip in the top bar.
+
+1. **What AI do you have?** Click the one you already pay for: Claude, ChatGPT, Gemini or
+   Copilot. Taskuary connects it, checks that it answers, and uses it to sort what comes in. If it
+   is not installed, the click installs it. If it needs you to sign in once, the card says
+   **Needs sign-in** and **Set it up** opens the AI's own sign-in. **More AI** lists every other
+   AI on this computer and every API provider, for when you would rather paste a key.
+2. **Where does your work come in?** Connect your main source: your email, a chat or a task
+   system. Email is the usual one and comes first. Microsoft 365 or Outlook signs in through your
+   company's own Microsoft app: your IT registers it once (the card shows the steps), you paste its
+   two IDs and sign in. Gmail needs an App Password, which Google makes at
+   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) once 2-Step
+   Verification is on. Any other mailbox takes its address, server and password. If your work
+   arrives somewhere else, **More chat and task options** has Teams, Slack, WhatsApp, Discord,
+   monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
+   connected and passes its test. Before Taskuary writes your job description it asks you to
+   connect your other sources too.
+3. **Any other connection you'd like to set up?** While what came in is read, WhatsApp, Teams,
+   Slack and Telegram are offered, and **More connections** shows the rest. This one is optional:
+   press **Walk me through my tasks** when you are ready.
+
+### Open your first task
+
+Once a source is connected, what came in lands on the rail on the left, the things that need you
+first. Click one to open it: **Came from** shows the message, and the **Agent** chat below it says
+what Taskuary made of it and what it has set up for you - a drafted reply waits there for your
+**Send**. **Next** brings the one below it; **Walk me through my tasks** takes you through all of
+them in order.
+
+**Setup** on the top bar opens the same three questions again whenever you want to
+change the AI or your sources. Setup does not overwrite an existing user's model or connection
+configuration.
+
+After that, connect a coding CLI if you want code written, or add a report for numbers you check
+by hand. **Settings → How mail is sorted** lets you use different models for different jobs. Reports
+and the Hub can wait until you have a workflow that needs them.
+
+Two reports exist from the start: the **End of day checkup** and the **Advisor**, which looks for
+useful follow-ups and patterns in your work. You can review or remove either in Reports. The
+Morning digest is available as an optional report.
+
 ## Try the demo
 
 You do not have to connect anything to see what Taskuary does:
@@ -67,6 +112,71 @@ and replayed sessions where coding agents would work. Nothing it offers can reac
 nothing sends, no connection can be created or given a secret, no shell or CLI starts, and no tool
 runs. A request that would touch something real is refused, and says so. It keeps its data in a
 throwaway folder: what you change stays until you stop it, and the next start is a fresh demo.
+
+## Choosing the AI setup
+
+Triage reads many messages cheaply; coding changes a repository rarely and wants a strong model.
+Taskuary lets those be different brains, and the choice is mostly about what you already pay for.
+
+| Setup | Triage, drafts, summaries | Coding sessions | Fits you if |
+|---|---|---|---|
+| **Two brains** (recommended) | a small cloud model on an API key | your coding CLI's full model | you have a low-cost API key |
+| **One brain, two gears** | the CLI's *light* model | the same CLI's main model | you have one CLI subscription and no key |
+| **One brain, one gear** | the CLI's full model | the same model | simplest, and expensive for routine mail |
+| **Local brain** | Ollama or any OpenAI-compatible local server | a coding CLI, optionally the same local model | no key, and no mail leaving the machine |
+
+With no cloud key, set the AI that sorts your mail to your configured CLI in
+[Settings](settings#how-mail-is-sorted), and give that CLI a light model on its connector card so
+routine triage does not burn the coding model.
+
+## Updating
+
+**Settings → Updates** shows the running build and the latest release, and installs it in place:
+the exe is swapped or `pip install` runs, and the app reopens. Connections and settings are
+untouched.
+
+For the Python install you can also do it yourself:
+
+```bash
+pip install --upgrade taskuary
+```
+
+## What leaves your machine
+
+Taskuary calls the services you configure and nothing else. Hosted AI providers and coding CLIs
+receive the prompts their work needs. With a model running on your machine, those prompts stay
+on it too; connected services such as mail still use their own connections either way.
+
+Before a prompt reaches a hosted model, a headless CLI run or the first turn of an agent pane,
+Taskuary replaces recognisable credentials with labelled placeholders. The original message is
+never altered. A reply that still contains one of those placeholders is refused rather than sent.
+These are deterministic shape rules — they catch API keys and passwords that look like API keys
+and passwords, and they cannot catch every secret.
+
+## Where your data lives
+
+Taskuary keeps its data in a SQLite file in your home directory and serves its interface at
+`http://127.0.0.1:7787`.
+
+The Python and desktop installs keep everything in `~/.taskuary/`:
+
+| File | What it is |
+|---|---|
+| `taskuary.db` | the SQLite database — messages, tasks, settings, the audit log |
+| `config.toml` | local configuration |
+| `taskuary.log` | the application log |
+| `playbooks/*.md` | one page per kind of job an agent has learned to do |
+| `context/` | the context file each coding session is handed at startup |
+
+`TASKUARY_HOME` moves all of it. Docker uses `/data` inside the container. `TASKUARY_HOST`,
+`TASKUARY_PORT` and `TASKUARY_TOKEN` override server settings at runtime without being written
+back to the config file.
+
+:::warn Before you expose it beyond localhost
+Set `[server].token` in the config or provide `TASKUARY_TOKEN`, and send that token in the
+`X-Taskuary-Token` header. An unauthenticated Taskuary reachable from the network gives whoever
+finds it your mail, your repositories and an agent that can run commands.
+:::
 
 ## Command-line options
 
@@ -98,105 +208,6 @@ host programs, because both need a machine of their own.
 
 The compose file binds to localhost. Set `TASKUARY_TOKEN` before publishing the port anywhere
 else.
-
-## Your first run
-
-The first time it opens, the Assistant asks three questions. Each one is answered by clicking a
-card, and the cards are the same ones the [Connections](connections) page shows. The line at the
-top always says what to do next, and so do the Work list and the **Setup** chip in the top bar.
-
-1. **What AI do you have?** Click the one you already pay for: Claude, ChatGPT, Gemini or
-   Copilot. Taskuary connects it, checks that it answers, and uses it to sort what comes in. If it
-   is not installed, the click installs it. If it needs you to sign in once, the card says
-   **Needs sign-in** and **Set it up** opens the AI's own sign-in. **More AI** lists every other
-   AI on this computer and every API provider, for when you would rather paste a key.
-2. **Where does your work come in?** Connect your main source: your email, a chat or a task
-   system. Email is the usual one and comes first. Microsoft 365 or Outlook signs in through your
-   company's own Microsoft app: your IT registers it once (the card shows the steps), you paste its
-   two IDs and sign in. Gmail needs an App Password, which Google makes at
-   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) once 2-Step
-   Verification is on. Any other mailbox takes its address, server and password. If your work
-   arrives somewhere else, **More chat and task options** has Teams, Slack, WhatsApp, Discord,
-   monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
-   connected and passes its test. Before Taskuary writes your job description it asks you to
-   connect your other sources too.
-3. **Any other connection you'd like to set up?** While what came in is read, WhatsApp, Teams,
-   Slack and Telegram are offered, and **More connections** shows the rest. This one is optional:
-   press **Walk me through my tasks** when you are ready.
-
-**Setup** on the top bar opens the same three questions again whenever you want to
-change the AI or your sources. Setup does not overwrite an existing user's model or connection
-configuration.
-
-After that, connect a coding CLI if you want code written, or add a report for numbers you check
-by hand. **Settings → How mail is sorted** lets you use different models for different jobs. Reports
-and the Hub can wait until you have a workflow that needs them.
-
-Two reports exist from the start: the **End of day checkup** and the **Advisor**, which looks for
-useful follow-ups and patterns in your work. You can review or remove either in Reports. The
-Morning digest is available as an optional report.
-
-## Choosing the AI setup
-
-Triage reads many messages cheaply; coding changes a repository rarely and wants a strong model.
-Taskuary lets those be different brains, and the choice is mostly about what you already pay for.
-
-| Setup | Triage, drafts, summaries | Coding sessions | Fits you if |
-|---|---|---|---|
-| **Two brains** (recommended) | a small cloud model on an API key | your coding CLI's full model | you have a low-cost API key |
-| **One brain, two gears** | the CLI's *light* model | the same CLI's main model | you have one CLI subscription and no key |
-| **One brain, one gear** | the CLI's full model | the same model | simplest, and expensive for routine mail |
-| **Local brain** | Ollama or any OpenAI-compatible local server | a coding CLI, optionally the same local model | no key, and no mail leaving the machine |
-
-With no cloud key, set the triage brain to your configured CLI in
-[Settings](settings#how-mail-is-sorted), and give that CLI a light model on its connector card so
-routine triage does not burn the coding model.
-
-## Where your data lives
-
-The Python and desktop installs keep everything in `~/.taskuary/`:
-
-| File | What it is |
-|---|---|
-| `taskuary.db` | the SQLite database — messages, tasks, settings, the audit log |
-| `config.toml` | local configuration |
-| `taskuary.log` | the application log |
-| `playbooks/*.md` | one page per kind of job an agent has learned to do |
-| `context/` | the context file each coding session is handed at startup |
-
-`TASKUARY_HOME` moves all of it. Docker uses `/data` inside the container. `TASKUARY_HOST`,
-`TASKUARY_PORT` and `TASKUARY_TOKEN` override server settings at runtime without being written
-back to the config file.
-
-:::warn Before you expose it beyond localhost
-Set `[server].token` in the config or provide `TASKUARY_TOKEN`, and send that token in the
-`X-Taskuary-Token` header. An unauthenticated Taskuary reachable from the network gives whoever
-finds it your mail, your repositories and an agent that can run commands.
-:::
-
-## What leaves your machine
-
-Taskuary calls the services you configure and nothing else. Hosted AI providers and coding CLIs
-receive the prompts their work needs. With a model running on your machine, those prompts stay
-on it too; connected services such as mail still use their own connections either way.
-
-Before a prompt reaches a hosted model, a headless CLI run or the first turn of an agent pane,
-Taskuary replaces recognisable credentials with labelled placeholders. The original message is
-never altered. A reply that still contains one of those placeholders is refused rather than sent.
-These are deterministic shape rules — they catch API keys and passwords that look like API keys
-and passwords, and they cannot catch every secret.
-
-## Updating
-
-**Settings → Updates** shows the running build and the latest release, and installs it in place:
-the exe is swapped or `pip install` runs, and the app reopens. Connections and settings are
-untouched.
-
-For the Python install you can also do it yourself:
-
-```bash
-pip install --upgrade taskuary
-```
 
 ## Next
 

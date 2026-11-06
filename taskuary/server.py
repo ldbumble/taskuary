@@ -3717,14 +3717,14 @@ def task_outputs(tid: int):
 def open_task_outputs(tid: int, request: Request):
     """The task's outputs folder, opened on THIS computer (Explorer, Finder, the file manager) at the owner's press - the folder the server
     knows for the task (outputs.folder), never a path the page names. Owner only: an agent session has no business opening windows."""
-    import os, subprocess
+    import webbrowser
     from . import outputs
     _owner_only(request, "opening a folder on this computer is the owner's")
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     d = outputs.folder(tid)
     if not d.is_dir(): raise HTTPException(404, 'this task has no files yet')
-    if os.name == 'nt': os.startfile(str(d))                                     # noqa: S606 - a folder Taskuary made, by its own path
-    else: subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(d)])
+    # ...by its file address, as Open URL opens a page: the system's own handler (Explorer, Finder, the file manager), no process of ours
+    threading.Thread(target=webbrowser.open, args=(d.resolve().as_uri(),), daemon=True).start()
     return {'ok': True}
 
 

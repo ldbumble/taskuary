@@ -176,6 +176,18 @@ class CheckBackTests(unittest.TestCase):
         s.update_task(tid, {'Status': 'done'}, 'owner')
         self.assertFalse(s.get_task(tid).get('CheckBackAt'))                         # a closed task is checked back on by nobody
 
+    def test_the_owner_cancels_it_and_a_session_cannot(self):
+        s = MemoryStore(); tid = owner_task(s); checkback.set_check(s, tid, 'tomorrow 9am', 'the refund cleared on the card')
+        srv, c = config.load()['server'], TestClient(server.app)
+        hdr = {'X-Taskuary-Token': srv['agent_token'], guard.TASK_HDR: guard.task_proof(srv, tid)}
+        with mock.patch.object(server, 'store', s):
+            self.assertEqual(c.delete(f'/api/tasks/{tid}/check-back', headers=hdr).status_code, 403)   # never the agent's own press
+            self.assertTrue(s.get_task(tid)['CheckBackAt'])
+            self.assertEqual(c.delete(f'/api/tasks/{tid}/check-back').json(), {'ok': True, 'cancelled': True})
+            self.assertFalse(s.get_task(tid).get('CheckBackAt')); self.assertFalse(s.get_task(tid).get('CheckBackWhat'))
+            self.assertEqual(c.delete(f'/api/tasks/{tid}/check-back').json()['cancelled'], False)
+            self.assertEqual(c.delete('/api/tasks/99999/check-back').status_code, 404)
+
     def test_it_comes_due_on_the_reminders_clock_once(self):
         s = MemoryStore(); tid = owner_task(s)
         checkback.set_check(s, tid, 'in 2 hours', 'Erin Blake answered the invite')

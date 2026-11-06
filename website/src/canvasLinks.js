@@ -2,10 +2,12 @@
 // the tabs are gone, so a link that named one - a notification, the digest, a card's "change the judge", a bookmark -
 // becomes a request for the assistant canvas: open this task's view, or post this browse card at this place.
 // Pure, so test/canvasLinks.test.mjs can hold every link the app writes. `n` numbers the request; null = not ours.
+import { PHONE_GROUP } from "./phoneChats.js";
 const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
 // Settings' pages (SettingsView NAV): a link to any other opens the section list - "#settings=foo" crashed the app on
 // every reload (the final review, 2026-09-29)
-export const SETTINGS_PAGES = ["config", "policies", "audit", "updates"];
+// ...and Phone & chats (the owner, 2026-11-06), which holds the "Assistant on your phone" group: a link to that group lands there
+export const SETTINGS_PAGES = ["config", "policies", "phone", "audit", "updates"];
 // ABOUT YOU's sections (the owner, 2026-11-06): You, Docs, Playbooks and Memory left Settings and the Reports page for one page of their
 // own; every old link to them lands here (aboutAt). `you` is the identity page, opened at once
 export const ABOUT_PAGES = ["you", "docs", "playbooks", "memory"];
@@ -84,7 +86,9 @@ export function canvasRequestFromHash(hash, n = 0) {
   // ...on About you now (2026-11-06)
   if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return docAt(m[1], m[2], n);
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
-    const page = decodeURIComponent(m[1] || "config") || "config", group = m[2] ? decodeURIComponent(m[2]) : "";
+    const asked = decodeURIComponent(m[1] || "config") || "config", g = m[2] ? decodeURIComponent(m[2]) : "";
+    // the phone's knobs left Configuration for Phone & chats: search and the Assistant still say their group, and land on the page
+    const [page, group] = asked === "config" && g === PHONE_GROUP ? ["phone", ""] : [asked, g];
     // Profiles is a section of its own (2107f0d2): its link opens that section's list. PLAYBOOKS LEFT SETTINGS for the Reports page
     // (the owner, 2026-10-21) - an old link to them still lands, on their new shelf
     // ...and About you took them, with Docs, Memory and the identity page (2026-11-06)

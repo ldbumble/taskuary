@@ -47,6 +47,10 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
 import { recipientLabel, recipientOptions } from "./recipientOptions.js";
+import { label as btnLabel } from "./buttons.js";
+import PhoneChats from "./PhoneChats.jsx";
+import { CHANNEL_NAME, PHONE_GROUP, PHONE_PAGE, SETUP_STEPS, canHandOver, doorwayStatus } from "./phoneChats.js";
+import SmartphoneIcon from "@mui/icons-material/Smartphone";
 
 
 const KINDS = ["keyword", "sender", "sender_domain", "noreply", "first_time_sender"];
@@ -166,10 +170,10 @@ const KNOB_META = schema.knobs;
 
    Only chats you are ALONE in are offered, and that is enforced again on the way in
    (remote_assistant.use_chat) - the picker is a convenience, not the guard. */
-// the service's own spelling: capitalize made "Whatsapp", and the button said "Open the whatsapp card"
-const CHANNEL_NAME = { whatsapp: "WhatsApp", telegram: "Telegram" };
+// the service's own spelling (phoneChats.CHANNEL_NAME): capitalize made "Whatsapp", and the button said "Open the whatsapp card"
 const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   const [rows, setRows] = useState(null);
+  const [handoff, setHandoff] = useState(null);   // the walk handed to a chat right now ({channel, chat}), or null
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");     // could not READ the channels
   const [wErr, setWErr] = useState("");   // could not WRITE a choice
@@ -178,7 +182,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   // or Telegram connection", which is a lie about the owner's own setup, and the one thing a
   // settings page must never tell you (2026-09-17: "don't see anything there just one setting?").
   const load = useCallback(async () => {
-    try { setRows((await api.get("/api/assistant/doorways")).data.data || []); setErr(""); onLoaded?.(true); }
+    try { const { data } = await api.get("/api/assistant/doorways"); setRows(data.data || []); setHandoff(data.handoff || null); setErr(""); onLoaded?.(true); }
     catch (e) {
       setRows(null);
       setErr(e?.response?.status === 404
@@ -205,6 +209,14 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
     setBusy(channel); setWErr("");
     try { await api.post("/api/assistant/doorways/listens", { channel, listens: how }); await load(); }
     catch (e) { setWErr(e?.response?.data?.detail || "could not change that"); }
+    setBusy("");
+  };
+  // HAND THE WALK TO THE PHONE, from here too - the Assistant tab's "Walk me through them in …" by the same road (remote_assistant.start_handoff):
+  // it says hello in that chat and the desktop keeps working. Taking it back is the same press the tab's Walk it here makes.
+  const walk = async (channel, back = false) => {
+    setBusy(channel); setWErr("");
+    try { await api.post(back ? "/api/concierge/handoff/end" : "/api/concierge/handoff", back ? {} : { channel }); await load(); }
+    catch (e) { setWErr(e?.response?.data?.detail || (back ? "could not take the walk back" : "could not hand the walk over")); }
     setBusy("");
   };
   return (
@@ -266,6 +278,24 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
                 </Typography>
               </Box>
             )}
+            {/* WHERE IT STANDS, in words - and the steps while no chat is picked, since a chat is offered only once Taskuary has seen it */}
+            {(() => {
+              const st = doorwayStatus(r, handoff), steps = st.state === "unset" ? SETUP_STEPS[r.channel] || [] : [];
+              if (st.state === "off") return null;          // the row above already says so, beside the button to its card
+              return (
+                <Box data-tq-doorway-state={st.state} sx={{ mt: 1, ml: { sm: 12.5 } }}>
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                    <Typography variant="body2" sx={{ color: st.state === "off" || st.state === "unset" ? DIM : "#47654a", fontWeight: 600, fontSize: 12.5 }}>{st.line}</Typography>
+                    {canHandOver(r, handoff) && <Button size="small" variant="outlined" disabled={busy === r.channel} data-tq-hand-walk={r.channel}
+                      startIcon={<ChannelIcon channel={r.channel} sx={{ fontSize: 14 }} />} onClick={() => walk(r.channel)}
+                      title={`I say hello in ${CHANNEL_NAME[r.channel] || r.channel} and take you through what is waiting there; the desktop keeps working beside it`}>
+                      Walk me through them in {CHANNEL_NAME[r.channel] || r.channel}</Button>}
+                    {st.state === "walking" && <Button size="small" disabled={busy === r.channel} onClick={() => walk(r.channel, true)}>{btnLabel("walk_here")}</Button>}
+                  </Box>
+                  {!!steps.length && <Box component="ol" sx={{ m: 0, mt: 0.5, pl: 2.25, color: DIM, fontSize: 12.5, lineHeight: 1.6 }}>
+                    {steps.map((s) => <li key={s}>{s}</li>)}</Box>}
+                </Box>);
+            })()}
           </Box>
         );
       })}
@@ -402,6 +432,7 @@ const PAGES = {
   docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, and what it has learned." },
   config: { title: "Configuration", icon: TuneIcon, desc: "How mail is sorted, replies, agents and display - how Taskuary behaves." },
   policies: { title: "Mail rules", icon: AltRouteIcon, desc: "Rules the AI always follows — ignore a sender, escalate, auto-answer." },
+  phone: { title: "Phone & chats", icon: SmartphoneIcon, desc: "The chats that reach Taskuary from outside — your Assistant on WhatsApp or Telegram, and in Developer mode the chats that talk to your coding agents." },
   audit: { title: "Activity log", icon: VerifiedIcon, desc: "Who did what, when — a record of every action, and a check that proves nobody edited it." },
   updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
@@ -442,6 +473,7 @@ const PageHead = ({ page, first }) => (
 // `only` (the assistant canvas): draw ONE page - and on Configuration, one group of it - instead of the whole document
 function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog, only = null }) {
   const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
+  const { devMode } = useAgents();                            // Phone & chats' Agent channels are a developer's
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   // A PAGE THAT READS ITS OWN (the canvas's one page - About you, a document, Updates) needs none of the rules, settings and notes below:
@@ -723,7 +755,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     && !(panelOk && PANEL_OWNED.has(s.Name)));
   const panels = {
     "How mail is sorted": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
-    "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />,
     "Agent permissions": <AgentPermissions />,
   };
   // ...and what a section lists UNDER its knobs: the share links still open sit below the switch that allows them
@@ -733,7 +764,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     "Agent permissions": <><SavedSignins /><SendFilter /></>,
   };
   // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
-  const cfgGroups = GROUPS.filter((g) => (panels[g] || rowsOf(g).length) && (g !== "Coding agent" || canCode));
+  // ...and the phone's knobs are Phone & chats' (the owner, 2026-11-06: "it's not clear where that is"), never a Configuration group too
+  const cfgGroups = GROUPS.filter((g) => g !== PHONE_GROUP && (panels[g] || rowsOf(g).length) && (g !== "Coding agent" || canCode));
   const cfgKey = cfgGroups.join("|");
   useEffect(() => { onSections(cfgKey ? cfgKey.split("|") : []); }, [cfgKey, onSections]);
 
@@ -743,6 +775,41 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     ? <Alert severity="error" sx={{ m: 1 }}>{err}</Alert>
     : <CircularProgress size={22} sx={{ m: 4 }} />;
 
+  // ...and the panel's own keys are suppressed wherever they would otherwise land. Scoping this
+  // to the panel's tab was fine while every owned key had a KNOB_META entry in that group -
+  // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
+  // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
+  // back if the panel fails to load, which is why they keep their KNOB_META entries.
+  // A FUNCTION, NOT A COMPONENT: a component declared in here is a new type on every render,
+  // so React would remount every row and the box you are typing in would lose the caret.
+  const knobRow = (s) => {
+    const m = meta(s.Name);
+    // THE KNOB THE ASSISTANT BROUGHT THE PAGE UP FOR (#settings=config&group=..&key=..): outlined and scrolled into view - the setting's
+    // own control is the button to press (the owner, 2026-10-19: "like the assistant surfaces a settings ui")
+    const asked = only?.knob === s.Name;
+    return (
+      <Box key={s.Name} data-tq-knob={s.Name} {...(asked ? { "data-tq-asked": "" } : {})}
+        sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
+        gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`, ...(asked ? { outline: "2px solid #6f8a6e", outlineOffset: 4, borderRadius: 1 } : {}) }}>
+        <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
+          onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
+            {m.label}
+            {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
+          </Typography>
+          <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
+          {/* the line every description was missing: what shipped, and whether this is
+              still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
+          {defaultNote(s, m) && (
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
+              {defaultNote(s, m)}
+            </Typography>
+          )}
+        </Box>
+        <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
+      </Box>
+    );
+  };
   // WHAT ONE PAGE OF THE DOCUMENT DRAWS. Every one of them is drawn, every time: Settings is
   // one long page you scroll from About you to Updates, so a page is a place in it rather than
   // something that replaces what was there before (the owner, 2026-09-22: "we should have header
@@ -750,41 +817,6 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   // pages cost the same requests one page did.
   const body = (page) => {
     if (page === "config") {
-      // ...and the panel's own keys are suppressed wherever they would otherwise land. Scoping this
-      // to the panel's tab was fine while every owned key had a KNOB_META entry in that group -
-      // then `assistant_ai` lost its entry when it became a card, fell to "Other" by default, and
-      // came back as a bare unlabelled text box (d3bde8bd). `panelOk` still puts the plain rows
-      // back if the panel fails to load, which is why they keep their KNOB_META entries.
-      // A FUNCTION, NOT A COMPONENT: a component declared in here is a new type on every render,
-      // so React would remount every row and the box you are typing in would lose the caret.
-      const knobRow = (s) => {
-        const m = meta(s.Name);
-        // THE KNOB THE ASSISTANT BROUGHT THE PAGE UP FOR (#settings=config&group=..&key=..): outlined and scrolled into view - the setting's
-        // own control is the button to press (the owner, 2026-10-19: "like the assistant surfaces a settings ui")
-        const asked = only?.knob === s.Name;
-        return (
-          <Box key={s.Name} data-tq-knob={s.Name} {...(asked ? { "data-tq-asked": "" } : {})}
-            sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
-            gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`, ...(asked ? { outline: "2px solid #6f8a6e", outlineOffset: 4, borderRadius: 1 } : {}) }}>
-            <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
-              onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
-              <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
-                {m.label}
-                {m.help && <HelpOutlineIcon sx={{ fontSize: 15, color: "#cfc9bf" }} />}
-              </Typography>
-              <Typography variant="body2" sx={{ color: DIM, mt: 0.25 }}>{m.desc || s.Description}</Typography>
-              {/* the line every description was missing: what shipped, and whether this is
-                  still it. Quiet on purpose - it is a fact you check, not a thing to read. */}
-              {defaultNote(s, m) && (
-                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.3 }}>
-                  {defaultNote(s, m)}
-                </Typography>
-              )}
-            </Box>
-            <Box sx={{ flexShrink: 0 }}>{control(s)}</Box>
-          </Box>
-        );
-      };
       // ONE PAGE, NOT ELEVEN TABS. Every group is a section you scroll past and the rail holds the
       // same eleven names, so nothing runs off the right edge and a knob you half remember is found
       // by reading rather than by guessing which tab it was hiding on (the owner, 2026-09-18).
@@ -890,6 +922,11 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       );
     }
 
+    // PHONE & CHATS: the Assistant chat and its knobs, then - Developer mode only - the chats bound to coding agents (PhoneChats.jsx)
+    if (page === PHONE_PAGE) return (
+      <PhoneChats devMode={devMode} head={(name) => <SectionHead page={PHONE_PAGE} name={name} />}
+        assistant={<><PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />{rowsOf(PHONE_GROUP).map(knobRow)}</>} />
+    );
     if (page === "about") return <AboutYou />;
     if (page === "docs") return <DocsView sel={docSel} onSel={setDocSel} onCatalog={onCatalog} />;
     // ...its Update button lit when the Assistant brought the page up for it (#settings=updates&key=update), the way a knob row is
@@ -999,7 +1036,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
 // where About you leaves off, and moving it in keeps the top strip symmetric about the
 // Assistant now that Review is gone (the owner, 2026-09-22).
 // no "memory" page: the notes it listed are LEARNED.md lines now, under Docs (the owner, 2026-10-27: "probably garbage, remove it")
-const NAV = ["about", "docs", "config", "policies", "audit", "updates"];
+const NAV = ["about", "docs", "config", "policies", PHONE_PAGE, "audit", "updates"];
 
 // DOCS IS A TREE, not a list of scroll anchors: its rail entries SWITCH the document rather than
 // scrolling to a heading, because a document is not a heading you scroll past. Groups are headers
@@ -1170,7 +1207,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     // ...and ABOUT YOU is its own page now (the owner, 2026-11-06): You, Docs, Playbooks, Memory - Settings keeps the rest, the Activity
     // log only in Developer mode
     const SHELF = { docs: ["g:documents", "g:how"], profiles: ["g:profiles"] };
-    const mine = about ? ["you", "docs", "playbooks", "memory"] : ["config", "profiles", "policies", ...(devMode ? ["audit"] : []), "updates"];
+    const mine = about ? ["you", "docs", "playbooks", "memory"] : ["config", "profiles", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
     const section = mine.includes(browseState.section) ? browseState.section : null;
     const page = SHELF[section] ? "docs" : section === "you" ? "about" : section;
     const gone = section === "config" && browseState.open && !GROUPS.includes(browseState.open);
@@ -1196,9 +1233,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     const pbSlug = section === "playbooks" ? pbOpen(browseState.open) : null, pbBook = pbs.books.find((b) => b.slug === pbSlug);
     const pbBack = () => { pbs.load(); onBrowseState?.({ ...browseState, open: null }); };
     // ...a hit keeps the knob it found: it opened its group at the top, the setting itself somewhere below (the 2026-10-19 UI walk)
-    const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config", knob: k }))
+    // ...a phone knob opens Phone & chats, where its group is drawn now
+    const cards = needle ? hits.map(([k, m]) => (m.group === PHONE_GROUP ? { key: PHONE_PAGE, title: m.label || k, sub: `${PAGES[PHONE_PAGE].title} · ${m.desc || ""}`, section: PHONE_PAGE, knob: k }
+      : { key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config", knob: k }))
       // ...a group the schema puts nothing in is not a card: "Other" said "its own panel" over an empty page once strays stopped drawing
-      : section === "config" ? GROUPS.filter((g) => knobsIn(g) && (g !== "Coding agent" || canCode)).map((g) => ({ key: g, title: g, sub: `${knobsIn(g)} settings` }))
+      : section === "config" ? GROUPS.filter((g) => g !== PHONE_GROUP && knobsIn(g) && (g !== "Coding agent" || canCode)).map((g) => ({ key: g, title: g, sub: `${knobsIn(g)} settings` }))
       : SHELF[section] ? docCards.filter((c) => c.key !== "d:learned")
       : section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
           onOpen={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> })),
@@ -1216,8 +1255,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       summary: about ? "how you sound, how you do your job, and what Taskuary has learned · pick a section" : "how Taskuary works for you · pick a section",
       sections: mine.map((k) => ({ key: k, label: label(k), ...(k === "playbooks" ? { n: pbs.books.length } : {}) })),
       section: needle ? "" : section,
-      // You is one page: its chip opens it, with no card to press first
-      onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: key === "you" ? "you" : null }); },
+      // You is one page: its chip opens it, with no card to press first - and so is Phone & chats
+      onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: key === "you" || key === PHONE_PAGE ? key : null }); },
       cards: cards.map((c, i) => ({ ...c, key: needle ? `${c.key}-${i}` : c.key,
         onOpen: c.node ? undefined : () => {
           setQ("");
@@ -1247,10 +1286,11 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       detail: pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={pbBack} />
         : open && section !== "playbooks" && section !== "memory" ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
-      onBack: () => (section === "you" ? onBrowseState?.({ section: null, open: null }) : pbSlug != null ? pbBack() : onBrowseState?.({ ...browseState, open: null })),
+      onBack: () => (section === "you" || section === PHONE_PAGE ? onBrowseState?.({ section: null, open: null }) : pbSlug != null ? pbBack() : onBrowseState?.({ ...browseState, open: null })),
       openLabel: !open ? "" : pbSlug != null ? (pbSlug === "new" ? "a new playbook being written (About you - Playbooks)" : `the playbook "${pbBook?.title || pbSlug}" (About you - Playbooks), its words open`)
         : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - ${section === "docs" ? "Docs" : "Profiles"})`
         : section === "you" ? "who you are - your name, your identity on each channel, what the agents are told (About you)"
+        : section === PHONE_PAGE ? `Phone & chats (Settings) - your Assistant chat on WhatsApp or Telegram${devMode ? ", and the chats bound to coding agents" : ""}`
         : `the settings group "${section === "config" ? open : PAGES[section]?.title}" (Settings)`,
       empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : null,
       note: gone ? `“${browseState.open}” is not a settings group any more - here are the ones there are.` : "",

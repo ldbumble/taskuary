@@ -5565,6 +5565,14 @@ def task_landing(tid: int, full: bool = False):
     if not hub_agents.developer_mode(store): return {'data': None}
     return {'data': landing.state(store, tid, full=full)}
 
+@app.get('/api/tasks/{tid}/changes')
+def task_changes(tid: int):
+    "A coding task's work so far as one diff (landing.changes) - the header's Changes, while the agent works. Developer mode only."
+    from . import landing
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if not hub_agents.developer_mode(store): return {'data': None}
+    return {'data': landing.changes(store, tid)}
+
 @app.get('/api/tasks/{tid}/coding-chat')
 def task_coding_chat(tid: int):
     """A coding task as the one chat (codingchat.py): every session's steps - the CLI's own log, or its ACP updates - the mail that came

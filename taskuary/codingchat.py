@@ -108,4 +108,6 @@ def sessions(store, tid: int) -> list:
 
 def chat(store, tid: int) -> dict:
     "What the coding chat draws (CodingChat.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI."
-    return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(_live(int(tid)))}
+    from . import permissions
+    return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(_live(int(tid))),
+            'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for

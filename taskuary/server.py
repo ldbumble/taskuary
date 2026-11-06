@@ -5552,6 +5552,50 @@ def task_coding_chat(tid: int):
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     return {'data': codingchat.chat(store, tid)}
 
+class AgentChannelBody(BaseModel):
+    kind: str
+    chat: str
+    task: int | None = None
+    repo: str = ''
+    members: list[dict] = []
+
+@app.get('/api/agent-channels')
+def agent_channels_view(task: int = None):
+    "The chats bound to agents (agentchannels.py) - this task's, or all - and what a new one can use. Developer mode only."
+    from . import agentchannels
+    if not hub_agents.developer_mode(store): return {'data': None}
+    return {'data': agentchannels.view(store, task)}
+
+@app.post('/api/agent-channels')
+def agent_channel_bind(body: AgentChannelBody, request: Request):
+    "Bind a chat to an agent: the owner's press alone - it opens a door other people talk through."
+    from . import agentchannels
+    _owner_only(request, 'which chats reach an agent is the owner\'s to open')
+    try: return agentchannels.bind(store, body.kind, body.chat, body.task, body.repo, body.members, actor=ACTOR)
+    except PermissionError as e: raise HTTPException(409, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.delete('/api/agent-channels/{cid}')
+def agent_channel_unbind(cid: int, request: Request):
+    from . import agentchannels
+    _owner_only(request, 'which chats reach an agent is the owner\'s to close')
+    try: return agentchannels.unbind(store, cid, ACTOR)
+    except LookupError as e: raise HTTPException(404, str(e))
+
+class PermissionBody(BaseModel):
+    id: str
+    option: str
+
+@app.post('/api/tasks/{tid}/permission')
+def task_permission(tid: int, body: PermissionBody, request: Request):
+    "The owner's button on an agent's permission request (permissions.py) - the task chat's card."
+    from . import permissions
+    _owner_only(request, "answering an agent's permission request is the owner's")
+    try: out = permissions.answer(store, tid, body.id, body.option, ACTOR)
+    except ValueError as e: raise HTTPException(422, str(e))
+    if not out.get('ok'): raise HTTPException(409, out.get('why') or 'that request is no longer waiting')
+    return out
+
 class RevertBody(BaseModel): parts: list[dict]
 
 @app.post('/api/tasks/{tid}/landing/revert')

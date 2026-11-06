@@ -701,6 +701,9 @@ def meta_expr(key: str) -> str: return f"(CASE WHEN json_valid(MailMetaJson) THE
 # CREATE TABLE IF NOT EXISTS is a no-op on an existing db; these are not. IF NOT EXISTS
 # so a second open (desktop + web, or a restart) does not raise. Named so EXPLAIN QUERY
 # PLAN tests can see them, and so a DROP INDEX in a test is not a mystery.
+# a route row a brain built and never called left (brainroute.Lazy): 'ok', no time, no tokens - older than the sweep (?)
+UNCALLED_ROUTES = "Ms IS NULL AND TokensIn IS NULL AND Outcome='ok' AND At<?"
+
 INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_external ON message(ExternalId)',
     'CREATE INDEX IF NOT EXISTS idx_brainroute_at ON brainroute(At)',          # the AI-use dashboard reads 90 days by time
@@ -1701,6 +1704,12 @@ class SQLiteStore:
                 if body.count(at) == 1 and '## Several to-dos at once' not in body:
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='coding'", (body.replace(at, at + now), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_fans_out_todos', '1', 'migration')")
+            # ...and THE ROUTE ROWS OF BRAINS BUILT AND NEVER CALLED go, once (brainroute.Lazy, 2026-11-06): the chat poll wrote one a second,
+            # each 'ok' with no time and no tokens - a call made through the meter always has its time, so these were never calls
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='brainroute_uncalled_swept'").fetchone():
+                n = self.cx.execute(f"DELETE FROM brainroute WHERE {UNCALLED_ROUTES}", (_now(),)).rowcount
+                if n: logger.info(f'removed {n} AI route rows of brains that were built and never called')
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('brainroute_uncalled_swept', ?, 'migration')", (str(n),))
             # ...and THE LOGIN RULE LIVES IN CODE (_LOGIN_RULES): out of an edited AGENT.md / ASSISTANT.md that still reads it as shipped, once
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='login_rule_in_code'").fetchone():
                 for name, (froms, to) in _LOGIN_RULES.items():

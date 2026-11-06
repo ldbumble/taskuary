@@ -215,10 +215,13 @@ const ChannelMark = ({ channel }) => {
   const Icon = c === "whatsapp" ? WhatsAppIcon : c === "telegram" ? TelegramIcon : c === "email" || !c ? MailOutlineIcon : ChatBubbleOutlineIcon;
   return <Icon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />;
 };
-const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i) => (
-  <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
-    <span className="tq-aui-arrived-head"><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+// ...and a burst from one sender reads as one: the next message of the same person on the same channel carries its time alone (the owner's
+// four WhatsApp messages in a minute, 2026-11-05: the same "WhatsApp message from … · sent to Taskuary" over each)
+const sameAs = (a, b) => !!a && !!b && a.who === b.who && String(a.channel || "") === String(b.channel || "");
+const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i, all) => (
+  <div key={i} className={`tq-aui-arrived${sameAs(all[i - 1], x) ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
+    <span className="tq-aui-arrived-head">{sameAs(all[i - 1], x) ? when(x.at) || "" : <><ChannelMark channel={x.channel} />
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</>}</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {

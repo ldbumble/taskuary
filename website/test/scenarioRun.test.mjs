@@ -14,3 +14,19 @@ test("the folded What I did line carries its whole words as its title", () => {
 test("the rail's bottom fade sits on the card's inner edge", () => {
   assert.match(read("FeedView.jsx"), /position: "absolute", left: "1px", right: "1px", bottom: 0, zIndex: 6,/);
 });
+
+// THE WORKING LINE'S CLOCK is the turn's (the scenario run, 2026-11-06): it read the owner's line before the one just typed, "249m 53s" over a
+// turn three seconds old - the server's turn_started when it has said it, and never before the newest input in the thread
+test("Working on this… counts from the turn's own start", () => {
+  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(ws, /const since = \(session\?\.busy && session\?\.turn_started \? session\.turn_started \* 1000 : null\) \|\| turnStart\(shownMessages\);/);
+  assert.match(ws, /const typed = useAuiState\(\(s\) => turnBegan\(s\.thread\.messages\.filter\(\(m\) => m\.role === "user"\)\.map\(\(m\) => m\.createdAt\)\)\);/);
+  assert.match(ws, /<AgentBand \{\.\.\.props\} since=\{Math\.max\(since \|\| 0, typed \|\| 0\) \|\| null\} \/>/);
+});
+
+// ...and the lines typed while it works come under that line, never between the turn's head and its clock
+test("lines typed mid-turn are drawn under Working on this…", () => {
+  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("{atWork}", i), b = ws.indexOf("{serverBusy && atWork}", i), h = ws.indexOf("{held.map(", i);
+  assert.ok(i > 0 && a > i && b > a && h > b, "messages, the running line, the server's running line, then the held lines");
+});

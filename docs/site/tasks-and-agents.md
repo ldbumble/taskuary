@@ -341,7 +341,7 @@ playbook onto the task. Approve it, and the next message like it is matched to t
 triage, and the agent is seeded from it instead of from `CODING.md`'s repository rules.
 
 Each connector card lists the playbooks that name it, and the words themselves are edited on
-**About you → Playbooks**, where each has an on/off switch.
+**Reports → Playbooks**, where each has an on/off switch.
 
 ## The task view and the Board
 

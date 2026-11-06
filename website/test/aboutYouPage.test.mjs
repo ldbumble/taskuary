@@ -1,5 +1,5 @@
 // ONE PAGE ABOUT THE OWNER (the owner, 2026-11-06: "general things you care about, how you do your job, personality, goals"): About you
-// in the side nav beside Settings - You, Docs, Playbooks and Memory - with Memory as plain sentences over LEARNED.md, never its tags.
+// in the side nav beside Settings - You, Docs and Memory - with Memory as plain sentences over LEARNED.md, never its tags.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -13,6 +13,7 @@ test("About you is a side-nav page of its own, drawn by SettingsView's about are
   assert.match(b, /about: "About you"/);
   assert.match(src("TaskHubPage.jsx"), /About: "about"/);
   assert.match(src("FeedView.jsx"), /about: PersonOutlineIcon/);
+  assert.match(src("SettingsView.jsx"), /const mine = about \? \["you", "docs", "memory"\]/);
 });
 
 test("Memory shows LEARNED.md as one sentence per line with Keep / Wrong / Forget, through the existing mark road", () => {
@@ -40,10 +41,12 @@ test("under it, faint: when it was learned and from what - or that the owner wro
   assert.equal(fromWhere([{ kind: "message" }, { kind: "task" }, { kind: "idea" }, { kind: "message" }]), "mail you answered, what you did on tasks and more");
 });
 
-test("every old address of Docs, Playbooks and Memory still lands - and the Assistant's page map names the new page", async () => {
+test("every old address of Docs and Memory still lands - and the Assistant's page map names the page, Playbooks on Reports", async () => {
   const words = JSON.parse(fs.readFileSync(new URL("../../taskuary/words.json", import.meta.url), "utf8")).places;
-  for (const k of ["about", "docs", "memory", "playbooks"]) assert.match(words[k].name, /^About you → /, k);
+  for (const k of ["about", "docs", "memory"]) assert.match(words[k].name, /^About you → /, k);
   assert.equal(words.memory.href, "#about=memory");
+  assert.equal(words.playbooks.name, "Reports → Playbooks");
   const { canvasRequestFromHash } = await import("../src/canvasLinks.js");
-  for (const k of ["about", "docs", "memory", "playbooks"]) assert.equal(canvasRequestFromHash(words[k].href).area, "about", k);
+  for (const k of ["about", "docs", "memory"]) assert.equal(canvasRequestFromHash(words[k].href).area, "about", k);
+  assert.equal(canvasRequestFromHash(words.playbooks.href).area, "reports");
 });

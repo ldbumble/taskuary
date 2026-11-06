@@ -239,6 +239,19 @@ def test_a_write_no_census_reads_settles_on_the_next_tick(s):
     finally: w.close()
 
 
+def test_a_reader_waiting_on_the_worker_wakes_it(s):
+    # asleep between ticks, the worker cost every rail build after a write about half its interval
+    s.set_setting('processing_membership_rules', processing_all.MEMBERSHIP_RULES, 'system')
+    tid = s.create_task({'Title': 'T', 'Kind': 'reply', 'Status': 'open'}, 'fixture'); s.reconcile_processing_membership()
+    w = processing_all.MembershipWorker(s, interval=5.0, census_every=0)
+    w.start(); time.sleep(0.2)                                       # its first tick done: the next is 5 s off
+    try:
+        s._exec("UPDATE task SET Status='in_progress' WHERE TaskId=?", (tid,))
+        t0 = time.monotonic(); assert processing_all.wait_settled(s, wait=3.0)
+        assert time.monotonic() - t0 < 1.0 and not s.processing_reconcile_status()['pending']
+    finally: w.close()
+
+
 # ── the log: once a minute per call site ─────────────────────────────────────────────────────────────────
 
 def test_a_slow_wait_is_logged_once_a_minute_per_site_with_the_rest_counted():

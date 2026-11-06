@@ -430,6 +430,11 @@ def latest_block(store, tid: int) -> str:
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     return '\n\n'.join(out)
 
+def turn_facts(store, tid: int, task: dict = None) -> str:
+    "latest_block for a task's turn - none on the dock or a setup walk. Said in the turn, not the system prompt (_prompt)."
+    task = task if task is not None else store.get_task(tid) or {}
+    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid)
+
 def draft_turns(store, tid: int) -> list:
     """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
     any did), at (when it was drafted), stale (a later turn answered a newer message and left it untouched), before (that message's time)}."""
@@ -1282,7 +1287,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}')
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
-    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF) and (lb := latest_block(store, tid)): system += f'\n\n{lb}'
+    # ...the LATEST facts ride in the TURN, never the system prompt: they change every turn, and a CLI's system prompt is its process's
+    # command line (a hashed --append-system-prompt-file), so in the system prompt each turn started a new process (clipool's one per chat)
+    lb = turn_facts(store, tid, task)
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     from .terminal import TICK_HEAD, _tickable
@@ -1312,10 +1319,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # and not the owner (audit 2026-09-02).
     # ...and what goes is COMPACTED, not lost (the owner, 2026-11-05: "some sort of compaction if the chats get too long"): the room for it is
     # kept back first, then the cut turns are read from what the task already holds (compacted_turns)
-    room_for = lambda: len(head) + len('\n\n'.join(turns)) + len(tail) + (COMPACT_CHARS if len(turns) < len(said) else 0)
+    room_for = lambda: len(head) + len(lb) + len('\n\n'.join(turns)) + len(tail) + (COMPACT_CHARS if len(turns) < len(said) else 0)
     while len(turns) > 1 and room_for() > MAX_CONTEXT: turns.pop(0)
     earlier = compacted_turns(store, tid, said[:len(said) - len(turns)])
-    conv = "CONVERSATION\n" + (f'{earlier}\n\n' if earlier else '') + '\n\n'.join(turns) + tail
+    conv = (f'{lb}\n\n' if lb else '') + "CONVERSATION\n" + (f'{earlier}\n\n' if earlier else '') + '\n\n'.join(turns) + tail
     src, room = '\n\n'.join(sources), MAX_CONTEXT - len(head) - len(conv) - 20
     if stranger and sources: src, room = origin.SEED_LINE.format(path=origin.stranger_file(store, tid, sources)), MAX_CONTEXT
     if len(src) > room:
@@ -1870,6 +1877,7 @@ class GeneralSession:
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
+                if (lb := turn_facts(self.store, self.task_id)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'
             # Paths are harmless context to an API brain and essential if its CLI backup takes

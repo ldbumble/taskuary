@@ -47,20 +47,22 @@ def the_owners_day(s):
     return tid, mid, sent, rid
 
 
+# the facts ride in the TURN (general.turn_facts), not the system prompt: there they changed it every turn, and a CLI chat's system
+# prompt is its process's command line, so each turn started a new process
 def test_a_correction_after_a_pending_draft_names_the_newest_message_and_the_draft():
     s = MemoryStore(); tid, _, _, rid = the_owners_day(s)
-    system, _ = general._prompt(s, tid)
-    assert selfclose.LATEST_LINE in system
-    assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in system and FIX in system
-    assert f'THE DRAFT WAITING NOW (rv{rid}, to Gail Moreno, drafted at 02:48 PM' in system and 'BEFORE the newest message' in system
-    assert OLD in system and selfclose.WITHDRAW_LINE in system
+    system, turn = general._prompt(s, tid)
+    assert selfclose.LATEST_LINE in turn and 'THE NEWEST MESSAGE' not in system
+    assert 'THE NEWEST MESSAGE - from the owner (in this chat)' in turn and FIX in turn
+    assert f'THE DRAFT WAITING NOW (rv{rid}, to Gail Moreno, drafted at 02:48 PM' in turn and 'BEFORE the newest message' in turn
+    assert OLD in turn and selfclose.WITHDRAW_LINE in turn
 
 
 def test_already_sent_replies_are_in_the_turns_context():
     s = MemoryStore(); tid, *_ = the_owners_day(s)
-    system, _ = general._prompt(s, tid)
-    assert 'ALREADY SENT ON THIS TASK - never draft these again' in system
-    line = next(l for l in system.splitlines() if SENT in l)
+    _, turn = general._prompt(s, tid)
+    assert 'ALREADY SENT ON THIS TASK - never draft these again' in turn
+    line = next(l for l in turn.splitlines() if SENT in l)
     assert 'to Gail Moreno' in line and line.startswith('- 06:10 PM')
 
 

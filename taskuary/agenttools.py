@@ -72,8 +72,12 @@ TOOLS = {
                      "nothing moves. Not for routine steps.",
                      _S({'question': _STR, 'context': _STR}, ('question',)), ('POST', '/api/agent/ask-stronger')),
     'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
-                      "mail. It becomes a pending reply with a Send button for the owner - nothing is sent.",
-                      _S({'text': _STR, 'to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
+                      "mail. `answers`: the number of the mail it replies to, when that is an earlier one than the newest (THE MAIL ON THIS "
+                      "TASK in your brief). Who hears it is yours to decide: `only: true` sends it to that mail's sender alone (something "
+                      "sensitive), `cc` lists who else is copied instead of the thread's own, and `why_to` says in one line why it goes to "
+                      "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent.",
+                      _S({'text': _STR, 'to': _STR, 'answers': _INT, 'only': {'type': 'boolean'}, 'cc': {'type': 'array', 'items': _STR},
+                          'why_to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
     'reply_not_needed': ('own', "The reply waiting on this task is no longer needed - someone else answered, the owner already did. `why` "
                          "says it in one line. The draft stays, marked, with the owner's Send still on it - nothing is sent, deleted or "
                          "closed; a new reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
@@ -197,7 +201,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         out = doors['ask_stronger'](tid, str(a.get('question') or ''), str(a.get('context') or ''))
         return out['answer'] if out.get('ok') else out.get('says') or _j(out)
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
-    if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach'))))
+    if name == 'propose_reply':
+        who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
+        return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who))
     if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''),
                                                          attached(tid, a.get('attach'))))
     if name == 'sign_form':

@@ -371,7 +371,7 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       const args = e.detail?.args || e.detail || {};
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
-      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: "", status: "running" };
+      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running" };
       byId.set(id, step); steps.push(step);
     } else if (e.type === "tool_result") {
       const step = byId.get(e.detail?.tool_call_id || e.name);

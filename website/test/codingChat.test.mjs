@@ -41,11 +41,14 @@ const ACP = [
 const ses = (more) => ({ sid: "s1", cli: "claude", at: "2026-11-06 09:00:00", ...more });
 // the rows a person reads: ids and stamps aside, an ACP session has no per-step clock
 const shape = (rows) => rows.map(({ id, at, ...r }) => r);
+// ...and a command's output, which only ACP hands over (a log keeps the command alone)
+const noOutput = (rows) => rows.map((r) => (r.parts ? { ...r, parts: r.parts.map((p) => (p.steps ? { ...p, steps: p.steps.map(({ detail, ...s }) => s) } : p)) } : r));
 
 test("a session's log and the same session over ACP draw the same chat rows", () => {
   const log = chatRows({ sessions: [ses({ source: "Claude Code log", steps: LOG })] });
   const acp = chatRows({ sessions: [ses({ source: "acp", updates: ACP })] });
-  assert.deepEqual(shape(acp), shape(log));
+  assert.deepEqual(noOutput(shape(acp)), noOutput(shape(log)));
+  assert.match(acp[0].parts[0].steps[1].detail, /\$ pytest -q tests\n→ 3 passed/);
   assert.deepEqual(log.map((r) => r.kind), ["turn", "you", "turn"]);
   const [first] = log;
   assert.deepEqual(first.parts.map((p) => p.type), ["work", "edit", "said"]);
@@ -150,9 +153,78 @@ test("over ACP each step keeps the moment it came in, and the plan is one checkl
   assert.deepEqual(plans[0].items, [{ text: "Read the ledger", state: "done" }, { text: "Fix the tax line", state: "now" }]);
 });
 
-test("over ACP the box is a prompt, Stop ends the turn, and the Terminal is offered only once a command printed", () => {
+test("over ACP the box is a prompt and Stop ends the turn; there is no Terminal button, and a pty's asking screen is a card in the stream", () => {
+  // the owner, 2026-11-06: "hate this terminal button. it's also not a terminal"
   const src = fs.readFileSync(new URL("../src/CodingChat.jsx", import.meta.url), "utf8");
   assert.match(src, /\/api\/tasks\/\$\{tid\}\/agent\/cancel/);
-  assert.match(src, /live\.terminal !== false/);
   assert.match(src, /data-tq-plan/);
+  assert.doesNotMatch(src, /terminal-toggle|TerminalIcon|<span>Terminal<\/span>/);
+  assert.match(src, /asking = !!live\?\.asking && !acp/);
+  assert.match(src, /data-tq-chat-screen[^]*The agent's screen is asking something[^]*<TerminalPane/);
+});
+
+// ── recorded ACP update sequences ────────────────────────────────────────────────────────────────
+const say = (t, at) => ({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: t }, ...(at ? { _at: at } : {}) });
+const BRIEF = { sessionUpdate: "user_message_chunk", content: { type: "text", text: "TASKUARY: work TQ-0042 ..." }, _meta: { taskuary: "brief" } };
+const flat = (turn) => turn.parts.flatMap((p) => (p.type === "work" ? p.steps.map((s) => `${s.kind === "said" ? "said" : "step"}:${s.summary}:${s.status}`)
+  : p.type === "said" ? [`said:${p.text}`] : [`${p.type}`]));
+
+test("a message after a step still running draws BELOW it, and the step keeps running (the owner, 2026-11-06: never write above what was written)", () => {
+  const ups = [BRIEF, say("Running the suite."),
+    { sessionUpdate: "tool_call", toolCallId: "t1", kind: "execute", title: "pytest", status: "in_progress", rawInput: { command: "pytest -q" } },
+    { sessionUpdate: "tool_call_update", toolCallId: "t1", _meta: { terminal_output_delta: { data: "....\n" } } },
+    say("Quick update: "), say("about half the suite has passed so far.")];
+  const live = { working: true, transport: "acp" };
+  const before = chatRows({ sessions: [ses({ source: "acp", live: true, updates: ups.slice(0, 4) })], live }).at(-1);
+  const after = chatRows({ sessions: [ses({ source: "acp", live: true, updates: ups })], live }).at(-1);
+  assert.deepEqual(flat(before), ["said:Running the suite.", "step:Ran pytest:running"]);
+  // ...what was on screen stays as it was, in place; the new words come after it
+  assert.deepEqual(flat(after), [...flat(before), "said:Quick update: about half the suite has passed so far."]);
+  // ...and what it printed so far is under the running step
+  assert.match(after.parts[1].steps[0].detail, /\$ pytest -q\n→ \.\.\.\./);
+  // ...the result, when it comes, settles the same row where it stands
+  const done = chatRows({ sessions: [ses({ source: "acp", live: true, updates: [...ups, { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" }] })], live }).at(-1);
+  assert.deepEqual(flat(done), ["said:Running the suite.", "step:Ran pytest:done", "said:Quick update: about half the suite has passed so far."]);
+});
+
+test("a command's output opens under its own step: Claude's fenced result and Codex's streamed one; a failed command says so", () => {
+  const ups = [BRIEF,
+    { sessionUpdate: "tool_call", toolCallId: "c", kind: "execute", rawInput: { command: "pytest -q" } },
+    { sessionUpdate: "tool_call_update", toolCallId: "c", status: "failed", content: [{ type: "content", content: { type: "text", text: "```\n1 failed, 3 passed\n```" } }] },
+    { sessionUpdate: "tool_call", toolCallId: "x", kind: "execute", rawInput: { command: "npm test" } },
+    { sessionUpdate: "tool_call_update", toolCallId: "x", _meta: { terminal_output_delta: { data: "ok 1\n" } } },
+    { sessionUpdate: "tool_call_update", toolCallId: "x", _meta: { terminal_output_delta: { data: "ok 2\n" } } },
+    { sessionUpdate: "tool_call_update", toolCallId: "x", status: "completed", content: [{ type: "content", content: { type: "text", text: "ignored" } }] }];
+  const [turn] = chatRows({ sessions: [ses({ source: "acp", updates: ups })] });
+  const [a, b] = turn.parts[0].steps;
+  assert.equal(a.detail, "$ pytest -q\n→ 1 failed, 3 passed"); assert.equal(a.status, "error");
+  assert.equal(b.detail, "$ npm test\n→ ok 1\nok 2");
+});
+
+test("a turn that ended on a question is not working, though its session is alive (the owner's live coding task, 2026-11-06)", () => {
+  const ups = [BRIEF, { sessionUpdate: "tool_call", toolCallId: "r", kind: "read", title: "Read ledger.py", status: "completed", locations: [{ path: "C:/work/ledger/ledger.py" }] },
+    say("I can fix the rounding in ledger.py. Should I go ahead?")];
+  const rows = (live, permissions = []) => chatRows({ sessions: [ses({ source: "acp", live: true, updates: ups })], live, permissions });
+  // ...the turn ended: the session waits on the owner - no turn at work, nothing spinning under the question
+  assert.equal(rows({ working: false, transport: "acp" }).at(-1).running, false);
+  assert.equal(rows({ working: true, transport: "acp" }).at(-1).running, true);
+  // ...and at work but waiting on the owner's press (a permission card, a screen that asks): running, but waiting - no "Working on this…"
+  assert.equal(rows({ working: true }, [{ id: "p1" }]).at(-1).waiting, true);
+  assert.equal(rows({ working: true, asking: true }).at(-1).waiting, true);
+  const src = fs.readFileSync(new URL("../src/CodingChat.jsx", import.meta.url), "utf8");
+  assert.match(src, /r\.running && !r\.waiting && !r\.parts\.some\(stillRuns\)/);
+});
+
+test("the general chat's ACP trace keeps the words where they were said: the answer takes only what came after the last call", async () => {
+  const { stepsOf } = await import("../src/agentSteps.js");
+  // the trace agents.ACPSteps writes for the same recorded sequence (tests/test_acp_steps_order.py)
+  const trace = [{ type: "progress", name: "text", detail: "Running the suite." },
+    { type: "tool_call", name: "Bash", detail: { tool_call_id: "t1", args: { command: "pytest -q" } } },
+    { type: "progress", name: "text", detail: "Quick update: half of it passed." },
+    { type: "tool_result", name: "t1", detail: { tool_call_id: "t1", result: "212 passed" } },
+    { type: "progress", name: "text", detail: "All 212 pass." }];
+  const live = stepsOf(trace, { keepStart: false }).map((s) => s.summary);
+  assert.deepEqual(live, ["Running the suite.", "Ran pytest", "Quick update: half of it passed.", "All 212 pass."]);
+  // ...filed: the answer leaves the trail, every earlier line stays where it stood
+  assert.deepEqual(stepsOf(trace, { keepStart: false, answer: "All 212 pass." }).map((s) => s.summary), live.slice(0, 3));
 });

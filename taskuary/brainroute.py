@@ -47,7 +47,8 @@ class Route(NamedTuple):
     escalate: str = ''             # the tier a retry would go up to, '' when none
 
 
-KEEP_DAYS = 30           # how long a route row is kept (retention.tick trims the rest)
+KEEP_DAYS = 30           # how long a route's reason is kept (retention.tick trims the rest)
+USAGE_DAYS = 90          # ...and the row itself, for what the call used: the AI-use dashboard reads 90 days (aiusage)
 
 
 def log(store, r: 'Route', task_id=None, outcome: str = 'ok', pick: str = None, escalated_from=None) -> int | None:
@@ -70,7 +71,8 @@ def outcome(store, rid, said: str, why: str = None) -> None:
 
 
 def trim(store, now: datetime = None) -> int:
-    return store.trim_brain_routes(((now or datetime.now()) - timedelta(days=KEEP_DAYS)).isoformat(sep=' ', timespec='seconds'))
+    at = lambda d: ((now or datetime.now()) - timedelta(days=d)).isoformat(sep=' ', timespec='seconds')
+    return store.trim_brain_routes(at(USAGE_DAYS), at(KEEP_DAYS))
 
 
 def why_for_task(store, task_id) -> str:
@@ -401,8 +403,9 @@ def step_up(store, r: 'Route', rid, task_id, why: str, build):
     if brain is None: return None
     said = f"{JOB_WORDS[r.job]} came back {why} on {_said(store, r.pick)}, so it was asked once of {_said(store, to)}'s strong model"
     up = Route(r.job, 'strong', to, '', 'strong', [], 'unsure', said[0].upper() + said[1:], r.difficulty, r.data_class)
-    log(store, up, task_id, escalated_from=rid); outcome(store, rid, 'escalated')
-    return brain
+    rid2 = log(store, up, task_id, escalated_from=rid); outcome(store, rid, 'escalated')
+    from . import aiusage
+    return aiusage.metered(store, rid2, brain)
 
 
 # ── health and the day's cap (Auto mode) ─────────────────────────────────────────────────────────────────────────────────────

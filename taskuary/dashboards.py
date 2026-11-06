@@ -22,7 +22,7 @@ KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'ar
          'stacked': (('x', 'series'), 2), 'table': ((), 4), 'list': (('label',), 2)}
 AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
-MAX_SOURCES, MAX_COMPONENTS, ROWS = 6, 12, 2000
+MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 18, 2000
 COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date')
 
 
@@ -133,21 +133,40 @@ def _replies(store, days):
              'hours': round(max(0.0, r['Hrs']), 1) if r['Hrs'] is not None else None} for r in rows]
 
 
+def _ai_usage(store, days):
+    from . import aiusage
+    return aiusage.dataset(store, days)
+
+
 DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|closed), priority (regular|important|urgent), arrived (date), closed (date), '
                              'waiting (how long since it arrived, in words)'),
             'mail': (_mail, 'message_id, task_id, day (date), channel, sender, became_task (yes|no)'),
             'flow': (_flow, 'message_id, task_id, day (date), channel, stage (Came in|Triaged|On a task|Task closed - one row per stage reached)'),
             'agent_runs': (_agent_runs, 'run_id, task_id, ref, day (date), agent, status, outcome (finished|failed|stopped|waiting on you|working), minutes'),
-            'replies': (_replies, 'task_id, day (date the reply was decided), channel, status, hours (ask to answer)')}
+            'replies': (_replies, 'task_id, day (date the reply was decided), channel, status, hours (ask to answer)'),
+            'ai_usage': (_ai_usage, 'day (date), task_id (agent runs only), kind (agent run|one call), job, what (the job in words), brain, model, '
+                                    'tier (quick|normal|hard|as set), calls, tokens_in, cached, tokens_out, tokens (in + out), seconds, minutes')}
 
 
 # ── the built-in dashboard: what the End of day checkup is to reports. Every install gets it (store.SEEDED_REPORTS), and New
 # dashboard offers it again in one press. It reads ONLY this app's own tables, so it draws for anybody, with nothing connected.
+# ...and what the AI used (the owner, 2026-11-06: "dashboard of the taskuary thing included in current one the token usage and per
+# model"): tokens per model per day, by job, an agent run's tokens and time, and how many calls were quick, normal or hard
+AI_TILES = [
+    {'kind': 'stacked', 'title': 'AI tokens by model, per day', 'source': 'ai', 'x': 'day', 'series': 'model', 'agg': 'sum', 'y': 'tokens', 'w': 2},
+    {'kind': 'bar', 'title': 'AI tokens by job', 'source': 'ai', 'x': 'what', 'agg': 'sum', 'y': 'tokens', 'limit': 8, 'w': 2},
+    {'kind': 'stat', 'title': 'Tokens per agent run', 'source': 'ai', 'agg': 'median', 'y': 'tokens', 'where': {'kind': 'agent run'}, 'good': 'none'},
+    {'kind': 'stat', 'title': 'Minutes per agent run', 'source': 'ai', 'agg': 'median', 'y': 'minutes', 'unit': 'min',
+     'where': {'kind': 'agent run'}, 'good': 'none'},
+    {'kind': 'bar', 'title': 'AI calls: quick, normal or hard', 'source': 'ai', 'x': 'tier', 'agg': 'sum', 'y': 'calls',
+     'order': ['quick', 'normal', 'hard'], 'w': 2}]
+AI_SOURCE_KEY = 'ai'
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
           'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
                       _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
-                      _own('agents', 'Agent sessions', 'agent_runs', 'day'), _own('replies', 'Replies', 'replies', 'day')],
+                      _own('agents', 'Agent sessions', 'agent_runs', 'day'), _own('replies', 'Replies', 'replies', 'day'),
+                      _own('ai', 'AI used', 'ai_usage', 'day')],
           'filters': {'range': 7, 'segment': 'channel'},
           'components': [
               # the numbers first: what came in, what it became, what is still open, and how fast the owner answers
@@ -167,7 +186,8 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
               {'kind': 'bar', 'title': 'Who writes most', 'source': 'mail', 'x': 'sender', 'limit': 8, 'w': 2},
               # ...and the detail: the asks that have waited longest on the owner, each opening its task
               {'kind': 'list', 'title': 'Waiting longest on you', 'source': 'tasks', 'label': 'title', 'meta': 'waiting',
-               'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4}]}
+               'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4},
+              *AI_TILES]}
 TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
                         'explain': 'What came in and from where, how far it got, what is still open, how fast you answer and what your '
                                    'agents did - from this app\'s own records, so there is nothing to connect.'}}
@@ -178,7 +198,7 @@ def template(key) -> dict | None: return json.loads(json.dumps(TEMPLATES[key])) 
 
 
 def run_taskuary_data(cfg):
-    """{"dataset": "tasks|mail|flow|agent_runs|replies", "days": 90} - Taskuary's own tables as plain rows, no AI: tasks (task_id,
+    """{"dataset": "tasks|mail|flow|agent_runs|replies|ai_usage", "days": 90} - Taskuary's own tables as plain rows, no AI: tasks (task_id,
     ref, title, kind, status, state, priority, arrived, closed, waiting), mail (day, channel, sender, became_task), flow (day,
     channel, stage), agent_runs (day, agent, outcome, minutes), replies (day, channel, hours). The rows a dashboard draws from. `store` arrives via resolve_cfg."""
     from .reports import rows_out, row_limit
@@ -207,6 +227,33 @@ def three_priorities(spec: dict) -> dict:
         if 'priority' in (c.get('x'), c.get('series')) and isinstance(c.get('order'), list):
             c['order'] = list(dict.fromkeys(level(v) if known(v) else v for v in c['order']))     # low and normal both land on regular
     return out
+
+
+def with_ai_tiles(spec: dict) -> dict:
+    """A saved Taskuary at a glance with the AI-use source and tiles added (2026-11-06) - the same spec when it already reads ai_usage,
+    is not the built-in, or has no room under the caps."""
+    if not is_dashboard(spec) or spec.get('title') != GLANCE['title']: return spec
+    srcs, comps = spec.get('sources') or [], spec.get('components') or []
+    if any(isinstance(s, dict) and s.get('dataset') == 'ai_usage' for s in srcs): return spec
+    key = AI_SOURCE_KEY if AI_SOURCE_KEY not in {_key(s, i) for i, s in enumerate(srcs, 1) if isinstance(s, dict)} else 'ai_used'
+    if len(srcs) + 1 > MAX_SOURCES or len(comps) + len(AI_TILES) > MAX_COMPONENTS: return spec
+    src = {**next(s for s in GLANCE['sources'] if s['key'] == AI_SOURCE_KEY), 'key': key}
+    return {**spec, 'sources': [*srcs, src], 'components': [*comps, *({**c, 'source': key} for c in AI_TILES)]}
+
+
+AI_TILES_KEY = 'glance_ai_tiles_added'
+
+
+def migrate_ai_tiles(store) -> int:
+    """An existing install's Taskuary at a glance gets the AI-use tiles, once: an owner who removes them later is not given them again."""
+    if store.get_setting(AI_TILES_KEY): return 0
+    n = 0
+    for src in store.list_sources(active_only=False):
+        cfg = cfg_of(src)
+        if src.get('Channel') == 'report' and (new := with_ai_tiles(cfg)) != cfg:
+            store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(new)}, 'migrate'); n += 1
+    store.set_setting(AI_TILES_KEY, '1', 'migrate')
+    return n
 
 
 def migrate_priorities(store) -> int:

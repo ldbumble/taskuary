@@ -632,9 +632,12 @@ CREATE TABLE IF NOT EXISTS lore_comment (CommentId INTEGER PRIMARY KEY, LoreId I
   Author TEXT, CreatedAt TEXT);
 CREATE INDEX IF NOT EXISTS idx_lore_comment ON lore_comment(LoreId, CommentId);
 CREATE TABLE IF NOT EXISTS lore_vote (LoreId INTEGER, Actor TEXT, Delta INTEGER, At TEXT, PRIMARY KEY (LoreId, Actor));
--- Which brain each AI call was built on, and why (brainroute.py) - never what it was asked or what it said. Trimmed at 30 days.
+-- Which brain each AI call was built on, and why (brainroute.py) - never what it was asked or what it said - and what it used
+-- (aiusage.py): the model that answered, tokens in / cached / out, its time, how many calls, the agent session it was. Why is
+-- kept a month, the rest 90 days (brainroute.trim).
 CREATE TABLE IF NOT EXISTS brainroute (Id INTEGER PRIMARY KEY, At TEXT, Job TEXT, TaskId INTEGER, MessageId INTEGER, Pick TEXT,
-  Model TEXT, Tier TEXT, Rule TEXT, Why TEXT, Difficulty TEXT, DataClass TEXT, EscalatedFrom INTEGER, Outcome TEXT, Ms INTEGER);
+  Model TEXT, Tier TEXT, Rule TEXT, Why TEXT, Difficulty TEXT, DataClass TEXT, EscalatedFrom INTEGER, Outcome TEXT, Ms INTEGER,
+  Ran TEXT, TokensIn INTEGER, Cached INTEGER, TokensOut INTEGER, Calls INTEGER, Sid TEXT);
 CREATE INDEX IF NOT EXISTS idx_brainroute_task ON brainroute(TaskId, Id);
 -- How hard a task's work is, whether its reader could tell, and what kind of data it carries - triage's judgements, apart from the
 -- priority, kept per task (brainroute.judged). `By` is 'owner' once they correct one: their word stands until they change it again.
@@ -677,6 +680,7 @@ def meta_expr(key: str) -> str: return f"(CASE WHEN json_valid(MailMetaJson) THE
 # PLAN tests can see them, and so a DROP INDEX in a test is not a mystery.
 INDEXES = (
     'CREATE INDEX IF NOT EXISTS idx_message_external ON message(ExternalId)',
+    'CREATE INDEX IF NOT EXISTS idx_brainroute_at ON brainroute(At)',          # the AI-use dashboard reads 90 days by time
     'CREATE INDEX IF NOT EXISTS idx_message_conversation ON message(ConversationId, SentAt)',
     # ...and by arrival: store.talked_with walks a chat from each of their lines to the owner's next one
     'CREATE INDEX IF NOT EXISTS idx_message_conversation_id ON message(ConversationId, MessageId)',
@@ -1383,6 +1387,10 @@ class SQLiteStore:
             if 'StepsJson' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN StepsJson TEXT')
             if 'TaskId' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN TaskId INTEGER')
             if 'RepairsJson' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN RepairsJson TEXT')   # flow.py self-repairs
+            # what each AI call used (aiusage.py, 2026-11-06)
+            brcols = {r[1] for r in self.cx.execute('PRAGMA table_info(brainroute)')}
+            for c, t in (('Ran', 'TEXT'), ('TokensIn', 'INTEGER'), ('Cached', 'INTEGER'), ('TokensOut', 'INTEGER'), ('Calls', 'INTEGER'), ('Sid', 'TEXT')):
+                if c not in brcols: self.cx.execute(f'ALTER TABLE brainroute ADD COLUMN {c} {t}')
             # after the widen above, which rebuilds the table without it
             if 'LastErrorAt' not in {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}:
                 self.cx.execute('ALTER TABLE connector ADD COLUMN LastErrorAt TEXT')
@@ -4488,7 +4496,7 @@ class SQLiteStore:
     # A route row is on no screen's road but the log's own, so it does not move this connection's write counter: the display
     # caches are keyed on it (feed_tag, PROCESSING_DIRTY_TABLES), and every AI call writes one - the rail would rebuild for nothing.
     BRAIN_ROUTE_COLS = ('At', 'Job', 'TaskId', 'MessageId', 'Pick', 'Model', 'Tier', 'Rule', 'Why', 'Difficulty', 'DataClass',
-                        'EscalatedFrom', 'Outcome', 'Ms')
+                        'EscalatedFrom', 'Outcome', 'Ms', 'Ran', 'TokensIn', 'Cached', 'TokensOut', 'Calls', 'Sid')
     def add_brain_route(self, rec: dict) -> int:
         cols = [c for c in self.BRAIN_ROUTE_COLS if rec.get(c) is not None]
         return self._exec_unseen(f"INSERT INTO brainroute ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", [rec[c] for c in cols])
@@ -4506,10 +4514,26 @@ class SQLiteStore:
         q, p = 'SELECT COUNT(*) AS n FROM brainroute WHERE At>=?', [since]
         if tier: q, p = q + ' AND Tier=?', p + [tier]
         return (self._one(q, p) or {}).get('n') or 0
-    def trim_brain_routes(self, before: str) -> int:
+    def trim_brain_routes(self, before: str, why_before: str = None) -> int:
+        "Rows older than `before` go; older than `why_before`, only their reason does - what they used stays for the dashboard."
+        if why_before: self._exec_unseen('UPDATE brainroute SET Why=NULL WHERE At<? AND Why IS NOT NULL', (why_before,))
         n = (self._one('SELECT COUNT(*) AS n FROM brainroute WHERE At<?', (before,)) or {}).get('n') or 0
         if n: self._exec_unseen('DELETE FROM brainroute WHERE At<?', (before,))
         return n
+    def add_brain_usage(self, rid: int, ms: int = None, use: dict = None) -> None:
+        "One more call on route `rid`: its time and tokens ADDED to the row's (a kept conversation is one brain, many calls)."
+        u = use or {}
+        tok = lambda k: None if u.get(k) is None else int(u[k])
+        self._exec_unseen('''UPDATE brainroute SET Calls=COALESCE(Calls,0)+1, Ms=CASE WHEN ? IS NULL THEN Ms ELSE COALESCE(Ms,0)+? END,
+            TokensIn=CASE WHEN ? IS NULL THEN TokensIn ELSE COALESCE(TokensIn,0)+? END, Cached=CASE WHEN ? IS NULL THEN Cached ELSE COALESCE(Cached,0)+? END,
+            TokensOut=CASE WHEN ? IS NULL THEN TokensOut ELSE COALESCE(TokensOut,0)+? END, Ran=COALESCE(?, Ran) WHERE Id=?''',
+            (ms, ms, tok('in'), tok('in'), tok('cached'), tok('cached'), tok('out'), tok('out'), u.get('model') or None, int(rid)))
+    def brain_routes_since(self, since: str, task_id: int = None, limit: int = 20000) -> list:
+        q, p = 'SELECT * FROM brainroute WHERE At>=?', [since]
+        if task_id is not None: q, p = q + ' AND TaskId=?', p + [int(task_id)]
+        return self._rows(q + ' ORDER BY Id DESC LIMIT ?', p + [int(limit)])
+    def brain_route_of_session(self, sid: str):
+        return self._one('SELECT * FROM brainroute WHERE Sid=? ORDER BY Id DESC LIMIT 1', (str(sid),))
     # ── how hard a task's work is, and what data it carries (triage's judgements; brainroute reads them) ────────
     def task_judged(self, task_id) -> dict:
         return self._one('SELECT * FROM task_judged WHERE TaskId=?', (int(task_id),)) or {}

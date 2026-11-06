@@ -143,7 +143,8 @@
                  "mail": ["What came in", "one row per message in: its day, channel and sender, and whether it became a task"],
                  "flow": ["How far it got", "one row per stage a message reached: came in, triaged, on a task, its task closed"],
                  "agent_runs": ["Agent sessions", "one row per agent session: its day, the agent, how it ended and its minutes"],
-                 "replies": ["Replies", "one row per reply decided: its day, channel and the hours from the ask to the answer"]}
+                 "replies": ["Replies", "one row per reply decided: its day, channel and the hours from the ask to the answer"],
+                 "ai_usage": ["AI used", "one row per agent run, and each day's other AI calls rolled up: the job, model, how hard, tokens and time"]}
   },
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]

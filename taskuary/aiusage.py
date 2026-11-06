@@ -1,0 +1,168 @@
+"""What each AI call used: the model that answered, its tokens and its time, on that call's brainroute row (the owner, 2026-11-06:
+"count of tokens per agent ... time it took ... which model it used so we can build dashboard ... the token usage and per model").
+
+The route row is written before the call (brainroute.log); what the call USED is only known after it. `Metered` wraps the brain
+build_llm hands out, and every call it makes runs inside a meter (a context variable, like llm.watching): the provider's own count
+is noted into it wherever an answer comes back - Anthropic's `usage`, the OpenAI-style `usage` of chat completions and the Responses
+API (OpenAI, Azure, OpenRouter, the OpenAI-compatible cards, the ChatGPT plan), a Claude CLI's `result` event and a Codex CLI's
+`turn.completed`. A brain whose answer carries no count (Gemini's and the other CLIs' one-shots, the ACP road) leaves the tokens
+blank - never a guess. An agent session in a pane is counted from its CLI's own log when it is saved (sessionrecord.save -> session).
+
+Tokens follow sessionrecord's convention: `in` is every input token, cached ones included; `cached` is how many of them were.
+"""
+import contextvars, time
+from datetime import datetime, timedelta
+from loguru import logger
+
+_METER = contextvars.ContextVar('tq_ai_meter', default=None)
+TIER_WORDS = {'light': 'quick', 'standard': 'normal', 'strong': 'hard', 'fixed': 'as set', 'held': 'held'}
+RUN_JOBS = ('general', 'coding', 'quick_work')       # an agent's work: one row is a run, not one message's answer
+
+
+def note(model: str = '', i=None, cached=None, o=None) -> None:
+    "What one answer used, into the call's meter - nothing when no meter is open (a call made outside build_llm)."
+    m = _METER.get()
+    if m is None: return
+    if isinstance(model, str) and model: m['model'] = model
+    for k, v in (('in', i), ('cached', cached), ('out', o)):
+        if v is not None: m[k] = m.get(k, 0) + int(v)
+
+
+def _n(o, k):
+    v = o.get(k) if isinstance(o, dict) else getattr(o, k, None)
+    return int(v) if isinstance(v, (int, float)) else 0
+
+
+def anthropic(r) -> None:
+    "An Anthropic Messages answer (the SDK's object, or the same as a dict): its input_tokens leave the cache out, so they are added in."
+    u = r.get('usage') if isinstance(r, dict) else getattr(r, 'usage', None)
+    if not u: return
+    hit = _n(u, 'cache_read_input_tokens')
+    note(r.get('model') if isinstance(r, dict) else getattr(r, 'model', ''),
+         _n(u, 'input_tokens') + _n(u, 'cache_creation_input_tokens') + hit, hit, _n(u, 'output_tokens'))
+
+
+def openai(j: dict) -> None:
+    "An OpenAI-style answer: chat completions (prompt/completion_tokens) or the Responses API (input/output_tokens)."
+    u = (j or {}).get('usage') if isinstance(j, dict) else None
+    if not isinstance(u, dict): return
+    chat = 'prompt_tokens' in u
+    d = u.get('prompt_tokens_details' if chat else 'input_tokens_details') or {}
+    note(j.get('model') or '', _n(u, 'prompt_tokens' if chat else 'input_tokens'), _n(d, 'cached_tokens'),
+         _n(u, 'completion_tokens' if chat else 'output_tokens'))
+
+
+def claude_result(j: dict) -> None:
+    """A Claude CLI's closing `result` event: the turn's usage, and the model that did the most of it (modelUsage also names the
+    small model Claude Code asks on the side)."""
+    if not isinstance(j, dict): return
+    mu = j.get('modelUsage') if isinstance(j.get('modelUsage'), dict) else {}
+    model = max(mu, key=lambda k: _n(mu[k], 'outputTokens'), default='')
+    if isinstance(j.get('usage'), dict): anthropic({'usage': j['usage'], 'model': model})
+    elif model: note(model)
+
+
+def codex_turn(u: dict) -> None:
+    "A Codex CLI's `turn.completed` usage: its input_tokens already count the cached ones."
+    if isinstance(u, dict): note('', _n(u, 'input_tokens'), _n(u, 'cached_input_tokens'), _n(u, 'output_tokens'))
+
+
+def record(store, rid, ms: int, use: dict) -> None:
+    if not rid: return
+    try: store.add_brain_usage(rid, ms, use)
+    except Exception as e: logger.debug(f'aiusage: could not keep what route {rid} used - {e}')
+
+
+class Metered:
+    """A brain whose every call writes its time, tokens and the model that answered on its route row. It answers exactly as the brain
+    it wraps, and proxies attributes (a failover sets session_id and last_pick DURING a call)."""
+    def __init__(self, store, rid, brain):
+        for k, v in (('_store', store), ('_rid', rid), ('_brain', brain)): object.__setattr__(self, k, v)
+    def __call__(self, *a, **kw):
+        m, t0 = {}, time.monotonic()
+        tok = _METER.set(m)
+        try: return object.__getattribute__(self, '_brain')(*a, **kw)
+        finally:
+            _METER.reset(tok)
+            record(object.__getattribute__(self, '_store'), object.__getattribute__(self, '_rid'), int((time.monotonic() - t0) * 1000), m)
+    def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
+    def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
+
+
+def metered(store, rid, brain): return Metered(store, rid, brain) if brain and rid else brain
+
+
+# ── an agent session in a pane: counted when it is saved ─────────────────────────────────────────────────────────────────────────
+def session(store, tid, sid: str, cli: str, started: str, rec: dict, model: str = '') -> int | None:
+    """A coding pane's run onto the route row the router logged when it opened (brainroute.for_session), else a row of its own: the
+    real model, the CLI's token count and how long it worked. Saved on exit AND on close, so it is written once per session (Sid)."""
+    use, took = rec.get('usage') or {}, rec.get('took')
+    fields = {'Ran': model or None, 'TokensIn': use.get('in'), 'Cached': use.get('cached'), 'TokensOut': use.get('out'),
+              'Ms': int(took * 1000) if isinstance(took, (int, float)) else None, 'Calls': 1, 'Sid': str(sid)}
+    try:
+        row = store.brain_route_of_session(sid)
+        if not row and tid and started:
+            # the router logs the pane's route just before the pane starts: a couple of minutes' slack finds it, never an older run's
+            since = (datetime.fromisoformat(str(started)[:19]) - timedelta(minutes=2)).isoformat(sep=' ', timespec='seconds')
+            row = next((r for r in store.brain_routes_since(since, int(tid), limit=20)
+                        if r.get('Job') == 'coding' and not r.get('Sid')), None)
+        if row: store.set_brain_route(row['Id'], **{k: v for k, v in fields.items() if v is not None}); return row['Id']
+        return store.add_brain_route({'At': str(started or datetime.now().isoformat(sep=' ', timespec='seconds'))[:19].replace('T', ' '),
+                                      'Job': 'coding', 'TaskId': int(tid) if str(tid or '').isdigit() else None, 'Pick': f'cli:{cli}' if cli else '',
+                                      'Tier': 'fixed', 'Rule': 'session', 'Why': f'A session in a pane on {cli or "a CLI"}', 'Outcome': 'ok', **fields})
+    except Exception as e:
+        logger.debug(f'aiusage: session {sid} not counted - {e}'); return None
+
+
+# ── what was used, as rows: the task's fold and the dashboard's dataset ───────────────────────────────────────────────────────────
+def _brain(store, pick, said):
+    if pick not in said:
+        from .brainroute import _said
+        try: said[pick] = _said(store, pick) if pick and pick != 'demo' else ('the demo' if pick == 'demo' else '')
+        except Exception: said[pick] = str(pick or '')
+    return said[pick]
+
+
+def row(store, r: dict, said: dict = None) -> dict:
+    "One route row in plain words: when, the job, the brain and model, quick/normal/hard, tokens and seconds (None where uncounted)."
+    from .brainroute import JOB_WORDS
+    brain, ms = _brain(store, r.get('Pick') or '', {} if said is None else said), r.get('Ms')
+    i, o = r.get('TokensIn'), r.get('TokensOut')
+    return {'id': r['Id'], 'at': r.get('At') or '', 'day': str(r.get('At') or '')[:10], 'task_id': r.get('TaskId'),
+            'job': r.get('Job') or '', 'brain': brain,
+            'what': 'a question the agent asked a stronger model' if r.get('Rule') == 'agent asked' else JOB_WORDS.get(r.get('Job'), r.get('Job') or ''),
+            'model': r.get('Ran') or r.get('Model') or brain, 'tier': TIER_WORDS.get(r.get('Tier'), r.get('Tier') or ''),
+            'tokens_in': i, 'cached': r.get('Cached'), 'tokens_out': o, 'tokens': None if i is None and o is None else (i or 0) + (o or 0),
+            'seconds': None if ms is None else round(ms / 1000, 1), 'calls': r.get('Calls') or (1 if ms is not None else 0),
+            'run': bool(r.get('Sid')) or (r.get('Job') in RUN_JOBS and r.get('Rule') != 'agent asked'), 'outcome': r.get('Outcome') or 'ok'}
+
+
+def for_task(store, tid: int, limit: int = 200) -> dict:
+    "Every AI call and agent run on this task, newest first, with their totals - what the task's 'AI used' fold reads."
+    said = {}
+    rows = [row(store, r, said) for r in store.brain_routes(int(tid), limit=limit)]
+    tot = lambda k: sum(x[k] or 0 for x in rows) if any(x[k] is not None for x in rows) else None
+    return {'rows': rows, 'total': {'calls': len(rows), 'tokens': tot('tokens'), 'tokens_in': tot('tokens_in'), 'tokens_out': tot('tokens_out'),
+                                    'cached': tot('cached'), 'seconds': tot('seconds')}}
+
+
+def dataset(store, days) -> list:
+    """The `ai_usage` dataset (dashboards.DATASETS): an agent run is a row of its own; the one-message calls are rolled up per day, job,
+    brain, model and tier with how many there were - so 90 days of triage fit the dashboard's rows."""
+    since = (datetime.now() - timedelta(days=max(1, int(days or 90)))).strftime('%Y-%m-%d %H:%M:%S')
+    out, roll, said = [], {}, {}
+    for r in store.brain_routes_since(since):
+        if r.get('Pick') == 'demo' and r.get('TokensIn') is None: continue          # the demo's scripted answers used nothing
+        x = row(store, r, said)
+        base = {k: x[k] for k in ('day', 'job', 'what', 'brain', 'model', 'tier')}
+        nums = {'tokens_in': x['tokens_in'], 'tokens_out': x['tokens_out'], 'cached': x['cached'], 'tokens': x['tokens'], 'seconds': x['seconds']}
+        if x['run']:
+            out.append({**base, 'task_id': x['task_id'], 'kind': 'agent run', 'calls': max(1, x['calls']), **nums,
+                        'minutes': None if x['seconds'] is None else round(x['seconds'] / 60, 1)}); continue
+        k = tuple(base.values())
+        g = roll.setdefault(k, {**base, 'task_id': None, 'kind': 'one call', 'calls': 0, **{n: None for n in nums}, 'minutes': None})
+        g['calls'] += max(1, x['calls'])
+        for n, v in nums.items():
+            if v is not None: g[n] = round((g[n] or 0) + v, 1) if n == 'seconds' else (g[n] or 0) + v
+    return sorted(out + list(roll.values()), key=lambda x: x['day'], reverse=True)

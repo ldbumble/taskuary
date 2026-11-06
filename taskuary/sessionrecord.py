@@ -286,6 +286,30 @@ def cli_usage(cli: str, ext: str, since: str = '') -> dict:
         logger.debug(f'session record: {cli} usage for {ext} unreadable - {e}'); return {}
 
 
+def _models(cli: str, f: Path) -> list:
+    "Each model the run's log names, in order: claude's assistant messages, codex's turn contexts, gemini's messages."
+    if cli == 'gemini':
+        try: j = json.loads(f.read_text(encoding='utf-8', errors='replace'))
+        except ValueError: return []
+        return [m.get('model') for m in (j.get('messages') if isinstance(j, dict) else j) or [] if isinstance(m, dict) and m.get('model')]
+    out = []
+    for line in f.read_text(encoding='utf-8', errors='replace').splitlines():
+        try: j = json.loads(line)
+        except ValueError: continue
+        if cli == 'claude' and j.get('type') == 'assistant': out.append((j.get('message') or {}).get('model'))
+        elif cli == 'codex' and j.get('type') == 'turn_context': out.append((j.get('payload') or {}).get('model'))
+    return [m for m in out if m and m != '<synthetic>']
+
+
+def run_model(cli: str, ext: str) -> str:
+    "The model a run's own log says answered last - '' when its CLI keeps no log we read, or the log names none."
+    name = str(cli or '').split('/')[-1].removesuffix('.exe')
+    if not (ext and name in USAGE): return ''
+    try: f = READERS[name][0](str(ext)); ms = _models(name, f) if f else []
+    except Exception as e: logger.debug(f'session record: {cli} model for {ext} unreadable - {e}'); return ''
+    return ms[-1] if ms else ''
+
+
 def took(steps: list, started: str, ended: str = '') -> int | None:
     """Seconds from the run's start to the last thing it did - not to when its pane closed, which can be hours of waiting on the
     owner later. A run whose log has no times is measured to `ended`; None when the start is unknown."""
@@ -399,6 +423,9 @@ def save(store, tid: int, sid: str, cli: str, ext: str, screen: str = '', starte
     if started and (use := cli_usage(cli, ext, _when(started))): rec['usage'] = use
     try: _saved_path(tid, sid).write_text(json.dumps(rec), encoding='utf-8')
     except OSError as e: logger.warning(f'session record for task {tid} not kept: {e}')
+    # ...and on the task's AI use: this run's model, tokens and time (aiusage.session), once per session however often it is saved
+    from . import aiusage
+    aiusage.session(store, tid, sid, cli, _when(started), rec, run_model(cli, ext))
     return rec
 
 

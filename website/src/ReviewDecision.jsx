@@ -320,7 +320,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       // ...and on the task page a send that went IS the close (closeOnSend, 2026-10-29): only here, after the receipt - never at the press
       // ...and only Send and close's (`shut`, the owner 2026-11-03): Close out's plain Send leaves the task open, as every other Send does
       else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) {
-        setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && shut && verb === "approve" && (data.reply ? !!data.reply.ok : true) }); return;
+        // ...with what went and where (`said`): the chat keeps the sent card in place, marked, while the task closes (TaskPage SentHere)
+        setSent(verb === "approve"); setBusy(false); await onSent({ closes: closesIt && shut && verb === "approve" && (data.reply ? !!data.reply.ok : true),
+          said: verb === "approve" ? { text: value, channel: r.Channel || "", to: replyContext(r), id: r.ReviewId } : null }); return;
       }
       onChanged?.();
     } catch (e) {

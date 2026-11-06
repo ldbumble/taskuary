@@ -26,7 +26,7 @@ import { AgentSteps } from "./AgentStepRows.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
-import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp } from "./agentWork.js";
+import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp, turnBegan } from "./agentWork.js";
 import { instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, Md } from "./md.jsx";
@@ -310,7 +310,7 @@ const Ticking = ({ since }) => {
 };
 const RanFor = () => {
   const at = useAuiState((s) => s.message.createdAt), id = useAuiState((s) => s.message.id);
-  const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? ms[i - 1].createdAt : null; });
+  const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? turnBegan(ms.slice(0, i).map((m) => m.createdAt)) : null; });
   // ...a turn still running has not "ran" anything yet: its stamp read "ran 0s" over "Working on this…" (the chat-model stress run, 2026-11-05)
   // ...and the live message is drawn anew at every step, so its own time is the latest step's: the turn began at the server's `since`, else
   // at the line it answers

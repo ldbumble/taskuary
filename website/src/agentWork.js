@@ -91,6 +91,10 @@ export const tookText = (ms) => { const s = Math.round(ms / 1000);
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
 export const clockText = (ms) => { const s = Math.max(0, Math.floor((ms || 0) / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
   return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(s % 60).padStart(2, "0")}`; };
+// ...FROM WHEN IT BEGAN: the newest of everything above it, not the row just above (the owner, 2026-11-05): a mail read in while the turn before
+// ran is drawn between that answer and the re-think it woke, stamped when it came in - read as the start, the re-think "ran" from before the
+// answer above it had finished
+export const turnBegan = (times) => (times || []).reduce((a, t) => { const ms = +new Date(t ?? NaN); return Number.isFinite(ms) && (a == null || ms > a) ? ms : a; }, null);
 export const turnStamp = ({ running, start, end, now }) => {
   const t0 = +new Date(start || NaN), t1 = +new Date((running ? now : end) || NaN), ms = t1 - t0;
   if (!Number.isFinite(ms) || ms < 0 || ms >= 6 * 3600 * 1000) return "";

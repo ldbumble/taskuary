@@ -406,11 +406,16 @@ def shown_history(store, tid: int) -> list:
     # it as the input drawn over it - two answers in a row read as a restart, with the mail that woke the second nowhere
     # ...the turn it woke is the next BRIEF after it (a re-think starts on its own brief once the turn it came in under ends); only with no
     # brief after it does it stand over the next answer, else at the foot
+    # ...but never over the answer of a turn that was ALREADY RUNNING when it came in (the owner, 2026-11-05: four messages in a burst, the last
+    # read in mid-turn - all four were drawn over the first answer, which then "ran 1s", and the re-think it woke stood with no input over it,
+    # reading as a second agent): a turn whose input row (a brief, the owner's line - filed as the turn takes) is older than the mail had begun
+    # without it. A re-think woken with no brief of its own follows an answer, so the mail stands over it.
+    def took(i, j): return msgs[i]['role'] == 'assistant' and i and msgs[i - 1]['role'] == 'user' and str(rows[i - 1].get('CreatedAt')) < j
     before = {}
     for x in loose:
-        brief = next((i for i, c in enumerate(rows) if msgs[i].get('brief') and str(c.get('CreatedAt')) >= str(x['JoinedAt'])), None)
-        if brief is not None: msgs[brief]['mail'] = (msgs[brief].get('mail') or []) + shown([x]); continue
-        at = next((i for i, c in enumerate(rows) if str(c.get('CreatedAt')) >= str(x['JoinedAt'])), None)
+        j = str(x['JoinedAt'])
+        at = next((i for i, c in enumerate(rows) if str(c.get('CreatedAt')) >= j and not took(i, j)), None)
+        if at is not None and msgs[at].get('brief'): msgs[at]['mail'] = (msgs[at].get('mail') or []) + shown([x]); continue
         before.setdefault(at, []).append(x)
     for at in sorted(before, key=lambda k: -1 if k is None else k, reverse=True):
         got = before[at]

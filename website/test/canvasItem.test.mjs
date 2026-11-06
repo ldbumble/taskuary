@@ -133,6 +133,6 @@ test("every task view opens at the top of the canvas, a short one with the blank
   // ...and the "…" of a press in flight under it does not take the screen away (browser/next-steady.test.mjs)
   // ...but a box opened under the card (Close with a note, the agent box) stands right under it, not a screen down (the walk's SEEN)
   assert.match(src("assistantView.css"), /\.tq-chat-inner > \.tq-canvas-live:not\(:has\(\[data-tq-folded\]\)\):not\(:has\(~ \.tq-msg:not\(\.tq-pending\), ~ \.tq-canvas-live, ~ \.tq-live-card, ~ \.tq-browse-line:not\(:empty\)\)\) \{ min-height: calc\(100cqh \+ 14px\); \}/);
-  assert.match(src("AssistantView.jsx"), /\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(\n\s*<div className="tq-msg tq-pending">/);
+  assert.match(src("AssistantView.jsx"), /\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(\n\s*<div className=\{`tq-msg tq-pending\$\{\(nextComing \|\| walkDots\) && !\(busy && words\) \? " tq-walk-dots" : ""\}`\}>/);
   assert.match(src("AssistantView.jsx"), /const toEnd = \(el\) => \{/);
 });

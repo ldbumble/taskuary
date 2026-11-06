@@ -1895,12 +1895,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const stuck = useRef(false);
   // ...unless a line was said AFTER the view (the owner, 2026-10-28: a phone's answer sat under the chat box): a one-line answer under
   // a tall view is less than toEnd's 48px, and putting the view's top up put the answer below the fold
-  const lastSaid = (el) => [...el.querySelectorAll(".tq-msg:not(.tq-welcome-msg):not(.receipt)")].pop() || null;
+  // ...and the "…" of a move in flight is no line said (the owner, 2026-11-05: "try to smooth"): read as one after the card, a Send and close or
+  // Mark done threw the body to its end the moment the dots came - the card jumped up 50px, then the next one drew back at the top. The dots
+  // wait under the card's floor (assistantView.css .tq-canvas-live) and the card holds still until the next one draws in its place
+  const lastSaid = (el) => [...el.querySelectorAll(".tq-msg:not(.tq-welcome-msg):not(.receipt):not(.tq-walk-dots)")].pop() || null;
   const saidAfter = (live, said) => !!live && !!said && !live.contains(said) && !!(live.compareDocumentPosition(said) & Node.DOCUMENT_POSITION_FOLLOWING);
+  // A CARD PUT ON THE TABLE IS PUT THERE, not slid there (the owner, 2026-11-05: "try to smooth"): the body scrolls smoothly for the owner's
+  // reading, and the next task drew a line low under the one put down, then slid up to its place - the card's own placing goes at once
+  const placeAt = (el, top) => { el.style.scrollBehavior = "auto"; el.scrollTop = top; el.style.scrollBehavior = ""; };
   const toEnd = (el) => {
     const live = [...el.querySelectorAll(".tq-canvas-live")].pop(), box = el.getBoundingClientRect(), r = live?.getBoundingClientRect(), said = lastSaid(el);
-    const top = r && !saidAfter(live, said) && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48;
-    el.scrollTop = top ? el.scrollTop + r.top - box.top : el.scrollHeight;
+    // ...the walk's dots under the card count for nothing there either: with them the end lay a line below the card, and the body went to it
+    const dots = el.querySelector(".tq-walk-dots"), slack = dots ? dots.getBoundingClientRect().height + 24 : 0;
+    const top = r && !saidAfter(live, said) && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48 + slack;
+    if (top) placeAt(el, el.scrollTop + r.top - box.top); else el.scrollTop = el.scrollHeight;
     stuck.current = !top;
     // ...and on a phone the newest line stands clear of the chat box under it, whatever lies over the body's foot
     if (!top && said && window.matchMedia?.("(max-width:600px)").matches) {
@@ -1926,7 +1934,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // send's Redraft was pulled back under the dock the moment it was scrolled clear (the matrix's phone pass, 2026-10-20)
     const lit = !held && el.querySelector("[data-tq-lit]")?.getBoundingClientRect();
     const off = held ? r.top + r.height / 2 - (b.top + body.clientHeight / 2) : Math.max(r.top - b.top, lit?.height ? lit.bottom + 8 - floorOf(body, el) : -Infinity);
-    if (Math.abs(off) > 2) body.scrollTop += off;      // the body alone scrolls - scrollIntoView moved the whole page as well
+    if (Math.abs(off) > 2) placeAt(body, body.scrollTop + off);      // the body alone scrolls - scrollIntoView moved the whole page as well
     return true;
   }, []);
   // a NEW line lets go of the hold: the answer to "what does this one do?" must land in view (the final review) - a pinned card
@@ -3578,7 +3586,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...a line of its own that stands under the card on the table only while the answer is on its way (tq-pending, assistantView.css) -
   // or in the pop-up over it, where the answer it waits for will be
   const pendingLine = <>{(busy || phoneBusy || nextComing || walkDots) && (
-            <div className="tq-msg tq-pending"><div className="avatar"><AssistantMark /></div>
+            <div className={`tq-msg tq-pending${(nextComing || walkDots) && !(busy && words) ? " tq-walk-dots" : ""}`}><div className="avatar"><AssistantMark /></div>
               <div className="body">{busy && words ? <div className="tq-words" data-tq-words="">{looksMd(words) ? <Md text={words} /> : words.split("\n").map((p, i) => <p key={i}>{p}</p>)}</div>
                 : <span className="tq-typing"><i /><i /><i /></span>}
                 {/* ...and how long it has been at it, where the dots alone were silent: its own clock, so the chat does not redraw each second */}

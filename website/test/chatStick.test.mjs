@@ -9,7 +9,7 @@ const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "
 
 test("toEnd marks the thread stuck at its end, and growth keeps it there however much it grows", () => {
   const at = src.indexOf("const toEnd = (el) =>");
-  assert.match(src.slice(at, at + 500), /stuck\.current = !top;/, "at the end = stuck; a task view held by its top is not");
+  assert.match(src.slice(at, at + 900), /stuck\.current = !top;/, "at the end = stuck; a task view held by its top is not");
   assert.match(src, /if \(!holdBottom\.current && \(stuck\.current \|\| el\.scrollHeight - el\.scrollTop - el\.clientHeight < 240\)/);
 });
 

@@ -234,7 +234,7 @@ leaving anything you wrote outside that block alone.
 - **Wall** — every live terminal side by side, each with its own prompt box.
 - **Tasks** — the durable task, its agent sessions and the reply, as three separate records.
 - **Review** — the outbound queue.
-- **Reports** — connected data on a schedule; see [Reports and the Advisor](reports).
+- **Reports** — connected data on a schedule, routines and playbooks; see [Reports and the Advisor](reports).
 - **Hub** — what agents have learned, by topic, so knowledge survives past one job.
-- **About you** — who you are, the documents above, your playbooks, and what Taskuary has learned about you (Memory).
+- **About you** — your initials in the top right corner: who you are, the documents above, and what Taskuary has learned about you (Memory).
 - **Settings** — everything else; see the [Settings reference](settings).

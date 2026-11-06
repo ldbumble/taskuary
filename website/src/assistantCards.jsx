@@ -61,7 +61,7 @@ import ItemSections, { ItemLay, ItemPart, handToItem } from "./ItemSections.jsx"
 import { withImages } from "./promptImages.jsx";
 import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its pane's moves as a task's does
 import { TYPE_LABELS, reportSchedule } from "./reportWords.js";
-import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's three sections, by name (ItemSections)
+import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
@@ -849,12 +849,11 @@ export function MeetingCard({ card, table = null }) {
             <div className="tq-thr-did muted">Nobody is preparing for this.</div>
             <div className="tq-item-note">{`${btn("regular_agent")} asks what you want first - it gets the meeting: when, who, where and what the invite says. `
               + `${btn("prepare")} starts one at once on its people and subject through your saved mail.`}</div>
-          </ItemPart> },
-        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", join ? "Join opens the meeting link" : "Nothing to decide"],
-          body: <ItemPart data-tq-meeting-close="">
+          </ItemPart> }]}
+        moves={<ItemPart data-tq-meeting-close="">
             <RowMoves on="on its panes" />
             <Foot verb={join} then={join ? <><b>Join</b> opens the meeting link.</> : null} />
-          </ItemPart> }]} />;
+          </ItemPart>} />;
   }
   return (
     <CardShell card={card} kicker={`coming up · ${age(e.start)}`} title={e.subject || card.title}
@@ -938,18 +937,13 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
             {card.brief_today && <TodayMeetingsStrip />}
             {card.mid && <FullText mid={card.mid} revision={card.presentation_revision} report={{ name }} />}
             {share}
-          </ItemPart> },
-        // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
-        { key: "agent", n: 3, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-          // ...nothing but the chat and its box (ItemSections ItemAsk): an empty chat over the box IS "no agent yet" (the owner, 2026-11-05)
-          body: null },
-        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the report"],
-          body: <ItemPart data-tq-report-close="">
+          </ItemPart> }]}
+        moves={<ItemPart data-tq-report-close="">
             <RowMoves close={card} on="at the top of the report" />
             <Foot close={card} onDone={onDone} promote={card.bad ? "rerun" : null}
               then={card.bad ? "Running it again runs the report in the background - its result goes where the report sends it, and if it fails the bell says why." : null}
               where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
-          </ItemPart> }]} />;
+          </ItemPart>} />;
   }
   return (
     <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}
@@ -1008,13 +1002,8 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
         { key: "report", n: 2, name: "Dashboard", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "#746e64" }} />,
           lines: [card.title],
           // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
-          body: <div data-tq-dash-body="">{drawn}{share}</div> },
-        // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
-        { key: "agent", n: 3, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-          // ...nothing but the chat and its box (ItemSections ItemAsk): an empty chat over the box IS "no agent yet" (the owner, 2026-11-05)
-          body: null },
-        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the dashboard"],
-          body: <ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart> }]} />;
+          body: <div data-tq-dash-body="">{drawn}{share}</div> }]}
+        moves={<ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart>} />;
   }
   return (
     <CardShell card={card} kicker="dashboard" title={card.title}
@@ -1153,12 +1142,8 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
                 habits row lists its habits instead, with no Whose move or Suggestion */}
             {habits ? <HabitList card={card} onDone={onDone} />
               : <Facts rows={rows} />}
-          </ItemPart><CardErr err={err} /></> },
-        { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-          // ...nothing but the chat and its box (ItemSections ItemAsk): an empty chat over the box IS "no agent yet" (the owner, 2026-11-05)
-          body: null },
-        { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on its panes"],
-          body: <ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart> }]} />);
+          </ItemPart><CardErr err={err} /></> }]}
+        moves={<ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart>} />);
   return (
     <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
       {habits && <HabitList card={card} onDone={onDone} />}
@@ -1604,16 +1589,12 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
         // ...and triage's miss said where a task's Not a task is (the owner, 2026-10-29): Should be a task, from the row's own verbs
         ...(batch ? {} : { moves: <PaneMoves sec="from" /> }),
         // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
-        body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> },
-      { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-        // ...an empty chat over the box is "no agent yet" (the owner, 2026-11-05); a handful, which has no box until a line is handed on, says how
-        body: null },
-      { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
-        body: <ItemPart data-tq-fyi-close="">
+        body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> }]}
+      moves={<ItemPart data-tq-fyi-close="">
           <div className="tq-card-note">Nothing to decide - {n === 1 ? "it only wants" : "they only want"} you to know.</div>
           <RowMoves next={next} on={batch ? "" : "on its panes"} />
           {foot}
-        </ItemPart> }]} />;
+        </ItemPart>} />;
 }
 
 // how many fyi a card can show whole before every line folds to one (FyisCard)

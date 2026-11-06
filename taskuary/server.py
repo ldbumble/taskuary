@@ -5460,6 +5460,18 @@ def agent_check_back(body: AgentCheckBackBody, request: Request):
     try: return checkback.set_check(store, body.task_id, body.when, body.what, body.agent)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class AgentAskStrongerBody(BaseModel): task_id: int; question: str; context: str = ''
+
+@app.post('/api/agent/ask-stronger')
+def agent_ask_stronger(body: AgentAskStrongerBody, request: Request):
+    """The ask_stronger tool from the session working the task: one question to the strong gear of its brain (askstronger.py), no cap,
+    logged as a route with what it used. An answer in words - nothing moves."""
+    from . import askstronger
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: return askstronger.ask(store, body.task_id, body.question, body.context)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''
@@ -5544,13 +5556,14 @@ async def mcp_rpc(request: Request, task: int = 0):
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
+             'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(): agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files)), request),
              'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]
-        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system') and not (
+        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger') and not (
                 name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
         # ...this door is never a stranger's session's, so a stranger's words on its own task are never read through it (agenttools.UNVOUCHED)
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)

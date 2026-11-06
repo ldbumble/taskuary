@@ -48,7 +48,7 @@ test("every item put on the table goes through putOnTable, which pins its card t
   assert.equal((view.match(/setCurrent\(/g) || []).length, 1, "Current is set in one place");
   assert.doesNotMatch(view, /toCard/);
   // the pin: the card's top to the top of the body, on mount and on every resize, until the owner scrolls
-  assert.match(view, /if \(Math\.abs\(off\) > 2\) body\.scrollTop \+= off;/);
+  assert.match(view, /if \(Math\.abs\(off\) > 2\) placeAt\(body, body\.scrollTop \+ off\);/);
   assert.match(view, /const ro = new ResizeObserver\(\(\) => \{ if \(keepTable\(\)\) return;/);
   assert.match(view, /el\.addEventListener\("wheel", own, \{ passive: true \}\)/);
   // ...a receipt under it keeps the card in view; an answer or a proposal to confirm lets go

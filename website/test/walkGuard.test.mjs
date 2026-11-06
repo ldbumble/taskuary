@@ -27,7 +27,7 @@ test("a Walk press posts no line of the owner's - only the \"…\", from the pre
   assert.doesNotMatch(src, /Walk me through my tasks\."/);
   assert.match(start, /startLast\.current = msgs\.length \? msgs\[msgs\.length - 1\]\.id : null;\s*setStarting\(true\);/);
   assert.match(src, /const walkDots = starting && \(msgs\.length \? msgs\[msgs\.length - 1\]\.id : null\) === startLast\.current;/);
-  assert.match(src, /\{\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(\s*<div className="tq-msg tq-pending">/);
+  assert.match(src, /\{\(busy \|\| phoneBusy \|\| nextComing \|\| walkDots\) && \(\s*<div className=\{`tq-msg tq-pending/);
   // ...and the welcome steps aside while it starts, as it did under the old line, coming back with its button if the start fails
   assert.match(src, /state && !shown\.some\(\(m\) => !inWin\.has\(m\.id\)\) && \(!busy \|\| popOpen\) && !starting && welcome\(\)/);
 });

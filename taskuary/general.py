@@ -409,14 +409,15 @@ def newest_message(store, tid: int) -> dict | None:
 
 def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
 
-def latest_block(store, tid: int) -> str:
-    "LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none."
+def latest_block(store, tid: int, resumed: bool = False) -> str:
+    """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
+    `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
     from . import selfclose
     from .continuity import clock
     new, sent = newest_message(store, tid), wrapup.sent_replies(store, tid)
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
-    answered = any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid))
+    answered = not resumed and any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid))
     if not (rv or sent or answered): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
@@ -430,10 +431,10 @@ def latest_block(store, tid: int) -> str:
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     return '\n\n'.join(out)
 
-def turn_facts(store, tid: int, task: dict = None) -> str:
+def turn_facts(store, tid: int, task: dict = None, resumed: bool = False) -> str:
     "latest_block for a task's turn - none on the dock or a setup walk. Said in the turn, not the system prompt (_prompt)."
     task = task if task is not None else store.get_task(tid) or {}
-    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid)
+    return '' if is_dock(task) or task.get('SourceRef') in ('connector:setup', SETUP_REF) else latest_block(store, tid, resumed)
 
 def draft_turns(store, tid: int) -> list:
     """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
@@ -1877,7 +1878,7 @@ class GeneralSession:
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner and not brief else text     # a brief is Taskuary's, never "the owner says"
-                if (lb := turn_facts(self.store, self.task_id)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
+                if (lb := turn_facts(self.store, self.task_id, resumed=True)): user = f'{lb}\n\n{user}'      # what is newest, waiting and sent, as of THIS turn
                 if is_dock(self.store.get_task(self.task_id)):
                     user += f'\n\n{dock_snapshot(self.store)}'
             # Paths are harmless context to an API brain and essential if its CLI backup takes

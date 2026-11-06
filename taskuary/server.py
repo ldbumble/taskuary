@@ -3092,6 +3092,24 @@ def list_workstreams():
     return {'data': [{k: w[k] for k in ('slug', 'name', 'about', 'personal', 'status')} for w in hub_ws.streams(store)]}
 
 
+class WorkstreamsAnswerBody(BaseModel):
+    items: list = []
+
+
+# WHAT YOU WORK ON, CHANGED LATER (the owner, 2026-11-06): setup's list, on About you - renamed, ticked Personal, left out or kept
+@app.get('/api/about/workstreams')
+def about_workstreams():
+    from . import firstrun
+    return firstrun.workstreams_page(store)
+
+
+@app.put('/api/about/workstreams')
+def put_about_workstreams(body: WorkstreamsAnswerBody):
+    """The rows the owner changed, each {slug, name, personal, keep} - as the setup screen's answer, one left out kept to tick again."""
+    from . import firstrun
+    return firstrun.answer_workstreams(store, body.items, ACTOR)
+
+
 @app.put('/api/tasks/{task_id}/workstream')
 def set_task_workstream(task_id: int, body: WorkstreamBody):
     """Move a task to a workstream - the picker on the task, as the repo picker moves it to a checkout (the owner, 2026-11-01). Its

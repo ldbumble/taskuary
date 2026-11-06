@@ -575,13 +575,15 @@ class MembershipWorker:
                     self.store.set_setting('processing_membership_rules', MEMBERSHIP_RULES, 'system')
             except Exception as exc: logger.warning(f'processing membership rule stamp failed: {exc}')
             while not self.stop.is_set():
-                delay = self.interval
                 try:
                     self.reconcile()
                 except Exception as exc:
                     logger.warning(f'processing membership refresh failed: {exc}')
-                    delay = max(self.interval, 5.0)
-                self.wake.wait(delay); self.wake.clear()
+                    # ...A FAILING TICK BACKS OFF, and a reader's kick does not cut that short - it would retry a broken store as fast as
+                    # the rail asks (only stop ends the wait)
+                    if self.stop.wait(max(self.interval, 5.0)): break
+                    continue
+                self.wake.wait(self.interval); self.wake.clear()
                 if self.stop.is_set(): break
         self.thread = threading.Thread(target=run, name='processing-membership', daemon=True)
         self.thread.start()

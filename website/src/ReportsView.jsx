@@ -971,14 +971,14 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
    reaches nobody at all is not a setting, it is a report that does nothing. */
 // the one judge setting, app-wide: Settings › Configuration › How mail is sorted › Where runs go
 const JUDGE_HASH = `settings=config&group=${encodeURIComponent("How mail is sorted")}`;
-const WHERE_RUNS_GO = "Settings › How mail is sorted › Where runs go";
+const WHERE_RUNS_GO = "Settings › How mail is sorted › Where reports go";
 // Who decides where a run goes, in words the card can say. `judge` is the Where-runs-go slot as
 // /api/ai/defaults reports it; blank there means the brain that writes this report (reports.judge_for).
 function judgeWords(judge, cfg, brains) {
   const brainLabel = (value) => (brains || []).find((b) => b.value === value)?.label;
   if (judge?.kind === "decision") return [judge.display || "TypeSafe Jev",
     `It reads what came back and answers yes or no to each line above — nothing else is asked of it, which is why a model that only decides can do this job. Chosen for every report under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
-  if (judge?.value) return [brainLabel(judge.value) || judge.display || "The brain chosen under Where runs go",
+  if (judge?.value) return [brainLabel(judge.value) || judge.display || "The AI chosen under Where reports go",
     `It reads what came back and answers yes or no to each line above. Chosen for every report under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
   return ["The brain that writes this report",
     `That is ${brainLabel(cfg.ai_brain) || "the AI that sorts your mail"} — the same AI the summary above runs on, picked there. To have one judge for every report, or a model that only decides, pick it under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
@@ -1119,7 +1119,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
         );
       })}
       {/* WHO JUDGES IS SAID HERE, NOT PICKED. There is ONE judge setting, for every report (Settings ›
-          How mail is sorted › Where runs go), and blank there means the brain that writes this report - the
+          How mail is sorted › Where reports go), and blank there means the brain that writes this report - the
           picker above the summary prompt. A second brain picker used to sit here: it wrote the very same
           field as that one, and read as a per-report judge that the setting then quietly overrode (the
           owner, 2026-09-17: "here i choose what model judges what goes on rail?? ... but then in setting

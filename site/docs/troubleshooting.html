@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#agents">Agents</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#mail-rules">Mail rules</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#activity-log">Activity log</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -220,7 +220,7 @@ returns the exact text the prompt was handed. That is almost always where the su
 missed slot. <strong>Run due now</strong> forces everything owed.</li>
 </ul>
 <h2 id="reading-the-audit-log">Reading the audit log<a class="anchor" href="#reading-the-audit-log" aria-label="Link to this section">#</a></h2>
-<p><strong>Settings → Audit integrity</strong> is the answer to &quot;why did this happen&quot; and &quot;who did this&quot;. Every
+<p><strong>Settings → Activity log</strong> is the answer to &quot;why did this happen&quot; and &quot;who did this&quot;. Every
 consequential action is one row: routed, filed, replied, opened, saved, deleted — with the actor,
 the time, and the thing it happened to.</p>
 <p><strong>Verify</strong> recomputes the hash chain from the first row and tells you whether the record has been
@@ -315,7 +315,7 @@ is enough when the failure started with the version you are on), or</li>
 </ul>
 <p>A failure you can fix yourself, such as a sign-in that was refused, is never counted. Neither is a
 task that carries words from someone you have not vouched for. Each problem is raised once. Put it
-down with <strong>Not ours</strong> and it stays down.</p>
+down with <strong>Not for me</strong> and it stays down.</p>
 <h2 id="still-wrong">Still wrong<a class="anchor" href="#still-wrong" aria-label="Link to this section">#</a></h2>
 <ul>
 <li>The live API reference at <code>/api/docs</code> shows exactly what the app exposes, and is the fastest way

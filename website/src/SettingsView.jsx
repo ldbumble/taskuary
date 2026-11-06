@@ -381,9 +381,9 @@ const hidden = (name) => !KNOB_META[name] || HIDDEN.has(name) || isState(name)
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
 const SECTION_HELP = {
-  policies: { title: "Routing policies — the deterministic layer",
+  policies: { title: "Mail rules — what always wins over the AI",
     body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: skip > ignore > escalate — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue). Everything else is triage's to judge.\n\nNothing writes into this table by itself: 'Not for me' teaches a verdict in LEARNED.md, not a rule here, and muting a sender is 'Skip this sender'." },
-  audit: { title: "Audit integrity — what the log is, and how to read it",
+  audit: { title: "Activity log — what it is, and how to read it",
     body: "Every consequential thing Taskuary does is one row in an append-only log: a message routed or filed and why, a verdict you gave, a reply sent, an agent session opened or wrapped, a connector saved or signed in, a setting changed, a task deleted. Each row stores a hash of its own contents PLUS the hash of the row before it, so the rows form a chain: change any row after the fact — even one character in the database — and its hash no longer matches, and every row after it points at a parent that no longer exists.\n\nVerify recomputes the whole chain from the first row. Intact means the record you see is the record that was written. 'Contents altered' names the exact rows that were changed after writing — the thing this log exists to catch. 'Out of order' means two writers raced at the same instant once; nothing was changed, and it cannot recur.\n\nThe history below is that log, newest first: when, who (you, the router, an agent, a scheduled report), what was done, to what. It is the answer to 'why did this happen' and 'who did this' for anything on your work rail or the Board." },
 };
 
@@ -399,8 +399,8 @@ const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, and what it has learned." },
   config: { title: "Configuration", icon: TuneIcon, desc: "How mail is sorted, replies, agents and display - how Taskuary behaves." },
-  policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
-  audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
+  policies: { title: "Mail rules", icon: AltRouteIcon, desc: "Rules the AI always follows — ignore a sender, escalate, auto-answer." },
+  audit: { title: "Activity log", icon: VerifiedIcon, desc: "Who did what, when — a record of every action, and a check that proves nobody edited it." },
   updates: { title: "Updates", icon: SystemUpdateAltIcon, desc: "Which build is running, which is the latest release, and one button that installs it and reopens — connections and settings untouched." },
 };
 
@@ -909,7 +909,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
           </Typography>
           <Button variant="contained" disabled={verifying} onClick={runVerify}
             startIcon={verifying ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <VerifiedIcon sx={{ fontSize: 16 }} />}>
-            {verifying ? "Checking every row…" : "Verify chain"}</Button>
+            {verifying ? "Checking every row…" : "Check the record"}</Button>
           {verify && (
             <Box sx={{ mt: 2 }}>
               {verify.ok && <Typography sx={{ fontWeight: 600, fontSize: 13.5, color: "#47654a" }}>
@@ -1005,7 +1005,7 @@ const NAV = ["about", "docs", "config", "policies", "audit", "updates"];
 // playbook, Manage profiles - are entries here too. Nothing about this page lives in a header any
 // more (the owner, 2026-09-22: "everything moves to sidebar").
 const docsTree = ({ profiles = [], people = [] }) => [
-  { key: "g:documents", label: "Operator documents", head: true, sel: { group: "documents" } },
+  { key: "g:documents", label: "Your documents", head: true, sel: { group: "documents" } },
   ...OPERATOR_DOCS.map((d) => ({ key: `d:${d.name}`, label: d.label, sel: { group: "documents", doc: d.name } })),
   { key: "g:profiles", label: "Profiles", head: true, sel: { group: "profiles" } },
   // by WORKER NAME, not by filename. A profile's rules document can BE an operator document -

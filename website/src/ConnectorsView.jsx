@@ -552,7 +552,7 @@ const META = {
     desc: "TypeSafe's Jev — answers typed questions with calibrated probabilities instead of words. It can decide where a finished report goes; it cannot write one.",
     howto: ["Create a key at typesafe.ai → API keys.",
       "Paste it under Credentials. Test asks Jev one real question and reports the confidence it came back with — there is no completion to run.",
-      `Then pick it under ${placeName("sorting")} → Where runs go. It appears in no other brain picker, on purpose.`,
+      `Then pick it under ${placeName("sorting")} → Where reports go. It appears in no other AI picker, on purpose.`,
       "Before you trust it: open a report with an AI routing line and press try it on the last 5 runs, with and without this chosen. That replays both judges over the same real runs."] },
   ollama: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["base_url (default http://127.0.0.1:11434)", "base_url"], ["model — required, e.g. llama3.2 / qwen2.5", "model"]],

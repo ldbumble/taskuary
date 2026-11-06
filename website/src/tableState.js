@@ -13,6 +13,12 @@ export function tableOf({ current = null, cardKey = null, foldedKey = null, brow
   return { key, folded, place, speaks: !!key && !folded && !place && (!setup || !!over) };
 }
 
+// SOMETHING IS OPEN OVER THE CHAT: an item on the table in view (not folded by its X) or a page. Then the Assistant's own icons (read
+// aloud, Past chats, New chat) live in its corner pill, where over a task they cannot read as the task's (2026-11-06); with nothing open
+// the canvas IS the Assistant's chat, and they sit in its head again - the owner could not find New chat there ("there used to be button
+// to clear the chat??", 2026-11-06)
+export const overChat = (t) => !!t?.place || (!!t?.key && !t?.folded);
+
 // WHAT THE RAIL'S TAG AND THE BOX SAY of it (the 2026-10-19 UI walk, G5): a page opened over the item keeps it on the table - its ringed
 // row still brings it back - but it is not in view, and "on the table" and "Ask about this one" said it was while Connections covered it
 // ...and the next ask is about THE PAGE ALONE (the owner, 2026-11-05): it no longer carries the task beneath, so the box names only the page

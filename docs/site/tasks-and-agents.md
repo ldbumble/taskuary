@@ -2,25 +2,26 @@ A task in Taskuary is three records, not one: the durable job, the agent work do
 is closed out - the reply to whoever asked, and on GitHub the merge or the closed issue. They start and finish independently, and keeping them apart is what stops
 the word "done" meaning three different things.
 
-## A task's three lives
+## A task's two sections
 
-A **coding** task shows them as three sections, left to right — **1 Came from → 2 Agent → 3 Close
-out**. The section the task is up to opens; the other two fold to slim columns beside it that still
-say where they stand. Each section carries its own moves: on its spine while folded, on a strip
-across its top while open.
+Every task - general, reply, coding or a plain to-do - is two sections, left to right: **Came from** and
+**Agent**, and its Agent section is one chat. The section the task is up to opens; the other folds to a
+slim column beside it that still says where it stands. The reply, the post, the emails it owes, the file
+the agent set up and, on a coding task, how its branch lands all sit in the chat, under that turn's **Next
+steps** ([A general task is one chat](#a-general-task-is-one-chat)), each with its own **Send**. **Mark
+done** and the task's other moves are one row on the chat's strip.
 
-A **general** or **reply** task has two: **Came from** and **Agent**, and its Agent section is one chat.
-There is no Close out on it: the reply, the post or the file the agent set up sits in the chat, under
-that turn's **Next steps** ([A general task is one chat](#a-general-task-is-one-chat)). **Mark done** is
-on the task's own bar.
+A plain to-do no agent has touched is **Came from** alone, with the box at its foot: type there and the
+agent starts, and its chat opens beside it. A coding agent's live terminal is a **Terminal** toggle inside
+its chat, never a column of its own. **AI used** and, on a coding task, **Talk to this agent from…** are
+small buttons in the task's top-right corner.
 
 | Section | What it records | Its moves | What it never does by itself |
 |---|---|---|---|
 | **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not for me**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
-| **Agent** | One or more runs by a coding agent, and the Result each left - on a general task, the one chat | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** on a coding task; on a general task, the box under the chat | Ending a session does not mark the task done or send a reply |
-| **Close out** (coding tasks) | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve and close**, **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Approve and close** does the same after the merge or the issue's close; **Send** and **Approve** never close it — the task stays open until you **Mark done** |
+| **Agent** | The one chat: the agent's turns, and the cards it set up - the reply to whoever asked with **Send and close**, **Send** and **Redraft**, the emails it owes, an invite's answers, the hand-off, and the last act where the task lives (merge its pull request, close its issue: **Approve and close**, **Approve**, **Decline**) | The box under the chat; **Mark done**, **Hand it to a person**, **Close with a note**, **Attach a file**, **Share** on its strip | Ending a session does not mark the task done or send a reply; **Send** and **Approve** never close it - the task stays open until you **Mark done** (or press a **... and close**) |
 
-**Mark done** always comes first on Close out, or on a chat task's bar, and is never folded away. When a strip runs out of
+**Mark done** always comes first on the task's row of moves, and is never folded away. When a strip runs out of
 room, the rest of its moves fold into a **▾** at its end. The task's title bar holds only its status,
 **Expand** and **×**.
 
@@ -28,15 +29,13 @@ Under the task is one small bar, **Nav**: **Back** and **Next**, each greyed whe
 go. The chat is a separate pill in the corner; type there and a window opens out of it, about the
 task on the table.
 
-While a coding agent's session is live, it takes the whole width: Came from and Close out fold to their
-spines, and the Agent strip holds only **Stop and save**. Its Result, and **Continue**, come back
-when it stops.
+While an agent works, its chat takes the whole width and Came from folds to its spine.
 
 ### Who is allowed to close it
 
 ![Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not for me; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
 
-There is one close, **Mark done**. Close out's **Send and close** is a Send and then that close, in one press. A plain
+There is one close, **Mark done**. A draft's **Send and close** is a Send and then that close, in one press. A plain
 **Send**, or approving an agent's act, never closes a task by itself (the owner's rule: sending and closing are two steps). Mark done always does the
 same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
 it leaves your work rail, and the "yours to end" mark comes off.
@@ -45,7 +44,7 @@ it leaves your work rail, and the "yours to end" mark comes off.
 |---|---|---|
 | **Mark done** — the task page, the Assistant's button or card, "done" or "close" in the chat, the phone | Mark done | never |
 | **Send** a reply (or one of the task's emails) | Sends it, and nothing else: the item stays in front of you with its receipt, and **Mark done** or **Next** | always - sending and closing are two steps |
-| **Send and close** in Close out | Sends the reply; once it went, Mark done. Sent nowhere it cannot confirm, it waits for **Check delivery** or **Send anyway** first | an agent is still working on it, or anything else on it still waits on you (a held step, another reply) - the task says why |
+| **Send and close** under a draft in the chat | Sends the reply; once it went, Mark done. Sent nowhere it cannot confirm, it waits for **Check delivery** or **Send anyway** first | an agent is still working on it, or anything else on it still waits on you (a held step, another reply) - the task says why |
 | **Tick the last checklist box** | Mark done | an agent is still working on it |
 | **Hand it to a person** | Forwards it, and the task waits on them (📤 waiting on them) | always - **Mark done** when it is finished |
 | **Not for me** | Deleted if nothing was done on it, otherwise Mark done | never |
@@ -60,13 +59,13 @@ A task an agent or a merged pull request closed stays on your work rail until yo
 
 Mail is answered by the reply. A pull request is merged, and an issue closed. Whatever the system, the card has the
 same three buttons - only the line under them says what they do there. None of them closes the task: **Mark done** does -
-except **Approve and close**, which the task page's Close out puts first where your reply rides with the close-out: it
+except **Approve and close**, which the card in the task's chat puts first where your reply rides with the close-out: it
 approves, sends the reply, then closes the task (kept open while an agent works on it). **Approve** beside it does the
 same and leaves the task open; when the line is tight it folds into the **▾** beside **Approve and close**.
 
 | Button | What it does |
 |---|---|
-| **Approve and close** (**Send and close** on a reply alone) | Does what **Approve** does, then closes the task - in Close out, where your reply goes with it |
+| **Approve and close** (**Send and close** on a reply alone) | Does what **Approve** does, then closes the task - in the chat, where your reply goes with it |
 | **Approve** (**Send** on a reply alone) | Does the task's last act the normal way for its system, sending your reply with it - and only that |
 | **Decline** | Closes it without doing it, where the system has that difference - a pull request closed unmerged |
 | **Not yet** | Nothing happens; the task stays open and on you (in the Assistant's walk this is **Next**) |
@@ -177,7 +176,7 @@ task page, the Board, the assistant's cards and the phone all use the same ones.
 
 | It ended because | What you see | What brings it back |
 |---|---|---|
-| The agent said it was done | its **Close out** card if its work lives on GitHub, then ✅ **agent finished** - ready to send if a reply is owed | a new message on it |
+| The agent said it was done | its close-out card in the chat if its work lives on GitHub, then ✅ **agent finished** - ready to send if a reply is owed | a new message on it |
 | You pressed **Stop and save** | 💾 **session saved** - the report is written, the task stays open | **Continue** |
 | You pressed **Mark done** | the task is closed and the agent stopped | they write again |
 | The session crashed or was closed, or Taskuary closed | ⏹ **agent stopped** - a reply it had held is back for your yes | **Continue**, or **Run another agent** |
@@ -316,10 +315,9 @@ state.
 
 ## Replies
 
-On a coding task, Close out holds the reply whenever the task has an incoming sender. It shows one of three
-things: no draft yet (**Draft reply**), a draft ready (**Send**, **Redraft**), or a reply sent. Type your own
-or generate one, edit it, send it. On a general or reply task the draft is a card under the newest turn's
-**Next steps** in the chat, with its To, Cc, attachments and **Send**; ask in the box for a different one.
+On every task the draft is a card under the newest turn's **Next steps** in the chat, with its To, Cc,
+attachments and **Send**; it shows no draft yet (**Draft reply**), a draft ready (**Send**, **Redraft**), or a
+reply sent. Edit it in place, or ask in the box for a different one.
 
 One reply is special. A **clarification** stops the active agent when it is sent and moves the
 task to waiting, because an external answer is now required. An ordinary reply from an
@@ -375,10 +373,10 @@ server and the Assistant alike (`taskuary/stages.json`). The first row that hold
 | agent working | an agent's session is open, working or waiting on you | Agent - the session, the whole width | over the work |
 | waiting on someone | handed to a person | Came from - who it waits on and when it is due | on the folded sections |
 | done (by its agent) | its own agent closed it | Agent - who closed it and why, and its Result | — |
-| done | closed | Close out - how it closed, the note, what went out | — |
-| close out | a draft or emails wait for **Send**, or something went out | Close out | over the work |
+| done | closed | Agent - the chat, how it closed, the note, what went out | — |
+| to send | a draft or emails wait for **Send**, or something went out | Agent - the chat, the draft's card in it | over the work |
 | agent result | an agent finished, stopped or failed | Agent - its Result, or why it failed with **Try again** | over the work |
-| to reply | somebody wrote and nothing is drafted | Came from, with Close out's move lit | on the folded sections |
+| to reply | somebody wrote and nothing is drafted | Came from, with Agent's move lit | on the folded sections |
 | to do | a to-do's checklist or a goal's steps | Came from and its list | on the folded sections |
 | to start | an ask nothing has worked yet | Came from, with Agent's move lit | on the folded sections |
 

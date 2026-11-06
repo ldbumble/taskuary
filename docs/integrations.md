@@ -10,7 +10,7 @@ existing links keep working.
 - [Start here](https://taskuary.com/docs/) — install, first run, where your data lives
 - [How it works](https://taskuary.com/docs/how-it-works) — the Timeline, the five roads, what triage decides
 - [Connections](https://taskuary.com/docs/connections) — what Taskuary may read, and what it may do with it
-- [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) — the three lives of a task
+- [Tasks and agents](https://taskuary.com/docs/tasks-and-agents) — a task's two sections, Came from and its one chat
 - [Reports and the Advisor](https://taskuary.com/docs/reports) — the pipeline, and the report that judges
 - [On your phone](https://taskuary.com/docs/phone) — WhatsApp and Telegram
 - [Settings reference](https://taskuary.com/docs/settings) — every knob, generated from the schema

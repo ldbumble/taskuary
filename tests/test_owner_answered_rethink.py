@@ -86,3 +86,34 @@ def test_a_mail_read_in_mid_turn_with_no_rethink_waits_at_the_foot():
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Answer.'); s._exec("UPDATE comment SET CreatedAt='2026-11-05 09:04:00' WHERE Body='Answer.'")
     shown = general.shown_history(s, tid)
     assert [m['role'] for m in shown] == ['user', 'assistant', 'user'] and shown[-1]['mail'][0]['words'] == 'And one more.'
+
+
+def test_a_task_started_by_the_owners_own_line_keeps_the_mail_above_it():
+    """2026-11-06: a reply task no agent had touched - the owner typed a line under the mail, which started the agent, and the mail left the
+    chat: the stream began at "You". The mail stays first, then the owner's line, the answer, and a later mail over its re-think - each once."""
+    s = MemoryStore(); tid = _task(s)
+    s._exec("UPDATE message SET CreatedAt='2026-11-05 09:00:00' WHERE TaskId=?", (tid,))
+    def said(actor, kind, body, at):
+        s.add_comment(tid, actor, kind, body); s._exec("UPDATE comment SET CreatedAt=? WHERE Body=?", (at, body))
+    said('owner', general.USER_TYPE, 'Say yes, Friday works.', '2026-11-05 09:03:00')
+    assert [m.get('mail', [{}])[0].get('words', m['content'][0]['text'])[:8] for m in general.shown_history(s, tid)] == ['Can you ', 'Say yes,']
+    said('assistant', general.ASSISTANT_TYPE, 'Drafted the yes.', '2026-11-05 09:04:00')
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Re: Badge list', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                   'BodyText': 'Great, see you then.', 'Status': 'filed', 'SentAt': '2026-11-05 09:10:00'})
+    s._exec("UPDATE message SET CreatedAt='2026-11-05 09:10:00' WHERE BodyText LIKE 'Great%'")
+    said('assistant', general.ASSISTANT_TYPE, 'She confirmed.', '2026-11-05 09:12:00')
+    shown = general.shown_history(s, tid)
+    rows = [[x['words'] for x in m['mail']] if m.get('mail') else m['content'][0]['text'] for m in shown]
+    assert rows == [['Can you send the badge list?'], 'Say yes, Friday works.', 'Drafted the yes.', ['Great, see you then.'], 'She confirmed.'], rows
+    assert shown[0]['mail'][0]['who'] == 'Gail Moreno' and shown[0]['brief']
+
+
+def test_a_task_the_owner_started_opens_on_their_line_not_on_its_own_timeline_row():
+    """...but the row a task the owner made carries for the timeline (ownwork.ensure: their own ask, signed You) is no mail that came in -
+    over their first line it said the same words twice."""
+    from taskuary import ownwork
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Plan the offsite', 'Summary': 'Plan the offsite for May', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    assert ownwork.ensure(s, tid)
+    s.add_comment(tid, 'owner', general.USER_TYPE, 'Plan the offsite for May')
+    assert [m['role'] for m in general.shown_history(s, tid)] == ['user'] and not general.shown_history(s, tid)[0].get('mail')

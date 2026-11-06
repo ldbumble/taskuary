@@ -73,6 +73,9 @@ class ACPCoding:
         from . import blackboard as bb, proof, witness
         self.sid, self.store, self.profile, self.model, self.mode = uuid.uuid4().hex[:12], store, dict(profile), model, mode
         self.args = [str(a) for a in args]
+        # ...its folder by its LONG name, as the agent names every file it touches: a temp checkout named by its 8.3 short name left each path
+        # absolute on the card and the blackboard (the live check, 2026-11-06)
+        self.root = os.path.realpath(cwd) if cwd and os.path.isdir(cwd) else cwd
         self.argv, self.cwd, self.opened_in, self.label, self.task_id, self.agent, self.cli = list(argv), cwd, cwd, label, task_id, agent, cli
         self.rows, self.cols = rows, cols
         self.started, self.started_ts = datetime.now().isoformat(sep=' ', timespec='seconds'), time.time()
@@ -148,7 +151,7 @@ class ACPCoding:
         from . import blackboard as bb
         try: dirty = bb.dirty(self.cwd) - self.dirty0
         except Exception: dirty = set()
-        edited = {_rel(p, self.cwd) for p, v in self.touched.items() if v.get('edit')}
+        edited = {_rel(p, self.root) for p, v in self.touched.items() if v.get('edit')}
         got = sorted(set(map(str, dirty)) | edited)[:20]
         self._files = (got, time.time())
         return got
@@ -157,7 +160,7 @@ class ACPCoding:
         "The files under its hands NOW - 'path:line' where the call named one - from its calls' locations, newest first."
         now = time.time()
         rows = sorted(((p, v) for p, v in self.touched.items() if now - v['at'] < HOT_S), key=lambda x: -x[1]['at'])
-        return [_rel(p, self.cwd) + (f":{v['l']}" if v.get('l') else '') for p, v in rows][:8]
+        return [_rel(p, self.root) + (f":{v['l']}" if v.get('l') else '') for p, v in rows][:8]
 
     def info(self, tail=0, details=True):
         from . import terminal as term
@@ -171,7 +174,7 @@ class ACPCoding:
         from . import browserview as bv
         files = self.files()
         return {**base, 'files': files, 'touching': self.touching(), 'browser': bv.state(self.sid),
-                'work': self.witness.snapshot(files, self.cwd, (self.tail(1) or [''])[-1])}
+                'work': self.witness.snapshot(files, self.root, (self.tail(1) or [''])[-1])}
 
     def transcript_text(self, chars: int = 12000) -> str:
         "What the session said, as readable text (terminal.harvest reads a pty's screen; this has the turns themselves)."

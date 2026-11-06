@@ -361,14 +361,12 @@ const TurnWork = ({ data }) => {
     // open with its spinner, and what the agent says after it draws below it
     : now && (i === last || p.steps.some((x) => x.status === "running")) ? <LiveSteps key={p.id} steps={p.steps} />
     : <Fold key={p.id} k={`${key}:${p.id}`} label={stepsWord([p])}><AgentSteps data={{ steps: p.steps }} /></Fold>;
-  // SUMMARY: the words after its last piece of work are its answer; everything before is one quiet "n steps" line that opens on them. A turn at
-  // work, or one its summary sums up, folds whole - its "Working on this…" (AtWork) or its summary says the rest
+  // SUMMARY: the agent's words, in order; every step, edit and plan behind one quiet "n steps" line over them that opens on them all. A turn its
+  // summary sums up folds whole - its summary says the words
   if (level === "summary") {
-    let tail = parts.length;
-    if (!now && !ended) while (tail > 0 && parts[tail - 1].type === "said") tail -= 1;
-    const hidden = parts.slice(0, tail);
-    return <>{hidden.some((p) => p.type !== "said") && <Fold k={`${key}:all`} quiet label={stepsWord(hidden)}>{hidden.map((p, i) => draw(p, i, "everything"))}</Fold>}
-      {parts.slice(tail).map((p, i) => draw(p, tail + i, level))}</>;
+    const said = ended ? [] : parts.filter((p) => p.type === "said"), rest = ended ? parts : parts.filter((p) => p.type !== "said");
+    return <>{rest.some((p) => p.type !== "said") && <Fold k={`${key}:all`} quiet label={stepsWord(rest)}>{rest.map((p, i) => draw(p, i, "everything"))}</Fold>}
+      {said.map((p) => <Md key={p.id} text={p.text} />)}</>;
   }
   return <>{parts.map((p, i) => draw(p, i, level))}</>;
 };
@@ -1048,9 +1046,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     setData(null); setError(""); setAttachments([]); setNewChatBusy(false); setConfirmNewChat(false);
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
+    if (coding) { setData({ messages: [] }); return () => { live = false; }; }
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
     return () => { live = false; };
-  }, [accept, task.TaskId]);
+  }, [accept, task.TaskId, coding]);
 
   const updateProvider = async (nextId, nextModel = model) => {
     setConnectorId(String(nextId)); setModel(nextModel); setError("");
@@ -1097,10 +1096,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   }, [task.TaskId, coding, cc.load]);
   /* On screen, the agent's CLI stays open: the server reaps one nobody touches for 30 minutes, and this is the touch. Nothing starts here. */
   useEffect(() => {
+    if (coding) return undefined;
     const seen = () => { if (!document.hidden) api.post(`/api/tasks/${task.TaskId}/assistant/seen`).catch(() => {}); };
     seen(); const t = setInterval(seen, 60000);
     return () => clearInterval(t);
-  }, [task.TaskId]);
+  }, [task.TaskId, coding]);
 
   /* An answer written while you were somewhere else. The run no longer dies when this pane
      goes away, so when it comes back the conversation may be mid-sentence - or already have
@@ -1145,8 +1145,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...and what a read brings is handed to the standing thread (a revision bump), as the poll does: taken into `data` alone, the owner's
   // Continue note waited for the next poll to show (the owner, 0.3.9.51: "I did Continue, filled it out and nothing happened")
   const refresh = useCallback(() => {
+    if (coding) { cc.load(); return; }           // a coding source reads its own sessions (useCodingChat)
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => { accept(r.data); setRevision((k) => k + 1); }).catch(() => {});
-  }, [accept, task.TaskId]);
+  }, [accept, task.TaskId, coding, cc.load]);
   // A SESSION ANOTHER DOOR STARTED (`liveSid`, the page's live one): the canvas's Continue card, the Assistant, the phone. The page
   // adopted it, but this conversation had loaded before it existed and polls only while it knows of a turn, so a Continue with a note
   // showed the old turns under an agent that had already asked its question (the agents walk, 2026-10-26). Read again when they differ.
@@ -1154,8 +1155,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the reason nor - when it failed before the agent took it - the owner's own words, so a refused send left nothing on screen (the owner,
   // 2026-11-02: "the text goes no where"). The page still learns the session is down (accept -> onSession); the thread keeps both.
   const failed = useCallback(() => {
+    if (coding) return;
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
-  }, [accept, task.TaskId]);
+  }, [accept, task.TaskId, coding]);
   const loaded = !!data, knownSid = data?.session?.sid || "";
   useEffect(() => { if (loaded && liveSid && knownSid !== liveSid) refresh(); }, [loaded, liveSid, knownSid, refresh]);
   // ...and at once when that door says it answered (`reread`, bumped by the page): the note is on the conversation by then, and the
@@ -1201,7 +1203,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // ...the question the answer box below shows is said there only (askOnce.js)
   const shownMessages = (() => { const general = withoutAsked(messagesWithTrace(data?.messages, session, dock),
     !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
-    return coding ? byTime([...general, ...rowMessages(cc.rows)]) : general; })();
+    // ...a coding turn at work is stamped from its own first step (`since`), never from the mail above it
+    const turns = rowMessages(cc.rows).map((m) => (String(m.id).startsWith("live-") && m.createdAt ? { ...m, since: +asUtc(m.createdAt) || undefined } : m));
+    return coding ? byTime([...general, ...turns]) : general; })();
   // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
   // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
   const road = coding ? (w, files) => { const said = withImages(w, files);
@@ -1224,7 +1228,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // runs on some renders and not others - which is React #310, and it blanked the whole view.
   const name = dock ? "Taskuary" : agentName(task);
   const work = workOf(session?.trace);
-  const since = turnStart(shownMessages), began = session?.busy && session?.turn_started ? session.turn_started * 1000 : null;
+  // ...a coding turn at work counts from its own first step, as a general one from the server's `turn_started`
+  const codingAt = coding ? shownMessages.find((m) => String(m.id).startsWith("live-"))?.createdAt : null;
+  const since = turnStart(shownMessages), began = session?.busy && session?.turn_started ? session.turn_started * 1000 : codingAt ? +asUtc(codingAt) || null : null;
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;

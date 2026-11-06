@@ -23,6 +23,7 @@ import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
 import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
+import { useAgents } from "./ui.jsx";
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
 // oxblood, which means "this is on you" and nothing else
@@ -63,6 +64,7 @@ export const searchPicked = () => window.dispatchEvent(new Event(SEARCH_PICKED))
 // ...and AT A PHONE'S WIDTH THE SAME BUTTON, as its icon (the 2026-10-19 UI walk, G13): the bar was display:none there, so a
 // phone had no search at all
 export function SearchBar({ onOpen }) {
+  const { devMode } = useAgents();       // pull requests are a developer's word (audit, 2026-11-05)
   return (
     <Box component="button" type="button" onClick={onOpen} data-tq-search-open="true" aria-label="Search everything (Ctrl+K)"
       sx={{ display: "flex", alignItems: "center", justifyContent: { xs: "center", sm: "flex-start" }, gap: 0.9,
@@ -72,7 +74,7 @@ export function SearchBar({ onOpen }) {
         "&:hover": { borderColor: "#cfc7bb", boxShadow: "0 1px 3px rgba(30,50,38,.06)" } }}>
       <SearchIcon sx={{ fontSize: 16, color: FAINT }} />
       <Box component="span" sx={{ flex: 1, fontSize: 12.5, color: FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        display: { xs: "none", sm: "block" } }}>Search tasks, mail, chats, PRs…</Box>
+        display: { xs: "none", sm: "block" } }}>{devMode ? "Search tasks, mail, chats, PRs…" : "Search tasks, mail, chats…"}</Box>
       <Box component="span" sx={{ display: { xs: "none", sm: "inline-flex" } }}><Kbd>Ctrl K</Kbd></Box>
     </Box>
   );
@@ -179,6 +181,7 @@ const opened = (h) => {
 
 export default function SearchEverything({ open, onClose, onOpenTask, onOpenMessage, onPickSource, query = "" }) {
   const [q, setQ] = useState(""), [res, setRes] = useState(null), [busy, setBusy] = useState(false);
+  const { devMode } = useAgents();       // "pull requests" only where there are any to find (Developer mode)
   const [only, setOnly] = useState(""), [at, setAt] = useState(0);
   // ENTER OPENS WHAT WAS TYPED (the 2026-10-19 UI walk, G9): Enter straight after typing opened the LAST query's top hit - the rows
   // on screen were still the old words' - or, before any answer, did nothing. The rows count only when they answer the words in
@@ -263,7 +266,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
         <SearchIcon sx={{ fontSize: 21, color: q ? INK : FAINT }} />
         <InputBase autoFocus fullWidth value={q} onKeyDown={key}
           onChange={(e) => { typed.current = e.target.value; if (held.current !== e.target.value.trim()) held.current = ""; setQ(e.target.value); }}
-          placeholder="Search tasks, mail, chats, pull requests, the Advisor…" inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
+          placeholder={devMode ? "Search tasks, mail, chats, pull requests, the Advisor…" : "Search tasks, mail, chats, the Advisor…"} inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
           sx={{ fontSize: 16, color: INK, "& input::placeholder": { color: FAINT, opacity: 1 } }} />
         <Kbd>Esc</Kbd>
       </Box>

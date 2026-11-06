@@ -84,7 +84,7 @@ file as they are.
 
 - Write a concrete instruction — "Summarise spend by site; flag any vendor above 10k or new this
   month" — not "summarise the data".
-- **Brain**: the triage brain writes it by default; any connector with a saved key can be picked
+- **Brain**: the AI that sorts your mail writes it by default; any connector with a saved key can be picked
   per report. A saved pick that has lost its key stays visible and disabled rather than silently
   vanishing.
 - With a prompt set but no AI connector active, the raw data files and the builder says so.

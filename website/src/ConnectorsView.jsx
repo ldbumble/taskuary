@@ -2527,7 +2527,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Active && conn.Type === "whatsapp" && waSt ? <WaStatusLine st={waSt} cid={conn.ConnectorId} onTurnedAway={openPicker} /> : (
           <Typography variant="body2" sx={{ color: DIM }}>
             {conn.Active
-              ? (isAI ? "On — wired into intent triage (the first active AI connector wins)." : "On — polling on schedule and via Sync now.")
+              ? (isAI ? "On — sorts your mail." : "On — polling on schedule and via Sync now.")
               : "Off — flip on once Test passes."}
           </Typography>)}
         {/* the last step of a setup should be the first sync - not a wait for the ten-minute clock. It is there once the SERVER has the

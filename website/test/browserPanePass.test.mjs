@@ -36,7 +36,7 @@ test("the first frame of a connection sends the pane's shape, which a still-star
 });
 
 test("your turn is never said over a pane with no frame drawn (2026-11-04)", () => {
-  assert.match(pane, /\{!live \? "waiting for the page to draw — type once it shows" : handed\.current \? "your turn/);
+  assert.match(pane, /\{!live \? "Loading the page…" : handed\.current \? "your turn/);
 });
 
 test("the viewport is set only by the tab the owner is at", () => {

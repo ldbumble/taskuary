@@ -783,6 +783,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'mastodon_post': _lazy('social', 'run_mastodon_post'),
             'linkedin_me': _lazy('linkedin', 'run_linkedin_me'),
             'linkedin_post': _lazy('linkedin', 'run_linkedin_post'),
+            'github_issue': _lazy('github', 'run_github_issue'),     # a new issue, on the owner's press (github.run_github_issue)
             # Robinhood over its hosted MCP: the manifest, the reads, and the one write.
             # The write is registered like QuickBooks' bill - PROPOSED on a card narrowed to read, run at FULL.
             'robinhood_tools': _lazy('robinhood', 'run_robinhood_tools'),
@@ -908,7 +909,7 @@ def executor_for(type_name):
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery', 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
-           'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin',
+           'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github',
            'bluesky_me': 'bluesky', 'bluesky_timeline': 'bluesky', 'bluesky_post': 'bluesky',
            'mastodon_me': 'mastodon', 'mastodon_timeline': 'mastodon', 'mastodon_post': 'mastodon',
            's3_object': 'aws', 'cloudwatch_logs': 'aws', 'azure_blob': 'azure', 'azure_logs': 'azure', 'calendar': 'outlook',
@@ -1070,6 +1071,12 @@ def linkedin_connection(store, connector_id=None) -> dict:
     return _card(store, 'linkedin', 'token', connector_id)
 
 
+def github_connection(store, connector_id=None) -> dict:
+    "The GitHub card's token, as `token` - only that: its repos and routes are the poller's, never an issue's say."
+    c = _connector(store, 'github', connector_id, with_secret=True)
+    return {'token': c['Secret']} if c and c.get('Secret') else {}
+
+
 def bluesky_connection(store, connector_id=None) -> dict:
     """The app password is the secret, and it arrives as `app_password` because that is what
     social.session reads. `_cid` rides along so the session cache is per CARD - two Bluesky
@@ -1146,6 +1153,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'robinhood_tools': robinhood_connection, 'robinhood_read': robinhood_connection,
                  'robinhood_order': robinhood_connection,
                  'linkedin_me': linkedin_connection, 'linkedin_post': linkedin_connection,
+                 'github_issue': github_connection,
                  'bluesky_me': bluesky_connection, 'bluesky_timeline': bluesky_connection,
                  'bluesky_post': bluesky_connection,
                  'mastodon_me': mastodon_connection, 'mastodon_timeline': mastodon_connection,

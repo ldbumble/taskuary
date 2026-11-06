@@ -137,8 +137,8 @@ class TheModelIsToldTheActionsOnTheTable(unittest.TestCase):
 
     def test_a_drafts_send_button_is_named_as_approve(self):
         lines = concierge.table_actions(None, {'kind': 'review', 'key': 'review:1', 'rid': 1, 'tid': 1, 'lane': 'review'},
-                                        chips=[{'verb': 'approve', 'label': 'Close out'}, {'verb': 'next', 'label': 'Next'}])
-        self.assertIn('"Close out" = approve', lines)
+                                        chips=[{'verb': 'approve', 'label': 'Approve and close'}, {'verb': 'next', 'label': 'Next'}])
+        self.assertIn('"Approve and close" = approve', lines)
         self.assertIn('sends the reply as it stands', lines)
 
 

@@ -116,7 +116,7 @@ NEEDS = (
     ('rerun', 'Re-run failed checks', 'Actions: write', 'push'),
     ('issue', 'Close an issue', 'Issues: write', 'triage'),
     ('comment', 'Post your reply as the comment', 'Issues / Pull requests: write', 'triage'),
-    ('anyway', 'Close out anyway, past the repo\'s rules', 'Contents: write, and the admin role', 'admin'),
+    ('anyway', 'Finish anyway, past the repo\'s rules', 'Contents: write, and the admin role', 'admin'),
     ('close', 'Close a pull request without merging', 'Pull requests: write', 'push'),
 )
 GRANT_OF = {'pr': 'contents', 'update': 'pull_requests', 'rerun': 'actions', 'issue': 'issues', 'comment': 'issues', 'anyway': 'contents',

@@ -650,7 +650,7 @@ def draft_new(store, people, subject: str, start: str, end: str, note: str = '',
                             'Deliver': json.dumps(env), 'Reason': f"{head}{' · ' + clash if clash else ''} - press {send_word()} and the calendar is told"})
     store.audit('review', rid, 'calendar_drafted', actor, detail={'act': 'schedule', 'provider': acct['provider'], 'new': True})
     return {'taskId': tid, 'ref': task_ref(tid), 'reviewId': rid, 'title': title,
-            'say': f"{task_ref(tid)} - {head}" + (f' ({clash})' if clash else '') + f'. The invite waits in Close out for your {send_word()}.'}
+            'say': f"{task_ref(tid)} - {head}" + (f' ({clash})' if clash else '') + f'. The invite waits in its chat for your {send_word()}.'}
 
 
 def env_of(r) -> dict:

@@ -5409,7 +5409,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.checklist': return f" The list has {len(o.get('checklist') or [])} item(s)" + (f", {o['added']} email(s) added." if o.get('added') else '.')
     if kind == 'task.handoff' and o.get('to'): return f" The hand-off to {o['to']} is below for your yes - nothing has gone."
     if kind == 'task.clarify': return ' The question is below for your yes - nothing has gone.'
-    if kind == 'task.share': return f" The summary for {o.get('to') or 'them'} waits in Close out for your yes - nothing has gone."
+    if kind == 'task.share': return f" The summary for {o.get('to') or 'them'} waits in the task's chat for your yes - nothing has gone."
     if kind == 'review.reject': return ' The draft is rejected; the task stays open.'
     if kind == 'task.defer': return ' ' + away_line(o)
     if kind == 'task.watching': return ' ' + watch_line(o)

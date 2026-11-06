@@ -304,3 +304,9 @@ def test_the_router_s_effort_reaches_the_api_call(s, fresh):
         llm.build_llm(s, job='draft', task_id=tid)('sys', 'user')
     assert (sent[0]['model'], sent[0]['reasoning_effort']) == ('gpt-5', 'high')
     assert 'gpt-5, high effort' in s.brain_routes(tid, limit=1)[0]['Why']
+
+
+def test_a_rule_sentence_never_repeats_its_job():
+    from taskuary import brainroute
+    assert brainroute.sentence({'when': {'job': ['general', 'quick_work'], 'difficulty': ['quick']}, 'use': {'tier': 'light'}}) == \
+        'Quick general work -> the quick model'

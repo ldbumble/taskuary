@@ -467,8 +467,13 @@ def sentence(r: dict) -> str:
     """A rule as the owner reads it - "Hard drafts, general work and coding -> the strong model" - built from its values, so the
     sentence can never say something the rule does not do."""
     w, u = r.get('when') or {}, r.get('use') or {}
-    jobs = _and(PLURAL.get(j, j) for j in w.get('job') or []) or 'every job'
-    who = ' '.join(x for x in (_and({'standard': 'normal'}.get(d, d) for d in w.get('difficulty') or []), jobs) if x)
+    ds = [{'standard': 'normal'}.get(d, d) for d in w.get('difficulty') or []]
+    # a job word that already names the difficulty ("quick general work") loses it under that difficulty, and a repeat goes: never
+    # "Quick general work and quick general work"
+    js = [PLURAL.get(j, j) for j in w.get('job') or []]
+    js = [next((x[len(d) + 1:] for d in ds if x.startswith(d + ' ')), x) for x in js]
+    jobs = _and(dict.fromkeys(js)) or 'every job'
+    who = ' '.join(x for x in (_and(ds), jobs) if x)
     if w.get('data_class'): who += f" carrying {_and(w['data_class'])} data"
     if w.get('origin'): who += f" written by {_and('a stranger' if o == 'stranger' else 'you' if o == 'owner' else 'people you trust' for o in w['origin'])}"
     if w.get('person'): who += f" with {_and(w['person'])}"

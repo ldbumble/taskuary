@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { adviceRead, sameTarget, tableOf, tableWords } from "../src/tableState.js";
+import { adviceRead, overChat, sameTarget, tableOf, tableWords } from "../src/tableState.js";
 import { adviceKeyFor } from "../src/advice.js";
 
 const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
@@ -79,4 +79,16 @@ test("the page wires the record: the strip, the box's subject, the folded line a
   assert.match(src, /if \(isCur \|\| \(table\.folded && key === table\.key\)\) \{ backToTable\(key\); return; \}\n\s*pull\(key, null\);/, "its row unfolds it, not a second pull");
   assert.match(src, /firstRun && \(browsing \|\| setupCard\) && <div data-tq-setup-over=""/, "a sidebar place - or a task - opens during setup, with the way back");
   assert.doesNotMatch(src, /setTimeout\(\(\) => \{ if \(n === adviceAsk\.current\) setAsking\(null\); \}, 20000\)/, "no 20 s spinner that then shows nothing");
+});
+
+// the owner, 2026-11-06: "there used to be button to clear the chat??" - on the home screen the icons left the head for the pill
+test("the Assistant's own icons: in the head on the home screen, in the pill only while a task or page is open over the chat", () => {
+  assert.equal(overChat(tableOf({})), false, "home: nothing on the table");
+  assert.equal(overChat(tableOf({ current: "task:7", foldedKey: "task:7" })), false, "a task folded by its X: the chat is back");
+  assert.equal(overChat(tableOf({ current: "task:7" })), true, "a task open");
+  assert.equal(overChat(tableOf({ browsing: "b1" })), true, "a page (Settings) open");
+  assert.equal(overChat(tableOf({ cardKey: "task:9", foldedKey: "task:9", browsing: "b1" })), true, "a page over a folded task");
+  assert.match(src, /const iconsInPill = chatApart && overChat\(table\)/);
+  assert.match(src, /\{iconsInPill && <span className="tq-compose-own">\{ownIcons\}<\/span>\}/);
+  assert.match(src, /\{!iconsInPill && ownIcons\}/, "never both at once");
 });

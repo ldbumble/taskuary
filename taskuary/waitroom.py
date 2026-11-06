@@ -223,6 +223,12 @@ def deliver(store, tid: int) -> dict:
     if st == 'parked':
         from . import general
         if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left); how = 'typed into'
+        # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
+        # drawn as theirs in the coding chat - never "While you were working, the owner queued..." in the owner's bubble (to_general's rule)
+        elif term.is_acp(t):
+            t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x),
+                     shown=[parts(x.get('Note'))[0] for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)])
+            how = 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two
         else: how = term.tell(t, ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x))
         store.deliver_waiting([x['WId'] for x in notes], 'typed')

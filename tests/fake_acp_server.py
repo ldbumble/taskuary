@@ -9,6 +9,9 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_FAIL=init     it dies at initialize, as an adapter that cannot start does
   FAKE_ACP_RESUME=1      it offers session/resume (no replay) beside session/load
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
+  FAKE_ACP_CODE=<file>   a coding turn: a plan, an edit of that file asked for (kind edit, its location) and, once allowed, made -
+                         a comment line on top, sent back as a diff - then `git status` run, its output streamed as terminal deltas
+  FAKE_ACP_HANG=1        a turn that only ends when it is cancelled (session/cancel)
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, sys
@@ -19,6 +22,7 @@ _prompt_id = None                 # the turn waiting on the permission answer
 _heard = ''                       # what it was asked, said back once the turn ends
 SET = {'mode': 'auto', 'model': 'opus', 'effort': 'high'}
 STARTS = 0                        # how many turns this one process has served: a kept connection serves more than one
+RESUMED = ''                      # the session it was resumed into, said back in its answer
 
 
 def send(msg): sys.stdout.write(json.dumps(msg) + '\n'); sys.stdout.flush()
@@ -27,6 +31,23 @@ def note(method, params): send({'jsonrpc': '2.0', 'method': method, 'params': pa
 
 
 def update(what, **rest): note('session/update', {'sessionId': SID, 'update': {'sessionUpdate': what, **rest}})
+
+
+def code_done(granted):
+    "The edit allowed: made, its diff sent, a command run with its output streamed, and the turn ends."
+    path = os.environ['FAKE_ACP_CODE']
+    if granted:
+        old = open(path, encoding='utf-8').read()
+        new = '# keeps the ledger totals\n' + old
+        open(path, 'w', encoding='utf-8', newline='\n').write(new)
+        update('tool_call_update', toolCallId='call_1', status='completed',
+               content=[{'type': 'diff', 'path': path, 'oldText': old, 'newText': new}])
+        update('tool_call', toolCallId='call_2', title='git status', kind='execute', status='in_progress', rawInput={'command': 'git status --short'})
+        update('tool_call_update', toolCallId='call_2', _meta={'terminal_output_delta': {'data': ' M ' + os.path.basename(path) + '\n'}})
+        update('tool_call_update', toolCallId='call_2', status='completed', _meta={'terminal_exit': {'exit_code': 0}})
+        update('plan', entries=[{'content': 'Read the file', 'status': 'completed'}, {'content': 'Add the comment', 'status': 'completed'}])
+    else: update('tool_call_update', toolCallId='call_1', status='failed')
+    update('agent_message_chunk', content={'type': 'text', 'text': ('Added the comment.' if granted else 'denied') + f' - {_heard}'})
 
 
 def options():
@@ -46,8 +67,10 @@ for line in sys.stdin:
         if mid == PERM_ID and _prompt_id is not None:
             granted = ((msg.get('result') or {}).get('outcome') or {}).get('outcome') == 'selected' and \
                 'reject' not in str(((msg.get('result') or {}).get('outcome') or {}).get('optionId'))
-            update('tool_call_update', toolCallId='call_1', status='completed' if granted else 'failed')
-            update('agent_message_chunk', content={'type': 'text', 'text': ('granted' if granted else 'denied') + f' - {_heard}'})
+            if os.environ.get('FAKE_ACP_CODE'): code_done(granted)
+            else:
+                update('tool_call_update', toolCallId='call_1', status='completed' if granted else 'failed')
+                update('agent_message_chunk', content={'type': 'text', 'text': ('granted' if granted else 'denied') + f' - {_heard}'})
             reply(_prompt_id, {'stopReason': 'end_turn'})
             _prompt_id = None
         continue
@@ -67,6 +90,7 @@ for line in sys.stdin:
         update('tool_call', toolCallId='old_1', title='an earlier turn', kind='read', status='completed', rawInput={'path': 'old.txt'})
         reply(mid, {'configOptions': options()})
     elif method == 'session/resume':
+        RESUMED = str(msg['params'].get('sessionId') or '')
         reply(mid, {'configOptions': options()})
     elif method == 'session/set_config_option':
         SET[msg['params']['configId']] = msg['params']['value']
@@ -74,8 +98,20 @@ for line in sys.stdin:
     elif method == 'session/prompt':
         STARTS += 1
         said = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
-        _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}]"
+        _heard = f"heard: {said} [mode={SET['mode']} model={SET['model']} effort={SET['effort']} turn={STARTS}" + (f' resumed={RESUMED}' if RESUMED else '') + ']'
         update('agent_message_chunk', content={'type': 'text', 'text': 'Looking. '})
+        if os.environ.get('FAKE_ACP_HANG') == '1' and STARTS == 1:
+            _prompt_id = mid; continue                  # only session/cancel ends this one
+        if os.environ.get('FAKE_ACP_CODE'):
+            path = os.environ['FAKE_ACP_CODE']
+            update('plan', entries=[{'content': 'Read the file', 'status': 'completed'}, {'content': 'Add the comment', 'status': 'in_progress'}])
+            tc = {'toolCallId': 'call_1', 'title': f'Edit {os.path.basename(path)}', 'kind': 'edit', 'rawInput': {'file_path': path},
+                  'locations': [{'path': path, 'line': 1}]}
+            update('tool_call', **tc, status='pending')
+            _prompt_id = mid
+            send({'jsonrpc': '2.0', 'id': PERM_ID, 'method': 'session/request_permission', 'params': {'sessionId': SID, 'toolCall': tc,
+                  'options': [{'optionId': 'reject-once', 'name': 'Reject', 'kind': 'reject_once'}, {'optionId': 'allow-once', 'name': 'Allow once', 'kind': 'allow_once'}]}})
+            continue
         ask = os.environ.get('FAKE_ACP_ASK')
         tc = {'toolCallId': 'call_1', 'title': ask, 'kind': 'execute', 'rawInput': {'command': ask}} if ask else \
              {'toolCallId': 'call_1', 'title': 'read the ledger'}

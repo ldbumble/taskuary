@@ -694,6 +694,11 @@ def cli_of(argv) -> str:
     return re.split(r'[\\/]', str((argv or [''])[0]))[-1].lower().rsplit('.', 1)[0] if argv else ''
 
 
+def is_acp(t) -> bool:
+    "A coding session over ACP (acpcoding.ACPCoding): a prompt where a pty takes keys, its turns where a pty has a screen."
+    return getattr(t, 'acp', False) is True
+
+
 def cli_named(profile: dict, argv=None) -> str:
     """The CLI this session RUNS, by the name the profile asked for.
 
@@ -1078,8 +1083,11 @@ def opening_geometry(store) -> tuple:
 
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
                  rows: int = 0, cols: int = 0, actor: str = 'owner', model: str = None,
-                 seed_fn=None, resume: str = None, brain: str = None) -> Term:
+                 seed_fn=None, resume: str = None, brain: str = None, pty: bool = False) -> Term:
     """Start a terminal: a configured agent CLI, or a plain shell when agent is None.
+
+    A task's claude or codex with 'Run CLI agents over ACP' on opens over ACP instead (acpcoding.py): the same argv, seed and registry
+    entry, no pty. `pty` forces the terminal - the fallback when its adapter does not start.
 
     `seed_fn(cwd) -> str` builds the first prompt once the working directory is known. CLIs
     that take an interactive prompt on the command line get it THERE - the session starts with
@@ -1161,16 +1169,20 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         elif mode == 'full':
             from . import agenttools
             argv = agenttools.insert(argv, agenttools.session_args(store, cli_named(profile, argv), task_id, argv))
+    # ...A CODING SESSION OVER ACP (acpcoding.wanted: the owner's task on claude or codex, the switch on): everything above is its launch
+    # too - Taskuary's tools, the send filter, the theme and hooks file - carried to the adapter; what follows that is a pty's own is not
+    from . import acpcoding
+    acp_road = bool(agent and not pty and acpcoding.wanted(store, profile, mode, task_id))
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
     from .agents import assign_argv, resume_argv
-    if agent and resume:
+    if agent and resume and not acp_road:
         argv = codex_resume_model(list(argv) + resume_argv(profile, resume, store), model or profile.get('model'))
     # ...and for a NEW one, name it ourselves where the CLI allows (agents.ASSIGN_ARGS). Learning
     # an id afterwards leaves a window - a pane killed inside it was gone for good - and it has to
     # guess WHICH session a hook or a log belongs to. A name we chose has neither problem.
-    assigned = str(uuid.uuid4()) if agent and not resume else ''
+    assigned = str(uuid.uuid4()) if agent and not resume and not acp_road else ''
     named = assign_argv(profile, assigned, store) if assigned else []
     argv, assigned = (list(argv) + named, assigned) if named else (argv, '')
     if agent:
@@ -1192,7 +1204,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     if seed and task_id:
         from . import sessionrecord as _sr
         _sr.keep_seed(task_id, seed)
-    extra = seed_argv(profile, seed) if seed and not resume else None
+    extra = seed_argv(profile, seed) if seed and not resume and not acp_road else None
     # pywinpty joins argv with list2cmdline - correct for a direct .exe - but an npm .CMD shim
     # runs through `cmd /c`, and cmd.exe parses & | < > and stray quotes as ITS OWN syntax:
     # the seed's `subject "T&E System"` was cut AT THE AMPERSAND and half a prompt was
@@ -1217,7 +1229,14 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                 _hooks.install_user(cli, token=session_env(agent, task_id, cwd).get('TASKUARY_TOKEN', ''), cmd=str(profile.get('cmd') or cli))
                 _hooks.retire_project(cwd)
         except Exception as e: logger.debug(f'agent hooks not installed for {cwd}: {e}')
-    t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv), mode=mode)
+    if acp_road:
+        from .agents import _resolve_cmd
+        try: base = len(_resolve_cmd(profile['cmd']))
+        except FileNotFoundError: base = 1
+        t = acpcoding.ACPCoding(store, profile, argv, acpcoding.carried(argv[base:]), cwd, label, task_id, agent, cli_named(profile, argv),
+                                model or profile.get('model'), resume or '', rows, cols, mode,
+                                fallback=lambda: open_session(store, agent, task_id, None, cwd, rows, cols, actor, model, seed_fn, resume, brain, pty=True))
+    else: t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv), mode=mode)
     SESSIONS[t.sid] = t
     if assigned: bind_ext(t, assigned)     # resumable before it has drawn a single character
     # ...and a RESUMED pane is already named - by the conversation it reopens (`claude --resume <id>` keeps the id: the
@@ -1250,15 +1269,16 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
             threading.Thread(target=_bv.start, args=(t.sid, last), daemon=True).start()
         from . import agentdesktop as _ad
         _ad.mark_from_triage(store, task_id)               # ...and in a desktop app, with Agent Desktop on (2026-10-31)
-    if agent and task_id and 'codex' in os.path.basename(str(argv[0])).lower():
+    if agent and task_id and not acp_road and 'codex' in os.path.basename(str(argv[0])).lower():
         from .witness import RolloutTail
         RolloutTail(t).start()
     # ...and the CLIs that neither take an id nor stream one: watch for the file they write
-    if agent and task_id and not assigned:
+    if agent and task_id and not assigned and not acp_road:
         from . import sessionfiles
         cli = cli_of(argv)
         if sessionfiles.watches(cli): sessionfiles.SessionWatch(t, cli).start()
-    if seed:
+    if acp_road: t.start(seed or '')         # its first session/prompt; none at all for a quiet resume - it is back at its prompt
+    elif seed:
         if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
@@ -1660,6 +1680,7 @@ def harvest(t: Term, chars: int = 12000) -> str:
     readable text. And the rendering has to be a real terminal (see render): a regex that strips
     absolute cursor moves instead of obeying them turned a 27-minute session into 216 characters
     of glued-together debris, which is what the AI was being asked to write a report from."""
+    if is_acp(t): return t.transcript_text(chars)      # an ACP session has its turns themselves, not a screen
     raw = _drop_echo(render(t.scrollback(), getattr(t, 'cols', 110), getattr(t, 'rows', 32)),
                      getattr(t, 'seeded', '')).strip()
     tidy = declutter(raw)
@@ -2571,7 +2592,7 @@ def screen(sid: str, lines: int = 32) -> dict | None:
     t = get(sid)
     if not t: return None
     n = max(1, min(int(lines or 32), 120))
-    shown = render(t.scrollback(), t.cols, t.rows).splitlines()
+    shown = t.screen_lines(n) if is_acp(t) else render(t.scrollback(), t.cols, t.rows).splitlines()
     return {'sid': t.sid, 'alive': bool(t.alive), 'rows': t.rows, 'cols': t.cols,
             'promptPending': prompt_pending(t),
             'lines': shown[-n:]}
@@ -2755,6 +2776,7 @@ def type_into(t, text: str, done=None):
     while it works. `done(ok)` hears the outcome; a line that never left the box is cleared out of it
     first (^U, never Esc: that interrupts the agent), so nothing half-said sits there under its turn."""
     text = clean_typed(text)
+    if is_acp(t): return t.say(text, done=done)     # an ACP session takes a prompt, never keystrokes
     def go():
         for i in range(0, len(text), SEED_CHUNK):
             t.write(text[i:i + SEED_CHUNK])
@@ -2796,6 +2818,7 @@ def answer_form(t, picks) -> None:
     words are the "Type something." row (the digit after the last option), then the words, then Enter. The last tab
     is a review whose "1" submits every answer together. `picks` = [(choices, answer)], in order. Own thread."""
     picks = [(list(c or []), ' '.join(str(a or '').split())) for c, a in picks]
+    if is_acp(t): return t.say(' '.join(a for _c, a in picks if a))    # no form on screen over ACP: the answers are its next prompt
     def go():
         for _ in range(len(picks) + 1):
             t.write('\x1b[D'); time.sleep(.15)
@@ -2817,7 +2840,7 @@ def queue_codex(t, text: str) -> bool:
     thread at once and holds a busy one's message for its next turn (measured 2026-09-25: a pty-launched
     codex answered a queued line in 8 s). It is a new TURN, never a pick: a chooser or an approval on the
     screen still needs its keystroke, so callers only send an answer to a question asked in words."""
-    if getattr(t, 'cli', '') != 'codex' or not getattr(t, 'ext_id', ''): return False
+    if getattr(t, 'cli', '') != 'codex' or not getattr(t, 'ext_id', '') or is_acp(t): return False
     from .agents import _resolve_cmd, child_env
     from . import spawn
     try:

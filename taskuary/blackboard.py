@@ -82,8 +82,10 @@ def peers(store, cwd, exclude_tid=None) -> list:
         for t in list(term.SESSIONS.values()):
             if t.alive and t.task_id and t.task_id != exclude_tid and norm(t.cwd) == me:
                 task = store.get_task(t.task_id) or {}
+                # ...and where its hands are NOW, file:line, where its session says (an ACP session's calls name their locations)
                 out.append({'tid': t.task_id, 'ref': task_ref(t.task_id), 'title': task.get('Title') or '',
-                            'agent': t.agent or t.label, 'files': t.files(), 'started': t.started})
+                            'agent': t.agent or t.label, 'files': t.files(), 'started': t.started,
+                            'touching': t.touching() if hasattr(t, 'touching') else []})
     for r in store.running_runs():
         if not r.get('TaskId') or r['TaskId'] == exclude_tid or any(p['tid'] == r['TaskId'] for p in out): continue
         prof = json.loads((store.get_agent(r['AgentName']) or {}).get('Config') or '{}')
@@ -335,6 +337,7 @@ def briefing(store, cwd, exclude_tid=None, assess_for: int = None) -> str:
     who = ' | '.join((f"a stranger's task ({p['ref']}) ({p['agent']})" if _stranger(store, p) else
                       f"{p['ref']} \"{p['title'][:80]}\" ({p['agent']}) - about: {str((store.get_task(p['tid']) or {}).get('Summary') or '')[:160] or 'no summary'}")
                      + f" - files it has modified so far: {', '.join(os.path.basename(x) for x in p['files'][:10]) or 'none yet'}"
+                     + (f" - working in right now: {', '.join(p['touching'][:5])}" if p.get('touching') else '')
                      + (f" - it said: {said[p['tid']]}" if p.get('tid') in said and not _stranger(store, p) else '') for p in ps)
     out = ('OTHER AGENTS are working in this same checkout RIGHT NOW: ' + who + '. They were here '
            'first and have control of their files: never edit, revert, stash or commit them, and '

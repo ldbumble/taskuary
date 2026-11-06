@@ -9,9 +9,10 @@ The page maps the steps into chat rows with the general chat's own step lines (c
 
 THE ACP SEAM. A coding session run over ACP (step 1: acp.py) has no CLI log to read - its session/update notifications ARE the record.
 `record_update` keeps each one beside the task as it arrives; `chat` hands a session's kept updates to the page as `updates`, and
-codingChat.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. Step 1 calls
-`record_update(tid, sid, update)` from the ACP client's on_update for a coding session - that is the whole of it."""
+codingChat.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. A coding session over ACP
+(acpcoding.ACPCoding) calls `record_update(tid, sid, update)` for every update it gets, and for every prompt it sends."""
 import json, re
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
@@ -33,6 +34,8 @@ def record_update(tid: int, sid: str, update: dict) -> None:
     {'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': prompt}} - with '_meta': {'taskuary': 'brief'} when it is
     Taskuary's own seed or brief rather than the owner's words (the chat never draws a brief; it draws the mail that caused it)."""
     if not isinstance(update, dict) or not sid: return
+    # ...stamped as it arrives (`_at`, the server's own zone): ACP updates carry no time, and a turn read as one stamp under every mail
+    update = {**update, '_at': update.get('_at') or datetime.now().isoformat(sep=' ', timespec='seconds')}
     try:
         with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(update, ensure_ascii=False) + '\n')
     except (OSError, TypeError, ValueError) as e: logger.debug(f'coding chat: ACP update for task {tid} not kept - {e}')
@@ -73,8 +76,11 @@ def live_of(t) -> dict | None:
     except Exception: asking = False
     try: phase = t.phase()
     except Exception: phase = 'unknown'
+    acp = term.is_acp(t)
+    # ...over ACP (acpcoding.py) there is no screen to ask from, and its terminal is its commands' output: none yet is no Terminal toggle
     return {'sid': t.sid, 'cli': getattr(t, 'cli', '') or term.cli_of(getattr(t, 'argv', None) or []), 'started': t.started,
-            'asking': asking, 'working': phase == 'working', 'promptPending': bool(term.prompt_pending(t))}
+            'asking': asking, 'working': phase == 'working', 'promptPending': bool(term.prompt_pending(t)),
+            'transport': 'acp' if acp else 'pty', 'terminal': bool(getattr(t, 'has_output', False)) if acp else True}
 
 
 # ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read
@@ -102,8 +108,12 @@ def sessions(store, tid: int) -> list:
     t = _live(tid)
     items = [(r.get('Sid') or '', r.get('Brain') or '', r.get('ExtId') or '', r.get('CreatedAt'), False) for r in rows if (r.get('Sid') or '') != getattr(t, 'sid', None)]
     if t: items.append((t.sid, getattr(t, 'cli', '') or '', getattr(t, 'ext_id', '') or '', t.started, True))
-    last = {(cli, ext): i for i, (_, cli, ext, _, _) in enumerate(items) if ext}
-    return [_session(tid, sid, cli, ext, at, live) for i, (sid, cli, ext, at, live) in enumerate(items) if not ext or last[(cli, ext)] == i]
+    # ...a session run over ACP keeps its OWN updates (record_update, per Taskuary session): a resumed one holds only its new turns, so it
+    # never stands in for the ones before it, and they are all kept
+    acp = {sid for sid, *_ in items if _acp_path(tid, sid).is_file()}
+    last = {(cli, ext): i for i, (sid, cli, ext, _, _) in enumerate(items) if ext and sid not in acp}
+    return [_session(tid, sid, cli, ext, at, live) for i, (sid, cli, ext, at, live) in enumerate(items)
+            if not ext or sid in acp or last.get((cli, ext)) == i]
 
 
 def chat(store, tid: int) -> dict:

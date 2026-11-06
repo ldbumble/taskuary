@@ -17,6 +17,7 @@ agents.resolve_brain, concierge.pick), so a fixed install behaves as it always d
 All router state lives in the store - settings and the `brainroute` log - never in module globals: the
 poller and the server are separate processes (dirty triggers are cross-process).
 """
+import threading
 from datetime import datetime, timedelta
 from typing import NamedTuple
 from loguru import logger
@@ -53,8 +54,9 @@ USAGE_DAYS = 90          # ...and the row itself, for what the call used: the AI
 
 
 def log(store, r: 'Route', task_id=None, outcome: str = 'ok', pick: str = None, escalated_from=None) -> int | None:
-    """One row per brain built: the job, what runs it and why - never the prompt or the answer. A log that cannot be written
-    is never the reason a call fails, so a failure here is a debug line and None."""
+    """One row per brain CALLED (Lazy) or refused: the job, what runs it and why - never the prompt or the answer. A log that cannot be
+    written is never the reason a call fails, so a failure here is a debug line and None."""
+    escalated_from = rid_of(escalated_from)
     try:
         return store.add_brain_route({'At': datetime.now().isoformat(sep=' ', timespec='seconds'), 'Job': r.job,
                                       'TaskId': int(task_id) if str(task_id or '').isdigit() else None, 'Pick': r.pick if pick is None else pick,
@@ -64,8 +66,25 @@ def log(store, r: 'Route', task_id=None, outcome: str = 'ok', pick: str = None, 
         logger.debug(f'brainroute: could not log a {r.job} route - {e}'); return None
 
 
+# A ROW PER CALL, NOT PER BUILD (the owner's live install, 2026-11-06): the row was written when a brain was BUILT, and the chat poll
+# built triage's once a second and never called it - 234 rows in four minutes, every one without a task, a time or a token, counted on
+# the AI-use dashboard and the task's AI-used list as calls. build_llm hands out a Lazy instead: the row is written on the brain's first
+# call (aiusage.Metered), or when the build itself ends in a refusal or an error (outcome) - so the reason is kept whenever it mattered.
+class Lazy:
+    "A route row written on first use: called, it is the row's id (written then, once); a brain built and never called writes nothing."
+    def __init__(self, store, r: 'Route', task_id=None, pick: str = None):
+        self.store, self.r, self.task_id, self.pick, self._id, self._lock = store, r, task_id, pick, None, threading.Lock()
+    def __call__(self) -> int | None:
+        with self._lock:
+            if self._id is None: self._id = log(self.store, self.r, self.task_id, pick=self.pick) or 0
+        return self._id or None
+
+def rid_of(rid): return rid() if isinstance(rid, Lazy) else rid
+
+
 def outcome(store, rid, said: str, why: str = None) -> None:
     "How the call ended when it was not as built: 'fallback:<pick>', 'refused:<why>', 'error'."
+    rid = rid_of(rid)
     if not rid: return
     try: store.set_brain_route(rid, Outcome=said, **({'Why': why} if why else {}))
     except Exception as e: logger.debug(f'brainroute: could not mark route {rid} {said} - {e}')

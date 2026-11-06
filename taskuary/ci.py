@@ -225,7 +225,9 @@ def check_task(store, task_id: int, llm=None) -> dict:
     text = (f"CI is failing on {where}, commit {at['sha'][:7]}). "
             f"The failing checks are:\n{named}\n{tail}")
     store.add_comment(task_id, 'ci', 'agent', f'{CI_MARK} {key}\n{text}')
-    handed = hub_term.say_to_task(store, task_id, {'FromName': 'CI', 'Channel': 'github', 'BodyText': text}, 'ci')
+    from . import origin
+    try: handed = hub_term.say_to_task(store, task_id, {'FromName': 'CI', 'Channel': 'github', 'BodyText': text}, 'ci')
+    except origin.Refusal: handed = False         # the task says why (terminal.stranger_now); it waits on the owner
     if not handed:
         # nobody is at the keyboard: it becomes work waiting on the owner, not a silent red
         store.update_task(task_id, {'Status': 'open'}, 'ci')
@@ -283,7 +285,9 @@ def pull_comments(store, task_id: int, at: dict) -> int:
         # an agent with its permission checks off (audit 2026-09-02). Everyone else's lands on the
         # timeline only. With nobody at the keyboard the task goes back to open either way, so the
         # timeline row it just grew is not the only thing carrying the news
-        said = typed and hub_term.say_to_task(store, task_id, {'FromName': 'GitHub', 'Channel': 'github', 'BodyText': typed}, 'github')
+        from . import origin
+        try: said = typed and hub_term.say_to_task(store, task_id, {'FromName': 'GitHub', 'Channel': 'github', 'BodyText': typed}, 'github')
+        except origin.Refusal: said = False
         if not said: store.update_task(task_id, {'Status': 'open'}, 'github')
         store.audit('task', task_id, 'pr_comments', 'github', detail={'new': n, 'pr': at.get('number')})
     return n

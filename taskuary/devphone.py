@@ -90,6 +90,8 @@ def tell(store, p: dict) -> str:
     if not text: raise LookupError('tell_agent needs `text` - the owner\'s words for the agent')
     if not any(t.task_id == tid for t in peers._cli_sessions()):
         return f"No coding agent is running on {task_ref(tid)} - nothing was sent. coding_agents lists the ones that are."
+    from . import terminal as term
+    if (why := term.stranger_now(store, tid)): return f'Nothing was sent to the agent on {task_ref(tid)}: {why}.'
     store.add_comment(tid, 'owner', 'human', text)
     o = waitroom.add(store, tid, text, 'owner')
     store.audit('task', tid, 'phone_tell_agent', 'owner', detail={'chars': len(text)})

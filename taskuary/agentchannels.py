@@ -353,6 +353,8 @@ def _tell(store, b, tid: int, text: str, m):
     ok, why = in_repo(store, b, tid)
     if not ok: return say(store, b, f'Nothing was sent - {why}.')
     if not store.get_task(tid): return say(store, b, f'There is no task {task_ref(tid)}.')
+    from . import terminal as term
+    if (why := term.stranger_now(store, tid)): return say(store, b, f'Nothing was sent to {task_ref(tid)} - {why}.')
     if m is None:
         store.add_comment(tid, 'owner', 'human', text)
         o = waitroom.add(store, tid, text, 'owner')

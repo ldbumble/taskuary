@@ -2916,6 +2916,11 @@ def continue_work(task_id: int, body: ContinueBody = None):
         outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'general'})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
     note = with_images(note, imgs).strip()
+    # ...a coding session that IDLED OUT (acpcoding.idle_out) is not over: it comes back as the same run, and the note is its next prompt
+    from . import acpcoding, waitroom
+    if note and acpcoding.idled(task_id, store):
+        out = waitroom.add(store, task_id, note, ACTOR)
+        return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': True, **out}
     row, _why = _resumable(task_id)
     # CONTINUE IS THE SAME CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course"): the one that made
     # the conversation, else the one that last worked the task - never whatever the default happens to be today
@@ -5895,7 +5900,9 @@ def answer_to_agent(tid: int, body: dict):
     # a full-permission session is the one a stranger's words must never be typed into (its reviewer is the bypass)
     if origin.of_message(store, m)[0] == 'stranger' and terminal.mode_of_task(tid) not in ('', 'auto'):
         raise HTTPException(409, "this session runs with full permissions - start it again and it will run in auto mode, then hand it the stranger's message")
-    if not terminal.say_to_task(store, tid, m, ACTOR):
+    try: handed = terminal.say_to_task(store, tid, m, ACTOR)
+    except origin.Refusal as e: raise HTTPException(409, str(e))
+    if not handed:
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}
 

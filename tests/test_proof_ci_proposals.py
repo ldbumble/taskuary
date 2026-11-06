@@ -369,6 +369,15 @@ class CiLoopTests(unittest.TestCase):
             ci.check_task(s, tid)
         self.assertEqual(s.get_task(tid)['Status'], 'open')
 
+    def test_a_session_held_for_a_stranger_puts_it_back_on_the_owner_too(self):
+        "say_to_task refused (terminal.stranger_now): nothing went in, so it is the owner's, as with no session at all."
+        from taskuary import origin
+        s = armed(MemoryStore()); tid = self._task_with_pr(s)
+        with mock.patch.object(github, 'pr', return_value={'number': 7, 'url': 'u', 'head': 'f', 'sha': 'z', 'state': 'open'}),              mock.patch.object(github, 'checks', return_value={'state': 'failure', 'total': 1, 'pending': 0,
+                                                              'failed': [{'name': 'lint', 'url': '', 'summary': ''}]}),              mock.patch.object(terminal, 'say_to_task', side_effect=origin.Refusal(terminal.STRANGER_NOW)):
+            self.assertFalse(ci.check_task(s, tid)['handed'])
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+
     def test_green_says_nothing(self):
         s = armed(MemoryStore()); tid = self._task_with_pr(s)
         with mock.patch.object(github, 'pr', return_value={'number': 7, 'url': 'u', 'head': 'f', 'sha': 'z', 'state': 'open'}), \

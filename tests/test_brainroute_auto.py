@@ -105,7 +105,7 @@ def test_no_strong_model_anywhere_stays_standard_and_says_so(s):
 def test_the_strong_tier_reaches_the_brain_that_is_built(s):
     s.set_setting('ai_route_mode', 'auto', 'owner'); tid = _task(s, 'hard'); seen = []
     with mock.patch.object(llm, 'make_llm', lambda t, conf, key: seen.append(conf['model']) or (lambda *a, **k: 'ok')):
-        llm.build_llm(s, job='draft', task_id=tid); llm.build_llm(s, job='draft', task_id=_task(s))
+        llm.build_llm(s, job='draft', task_id=tid)('s', 'u'); llm.build_llm(s, job='draft', task_id=_task(s))('s', 'u')   # a route row is a call's
     assert seen == ['claude-opus-5', 'claude-sonnet-5']
     assert [r['Tier'] for r in s.brain_routes()][::-1] == ['strong', 'standard']
 

@@ -2,6 +2,34 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.11 - 2026-11-06
+
+- A plain to-do is the one chat too: no Close out section; it still opens on what came in (WIP, bundles not rebuilt)
+- The stage model has two sections, Came from and the chat: close_out is to_send, and the Advisor names no Close out section
+- An FYI handful says "6 messages", and the dock's files ride its box's own line
+- A line the owner sends is in the chat once, and its files leave the box with the send
+- A follow-up line their reply ended is marked done once, not on every rail build
+- Triage names no repository: it says a job is coding and nothing about where
+- The coding agent picks its checkout: use_repo and find_repos
+- No repository chosen is no hold on the page: the agent picks, the owner can still change it
+- A rail build waiting on the membership worker wakes it instead of waiting out its tick
+- Every task is Came from and its one chat: the Close out column, its tab, its pairing and its notice are gone
+- The settle wait looks again in milliseconds once it has woken the worker
+- Items lay no hidden Close out section: what registers their row's verbs is ItemSections' 'moves'
+- What the Assistant, the agents, the phone and the demo say: the chat, never Close out
+- AI used and 'Talk to this agent fromâ€¦' are quiet buttons in the task's top-right corner, each a popover
+- Docs: a task is Came from and its one chat - no Close out section, stage or step names
+- One prompt box everywhere: every box that talks to an agent is the same component
+- Next turns blue as soon as the move saves: the walk asks for the light answer and reads the rail behind it
+- AI routing: an optional AI per level for the agents' work
+- The mail a task came in on stays in its chat after the owner's first line
+- Coding sessions over ACP: a task's claude or codex opens as one ACP connection in its checkout, the pty its fallback
+- Coding chat over ACP: the plan is a checklist, Stop ends the turn, the Terminal shows once a command printed
+- ACP coding: a file it touches is named from the checkout's long name
+- A stranger's task never runs over ACP, on either road, whatever a caller hands the gate
+- Docs: ACP step 2 - coding sessions on claude and codex, the registry they share, the stranger floor, the live check
+- Regenerate the assistant tools docs page after the Close out wording change
+
 ## 0.3.11.10 - 2026-11-06
 
 - AI routing: Auto by default, effort for one-model brains, plain words in Settings

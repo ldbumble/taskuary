@@ -341,3 +341,53 @@ def everything(store, q: str) -> dict:
     srcs, sets, cons = _sources(store, words, rest), _settings(words), _connectors(store, words)
     totals.update(task=n_tasks, source=len(srcs), setting=len(sets), connector=len(cons))
     return {'q': q, 'hits': tasks + msgs + srcs[:N_SRCS] + sets[:N_PLACES] + cons[:N_PLACES], 'totals': totals, 'capped': capped}
+
+
+# ── WHAT EARLIER TASKS SETTLED (the owner, 2026-11-05, from Hermes' session_search: search before asking) ─────────────────────────────
+# An agent asked the owner for a vendor id, a login route or the account they prefer that an earlier task had already found. Each task's
+# ENDING is kept already - its turn summaries' `did` (general.SUMMARY_TYPE) and an agent's filed report (wrapup.REPORTS) - so this reads
+# those; nothing new is stored. `loose`: the words of a task's title (any two of its longer words), not words an agent typed (all of them).
+N_OUTCOMES, OUTCOME_CHARS = 8, 320
+
+
+def _settled(row) -> str:
+    from .general import SUMMARY_TYPE
+    from .wrapup import report_body
+    if row['ActorType'] != SUMMARY_TYPE: return report_body(row['Body']).split('\n\nLAST MESSAGE', 1)[0]
+    try: j = json.loads(row['Body'] or '{}') or {}
+    except ValueError: return ''
+    return str(j.get('did') or j.get('about') or '') if isinstance(j, dict) else ''
+
+
+def outcomes(store, words, skip=None, limit: int = N_OUTCOMES, loose: bool = False) -> list:
+    """Earlier tasks whose own words or ending match `words`, each with what it settled - its newest ending. Best match first, then newest;
+    never the task asking (`skip`) nor one dropped as no task at all."""
+    from .general import SUMMARY_TYPE
+    from .routing import tokens
+    ws = list(dict.fromkeys(w for w in tokens(' '.join(words) if isinstance(words, (list, tuple)) else words) if not loose or len(w) >= 4))[:8]
+    if not ws: return []
+    need = min(2, len(ws)) if loose else len(ws)
+    hay = "lower(IFNULL(t.Title,'') || ' ' || IFNULL(t.Summary,'') || ' ' || IFNULL(c.Body,''))"
+    rows = store._rows(f"SELECT c.CommentId, c.TaskId, c.ActorType, c.Body, c.CreatedAt, t.Title, t.Summary, t.Status, t.ClosedAt FROM comment c "
+                       f"JOIN task t ON t.TaskId=c.TaskId WHERE (c.ActorType=? OR c.Body LIKE 'AGENT REPORT%' OR c.Body LIKE 'CODER REPORT%') "
+                       f"AND t.Status<>'dropped' AND c.TaskId<>? AND ({' OR '.join(f'{hay} LIKE ?' for _ in ws)}) ORDER BY c.CommentId DESC LIMIT 400",
+                       (SUMMARY_TYPE, int(skip or 0), *[f'%{w}%' for w in ws]))
+    best = {}
+    for r in rows:
+        if r['TaskId'] in best: continue
+        said = ' '.join(_settled(r).split())
+        if not said: continue
+        text = f"{r.get('Title') or ''} {r.get('Summary') or ''} {said}".lower()
+        n = sum(w in text for w in ws)
+        if n >= need: best[r['TaskId']] = (n, r, said)
+    top = sorted(best.values(), key=lambda x: (-x[0], -x[1]['CommentId']))[:limit]
+    return [{'tid': r['TaskId'], 'ref': task_ref(r['TaskId']), 'title': r.get('Title') or '', 'status': r.get('Status') or '',
+             'when': str(r.get('ClosedAt') or r.get('CreatedAt') or '')[:10],
+             'settled': said[:OUTCOME_CHARS] + ('…' if len(said) > OUTCOME_CHARS else '')} for _, r, said in top]
+
+
+def says_outcomes(hits: list) -> str:
+    "The outcomes as an agent reads them: one line each, the task first - '' with none."
+    if not hits: return ''
+    return ("WHAT EARLIER TASKS SETTLED (each one's own ending - what it found and did):\n"
+            + '\n'.join(f"- {h['ref']} ({h['status']}, {h['when']}) {h['title']}: {h['settled']}" for h in hits))

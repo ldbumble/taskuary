@@ -39,8 +39,9 @@ TOOLS = {
                         _S({'id': _INT}, ('id',)), ('GET', '/api/attachments/1')),
     'my_task': ('read', "This task's brief: its title, summary, status and checklist with each to-do's id. Re-read it after a long "
                 "stretch of work. Read-only.", _S({}), ('GET', '/api/tasks/1')),
-    'search_tasks': ('read', "Search the owner's tasks, mail, chats and pull requests by words - what Taskuary's own search box finds. "
-                     "Read-only.", _S({'words': _STR}, ('words',)), ('GET', '/api/search')),
+    'search_tasks': ('read', "Search the owner's tasks, mail, chats and pull requests by words - what Taskuary's own search box finds - "
+                     "and what earlier tasks SETTLED (their own endings: the id found, the route that worked, the account used). Search "
+                     "here before asking the owner a fact. Read-only.", _S({'words': _STR}, ('words',)), ('GET', '/api/search')),
     'person': ('read', "Who a name or address is in the owner's mail, and their latest messages. Read-only.",
                _S({'name': _STR}, ('name',)), ('GET', '/api/agent/messages')),
     'search_knowledge': ('read', "Search the documents in the owner's knowledge base (indexed folders and SharePoint libraries). "
@@ -154,8 +155,10 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'search_tasks':
         from . import search
         got = search.everything(store, a.get('words', ''))
-        return _out(_j([{k: h.get(k) for k in ('type', 'id', 'ref', 'title', 'sub', 'snippet', 'when', 'status') if h.get(k)} for h in got.get('hits', [])][:40]),
-                    fence_it=True)
+        # ...and the endings of earlier tasks on those words (search.outcomes): what one already settled is not asked of the owner again
+        done = search.says_outcomes(search.outcomes(store, a.get('words', ''), skip=tid))
+        return _out(_j([{k: h.get(k) for k in ('type', 'id', 'ref', 'title', 'sub', 'snippet', 'when', 'status') if h.get(k)} for h in got.get('hits', [])][:40])
+                    + (f'\n\n{done}' if done else ''), fence_it=True)
     if name == 'person':
         from . import people
         who = people.resolve(store, a.get('name', ''))

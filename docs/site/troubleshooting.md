@@ -116,7 +116,7 @@ Open the report row: the last run shows what it read, what came out, and the err
 
 ## Reading the audit log
 
-**Settings → Activity log** is the answer to "why did this happen" and "who did this". Every
+**Settings → Activity log** (Developer mode) is the answer to "why did this happen" and "who did this". Every
 consequential action is one row: routed, filed, replied, opened, saved, deleted — with the actor,
 the time, and the thing it happened to.
 

@@ -155,7 +155,8 @@ class DeskRoutes(unittest.TestCase):
     def test_every_shelf_of_the_reports_page_has_its_address_in_the_page_list(self):
         """The 2026-10-26 sweep: "go to reports" opened the Workflows shelf - #report=workflows was the only shelf the model was told."""
         block = concierge.pages_block(store())
-        for shelf in ('reports', 'workflows', 'dashboards', 'playbooks'): self.assertIn(f'#report={shelf}', block)
+        for shelf in ('reports', 'workflows', 'dashboards'): self.assertIn(f'#report={shelf}', block)
+        self.assertIn('#about=playbooks', block, 'the playbooks are About you\'s since 2026-11-06')
 
     def test_any_row_button_named_by_its_own_label_lights(self):
         """The 2026-10-26 sweep: button.light {button: 'Remind me'} missed with "has no remind me button - its row has ..., Remind me",
@@ -531,7 +532,7 @@ class DeskRoutes(unittest.TestCase):
         with concierge.delivering(concierge.PHONE), \
              mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps({'kind': 'playbook'})):
             out, spawn = say(s, ask, None, json.dumps({'kind': 'setup', 'params': {'text': ask}}).join(('CALL: ', '')))
-        self.assertIn('Reports → Playbooks', out['say']); self.assertNotIn('proposal', out); spawn.assert_not_called()
+        self.assertIn('About you → Playbooks', out['say']); self.assertNotIn('proposal', out); spawn.assert_not_called()
 
     def test_the_phone_keeps_its_text_yes_or_no(self):
         s = store(); tid, item = on_table(s)

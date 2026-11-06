@@ -262,10 +262,10 @@ class EachFactGoesWhereItBelongs(unittest.TestCase):
 
     def test_every_save_says_the_document_and_who_reads_it(self):
         s = store()
-        for section, about, want in (('soul', '', ['[SOUL.md](#settings=docs&doc=soul)', 'read by triage']),
-                                     ('counsel', '', ['[COUNSEL.md](#settings=docs&doc=counsel)', 'the morning brief']),
+        for section, about, want in (('soul', '', ['[SOUL.md](#about=docs&doc=soul)', 'read by triage']),
+                                     ('counsel', '', ['[COUNSEL.md](#about=docs&doc=counsel)', 'the morning brief']),
                                      ('style', 'gail@northwind.example', ['for gail@northwind.example', 'By recipient', 'drafts to them']),
-                                     ('care', '', ['[LEARNED.md](#settings=docs&doc=learned)', 'read by triage'])):
+                                     ('care', '', ['[your memory](#about=memory)', 'read by triage'])):
             out = call(s, 'memory.remember', note=f'a {section} fact', section=section, about=about)
             for w in want: self.assertIn(w, out['say'], section)
 

@@ -10,7 +10,7 @@ const src = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta
 test("each of the four views draws through the canvas's frame when it is handed `browse`", () => {
   for (const [file, sig] of [["ConnectorsView.jsx", "export default function ConnectorsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null })"],
     ["ReportsView.jsx", "export default function ReportsView({ browse = null, browseState = {}, onBrowseState = null })"],
-    ["SettingsView.jsx", "export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null })"],
+    ["SettingsView.jsx", "export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null, area = \"settings\" })"],
     ["HubView.jsx", "export default function HubView({ onOpenTask, browse = null, browseState = {}, onBrowseState = null })"]]) {
     const s = src(file);
     assert.ok(s.includes(sig), file);
@@ -86,6 +86,6 @@ test("Docs in the canvas lists every document the tab's rail did, and opens the 
 // the sidebar and "Run a report or workflow" hand no state: the page opened on three chips and no list (the UX walk, 2026-10-22)
 test("Reports opened with no shelf named shows the reports", () => {
   const s = src("ReportsView.jsx");
-  assert.match(s, /: browseState\.section \?\? "reports";/);
+  assert.match(s, /: \["reports", "dashboards", "workflows"\]\.includes\(browseState\.section\) \? browseState\.section : "reports";/);
   assert.doesNotMatch(s, /browseState\.section \?\? null/);
 });

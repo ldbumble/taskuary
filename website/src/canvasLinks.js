@@ -5,7 +5,14 @@
 const REPORT_BUCKETS = ["workflows", "new-invoices", "new-agent"];
 // Settings' pages (SettingsView NAV): a link to any other opens the section list - "#settings=foo" crashed the app on
 // every reload (the final review, 2026-09-29)
-export const SETTINGS_PAGES = ["about", "docs", "config", "policies", "audit", "updates"];
+export const SETTINGS_PAGES = ["config", "policies", "audit", "updates"];
+// ABOUT YOU's sections (the owner, 2026-11-06): You, Docs, Playbooks and Memory left Settings and the Reports page for one page of their
+// own; every old link to them lands here (aboutAt). `you` is the identity page, opened at once
+export const ABOUT_PAGES = ["you", "docs", "playbooks", "memory"];
+const aboutAt = (section, n, more = {}) => ({ kind: "browse", area: "about",
+  state: { section: ABOUT_PAGES.includes(section) ? section : null, open: section === "you" ? "you" : null, ...more }, n });
+// a document by name: LEARNED.md's own view is Memory's sentences, its What changed list is still the document's
+const docAt = (doc, view, n) => (doc === "learned" && !view ? aboutAt("memory", n) : aboutAt("docs", n, { open: `d:${doc}`, ...(view ? { view } : {}) }));
 
 // WHO A REPORT IS SENT TO, ASKED IN THE CHAT (the owner, 2026-11-02: "send this report to gail@northwind.example every run"): the
 // Assistant brings the builder up as #report=<id>&line=send&to=<address>[&how=always] (concierge.report_page) and the route card's box is
@@ -31,15 +38,17 @@ export function canvasRequestFromHash(hash, n = 0) {
   }
   if ((m = /^#report=([^&]+)/.exec(h))) {
     const v = decodeURIComponent(m[1]);
+    // PLAYBOOKS LEFT THE REPORTS PAGE for About you (2026-11-06): the shelf's old link, and New playbook asked for (New's Playbook tab) -
+    // `newPb` numbers the ask, so a second one opens the dialog again
+    if (v === "playbooks") return aboutAt("playbooks", n);
+    if (v === "new-playbook") return aboutAt("playbooks", n, { newPb: n + 1 });
     // a draft New built (draftHandoff): its kind's shelf, the draft open
     const state = v === "new" ? { section: "reports", open: "new-report" }
       : v === "draft" ? { section: "reports", open: "draft" } : v === "draft-workflow" ? { section: "workflows", open: "draft" }
       // the dashboards' shelf: the list, a new one being described, or a draft New built (dashboards.py)
       : v === "dashboards" ? { section: "dashboards", open: null } : v === "new-dashboard" ? { section: "dashboards", open: "new-dashboard" }
       : v === "draft-dashboard" ? { section: "dashboards", open: "draft" }
-      : v === "workflows" ? { section: "workflows", open: null } : v === "playbooks" ? { section: "playbooks", open: null }
-        // ...and New playbook asked for (New's Playbook tab): the shelf, its dialog open - `newPb` numbers the ask, so a second one opens it again
-        : v === "new-playbook" ? { section: "playbooks", open: null, newPb: n + 1 }
+      : v === "workflows" ? { section: "workflows", open: null }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
           : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}),
             ...(routeOfHash(h) ? { route: routeOfHash(h) } : {}) }
@@ -59,6 +68,11 @@ export function canvasRequestFromHash(hash, n = 0) {
   // one section of Connections, its cards open ("#connections=AI — voice": the crossed-out mic's Set up voice AI)
   if ((m = /^#connections=([^&]+)/.exec(h))) return { kind: "browse", area: "connections", state: { section: decodeURIComponent(m[1]), open: null }, n };
   if (/^#connections$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null }, n };
+  // About you, and one section of it (#about=docs&doc=soul[&view=changes], #about=new-playbook)
+  if ((m = /^#about(?:=([\w-]*))?(?:&doc=(\w+))?(?:&view=(\w+))?/.exec(h))) {
+    if (m[1] === "docs" && m[2]) return docAt(m[2], m[3], n);
+    return m[1] === "new-playbook" ? aboutAt("playbooks", n, { newPb: n + 1 }) : aboutAt(m[1] || "", n);
+  }
   if (/^#settings$/.test(h)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
   // ...and a topic and an open post on it (#hub=<topic>&post=<id>): Back from an opened post left the Hub entirely - the address said
   // #hub whatever was open, so the post's opening was no step of history (2026-10-26)
@@ -67,26 +81,27 @@ export function canvasRequestFromHash(hash, n = 0) {
     return { kind: "browse", area: "hub", state: section || open != null ? { section, open } : {}, n };
   }
   // one document, and the view to open it on (the opening screen's "learned this week" -> LEARNED.md, What changed)
-  if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return { kind: "browse", area: "settings", state: { section: "docs", open: `d:${m[1]}`, ...(m[2] ? { view: m[2] } : {}) }, n };
+  // ...on About you now (2026-11-06)
+  if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return docAt(m[1], m[2], n);
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
     const page = decodeURIComponent(m[1] || "config") || "config", group = m[2] ? decodeURIComponent(m[2]) : "";
     // Profiles is a section of its own (2107f0d2): its link opens that section's list. PLAYBOOKS LEFT SETTINGS for the Reports page
     // (the owner, 2026-10-21) - an old link to them still lands, on their new shelf
-    if (page === "playbooks") return { kind: "browse", area: "reports", state: { section: "playbooks", open: null }, n };
+    // ...and About you took them, with Docs, Memory and the identity page (2026-11-06)
+    if (page === "playbooks" || page === "docs" || page === "memory") return aboutAt(page, n);
+    if (page === "about") return aboutAt("you", n);
     if (page === "profiles") return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
-    // ...and the old Verdicts & notes page is LEARNED.md now (the owner, 2026-10-27): its old link lands there
-    if (page === "memory") return { kind: "browse", area: "settings", state: { section: "docs", open: "d:learned" }, n };
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     // ...and &key=<knob>: the one setting the Assistant brought the page up for (concierge._route), outlined and in view
     // ...and on a page of its own, its one button (#settings=updates&key=update: "update taskuary" brings Updates up with its button lit)
     const knob = (page !== "config" || group) && /&key=([^&]+)/.test(h) ? decodeURIComponent(/&key=([^&]+)/.exec(h)[1]) : "";
-    return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page, ...(knob ? { knob } : {}) }, n };
+    return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page, ...(knob ? { knob } : {}) }, n };
   }
   // a connector card's "new playbook for this connection" (#playbook=new:<type>): the Playbooks shelf, its New playbook asked for that card
-  if ((m = /^#playbook=new:([\w-]+)/.exec(h))) return { kind: "browse", area: "reports", state: { section: "playbooks", open: null, newFor: m[1] }, n };
-  // a playbook: Reports -> Playbooks, that one open in its editor (#playbook=new is a new one)
-  if ((m = /^#playbook=([\w.-]+)/.exec(h))) return { kind: "browse", area: "reports", state: { section: "playbooks", open: `pb:${m[1]}` }, n };
+  if ((m = /^#playbook=new:([\w-]+)/.exec(h))) return aboutAt("playbooks", n, { newFor: m[1] });
+  // a playbook: About you -> Playbooks, that one open in its editor (#playbook=new is a new one)
+  if ((m = /^#playbook=([\w.-]+)/.exec(h))) return aboutAt("playbooks", n, { open: `pb:${m[1]}` });
   // "Manage profiles": the Profiles section, where every profile is a card beside Manage profiles and + New profile
   if (/^#profiles(?:$|=)/.test(h)) return { kind: "browse", area: "settings", state: { section: "profiles", open: null }, n };
   return null;
@@ -103,16 +118,20 @@ export function hashFor(area, s = {}) {
   if (area === "connections") return s.connector === "cli-agents" ? "#cli-agents"
     : s.connector ? `#connector=${s.connector}${s.chats != null ? `&chats=${enc(s.chats)}` : ""}`
     : s.section ? `#connections=${enc(s.section)}` : "#connections";
+  if (area === "about") {
+    const p = s.section;
+    if (p === "docs") return /^d:\w+$/.test(String(s.open || "")) ? `#about=docs&doc=${s.open.slice(2)}${s.view ? `&view=${s.view}` : ""}` : "#about=docs";
+    if (p === "playbooks") return /^pb:[\w.-]+$/.test(String(s.open || "")) ? `#playbook=${s.open.slice(3)}` : "#about=playbooks";
+    return ABOUT_PAGES.includes(p) ? `#about=${p}` : "#about";
+  }
   if (area === "settings") {
     const p = s.section;
     if (!p) return "#settings";
-    if (p === "docs") return /^d:\w+$/.test(String(s.open || "")) ? `#settings=docs&doc=${s.open.slice(2)}${s.view ? `&view=${s.view}` : ""}` : "#settings=docs";
     if (p === "config") return s.open ? `#settings=config&group=${enc(s.open)}${s.knob ? `&key=${enc(s.knob)}` : ""}` : "#settings=config";
     return `#settings=${p}${s.knob ? `&key=${enc(s.knob)}` : ""}`;
   }
   if (area === "reports") {
     if (s.section === "workflows") return s.open === "draft" ? "#report=draft-workflow" : REPORT_BUCKETS.includes(s.open) ? `#report=${s.open}` : "#report=workflows";
-    if (s.section === "playbooks") return /^pb:[\w.-]+$/.test(String(s.open || "")) ? `#playbook=${s.open.slice(3)}` : "#report=playbooks";
     if (s.section === "dashboards") return typeof s.open === "number" ? `#report=${s.open}` : s.open === "draft" ? "#report=draft-dashboard"
       : s.open === "new-dashboard" ? "#report=new-dashboard" : "#report=dashboards";
     // ...a run's Fix with AI (&fix=) is an act the link asks for once, not a place: Back to it must not ask again

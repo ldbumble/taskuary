@@ -219,27 +219,36 @@ const ChannelMark = ({ channel }) => {
 // four WhatsApp messages in a minute, 2026-11-05: the same "WhatsApp message from … · sent to Taskuary" over each)
 // ...icon, who and when - no "sent to Taskuary" (the owner, 2026-11-05: every input goes to it; the words said nothing)
 const sameAs = (a, b) => !!a && !!b && a.who === b.who && String(a.channel || "") === String(b.channel || "");
-const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => (
-  <div key={i} className={`tq-aui-arrived${sameAs(all[i - 1], x) ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
-    <span className="tq-aui-arrived-head">{sameAs(all[i - 1], x) ? when(x.at) || "" : <><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at)].filter(Boolean).join(" · ")}</>}</span>
-    <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
-  </div>));
+// ...and in the same minute as the one before, no head at all: "6:22 PM" over three lines in a row said nothing (the scenario run, 2026-11-06)
+const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => {
+  const more = sameAs(all[i - 1], x), stamp = x.at ? when(x.at) : "", again = more && stamp === (all[i - 1].at ? when(all[i - 1].at) : "");
+  return <div key={i} className={`tq-aui-arrived${more ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
+    {!again && <span className="tq-aui-arrived-head">{more ? stamp : <><ChannelMark channel={x.channel} />
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, stamp].filter(Boolean).join(" · ")}</>}</span>}
+    <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{x.words}</span>
+  </div>;
+});
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
   const at = useAuiState((s) => s.message.createdAt);
   // ...a brief with no mail but a SHORT line of its own is a trigger of Taskuary's ("Signed in to the site") - on the right, with the time;
-  // a long one is Taskuary's instructions to the agent, never drawn
+  // a long one is Taskuary's instructions to the agent, never drawn - nor one carrying only the owner's own reply: a short brief over it drew
+  // Taskuary's own "THE THREAD CHANGED: …" as a trigger on the right (the scenario run, 2026-11-06)
   const words = useAuiState((s) => textOf(s.message));
+  const prev = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === s.message.id), p = ms[i - 1];
+    return p?.role === "user" && !p.metadata?.custom?.brief ? (p.createdAt ? when(new Date(p.createdAt)) : "") : null; });
   if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
-    : words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
+    : !mail?.length && words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
       <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{at ? when(new Date(at)) : ""}</span>
       <span className="tq-aui-arrived-words">{words}</span></div></MessagePrimitive.Root> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
+  // ...three lines typed in a row read as one, as a sender's burst does (Arrived): the head once, then a new minute's time alone, a same minute nothing
+  const stamp = at ? when(new Date(at)) : "";
   if (chat) return (
-    <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
-      <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{at ? ` · ${when(new Date(at))}` : ""}</div>
-      <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
+    <MessagePrimitive.Root className={`tq-aui-message tq-aui-user${prev !== null ? " tq-aui-user-more" : ""}`}>
+      {prev === null ? <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>
+        : stamp && stamp !== prev ? <div className="tq-aui-user-head">{stamp}</div> : null}
+      <div className="tq-aui-user-bubble" dir="auto"><MessagePrimitive.Parts /></div>
     </MessagePrimitive.Root>);
   return brief ? (
     <MessagePrimitive.Root className="tq-aui-message tq-aui-brief">

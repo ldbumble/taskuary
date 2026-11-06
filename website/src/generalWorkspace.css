@@ -16,6 +16,10 @@
 .tq-aui-agent-body { min-width: 0; max-width: 100%; padding: 5px 3px; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body * { max-width: 100%; min-width: 0; box-sizing: border-box; }
 .tq-aui-agent-body p, .tq-aui-agent-body li { max-width: 110ch; }
+/* right-to-left words read right to left: each paragraph takes its own direction from its first letter, so a Hebrew line's "!" ends it
+   instead of opening it, and an English answer quoting one stays left to right; a bubble of them also sits right (dir=auto, GeneralWorkspace)
+   (the scenario run, 2026-11-06) */
+.tq-aui-agent-body p, .tq-aui-agent-body li, .tq-aui-user-bubble p, .tq-aui-arrived-words, .tq-aui-ask { unicode-bidi: plaintext; }
 .tq-aui-agent-body pre, .tq-aui-agent-body code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body table { width: 100%; table-layout: fixed; }
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }
@@ -163,6 +167,9 @@
 /* ...and the summary keeps its breath under the agent's own words when they are shown over it (AgentSummary's first head has no top margin) */
 .tq-aui-chat .tq-aui-agent-body > div:not(.tq-aui-summary):not(.tq-aui-live-steps) + .tq-aui-summary[data-tq-summary=open] { margin-top: 12px; }
 .tq-aui-chat .tq-aui-user-head { justify-self: end; color: #6b6559; font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
+/* ...the owner's next line in a row sits close under the one before, a new minute's time alone over it (GeneralWorkspace UserMessage) */
+.tq-aui-chat .tq-aui-message:has(+ .tq-aui-user-more) { margin-bottom: 8px; }
+.tq-aui-chat .tq-aui-user-more .tq-aui-user-head { font-weight: 500; color: #8b877e; }
 /* ...THE CHAT TAKES THE ROOM (the owner, 2026-11-05: "let's make the ui components as minimal as possible to leave space for that chat"): its box
    sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),
    no line explaining the two Sends */

@@ -76,6 +76,16 @@ def test_a_coding_task_on_claude_runs_over_acp_and_its_turn_is_the_chat(world, m
     assert '$' in t.scrollback() and 'git status --short' in t.scrollback() and 'M totals.py' in t.scrollback()
 
 
+def test_what_each_turn_used_is_on_the_task_s_ai_use(world, monkeypatch):
+    "The adapter's count of each turn, added onto the session's route row - a session over ACP files no CLI log on exit, as a pane does."
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_CODE', str(repo / 'totals.py')); monkeypatch.setenv('FAKE_ACP_USAGE', '1')
+    t = open_(s, tid, repo)
+    assert idle(t)
+    row = s.brain_route_of_session(t.sid)
+    assert (row['Job'], row['TaskId'], row['Ran'], row['TokensIn'], row['Cached'], row['TokensOut'], row['Calls']) ==            ('coding', tid, 'claude-opus-5-5', 3412, 3000, 250, 1)
+
+
 def test_its_registry_entry_is_what_the_board_peers_and_the_phone_read(world, monkeypatch):
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_CODE', str(repo / 'totals.py'))

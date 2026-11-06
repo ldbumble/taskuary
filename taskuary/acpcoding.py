@@ -34,8 +34,13 @@ _SHELL = re.compile(r'^(bash|powershell|pwsh|shell|execute|terminal|local_shell|
 def wanted(store, profile: dict, mode: str, task_id) -> bool:
     """Does this coding session run over ACP: a task's session, the owner's own (a stranger's runs on argv's floor), the switch on, and a
     CLI whose adapter we ship (claude, codex). A native-ACP CLI keeps its pty here until its coding road is checked; any other CLI has none."""
-    from . import agents, clis
+    from . import agents, clis, origin
     if not str(task_id or '').isdigit() or mode != 'full' or not agents.acp_on(store): return False
+    # ...and A STRANGER'S TASK NEVER, whatever mode a caller passed: its floor (the CLI's reviewer, --strict-mcp-config, its settings file and
+    # hooks, a trimmed environment) is argv's, and ACP's permission answer would allow what that reviewer refuses
+    try:
+        if origin.of_task(store, int(task_id))[0] == 'stranger': return False
+    except Exception: return False                         # who wrote it unknown: not over ACP
     return bool(clis.acp_adapter(str(profile.get('cmd') or '')))
 
 

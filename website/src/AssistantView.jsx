@@ -832,8 +832,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}
                         {/* ...an FYI or a report made a task says where it went, quietly, its ref the way to the task (movedFyi.js) */}
-                        {!!i.moved && <span className="tq-pile-moved" data-tq-moved={i.moved.ref}><span className="w">Moved to Tasks ·</span><span className="ref" role="link"
-                          title={`Open ${i.moved.ref}`} onClick={(e) => { e.stopPropagation(); onPull(i.key); }}>{i.moved.ref}</span></span>}
+                        {/* ...its ref first in the page, drawn last (row-reverse): squeezed, the words drop out whole instead of reading "Mo…" */}
+                        {!!i.moved && <span className="tq-pile-moved" data-tq-moved={i.moved.ref}><span className="ref" role="link"
+                          title={`Open ${i.moved.ref}`} onClick={(e) => { e.stopPropagation(); onPull(i.key); }}>{i.moved.ref}</span><span className="w">Moved to Tasks ·</span></span>}
                         {!!word && (
                           <span className={`tq-pile-word${goal ? " keep" : ""}`}
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>

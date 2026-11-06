@@ -161,8 +161,12 @@
 .tq-pile-word i { font-style: normal; font-size: 11px; line-height: 1; margin-right: 4px; filter: saturate(.9); }
 /* an FYI Should be a task made a task (movedFyi.js): its row stays in FYI, quieter, saying where it went - the ref the way to the task */
 .tq-pile-row.moved .t b { color: #8a8478; }
-.tq-pile-moved { flex: 0 1 auto; min-width: 0; display: inline-flex; gap: 4px; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; white-space: nowrap; }
-.tq-pile-moved .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* ...one line high, the ref at its end: with no room for "Moved to Tasks ·" whole, the words wrap onto the hidden second line and the ref
+   stays - cut, they read "Mo…" beside a squeezed title (the scenario run, 2026-11-06); the row's hover says where it went in full */
+/* ...and it gives way before the title, down to its ref: the room the words left goes to the title, not to a gap */
+.tq-pile-moved { flex: 0 1000 auto; min-width: 5em; display: inline-flex; flex-direction: row-reverse; flex-wrap: wrap; align-content: flex-start; column-gap: 4px;
+  height: 1.5em; overflow: hidden; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; white-space: nowrap; }
+.tq-pile-moved .w { flex: 0 0 auto; }
 .tq-pile-moved .ref { flex: 0 0 auto; color: #55697a; font-variant-numeric: tabular-nums; border-bottom: 1px solid #c9d2d9; cursor: pointer; }
 .tq-pile-moved .ref:hover { border-bottom-color: #55697a; }
 .tq-moved .tq-ref-link { font: inherit; font-weight: 600; padding: 0; background: none; border: 0; border-bottom: 1px solid #c9d2d9; }

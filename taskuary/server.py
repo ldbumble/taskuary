@@ -5332,10 +5332,12 @@ def _owner_history(request: Request, tid: int):
 def agent_messages(request: Request, task_id: int, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '',
                    limit: int = 20):
     """`taskuary --search` from an agent's own shell: the owner's mail and messages by sender, subject, words and date (mailsearch)."""
-    from . import mailsearch
+    from . import mailsearch, search
     _owner_history(request, task_id)
     hits = mailsearch.search(store, sender, subject, words, since, until, limit)
-    return {'data': hits, 'says': mailsearch.says(hits)}
+    # ...and what earlier tasks settled on those words (search.outcomes): the CLI's one search reads both, so it asks the owner neither
+    done = search.outcomes(store, f'{subject} {words}', skip=task_id) if (words or subject).strip() else []
+    return {'data': hits, 'outcomes': done, 'says': mailsearch.says(hits) + (f'\n\n{search.says_outcomes(done)}' if done else '')}
 
 @app.get('/api/agent/messages/{mid}')
 def agent_message(mid: str, request: Request, task_id: int):

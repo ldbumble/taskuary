@@ -249,6 +249,11 @@ def thinking(store) -> dict | None:
         out = {'at': s.get('triage_last_error_at') or _now()}
         store.set_setting(THINKING, json.dumps(out), 'system')
     held = f" {n} {_plural(n, 'is', 'are')} waiting for me so far." if n else ''
+    # a spent budget is said as itself, once: no "trouble thinking", and not again as the error under it (llm.BudgetSpent)
+    from .llm import budget_said
+    if err and (spent := budget_said(err)):
+        return {'title': spent, 'detail': f"Mail is still coming in and I'm holding all of it.{held} Nothing is lost.", 'since': out['at'],
+                'error': '', 'held': n}
     if err: return {'title': "I'm having trouble thinking for a few minutes",
                     'detail': f"Mail is still coming in and I'm holding all of it.{held} Nothing is lost.", 'since': out['at'], 'error': err, 'held': n}
     return {'title': "I'm catching up", 'detail': f"I'm sorting the {n} {_plural(n, 'message', 'messages')} I was holding. Nothing is lost.",

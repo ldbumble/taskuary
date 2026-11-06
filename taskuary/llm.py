@@ -57,6 +57,39 @@ GATEWAY_NOT_GATEWAY = ('That address answered with a web page, not the AI gatewa
 GATEWAY_CODE = "The access code didn't work - copy all of it again and press Connect."
 GATEWAY_FAULT = 'The gateway answered with an error of its own - try again in a minute, or ask whoever sent your access code.'
 LOCAL_HOSTS = ('localhost', '127.0.0.1', '::1')
+# A GATEWAY THAT SCALES TO ZERO (Cloud Run) answers its first request only once it has started, which took past the 15 s every other
+# provider's list gets: Connect said "Couldn't reach that address" about a gateway that was booting, and the model list came back empty,
+# so no job got its model. Quick to give up on an address that is not there, patient with one that is.
+GATEWAY_WAIT = (15, 90)
+# A SPENT BUDGET IS NOT A BROKEN AI (the owner's gateway, 2026-11-06): LiteLLM answers 422 {"error": {"type": "budget_exceeded", "message":
+# "Budget has been exceeded! Team=<id> Current cost: ..."}} once a team's budget is used. Read as an effort or a format refusal it was asked
+# twice more, and shown raw - a team id and a cost the person cannot act on. It is said in one line, and the card rests (brainroute.spend).
+BUDGET_LINE = "{name}'s monthly budget is used up - it answers again when the budget resets or is raised"
+BUDGET_REST = 3600         # seconds before a spent card is asked again: a budget raised comes back within the hour, and no poll hammers it
+_BUDGET = re.compile(r'budget_exceeded|budget has been exceeded|exceeded budget', re.I)
+
+
+class BudgetSpent(RuntimeError):
+    "The gateway turned the call away on its budget. `until` is when the router asks it again; `unavailable` lets a backup take the call."
+    unavailable = True
+    def __init__(self, line: str, rest: int = BUDGET_REST):
+        from datetime import datetime, timedelta
+        super().__init__(line); self.until = datetime.now() + timedelta(seconds=rest)
+
+
+def budget_said(text) -> str:
+    "The spent-budget line inside an error however it was wrapped ('AI triage failed (...)'), else ''."
+    m = re.search(r"[A-Za-z][\w .-]{0,40}?" + re.escape(BUDGET_LINE.split('{name}')[1]), str(text or ''))
+    return m.group(0) if m else ''
+
+
+def budget_spent(r) -> bool:
+    "Did the gateway refuse on its budget? Its error's type, else its words - never a status alone: a 422 is also a refused effort or format."
+    st, text = getattr(r, 'status_code', 200), getattr(r, 'text', '')
+    if not isinstance(st, int) or st < 400 or not isinstance(text, str): return False
+    try: e = json.loads(text).get('error')
+    except (ValueError, AttributeError): e = None
+    return (isinstance(e, dict) and str(e.get('type') or '') == 'budget_exceeded') or bool(_BUDGET.search(text))
 
 
 def gateway_url(raw) -> str:
@@ -86,7 +119,7 @@ def gateway_problem(cfg: dict, key: str) -> str:
     try: base = gateway_base(cfg)
     except ValueError as e: return str(e)
     if not base: return GATEWAY_MISSING
-    try: r = requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=15, allow_redirects=False)
+    try: r = requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=GATEWAY_WAIT, allow_redirects=False)
     except requests.RequestException: return GATEWAY_SILENT
     if r.status_code >= 500: return GATEWAY_FAULT
     if (body := _json(r)) is None: return GATEWAY_NOT_GATEWAY
@@ -462,16 +495,21 @@ def _scrub(brain): return _Scrubbed(brain) if brain else brain
 
 class _Cooling:
     """A CLI brain that, refused on its usage allowance with a time it comes back, says so to the router (brainroute.cool): the
-    next call goes to a backup until then, instead of to the brain that will refuse it again. The refusal itself still raises."""
+    next call goes to a backup until then, instead of to the brain that will refuse it again. The refusal itself still raises.
+    ...and an AI card whose budget is spent (BudgetSpent) rests the same way - and while it rests it is not asked at all: the call
+    raises the same line at once, so a poll with no backup holds its mail without a request per message (brainroute.spend)."""
     def __init__(self, store, pick, brain):
         for k, v in (('_store', store), ('_pick', pick), ('_brain', brain)): object.__setattr__(self, k, v)
     def __call__(self, *a, **kw):
-        try: return self._brain(*a, **kw)
+        from . import brainroute
+        if (line := brainroute.spent(self._store, self._pick)): raise BudgetSpent(line)
+        try: out = self._brain(*a, **kw)
         except Exception as e:
-            if getattr(e, 'until', None):
-                from . import brainroute
-                brainroute.cool(self._store, self._pick, e.until)
+            if isinstance(e, BudgetSpent): brainroute.spend(self._store, self._pick, str(e), e.until)
+            elif getattr(e, 'until', None): brainroute.cool(self._store, self._pick, e.until)
             raise
+        brainroute.unspend(self._store, self._pick)
+        return out
     def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
     def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)
@@ -555,7 +593,7 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                 if gear == 'strong' and not chosen_model and str(config.get('strong_model') or '').strip():
                     config = {**config, 'model': str(config['strong_model']).strip()}
                 if chosen_model: config = {**config, 'model': chosen_model}
-                return make_llm(full['Type'], config, full.get('Secret'))
+                return _Cooling(store, candidate, make_llm(full['Type'], config, full.get('Secret')))
         return None
 
     brains = [(candidate, one(candidate, i == 0)) for i, candidate in enumerate(picks)]
@@ -808,7 +846,7 @@ def _list_models(t, cfg: dict, key: str) -> list:
         if t == 'ollama' and base.endswith('11434'): base += '/v1'
         if not base: return []
         url, h, k = f'{base}/models', ({'Authorization': f'Bearer {key}'} if key else {}), 'data'
-    r = requests.get(url, headers=h, timeout=15)
+    r = requests.get(url, headers=h, timeout=GATEWAY_WAIT if t == 'hipaa_ai' else 15)
     if r.status_code != 200: raise RuntimeError(f'{t} answered {r.status_code}: {str(r.text)[:160]}')
     return sorted({m.get('id') for m in (r.json().get(k) or []) if m.get('id')})
 
@@ -824,7 +862,11 @@ def _list_models(t, cfg: dict, key: str) -> list:
 EFFORT_TAKERS = ('anthropic', 'openai', 'azure_openai', 'hipaa_ai')
 EFFORT_WORDS = ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 _NO_EFFORT = set()         # (type, endpoint, model) that refused an effort - asked plainly from then on
-_EFFORT_REFUSED = re.compile(r'reasoning_effort|reasoning\.effort|effort|output_config', re.I)
+_EFFORT_REFUSED = re.compile(r'reasoning_effort|reasoning\.effort|\beffort\b|output_config|thinking', re.I)
+# A GATEWAY TURNS AN EFFORT INTO A THINKING BUDGET for a Claude model behind it (LiteLLM: low 1024, high 4096 tokens), and Claude
+# refuses a budget that is not under max_tokens, or thinking beside the forced tool a json_schema becomes - in words that never say
+# "effort". THIS call is asked again without it; the model is not written off, since a call with more room takes it.
+_THINK_REFUSED = re.compile(r'budget_tokens|thinking may not be enabled', re.I)
 
 
 def split_effort(model: str) -> tuple:
@@ -964,7 +1006,10 @@ def make_llm(t, cfg: dict, key: str):
         # be handed a response_format. Walk the grid until one works.
         content = ([{'type': 'image_url', 'image_url': {'url': f'data:{ct};base64,{b64}'}}
                     for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
-        msgs = [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}]
+        # AN EMPTY TURN IS NO TURN: Gemini and Claude behind a gateway both refuse one ("contents.parts must not be empty", "text content
+        # blocks must be non-empty") where OpenAI let it by - a blank system is left out, and a blank ask is the system's words
+        if not str(user or '').strip() and not images: system, content = '', system
+        msgs = ([{'role': 'system', 'content': system}] if str(system or '').strip() else []) + [{'role': 'user', 'content': content}]
         last = None
 
         def once(fmt):
@@ -978,9 +1023,13 @@ def make_llm(t, cfg: dict, key: str):
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                    # a spent budget first: it is no refused effort or format, and asking again in another shape only spends a request
+                    if budget_spent(r): raise BudgetSpent(BUDGET_LINE.format(name='HIPAA AI' if t == 'hipaa_ai' else t))
                     # ...a proxy may turn it down with a 422 of its own (the gateway in front of another provider's model)
-                    if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
-                        _no_effort(ek, r.text); r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                    said = r.text or ''
+                    if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(said):
+                        if not _THINK_REFUSED.search(said): _no_effort(ek, said)
+                        r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
                         aiusage.openai(r.json())
                         ch = (r.json().get('choices') or [{}])[0]

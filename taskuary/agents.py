@@ -662,6 +662,8 @@ def brain_key(store, pick: str, cfg: dict = None) -> str:
 def availability_failure(error) -> bool:
     """Can the same untouched work safely be retried on a backup provider?"""
     text = str(error or '')
+    # ...and an AI card resting on its spent budget (llm.BudgetSpent) says so itself
+    if getattr(error, 'unavailable', False) is True: return True
     return isinstance(error, (FileNotFoundError, PermissionError)) or bool(
         _UNAVAILABLE.search(text) or _SIGNED_OUT.search(text) or _DENIED.search(text) or _NO_HOME.search(text))
 

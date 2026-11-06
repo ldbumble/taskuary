@@ -368,7 +368,9 @@ def summary_marker(text: str, letters=()) -> tuple:
     if not m and not _SUMMARY_CUT.search(t): return text, None
     rest, bare = without_summary(t).strip(), lambda: (rest or _SUMMARY_TAGS.sub('', t).strip(), None)
     if not m: return bare()
-    try: j = json.loads(m.group(1).strip())
+    # ...read however the model wrapped it: Gemini and Claude behind a gateway put a ```json fence inside the tags (llm.json_of)
+    from .llm import json_of
+    try: j = json_of(m.group(1))
     except ValueError: return bare()
     if not isinstance(j, dict): return bare()
     flat = lambda x, n: without_letters(' '.join(str(x or '').split()), letters)[:n]

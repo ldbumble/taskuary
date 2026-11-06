@@ -9,6 +9,7 @@ import contextlib, json, os, re, threading, time
 from loguru import logger
 
 from .store import task_ref
+from .llm import json_of            # a fence anywhere, prose before it: how the gateway's models answer
 
 
 # normpath('') is '.', which is a real relative path and would make every checkout-less note
@@ -366,7 +367,7 @@ def likely_overlap(store, tid: int, ps: list) -> tuple:
                             + (', '.join(p['files'][:15]) or 'none yet') for p in ps)
         out = llm(OVERLAP_SYSTEM, f"New task: \"{t.get('Title') or ''}\" - {str(t.get('Summary') or '')[:1500]}\n\n"
                                   f'Running in the same checkout:\n{running}', max_tokens=200)
-        j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+        j = json_of(out)
         if j.get('overlap'):
             return next((p for p in ps if p['ref'] == str(j.get('with') or '')), ps[0]), str(j.get('why') or '')
         return None, 'assessed: no overlap'      # an answer, as distinct from no assessment (PW-174)

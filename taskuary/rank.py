@@ -29,6 +29,7 @@ from datetime import datetime
 from loguru import logger
 
 from .store import task_ref
+from .llm import json_of            # a fence anywhere, prose before it: how the gateway's models answer
 from . import kinds as task_kinds
 
 BASE = 0.5
@@ -191,7 +192,7 @@ def rerank(store, force: bool = False) -> int:
             items.append(f"{task_ref(q['TaskId'])} | {str(t.get('Title') or '')[:90]} | signals: {q.get('Why') or ''} | "
                          f"{str(t.get('Summary') or '')[:160]}")
         out = llm(RERANK_SYSTEM, 'Items:\n' + '\n'.join(items), max_tokens=900)
-        j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+        j = json_of(out)
         order = [str(o.get('ref') or '') for o in j.get('order') or []]
         whys = {str(o.get('ref') or ''): str(o.get('why') or '')[:60] for o in j.get('order') or []}
         n, k = 0, len(order)
@@ -275,7 +276,7 @@ def _order(store, llm, rows: list):
     """One listwise call over these arrivals; its order IS their rank."""
     try:
         out = llm(RANK_SYSTEM, 'Arrivals:\n' + '\n'.join(_arrival_line(r) for r in rows), max_tokens=900)
-        j = json.loads(re.sub(r'^```(json)?|```$', '', (out or '').strip(), flags=re.M))
+        j = json_of(out)
         order = [str(o.get('ref') or '') for o in j.get('order') or []]
         whys = {str(o.get('ref') or ''): str(o.get('why') or '')[:60] for o in j.get('order') or []}
         bad = {str(o.get('ref') or ''): ' '.join(str(o.get('danger') or '').split())[:160] for o in j.get('order') or []

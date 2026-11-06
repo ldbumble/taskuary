@@ -439,6 +439,41 @@ def cool(store, pick: str, until: datetime) -> None:
     except Exception as e: logger.debug(f'brainroute: could not rest {pick} - {e}')
 
 
+SPENT_KEY = 'ai_route_spent'      # {pick: the line to say} for an AI card resting on a spent budget (llm.BudgetSpent)
+
+
+def _spent_map(store) -> dict:
+    import json
+    try: d = json.loads(str(store.get_setting(SPENT_KEY) or '').strip() or '{}')
+    except ValueError: d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def spend(store, pick: str, line: str, until: datetime) -> None:
+    "Rest `pick` on its spent budget until `until`, and keep the line it is said in."
+    import json
+    if not pick: return
+    cool(store, pick, until)
+    try: store.set_setting(SPENT_KEY, json.dumps({**_spent_map(store), pick: str(line)[:300]}), 'router')
+    except Exception as e: logger.debug(f'brainroute: could not note {pick} spent - {e}')
+
+
+def spent(store, pick: str) -> str:
+    "The spent-budget line while `pick` still rests on it, else '' - a rest that ran out is asked again."
+    line = _spent_map(store).get(pick) if pick else None
+    return str(line) if line and pick in cooldowns(store) else ''
+
+
+def unspend(store, pick: str) -> None:
+    "It answered: whatever rest it was on is over."
+    import json
+    d = _spent_map(store)
+    if pick not in d: return
+    d.pop(pick)
+    try: store.set_setting(SPENT_KEY, json.dumps(d), 'router')
+    except Exception as e: logger.debug(f'brainroute: could not clear {pick} spent - {e}')
+
+
 def cap(store):
     "The owner's limit on strong calls a day, or None (blank, the default: no cap)."
     v = str(store.get_setting(CAP_KEY) or '').strip()

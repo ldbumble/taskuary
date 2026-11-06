@@ -96,6 +96,9 @@ export function AttachChip({ name, icon = null, thumb = "", warn = "", note = ""
 export const ATTACH_FEW = 3;
 export const attachSplit = (n, few = ATTACH_FEW) => (n > few + 1 ? few : n);   // how many chips stand in the row: "+1 more" is never worth its chip
 const isChip = (c) => React.isValidElement(c) && c.type === AttachChip;
+// ...INSIDE THE BOX, on its one line: left of the words, never more than a third of it, so the box stays one thin line (the owner, 2026-11-06)
+export const INLINE_CHIPS = { flex: "0 1 auto", maxWidth: "34%", pb: 0 };
+
 export function AttachRow({ children, sx, few = ATTACH_FEW, ...rest }) {
   const [at, setAt] = useState(null);
   const all = React.Children.toArray(children), chips = all.filter(isChip), other = all.filter((c) => !isChip(c)), k = attachSplit(chips.length, few), more = chips.slice(k);

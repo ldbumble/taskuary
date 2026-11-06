@@ -19,7 +19,9 @@ test("the item, the paperclip's files and a dropped picture are one chip each, i
   assert.match(imgs, /export function AttachChip\(/);
   assert.match(imgs, /display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0\.5, minWidth: 0, maxWidth: "100%", overflow: "hidden"/);
   assert.doesNotMatch(imgs, /overflowX: "auto"/, "the row never scrolls sideways: a few chips, then +N more (the owner, 2026-11-06)");
-  assert.match(read("AgentSummary.jsx"), /<AttachRow sx=\{\{ flex: "0 0 100%", pt: 0\.25, px: 0\.5 \}\}>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/AttachRow>/);
+  // ...on the box's one thin line, left of the words (the owner, 2026-11-06: "keep the prompt box thin")
+  assert.match(read("AgentSummary.jsx"), /<AttachRow sx=\{INLINE_CHIPS\}>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/AttachRow>/);
+  assert.match(imgs, /export const INLINE_CHIPS = \{ flex: "0 1 auto", maxWidth: "34%"/);
   assert.match(read("ItemSections.jsx"), /<AttachChip key=\{i\.key\} data-tq-item-chip=\{i\.key\} name=\{i\.title\}/);
   assert.match(read("GeneralWorkspace.jsx"), /<AttachRow className="tq-aui-attachments"/);
 });

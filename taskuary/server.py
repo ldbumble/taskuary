@@ -3713,6 +3713,21 @@ def task_outputs(tid: int):
     return {'data': outputs.listing(tid), 'folder': f'scratch/outputs/{task_ref(tid)}'}
 
 
+@app.post('/api/task-outputs/{tid}/open')
+def open_task_outputs(tid: int, request: Request):
+    """The task's outputs folder, opened on THIS computer (Explorer, Finder, the file manager) at the owner's press - the folder the server
+    knows for the task (outputs.folder), never a path the page names. Owner only: an agent session has no business opening windows."""
+    import os, subprocess
+    from . import outputs
+    _owner_only(request, "opening a folder on this computer is the owner's")
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    d = outputs.folder(tid)
+    if not d.is_dir(): raise HTTPException(404, 'this task has no files yet')
+    if os.name == 'nt': os.startfile(str(d))                                     # noqa: S606 - a folder Taskuary made, by its own path
+    else: subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(d)])
+    return {'ok': True}
+
+
 @app.api_route('/api/task-outputs/{tid}/{rel:path}', methods=['GET', 'HEAD'])
 def task_output(tid: int, rel: str, download: bool = False, preview: bool = False, sheet: str = ''):
     """One file from THIS task's outputs folder - a name inside it, never a path out of it (outputs.resolve). `preview` gives a

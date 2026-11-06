@@ -258,3 +258,22 @@ def test_conductor_mode_is_the_owners_words_to_any_agent_in_its_repo(w):
     assert len(w.typed) == 1
     ws.record(w.s, w.tid, f's{w.tid}', 'turn_end', text='Switched to banker\'s rounding.')
     assert w.posts[-1][1] == f"{task_ref(w.tid)}: Switched to banker's rounding."
+
+
+def test_an_agent_cannot_open_a_channel_or_answer_its_own_permission():
+    from taskuary import guard
+    for m, p in (('POST', '/api/agent-channels'), ('DELETE', '/api/agent-channels/3'), ('POST', '/api/tasks/12/permission')):
+        assert guard.classify(m, p)[0] == 'deny', p
+
+
+def test_the_task_chat_carries_the_card_for_a_waiting_permission(w):
+    from taskuary import codingchat
+    t = threading.Thread(target=lambda: perm.ask(w.s, w.tid, {'tool': 'Bash', 'kind': 'execute', 'command': 'npm test'}, wait=3), daemon=True); t.start()
+    for _ in range(200):
+        if perm.pending(w.tid, w.s): break
+        time.sleep(0.02)
+    with mock.patch.object(codingchat, 'sessions', return_value=[]), mock.patch.object(codingchat, 'mails', return_value=[]), \
+         mock.patch.object(codingchat, 'live_of', return_value=None):
+        card = codingchat.chat(w.s, w.tid)['permissions'][0]
+    assert 'npm test' in card['line'] and [o['label'] for o in card['options']][:2] == ['Allow once', 'Always allow']
+    perm.answer(w.s, w.tid, card['id'], 'reject_once'); t.join(3)

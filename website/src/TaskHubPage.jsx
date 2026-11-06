@@ -38,6 +38,7 @@ import { askAssistant } from "./askAssistant.js";
 import { TaskuaryMark, asUtc, timeAgo, useAgents } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
+import ProfileButton from "./ProfileButton.jsx";
 import BugReportDialog from "./BugReportDialog.jsx";
 import { label as btnLabel } from "./buttons.js";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
@@ -610,6 +611,8 @@ export default function TaskHubPage() {
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>}
           {!phone && <QuitButton onStopped={setStopped} />}
+          {/* ABOUT YOU IS THE FACE IN THE CORNER, not a sidebar line (the owner, 2026-11-06) - on a phone too, where Quit folds into Help */}
+          <ProfileButton onOpen={() => go("About")} />
         </Box>
 
         {/* tighter side padding than top/bottom: the horizontal margin is dead space on a wide

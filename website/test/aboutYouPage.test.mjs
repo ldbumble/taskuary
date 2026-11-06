@@ -1,5 +1,5 @@
-// ONE PAGE ABOUT THE OWNER (the owner, 2026-11-06: "general things you care about, how you do your job, personality, goals"): About you
-// in the side nav beside Settings - You, Docs and Memory - with Memory as plain sentences over LEARNED.md, never its tags.
+// ONE PAGE ABOUT THE OWNER (the owner, 2026-11-06: "general things you care about, how you do your job, personality, goals"): About you,
+// opened from the avatar in the top bar's corner - You, Docs and Memory - with Memory as plain sentences over LEARNED.md, never its tags.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
@@ -7,12 +7,12 @@ import { fromWhere, provenance, sentence } from "../src/memorySentences.js";
 
 const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("About you is a side-nav page of its own, drawn by SettingsView's about area", () => {
+test("About you is a page of its own, drawn by SettingsView's about area", () => {
   const b = src("CanvasBrowse.jsx");
   assert.match(b, /area === "about" && <SettingsView key="about" area="about"/);
   assert.match(b, /about: "About you"/);
   assert.match(src("TaskHubPage.jsx"), /About: "about"/);
-  assert.match(src("FeedView.jsx"), /about: PersonOutlineIcon/);
+  assert.doesNotMatch(src("FeedView.jsx"), /about: PersonOutlineIcon/, "no sidebar line");
   assert.match(src("SettingsView.jsx"), /const mine = about \? \["you", "docs", "memory"\]/);
 });
 

@@ -1293,6 +1293,8 @@ def acp_on(store) -> bool:
 def _acp_road(profile: dict, store=None) -> bool:
     "Does this run go over ACP: a run marked for it (llm: a general agent's run with hands), the switch on, and a way to launch it."
     if not (profile.get('acp_ok') and acp_on(store if store is not None else _RUN.get()[0])): return False
+    # ...never a stranger's run, whatever acp_ok says: its trimmed environment (strict_env) marks the floor argv carries (llm.make_cli_llm)
+    if profile.get('strict_env'): return False
     return bool(profile.get('acp') or profile.get('acp_cmd') or clis_mod.acp_adapter(profile.get('cmd') or ''))
 
 

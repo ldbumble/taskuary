@@ -10,6 +10,7 @@ import pytest
 
 from taskuary import acpcoding, agents, blackboard, codingchat, devphone, peers, permissions, session_artifacts, shellgate, terminal, waitroom
 from taskuary.store import MemoryStore
+from taskuary import llm, origin
 
 pytestmark = pytest.mark.acp
 FAKE = [sys.executable, str(Path(__file__).parent / 'fake_acp_server.py')]
@@ -176,3 +177,78 @@ def test_the_switch_off_a_cli_without_acp_and_a_strangers_task_keep_the_terminal
     if how == 'no adapter': s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'gemini', 'cwd': str(repo)}))
     if how == 'a stranger': monkeypatch.setattr('taskuary.origin.launch_mode', lambda *a, **k: 'auto')
     assert isinstance(open_(s, tid, repo), Pane)
+
+
+# ── a stranger's task: never over ACP, on either road ────────────────────────────────────────────────────────────────────────
+def stranger(s):
+    t = s.create_task({'Title': 'Fix the import warning', 'Kind': 'coding', 'Source': 'email'}, 'router')
+    s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'someone@vendor.example', 'Status': 'routed'})
+    assert origin.of_task(s, t)[0] == 'stranger'
+    return t
+
+
+@pytest.fixture
+def floor(world, monkeypatch, tmp_path):
+    "A stranger's task beside the owner's, the switch on, the adapters present, and a claude new enough to run one."
+    s, tid, repo = world
+    monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': (2, 1, 299))
+    (tmp_path / 'temp').mkdir(); monkeypatch.setattr('tempfile.gettempdir', lambda: str(tmp_path / 'temp'))
+    monkeypatch.setattr(terminal, 'Term', Pane)
+    assert agents.acp_on(s)
+    return s, stranger(s), repo
+
+
+class Pane2(Pane):
+    "The pty stand-in, keeping how it was started."
+    def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None, cli='', mode='full'):
+        super().__init__(argv, cwd, label, task_id, agent, rows, cols, store, cli, mode); self.mode = mode
+
+
+@pytest.mark.parametrize('resume', ['', 'sess_fake_1'])
+def test_a_strangers_coding_session_on_claude_keeps_its_terminal_and_its_floor(floor, monkeypatch, resume):
+    """A stranger's task on claude runs 'auto' (origin.launch_mode): the CLI's own reviewer, --strict-mcp-config, its session settings
+    file with the floor's hooks, a trimmed environment (Term mode 'auto' -> strict) - in a pty, new or resumed, never over ACP."""
+    s, t, repo = floor
+    monkeypatch.setattr(terminal, 'Term', Pane2)
+    p = terminal.open_session(s, 'coding', t, None, str(repo), 32, 110, 'owner', seed_fn=lambda here: 'look', resume=resume or None)
+    assert isinstance(p, Pane2) and p.mode == 'auto' and not any(terminal.is_acp(x) for x in terminal.SESSIONS.values())
+    a = [str(x) for x in p.argv]
+    assert a[a.index('--permission-mode') + 1] == 'auto' and '--strict-mcp-config' in a and '--dangerously-skip-permissions' not in a
+    assert a[a.index('--settings') + 1] == origin.session_settings(s, t)
+    assert '--mcp-config' not in a                              # Taskuary's toolbox is trusted work's only
+
+
+def test_a_strangers_coding_session_on_a_cli_with_no_reviewer_starts_nowhere(floor):
+    "codex has no reviewer (clis.AUTO): a stranger's task is refused - no pty, and no ACP session either."
+    s, t, repo = floor
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'codex', 'acp_cmd': FAKE, 'cwd': str(repo)}))
+    with pytest.raises(ValueError, match='no built-in reviewer'):
+        terminal.open_session(s, 'coding', t, None, str(repo), 32, 110, 'owner', seed_fn=lambda here: 'look')
+    assert not terminal.SESSIONS
+
+
+@pytest.mark.parametrize('mode', ['full', 'auto', 'look', ''])
+def test_the_acp_gate_refuses_a_strangers_task_whatever_mode_it_is_handed(floor, mode):
+    s, t, repo = floor
+    prof = {'cmd': 'claude'}
+    assert not acpcoding.wanted(s, prof, mode, t)
+    assert acpcoding.wanted(s, prof, 'full', s.create_task({'Title': 'mine', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner'))
+
+
+def _general(s, t, **kw):
+    brain = llm.make_cli_llm(s, 'coding', task_id=t, **kw)
+    with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run: brain('', 'hi')
+    return run.call_args.args[0]
+
+
+@pytest.mark.parametrize('how', [dict(cli_tools=True), dict(research=True), dict(research='web'), dict()])
+def test_the_general_road_refuses_a_strangers_task_too(floor, how):
+    """A general agent's run on a stranger's task - with hands ('auto': the reviewer, its settings, a trimmed env, its own folder), a
+    look (no tools), or the classifier (every tool off) - stays on argv: acp_ok False, and the road refuses a trimmed env on its own."""
+    s, t, repo = floor
+    p = _general(s, t, **how)
+    assert not p.get('acp_ok') and not agents._acp_road(p, s)
+    if how: assert p.get('strict_env') is True
+    assert not agents._acp_road({**p, 'acp_ok': True}, s) if p.get('strict_env') else True
+    mine = _general(s, s.create_task({'Title': 'mine', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner'), cli_tools=True)
+    assert mine.get('acp_ok') is True and agents._acp_road(mine, s)          # the owner's own run with hands is the one that goes

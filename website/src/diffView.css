@@ -1,0 +1,44 @@
+/* the diff as an editor shows it (DiffView.jsx) - the app's own diff colours (ui.jsx DiffBlock), its mono face, line numbers down the side */
+.tq-dv { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tq-dv-all { display: flex; gap: 10px; justify-content: flex-end; }
+.tq-dv-all button, .tq-dv-marks button { appearance: none; border: 0; background: none; padding: 0; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.4; color: #6e685f; cursor: pointer; }
+.tq-dv-all button:hover { color: #292824; text-decoration: underline; }
+.tq-dv-file { border: 1px solid #e1dcd5; border-radius: 8px; overflow: hidden; background: #fff; min-width: 0; }
+.tq-dv-file-row { appearance: none; width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; background: #f4f1ec; cursor: pointer; font: inherit; text-align: left; }
+.tq-dv-file-row:hover { background: #e9e3d8; }
+.tq-dv-chev { color: #a9a294; font-size: 10px; width: 10px; flex: 0 0 10px; }
+.tq-dv-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 11.5px/1.4 'Cascadia Mono', Consolas, monospace; color: #292824; }
+.tq-dv-plus, .tq-dv-minus { font: 11px/1.4 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+.tq-dv-plus { color: #47654a; } .tq-dv-minus { color: #6b2733; }
+.tq-dv-marked { font-size: 10.5px; font-weight: 600; color: #7a2f3c; }
+.tq-dv-empty { padding: 8px 12px; color: #8b877e; font-size: 12px; }
+.tq-dv-hunk { border-top: 1px solid #ece8e1; overflow-x: auto; }
+.tq-dv-head { display: flex; align-items: center; gap: 10px; padding: 2px 10px; background: #e3e6e1; color: #6f8a6e; font: 11px/1.6 'Cascadia Mono', Consolas, monospace; }
+.tq-dv-at { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tq-dv-marks { display: flex; gap: 2px; flex-shrink: 0; }
+.tq-dv-marks button { padding: 1px 8px; border-radius: 99px; font-weight: 600; color: #6e685f; }
+.tq-dv-marks button[aria-pressed=true][data-tq-hunk-keep] { background: #dfeade; color: #47654a; }
+.tq-dv-marks button[aria-pressed=true][data-tq-hunk-revert] { background: #f0e2e4; color: #6b2733; }
+.tq-dv-reverting .tq-dv-lines { opacity: .55; }
+.tq-dv-lines { border-collapse: collapse; width: 100%; font: 11.5px/1.5 'Cascadia Mono', Consolas, monospace; color: #3d3a33; }
+.tq-dv-lines td { padding: 0 6px; vertical-align: top; }
+/* ...a fixed gutter: inside a chat's body every child is min-width 0 (generalWorkspace.css), and the numbers ran into each other */
+.tq-dv-lines td.tq-dv-n { width: 34px; min-width: 34px !important; text-align: right; color: #a9a294; user-select: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tq-dv-lines td.tq-dv-op { width: 14px; min-width: 14px !important; padding: 0 2px !important; user-select: none; color: #8b877e; }
+.tq-dv-code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.tq-dv-add { background: #dfeade; } .tq-dv-add .tq-dv-op { color: #47654a; }
+.tq-dv-del { background: #f0e2e4; } .tq-dv-del .tq-dv-op { color: #6b2733; }
+.tq-dv-note td { color: #8b877e; font-style: italic; }
+.tq-dv-kw { color: #55697a; font-weight: 600; }
+.tq-dv-str { color: #8b6f3a; }
+.tq-dv-com { color: #8b877e; font-style: italic; }
+.tq-dv-num { color: #7a5a8a; }
+/* in the coding chat (CodingChat.jsx): an edit is a step row that opens on its diff, and the Terminal a small toggle in the box */
+.tq-cc-edit { margin: 2px 0 6px; }
+.tq-cc-edit > summary { color: #3d3a33; font-weight: 500; }
+.tq-cc-diff { margin: 4px 0 6px 21px; border: 1px solid #e1dcd5; border-radius: 7px; overflow: hidden; background: #fff; }
+.tq-cc-diff > .tq-dv-hunk:first-child { border-top: 0; }
+.tq-cc-term { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 9px; border: 1px solid #dfdbd3; border-radius: 99px;
+  background: #f4f1ec; color: #6e685f; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.tq-cc-term:hover { color: #292824; background: #ece6da; }
+.tq-cc-term[aria-pressed=true] { background: #292824; border-color: #292824; color: #fbfaf7; }

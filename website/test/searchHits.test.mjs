@@ -62,8 +62,9 @@ test("settings and connections are kinds of their own", () => {
 // Enter is spent on the answer to the words in the box - never on rows left from earlier words (SearchEverything.jsx)
 test("Enter opens what was typed: held until its own answer lands", () => {
   const f = readFileSync(new URL("../src/SearchEverything.jsx", import.meta.url), "utf8");
-  assert.match(f, /const settled = !!res && res\.q === q\.trim\(\) && !busy;/);
-  assert.match(f, /if \(settled && res\.q === t\) pick\(shown\.flat\[at\]\);\s*else if \(asks\(t\)\) held\.current = t;/);
+  // ...the words as asked: with Done today pressed, done:today rides beside them (2026-11-06)
+  assert.match(f, /const settled = !!res && res\.q === askOf\(q\) && !busy;/);
+  assert.match(f, /const t = askOf\(typed\.current\);\s*if \(settled && res\.q === t\) pick\(shown\.flat\[at\]\);\s*else if \(today \|\| asks\(t\)\) held\.current = t;/);
   assert.match(f, /disableRestoreFocus/);
 });
 

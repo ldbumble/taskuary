@@ -277,6 +277,11 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         it = trackers.item_of(store, task_id)
         if it and it['tracker'] == trackers.TYPES[p['type']][0]: p = {**p, 'item': it['item']}
     ok, why = validate(store, p)
+    # ...a new GitHub issue names its repository and a title, said to the agent now rather than at the press
+    if ok and p.get('action') == 'run_tool' and p.get('type') == 'github_issue':
+        from .github import issue_check, issue_labels
+        if why := issue_check(p): ok = False
+        elif p.get('labels'): p = {**p, 'labels': ', '.join(issue_labels(p['labels']))}
     # ...a picture on a post is one in the task's own folder, named - never a path the agent wrote (execute resolves it again)
     if ok and p.get('action') == 'run_tool':
         p = {k: v for k, v in p.items() if k != 'image_path'}

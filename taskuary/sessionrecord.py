@@ -75,10 +75,32 @@ def _target(args) -> str:
     return _cut(' '.join(str(v).split()), TARGET_N)
 
 
+# THE CODING CHAT DRAWS A STEP FROM ITS OWN ARGUMENTS (codingChat.js -> agentSteps.describeCall: "Read store.py", "Ran pytest"), and an
+# edit as its diff ("Edited budget.py (+12 −3)", the owner 2026-11-06: "i do like you can review the code diffs"). Kept small: the strings
+# a step line is built from, each cut short, and an edit's own before/after - never a tool's output
+ARG_N, EDIT_N = 300, 20000
+_ARG_KEYS = _TARGET_KEYS + ('glob', 'title', 'dir_path', 'directory', 'q', 'search_term', 'regex', 'notebook_path')
+
+
+def _args(a: dict) -> dict: return {k: _cut(v, ARG_N) for k, v in a.items() if k in _ARG_KEYS and isinstance(v, str) and v.strip()}
+
+
+def _edit(a: dict) -> dict | None:
+    "An edit's before/after as the tool was handed it: {parts: [{old, new}]} - a Write is all new, a MultiEdit each of its edits."
+    one = lambda o, n: {'old': str(o or '')[:EDIT_N], 'new': str(n or '')[:EDIT_N]}
+    if isinstance(a.get('edits'), list): parts = [one(e.get('old_string'), e.get('new_string')) for e in a['edits'] if isinstance(e, dict)]
+    elif 'old_string' in a or 'new_string' in a: parts = [one(a.get('old_string'), a.get('new_string'))]
+    elif isinstance(a.get('content'), str): parts = [one('', a['content'])]
+    else: return None
+    return {'parts': parts[:20]} if parts else None
+
+
 def _tool(name, args, at=None) -> dict:
     args = hide_draft(name, args)
     s = {'k': 'tool', 'name': str(name or 'tool'), 'text': _target(args), 'at': at}
     a = args if isinstance(args, dict) else {}
+    if (kept := _args(a)): s['args'] = kept
+    if name in _FILE_TOOLS and (e := _edit(a)): s['edit'] = e
     # a command the agent DESCRIBED reads as what it was for; the command itself stays one click away
     if str(a.get('description') or '').strip() and (a.get('command') or a.get('cmd')):
         s['text'], s['detail'] = _cut(a['description'], TARGET_N), _cut(a.get('command') or a.get('cmd'), 4000)
@@ -111,22 +133,32 @@ def _newest(base: Path, pattern: str):
 def _claude_file(ext: str): return _newest(_home() / '.claude' / 'projects', f'*/{ext}.jsonl')
 
 
+def _hunks(sp) -> list:
+    "Claude's own structuredPatch for an edit (its toolUseResult): the hunks with their real line numbers, as git writes them."
+    keep = ('oldStart', 'oldLines', 'newStart', 'newLines')
+    return [{**{k: h.get(k) for k in keep}, 'lines': [str(l) for l in h.get('lines') or []][:2000]}
+            for h in (sp or [])[:50] if isinstance(h, dict) and isinstance(h.get('lines'), list)]
+
+
 def _claude(path: Path) -> list:
-    out = []
+    out, uses = [], {}
     for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
         try: j = json.loads(line)
         except ValueError: continue
         if j.get('isMeta') or j.get('isSidechain') or j.get('type') not in ('user', 'assistant'): continue
         at, msg = j.get('timestamp'), j.get('message') or {}
+        # ...an edit's result carries the patch Claude wrote, line numbers and all: it replaces the before/after its call was handed
+        res = j.get('toolUseResult') if isinstance(j.get('toolUseResult'), dict) else {}
         for b in _blocks(msg.get('content')):
             t = b.get('type')
+            if t == 'tool_result' and (s := uses.get(b.get('tool_use_id'))) and (h := _hunks(res.get('structuredPatch'))): s['edit'] = {'hunks': h}
             if j['type'] == 'user':
                 # the owner's words - not a tool result coming back, not a slash command's or a hook's plumbing
                 if t == 'text' and (x := str(b.get('text') or '').strip()) and not x.startswith(('<command-', '<local-command', '<system-reminder', 'Caveat:')):
                     out.append({'k': 'you', 'text': _cut(x, YOU_N), 'at': at})
             elif t == 'thinking' and str(b.get('thinking') or '').strip(): out.append({'k': 'thought', 'text': _cut(b['thinking'], THOUGHT_N), 'at': at})
             elif t == 'text' and str(b.get('text') or '').strip(): out.append({'k': 'said', 'text': _cut(b['text'], SAID_N), 'at': at})
-            elif t == 'tool_use': out.append(_tool(b.get('name'), b.get('input'), at))
+            elif t == 'tool_use': out.append(s := _tool(b.get('name'), b.get('input'), at)); uses[b.get('id')] = s
     return out
 
 
@@ -153,8 +185,10 @@ def _codex(path: Path) -> list:
         elif t in ('function_call', 'custom_tool_call', 'local_shell_call'):
             args = p.get('arguments') or p.get('input') or (p.get('action') or {})
             if t == 'custom_tool_call' and p.get('name') == 'apply_patch':
-                files = re.findall(r'^\*\*\* (?:Update|Add|Delete) File: (.+)$', str(args), re.M)
-                out += [{'k': 'tool', 'name': 'apply_patch', 'text': _cut(f, TARGET_N), 'file': f, 'at': at} for f in files] or [_tool('apply_patch', '', at)]
+                # ...each file with its own part of the patch, the diff the coding chat draws (codingChat.js)
+                cuts = re.split(r'^\*\*\* (?:Update|Add|Delete) File: (.+)$', re.sub(r'\n?\*\*\* End Patch\s*$', '', str(args)), flags=re.M)
+                out += [{'k': 'tool', 'name': 'apply_patch', 'text': _cut(f, TARGET_N), 'file': f, 'at': at, 'edit': {'patch': p.strip('\n')[:EDIT_N]}}
+                        for f, p in zip(cuts[1::2], cuts[2::2])] or [_tool('apply_patch', '', at)]
             elif t == 'custom_tool_call' and (cmds := re.findall(r'\bcmd:\s*"((?:[^"\\]|\\.)*)"', str(args))):
                 out += [{'k': 'tool', 'name': 'shell', 'text': _cut(_hide_flags(c.replace('\\"', '"')), TARGET_N), 'at': at} for c in cmds]   # codex's js harness: the commands it ran
             else: out.append(_tool(p.get('name') or 'shell', args, at))

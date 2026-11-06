@@ -1545,7 +1545,8 @@ def _memory(store, tid: int, kind: str, p: dict) -> dict:
             # EVERY SAVE SAYS WHICH DOCUMENT AND WHO READS IT, linked (the design's routing table, approved 2026-10-28): the owner reads
             # where a fact went, and opens it there to change it
             doc = r.get('doc') or 'learned'
-            at = f"[{'STYLE' if doc == 'style' else doc.upper()}.md](#settings=docs&doc={doc})"
+            # ...LEARNED.md as About you's Memory, its lines as sentences (2026-11-06); every other document on About you's Docs
+            at = f"[your memory]({places.href('memory')})" if doc == 'learned' else f"[{'STYLE' if doc == 'style' else doc.upper()}.md]({places.href('docs')}&doc={doc})"
             if doc == 'style' and r.get('who'):
                 return _did(store, tid, f"Saved to your writing style for {r['who']}: {q(r['text'])} - {at}, under By recipient, "
                                         f"{memoryedit.DOC_READS['style_for']}.", kind, r)
@@ -2343,7 +2344,8 @@ def _system(store, llm=None) -> str:
     # ...and which Taskuary this is: "what version am I on?" had no answer but What's new's top section, which a checkout runs ahead of
     # or behind (2026-11-02); the bug report already says it (bugreport.py)
     from . import __version__
-    return f"{_counsel(store)}\n\n{who}{where}{pages}THIS IS TASKUARY {__version__}.\n\n{contract.format(owner=_owner(store))}"
+    from . import devphone          # ...and on the phone in Developer mode, the coding agents' tools - nowhere else
+    return f"{_counsel(store)}\n\n{who}{where}{pages}{devphone.block()}THIS IS TASKUARY {__version__}.\n\n{contract.format(owner=_owner(store))}"
 
 
 def pages_block(store) -> str:
@@ -2385,12 +2387,12 @@ def pages_block(store) -> str:
             # list had (2026-10-26)
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; a new dashboard #report=new-dashboard; the Reports page and its list of reports #report=reports; the '
-            'workflows #report=workflows; the dashboards #report=dashboards; the playbooks #report=playbooks\n'
+            'workflows #report=workflows; the dashboards #report=dashboards\n'
             # ...and NEW ITSELF, blank (canvasLinks #new-task): "I want to start something new" had no address, and a job with no words yet
             # is not task.create_from_text's to write (2026-11-02)
             '- New, the card that starts something, empty on one of its tabs: #new-task&kind=<agent|send|note|meeting|goal|report|dashboard|'
             'workflow|playbook> (#new-task alone opens Send something)\n'
-            '- settings, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
+            '- settings and About you, page by page:\n' + _screens() + '\n' + THIS_APP + '\n\n')
 
 
 # WHAT THE APP ITSELF IS ASKED TO DO IS ITS OWN SCREEN (the owner, 2026-10-23: "i asked assistant to update taskuary and it pulled up general
@@ -3163,6 +3165,8 @@ def read_op(store, kind: str, params: dict) -> str:
     the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
     goes back to the model, which then speaks with it."""
     p = params or {}
+    from . import devphone
+    if devphone.runs(kind): return devphone.read(store, kind, p)         # the coding agents, from the phone in Developer mode
     if kind in ('app.health', 'app.repair'): return _trouble(store, kind, p)
     if kind == 'issue.draft': return _issue(store, p)
     if kind == 'task.read':

@@ -336,7 +336,9 @@ def briefing(store, cwd, exclude_tid=None, assess_for: int = None) -> str:
            'first and have control of their files: never edit, revert, stash or commit them, and '
            'never use git add -A / git commit -a - stage and commit ONLY files you yourself changed '
            '(git status before committing; uncommitted changes that are not yours are their work in '
-           'progress, leave them exactly as they are). Coordinate on the wall (`taskuary --note`) before changing a shared file.')
+           'progress, leave them exactly as they are). Coordinate on the wall (`taskuary --note`) before changing a shared file - and '
+           'BEFORE YOU TOUCH A FILE ANOTHER AGENT HAS MODIFIED, tell it with the note_peers tool (`to`: its TQ ref, or "repo" for all of '
+           'them here): which file, and what you are about to change. Their notes reach you the same way, at your next turn.')
     if assess_for:
         hit, why = likely_overlap(store, assess_for, ps)
         if hit: out += f" SIMILAR WORK (the model's read, not a lock): {hit['ref']} - {why or 'likely the same files'}. Coordinate before you touch what it is on."

@@ -157,6 +157,10 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // ...and one switch for the three views, Chat wearing the real logo (2026-10-15: no Board button, no Task mode)
   assert.match(page, /\{ k: "chat", label: "Chat", icon: \(on\) => <TaskuaryMark/);
   assert.match(page, /<ViewSwitch view=\{tab === "Board" \? "board" : asstGame \? "game" : "chat"\}/);
+  // ...the Board only in Developer mode (2026-11-06); the Game stays for everyone
+  assert.match(page, /SWITCH_VIEWS\.filter\(\(v\) => dev \|\| v\.k !== "board"\)/);
+  assert.match(page, /\} dev=\{devMode\}/);
+  assert.match(page, /\{ k: "game", label: "Game"/);
   assert.doesNotMatch(page, /<StageMode/);
   const view = read("AssistantView.jsx");
   assert.match(view, /\/api\/funnel\/pile/);

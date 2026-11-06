@@ -431,7 +431,7 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             detail = f'API key valid on {site}' + ('' if dd.get('app_key') else ' - add the application key for monitor reads')
         elif c['Type'] == 'winrm':
             host = cfg.get('host')
-            if not host: raise RuntimeError('no host set - enter the machine name (e.g. AZWEB01)')
+            if not host: raise RuntimeError('no host set - enter the machine name (e.g. NWWEB01)')
             from .reports import winrm_argv
             argv, env = winrm_argv(host)
             p = spawn.run(argv, env=env, capture_output=True, text=True, encoding='utf-8',

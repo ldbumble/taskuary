@@ -234,6 +234,7 @@ class AllowListTests(unittest.TestCase):
             'POST /api/agent/propose', 'POST /api/mcp',     # the toolbox (2026-10-25): a proposal on its own task, and its tools' one door
             'POST /api/agent/sign-form',                    # a form on its own task signed into its own folder (handsign, 2026-11-04) - nothing leaves
             'POST /api/agent/check-back',                   # its own follow-up on its own task (checkback.py, 2026-11-05) - nothing leaves
+            'POST /api/agent/note-peers', 'POST /api/agent/propose-land',   # a note to a peer, and its pick for how its branch lands (2026-11-06)
             'POST /api/board/notes',
             'POST /api/handbook', 'POST /api/handbook/{lid}/comment', 'POST /api/handbook/{lid}/restore',
             'POST /api/handbook/{lid}/retire', 'POST /api/handbook/{lid}/vote',

@@ -325,14 +325,39 @@ def owner_asked_since(store, task_id: int, at: str) -> bool:
     return any(c.get('ActorType') == USER_TYPE and str(c.get('CreatedAt') or '') > str(at or '') for c in store.list_comments(task_id))
 
 
+def on_thread(store, task_id: int) -> set:
+    "Every address on this task's mail - who wrote, and whom it went to or copied - lowercased."
+    out = set()
+    for r in store._rows('SELECT FromEmail, RecipientsJson FROM message WHERE TaskId=?', (int(task_id),)):
+        try: rec = json.loads(r.get('RecipientsJson') or '{}') or {}
+        except (TypeError, ValueError): rec = {}
+        out |= {str(a or '').strip().lower() for a in [r.get('FromEmail'), *(rec.get('to') or []), *(rec.get('cc') or [])]}
+    return {a for a in out if '@' in a}
+
+
+def _addrs(v) -> list | None:
+    "`cc` as an agent gives it - a list, or one line split at commas or semicolons - each address once, lowercased; None when not given."
+    if v is None: return None
+    xs = v if isinstance(v, (list, tuple)) else re.split(r'[,;]', str(v))
+    out = []
+    for x in xs:
+        a = (re.search(r'<([^>]+)>', str(x)) or re.search(r'(\S+@\S+)', str(x)))
+        a = a.group(1).strip().lower() if a else str(x).strip()      # ...words that hold no address stay, for the check to name
+        if a and a not in out: out.append(a)
+    return out
+
+
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False,
-                to: str = '', sid: str = None, answers: int | None = None) -> dict:
+                to: str = '', sid: str = None, answers: int | None = None, only: bool = False, cc=None, why_to: str = '') -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
     the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
     text they go on the reply already pending - an agent that forgot the file adds it afterwards.
     A message the work's answer already went to takes another only as a follow-up: `follow_up` (the agent says the owner
-    asked for it) or the owner's own words in the conversation since the send."""
+    asked for it) or the owner's own words in the conversation since the send.
+    WHO HEARS IT IS THE AGENT'S CALL (the owner, 2026-11-06: "the agent decides who needs to know ... if it's sensitive only to that
+    person"): `answers` - the mail it replies to, an earlier one included; `only` - that mail's sender alone, nobody copied; `cc` - who
+    else is copied (replacing the thread's), an address not on the thread said so on the card; `why_to` - the one line the card says why."""
     text = str(text or '').strip()
     if not text and files:
         rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
@@ -357,6 +382,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         a = store.get_message(answers) or {}
         if a.get('TaskId') != task_id or a.get('Status') in ('context', 'skipped') or str(a.get('Direction') or 'in') == 'out' or from_owner(store, a):
             return {'ok': False, 'why': f'#{answers} is not a mail on this task - use a number from THE MAIL ON THIS TASK in your brief, or leave --answers out'}
+    # ...and who else hears it: `only` is the sender alone, so it copies nobody; an address the thread never had is said on the card
+    ccs = _addrs(cc)
+    if only and ccs: return {'ok': False, 'why': '--only sends it to that one person - leave --cc out, or drop --only to copy others'}
+    bad = [a for a in ccs or [] if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', a)]
+    if bad: return {'ok': False, 'why': f"{', '.join(bad)} is not an email address - nothing was saved"}
+    new = [a for a in ccs or [] if a not in on_thread(store, task_id)]
     # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's
     # answer IS the result, and filing it as a reply "waiting on your approval" addressed it to them (2026-09-23).
     # Refusing it outright threw the answer away - a whole review the owner asked for, gone (2026-10-06) - so keep it.
@@ -386,6 +417,11 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if sent:
         from .continuity import clock
         why = f'{FOLLOW_UP}{clock(sent.get("DecidedAt"))} reply - {agent} wrote it in its session; approve to send'
+    # ...and why it goes to whom it goes, when the agent chose: the card says it beside the To and Cc
+    pick = ' '.join(str(why_to or '').split())[:300]
+    if only or ccs is not None or pick:
+        why += f" - {'only to the sender' if only else 'recipients chosen by the agent'}{': ' + pick if pick else ''}"
+        if new: why += f" (copies {', '.join(new)}, not on this thread before)"
     if held:
         rid = held['ReviewId']; store.unhold_review(rid, why)
     elif live:
@@ -403,9 +439,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and to whom it goes, at once - its To and Cc - so the card says the person the agent wrote to, and a line from somebody else
     # later never moves it. An answer to the owner's OWN mail (a promise task's) goes to whom it went (outbound.reply_envelope)
     m = store.get_message(ans or mid) or {}
-    if ans or not store.review_envelope(rid):   # a mail that holds the ask replaces the recipients an earlier save set
+    # a mail that holds the ask replaces the recipients an earlier save set - and so does the agent's own choice of who hears it
+    if ans or not store.review_envelope(rid) or only or ccs is not None:
         from .outbound import reply_envelope
-        if (env := reply_envelope(store, m)): store.set_review_envelope(rid, env)
+        if (env := reply_envelope(store, m, 'reply_to' if only else 'reply_all')):
+            if ccs is not None: env = {**env, 'cc': [a for a in ccs if a not in env['to']]}
+            store.set_review_envelope(rid, env)
     from .signatures import agent_signed
     text = agent_signed(store, store.get_review(rid) or rv, text, m) or text
     # ...said once per letter: the same reply saved twice - its marker and its `--reply` in one turn - wrote "agent drafted the reply
@@ -417,7 +456,10 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     if not same: store.add_comment(task_id, agent, 'agent', f'{agent} drafted the reply itself - it is on the task, waiting on your approval.')
     # ...and the session is told whom it went to - and, when it did not say and the task has more than one person on it, who they are
     many = [] if str(to or '').strip() else people_named(store, task_id)
-    return {'ok': True, 'review_id': rid, 'message_id': mid, 'to': m.get('FromName') or m.get('FromEmail') or '',
+    env = store.review_envelope(rid)
+    return {'ok': True, 'review_id': rid, 'message_id': mid, 'answers': ans or mid, 'to': m.get('FromName') or m.get('FromEmail') or '',
+            **({'recipients': {'to': env.get('to') or [], 'cc': env.get('cc') or []}} if env else {}),
+            **({'new_on_thread': new} if new else {}),
             **({'people': many} if len(many) > 1 else {}), **_told(store, rid, attach_files(store, rid, files, agent))}
 
 
@@ -720,6 +762,12 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # a setup session kept no transcript on purpose (secrets were typed into it) and has no report to write
     if task.get('Kind') == aisetup.KIND: return aisetup.finish(store, tid, actor)
     if task.get('SourceRef') == aisetup.WALK_REF: return aisetup.finish_walk(store, tid, actor)      # a card's walk: its Test was the report
+    # ...a coding task's branch is read off the shared checkout NOW, while its HEAD is still the agent's: the close-out's landing question
+    # asks about that branch even after another agent switches the checkout (landing.py)
+    if str(task.get('Kind') or '').lower() == 'coding':
+        from . import landing
+        try: landing.seen(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: its branch was not read at the close - {e}')
     # General work already has a durable, turn-by-turn record in task comments. It does not need a
     # coding-transcript summarizer or a synthetic AGENT REPORT; close the shared session and the
     # task, leaving that conversation intact.

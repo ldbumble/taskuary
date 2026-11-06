@@ -143,10 +143,40 @@ def body_images(tok, body: str, cap: int = 4, max_bytes: int = 5_000_000) -> lis
     return out
 
 
-def create_issue(tok, repo, title, body):
-    r = _ok(requests.post(f'{GH}/repos/{repo}/issues', headers=_h(tok), json={'title': title, 'body': body}, timeout=20), 'open an issue')
+def create_issue(tok, repo, title, body, labels=None):
+    r = _ok(requests.post(f'{GH}/repos/{repo}/issues', headers=_h(tok), timeout=20,
+                          json={'title': title, 'body': body, **({'labels': list(labels)} if labels else {})}), 'open an issue')
     j = r.json()
     return {'number': j['number'], 'url': j['html_url']}
+
+
+# A NEW ISSUE, ON THE OWNER'S PRESS (the owner, 2026-11-06): the agent sets it up - repository, title, body, labels if any - and the
+# card in the turn shows it with Create issue (connectorcatalog `actions`); nothing is filed before the press. Everyone watching the
+# repository is told of a new issue, so an agent's call always waits for that press (scopes.REACHES), a trusted repository's too.
+# ...owner/name, GitHub's own shapes: it goes into the API path with the owner's token, so `..` is never a name
+REPO = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/(?!\.\.?$)[A-Za-z0-9_.-]{1,100}$')
+def issue_labels(v) -> list:
+    "`labels` as an agent writes them - a list, or one line split at commas - each trimmed, none empty, at most ten."
+    xs = v if isinstance(v, (list, tuple)) else str(v or '').split(',')
+    return [s for s in (str(x).strip() for x in xs) if s][:10]
+
+def issue_check(p: dict) -> str:
+    "'' when a new issue is whole, else what is missing - asked at the proposal and again at the press."
+    repo = str(p.get('repo') or '').strip()
+    if not repo: return 'github_issue needs `repo` - owner/name'
+    if not REPO.match(repo): return f'{repo!r} is not a repository - write it owner/name'
+    if not str(p.get('title') or '').strip(): return 'github_issue needs a `title`'
+    return ''
+
+def run_github_issue(cfg):
+    """GitHub: open an issue - {repo: owner/name, title, body, labels (optional)}. Reaches people: everyone watching the repository
+    is told, so an agent's call waits for the owner's Create issue."""
+    if why := issue_check(cfg): raise RuntimeError(why)
+    if not cfg.get('token'): raise RuntimeError('the GitHub connection has no token saved - paste one under Connections')
+    repo, title = str(cfg['repo']).strip(), ' '.join(str(cfg['title']).split())[:256]
+    out = create_issue(cfg['token'], repo, title, str(cfg.get('body') or ''), issue_labels(cfg.get('labels')))
+    return {'headline': f"opened {repo}#{out['number']}", 'rows': [{'repo': repo, 'number': out['number'], 'title': title, 'url': out['url']}]}
+
 
 def comment_issue(tok, repo, number, body):
     """One comment on an issue or PR - how a Taskuary reply reaches a GitHub author."""

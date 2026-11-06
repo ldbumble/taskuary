@@ -1,6 +1,7 @@
 // ONE CARD FOR EVERY ACT A CONNECTOR DECLARES (the owner, 2026-11-05: "each connector should have settings what the action view looks like
 // no?"): the agent's run_tool on a tool the catalogue gives an action view (taskuary/connectorcatalog.json `actions`, read by actionCard.js) -
-// a LinkedIn post with its picture, who sees it and post now or save as a draft; a Bluesky or Mastodon post; a comment on a tracker item. Its
+// a LinkedIn post with its picture, who sees it and post now or save as a draft; a Bluesky or Mastodon post; a comment on a tracker item;
+// a new GitHub issue - its repository, title and labels, its words editable, Create issue (2026-11-06). Its
 // words are editable while it waits, its choices too where declared, pre-filled from the connection's defaults (Connections). The press is the
 // one decide road every proposal takes (/api/reviews/{id}/decide, verdicts.decide -> proposals.execute): nothing goes before it. Live only on
 // the newest turn; older turns keep theirs read-only, in their own words. Once it went it says so, with the link.
@@ -51,7 +52,8 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
         {f.choices.map((c) => <option key={String(c.value)} value={String(c.value)}>{c.label}</option>)}</Box>
     : <span key={f.key} data-tq-act-choice={f.key}>{choiceOf(f, f.value)?.label || String(f.value)}</span>;
   const meta = [row?.network, ...fields.filter((f) => f.type === "choice").map(choice)].filter(Boolean);
-  const lines = fields.filter((f) => f.type === "line" && f.value);
+  // ...a `heading` line is the act's own title, drawn bold over its words (a GitHub issue's title), never "Title ..." in the header
+  const lines = fields.filter((f) => f.type === "line" && f.value && !f.heading), heads = fields.filter((f) => f.heading && f.value);
   return (
     <Box data-tq-act={row?.ReviewId} data-tq-act-kind={act.kind} data-tq-act-state={gone ? "done" : st.live ? "waiting" : "not-done"}
       sx={{ mt: 1, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff", overflow: "hidden" }}>
@@ -65,6 +67,7 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
         </Box>
       </Box>
       {post && lines.map((f) => <Typography key={f.key} sx={{ px: 1.5, fontSize: 12, color: DIM }}>{f.label}: {f.value}</Typography>)}
+      {heads.map((f) => <Typography key={f.key} data-tq-act-heading={f.key} sx={{ px: 1.5, pt: 0.25, fontSize: 14, fontWeight: 700, color: INK, overflowWrap: "anywhere" }}>{f.value}</Typography>)}
       {st.live && !gone
         ? <Box component="textarea" data-tq-act-text="" value={text} onChange={(e) => setText(e.target.value)} disabled={!!busy} rows={Math.min(14, Math.max(3, text.split("\n").length + 1))}
             sx={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", border: 0, outline: 0, px: 1.5, py: 0.5, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent" }} />

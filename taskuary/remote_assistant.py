@@ -21,7 +21,7 @@ import collections, json, re, threading, time
 from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
-from . import buttons, lanes
+from . import buttons, devphone, lanes
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
 from .funnel_presentation import back_in as _back_in, is_own, move_of as move_title, shows, story_who
 
@@ -996,7 +996,8 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
         welcome.touch(store)                  # a word on the phone is the owner here: "while you were away" ends with it
         store.audit('task', tid, 'assistant_chat_question', f'owner-{channel}',
                     detail={'channel': channel, 'chat': chat, 'chars': len(question)})
-        with concierge.delivering(concierge.PHONE):
+        # ...and in Developer mode the coding agents' tools are this turn's too (devphone.py) - only here, only while armed
+        with concierge.delivering(concierge.PHONE), devphone.armed(store):
             # the item on the table is the walk's own, persisted and validated here - a phone has no
             # client state to send, and the key is all say() needs to build the item afresh
             item = concierge.restore_current(store, tid)
@@ -1092,6 +1093,11 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                 if not picked: forget_offered(store, channel, chat)
                 send(store, channel, chat, straight, connector_id)
                 return
+            # a landing answer typed instead of tapped is the same pick (devphone.typed) - the owner's own words, never the model's read
+            if not picked and (land_pick := devphone.typed(question, offered, acts)):
+                forget_offered(store, channel, chat)
+                send(store, channel, chat, run_act(store, land_pick, item), connector_id)
+                return
             out = concierge.say(store, question, key=concierge.current_key(store, tid) or None, actor='owner', cancel=cancel)
             if cancel is not None and cancel.is_set(): return          # a pick came in behind it and answers instead
             if out.get('no_brain') and not picked:
@@ -1109,7 +1115,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
                     send(store, channel, chat, f'Pick 1 to {len(offered)} - the choices are below.', connector_id, choices=offered)
                     return
             if not picked: forget_offered(store, channel, chat)
-            text = carry_out(store, out, item, picked=picked)
+            text = carry_out(store, out, item, picked=picked, extra=devphone.take() or None)    # a landing question's answers, as picks
             if out.get('no_brain') and not _CHOICES_BLOCK.search(text):
                 # ...and with nothing waiting either, still a way on (a fresh install's first "hi" was a dead end): the AI cards, everything else
                 text = turn_text({'say': text.replace(concierge.NO_BRAIN, concierge.NO_BRAIN_BARE), 'item': None}, store=store,
@@ -1709,6 +1715,7 @@ def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
 def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     from . import asks, concierge, funnel, operations
     t = act.get('t')
+    if t == devphone.LAND_ACT: return devphone.picked(store, act, actor)        # the owner's answer to the landing question (devphone)
     from . import doorway_browse
     try:
         if t == 'section':

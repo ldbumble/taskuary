@@ -111,6 +111,9 @@ import { closeoutOf } from "./reviewProposal.js";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import EarlierRounds from "./CloseoutRounds.jsx";
+import LandingCard from "./LandingCard.jsx";
+import CodingChat from "./CodingChat.jsx";
+import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import MoreDrafts from "./MoreDrafts.jsx";
 import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
@@ -1304,6 +1307,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the pane shows the selected task or nothing - never the previous one while this loads
   const t = detail?.task?.TaskId === selected ? detail.task : null;
   const isGeneral = isGeneralKind(t?.Kind);
+  // A BRANCH WAITING TO LAND (landing.py): read once the coding task is on the table, and again whenever its card reads it (LandingCard onState) -
+  // the folded Close out tab said "Nothing owed" over the landing question it hid (the conductor run, 2026-11-06)
+  const [landAsk, setLandAsk] = useState(false);
+  const landingOf = t?.Kind === "coding" && canCode ? t.TaskId : null;
+  useEffect(() => {
+    setLandAsk(false);
+    if (!landingOf) return undefined;
+    let on = true;
+    api.get(`/api/tasks/${landingOf}/landing`).then(({ data }) => on && setLandAsk(!!data?.data?.ask)).catch(() => {});
+    return () => { on = false; };
+  }, [landingOf, detail?.task?.UpdatedAt]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Closing it is this view's; what comes NEXT is the page around it (TasksView moves to the next live row, the canvas
   // walks on) - `onFinish(status, close)` runs the close itself so the list can pre-record the state it is about to see.
@@ -1958,7 +1972,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     close: closeStatus({ advisor: adviceIn === "close" ? warn?.advice?.label || "" : "", closed: ["done", "dropped"].includes(t.Status), note: closedNote, to: replyMessage?.FromName || "",
       where: replyMessage ? replyMessage.SourceName || channelName(replyMessage.Channel) : "",
       draft: String(pendingReview?.DraftText || sentReview?.FinalText || sentReview?.DraftText || newestFirst(sentOutside)[0]?.OwnText || newestFirst(sentOutside)[0]?.BodyText || "").slice(0, 240),
-      waiting: !!pendingReview, emails: emailsWaiting, owes: owedEmails(detail?.checklist, detail?.reviews), sent: !!(sentReview || sentOutside.length), owed: !!replyMessage,
+      waiting: !!pendingReview, emails: emailsWaiting, owes: owedEmails(detail?.checklist, detail?.reviews), sent: !!(sentReview || sentOutside.length), owed: !!replyMessage, landing: landAsk,
       sentWhen: sentReview?.DecidedAt ? whenShort(sentReview.DecidedAt) : newestFirst(sentOutside)[0]?.SentAt ? whenShort(newestFirst(sentOutside)[0].SentAt) : "" }),
   };
   // ...a closed section's tab, in place of the section: the arrow points the way it opens
@@ -2824,6 +2838,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
           onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />
       </Box>}
+      {/* HOW ITS BRANCH LANDS, on a coding task in Developer mode (LandingCard.jsx): the diff since it started, and the one question */}
+      {/* ...and in the coding chat it is a card in the stream instead (CodingChat `landing`) - drawn once */}
+      {coOn && canCode && t?.Kind === "coding" && !cardsIn && <LandingCard taskId={t.TaskId} onState={(x) => setLandAsk(!!x?.ask)} onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
       {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
           again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
       {coOn && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
@@ -3604,7 +3621,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // ...or says the agent's draft waiting in Close out (AgentDraftNotice.jsx), where its questions are asked
                       ...(!chatPane && (resultRest || (failedRun && !resultOpen)) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
+                      {/* A CODING TASK IS THE SAME ONE CHAT (the owner, 2026-11-06): its session's turns, the drafted reply with Send, the landing card and
+                          the close in one stream, the terminal a toggle inside it (CodingChat.jsx) - no Agent pane beside a Close out column */}
+                      {t.Kind === "coding" ? <CodingChat key={t.TaskId} task={t} term={term} next={chatCards}
+                        landing={cardsIn && canCode && t?.Kind === "coding" && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat onState={(x) => setLandAsk(!!x?.ask)}
+                          onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
+                        reading={readingOf(t?.ThreadJson)?.asking ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(t.ThreadJson).asking}</div> : null}
+                        came={{ label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : "Came from",
+                          title: "Where this came from - opens it", onOpen: threeUp ? () => openSection("from") : null }}
+                        closedLine={t.Status === "done" ? `✓ ${btn(closedNote ? "close_note" : "close")}${t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}${closedNote ? ` - ${closedNote}` : ""}`
+                          : t.Status === "dropped" ? "Dropped - nobody works it any more" : ""}
+                        tail={<AiUsed taskId={t.TaskId} />} onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
+                      : <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
@@ -3615,7 +3643,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         closedLine={t.Status === "done" ? `✓ ${btn(closedNote ? "close_note" : "close")}${t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}${closedNote ? ` - ${closedNote}` : ""}`
                           : t.Status === "dropped" ? "Dropped - nobody works it any more" : ""}
                         tail={<AiUsed taskId={t.TaskId} />}
-                        approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
+                        approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />}
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (

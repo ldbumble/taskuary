@@ -356,7 +356,11 @@ def main():
     ap.add_argument('--slot', default='', help='the checklist slot this email fills (the id after --slot in your checklist)')
     ap.add_argument('--to', default='', help='who it goes to: with --draft, when no slot names them; with --reply, the person on this '
                                              'task you are answering or asking (a name or address)')
-    ap.add_argument('--answers', type=int, metavar='N', help='with --reply: the message number (#N) of the mail that holds the ask, when it is not the one triage picked')
+    ap.add_argument('--answers', type=int, metavar='N', help='with --reply: the message number (#N) of the mail it replies to - the one that holds '
+                                                         'the ask, or an earlier mail when that is the right next step')
+    ap.add_argument('--only', action='store_true', help="with --reply: to that mail's sender alone, nobody copied (something sensitive)")
+    ap.add_argument('--cc', action='append', default=None, metavar='ADDRESS', help='with --reply: who else is copied, instead of the thread (repeat for more)')
+    ap.add_argument('--why-to', default='', metavar='LINE', help='with --reply: one line on why it goes to whom it goes, when it is not the plain reply all')
     ap.add_argument('--subject', default='', help='the subject line')
     # ...and a BATCH's items (batch.py): one finding per item, as the agent finishes each
     ap.add_argument('--item', type=int, metavar='N', help='in a batch: report on item N (with --result, and --overlap/--settled)')
@@ -436,7 +440,7 @@ def main():
         got = (_post('/api/agent/draft', {'task_id': int(tid), 'text': text, 'to': args.to, 'subject': args.subject, 'slot': args.slot,
                                           'agent': who, 'files': files}, stranger) if drafting
                else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up,
-                                                'to': args.to, 'answers': args.answers}, stranger))
+                                                'to': args.to, 'answers': args.answers, 'only': args.only, 'cc': args.cc, 'why_to': args.why_to}, stranger))
         if not got: return
         r, out = got
         # ...saying to WHOM it was saved: "reply saved" alone let a question meant for one requester sit as an answer to another (2026-11-02)

@@ -100,7 +100,10 @@ export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent
 // ...and a kind not yet known is not home: a coding task drew two sections for a moment before its detail landed
 // ...AND ANY TASK AN AGENT TALKED ON, OR CLOSED (the owner, 2026-11-06: a done task opened from Search in the old three columns - "it should open
 // to agent tab now that came from is gone"): `chatted` - a chat on it, or it is closed - makes it home too, save a coding task's terminal
-export const chatHome = ({ kind, terminal = false, chatted = false } = {}) => !terminal && !!kind && (isGeneralKind(kind) || kind === "reply" || (chatted && kind !== "coding"));
+// ...AND A CODING TASK, ITS TERMINAL LIVE OR NOT (the owner, 2026-11-06: "combine the close out action in the coding cli as well. basically making
+// general and coding agent more similar"): its chat is the session, the drafted reply and the landing in one stream (CodingChat.jsx), the
+// terminal a toggle inside it - no Close out column
+export const chatHome = ({ kind, terminal = false, chatted = false } = {}) => !!kind && (kind === "coding" || (!terminal && (isGeneralKind(kind) || kind === "reply" || chatted)));
 // ...a live CODING terminal, that is: a general agent's own chat is a session too (mode "assistant"), and its task stays home
 export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
 export const taskSections = (home) => (home ? SECTIONS.filter((s) => s.key !== "close") : SECTIONS);
@@ -147,9 +150,12 @@ export const agentStatus = ({ profile = "", word = "not started", said = "", mad
 // ...and AN EMAIL THE TASK OWES LEADS, ITS OWN TO FIRST (`owes`, taskLifecycle.owedEmails - the owner, 2026-11-02): a chat asked for an email
 // to somebody else and the tab said only "Reply to <the chat's sender>"; each owed email says where it goes and where it stands, and
 // the count of drafted ones is not said again under them
-export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false, advisor = "", owes = [] } = {}) => ({
+// ...AND A BRANCH WAITING TO LAND IS OWED TOO (`landing`, LandingCard): "Nothing owed" stood folded over the landing question it hid (the conductor
+// run, 2026-11-06) - the tab says the question waits, and "Nothing owed" is said only where nothing at all does
+export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false, advisor = "", owes = [], landing = false } = {}) => ({
   lines: [...(closed ? [] : owes.map((o) => `Email to ${o.to || o.name} · ${o.state}`)), to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
-    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails || owes.length ? "" : "Nothing owed",
+    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails || owes.length || landing ? "" : "Nothing owed",
+    !closed && landing ? "Branch waiting to land · how should it land?" : "",
     emails && !owes.length ? `${plural(emails, "email")} waiting for Send` : ""].filter(Boolean),
   foot: advisor ? `Advisor: ${advisor} is next` : "" });
 

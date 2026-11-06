@@ -1345,7 +1345,7 @@ function KbSearch({ conn }) {
 
 const WINRM_HOWTO = [
   "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
-  "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
+  "A box you can RDP into (like NWWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
   "If Test fails with 'WinRM unreachable', enable PS remoting on the remote box once: open an elevated PowerShell THERE and run Enable-PSRemoting -Force.",
   "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands under Reports on your work rail.",
 ];
@@ -1838,6 +1838,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     key: `s${c.ConnectorId}`, title: c.Name || title, channel: type,
     desc: desc(c), haystack,
     go: () => setOpen({ kind: "connector", id: c.ConnectorId }),
+    // ...and these carry it too (the owner, 2026-11-06): SQL Server, remote Windows, Agent Desktop and Reason Network had Remove only on
+    // their own page - the same channel the page's own Remove says (MssqlDetail, WinrmDetail: data)
+    remove: removable(c) ? { conn: c, channel: type === "mssql" || type === "winrm" ? "data" : "", reload: load } : null,
   }));
   const planned = types.filter((t) => t.status === "planned").map((t) => t.type);
   // `rest` catches whatever the server starts advertising that this file has not been taught
@@ -1924,7 +1927,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "Cloud & infrastructure", cards: [
       ...dataCards(["aws", "azure"]),
       ...specialCards("winrm", "Remote Windows (WinRM)", "winrm",
-        "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" ")),
+        "remote windows winrm rdp powershell remoting nwweb01 " + WINRM_HOWTO.join(" ")),
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
@@ -2103,7 +2106,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
 /* ── "Remove connection" on every detail page: wipes creds/config, turns sources off ── */
 /* The second door to a playbook (docs/beyond-code.md): the card is where you look for "what does
    this thing do for us", so it lists every playbook whose `uses:` line names this connection, and
-   opens each on Reports → Playbooks (#playbook=<slug>), where the words are edited. */
+   opens each on About you → Playbooks (#playbook=<slug>), where the words are edited. */
 function CardPlaybooks({ type }) {
   const [books, setBooks] = useState(null);
   useEffect(() => {
@@ -2858,7 +2861,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
       {tab === "Setup" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-          <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
+          <TextField label="machine name" placeholder="NWWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setCfg({ ...cfg, host: e.target.value })} onBlur={boxes.flush} InputProps={{ endAdornment: boxes.tick("host") }} />
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
             <Button variant="contained" disableElevation disabled={busy === "test" || !cfg.host} onClick={runTest}

@@ -133,3 +133,26 @@ test("the coding chat's box types into the running CLI, or picks the session bac
   assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/continue-work/);
   assert.match(src, /\/api\/tasks\/\$\{tid\}\/coding-chat/);
 });
+
+test("over ACP each step keeps the moment it came in, and the plan is one checklist - the newest of its turn", () => {
+  const ups = [
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: "TASKUARY: work TQ-0042 ..." }, _meta: { taskuary: "brief" }, _at: "2026-11-06 09:00:00" },
+    { sessionUpdate: "plan", entries: [{ content: "Read the ledger", status: "in_progress" }, { content: "Fix the tax line", status: "pending" }], _at: "2026-11-06 09:00:02" },
+    { sessionUpdate: "tool_call", toolCallId: "a", kind: "read", title: "Read store.py", status: "completed", locations: [{ path: "C:/work/ledger/store.py" }], _at: "2026-11-06 09:00:03" },
+    { sessionUpdate: "plan", entries: [{ content: "Read the ledger", status: "completed" }, { content: "Fix the tax line", status: "in_progress" }], _at: "2026-11-06 09:00:04" },
+    { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "On the tax line now." }, _at: "2026-11-06 09:00:05" },
+  ];
+  assert.equal(stepsFromAcp(ups).find((s) => s.k === "tool").at, "2026-11-06 09:00:03");
+  const [turn] = chatRows({ sessions: [{ sid: "s", source: "acp", at: "2026-11-06 08:59:00", updates: ups }] });
+  assert.equal(turn.at, "2026-11-06 09:00:02");
+  const plans = turn.parts.filter((p) => p.type === "plan");
+  assert.equal(plans.length, 1);
+  assert.deepEqual(plans[0].items, [{ text: "Read the ledger", state: "done" }, { text: "Fix the tax line", state: "now" }]);
+});
+
+test("over ACP the box is a prompt, Stop ends the turn, and the Terminal is offered only once a command printed", () => {
+  const src = fs.readFileSync(new URL("../src/CodingChat.jsx", import.meta.url), "utf8");
+  assert.match(src, /\/api\/tasks\/\$\{tid\}\/agent\/cancel/);
+  assert.match(src, /live\.terminal !== false/);
+  assert.match(src, /data-tq-plan/);
+});

@@ -16,18 +16,21 @@ export function stepsFromAcp(updates) {
   const out = [], byId = new Map();
   // ...the agent's words arrive a token at a time: one step per run of chunks, as a log has one per block. A prompt Taskuary sent marks itself
   // its brief (`_meta.taskuary`), as mark_briefs marks a log's
-  const chunk = (k, t) => { if (!t) return; const last = out.at(-1); if (last?.k === k && last.open) last.text += t; else out.push({ k, text: t, open: true }); };
+  // ...each step at the moment its first update came in (`_at`, stamped as it was kept): ACP itself carries no time
+  let at = "";
+  const chunk = (k, t) => { if (!t) return; const last = out.at(-1); if (last?.k === k && last.open) last.text += t; else out.push({ k, text: t, open: true, ...(at ? { at } : {}) }); };
   for (const u of updates || []) {
     const kind = u?.sessionUpdate;
+    at = u?._at || "";
     if (kind === "user_message_chunk") chunk(u._meta?.taskuary === "brief" ? "brief" : "you", textOf(u.content));
     else if (kind === "agent_message_chunk") chunk("said", textOf(u.content));
     else if (kind === "agent_thought_chunk") chunk("thought", textOf(u.content));
-    else if (kind === "plan") out.push({ k: "plan", items: (u.entries || []).map((e) => ({ text: String(e?.content || ""), status: e?.status || "pending" })) });
+    else if (kind === "plan") out.push({ k: "plan", items: (u.entries || []).map((e) => ({ text: String(e?.content || ""), status: e?.status || "pending" })), ...(at ? { at } : {}) });
     else if (kind === "tool_call" || kind === "tool_call_update") {
       let s = byId.get(u.toolCallId);
       if (!s) {
         if (kind === "tool_call_update" && !u.rawInput && !u.title && !u.kind) continue;
-        s = { k: "tool", name: ACP_TOOL[u.kind] || u.title || u.kind || "tool", args: {} };
+        s = { k: "tool", name: ACP_TOOL[u.kind] || u.title || u.kind || "tool", args: {}, ...(at ? { at } : {}) };
         byId.set(u.toolCallId, s); out.push(s);
       }
       if (u.rawInput && typeof u.rawInput === "object") s.args = { ...s.args, ...small(u.rawInput) };
@@ -67,7 +70,11 @@ export const editRow = (s) => {
   return { type: "edit", file, summary: `${verb} ${baseName(file) || "a file"}${hunks.length ? ` (+${plus} −${minus})` : ""}`, plus, minus, hunks };
 };
 
-// a turn's own parts in order: its words, a fold of the work it did, each edit with its diff
+// THE PLAN IS A CHECKLIST, the newest one of the turn where it was last updated - never "Updated its plan (3 steps)" six times over
+const PLAN_MARK = { completed: "done", done: "done", in_progress: "now", now: "now" };
+export const planRow = (s) => ({ type: "plan", items: (s.items || []).filter((x) => x?.text).map((x) => ({ text: x.text, state: PLAN_MARK[x.status] || "todo" })) });
+
+// a turn's own parts in order: its words, a fold of the work it did, each edit with its diff, its plan
 export function turnParts(steps, { running = false } = {}) {
   const parts = [], run = [];
   const flush = (last) => {
@@ -78,8 +85,14 @@ export function turnParts(steps, { running = false } = {}) {
     }
     run.length = 0;
   };
-  steps.forEach((s, i) => { if (isEdit(s)) { flush(false); parts.push(editRow(s)); } else run.push(s); if (i === steps.length - 1) flush(true); });
-  return parts.map((p, i) => ({ ...p, id: `p${i}` }));
+  steps.forEach((s, i) => {
+    if (isEdit(s)) { flush(false); parts.push(editRow(s)); }
+    else if (s.k === "plan" && s.items?.length) { flush(false); parts.push(planRow(s)); }
+    else run.push(s);
+    if (i === steps.length - 1) flush(true);
+  });
+  const lastPlan = parts.map((p) => p.type).lastIndexOf("plan");
+  return parts.filter((p, i) => p.type !== "plan" || i === lastPlan).map((p, i) => ({ ...p, id: `p${i}` }));
 }
 
 // ── the chat: what came in, what the owner said, and each turn - oldest first ────────────────────

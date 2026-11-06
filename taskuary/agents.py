@@ -1432,15 +1432,54 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace):
         client.close(); raise
 
 
+# OUR MODEL ID, THE AGENT'S SPELLING (the owner's chat, 2026-11-06: "claude offers no model 'claude-opus-5-5' over ACP - it runs on opus"
+# as an agent step). claude-agent-acp offers aliases - default, opus, sonnet, haiku, opus[1m] - and may offer dated ids; codex-acp offers
+# Codex's own ids. Ours is matched to the closest one quietly: plumbing is a debug line, never the owner's chat. Only a model the agent
+# has nothing near - one this sign-in cannot run - is said, in plain words.
+_FAMILIES = ('opus', 'sonnet', 'haiku')
+def _bare(v) -> str: return re.sub(r'(\[[^\]]*\]|-\d{8})$', '', str(v or '').lower())
+def _parts(v) -> list: return re.split(r'[^a-z0-9]+', str(v or '').lower())
+
+
+def offered_model(want: str, vals: list) -> str:
+    """The value the agent offers for model `want`: the same id; else it without a date or [1m] suffix; else claude's family
+    (claude-opus-5-5 -> opus, the bare alias first); else the offered id that begins `want` or that `want` begins. '' when none is near."""
+    vals, w = [str(v) for v in vals or [] if v], _bare(want)
+    if not (w and vals): return ''
+    if (x := next((v for v in vals if v.lower() == str(want).lower()), '')): return x
+    if (same := [v for v in vals if _bare(v) == w]): return min(same, key=lambda v: ('[' in v, len(v)))
+    if (fam := next((f for f in _FAMILIES if f in _parts(w)), '')):
+        c = [v for v in vals if fam in _parts(v)]
+        return min(c, key=lambda v: (v.lower() != fam, '[' in v, len(v))) if c else ''
+    near = [v for v in vals if _bare(v).startswith(w) or w.startswith(_bare(v))]
+    return min(near, key=lambda v: (abs(len(_bare(v)) - len(w)), len(v))) if near else ''
+
+
+def offered_effort(want: str, vals: list) -> str:
+    "The offered effort nearest `want` on the one scale (brainroute.EFFORTS), a lower one on a tie - '' when it offers none we know."
+    from .brainroute import EFFORTS
+    vals = [str(v) for v in vals or [] if v]
+    if want in vals: return want
+    if want not in EFFORTS: return ''
+    known = [v for v in vals if v in EFFORTS]
+    return min(known, key=lambda v: (abs(EFFORTS.index(v) - EFFORTS.index(want)), EFFORTS.index(v))) if known else ''
+
+
 def _acp_gears(client, profile: dict, name: str, trace):
-    "The run's model and effort as session config options; one the agent does not offer is said, and it runs on its own."
+    """The run's model and effort as session config options, each as the agent spells it (offered_model, offered_effort). A model it has
+    nothing near is said to the owner; everything else is a debug line, and it runs on its own."""
     if not profile.get('model'): return
     from .climodels import split_pick
     for cat, want in zip(('model', 'thought_level'), split_pick(profile['model'])):
-        if want and not client.set_option(cat, want):
-            o = client.option(cat)
-            trace('progress', 'acp', f"{name} offers no {'model' if cat == 'model' else 'effort'} '{want}' over ACP - it runs on "
-                                     f"{o.get('currentValue') or 'its default'}")
+        if not want or not client.option(cat): continue
+        vals = client.values(cat)
+        to = (offered_model if cat == 'model' else offered_effort)(want, vals) if vals else want
+        if to and client.set_option(cat, to):
+            if to != want: logger.debug(f'acp: {name} {cat} {want!r} runs as its {to!r}')
+            continue
+        now = client.option(cat).get('currentValue') or 'its default'
+        logger.debug(f'acp: {name} offers no {cat} near {want!r} (it offers {vals}) - it runs on {now}')
+        if cat == 'model': trace('progress', 'acp', f"{want} is not available on this {_cli_name(name)} sign-in, so this ran on {now}")
 
 
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
@@ -1482,9 +1521,12 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     try:
         with conv.lock:
             if launch['adapter']: _acp_gears(client, profile, name, trace)     # a native CLI took its model on its command line
+            since = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             stop, said = client.prompt(prompt)
             conv.turns += 1; conv.used = time.time()
         ok = True
+        # WHAT THE TURN USED, onto its route row (aiusage.Metered's meter): the adapter's count, else the CLI's own log (aiusage.acp_turn)
+        aiusage.note_turn(aiusage.acp_turn(_cli_name(name), client.last_turn, client.session_id, since))
         if stop and stop not in ('end_turn', 'cancelled'): trace('progress', 'acp', f'the turn ended early: {stop}')
         diff = ''
         if cwd:

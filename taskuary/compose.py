@@ -569,6 +569,21 @@ def validate(store, cfg: dict):
 
 
 # ── a dashboard: sources + preset components, written once and run with no AI ─────────────────────────────
+# THE PRESETS, said once: the dashboard composer and the one-sentence tile (compose_tile) both bind to these and nothing else
+DASHBOARD_COMPONENTS = (
+    'COMPONENTS - only these presets, each {"kind", "title", "said", "source": "<a source key>", ...its bindings, "w": 1-4 (of 4 columns)}.\n'
+    '"said" is the one plain sentence a person would write for the tile ("How many tasks are open right now, lower is better"): it is '
+    'shown on the tile and the owner edits the tile by rewriting it.\n'
+    '- "stat": one number. "agg": count|sum|avg|median|min|max, "y" for any agg but count, optional "where": {column: value}, '
+    '"good": "up"|"down" (which direction is good), optional "unit" (h, min, $). Its delta and sparkline come from the source\'s date. Lead with 2-4 of them.\n'
+    '- "progress": a number toward a "target" (same keys as stat, plus "target": <number>).\n'
+    '- "line" / "area": a value over time. "x" = the date column, "agg", "y", optional "where". Never two measures on one chart.\n'
+    '- "bar": ranked categories. "x" = the category column, "agg", "y", optional "limit" (default 8; the rest fold into Other),'
+    ' optional "order": [x values] to keep stages in their order, "share": true to say each bar as a share of the first.\n'
+    '- "stacked": categories split by a second column: "x", "series" (at most 6 values read well), "agg", "y".\n'
+    '- "table": rows. "columns": [...], optional "sort": "<column>" or "-<column>", "limit".\n'
+    '- "list": items, each one line. "label" = the column a person reads, optional "meta" column, "sort", "limit". A row with a '
+    'task_id column opens that task when pressed.\n')
 DASHBOARD_SYSTEM = (
     'You design ONE Taskuary dashboard from a plain-English request: the data sources it reads (deterministic reads from the '
     'catalog - a query, a sheet, a file, Taskuary\'s own tables) and a grid of PRESET components bound to those sources\' '
@@ -584,17 +599,7 @@ DASHBOARD_SYSTEM = (
     '  A source\'s "key" is its own name here. An s3_object source puts its object path in "object_key", never in "key".\n'
     ' "filters": {"range": 7|30|90|0, "segment": "<a column several sources share, to slice every component by>"},\n'
     ' "components": [...]}\n'
-    'COMPONENTS - only these presets, each {"kind", "title", "source": "<a source key>", ...its bindings, "w": 1-4 (of 4 columns)}:\n'
-    '- "stat": one number. "agg": count|sum|avg|median|min|max, "y" for any agg but count, optional "where": {column: value}, '
-    '"good": "up"|"down" (which direction is good), optional "unit" (h, min, $). Its delta and sparkline come from the source\'s date. Lead with 2-4 of them.\n'
-    '- "progress": a number toward a "target" (same keys as stat, plus "target": <number>).\n'
-    '- "line" / "area": a value over time. "x" = the date column, "agg", "y", optional "where". Never two measures on one chart.\n'
-    '- "bar": ranked categories. "x" = the category column, "agg", "y", optional "limit" (default 8; the rest fold into Other),'
-    ' optional "order": [x values] to keep stages in their order, "share": true to say each bar as a share of the first.\n'
-    '- "stacked": categories split by a second column: "x", "series" (at most 6 values read well), "agg", "y".\n'
-    '- "table": rows. "columns": [...], optional "sort": "<column>" or "-<column>", "limit".\n'
-    '- "list": items, each one line. "label" = the column a person reads, optional "meta" column, "sort", "limit". A row with a '
-    'task_id column opens that task when pressed.\n'
+    + DASHBOARD_COMPONENTS +
     'RULES\n'
     '- One screen: 4-10 components. The numbers first (stat/progress, w 1), the trends and rankings next (w 2), a table or '
     'list last (w 2-4). Every title is what a person would call the number, never a column name.\n'
@@ -628,8 +633,78 @@ def compose_dashboard(store, ask: str, llm, answers: dict = None, rounds: int = 
         cfg = {k: v for k, v in cfg.items() if k in DASHBOARD_KEYS} | {'type': 'dashboard'}
         for i, s in enumerate(cfg.get('sources') or [], 1):
             if isinstance(s, dict): s.setdefault('key', f's{i}')
+        cfg, dropped = _tiles_of(store, cfg, llm)
         ok, why = dashboards.validate(cfg, store)
+        if not ok and dropped and not cfg.get('components'): why = dropped[0]
         if not ok: return {'error': why, 'config': cfg}
-        return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],
+        note = f" I left out {len(dropped)} tile{'s' if len(dropped) > 1 else ''} I could not draw: {'; '.join(dropped)}." if dropped else ''
+        return {'config': cfg, 'explain': (str(out.get('explain') or '') + note).strip()[:900],
                 'confidence': out.get('confidence') or 'medium', 'looked_at': looked}
     return _rounds(store, llm, dashboard_system() + _playbook(cat), user, rounds, finish)
+
+
+def _tiles_of(store, cfg, llm) -> tuple:
+    """(the spec with every tile checked and carrying its sentence, [why each dropped one could not be drawn]). A tile that fails the
+    tile's check goes through compose_tile once with its own sentence - the same road a sentence typed on the setup page takes."""
+    from . import dashboards
+    if not isinstance(cfg.get('components'), list) or not isinstance(cfg.get('sources'), list): return cfg, []
+    seen, out, dropped = dashboards.seen_columns(cfg), [], []
+    for c in cfg['components']:
+        said = str((c or {}).get('said') or '').strip() if isinstance(c, dict) else ''
+        good, why = dashboards.check_tile(cfg, c, seen)
+        if not good:
+            said = said or (dashboards.describe(c, cfg) if isinstance(c, dict) else '')
+            got = compose_tile(store, cfg, said, llm, current=c if isinstance(c, dict) else None, seen=seen) if said else {'error': why}
+            good = got.get('component')
+            if not good: dropped.append(why); continue
+        out.append({**good, 'said': said or good.get('said') or dashboards.describe(good, cfg)})
+    return {**cfg, 'components': out}, dropped
+
+
+# ── one tile from one sentence (the owner, 2026-11-06: "maybe we should just use text to say what it shows") ─────────────────
+TILE_SYSTEM = (
+    'You turn ONE sentence the owner wrote into ONE tile of their Taskuary dashboard. The sentence is theirs and stays on the tile; you '
+    'choose the preset and bind it to the real columns of one of the dashboard\'s sources, listed below with the values a short column '
+    'takes. Nothing is summarised by an AI when the dashboard runs: the page counts and draws the rows.\n\n'
+    'Answer JSON only, one of:\n'
+    '  {"component": {"kind", "title", "source", ...its bindings}}\n'
+    '  {"cannot": "<one plain sentence to the owner: what none of the sources holds>"} - only when no source has what the sentence asks.\n'
+    'When "current" is given the owner rewrote that tile\'s sentence: change what the new words ask for and keep the rest of it.\n\n'
+    + DASHBOARD_COMPONENTS +
+    'RULES\n'
+    '- "title" is short (under 40 characters): what a person would call the number, never a column name.\n'
+    '- Bind only to the columns listed for the source you pick. "where" values are exact matches of the values listed.\n'
+    '- Counts are "agg": "count" with no "y". A sum, average, median, lowest or highest needs the numeric column as "y".\n'
+    '- "range": false when the sentence counts what is true NOW (open, right now, a balance); "range": 7, 30 or 90 for a fixed window '
+    '("this week" is 7); no "range" otherwise - the page\'s range then cuts it.\n'
+    '- "good" only when the sentence says which way is better. "w" only when it asks for a width.\n')
+NO_TILE = 'That could not be drawn: {}. Try saying it another way.'
+
+
+def compose_tile(store, spec: dict, said: str, llm, current: dict = None, data: dict = None, seen: dict = None) -> dict:
+    """{'component': <one tile, its sentence as `said`>} or {'error': <plain words>} - a sentence turned into a tile against the
+    dashboard's sources: their real columns (`data`, the rows they returned) and what each Taskuary dataset holds. The model reads the
+    sentence; the answer is held to the tile's check (dashboards.check_tile), and a refused one is asked again ONCE with the reason."""
+    if not llm: return dict(NO_AI)
+    said = str(said or '').strip()[:400]
+    if not said: return {'error': 'Say what the tile should show.'}
+    from . import dashboards
+    if not isinstance(spec, dict) or not [s for s in spec.get('sources') or [] if isinstance(s, dict)]:
+        return {'error': 'The dashboard reads no source yet - add one under Sources first.'}
+    seen = seen if seen is not None else dashboards.seen_columns(spec, data)
+    about = {k: v[1] for k, v in dashboards.DATASETS.items()}
+    srcs = [{'key': dashboards._key(s, i), 'label': s.get('label') or '', 'type': s.get('type'), **({'dataset': s['dataset'], 'holds': about.get(s['dataset'])}
+             if s.get('type') == 'taskuary_data' and s.get('dataset') else {}), 'date': s.get('date') or None,
+             **seen.get(dashboards._key(s, i), {'columns': [], 'values': {}})} for i, s in enumerate(spec['sources'], 1) if isinstance(s, dict)]
+    user = {'sentence': said, 'sources': srcs, **({'current': {k: v for k, v in current.items() if k != 'said'}} if isinstance(current, dict) else {})}
+    why = 'the answer was not a tile'
+    for _ in range(2):
+        try: raw = llm(TILE_SYSTEM, json.dumps(user, default=str), max_tokens=800)
+        except Exception as e:
+            logger.info(f'compose_tile: the AI did not answer - {type(e).__name__}: {e}'); return {'error': 'The AI did not answer - try again.'}
+        out = _json(raw)
+        if isinstance(out, dict) and str(out.get('cannot') or '').strip(): return {'error': str(out['cannot']).strip()[:300]}
+        c, why = dashboards.check_tile(spec, (out or {}).get('component') if isinstance(out, dict) else None, seen)
+        if c: return {'component': {**c, 'said': said}}
+        user = {**user, 'your_last_answer': out if out is not None else str(raw or '')[:1000], 'it_was_refused_because': why}
+    return {'error': NO_TILE.format(why)}

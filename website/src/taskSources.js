@@ -199,7 +199,8 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
   const said = run ? ""
     : String(verdict?.intent || routeIntent(route?.Reason) || (route?.Decision === "create" ? (kind === "reply" ? "reply_only" : "task") : "")).toLowerCase();
   const intent = INTENT[said] || "";
-  const repo = kind === "coding" ? repoTag(task?.Tags) || repoTag(task?.Tags, "triage-repo") || verdict?.repository || "" : "";
+  // the owner's pick, else the coding agent's own (use_repo, repochoice.py) - triage names none any more (the owner, 2026-11-06)
+  const repo = kind === "coding" ? repoTag(task?.Tags) || repoTag(task?.Tags, "agent-repo") || "" : "";
   const profile = kind === "general" ? assignedAgent(task?.Assignee) || verdict?.profile || "" : "";
   const pri = level(task?.Priority);
   const by = run ? startedBy(task, workflow) : "";

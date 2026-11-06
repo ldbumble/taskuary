@@ -3120,7 +3120,7 @@ def _repo_rows(task_id: int, agent: str = ''):
     row = store.get_agent(_profile(agent)) or {}
     prof = json.loads(row.get('Config') or '{}')
     paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
-    tagged = (re.search(r'repo:([^\s,]+)', str((store.get_task(task_id) or {}).get('Tags') or '')) or [None, None])[1]
+    tagged = hub_term.repo_tag(store.get_task(task_id) or {})        # the owner's pin - never the agent's own agent-repo: pick
     return [{'repo': r, 'score': sc, 'what': desc.get(r, ''), 'path': paths.get(r),
              'has_path': has, 'tagged': r == tagged,
              # a pathless repo is searched for on the spot, so the picker can offer the answer
@@ -3152,7 +3152,8 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
     # Replacing a choice replaces what that task taught. Otherwise correcting repo A to repo B
     # would leave the same task as positive evidence for both projects forever.
     store.clear_project_evidence(task_id)
-    tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x and not x.startswith('repo:')]
+    # ...and the agent's own pick goes with it (repochoice.AGENT_TAG): the owner's word replaces it, and an unpin lets the agent choose afresh
+    tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x and not x.startswith(('repo:', 'agent-repo:'))]
     if body.repo: tags.append(f'repo:{body.repo}')
     if body.repo: tags = [x for x in tags if x != 'held:repo']    # the question a held start asked (funnel.HELD_REPO) is answered
     store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
@@ -3171,7 +3172,7 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
                       'Marked general - no repository. The session opens in the agent\'s own folder '
                       'and the prompt says there is no codebase to change.' if body.repo == hub_term.NO_REPO
                       else f'Repo set to {body.repo} - the session works there and the prompt says so.'
-                      if body.repo else 'Cleared the repo - Taskuary picks it from the ask again.')
+                      if body.repo else 'Cleared the repo - the coding agent picks it again when it starts.')
     store.audit('task', task_id, 'set_repo', ACTOR, detail={'repo': body.repo, 'path': body.path})
     if body.repo and body.repo != hub_term.NO_REPO:
         from .projects import learn_task_repository
@@ -5524,6 +5525,26 @@ def agent_note_peers(body: AgentNoteBody, request: Request):
     except PermissionError as e: raise HTTPException(403, str(e))
     except ValueError as e: raise HTTPException(422, str(e))
 
+class AgentUseRepoBody(BaseModel): task_id: int; path_or_name: str; why: str = ''
+
+@app.post('/api/agent/use-repo')
+def agent_use_repo(body: AgentUseRepoBody, request: Request):
+    """The use_repo tool (and `taskuary --use-repo`) from the session working the task: the checkout it picked, checked to be a git checkout
+    it may work in, recorded on the task and taken by its live session (repochoice.use). The owner's own pick (Change) is never overruled."""
+    from . import repochoice
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: return repochoice.use(store, body.task_id, body.path_or_name, body.why)
+    except PermissionError as e: raise HTTPException(403, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/agent/repos')
+def agent_repos(task_id: int, request: Request, query: str = ''):
+    "The find_repos tool: the git checkouts under the folders agents may look in (repochoice.find) - read-only, on the session's own task."
+    from . import repochoice
+    _owner_history(request, task_id)
+    return {'data': repochoice.find(store, query), 'folders': repochoice.folders(store)}
+
 class AgentLandBody(BaseModel): task_id: int; how: str; why: str = ''
 
 @app.post('/api/agent/propose-land')
@@ -5612,7 +5633,7 @@ def task_land_revert(tid: int, body: RevertBody, request: Request):
 class LandBody(BaseModel): how: str
 
 @app.post('/api/tasks/{tid}/landing')
-def task_land(tid: int, body: LandBody, request: Request):
+def task_landing_answer(tid: int, body: LandBody, request: Request):
     "The owner's answer to the landing question: rebase and fast-forward, a merge commit, a pull request, or discard (landing.land)."
     from . import landing
     _owner_only(request, "how a branch lands is the owner's answer")
@@ -5713,7 +5734,8 @@ async def mcp_rpc(request: Request, task: int = 0):
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
              'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),
-             'propose_land': lambda tid, how, why: agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why), request)}
+             'propose_land': lambda tid, how, why: agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why), request),
+             'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]
         if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger') and not (
@@ -11410,7 +11432,10 @@ def settings():
     # (assistant.notes_key) - bookkeeping, not a knob, however many reports there are
     rows = [s for s in store.list_settings() if s['Name'] not in ('ingest_status', 'assistant_last_run', 'pane_geometry', 'pane_theme')
             and not s['Name'].startswith('report_last_run:') and not s['Name'].startswith('assistant_notes')]
-    return {'data': [{**r, 'Default': DEFAULT_SETTINGS.get(r['Name'])} for r in rows]}
+    from .repochoice import FOLDERS_KEY, default_folders
+    # ...a blank folder list means the usual homes for code that exist on THIS machine, so that is what it shipped as here
+    shipped = lambda k: '\n'.join(default_folders()) if k == FOLDERS_KEY else DEFAULT_SETTINGS.get(k)
+    return {'data': [{**r, 'Default': shipped(r['Name'])} for r in rows]}
 
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):

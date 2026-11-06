@@ -241,6 +241,10 @@ const OWN = {
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed" }),
   signform: () => ({ kind: "edit", summary: "Filled in and signed a form" }),
   propose: () => ({ kind: "plan", summary: "Asked for your yes" }),
+  // ...and where it works (repochoice.py): the one line the chat shows for the agent's pick - "Working in northwind/ledger - <why>"
+  userepo: (a) => { const w = String(a.path_or_name || "").trim(), at = /[\\/]/.test(w) && !/^[\w.-]+\/[\w.-]+$/.test(w) ? baseName(w) : w;
+    return { kind: "plan", summary: `Working in ${at || "a checkout"}${a.why ? ` - ${clip(a.why, 100)}` : ""}` }; },
+  findrepos: (a) => ({ kind: "list", summary: `Looked for the code on this computer${asked(a.query)}` }),
 };
 const KIND = Object.fromEntries(Object.entries(TOOLS).flatMap(([k, names]) => names.map((n) => [n, k])));
 

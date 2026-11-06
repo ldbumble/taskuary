@@ -1073,8 +1073,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "
         "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
         "missing. Do not turn this into a coding task or instruct a coding CLI.\n"
-        # Work that no repository can carry now lands here rather than stalling as a held coding task
-        # (ingest: no_repo). Some of it needs a tool nobody has wired - adding somebody to a Teams invite
+        # Work that no repository can carry lands here rather than stalling as a held coding task.
+        # Some of it needs a tool nobody has wired - adding somebody to a Teams invite
         # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
         # a job that quietly does nothing is the failure (the owner, 2026-09-07: "if it's not capable of
         # doing it, then it will say so").

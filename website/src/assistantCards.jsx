@@ -941,8 +941,8 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
           </ItemPart> },
         // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
         { key: "agent", n: 3, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-          body: <ItemPart data-tq-report-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
-            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
+          // ...nothing but the chat and its box (ItemSections ItemAsk): an empty chat over the box IS "no agent yet" (the owner, 2026-11-05)
+          body: null },
         { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the report"],
           body: <ItemPart data-tq-report-close="">
             <RowMoves close={card} on="at the top of the report" />
@@ -1011,8 +1011,8 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
           body: <div data-tq-dash-body="">{drawn}{share}</div> },
         // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
         { key: "agent", n: 3, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-          body: <ItemPart data-tq-dash-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
-            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
+          // ...nothing but the chat and its box (ItemSections ItemAsk): an empty chat over the box IS "no agent yet" (the owner, 2026-11-05)
+          body: null },
         { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on the dashboard"],
           body: <ItemPart data-tq-dash-close=""><RowMoves close={card} on="at the top of the dashboard" /><Foot close={card} onDone={onDone} /></ItemPart> }]} />;
   }
@@ -1155,8 +1155,8 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
               : <Facts rows={rows} />}
           </ItemPart><CardErr err={err} /></> },
         { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-          body: <ItemPart data-tq-idea-agent=""><div className="tq-thr-h"><b>No agent yet</b></div>
-            <div className="tq-thr-did muted">Nobody is working on this.</div></ItemPart> },
+          // ...nothing but the chat and its box (ItemSections ItemAsk): an empty chat over the box IS "no agent yet" (the owner, 2026-11-05)
+          body: null },
         { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", "Its moves are on its panes"],
           body: <ItemPart data-tq-idea-close=""><RowMoves on="on its panes" />{foot}</ItemPart> }]} />);
   return (
@@ -1593,7 +1593,7 @@ export function FyiMessage({ item, onHead = null, open: held = null, moved = nul
 // Close out the slim tabs. Nothing in here is a new move: a message's own are under it, the item's ride the row (`foot`), said in Close out
 function FyiSections({ card, table, items, msgs, foot, err, next }) {
   const nav = React.useContext(CardNav), n = items.length, batch = card.kind === "fyis";
-  const handOff = !batch && (nav.also || []).some((a) => /agent|coder/.test(a.verb || "")), ask = useItemAsk(!batch && card, "fyi");
+  const ask = useItemAsk(!batch && card, "fyi");
   return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask} hands={batch}
     title={batch ? `${plural(n, "message")} - nothing to decide` : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
@@ -1605,12 +1605,8 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
         // ...the handful as ONE list in one card (the owner, 2026-10-28: "too much space in fyi"): a hairline between messages, not a card each
         body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> },
       { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
-        body: <ItemPart data-tq-fyi-agent="">
-          <div className="tq-thr-h"><b>No agent yet</b></div>
-          <div className="tq-thr-did muted">Nobody is working on {n === 1 ? "this" : "these"}.</div>
-          {(batch || handOff) && <div className="tq-item-note">{batch ? `To hand them to an agent, press a line under Came from - ${btn("regular_agent")} is among its moves; every line comes here, and you take off the ones it should not read.`
-            : `${btn("regular_agent")} hands it to one - it gets the message and its attachments.`}</div>}
-        </ItemPart> },
+        // ...an empty chat over the box is "no agent yet" (the owner, 2026-11-05); a handful, which has no box until a line is handed on, says how
+        body: batch ? <div className="tq-item-note" data-tq-fyi-agent="">{`To hand them to an agent, press a line under Came from - ${btn("regular_agent")} is among its moves; every line comes here, and you take off the ones it should not read.`}</div> : null },
       { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
         body: <ItemPart data-tq-fyi-close="">
           <div className="tq-card-note">Nothing to decide - {n === 1 ? "it only wants" : "they only want"} you to know.</div>

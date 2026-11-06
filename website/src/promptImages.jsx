@@ -71,33 +71,34 @@ export function AttachImage({ pics, size = 18, sx }) {
   );
 }
 
-// the pictures waiting to go, as thumbnails with an x each - a file that is no picture a chip with its name.
-// `cannot(i)`: what this box's road cannot do with that one, said on its chip instead of dropping it silently
+// ONE ATTACHMENT LOOK (the owner, 2026-11-05, of the item chip on an Agent tab's box: make it the look everywhere): what goes with the words - an
+// item it was sent from, a file from the paperclip, a dropped or pasted picture - is one chip: a mark (or the picture, small), the name cut with
+// … and whole on hover, and its x. `warn`: why this box's road cannot take it, said on the chip instead of dropping it silently
+export function AttachChip({ name, icon = null, thumb = "", warn = "", onRemove = null, title = "", ...rest }) {
+  return <Box {...rest} title={warn ? `${name} - ${warn}` : title || name}
+    sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexShrink: 0, maxWidth: 240, height: 24, pl: thumb ? 0.25 : 0.75, pr: onRemove ? 0.25 : 0.75,
+      borderRadius: "12px", bgcolor: warn ? "#fbf3e8" : "#e4e9ee", border: `1px solid ${warn ? "#e2c9a8" : "transparent"}`, fontSize: 12.5, color: "#2f3a42" }}>
+    {thumb ? <Box component="img" src={thumb} alt="" sx={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+      : icon || <AttachFileIcon sx={{ fontSize: 13, color: "#55697a", flexShrink: 0 }} />}
+    <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</Box>
+    {warn && <Box component="span" sx={{ color: "#8a5a1c", whiteSpace: "nowrap", flexShrink: 0 }}>· {warn.length > 24 ? "can't go" : warn}</Box>}
+    {onRemove && <IconButton size="small" aria-label={`Remove ${name}`} onClick={onRemove} sx={{ width: 18, height: 18, p: 0, color: "#55697a", flexShrink: 0 }}>
+      <CloseIcon sx={{ fontSize: 12 }} /></IconButton>}
+  </Box>;
+}
+// ...in ONE line, however many: the row never grows the box - past its width it scrolls sideways (the box's size never changes, 2026-10-31)
+export const AttachRow = ({ children, sx, ...rest }) => (
+  <Box data-tq-attach-row="" {...rest} sx={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0.5, minWidth: 0, maxWidth: "100%", overflowX: "auto", overflowY: "hidden",
+    scrollbarWidth: "thin", pb: 0.25, ...sx }}>{children}</Box>);
+// the files waiting to go, as chips: `cannot(i)` says what this box's road cannot do with one
+export const fileChips = (pics, cannot = null) => pics.imgs.map((i) => <AttachChip key={i.path} data-tq-file-chip={i.name} data-tq-file-cannot={cannot?.(i) || undefined}
+  name={i.name} thumb={i.image === false ? "" : i.url || ""} warn={cannot?.(i) || ""} onRemove={() => pics.remove(i.path)} />);
+export const fileState = (pics) => <>{pics.busy && <Box component="span" sx={{ fontSize: 11, color: "#a09889", flexShrink: 0 }}>uploading…</Box>}
+  {!!pics.err && <Box component="span" sx={{ fontSize: 11, color: "#7a2f3c", flexShrink: 0 }}>{pics.err}</Box>}</>;
+// a box that keeps its files OUTSIDE it (the dock, Continue, New): the same chips, the same one line
 export function ImageTray({ pics, sx, cannot = null }) {
   if (!pics.imgs.length && !pics.err && !pics.busy) return null;
-  const x = (i, s) => <IconButton size="small" aria-label={`Remove ${i.name}`} onClick={() => pics.remove(i.path)} sx={s}><CloseIcon sx={{ fontSize: 12 }} /></IconButton>;
-  return (
-    <Box data-tq-image-tray sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75, ...sx }}>
-      {pics.imgs.map((i) => { const no = cannot?.(i) || ""; return i.image === false || !i.url ? (
-        <Box key={i.path} data-tq-file-chip={i.name} data-tq-file-cannot={no || undefined} title={no ? `${i.name} - ${no}` : i.name}
-          sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, maxWidth: "100%", minWidth: 0, height: 26, pl: 0.75, pr: 0.25, borderRadius: "13px",
-            border: `1px solid ${no ? "#e2c9a8" : "#ddd6cb"}`, bgcolor: no ? "#fbf3e8" : "#f6f4f1", fontSize: 12, color: "#3d3a34" }}>
-          <AttachFileIcon sx={{ fontSize: 13, color: "#6e685f", flexShrink: 0 }} />
-          <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0, maxWidth: 200 }}>{i.name}</Box>
-          {no && <Box component="span" sx={{ color: "#8a5a1c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>· {no}</Box>}
-          {x(i, { width: 18, height: 18, p: 0, color: "#6e685f", flexShrink: 0 })}
-        </Box>
-      ) : (
-        <Box key={i.path} title={no ? `${i.name} - ${no}` : i.name} data-tq-file-cannot={no || undefined} sx={{ position: "relative", width: 52, height: 52, borderRadius: "7px", overflow: "hidden",
-          border: `1px solid ${no ? "#e2c9a8" : "#ddd6cb"}`, bgcolor: "#f6f4f1", flexShrink: 0 }}>
-          <Box component="img" src={i.url} alt={i.name} sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          {x(i, { position: "absolute", top: 1, right: 1, width: 17, height: 17, p: 0, bgcolor: "rgba(38,37,33,.7)", color: "#fff", "&:hover": { bgcolor: "rgba(38,37,33,.9)" } })}
-        </Box>
-      ); })}
-      {pics.busy && <Box sx={{ fontSize: 11, color: "#a09889" }}>uploading…</Box>}
-      {!!pics.err && <Box sx={{ fontSize: 11, color: "#7a2f3c" }}>{pics.err}</Box>}
-    </Box>
-  );
+  return <AttachRow data-tq-image-tray="" sx={sx}>{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>;
 }
 
 // the words, then the files: how a CLI agent is shown a picture or a file (server.with_images says it the same way)

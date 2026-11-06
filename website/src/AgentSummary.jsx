@@ -3,7 +3,7 @@
 // drafts are their cards, inside Next steps (Task 4.2: `next`, what Close out held - TaskPage's own, so each draft is drawn once); elsewhere a
 // line each. An On you step's mark says whose it is, never a press.
 import React, { useState } from "react";
-import { Box, IconButton, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps } from "./agentSummary.js";
@@ -13,7 +13,7 @@ import { readingOf } from "./threadReading.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
 const dayWord = (at) => { const d = dayLabel(at); return d && d !== "Today" ? `${d} ` : ""; };
 import { MicButton } from "./ui.jsx";
-import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
+import { AttachImage, AttachRow, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 // ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
@@ -131,19 +131,33 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
       </Box>
       {/* ...the attachments and the box together at the pane's foot: a spacer above them takes the room (the owner, 2026-11-05) */}
       {box && <Box aria-hidden sx={{ flex: "1 1 auto" }} />}
-      {box && <ImageTray pics={pics} sx={{ mb: 0.75 }} />}
-      {box && <Box component="form" onSubmit={(e) => { e.preventDefault(); send(); }} {...pics.drop}
-        sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff" }}>
-        <Box component="textarea" data-tq-no-agent-box="" rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Tell me what's wrong, or ask about anything here…"
-          sx={{ flex: 1, minWidth: 0, resize: "none", border: 0, outline: 0, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent", py: 0.5 }} />
-        <AttachImage pics={pics} size={17} sx={{ width: 28, height: 28 }} />
-        <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
-        <IconButton type="submit" size="small" data-tq-no-agent-send="" aria-label="Send to the agent" disabled={busy || pics.busy || !(text.trim() || pics.imgs.length)}
-          title="Starts the agent on this task with your words"><SendIcon fontSize="small" /></IconButton>
-      </Box>}
+      {box && <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder="Tell me what's wrong, or ask about anything here…"
+        label="Send to the agent" title="Starts the agent on this task with your words" boxAttrs={{ "data-tq-no-agent-box": "" }} sendAttrs={{ "data-tq-no-agent-send": "" }} />}
       {!!err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>
   );
+}
+
+// ONE PROMPT BOX (the owner, 2026-11-05: "the box should be where it always is, not moved up. Don't have separate code. It's the same prompt box,
+// just with the Came from attached and your prompt in one"): a task's chat before its first agent and an item's Agent tab type into this one, at
+// the foot of their pane - what it goes with as chips on it (`chips`), the words, a file, the mic, Send. `cannot`: why a file cannot go (ImageTray)
+export function PromptBox({ text, setText, pics, busy = false, onSend, placeholder, label = "", title, chips = null, inputRef = null, cannot = null,
+  boxAttrs = {}, sendAttrs = {} }) {
+  const empty = !(text.trim() || pics.imgs.length);
+  return <>
+    <Box component="form" data-tq-prompt-box="" onSubmit={(e) => { e.preventDefault(); onSend(); }} {...pics.drop}
+      sx={{ px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff", flexShrink: 0, minWidth: 0 }}>
+      {/* ...what goes with the words, in one line inside the box: the item it came from first, then the files (AttachRow) */}
+      {!!(chips || pics.imgs.length || pics.busy || pics.err) && <AttachRow sx={{ pt: 0.5 }}>{chips}{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>}
+      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5 }}>
+        <Box component="textarea" ref={inputRef} {...boxAttrs} rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }} placeholder={placeholder} aria-label={label}
+          sx={{ flex: 1, minWidth: 0, resize: "none", border: 0, outline: 0, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent", py: 0.5 }} />
+        <AttachImage pics={pics} size={17} sx={{ width: 28, height: 28 }} />
+        <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
+        <IconButton type="submit" size="small" {...sendAttrs} aria-label={label} title={title} disabled={busy || pics.busy || empty}>
+          {busy ? <CircularProgress size={14} /> : <SendIcon fontSize="small" />}</IconButton>
+      </Box>
+    </Box>
+  </>;
 }

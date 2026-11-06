@@ -75,6 +75,16 @@ top always says what to do next, and so do the Work list and the **Setup** chip 
    monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
    connected and passes its test. Before Taskuary writes your job description it asks you to
    connect your other sources too.
+
+   **About your work** follows, one question a screen, nine in all: your name, organisation,
+   title, email signature, the systems you work in, your other sources, then **About your work**
+   itself, then how you write and who you are. Each answer is filled in from your mail where it can
+   be. The About your work screen has your job description on top, as your mail describes it, and
+   **What you work on** below it: six months of your mail grouped into the separate bodies of work
+   you do. Rename one, tick **Personal** for life outside work (nothing there is learned from), or
+   untick one that isn't yours. One **Next** keeps both. Next does not wait for the grouping: if it
+   is still running, the list fills in on its own with every one kept and none personal, and you can
+   change it later on **About you**, under **What you work on**.
 3. **Any other connection you'd like to set up?** While what came in is read, WhatsApp, Teams,
    Slack and Telegram are offered, and **More connections** shows the rest. This one is optional:
    press **Walk me through my tasks** when you are ready.

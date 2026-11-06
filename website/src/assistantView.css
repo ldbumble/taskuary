@@ -879,6 +879,10 @@
 /* ...except SETUP'S, which is the walk's corner pill (the owner, 2026-11-03: "back, all ready, next in corner like in actual app"): alone or
    beside a fix (Install, Change AI), Back and Next hold the bar's start, where the walk's Nav stands */
 .tq-setup-dock .tq-arow-verbs > .tq-cl-next:only-child { margin-right: auto; }
+/* ...and SETUP'S BAR IS AS WIDE AS SETUP'S PAGE (the owner, 2026-11-06: "if it's that big center the buttons. it looks insane"): with no box
+   beside it the dock ran the whole window - its line ~1800px across a 1920 screen and Back/Next at its far left, far from the cards. It
+   takes the step's own width (FirstRun's 980px column), centred, so its line and Back/Next sit under the cards */
+.tq-dock.tq-setup-dock { width: min(980px, 100%); margin-inline: auto; }
 .tq-arow-verbs.tight > .tq-cl:not(.tq-cl-next) { flex-shrink: 1; }
 /* the unseen copy ActionRow measures: every part in the row's own classes, at its natural width, taking no room */
 .tq-arow-ghost { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }

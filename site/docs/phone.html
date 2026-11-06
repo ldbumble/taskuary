@@ -82,7 +82,7 @@
 <div class="entry on">
       <a class="page" href="./phone" aria-current="page">On your phone</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide On your phone's sections"></button>
-      <div class="secs"><a class="sec" href="#the-doorways" data-sec="the-doorways">The doorways</a><a class="sec" href="#what-it-can-do" data-sec="what-it-can-do">What it can do</a><a class="sec" href="#the-morning-line" data-sec="the-morning-line">The morning line</a><a class="sec" href="#handing-over" data-sec="handing-over">Handing over</a><a class="sec" href="#what-it-will-not-do" data-sec="what-it-will-not-do">What it will not do</a><a class="sec" href="#sections-for-later-and-browsing-on-the-phone" data-sec="sections-for-later-and-browsing-on-the-phone">Sections, For later and browsing, on the phone</a></div>
+      <div class="secs"><a class="sec" href="#the-doorways" data-sec="the-doorways">The doorways</a><a class="sec" href="#what-it-can-do" data-sec="what-it-can-do">What it can do</a><a class="sec" href="#the-morning-line" data-sec="the-morning-line">The morning line</a><a class="sec" href="#handing-over" data-sec="handing-over">Handing over</a><a class="sec" href="#agent-channels-a-chat-into-one-coding-agent" data-sec="agent-channels-a-chat-into-one-coding-agent">Agent channels: a chat into one coding agent</a><a class="sec" href="#what-it-will-not-do" data-sec="what-it-will-not-do">What it will not do</a><a class="sec" href="#sections-for-later-and-browsing-on-the-phone" data-sec="sections-for-later-and-browsing-on-the-phone">Sections, For later and browsing, on the phone</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
@@ -213,9 +213,38 @@ hands to locks onto that item so you arrive where the conversation left off, and
 says so plainly instead of going quiet.</p>
 <p>The reverse is true too: a walk started on the page can be picked up on the phone, because the
 walk&#39;s position belongs to the conversation rather than to the surface you started it on.</p>
-<h2 id="what-it-will-not-do">What it will not do<a class="anchor" href="#what-it-will-not-do" aria-label="Link to this section">#</a></h2>
+<h2 id="agent-channels-a-chat-into-one-coding-agent">Agent channels: a chat into one coding agent<a class="anchor" href="#agent-channels-a-chat-into-one-coding-agent" aria-label="Link to this section">#</a></h2>
+<p>With <strong>Developer mode</strong> on, a chat can talk straight to one running coding agent - a WhatsApp or
+Telegram chat or group, a Slack channel, or a Teams chat. Open a coding task, unfold <strong>Talk to this
+agent from…</strong> at the foot of its chat, pick the channel and the chat, and bind it. What you write
+there goes into the agent as if you had typed it in its box, and its answers come back to the chat.</p>
+<p>You can let teammates in, so a few people can work on one project with the same agent:</p>
 <ul>
-<li>It will not speak in a group chat, or in a chat you did not choose.</li>
+<li><strong>Named people only.</strong> You add each teammate by name and by their id on that channel (a phone
+number on WhatsApp, a member ID on Slack, a work email on Teams). Everyone else in the chat is
+ignored, and nothing said in a bound chat ever becomes a task in your inbox.</li>
+<li><strong>Their words are theirs.</strong> The agent reads &quot;Gail Moreno (teammate)&quot; in front of every line of
+theirs, with a note that they are not you. The task&#39;s chat shows it the same way.</li>
+<li><strong>You hold every approval.</strong> Only you can approve a push, land the branch, allow a permission
+request, or let anything be sent, posted or paid. A teammate typing &quot;yes&quot;, &quot;1&quot; or the exact
+words of your choice does nothing - the chat says only you can answer.</li>
+<li><strong>One agent, one repo.</strong> A bound chat talks to that one agent, kept to its project&#39;s repo. It
+has no road to your mail, your other tasks or your files, and Taskuary passes nothing on if the
+agent&#39;s checkout is outside that repo.</li>
+</ul>
+<p>When the agent wants permission for something Taskuary&#39;s own rules do not settle, it asks you:
+as buttons on the task&#39;s chat, and in the bound chat as a numbered list - reply with the number.
+&quot;Always&quot; answers are remembered for that task and that kind of step, but never for a push or a
+send. With no answer in ten minutes the request is refused, and both places say so.</p>
+<p>A bound chat is the one place Taskuary speaks without being asked first, because you opened it for
+that: it carries the agent&#39;s answers, what it is waiting on you for, its permission requests and
+its landing question - nothing about your other work. <strong>Unbind</strong> takes it away again.</p>
+<div class="callout note"><p class="eyebrow">Reading the chat</p><p>Telegram bots in a group see only commands unless their privacy mode is off (BotFather, /setprivacy)
+or the bot is an admin. Slack needs the app in the channel with channel history allowed, and reads
+top-level messages, not thread replies. Teams posting needs your own Microsoft sign-in.</p>
+</div><h2 id="what-it-will-not-do">What it will not do<a class="anchor" href="#what-it-will-not-do" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>It will not speak in a group chat, or in a chat you did not choose. (An agent channel, above, speaks only for its agent.)</li>
 <li>It will not send anything a human has not approved, on any channel.</li>
 <li>It will not change a setting behind your back. A change you ask for comes back as a question for your yes.</li>
 <li>It will not answer someone else in your chat — only the linked owner account is heard.</li>

@@ -132,8 +132,8 @@ AGENT_WRITES = (
     (r'POST', r'^/api/hooks/claude/(floor|permit)$', "a stranger's session asking the floor, or the owner, before a tool call"),
     (r'POST', r'^/api/hooks/claude/reason$', "the Reason Network hook - a message to someone untrusted is refused, an approval goes to the owner"),
     (r'POST', r'^/api/hooks/claude/browser$', "the browser hook - an act that can't be undone is held for the owner (browsergate)"),
-    (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|check-back)$',
-     "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on/--reply-not-needed/--check-back` on the session's OWN task (owns_task); nothing leaves"),
+    (r'POST', r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft|check-back)$',
+     "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on/--reply-not-needed/--withdraw-draft/--check-back` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
     (r'POST', r'^/api/agent/ask-stronger$', "the session's own question to a stronger model (askstronger), on its OWN task - an answer in words, nothing moves"),
     (r'POST', r'^/api/agent/note-peers$', "a note to another agent (peers.py), from the session's OWN task - framed as a peer's, it approves nothing"),
@@ -285,7 +285,7 @@ def stranger_tid(server: dict, presented) -> int | None:
 # --draft/--item/--tick`, whose task id owns_task checks in the handler - and `taskuary --note`, whose note the board door pins to
 # the token's own task, so it never reaches another session's seed (blackboard.live_notes, wave B). Not the Hub, the data
 # tools or a report rerun: each of those reaches past its own task.
-_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed)$'), re.compile(r'^/api/board/notes$'))
+_STRANGER_WRITES = (re.compile(r'^/api/hooks/[a-z]+$'), re.compile(r'^/api/agent/(reply|done|draft|item|tick|waiting|not-needed|withdraw-draft)$'), re.compile(r'^/api/board/notes$'))
 _STRANGER_TASK_HOOK = re.compile(r'^/api/hooks/claude/(floor|permit)$')
 _STRANGER_FILE = re.compile(r'^/api/(attachments|task-artifacts)/(\d+)$')
 STRANGER_WHY = "a session working a stranger's task reaches its own task and nothing else"

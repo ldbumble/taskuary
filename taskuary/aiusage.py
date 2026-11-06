@@ -5,8 +5,8 @@ The route row is written before the call (brainroute.log); what the call USED is
 build_llm hands out, and every call it makes runs inside a meter (a context variable, like llm.watching): the provider's own count
 is noted into it wherever an answer comes back - Anthropic's `usage`, the OpenAI-style `usage` of chat completions and the Responses
 API (OpenAI, Azure, OpenRouter, the OpenAI-compatible cards, the ChatGPT plan), a Claude CLI's `result` event and a Codex CLI's
-`turn.completed`. A brain whose answer carries no count (Gemini's and the other CLIs' one-shots, the ACP road) leaves the tokens
-blank - never a guess. An agent session in a pane is counted from its CLI's own log when it is saved (sessionrecord.save -> session).
+`turn.completed`, an ACP turn's PromptResponse (else its CLI's own log - acp_turn). A brain whose answer carries no count (Gemini's
+and the other CLIs' one-shots) leaves the tokens blank - never a guess. An agent session in a pane is counted from its CLI's own log when it is saved (sessionrecord.save -> session).
 
 Tokens follow sessionrecord's convention: `in` is every input token, cached ones included; `cached` is how many of them were.
 """
@@ -67,6 +67,36 @@ def codex_turn(u: dict) -> None:
     if isinstance(u, dict): note('', _n(u, 'input_tokens'), _n(u, 'cached_input_tokens'), _n(u, 'output_tokens'))
 
 
+# ── the ACP road ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Both adapters we ship (claude-agent-acp 0.101.0, codex-acp 2.5.0) answer session/prompt with the TURN's own count - `usage`
+# {inputTokens, cachedReadTokens, cachedWriteTokens, outputTokens}, its inputTokens leaving the cache out as Anthropic's do - and name
+# the model in _meta.quota.model_usage. Their usage_update notifications are the context window's fill, not a count: not read here.
+# A turn whose answer carries none (codex-acp when Codex reported nothing, a native ACP CLI) is read from the CLI's own log by the ACP
+# session id - the CLI's own conversation id - counting only lines from the turn's start (sessionrecord.cli_usage).
+def acp(r) -> dict:
+    "{'model', 'in', 'cached', 'out'} from one ACP PromptResponse - only the keys it carries."
+    if not isinstance(r, dict): return {}
+    mu = ((r.get('_meta') or {}).get('quota') or {}).get('model_usage') if isinstance(r.get('_meta'), dict) else None
+    ms = [x for x in mu if isinstance(x, dict) and x.get('model')] if isinstance(mu, list) else []
+    out = {'model': max(ms, key=lambda x: _n(x.get('token_count') or {}, 'outputTokens'))['model']} if ms else {}
+    u = r.get('usage')
+    if not isinstance(u, dict) or not any(_n(u, k) for k in ('inputTokens', 'cachedReadTokens', 'cachedWriteTokens', 'outputTokens')): return out
+    hit = _n(u, 'cachedReadTokens')
+    return {**out, 'in': _n(u, 'inputTokens') + _n(u, 'cachedWriteTokens') + hit, 'cached': hit, 'out': _n(u, 'outputTokens')}
+
+
+def acp_turn(cli: str, r, sid: str, since: str) -> dict:
+    "What one ACP turn used: the adapter's own count, else the CLI's log for session `sid` from `since` (local 'YYYY-MM-DD HH:MM:SS')."
+    got = acp(r)
+    if 'in' in got or not (sid and since): return got
+    from .sessionrecord import cli_usage
+    use = cli_usage(cli, sid, since)
+    return {**got, **{k: use[k] for k in ('in', 'cached', 'out') if k in use}}
+
+
+def note_turn(use: dict) -> None: note(use.get('model') or '', use.get('in'), use.get('cached'), use.get('out'))
+
+
 def record(store, rid, ms: int, use: dict) -> None:
     if not rid: return
     try: store.add_brain_usage(rid, ms, use)
@@ -103,18 +133,38 @@ def session(store, tid, sid: str, cli: str, started: str, rec: dict, model: str 
     fields = {'Ran': model or None, 'TokensIn': use.get('in'), 'Cached': use.get('cached'), 'TokensOut': use.get('out'),
               'Ms': int(took * 1000) if isinstance(took, (int, float)) else None, 'Calls': 1, 'Sid': str(sid)}
     try:
-        row = store.brain_route_of_session(sid)
-        if not row and tid and started:
-            # the router logs the pane's route just before the pane starts: a couple of minutes' slack finds it, never an older run's
-            since = (datetime.fromisoformat(str(started)[:19]) - timedelta(minutes=2)).isoformat(sep=' ', timespec='seconds')
-            row = next((r for r in store.brain_routes_since(since, int(tid), limit=20)
-                        if r.get('Job') == 'coding' and not r.get('Sid')), None)
-        if row: store.set_brain_route(row['Id'], **{k: v for k, v in fields.items() if v is not None}); return row['Id']
-        return store.add_brain_route({'At': str(started or datetime.now().isoformat(sep=' ', timespec='seconds'))[:19].replace('T', ' '),
-                                      'Job': 'coding', 'TaskId': int(tid) if str(tid or '').isdigit() else None, 'Pick': f'cli:{cli}' if cli else '',
-                                      'Tier': 'fixed', 'Rule': 'session', 'Why': f'A session in a pane on {cli or "a CLI"}', 'Outcome': 'ok', **fields})
+        if (row := _session_row(store, tid, sid, started)): store.set_brain_route(row['Id'], **{k: v for k, v in fields.items() if v is not None}); return row['Id']
+        return _own_row(store, tid, sid, cli, started, fields)
     except Exception as e:
         logger.debug(f'aiusage: session {sid} not counted - {e}'); return None
+
+
+def _session_row(store, tid, sid: str, started: str):
+    "The route row of coding session `sid`: by its Sid, else the one the router logged as the pane opened (brainroute.for_session)."
+    row = store.brain_route_of_session(sid)
+    if not row and tid and started:
+        # the router logs the pane's route just before the pane starts: a couple of minutes' slack finds it, never an older run's
+        since = (datetime.fromisoformat(str(started)[:19]) - timedelta(minutes=2)).isoformat(sep=' ', timespec='seconds')
+        row = next((r for r in store.brain_routes_since(since, int(tid), limit=20) if r.get('Job') == 'coding' and not r.get('Sid')), None)
+    return row
+
+
+def _own_row(store, tid, sid, cli, started, fields: dict) -> int:
+    return store.add_brain_route({'At': str(started or datetime.now().isoformat(sep=' ', timespec='seconds'))[:19].replace('T', ' '),
+                                  'Job': 'coding', 'TaskId': int(tid) if str(tid or '').isdigit() else None, 'Pick': f'cli:{cli}' if cli else '',
+                                  'Tier': 'fixed', 'Rule': 'session', 'Why': f'A session in a pane on {cli or "a CLI"}', 'Outcome': 'ok', **fields})
+
+
+def coding_turn(store, tid, sid: str, cli: str, started: str, ms: int, use: dict) -> int | None:
+    """One turn of a coding session over ACP (acpcoding) ADDED onto its session's route row - a session is many turns, and nothing
+    files its tokens at the end the way a pane's CLI log is read on exit (session)."""
+    try:
+        row = _session_row(store, tid, sid, started)
+        rid = row['Id'] if row else _own_row(store, tid, sid, cli, started, {'Sid': str(sid)})
+        if row and not row.get('Sid'): store.set_brain_route(rid, Sid=str(sid))
+        store.add_brain_usage(rid, ms, use); return rid
+    except Exception as e:
+        logger.debug(f'aiusage: an ACP turn of {sid} not counted - {e}'); return None
 
 
 # ── what was used, as rows: the task's fold and the dashboard's dataset ───────────────────────────────────────────────────────────

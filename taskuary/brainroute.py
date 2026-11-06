@@ -402,7 +402,9 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     pick, model, g, chain = _fixed(store, job, task, want_pick, want_model, gear)
     j = judged(store, task) if task else {}
     from . import agents
-    from .general import is_dock
+    from .general import is_dock, chosen_model
+    # ...and an agent's model is chosen only when the owner picked it: its brain's own default, carried by a caller, is no choice
+    if want_model and job in LEVEL_JOBS and not chosen_model(store, pick, want_model): want_model = None
     chosen = want_pick is not None or bool(want_model)
     rule, tier = ('you chose it' if chosen else 'fixed'), 'fixed'
     # WORK THAT NEEDS HANDS stays on a CLI: coding, and a general task with a browser - an API backup got the browser brief and no

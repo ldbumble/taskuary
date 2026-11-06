@@ -20,20 +20,23 @@ test("the item, the paperclip's files and a dropped picture are one chip each, i
   assert.match(imgs, /display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0\.5, minWidth: 0, maxWidth: "100%", overflow: "hidden"/);
   assert.doesNotMatch(imgs, /overflowX: "auto"/, "the row never scrolls sideways: a few chips, then +N more (the owner, 2026-11-06)");
   // ...on the box's one thin line, left of the words (the owner, 2026-11-06: "keep the prompt box thin")
-  assert.match(read("AgentSummary.jsx"), /<AttachRow sx=\{INLINE_CHIPS\}>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/AttachRow>/);
+  assert.match(read("AgentSummary.jsx"), /\{chips && <AttachRow className="tq-aui-attachments" sx=\{INLINE_CHIPS\}>\{chips\}<\/AttachRow>\}/);
+  assert.match(read("AgentSummary.jsx"), /chips=\{any \? <>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/> : null\}/);
   assert.match(imgs, /export const INLINE_CHIPS = \{ flex: "0 1 auto", maxWidth: "34%"/);
   assert.match(read("ItemSections.jsx"), /<AttachChip key=\{i\.key\} data-tq-item-chip=\{i\.key\} name=\{i\.title\}/);
-  assert.match(read("GeneralWorkspace.jsx"), /<AttachRow className="tq-aui-attachments"/);
+  assert.match(read("GeneralWorkspace.jsx"), /<OneBox root=\{ComposerPrimitive\.Root\}/);
 });
 
 // ...AND IT LOOKS THE ONE BOX: the chat composer's own classes, paperclip left and the filled Send, so a task's first words (which start its
 // agent) leave the box as it was (the scenario run, 2026-11-06)
 test("the box before an agent wears the chat composer's classes", () => {
   const box = read("AgentSummary.jsx");
-  assert.match(box, /<Box component="form" className="tq-aui-composer" data-tq-prompt-box=""/);
+  assert.match(box, /return <Root className="tq-aui-composer" data-tq-one-box="" \{\.\.\.rootProps\}>/);
+  assert.match(box, /<OneBox rootProps=\{\{ "data-tq-prompt-box": ""/);
   assert.match(box, /<Box component="textarea" className="tq-aui-input"/);
   assert.match(box, /<button type="submit" className="tq-aui-send"/);
-  assert.ok(box.indexOf("<AttachImage pics={pics}") < box.indexOf('className="tq-aui-input"'), "the paperclip comes first, as in the chat");
+  const one = box.slice(box.indexOf("export function OneBox"));
+  assert.ok(one.indexOf('className="tq-aui-attach"') < one.indexOf("{input}"), "the paperclip comes first, as in the chat");
   assert.match(read("ItemSections.jsx"), /import "\.\/generalWorkspace\.css";/);
 });
 

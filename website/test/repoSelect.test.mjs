@@ -32,10 +32,8 @@ test("the next-run box takes the mic and pictures like Continue, and both starts
   assert.match(form, /<RunForm [^>]*value=\{run\.instruction\} onValue=\{runText\} pics=\{runPics\}/);
   const box = readFileSync(fileURLToPath(new URL("../src/RunForm.jsx", import.meta.url)), "utf8");
   const runForm = box.slice(box.indexOf("export function RunForm"), box.indexOf("export function AgentAsk"));
-  assert.match(runForm, /\{\.\.\.pics\.drop\}/);
-  assert.match(runForm, /<AttachImage pics=\{pics\}/);
-  assert.match(runForm, /<MicButton [^>]*onText=\{add\}/);
-  assert.match(runForm, /<ImageTray pics=\{pics\}/);
+  // ...the one box draws them (AgentSummary.PromptBox: drop, paperclip, mic, the files as chips)
+  assert.match(runForm, /<PromptBox text=\{value\} setText=\{setText\} pics=\{pics\}/);
   assert.match(view, /instructions: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
   assert.match(view, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
 });

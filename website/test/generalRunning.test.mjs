@@ -77,7 +77,7 @@ test("the question card has no box of its own - the composer answers an open que
   assert.doesNotMatch(card, /<TextField|<form|>Answer<|"Answer"|placeholder=/, "no field and no Answer button on the card");
   assert.match(card, /choices\.map\(\(c\) => <Button key=\{c\}[^>]*onClick=\{\(\) => send\(c\)\}>/, "a choice still answers at a press");
   // the composer's Enter (the form's submit) and its Send both take an open question's road, never a fresh turn beside it
-  assert.match(view, /<ComposerPrimitive\.Root className="tq-aui-composer" onSubmit=\{answerTyped\}>/);
+  assert.match(view, /<OneBox root=\{ComposerPrimitive\.Root\} rootProps=\{\{ onSubmit: answerTyped \}\}/);
   assert.match(view, /<ComposerPrimitive\.Send [^>]*onClick=\{answerTyped\}>/);
   const typed = view.slice(view.indexOf("const answerTyped"), view.indexOf("const askWords"));
   assert.match(typed, /if \(dock \|\| !asking\) return;\s*e\.preventDefault\(\);/, "only while a question is open; otherwise the composer sends as ever");

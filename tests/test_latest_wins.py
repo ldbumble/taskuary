@@ -65,6 +65,14 @@ def test_already_sent_replies_are_in_the_turns_context():
     line = next(l for l in turn.splitlines() if SENT in l)
     assert 'to Gail Moreno' in line and line.startswith('- 06:10 PM')
 
+def test_a_resumed_turn_carries_the_draft_and_the_sent_but_not_a_bare_answer():
+    s = MemoryStore(); tid, *_ = the_owners_day(s)
+    b = general.latest_block(s, tid, resumed=True)
+    assert 'THE DRAFT WAITING NOW' in b and 'ALREADY SENT ON THIS TASK' in b
+    t = s.create_task({'Title': 'x', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(t, 'owner', general.USER_TYPE, 'hi'); s.add_comment(t, 'assistant', general.ASSISTANT_TYPE, 'Hello.')
+    assert general.latest_block(s, t) and not general.latest_block(s, t, resumed=True)    # the CLI has the chat; its turn is the newest
+
 
 def test_a_new_mail_is_the_newest_message_and_the_replan_says_latest_wins():
     from taskuary import ingest

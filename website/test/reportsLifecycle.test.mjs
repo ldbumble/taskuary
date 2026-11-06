@@ -53,7 +53,7 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.doesNotMatch(card, /ai_brain: e\.target\.value/);
   assert.match(card, /decides where each run goes/);
   assert.match(card, /openAppLink\(JUDGE_HASH\)/);
-  assert.match(source, /const WHERE_RUNS_GO = "Settings › How mail is sorted › Where runs go"/);
+  assert.match(source, /const WHERE_RUNS_GO = "Settings › How mail is sorted › Where reports go"/);
   assert.match(source, /if \(judge\?\.kind === "decision"\) return \[judge\.display/);
   assert.match(source, /return \["The brain that writes this report"/);
   // the hash it sets is one the page follows

@@ -9,8 +9,8 @@ remember to update it.
 :::
 
 The other Settings pages are documented where their subject is: **About you** and the per-channel
-identities, **Routing policies** ([the deterministic layer](how-it-works#what-triage-actually-decides)),
-**Audit integrity**, and **Updates** ([updating](index#updating)).
+identities, **Mail rules** ([the deterministic layer](how-it-works#what-triage-actually-decides)),
+**Activity log**, and **Updates** ([updating](index#updating)).
 
 ## How to read this
 
@@ -19,7 +19,7 @@ Each setting shows what it does, and its shipped default. A few notes that apply
 - **Blank is meaningful.** For a brain or model setting, blank means "decide from what is
   connected" rather than "off" — the specific fallback is given per knob.
 - **A switch that is off is off for everything**, not just the surface you are looking at.
-- Four AI slots — the triage brain, the default coding CLI, the assistant and the general agent,
+- Four AI slots — the AI that sorts your mail, the default coding CLI, the assistant and the general agent,
   plus the judge that decides where a report run goes — are set on the cards at the top of the
   Configuration page rather than as plain rows. They appear below with their fallback rows, which
   is what you see if those cards cannot load.
@@ -29,7 +29,7 @@ Each setting shows what it does, and its shipped default. A few notes that apply
 
 <!-- generated: settings -->
 
-## Routing policies
+## Mail rules
 
 Rules evaluated **before** any AI touches a message; no model confidence overrides them.
 Precedence runs `ignore` → `escalate` → `auto_answer` → `draft` → `task_only`, and within one
@@ -59,7 +59,7 @@ sender, domain or topic ends with `(about: …)`. Triage, report routing, the Ad
 and the Assistant each read the sections that help them; edit a line, or press **Forget**, to
 change what they read.
 
-## Audit integrity
+## Activity log
 
 Every consequential thing Taskuary does is one row in an append-only log: a message routed or
 filed and why, a verdict, a reply sent, an agent session opened or wrapped, a connector saved, a

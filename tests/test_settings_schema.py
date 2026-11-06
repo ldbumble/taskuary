@@ -43,9 +43,9 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual([k for k in settings_schema.knobs() if k.endswith('_at')], [])
 
     def test_describe_says_the_value_in_the_schemas_words(self):
-        self.assertEqual(settings_schema.describe('intent_classify_enabled', '1'), 'Intent triage (How mail is sorted): on')
-        self.assertEqual(settings_schema.describe('intent_classify_enabled', '0'), 'Intent triage (How mail is sorted): off')
-        self.assertIn('Triage brain', settings_schema.describe('triage_ai', 'connector:80'))
+        self.assertEqual(settings_schema.describe('intent_classify_enabled', '1'), 'Sort new mail with AI (How mail is sorted): on')
+        self.assertEqual(settings_schema.describe('intent_classify_enabled', '0'), 'Sort new mail with AI (How mail is sorted): off')
+        self.assertIn('AI that sorts your mail', settings_schema.describe('triage_ai', 'connector:80'))
         self.assertEqual(settings_schema.describe('no_such_key', 'x'), 'no_such_key: x')
 
     def test_your_mail_goes_to_is_gone_and_the_stored_setting_still_reads(self):

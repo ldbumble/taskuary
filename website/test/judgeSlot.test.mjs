@@ -32,7 +32,7 @@ test("there is a card to paste the key on, and it says what it is for", () => {
   assert.match(view, /^ {2}typesafe: \{ group: "AI — agents & models"/m);
   // the shelf's list is aiShelf.js, the one Setup reads too
   assert.match(view, /channelCards\(AI_SHELF\)/); assert.ok(AI_SHELF.includes("typesafe"));
-  assert.match(view, /Where runs go/);          // where it is picked, said on the card itself
+  assert.match(view, /Where reports go/);          // where it is picked, said on the card itself
 });
 
 test("the slot with no model of its own does not show a model box", () => {

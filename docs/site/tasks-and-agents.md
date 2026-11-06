@@ -270,7 +270,7 @@ Three levels, each counted on its own:
 
 | Level | How many at once | Counts against Agents at once |
 |---|---|---|
-| **Agent sessions** started by themselves | **Settings → Agents at once** - 4 by default, 1 to 16. The rest queue and start as sessions end, and the Board shows why each waits | yes |
+| **Agent sessions** started by themselves | **Settings → Agents → Agents at once** - 4 by default, 1 to 16. The rest queue and start as sessions end, and the Board shows why each waits | yes |
 | **Quick work** calls | a pool of 8 | no |
 | **A CLI's own subagents**, background shells and monitors, inside one session | whatever that CLI runs | no - they are part of their session |
 

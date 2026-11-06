@@ -26,7 +26,7 @@ from . import climodels
 # One row per default. `gear` says WHICH of a CLI profile's two models this slot sets, and is
 # the reason a coding brain and a triage brain can be the same agent without fighting over one field.
 SLOTS = [
-    {'key': 'triage_ai', 'label': 'Triage brain', 'pick': 'brain', 'gear': 'light',
+    {'key': 'triage_ai', 'label': 'AI that sorts your mail', 'pick': 'brain', 'gear': 'light',
      'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file. '
              'Also runs the Advisor and writes what Taskuary remembers.',
      'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
@@ -61,7 +61,7 @@ SLOTS = [
     # brain writes its summary; this decides where the finished run goes - four yes/nos about text
     # somebody else produced. They were one setting while both were chat models; they are two now
     # because a decision model can do the second job and not the first.
-    {'key': 'judge_ai', 'label': 'Where runs go', 'pick': 'judge', 'gear': 'light',
+    {'key': 'judge_ai', 'label': 'Where reports go', 'pick': 'judge', 'gear': 'light',
      'desc': 'Decides whether a finished report shows under Reports, lands on your work rail, reaches you '
              'right away, or goes out - against the sentences you wrote on its card.',
      'why': 'Four yes/nos about a result somebody else wrote. It does not need to be able to talk, '

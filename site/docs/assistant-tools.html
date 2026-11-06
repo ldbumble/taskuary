@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#agents">Agents</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#mail-rules">Mail rules</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#activity-log">Activity log</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -183,7 +183,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>text</code> - the change</li>
 </ul>
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="mine"><code>mine</code><a class="anchor" href="#mine" aria-label="Link to this section">#</a></h3>
-<p>The &quot;Put it on my list&quot; button: make it a task on the owner&#39;s own list - no agent.</p>
+<p>The &quot;Make it a task&quot; button: make it a task on the owner&#39;s own list - no agent.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="regular-agent"><code>regular_agent</code><a class="anchor" href="#regular-agent" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Send to agent&quot; button: send it to an agent that does not write code - it becomes a task of its own. Never for Taskuary&#39;s own settings, connections or update: those are its own screens (app.find), nor for setting up a meeting: meeting.new.</p>
 <ul>
@@ -198,7 +198,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>new</code> (optional) - true when the job is NOT about the item on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="not-ours"><code>not_ours</code><a class="anchor" href="#not-ours" aria-label="Link to this section">#</a></h3>
-<p>The &quot;Not ours&quot; button: file it, just this once - its card asks whether from now on, or as a rule.</p>
+<p>The &quot;Not for me&quot; button: file it, just this once - its card asks whether from now on, or as a rule.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="not-ours-sender"><code>not_ours_sender</code><a class="anchor" href="#not-ours-sender" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Ignore this sender&quot; button: file everything from this sender from now on - their mail still arrives and stays readable.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="block-sender"><code>block_sender</code><a class="anchor" href="#block-sender" aria-label="Link to this section">#</a></h3>
@@ -474,9 +474,9 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>select</code> - (below): each task in it is marked done, each notice read</li>
 </ul>
 <p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-remove"><code>pipe.remove</code><a class="anchor" href="#pipe-remove" aria-label="Link to this section">#</a></h3>
-<p>Not ours for a SET at once - &quot;dismiss the spam&quot;, &quot;get rid of these newsletters&quot; - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.</p>
+<p>Not for me for a SET at once - &quot;dismiss the spam&quot;, &quot;get rid of these newsletters&quot; - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.</p>
 <ul>
-<li><code>select</code> - (below; <code>keys</code>: the rows you judged, from pipe.read): each mail is filed, each task removed (Not a task), nothing deleted</li>
+<li><code>select</code> - (below; <code>keys</code>: the rows you judged, from pipe.read): each mail is filed, each task removed (Not for me), nothing deleted</li>
 <li><code>learn</code> (optional) - true only when the owner says &quot;from now on&quot; too</li>
 </ul>
 <p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-block"><code>pipe.block</code><a class="anchor" href="#pipe-block" aria-label="Link to this section">#</a></h3>
@@ -486,7 +486,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>how</code> (optional) - rule (the default: an exclusion rule per sender in Settings, their mail never reaches triage again) | unsubscribe (a mailing list: its Unsubscribe comes up lit, one list at a time - the owner presses it)</li>
 </ul>
 <p class="runs">Runs at once and says what it changed.</p><h3 id="pipe-mine"><code>pipe.mine</code><a class="anchor" href="#pipe-mine" aria-label="Link to this section">#</a></h3>
-<p>Put it on my list for a SET of mail; each becomes a task of the owner&#39;s, no agent. A row already a task is left as it is.</p>
+<p>Make it a task for a SET of mail; each becomes a task of the owner&#39;s, no agent. A row already a task is left as it is.</p>
 <ul>
 <li><code>select</code></li>
 </ul>

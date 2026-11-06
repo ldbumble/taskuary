@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#agents">Agents</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#mail-rules">Mail rules</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#activity-log">Activity log</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -184,9 +184,9 @@ where <strong>Next</strong> reads it in turn. Nothing fires for absence; somethi
 whether to make it a rule, phrased as a question on its own idea row: &quot;You&#39;ve put down all 12 mails
 from <a href="mailto:newsletter@vendor.example">newsletter@vendor.example</a> and acted on none. Make it a rule so they are filed without reaching
 you? (Rules run before the AI.)&quot; <strong>Make it a rule</strong> writes the rule under Settings → Rules, named
-&quot;(learned)&quot; and saying it was promoted from learning; <strong>Not ours</strong> is the no, and the same question
+&quot;(learned)&quot; and saying it was promoted from learning; <strong>Not for me</strong> is the no, and the same question
 comes back only once the evidence has tripled. The bars are counts, never a reading: eight threads
-from one sender put down (Not ours, Not a task, Ignore this sender) and none taken up is an ignore
+from one sender put down (Not for me, Ignore this sender) and none taken up is an ignore
 rule; twenty from an automated sender is a skip; three automated senders on one domain with twelve
 between them is a domain rule; five of one sender&#39;s tasks marked urgent by hand, none ever put down,
 is an escalate rule. Never an ignore or a skip for a colleague or for anyone you have written to (an
@@ -199,7 +199,7 @@ agent runs end with the same error this week on at least two tasks, or after two
 that brought the failure. It also goes up when the Assistant&#39;s fix-it check gives up on the same
 connection twice in two weeks. These are counts, not the AI&#39;s reading: a refused sign-in is yours to
 fix, and a task with words from someone you have not vouched for is never read. Each problem is
-raised once, and <strong>Not ours</strong> keeps it down
+raised once, and <strong>Not for me</strong> keeps it down
 (<a href="troubleshooting#report-a-bug">Troubleshooting</a>).</p>
 <p><strong>Looking out for you.</strong> Once a day the Advisor stops thinking about the app and thinks about your
 job, the way a sharp chief of staff would: what could you tell your boss - &quot;I see this pain, and
@@ -246,7 +246,7 @@ every message or task an idea cites was really in what the Advisor read, and not
 personal workstream.</p>
 <p>What passes is an ordinary idea row: <strong>Send to agent</strong> has an agent draft the pitch or build the fix
 (its brief carries the next step, the pitch and the messages to read first), <strong>Make a task</strong>,
-<strong>Remind me</strong>, <strong>Not ours</strong>, and <strong>No more ideas like this</strong>, which stops that whole family. What you
+<strong>Remind me</strong>, <strong>Not for me</strong>, and <strong>No more ideas like this</strong>, which stops that whole family. What you
 did with each idea, and what the second look held back, is what the next day&#39;s pass reads first - it never raises again what it said before;
 each family is held to the same 80% bar as the Advisor&#39;s other kinds of line. It costs two calls on
 the Advisor&#39;s model a day (three at most, when an answer has to be asked for again), it does not look

@@ -63,9 +63,9 @@ class DeskTests(unittest.TestCase):
         self.assertIn('Nobody called Zed', concierge.route_to(self.s, 'Zed')[1])
 
     def test_a_setting_opens_its_group_with_the_knob_named(self):
-        out = self._turn('setting.set', label='intent triage', value='off')
+        out = self._turn('setting.set', label='sort new mail with AI', value='off')
         self.assertTrue(out['open'].startswith('#settings=config&group=How%20mail%20is%20sorted&key=intent_classify_enabled'), out['open'])
-        self.assertIn('Intent triage', out['say']); self.assertNotEqual(self.s.get_settings()['intent_classify_enabled'], '0')
+        self.assertIn('Sort new mail with AI', out['say']); self.assertNotEqual(self.s.get_settings()['intent_classify_enabled'], '0')
 
     def test_a_connection_opens_its_card(self):
         out = self._turn('connection.pause', name='alex mailbox')
@@ -164,9 +164,9 @@ class ActsTests(unittest.TestCase):
         self.assertIsNone(self.s.get_source(self.sid))
 
     def test_a_setting_by_label_is_validated_against_the_schema(self):
-        done = concierge.run_proposal(self.s, self._turn('setting.set', label='intent triage', value='off')['proposal'])
+        done = concierge.run_proposal(self.s, self._turn('setting.set', label='sort new mail with AI', value='off')['proposal'])
         self.assertEqual(self.s.get_settings()['intent_classify_enabled'], '0')
-        self.assertIn('Intent triage (How mail is sorted): off', concierge.receipt(self.s, done))
+        self.assertIn('Sort new mail with AI (How mail is sorted): off', concierge.receipt(self.s, done))
         bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='often')['proposal'])
         self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')
@@ -224,7 +224,7 @@ class AuditAndPhoneTests(unittest.TestCase):
     def test_what_the_assistant_changed_is_listed_as_a_record(self):
         from fastapi.testclient import TestClient
         with concierge.delivering(concierge.PHONE):
-            prop = concierge.say(self.s, 'x', llm=call('setting.set', label='intent triage', value='off'))['proposal']
+            prop = concierge.say(self.s, 'x', llm=call('setting.set', label='sort new mail with AI', value='off'))['proposal']
         concierge.receipt(self.s, concierge.run_proposal(self.s, prop))
         j = TestClient(server.app).get('/api/audit/assistant').json()
         self.assertEqual(j['data'][0]['entity'], 'setting'); self.assertEqual(j['data'][0]['detail']['to'], '0')

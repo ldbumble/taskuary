@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#how-mail-is-sorted">How mail is sorted</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#sharing">Sharing</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#agents">Agents</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#mail-rules">Mail rules</a><a class="sec" href="./settings#your-memory">Your memory</a><a class="sec" href="./settings#activity-log">Activity log</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -134,7 +134,7 @@ on the task&#39;s own bar.</p>
 <tbody><tr>
 <td><strong>Came from</strong></td>
 <td>The message, what triage made of it and why, the ask, and who owns it</td>
-<td><strong>Remind me</strong>, <strong>Watch it</strong>, <strong>Not a task</strong>, <strong>Change ▾</strong> (split or merge, who does it, priority, where the code is)</td>
+<td><strong>Remind me</strong>, <strong>Watch it</strong>, <strong>Not for me</strong>, <strong>Change ▾</strong> (split or merge, who does it, priority, where the code is)</td>
 <td>Changing the task does not start or stop an agent. Who works it is decided in the <strong>Agent</strong> section - <strong>Send to agent</strong> or <strong>Start</strong></td>
 </tr>
 <tr>
@@ -160,7 +160,7 @@ task on the table.</p>
 spines, and the Agent strip holds only <strong>Stop and save</strong>. Its Result, and <strong>Continue</strong>, come back
 when it stops.</p>
 <h3 id="who-is-allowed-to-close-it">Who is allowed to close it<a class="anchor" href="#who-is-allowed-to-close-it" aria-label="Link to this section">#</a></h3>
-<p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
+<p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not for me; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
 <p>There is one close, <strong>Mark done</strong>. Close out&#39;s <strong>Send and close</strong> is a Send and then that close, in one press. A plain
 <strong>Send</strong>, or approving an agent&#39;s act, never closes a task by itself (the owner&#39;s rule: sending and closing are two steps). Mark done always does the
 same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
@@ -199,7 +199,7 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <td>always - <strong>Mark done</strong> when it is finished</td>
 </tr>
 <tr>
-<td><strong>Not ours</strong> / <strong>Not a task</strong></td>
+<td><strong>Not for me</strong></td>
 <td>Deleted if nothing was done on it, otherwise Mark done</td>
 <td>never</td>
 </tr>
@@ -556,7 +556,7 @@ finds it needs more hands over to a session, with its notes as the brief, and th
 </thead>
 <tbody><tr>
 <td><strong>Agent sessions</strong> started by themselves</td>
-<td><strong>Settings → Agents at once</strong> - 4 by default, 1 to 16. The rest queue and start as sessions end, and the Board shows why each waits</td>
+<td><strong>Settings → Agents → Agents at once</strong> - 4 by default, 1 to 16. The rest queue and start as sessions end, and the Board shows why each waits</td>
 <td>yes</td>
 </tr>
 <tr>

@@ -63,7 +63,7 @@ def test_brains_borrowers_drafts_rules_and_sources_of_a_mailbox_card():
     store._insert('policy', {'Name': 'Payworth is fyi', 'Kind': 'sender', 'Pattern': 'payworth', 'Action': 'fyi', 'Mailbox': ALEX, 'Active': 1},
                   ('Name', 'Kind', 'Pattern', 'Action', 'Mailbox', 'Active'))
     got = kinds(store, ol)
-    assert got['brain'] == ['Triage brain']
+    assert got['brain'] == ['AI that sorts your mail']
     assert got['card'] == [store.get_connector(teams)['Name']]
     assert len(got['draft']) == 1 and got['rule'] == ['Payworth is fyi'] and got['source'] == [ALEX]
 

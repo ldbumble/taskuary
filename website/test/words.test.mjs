@@ -26,7 +26,7 @@ test("jargon is matched as a word: 'repo' is caught, 'approve' is not 'PR', 'ses
 });
 
 test("no page types a place of this app: the sentence asks words.place", () => {
-  const typed = /["'`>][^"'`<]*(?:Settings → (?:How mail is sorted|Routing policies|Docs|AI defaults)|Connections → (?:AI|Email)|under For later on your rail)/;
+  const typed = /["'`>][^"'`<]*(?:Settings → (?:How mail is sorted|Routing policies|Mail rules|Docs|AI defaults)|Connections → (?:AI|Email)|under For later on your rail)/;
   const hits = [];
   for (const f of fs.readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f) && !f.startsWith("demo"))) {
     const code = fs.readFileSync(path.join(SRC, f), "utf8").split("\n").filter((l) => !/^\s*(\/\/|\/\*|\*|\{\/\*)/.test(l));

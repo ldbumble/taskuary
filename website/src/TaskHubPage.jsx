@@ -69,7 +69,7 @@ const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 // report inside the conversation - and the Board, the agents and their wall, is the one full-screen view, reached from the
 // top bar. Every old destination still lands: go("Connections") and #connector=... open that card in the canvas.
 const VIEWS = ["Assistant", "Board"];
-const BROWSED = { Reports: "reports", Connections: "connections", Settings: "settings", Hub: "hub" };
+const BROWSED = { Reports: "reports", Connections: "connections", Settings: "settings", About: "about", Hub: "hub" };
 const DEMO_SETUP = { left: 0 };      // the static demo: nothing to finish, so the plain Setup pill the finished app shows
 const SUPPORT_URL ="https://github.com/ldbumble/taskuary/issues/new/choose";
 

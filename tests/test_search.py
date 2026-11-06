@@ -125,7 +125,7 @@ class TheAppIndexed(unittest.TestCase):
         self.assertEqual(self.first(s, 'work mail'), '#connector=outlook')
         self.assertEqual(self.first(s, 'the database card'), '#connector=database')
         self.assertEqual(self.first(s, 'audit log'), '#settings=audit')
-        self.assertEqual(self.first(s, 'soul'), '#settings=docs&doc=soul')
+        self.assertEqual(self.first(s, 'soul'), '#about=docs&doc=soul')
         self.assertTrue(str(self.first(s, 'AP ageing')).startswith('#report='))
         self.assertEqual(search.places(s, 'zzqx'), [])
         self.assertNotIn('MySQL', ' '.join(h['title'] for h in search.places(s, 'my style')))       # "my" is a whole word

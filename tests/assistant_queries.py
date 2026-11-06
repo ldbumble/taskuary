@@ -63,7 +63,7 @@ CASES = [
     Q('navigation', 'show me the workflows', None, 'Here: [Workflows](#report=workflows).', 'link:#report=workflows', tools=('pages',), freq=2),
     Q('navigation', 'go to reports', None, 'Here: [Reports](#report=reports).', 'link:#report=reports', tools=('pages',), freq=4),
     Q('navigation', 'show me my dashboards', None, 'Here: [Dashboards](#report=dashboards).', 'link:#report=dashboards', tools=('pages',), freq=3),
-    Q('navigation', 'go to the memory page', None, 'Here: [LEARNED.md](#settings=docs&doc=learned).', 'link:#settings=docs&doc=learned', tools=('pages',), freq=2),
+    Q('navigation', 'go to the memory page', None, 'Here: [your memory](#about=memory).', 'link:#about=memory', tools=('pages',), freq=2),
     Q('navigation', 'open the GitHub connection', None, 'Here: [GitHub](#connector=github).', 'link:#connector=github', tools=('pages',), freq=2),
     Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', freq=3),
     Q('navigation', 'bring up the census sync bug', None, [c('tasks.list', contains='census sync'), f'That is [{T12}](#task=12).'], 'read:tasks.list', freq=3),
@@ -278,8 +278,8 @@ BRING_UP = [
     ('the headcount report', 'headcount', '#msg=9'),
     ('open the report about Kesler Medical', 'Kesler Medical', '#msg=10'),
     ('my routines', 'routines', '#report=workflows'),   # the shelf's name since 2026-10-29
-    ('my SOUL doc', 'soul', '#settings=docs&doc=soul'),
-    ('what it learned', 'learned', '#settings=docs&doc=learned'),
+    ('my SOUL doc', 'soul', '#about=docs&doc=soul'),
+    ('what it learned', 'learned', '#about=memory'),     # About you's Memory since 2026-11-06
     ('the audit log', 'audit log', '#settings=audit'),
     ('agent profiles', 'profiles', '#profiles'),
     ('the mail rules', 'mail rules', '#settings=policies'),
@@ -845,8 +845,8 @@ AREA_SETTINGS = [
     Q('settings', 'reset all my settings to default', None, 'There is no reset-all - each setting is changed on its own row under Settings.', 'words',
       tools=('words',), freq=1, note='no such button: said, nothing pressed'),
     # ── the docs: brought up, read, and changed through the memory - never retyped whole from the chat ──
-    Q('settings', 'open my JOB.md', None, find('job'), 'link:#settings=docs&doc=job', freq=3),
-    Q('settings', 'where do I tell it about me', None, find('about you'), 'link:#settings=about', freq=2),
+    Q('settings', 'open my JOB.md', None, find('job'), 'link:#about=docs&doc=job', freq=3),
+    Q('settings', 'where do I tell it about me', None, find('about you'), 'link:#about=you', freq=2),
     # ...SOUL, JOB, LEARNED and COUNSEL ride every turn (concierge._system), so they are answered in words; the other docs are read whole
     Q('settings', 'what does my SOUL.md say about me', None, 'That you run AP at Northwind and work in the ledger.', 'words', tools=('words',), freq=2),
     Q('settings', "what's in my STYLE.md", None, [c('docs.search', section='your doc style'), 'Short, plain, signed Alex.'], 'read:docs.search', freq=2),
@@ -1223,7 +1223,7 @@ AREA_SELF_KNOWLEDGE = [
       'read:docs.search', freq=2),
     Q('self-knowledge', 'what rules do the agents work under', None, [c('docs.search', section='your doc agent'), 'AGENT.md: nothing sends without you.'],
       'read:docs.search', freq=1),
-    Q('self-knowledge', 'open my soul doc', None, 'Here: [SOUL.md](#settings=docs&doc=soul).', 'link:#settings=docs&doc=soul', tools=('pages',), freq=2),
+    Q('self-knowledge', 'open my soul doc', None, 'Here: [SOUL.md](#about=docs&doc=soul).', 'link:#about=docs&doc=soul', tools=('pages',), freq=2),
     # ── its help and what version this is ──
     Q('self-knowledge', 'how does the memory work?', None, [c('docs.search', query='memory'), 'It learns from what you do, never a button press.'],
       'read:docs.search', freq=2),

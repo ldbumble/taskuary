@@ -296,7 +296,8 @@ def _app_rows(store) -> list:
     try: docs = store.doc_names()
     except Exception: docs = []
     rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': places.name('docs'), 'rest': f'{d} document doc', 'key': d,
-              'href': f'#settings=docs&doc={d}' if re.fullmatch(r'\w+', d) else '#settings=docs'} for d in docs]
+              # ...LEARNED.md is About you's Memory, read as sentences (2026-11-06)
+              'href': places.href('memory') if d == 'learned' else places.href('docs') + (f'&doc={d}' if re.fullmatch(r'\w+', d) else '')} for d in docs]
     return rows
 
 

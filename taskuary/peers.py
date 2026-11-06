@@ -9,6 +9,7 @@ working one at its next stop (waitroom.tick); a new session in its seed. Each no
 A NOTE NEVER CARRIES THE OWNER'S AUTHORITY: it is framed as a peer's, kept as Taskuary's brief in the record (never YOU), and nothing it
 says approves, permits or answers anything - it is words for an agent to weigh, like a colleague's message.
 """
+from .timewords import plural
 import re
 from loguru import logger
 
@@ -77,8 +78,8 @@ def send(store, frm: int, to: str, text: str) -> dict:
         store.add_peer_note(frm, t, scope, repo, text)
         store.add_comment(t, 'peer', 'agent', f'Note from {task_ref(frm)}: {text}')
         sent.append(task_ref(t))
-    who = (', '.join(sent) if scope == 'task' else f"{len(sent)} agent{'s' if len(sent) != 1 else ''} in {repo or 'this checkout'}" if scope == 'repo'
-           else f"{len(sent)} agent{'s' if len(sent) != 1 else ''} at work")
+    who = (', '.join(sent) if scope == 'task' else f"{plural(len(sent), 'agent')} in {repo or 'this checkout'}" if scope == 'repo'
+           else f"{plural(len(sent), 'agent')} at work")
     if sent: store.add_comment(frm, 'peer', 'agent', f'Note to {who}: {text}')
     store.audit('task', frm, 'peer_note', 'agent', detail={'to': sent, 'scope': scope})
     for t in tids:

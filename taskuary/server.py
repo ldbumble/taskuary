@@ -5587,6 +5587,14 @@ def agent_channels_view(task: int = None):
     if not hub_agents.developer_mode(store): return {'data': None}
     return {'data': agentchannels.view(store, task)}
 
+@app.get('/api/chats/{kind}')
+def chat_picker(kind: str, agent: bool = False):
+    """Every chat on that connection, named, newest first - the one list the chat pickers draw (chatpick.py): the Assistant chat on
+    Settings > Phone & chats, and a new agent channel. `agent=1` marks the ones a binding cannot take, with why (agentchannels.choices)."""
+    from . import agentchannels, chatpick
+    if kind not in chatpick.KINDS: raise HTTPException(404, f"no chat list for {kind}")
+    return {'data': agentchannels.choices(store, kind) if agent else chatpick.chats(store, kind)}
+
 @app.post('/api/agent-channels')
 def agent_channel_bind(body: AgentChannelBody, request: Request):
     "Bind a chat to an agent: the owner's press alone - it opens a door other people talk through."

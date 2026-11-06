@@ -72,7 +72,9 @@ test("every WhatsApp picker draws the name over a small muted JID and filters th
   assert.match(s, /\{recipientId\(target\) && <Box sx=\{\{ \.\.\.mono, fontSize: 10, color: FAINT \}\}>/);
   assert.match(s, /filterOptions=\{\(rows, state\) => withFound\(recipientOptions\(rows, state\.inputValue\), found, state\.inputValue\)\}/);
   assert.match(src("EmailSomeone.jsx"), /<ChatRecipient key=\{channel\} channel=\{channel\}/);
-  assert.match(src("SettingsView.jsx"), /filterOptions=\{\(o, st\) => recipientOptions\(o, st\.inputValue, o\.length\)\}/);
+  // ...the Assistant chat and the agent channels draw ChatPicker, which searches the same way (chatPicker.filterChats)
+  assert.match(src("SettingsView.jsx"), /<ChatPicker options=\{r\.options\}/);
+  assert.match(src("chatPicker.js"), /export const filterChats = \(options = \[\], q = ""\) => recipientOptions\(options, q, options\.length\)/);
   assert.match(src("ReportsView.jsx"), /const chatFilter = \(opts, st\) => recipientOptions\(opts, st\.inputValue, 8\)/);
 });
 

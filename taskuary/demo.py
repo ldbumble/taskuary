@@ -56,6 +56,7 @@ ALLOWED_WRITES = (
     r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
     r'^/api/settings$',                                # display preferences
     r'^/api/advice/press$',                            # what was lit and what was pressed: a row in the demo's own database
+    r'^/api/dashboards/tile$',                         # a sentence turned into a tile: nothing saved, only Taskuary's own tables read
     # the checklist's "leave me alone", and the scripted walk - a tour of the app that touches
     # nothing real, which is what a visitor is here for. Its writes are two settings in the demo's
     # own database, which is what everything else on this list has in common.
@@ -406,6 +407,7 @@ def brain(seed: int = 0, store=None):
     def llm(system, user, max_tokens=None, images=None, **kw):
         text = str(user or '')
         if _field(text, VERBS_OFFERED): return _advice(text)
+        if str(system or '').startswith(TILE_SAYS): return _tile(text)
         if str(system or '').startswith('You ARE '): return _draft(text)       # responder.SYSTEM: the owner's own reply
         # ...a report asked for (issue.draft): the tool's own words say where its button is - the canned lines are about the list
         if 'You looked up issue.draft and it says:' in text:
@@ -421,6 +423,19 @@ def brain(seed: int = 0, store=None):
         said = pick.choice(CANNED)
         return said.format(list=_list_line(store if store is not None else _store())) if '{list}' in said else said
     return llm
+
+
+# A SENTENCE ON A DASHBOARD, ANSWERED FROM A SCRIPT (compose.TILE_SYSTEM): the demo reads no sentence, so every one is drawn as the
+# count of the first source, under the owner's own words - enough to see a tile draw, and the rewrite and the remove that follow it
+TILE_SAYS = 'You turn ONE sentence'
+
+
+def _tile(text):
+    try: ask = json.loads(text)
+    except ValueError: ask = {}
+    src = next((s for s in ask.get('sources') or [] if s.get('key')), None)
+    if not src: return json.dumps({'cannot': 'The dashboard reads no source yet.'})
+    return json.dumps({'component': {'kind': 'stat', 'title': str(ask.get('sentence') or 'Rows')[:38], 'source': src['key'], 'agg': 'count'}})
 
 
 # ── the world, invented ──────────────────────────────────────────────────────────────────

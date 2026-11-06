@@ -1,6 +1,8 @@
 // ONE DASHBOARD, DRAWN: the filter row above everything it scopes, then the grid of presets, each reading the same sliced rows.
 // The spec says what is drawn (dashboards.py validates it); the rows are the last run's. A pressed bar, column, day or tile puts
-// the rows behind it at the top of the grid; a row that is a task or a message opens it.
+// the rows behind it at the top of the grid; a row that is a task or a message opens it. On the setup page each tile is drawn inside
+// `frame` (its sentence and its buttons around it, DashboardEditor.jsx) and `after` closes the grid (the add box), so the page set up is
+// the page drawn.
 import React, { useCallback, useMemo, useState } from "react";
 import "./dashboard.css";
 import { DASH } from "../words.js";
@@ -8,7 +10,7 @@ import { openAppLink } from "../appLinks.js";
 import { Bars, Drill, Line, List, Progress, Stacked, StatTile, Table } from "./charts.jsx";
 import { RANGES, componentRows, dateOf, groupBy, inSegment, rowsOf, segmentValues, seriesSlots, spanOf, spanOf4, stacked, timeSeries, where } from "./slice.js";
 
-export default function Dashboard({ spec, data, stale = false, onOpen = openAppLink, now: nowAt }) {
+export default function Dashboard({ spec, data, stale = false, onOpen = openAppLink, now: nowAt, frame = null, after = null }) {
   const f = spec?.filters || {};
   const [days, setDays] = useState(() => (RANGES.includes(Number(f.range)) ? Number(f.range) : 30));
   const [value, setValue] = useState("");
@@ -57,7 +59,8 @@ export default function Dashboard({ spec, data, stale = false, onOpen = openAppL
       )}
       <div className="tq-dash-grid">
         {drill && <Drill drill={drill} columns={drillCols} onOpen={open} onClose={close} />}
-        {(spec?.components || []).map(draw)}
+        {(spec?.components || []).map((c, i) => (frame ? <React.Fragment key={i}>{frame(c, i, draw(c, i), spanOf4(c))}</React.Fragment> : draw(c, i)))}
+        {after}
       </div>
     </div>
   );

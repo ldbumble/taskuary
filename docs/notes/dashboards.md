@@ -5,7 +5,7 @@ Taskuary's own tables). Its components come from one preset library, and they ar
 writes the spec once, at setup (`compose.compose_dashboard`). After that, a scheduled run re-reads the sources, keeps the
 rows (`dashboard_result`) and files one row under Reports. The page slices those rows.
 
-- server: `taskuary/dashboards.py` (the spec, `taskuary_data`, a run) · `/api/dashboards/compose|preview|{sid}`
+- server: `taskuary/dashboards.py` (the spec, `taskuary_data`, a run) · `/api/dashboards/compose|tile|preview|{sid}`
 - page: `website/src/dashboard/` (`slice.js` cuts the rows, `charts.jsx` holds the presets, `Dashboard.jsx` lays them out) ·
   `DashboardEditor.jsx` (Reports → Dashboards) · `assistantCards.DashboardCard` (the canvas)
 
@@ -20,14 +20,23 @@ other, and it is edited in the same editor.
 
 ## Editing one
 
-Every dashboard is configurable in `DashboardEditor.jsx`, the AI's draft included. Its settings come first and the page they
-make is drawn under them (the owner, 2026-10-25: settings go above the dashboard):
+Every dashboard is configurable in `DashboardEditor.jsx`, the AI's draft included. Its sources come first, then the page
+itself, set up in place (the owner, 2026-10-25: settings go above the dashboard):
 
 - **Sources** are a report's own source cards (`ReportsView.SourceCard`), laid out as a report's are, each with its date
   column. Changing a source reads the rows again (`/api/dashboards/preview`, once the typing stops).
-- **What it shows** has one card per component: its preset, title, source, the bindings that preset takes
-  (`dashboard/setup.js` `BINDS`), a where, its own window (the page's range, a fixed 7/30/90 days, or what is true now) and
-  its width. The default range and the segment sit above the cards. A component edit redraws the same rows in place.
+- **What it shows** is the dashboard drawn, each tile under ONE sentence the owner wrote for it (its `said`) - the owner,
+  2026-11-06, of the field grid that came before: "it's not generalized ... maybe we should just use text to say what it
+  shows". Enter, or leaving the line, sends the sentence, the sources and the tile it rewrites to `/api/dashboards/tile`
+  (`compose.compose_tile`): the model reads the sentence against the sources' real columns and the values a short column
+  takes, and answers one component, held to `dashboards.check_tile` (the spec's own check, and only columns the source
+  has). A refused answer is asked again once with the reason; then the reason is said under the sentence. One "Add a tile"
+  box closes the grid. With no AI connected, tiles are moved, copied and removed, never added or changed, and one quiet
+  line says so. The default range ("opens on") and the segment ("slice by") stay above the tiles: they are the page's, not
+  any one tile's, and a sentence says its own window ("right now", "this week").
+- **A tile's sentence**: the built-in tiles carry ones written by hand; a tile saved before sentences is described from its
+  config (`dashboards.describe`, deterministic) when it is read, and keeps it on the next Save. The composer asks for a
+  sentence per tile, and a tile it got wrong is mended through `compose_tile` with that sentence.
 
 Save runs the same `dashboards.validate` as the composer, and reads the sources again when they changed.
 

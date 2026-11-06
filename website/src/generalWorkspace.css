@@ -99,8 +99,8 @@
 .tq-aui-thinking span { margin-left: 5px; color: #8b877e; font: 500 11px/1.2 'Cascadia Mono', Consolas, monospace; }
 @keyframes tqAuiThinking { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
 .tq-aui-footer { flex: 0 0 auto; padding: 10px 18px 8px; background: #fbfaf7; border-top: 1px solid #e4e0d9; }
-.tq-aui-composer { width: 100%; margin: 0 auto; min-height: 48px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
-.tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 7px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tq-aui-composer { width: 100%; margin: 0 auto; min-height: 40px; display: flex; flex-wrap: nowrap; align-items: center; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
+.tq-aui-input { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; color: #292824; font: inherit; font-size: 13px; line-height: 1.45; padding: 5px 5px; max-height: 150px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tq-aui-input::placeholder { color: #8f8b84; }
 .tq-aui-send, .tq-aui-cancel { width: 34px; height: 34px; flex: 0 0 34px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; color: white; background: #738275; }
 .tq-aui-send:disabled { cursor: default; opacity: .4; }
@@ -174,8 +174,8 @@
    sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),
    no line explaining the two Sends */
 /* a file's name in the agent's words, pressable: it opens the file over the chat (GeneralWorkspace AssistantText, FileDialog) */
-.tq-aui-agent-body code[data-tq-file-link] { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
-.tq-aui-agent-body code[data-tq-file-link]:hover { background: #ece6da; }
+.tq-aui-agent-body code[data-tq-folder-link], .tq-aui-agent-body code[data-tq-file-link] { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.tq-aui-agent-body code[data-tq-folder-link]:hover, .tq-aui-agent-body code[data-tq-file-link]:hover { background: #ece6da; }
 .tq-aui-chat .tq-aui-footer { padding-bottom: 7px; border-top: 0; }
 .tq-aui-chat [data-tq-redraft-warn], .tq-aui-chat [data-tq-redraft-btn], .tq-aui-chat [data-tq-then-line], .tq-aui-chat [data-tq-review-reason],
 [data-tq-no-agent-chat] [data-tq-review-reason],

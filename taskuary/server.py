@@ -2094,6 +2094,7 @@ def task_detail(task_id: int):
     from . import batch as _batch
     batch_rows = store.batch_items(task_id)
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
+    from . import landing as _land
     session = hub_term.for_task(task_id, tail=3, details=False)
     judged, ran, story = _brainroute().judged(store, task_id), _workerstate().ended(store, task_id), _agent_story(task_id)
     left = _workerstate().left_asking(store, task_id) if ran else []         # what a run that is over was still asking the owner
@@ -2165,6 +2166,8 @@ def task_detail(task_id: int):
             'strongAgain': (lambda j: {'pick': j[1], 'brain': _brainroute()._said(store, j[1]), 'model': j[2]} if j[1] else None)(_strong_again_of(d['task']) if strong else ('', '', '')),
             # ...and what the agent step says when nothing is live: why it never started, or what it did before it went
             'agentStory': story,
+            # ...and whether it works in a checkout: the header's Changes and the chat's landing card show then only, any kind (landing.has_checkout)
+            'checkout': _land.has_checkout(store, task_id, (session or {}).get('cwd') or (tr or {}).get('Cwd') or ''),
             # ...and whether Fix it can run on its items: an outsider's only in GitHub's cloud, and only once the owner turned that
             # on - a button that could only say "turn it on" was offered anyway (the owner, 2026-10-12: "what does this do?")
             'batchOutside': batch_outside,
@@ -5599,7 +5602,7 @@ def task_changes(tid: int):
 @app.get('/api/tasks/{tid}/coding-chat')
 def task_coding_chat(tid: int):
     """A coding task as the one chat (codingchat.py): every session's steps - the CLI's own log, or its ACP updates - the mail that came
-    in, and the live CLI, for the page to draw in the general chat's own rows (codingChat.js)."""
+    in, and the live CLI, for the page to draw in the general chat's own rows (chatStream.js)."""
     from . import codingchat
     if not store.get_task(tid): raise HTTPException(404, 'no such task')
     return {'data': codingchat.chat(store, tid)}

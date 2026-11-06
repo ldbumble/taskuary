@@ -5,11 +5,11 @@ Nothing new is recorded for it. The chat is read off what Taskuary already keeps
 - each session's steps - the CLI's own log (sessionrecord.cli_steps: Claude, Codex, Copilot, Gemini), else the copy kept when it was saved;
 - the mail that came in, in its sender's words (general.JOINED - the general chat's own shown_history reads the same rows);
 - and the live session: is its CLI running, and is its screen asking something only the terminal answers (a login, a permission prompt).
-The page maps the steps into chat rows with the general chat's own step lines (codingChat.js -> agentSteps.js).
+The page maps the steps into chat rows with the general chat's own step lines (chatStream.js -> agentSteps.js).
 
 THE ACP SEAM. A coding session run over ACP (step 1: acp.py) has no CLI log to read - its session/update notifications ARE the record.
 `record_update` keeps each one beside the task as it arrives; `chat` hands a session's kept updates to the page as `updates`, and
-codingChat.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. A coding session over ACP
+chatStream.stepsFromAcp maps them into the very step shape a log gives, so both roads draw one row shape. A coding session over ACP
 (acpcoding.ACPCoding) calls `record_update(tid, sid, update)` for every update it gets, and for every prompt it sends."""
 import json, re
 from datetime import datetime
@@ -117,9 +117,11 @@ def sessions(store, tid: int) -> list:
 
 
 def chat(store, tid: int) -> dict:
-    """What the coding chat draws (CodingChat.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI - one that
+    """What the coding chat draws (GeneralWorkspace.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI - one that
     idled out (acpcoding.idle_out) still, at rest: the chat stays as it was, and its box is the input that brings it back."""
     from . import acpcoding, permissions
     t = _live(int(tid)) or (acpcoding.IDLED.get(int(tid)) if acpcoding.idled(int(tid), store) else None)
+    from .landing import has_checkout
     return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(t),
+            'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for

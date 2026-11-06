@@ -544,7 +544,7 @@ class ResponseTests(unittest.TestCase):
     def test_mine_takes_it_off_the_agents_hands(self):
         s, tid, mid, item = self._asked()
         p = decide(s, "i'll do it myself", 'mine', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['label']), ('task.create_from_message', mid, 'task', 'Put it on my list'))
+        self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['label']), ('task.create_from_message', mid, 'task', 'Make it a task'))
         self.assertEqual(run(s, p).json()['status'], 'done')
         self.assertEqual(s.get_task(tid)['Assignee'], 'owner')
 

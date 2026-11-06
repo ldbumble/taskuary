@@ -53,12 +53,12 @@ numbered line here, and on WhatsApp the same choices come again as a **poll** un
 tap picks - even when the only choice is **Next**. A number or a tap runs exactly what the desktop's button runs,
 and no model reads it. Only words you type go to the model.
 
-![A number or a poll tap runs the desktop's action; Not ours asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model](img/phone-choices.svg "A pick is the button; words are words.")
+![A number or a poll tap runs the desktop's action; Not for me asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model](img/phone-choices.svg "A pick is the button; words are words.")
 
 | You send | What happens |
 |---|---|
 | a number, or a tap in the poll | the desktop button with that name, run at once - and if the model is still answering something you typed, that answer is dropped and the pick goes first |
-| **Not ours** | "How far?" — just this once, from now on, or a rule in Settings; the answer you pick runs |
+| **Not for me** | "How far?" — just this once, from now on, or a rule in Settings; the answer you pick runs |
 | **Send to agent** | "Which agent?" — triage's pick first, the other one next; the answer you pick runs |
 | a coding job with no clear checkout | "Which repository?" — the best guess first; the one you pick starts |
 | **More** | the rest of a long message - or, on a finished agent, its report - then the same choices |

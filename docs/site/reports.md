@@ -188,7 +188,7 @@ and your phone. What it reads, its two clocks and the outcome ledger it learns f
 | **Make a task** | A task on your own list; no agent starts. If triage already opened one for it, that task is the answer - never a second. |
 | **Send to agent** | An agent takes it - a coding or a non-coding one, as its kind says. |
 | **Remind me** | Put away until the day you pick; it comes back that morning. |
-| **Not ours** | Put down: the Advisor does not raise it again, reworded or not - only something new on that thread brings a follow-up back. |
+| **Not for me** | Put down: the Advisor does not raise it again, reworded or not - only something new on that thread brings a follow-up back. |
 | **Next** | Move on; the idea stays as it is. |
 
 Marking the row done on the rail puts the idea down as handled. An idea never reopens a task that

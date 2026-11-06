@@ -127,7 +127,7 @@ confirmed it went through.
 ### Reports, dashboards, and FYI open like work
 
 A report opens like a task, the report itself in the middle - its chart, its table, the files it attached - with
-**Put it on my list** beside Nav when it should become work. Dashboards land beside the reports; an agent can build
+**Make it a task** beside Next when it should become work. Dashboards land beside the reports; an agent can build
 one too, as it built Gail's vendor spend dashboard. On a report, an FYI or an Advisor idea the chat box is on the
 Agent tab only, and Came from shows the item. What needs nothing from you is batched: one FYI card holds every
 message of the batch, each folded to who, where, and its line, and **All read, next** moves on.

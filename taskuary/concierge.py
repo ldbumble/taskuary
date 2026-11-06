@@ -214,7 +214,7 @@ OPENING = (
 RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so.", 'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
             'reply': "I'll draft that - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
             'send_close': 'Sending it as drafted, then closing the task - it stays open while anything on it still waits on you.',
-            'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
+            'not_ours': "Not for me, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
             'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
             'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
@@ -1914,7 +1914,7 @@ def _past_of(label: str) -> str:
     "What a card's badge says happened to it, in the past tense."
     L = buttons.label
     return {L('close'): 'marked done', L('close_note'): 'closed with a note', L('approve'): 'sent', L('send_close'): 'sent and closed', L('defer'): 'put away until its day',
-            L('remove'): 'removed - not a task', L('not_ours'): 'filed - not ours', L('next', 'read'): 'read', L('next', 'batch'): 'all read',
+            L('remove'): 'put down - not for me', L('not_ours'): 'put down - not for me', L('next', 'read'): 'read', L('next', 'batch'): 'all read',
             L('next'): 'passed - still on you'}.get(label) or f'pressed {label}'
 
 

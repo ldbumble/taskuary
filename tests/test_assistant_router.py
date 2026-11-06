@@ -574,7 +574,7 @@ class TheModelIsToldTheRow(unittest.TestCase):
             said = concierge.table_actions(s, item)
             self.assertIn(f'"{buttons.label("remove")}" = task.not_a_task', said)
             self.assertIn(f'"{buttons.label("priority")}" = task.update', said)
-            self.assertNotIn(f'"{buttons.label("not_ours")}"', said)
+            self.assertEqual(said.count(f'"{buttons.label("not_ours")}"'), 1, said)   # its one Not for me is the row's Remove (audit 2026-11-05)
             self.assertIn(f'"{buttons.label("next")}" = next', said)
             with concierge.delivering(concierge.PHONE): self.assertIn(f'"{buttons.label("not_ours")}"', concierge.table_actions(s, item))
 

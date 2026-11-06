@@ -29,12 +29,12 @@ class ShouldBeATaskTests(unittest.TestCase):
         self.assertEqual(self.s.get_message(self.mid)['Status'], 'filed')
         chips = concierge.chips_for(self.s, {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'})
         mine = next(c for c in chips if c['verb'] == 'mine')
-        self.assertEqual(mine['label'], 'Should be a task')
-        self.assertNotIn(buttons.label('remove'), [c['label'] for c in chips])
-        self.assertEqual(buttons.label('remove'), 'Not a task')
+        self.assertEqual(mine['label'], 'Make it a task')
+        self.assertNotIn('remove', [c['verb'] for c in chips])   # Not for me here is the FYI's own (not_ours) - one word, two acts (audit 2026-11-05)
+        self.assertEqual(buttons.label('remove'), 'Not for me')
         # ...and its press, through the proposal road the row takes, wears the same words as its badge
         prop = concierge.propose_for(self.s, None, {'verb': 'mine', 'on_item': True}, {'kind': 'fyi', 'lane': 'fyi', 'mid': self.mid, 'key': f'msg:{self.mid}'}, '')
-        self.assertEqual(prop['label'], 'Should be a task')
+        self.assertEqual(prop['label'], 'Make it a task')
 
     def test_pressing_it_makes_an_open_task_and_triage_reads_the_lesson_on_the_next_one_like_it(self):
         seen = []

@@ -210,7 +210,7 @@ class ReceiptTests(PhoneCase):
         self.ref = next(f'TQ-{t:04d}' for t in (self.a, self.b) if f'TQ-{t:04d}' in self.first)
 
     def test_not_ours_says_what_happened(self):
-        (receipt, _), *rest = self.ph.tap('Not ours')
+        (receipt, _), *rest = self.ph.tap('Not for me')
         self.assertRegex(receipt, r'^(Taskuary:\n)?(TQ-\d{4} filed as not ours|Filed as not ours: Badge access for the new hire)\.$')
         self.assertTrue(rest and rest[-1][1], 'the next card follows with its choices')
 

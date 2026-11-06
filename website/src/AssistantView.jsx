@@ -29,6 +29,8 @@ import { runOperation } from "./taskOps.js";
 import { draftJob, openReply, rewriteReceipt } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import { lazyView } from "./lazyView.jsx";
+import AllDone from "./AllDone.jsx";
+import { burstsNow } from "./allDone.js";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
@@ -640,6 +642,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     if (free > 0) setTrim((was) => Math.max(0, was - free));
   });
 
+  // ...the rows it drew last time, so reaching clear in front of the owner plays its burst once (AllDone) - null until the pile has loaded,
+  // so a reload onto a clear rail stays quiet
+  const lastN = useRef(null), burst = !!pile && burstsNow(lastN.current, drawn.length);
+  useEffect(() => { if (pile) lastN.current = drawn.length; });
+
   return (
     <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey} data-tq-left={left}
       onFocus={(e) => { if (!wrapRef.current?.contains(e.relatedTarget)) kbdBack.current = e.relatedTarget || null; }}>
@@ -666,7 +673,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
           <button type="button" className="tq-pile-retry" data-tq-connect-ai="" onClick={connectAi}>{CONNECT_AI}</button>
         </div>
       ) : !drawn.length ? (
-        <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
+        <AllDone burst={burst}><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</AllDone>
       ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
         const extra = level === "fyi" ? tail : 0;           // the band's rows not here yet - counted, never dropped

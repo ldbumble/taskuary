@@ -176,6 +176,12 @@
 .tq-pile-empty { padding: 56px 24px 24px; text-align: center; color: #6e685f; font-size: 11.5px; line-height: 1.5; }
 .tq-pile-empty .mark { display: block; font-size: 30px; line-height: 1; color: #3c5740; }
 .tq-pile-empty b { display: block; color: #3c5740; font-size: 15px; margin: 6px 0 4px; }
+/* reaching clear (AllDone, the owner 2026-11-06): a short confetti burst over the empty rail, the line landing just after it */
+.tq-all-done { position: relative; }
+.tq-all-done-confetti { position: absolute; left: 0; top: 0; width: 100%; height: 260px; pointer-events: none; }
+.tq-all-done-line { opacity: 0; transform: translateY(6px); transition: opacity .35s ease, transform .35s ease; }
+.tq-all-done-line.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .tq-all-done-line { transition: none; } }
 
 /* ── the chat ─────────────────────────────────────────────────────────────────────────────── */
 .tq-chat-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 12px; border-bottom: 1px solid #e1dcd5; background: #fffdfb; }

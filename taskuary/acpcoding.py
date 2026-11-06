@@ -10,7 +10,7 @@ blackboard, the waiting room, landing, the hand raise, devphone's tell_agent, ag
 with a Term's fields (sid, task_id, agent, cli, argv, cwd, alive, started, files(), info(), phase(), write(), close()...). What a pty
 does with the screen, this does with typed updates:
 
-  - every session/update goes to codingchat.record_update, so the coding chat draws it live (codingChat.stepsFromAcp);
+  - every session/update goes to codingchat.record_update, so the coding chat draws it live (chatStream.stepsFromAcp);
   - a prompt is a session/prompt; one that comes while a turn runs goes INTO that turn where the adapter steers (acp.steer), else it is
     queued and sent as one at the turn's end (the general road's batching); Stop is session/cancel;
   - idle past the general agent's period it closes QUIETLY (idle_out) and the next input brings it back on its own conversation (wake);

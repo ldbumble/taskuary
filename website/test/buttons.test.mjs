@@ -84,8 +84,8 @@ const NOT_BUTTONS = {
   // other sends that are not a draft's Send (2026-10-18, when approve's label became "Send"): the bug report's own, the chat
   // composer's arrow, and the answer box's Send/Queue to a waiting agent
   "BugReportDialog.jsx": ["Send"], "GeneralWorkspace.jsx": ["Send"], "ui.jsx": ["Send"],
-  // ...the coding chat's own arrow, and the name a log gives an ACP read (codingChat.js) - a tool, not a label (2026-11-06)
-  "CodingChat.jsx": ["Send"], "codingChat.js": ["Read"],
+  // ...the name a log gives an ACP read (chatStream.js) - a tool, not a label (2026-11-06)
+  "chatStream.js": ["Read"],
   // ...and a connector card's AI setup walk: words sent to the agent walking the card (2026-10-21)
   "ConnectorsView.jsx": ["Send"],
   // a report's setup wizard steps forward with its own Continue - not the agent's (2026-10-18, when continue's label became "Continue")

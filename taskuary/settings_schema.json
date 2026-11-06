@@ -1,5 +1,5 @@
 {
-  "_": "THE settings vocabulary, once. SettingsView.jsx draws its knobs from this file and the assistant (settings_schema.py, appfacts.py) reads the same one, so a knob cannot be called one thing on the page and another in the chat. `groups` is the order the page stacks its sections in; each knob carries group, label, type (switch | number | select | text | brain | brains | channels | timezone | sound | flags), options for a select, desc (one line) and help (the long explanation the page shows).",
+  "_": "THE settings vocabulary, once. SettingsView.jsx draws its knobs from this file and the assistant (settings_schema.py, appfacts.py) reads the same one, so a knob cannot be called one thing on the page and another in the chat. `groups` is the order the page stacks its sections in; each knob carries group, label, type (switch | number | select | text | brain | brains | channels | timezone | sound | flags | lines | detail), options for a select, desc (one line) and help (the long explanation the page shows).",
   "_panel_owned": "Keys a CARD on the page already owns, so the knob list must not also offer them as a bare box. Every aidefaults.SLOTS key and its model_setting belongs here - tests/test_settings_schema.py fails if one is missing, which is what `assistant_ai` (d3bde8bd) and then `judge_ai` both did: a real setting with no KNOB_META entry falls through to the empty 'Other' group as an unlabelled text box, which is the one place nobody would look for it.",
   "panel_owned": [
     "triage_ai",
@@ -445,6 +445,20 @@
       "type": "number",
       "desc": "How many unattended agent sessions may run together. The rest queue.",
       "help": "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this."
+    },
+    "chat_detail_coding": {
+      "group": "Agents",
+      "label": "Chat detail for coding work",
+      "type": "detail",
+      "desc": "How much of a coding agent's work its task chat shows: Summary, Steps, or Everything - every tool call with its output and diff.",
+      "help": "Every task's agent talks in the same chat. This is where a task working in a code checkout starts. Summary shows what the agent said and made, and the cards waiting on you, with its steps behind one line. Steps shows one line a step, folded under each turn. Everything shows every tool call, its command, output and diff a press away.\n\nEach chat can say its own from the corner of its task header (Chat detail); that choice is kept for that task on this computer."
+    },
+    "chat_detail_other": {
+      "group": "Agents",
+      "label": "Chat detail for other work",
+      "type": "detail",
+      "desc": "How much of a general agent's work its task chat shows: Summary, Steps, or Everything.",
+      "help": "The same three stops as coding work, for every task that is not working in a code checkout - research, a reply, a report. Summary is where they start: the agent's words and results, and its cards, with its steps behind one line.\n\nEach chat can say its own from the corner of its task header (Chat detail)."
     },
     "code_folders": {
       "group": "Agents",

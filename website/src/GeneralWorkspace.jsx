@@ -21,8 +21,19 @@ import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptIma
 import { heldLine, notShown, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
-import { isWork, stepsOf } from "./agentSteps.js";
+import { baseName, isWork } from "./agentSteps.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
+import { PARTS, chatRows, chatSource, partsMessage, rowMessages, turnParts, workCount } from "./chatStream.js";
+import { detailFor, useOwnDetail } from "./chatDetail.js";
+import { useChatDefaults } from "./DetailSlider.jsx";
+import { PermissionCards } from "./AgentChannels.jsx";
+import { teammateLine } from "./agentChannels.js";
+import { Hunk } from "./DiffView.jsx";
+import { withImages } from "./promptImages.jsx";
+import WriteIcon from "@mui/icons-material/EditNoteRounded";
+import DoneIcon from "@mui/icons-material/CheckBoxRounded";
+import NowIcon from "@mui/icons-material/IndeterminateCheckBoxRounded";
+import TodoIcon from "@mui/icons-material/CheckBoxOutlineBlankRounded";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
@@ -37,12 +48,13 @@ import { outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutp
 import TurnFiles from "./TurnFiles.jsx";
 import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
-import { SessionPane } from "./TerminalView.jsx";
+import { SessionPane, TerminalPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
 import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
+import "./agentStepRows.css";
 import { ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
@@ -56,7 +68,7 @@ import ReviewDecision from "./ReviewDecision.jsx";
 import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary, { OneBox } from "./AgentSummary.jsx";
-import { answerShown, foldedSummaries, lastAnswerSummed } from "./agentSummary.js";
+import { answerShown, foldedSummaries, freshNext, lastAnswerSummed } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -83,10 +95,11 @@ const initial = (messages) => {
   });
 };
 
-// ONE PART carries the turn's working: the steps every backend maps into (agentSteps.js), drawn in the order they happened - its own
-// words, then a plain line per thing it did - above the answer. It was a row per raw tool call and then an "Agent progress" box saying
-// the same commands again (the owner, 2026-10-21: "make the output on the general agent canvas more readable, not some greps and gets").
-const stepsPart = (trace, opts) => { const steps = stepsOf(trace, opts); return steps.length ? [{ type: "data", name: "agent_steps", data: { steps } }] : []; };
+// ONE PART carries the turn's working: its parts (chatStream.turnParts - the one mapper a coding session's steps feed too), drawn in the order
+// they happened - its words, a line per thing it did, each edit with its diff, its plan - above the answer. It was a row per raw tool call and
+// then an "Agent progress" box saying the same commands again (the owner, 2026-10-21: "make the output on the general agent canvas more
+// readable, not some greps and gets").
+const stepsPart = (trace, opts) => partsMessage(turnParts(trace, opts));
 
 // assistant-ui owns the response being streamed in the currently mounted pane. The task's
 // session owns it when this pane is not mounted. Rehydrate that same tool/progress trace when a
@@ -94,7 +107,7 @@ const stepsPart = (trace, opts) => { const steps = stepsOf(trace, opts); return 
 export const messagesWithTrace = (messages, session, keepStart = true) => {
   const out = (messages || []).map((m) => ({ ...m, content: [...(m.content || [])] }));
   const trace = session?.trace;
-  if (!stepsOf(trace, { keepStart }).length) return out;
+  if (!turnParts(trace, { keepStart }).length) return out;
   if (session?.busy) {
     // ...with the turn's own start (general.info `turn_started`): its id is new at every step, and so was the time the runtime gave it
     out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }),
@@ -262,6 +275,11 @@ const UserMessage = () => {
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
   // ...three lines typed in a row read as one, as a sender's burst does (Arrived): the head once, then a new minute's time alone, a same minute nothing
   const stamp = at ? when(new Date(at)) : "";
+  // ...a teammate's line from a bound chat (agentchannels.py) is theirs, named and marked, never "You"
+  const mate = chat ? teammateLine(words) : null;
+  if (mate) return <MessagePrimitive.Root className="tq-aui-message tq-aui-user" data-tq-teammate={mate.who}>
+    <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{mate.who} (teammate) · {mate.via}{stamp ? ` · ${stamp}` : ""}</div>
+    <div className="tq-aui-user-bubble" dir="auto">{mate.text}</div></MessagePrimitive.Root>;
   if (chat) return (
     <MessagePrimitive.Root className={`tq-aui-message tq-aui-user${prev !== null ? " tq-aui-user-more" : ""}`}>
       {prev === null ? <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>
@@ -293,39 +311,66 @@ const live = (m) => m?.status?.type === "running" || String(m?.id || "").startsW
 const OPEN_FOLDS = new Set();
 const LIVE_SHOWN = 6;
 const foldKey = (id) => String(id || "").replace(/^(live-.+)-\d+$/, "$1");
-const WorkSteps = ({ data }) => {
+// HOW MUCH OF THE WORK IS DRAWN (chatDetail.js): "summary", "steps" or "everything" - the task's own, else its kind's default from Settings
+const LevelCtx = React.createContext("steps");
+// AN EDIT IS A ROW THAT OPENS ON ITS DIFF: "Edited budget.py (+12 −3)", the code with its line numbers under it
+const EditRow = ({ p }) => (
+  <details className="tq-aui-step tq-aui-step-edit tq-cc-edit" data-tq-edit={baseName(p.file)}>
+    <summary><WriteIcon aria-hidden className="tq-aui-step-icon" /><span>{p.summary}</span></summary>
+    <div className="tq-cc-diff">{p.hunks.length ? p.hunks.map((h, i) => <Hunk key={i} h={h} path={p.file} />)
+      : <div className="tq-dv-empty">Its log keeps no diff for this one.</div>}</div>
+  </details>);
+// ITS PLAN, A CHECKLIST: done ticked, the one it is on marked, the rest open
+const PLAN_ICON = { done: DoneIcon, now: NowIcon, todo: TodoIcon };
+const PlanRow = ({ p }) => (
+  <ul className="tq-cc-plan" data-tq-plan="" aria-label="The agent's plan">{p.items.map((x, i) => { const Icon = PLAN_ICON[x.state] || TodoIcon;
+    return <li key={i} data-tq-plan-item={x.state}><Icon aria-hidden sx={{ fontSize: 15 }} /><span>{x.text}</span></li>; })}</ul>);
+// ...a fold the owner opened stays open across the live turn's new ids (OPEN_FOLDS)
+const Fold = ({ k, label, quiet = false, children }) => {
+  const [open, setOpen] = useState(() => OPEN_FOLDS.has(k));
+  useEffect(() => { setOpen(OPEN_FOLDS.has(k)); }, [k]);
+  const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(k); else OPEN_FOLDS.delete(k); setOpen(o); };
+  return <details className="tq-aui-working-fold" data-tq-steps-fold={quiet ? "summary" : ""} open={open} onToggle={toggle}><summary>{label}</summary>{children}</details>;
+};
+// WHILE IT RUNS ITS STEPS ARE OPEN (the owner, 2026-11-05: "it has to show what it's working on a little more than this like pulling from url's
+// etc.. look how other chat libraries show intermediately the tool calls"): a quiet line a step, the newest at the foot with its spinner, the
+// last LIVE_SHOWN of them - those before fold into "N earlier steps"
+const LiveSteps = ({ steps }) => { const cut = Math.max(0, steps.length - LIVE_SHOWN);
+  return <div className="tq-aui-live-steps" data-tq-live-steps="" role="status" aria-live="polite">
+    {!!cut && <details className="tq-aui-live-earlier"><summary>{plural(cut, "earlier step")}</summary><AgentSteps data={{ steps: steps.slice(0, cut) }} /></details>}
+    <AgentSteps data={{ steps: steps.slice(cut) }} /></div>; };
+const stepsWord = (parts) => { const n = workCount(parts); return n ? plural(n, "step") : "Along the way"; };
+const TurnWork = ({ data }) => {
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
-  const key = foldKey(useAuiState((s) => s.message.id)), [open, setOpen] = useState(() => OPEN_FOLDS.has(key));
-  useEffect(() => { setOpen(OPEN_FOLDS.has(key)); }, [key]);
+  const key = foldKey(useAuiState((s) => s.message.id)), level = React.useContext(LevelCtx), chat = React.useContext(ChatCtx);
   // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
-  // its result before the answer was filed is drawn done, never circling
-  if (!now && (data?.steps || []).some((s) => s.status === "running")) data = { ...data, steps: data.steps.map((s) => (s.status === "running" ? { ...s, status: "done" } : s)) };
-  const chat = React.useContext(ChatCtx), keepOut = !chat;
-  // ...and in a chat a step is never "failed" (below) - a turn that ended with no summary too: its "failed" stood under a plain answer
-  if (!at || (!now && !ended)) return <AgentSteps data={chat ? { ...data, steps: (data?.steps || []).map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) } : data} />;
-  // a failure is never folded away: it is its own line under the fold (a retried one that worked is "recovered", and folds with the rest)
-  // ...where the chat is home and the turn ENDED in its summary, a step that failed on the way is part of the way, folded with the rest (the
-  // owner, 2026-11-05: "what are all those failures?") - only a turn that failed keeps its failures out
-  // ...IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a internal thought failure, for the user the task is getting done.
-  // failure means nothing"): working or ended, every step rides the one fold as a plain step - a TURN that failed says so in its own words
-  const all = data?.steps || [], bad = keepOut ? all.filter((s) => s.kind === "error" || s.status === "error") : [], n = all.filter(isWork).length;
-  const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
-  const calm = chat ? all.map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) : all;
-  // WHILE IT RUNS ITS STEPS ARE OPEN (the owner, 2026-11-05: "it has to show what it's working on a little more than this like pulling from url's
-  // etc.. look how other chat libraries show intermediately the tool calls"): a quiet line a step, the newest at the foot with its spinner, the
-  // last LIVE_SHOWN of them - those before fold into "N earlier steps". Once it has answered they fold into one "N steps" line, as ever
-  if (now) { const cut = Math.max(0, calm.length - LIVE_SHOWN);
-    return <div className="tq-aui-live-steps" data-tq-live-steps="" role="status" aria-live="polite">
-      {!!cut && <details className="tq-aui-live-earlier"><summary>{plural(cut, "earlier step")}</summary><AgentSteps data={{ steps: calm.slice(0, cut) }} /></details>}
-      <AgentSteps data={{ steps: calm.slice(cut) }} />
-    </div>; }
-  return <>
-    <details className="tq-aui-working-fold" open={open} onToggle={toggle}>
-      <summary>{n ? plural(n, "step") : "Along the way"}</summary>
-      <AgentSteps data={{ steps: calm.filter((s) => !bad.includes(s)) }} />
-    </details>
-    {!!bad.length && <AgentSteps data={{ steps: bad }} />}
-  </>;
+  // its result before the answer was filed is drawn done, never circling. IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a
+  // internal thought failure, for the user the task is getting done. failure means nothing") - a TURN that failed says so in its own words
+  const calm = (st) => (!now && st.status === "running" ? { ...st, status: "done", alongside: false }
+    : chat && (st.status === "error" || st.status === "recovered") ? { ...st, status: "done" } : st);
+  const parts = (data?.parts || (data?.steps ? [{ type: "work", id: "p0", steps: data.steps }] : []))
+    .map((p) => (p.type === "work" ? { ...p, steps: p.steps.map(calm) } : p));
+  // ...where nothing sums a turn up (the dock), its trail as ever: one line a step, its edits among them
+  if (!at) return <AgentSteps data={{ steps: parts.flatMap((p) => (p.type === "work" ? p.steps : p.type === "said" ? [{ id: p.id, kind: "said", summary: p.text }]
+    : p.type === "edit" ? [{ id: p.id, kind: "edit", summary: p.summary, status: "done" }] : [])) }} />;
+  const last = parts.length - 1;
+  const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
+    : p.type === "plan" ? <PlanRow key={p.id} p={p} />
+    : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
+    // IN THE ORDER IT HAPPENED (the owner, 2026-11-06: "never write above what was written already"): a group with a call still running stays
+    // open with its spinner, and what the agent says after it draws below it
+    : now && (i === last || p.steps.some((x) => x.status === "running")) ? <LiveSteps key={p.id} steps={p.steps} />
+    : <Fold key={p.id} k={`${key}:${p.id}`} label={stepsWord([p])}><AgentSteps data={{ steps: p.steps }} /></Fold>;
+  // SUMMARY: the words after its last piece of work are its answer; everything before is one quiet "n steps" line that opens on them. A turn at
+  // work, or one its summary sums up, folds whole - its "Working on this…" (AtWork) or its summary says the rest
+  if (level === "summary") {
+    let tail = parts.length;
+    if (!now && !ended) while (tail > 0 && parts[tail - 1].type === "said") tail -= 1;
+    const hidden = parts.slice(0, tail);
+    return <>{hidden.some((p) => p.type !== "said") && <Fold k={`${key}:all`} quiet label={stepsWord(hidden)}>{hidden.map((p, i) => draw(p, i, "everything"))}</Fold>}
+      {parts.slice(tail).map((p, i) => draw(p, tail + i, level))}</>;
+  }
+  return <>{parts.map((p, i) => draw(p, i, level))}</>;
 };
 // ...and with none of its steps on screen yet, the line stands alone (AgentBand)
 // ...its clock from the turn's own start: the server's `turn_started` when it has said it (`since`), and never before the newest input in the chat - the line just
@@ -333,10 +378,12 @@ const WorkSteps = ({ data }) => {
 // three seconds old (the scenario run, 2026-11-06)
 const AtWork = ({ since, began, ...props }) => {
   const folded = useAuiState((s) => { const m = s.thread.messages.at(-1);
-    return m?.role === "assistant" && live(m) && (m.content || []).some((p) => p.type === "data" && p.name === "agent_steps"); });
+    return m?.role === "assistant" && live(m) && (m.content || []).some((p) => p.type === "data" && (p.name === PARTS || p.name === "agent_steps")); });
+  // ...at Summary the live turn's steps are folded away: its "Working on this…" line stays
+  const level = React.useContext(LevelCtx);
   const typed = useAuiState((s) => turnBegan(s.thread.messages.filter((m) => m.role === "user").map((m) => m.createdAt)));
   // ...the server's own start wins when it has said it: a mail that joined mid-turn is newer than the turn and set its clock back to 0s
-  return folded ? null : <AgentBand {...props} since={began || Math.max(since || 0, typed || 0) || null} />;
+  return folded && level !== "summary" ? null : <AgentBand {...props} since={began || Math.max(since || 0, typed || 0) || null} />;
 };
 const Nothing = () => null;
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
@@ -389,7 +436,7 @@ const AssistantMessage = () => {
             length (the owner, 2026-11-05: "short text as possible") */}
         {/* ...but never when the words ARE the answer - the agent says so in its summary (agentSummary.answerShown; the owner, 2026-11-05:
             "it should say where the link is. this is just patting itself on the back and not showing the link") */}
-        <MessagePrimitive.Parts components={{ Text: chat && custom?.summary && !answerShown(custom.summary, words) ? Nothing : AssistantText, data: { by_name: { agent_steps: WorkSteps } } }} />
+        <MessagePrimitive.Parts components={{ Text: chat && custom?.summary && !answerShown(custom.summary, words) ? Nothing : AssistantText, data: { by_name: { [PARTS]: TurnWork, agent_steps: TurnWork } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
         {!custom?.summary && files}
         {!custom?.summary && lead && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
@@ -398,7 +445,7 @@ const AssistantMessage = () => {
         {work && !custom?.summary && newest && work.next && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={custom.folded ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} />}
+          acts={work.acts} next={custom.folded || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} />}
       </div>
     </MessagePrimitive.Root>
   );
@@ -624,7 +671,8 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onAttachBack,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
-  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "" }) {
+  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, hint = "", placeholder = "",
+  empty = "", stopShown = false }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -727,7 +775,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const asked = useRef(false);
   useEffect(() => {
     const text = String(task.Summary || '').trim();
-    if (asked.current || messages?.length || !text || !wantsAsk(task)) return;
+    if (asked.current || road || messages?.length || !text || !wantsAsk(task)) return;
     asked.current = true;
     onAsked?.();
     runtime.thread.append(text);
@@ -765,6 +813,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   const [askErr, setAskErr] = useState(""), answering = useRef(false);
   useEffect(() => { setAskErr(""); }, [asking?.request_id]);
   const answerTyped = (e) => {
+    // ...a source with its own road (a coding CLI: typed into it, or its session picked back up) takes every line as a held one
+    if (!dock && !asking && road) { e.preventDefault(); const c = runtime.thread.composer; holdText(c.getState().text.trim(), c); return; }
     if (dock || !asking) return;
     e.preventDefault();
     const c = runtime.thread.composer, w = c.getState().text.trim();
@@ -791,15 +841,19 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   }, [runtime]);
   const holdLine = (e) => {
     if (dock || asking) return;
-    const c = runtime.thread.composer, w = heldLine(e, c.getState().text, runtime.thread.getState().isRunning);
+    const c = runtime.thread.composer, w = heldLine(e, c.getState().text, !!road || runtime.thread.getState().isRunning);
     if (!w) return;
-    e.preventDefault(); c.setText("");
+    e.preventDefault(); holdText(w, c);
+  };
+  const holdText = (w, c) => {
+    if (!w && !attachmentsRef.current.length) return;
+    c.setText("");
     const id = `held-${Date.now()}-${Math.random()}`, after = (messages || []).filter((m) => m?.role === "user").length;
     // ...WITH THE BOX'S FILES: a line held mid-turn went without them, and they sat on in the box (the owner, 2026-11-06) - put back if it did not go
     const files = [...attachmentsRef.current];
     if (files.length) onClearAttachments(files.map((a) => a.path));
-    setHeld((h) => [...h, { id, text: w, after, drawn: mineDrawn.length }]);
-    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path) }, { timeout: 0 })
+    setHeld((h) => [...h, { id, text: w || withImages("", files.map((a) => a.path)), after, drawn: mineDrawn.length }]);
+    (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path) }, { timeout: 0 }))
       .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
@@ -810,7 +864,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
           {chat && !messages?.length && reading}
-          {!messages?.length && !starting && !(chat && reading) && (
+          {/* ...a source that says what an empty chat means (no coding session yet) says so under the reading */}
+          {!messages?.length && !starting && empty && <div className="tq-aui-hint" style={{ margin: "8px 0 16px" }}>{empty}</div>}
+          {!messages?.length && !starting && !empty && !(chat && reading) && (
             <div className="tq-aui-welcome">
               <TaskuaryMark size={22} />
               <div>
@@ -833,6 +889,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {notShown(held, mineDrawn).map((l) => <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
             <div className="tq-aui-role">you</div><div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
             {l.err && <div className="tq-aui-hint" role="alert">{l.err}</div>}</div>)}
+          {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
+          {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
               half-written answer is an offer to schedule something nobody has read yet - and it
               sat there through every tool call, which is where the eye goes while waiting. */}
@@ -869,6 +927,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
           {!dock && nextAt?.next && !summed && !working && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
+          {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout) */}
+          {!dock && landing}
           {/* ...AND HOW IT CLOSED, the stream's last line (the owner, 2026-11-06): a closed task is the same chat, its close said in it */}
           {!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
         </ThreadPrimitive.Viewport>
@@ -892,27 +952,45 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                   sx={{ cursor: came.onOpen ? "pointer" : "default" }} />}
                 {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</> : null}
               /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
-              input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={holdLine} placeholder={askWords || (dock ? "Tell Taskuary what to do next…" : MESSAGE)} />}
+              input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={holdLine} placeholder={askWords || placeholder || (dock ? "Tell Taskuary what to do next…" : MESSAGE)} />}
               onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}
               /* stopping is an ACT: closing this page is not one. The button tells the server to stop the run; abandoning the tab just detaches
                  from it (server.py) - and A TURN THIS PANE DID NOT START has the same stop (the owner, 2026-11-05): a turn woken by new mail, or one
                  running when the page was opened, runs on the server, and the runtime's Cancel stays hidden */
               extra={<><ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response" onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
-                {working && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
+                {(road ? stopShown : working) && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
                   title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}</>}
               send={<ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>} />
             {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}
-            <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste, drop or attach a file</div></>}
+            <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
   );
 }
 
+// A CODING SESSION AS THIS CHAT'S SOURCE (codingchat.py): every session's steps or ACP updates, the mail that came in, the live CLI and what it
+// waits on the owner for - read again while a CLI runs, when the task moves, and when the page's own session (`term`) changes
+function useCodingChat(tid, on, term) {
+  const [got, setGot] = useState(null);
+  const load = useCallback(() => (on ? api.get(`/api/tasks/${tid}/coding-chat`).then(({ data: d }) => setGot(d?.data || null)).catch(() => {}) : Promise.resolve()), [tid, on]);
+  useEffect(() => { setGot(null); load(); }, [load]);
+  // the page's own session is the first word that a CLI runs: the read follows it
+  const pageLive = on && term?.alive && term.mode !== "assistant" && term.taskId === tid ? term : null;
+  const live = got?.live || (pageLive ? { sid: pageLive.sid, cli: pageLive.cli, asking: false, working: !pageLive.waiting } : null);
+  useEffect(() => { load(); }, [pageLive?.sid, pageLive?.alive, load]);
+  useEffect(() => { if (!live) return undefined; const t = setInterval(load, 2500); return () => clearInterval(t); }, [!!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => (on ? onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }) : undefined), [on, tid, load]);
+  const rows = useMemo(() => (got ? chatRows(got) : []), [got]);
+  return { got, live, rows, load };
+}
+// ...the two sources in one stream, in the order things happened (a turn still at work, with no time of its own yet, at the foot)
+const byTime = (ms) => ms.map((m, i) => [String(m.createdAt || "9999").replace("T", " "), i, m]).sort((a, b) => a[0].localeCompare(b[0]) || a[1] - b[1]).map((x) => x[2]);
+
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "" }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", term = null, landing = null, onChanged }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -935,6 +1013,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   const selectionRef = useRef({ connectorId: "", model: "" });
   const attachmentsRef = useRef([]);
   selectionRef.current = { connectorId, model };
+  // ONE CHAT, WHATEVER THE SOURCE (chatStream.chatSource): a coding task's sessions, or the general agent's conversation - and how much of the
+  // work it draws (chatDetail.js): this task's own choice, else its kind's default from Settings. Off a task's own chat (the dock, the Wall), as ever
+  const source = dock ? "general" : chatSource(task, term), coding = source === "coding";
+  const cc = useCodingChat(task.TaskId, coding, term), defaults = useChatDefaults(), own = useOwnDetail(task.TaskId);
+  const level = chat && !dock ? detailFor({ source, settings: defaults, own }) : "steps";
+  useEffect(() => { if (cc.got) setRevision((k) => k + 1); }, [cc.got]);
   attachmentsRef.current = attachments;
 
   // asked once, and only once: the marker is cleared on the server as the question goes
@@ -1007,8 +1091,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     onSession?.(s);
   }, [onSession]);
   const stopRun = useCallback(() => {
-    api.post(`/api/tasks/${task.TaskId}/assistant/cancel`).catch(() => {});
-  }, [task.TaskId]);
+    if (coding) api.post(`/api/tasks/${task.TaskId}/agent/cancel`).then(() => setTimeout(cc.load, 600)).catch((x) => setError(errText(x)));
+    else api.post(`/api/tasks/${task.TaskId}/assistant/cancel`).catch(() => {});
+  }, [task.TaskId, coding, cc.load]);
   /* On screen, the agent's CLI stays open: the server reaps one nobody touches for 30 minutes, and this is the touch. Nothing starts here. */
   useEffect(() => {
     const seen = () => { if (!document.hidden) api.post(`/api/tasks/${task.TaskId}/assistant/seen`).catch(() => {}); };
@@ -1113,8 +1198,25 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     : <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
   // ...the question the answer box below shows is said there only (askOnce.js)
-  const shownMessages = withoutAsked(messagesWithTrace(data?.messages, session, dock),
+  const shownMessages = (() => { const general = withoutAsked(messagesWithTrace(data?.messages, session, dock),
     !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
+    return coding ? byTime([...general, ...rowMessages(cc.rows)]) : general; })();
+  // ...and what typing does there: into the running CLI as its next line, or the session picked back up with these words leading - the files
+  // named to the CLI by their paths after the words (promptImages.withImages), as every coding CLI reads a file
+  const road = coding ? (w, files) => { const said = withImages(w, files);
+    return (cc.live ? api.post(`/api/tasks/${task.TaskId}/waitroom`, { text: said }) : api.post(`/api/tasks/${task.TaskId}/continue-work`, { note: said }))
+      .then(() => { onChanged?.(); setTimeout(cc.load, 1200); }); } : null;
+  // ...its screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`); over ACP Stop ends the turn
+  const acp = cc.live?.transport === "acp", screenAsks = coding && !!cc.live?.asking && !acp && !!cc.live?.sid, perms = coding ? cc.got?.permissions || [] : [];
+  const codingBusy = coding && !!cc.live?.working && !screenAsks && !perms.length;
+  const codingCards = coding ? <>
+    {/* WHAT THE AGENT WAITS ON THE OWNER'S PRESS FOR (permissions.py): one card each, answered here or on a bound chat */}
+    <PermissionCards taskId={task.TaskId} items={perms} onAnswered={cc.load} />
+    {/* THE AGENT'S SCREEN, WHILE IT ASKS: the live terminal in the stream, answered there; gone once it stops asking */}
+    {screenAsks && <div className="tq-cc-screen" data-tq-chat-screen="" role="group" aria-label="The agent's screen is asking something">
+      <div className="tq-cc-screen-head">The agent's screen is asking something</div>
+      <TerminalPane sid={cc.live.sid} height="300px" onExit={cc.load} /></div>}</> : null;
+  const closedTask = ["done", "dropped"].includes(String(task.Status || ""));
   // WHO is on this task, what its turn has done so far, and when the turn began - all three read
   // off what this pane already has (agentWork.js). The dock is exempt: it IS the assistant.
   // Plain calls, NOT useMemo: this sits after the early return for "no data yet", so a hook here
@@ -1159,7 +1261,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
-    <ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={dock ? name : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
+    <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={dock ? name : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
@@ -1174,16 +1276,21 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
-        serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
+        serverBusy={busy || codingBusy} provider={coding ? cc.live?.cli || "" : session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""}
-        noAi={chat && !dock && !data?.providers?.length && !noAiSaid && !data?.demo
+        road={road} cards={codingCards} landing={chat && !dock ? landing : null} stopShown={coding && acp && !!cc.live?.working}
+        placeholder={coding ? (closedTask ? "Write to pick it back up…" : cc.live ? MESSAGE : "Write to pick the session back up…") : ""}
+        hint={!coding ? "" : acp ? (cc.live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
+          : cc.live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}
+        empty={coding && cc.got ? (cc.live ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one.") : ""}
+        noAi={!coding && chat && !dock && !data?.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
     </OutputsCtx.Provider>
     </WorkCtx.Provider>
-    </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider>
+    </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider></LevelCtx.Provider>
   );
   /* CHIP-SIZED, AND THEY GIVE WAY (the owner, 2026-11-03, Agent beside Close out: "this ui looks weird when split? make the model choice
      smaller"): a 220px brain picker and a 150px model box that never shrank sat on the heading's title - "Tasku… / answ…" - in a ~500px

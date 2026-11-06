@@ -1,7 +1,7 @@
 // HOW A CODING TASK'S BRANCH LANDS (the owner, 2026-11-06: "rebase fast forward is a question on each one and they can ask"): in its Close
 // out, the branch's diff against where the task started - files changed, + and - - with the whole diff a press away, then the one question.
 // The agent's own pick (propose_land) is marked; nothing lands until the owner answers. A conflict lands nothing: the agent gets it.
-// ...IN THE CODING CHAT IT IS A CARD OF ITS OWN (`inChat`, CodingChat.jsx), and the whole diff opens in the code viewer, a file a fold (DiffView);
+// ...IN THE CODING CHAT IT IS A CARD OF ITS OWN (`inChat`, GeneralWorkspace.jsx), and the whole diff opens in the code viewer, a file a fold (DiffView);
 // while it waits to land each part can be marked Keep or Revert, and the reverted ones are taken out of the branch first (landing.revert)
 import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";

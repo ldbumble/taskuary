@@ -8,7 +8,7 @@ and the answer is one of its options.
 1. Taskuary's own rules answer first (`auto`): an "always" the owner gave before on this task and tool pattern, and a read, search or
    think inside the task's own checkout. A send, post, pay, push or publish (`risky`) is never allowed by a rule - not even by a
    remembered "always", which is never offered for one.
-2. What is left is the OWNER's: a small card in the task chat (CodingChat.jsx, POST /api/tasks/<tid>/permission) and, on every channel
+2. What is left is the OWNER's: a small card in the task chat (the one task chat, GeneralWorkspace.jsx, POST /api/tasks/<tid>/permission) and, on every channel
    bound to the task (agentchannels.py), a message with the choices as numbered words - answered only by the owner's own reply there.
    It is a held ask (workerstate.hold), so the rail reads the agent as waiting on you, and the generic answer road resolves it too.
 3. No answer in TIMEOUT is a refusal, said plainly in the task and on the channel.

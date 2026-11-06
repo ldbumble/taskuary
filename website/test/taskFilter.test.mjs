@@ -99,7 +99,7 @@ test("with a live session, X steps back to the task first and the session keeps 
   // ...and it drops a hand-picked stage with it, so the reply the wrap-up just wrote is what the
   // page opens on rather than the pane that has finished (2026-09-22)
   assert.match(source, /if \(!liveSession\) \{ setPeek\(false\); setOpenStage\(null\); \}/, "the session ending puts the page back");
-  // ...a live coding CLI is a toggle inside its chat (CodingChat) - no terminal pane of the page's own to fold
+  // ...a live coding CLI is a drawn in its task's one chat (GeneralWorkspace) - no terminal pane of the page's own to fold
   assert.doesNotMatch(source, /workspaceMode === "live"|<TerminalPane /);
   // the task card and earlier runs all come back while peeking (Context & history went 2026-10-22: Came from is its messages)
   for (const gate of [/\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from=""/,

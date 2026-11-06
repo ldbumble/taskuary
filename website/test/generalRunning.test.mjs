@@ -14,7 +14,7 @@ test("a running turn says so, whichever backend is answering", () => {
   assert.match(view, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork name=\{name\}/);
   assert.match(view, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
   assert.match(view, /\{serverBusy && atWork\}/);
-  assert.match(view, /serverBusy=\{busy\} provider=\{session\?\.provider \|\| pickedLabel\} name=\{name\}/);
+  assert.match(view, /serverBusy=\{busy \|\| codingBusy\} provider=\{coding \? cc\.live\?\.cli \|\| "" : session\?\.provider \|\| pickedLabel\} name=\{name\}/);
   assert.match(view, /const Thinking = \(/);
   assert.match(view, /const AgentBand = \(\{ name, provider, work, since, starting = "" \}\)/);
 });

@@ -108,10 +108,12 @@ import { closeoutOf } from "./reviewProposal.js";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import LandingCard from "./LandingCard.jsx";
-import CodingChat from "./CodingChat.jsx";
 import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
 import CodeChanges from "./CodeChanges.jsx";
+import { ChatDetail } from "./DetailSlider.jsx";
+import { chatSource } from "./chatStream.js";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import AgentChannels from "./AgentChannels.jsx";
 import TokenOutlinedIcon from "@mui/icons-material/TokenOutlined";
@@ -1688,7 +1690,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const hasRecord = !!(report || detail?.transcript || (isGeneral && generalStarted)
     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result"));
   // EVERY TASK IS CAME FROM AND ITS ONE CHAT (the owner, 2026-11-06: "there should no longer be close out code anywhere"): general, reply,
-  // coding - a live coding terminal a toggle inside its chat (CodingChat) - and a plain to-do
+  // coding - a live coding CLI drawn in the same chat (GeneralWorkspace, chatStream.chatSource) - and a plain to-do
   const home = !!t;
   // ...a to-do no agent has touched is ONE section: what came in, the box under it (taskLayout.soloTodo) - no "Agent - not started" column
   const solo = soloTodo({ kind: t?.Kind, started: !!(term || hasRecord || generalStarted || hasGeneralHistory || queuedRow || agentOpening || failedRun || writeup) }),
@@ -2977,7 +2979,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...what AI the task used, and - a coding task in Developer mode - the chats its agent can be talked to from: quiet corner
                       buttons, each its popover (the owner, 2026-11-06: never at the bottom of the chat) */}
                   <HeadPop id="ai-used" title="AI used" icon={<TokenOutlinedIcon sx={{ fontSize: 16 }} />}><AiUsed taskId={t.TaskId} pop /></HeadPop>
-                  {canCode && t.Kind === "coding" && <HeadPop id="changes" title="Changes" wide icon={<DifferenceOutlinedIcon sx={{ fontSize: 16 }} />}>
+                  {/* ...how much of its agent's work the chat shows (chatDetail.js): this task's own, else its kind's default */}
+                  <HeadPop id="chat-detail" title="Chat detail" icon={<TuneOutlinedIcon sx={{ fontSize: 16 }} />}><ChatDetail taskId={t.TaskId} source={chatSource(t, term)} /></HeadPop>
+                  {/* ...and its code changes ONLY WHERE THERE IS CODE (the owner, 2026-11-06: "diff shows up if there is branch or checkout stuff available"):
+                      a task working in a checkout, whatever its kind (landing.has_checkout) */}
+                  {canCode && detail?.checkout && <HeadPop id="changes" title="Changes" wide icon={<DifferenceOutlinedIcon sx={{ fontSize: 16 }} />}>
                     <CodeChanges taskId={t.TaskId} /></HeadPop>}
                   {canCode && t.Kind === "coding" && <HeadPop id="agent-channels" title="Talk to this agent from…" icon={<ForumOutlinedIcon sx={{ fontSize: 16 }} />}>
                     <AgentChannels taskId={t.TaskId} pop /></HeadPop>}
@@ -3456,17 +3462,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       // ...or holds a draft waiting for its Send
                       ...(!chatPane && (resultRest || (failedRun && !resultOpen)) ? { "&:not(:has([data-tq-asking], [data-tq-agent-notice], .tq-aui-band, .tq-aui-thinking, .tq-aui-thread [data-tq-working], [data-tq-waits], [data-tq-on-you]))": { display: "none" } } : {}) }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                      {/* A CODING TASK IS THE SAME ONE CHAT (the owner, 2026-11-06): its session's turns, the drafted reply with Send, the landing card and
-                          the close in one stream, the terminal a toggle inside it (CodingChat.jsx) - no second column */}
-                      {t.Kind === "coding" || liveTerminal(term) ? <CodingChat key={t.TaskId} task={t} term={term} next={chatCards}
-                        landing={canCode && t.Kind === "coding" && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
-                          onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
-                        reading={readingOf(t?.ThreadJson)?.asking ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(t.ThreadJson).asking}</div> : null}
-                        came={{ label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : "Came from",
-                          title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null }}
-                        closedLine={closedSaid}
-                        onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
-                      : <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
+                      {/* ONE CHAT FOR EVERY KIND (the owner, 2026-11-06: "one shared chat object for coding and regular"): the component reads its own
+                          source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
+                          card joins it wherever the task works in a checkout */}
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
@@ -3474,7 +3473,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         opening={agentOpening}
                         came={home ? { label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from",
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
-                        closedLine={closedSaid} />}
+                        closedLine={closedSaid} term={term}
+                        landing={canCode && detail?.checkout && <LandingCard key={`land-${t.TaskId}`} taskId={t.TaskId} inChat
+                          onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
+                        onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (

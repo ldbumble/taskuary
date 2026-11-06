@@ -30,3 +30,8 @@ test("lines typed mid-turn are drawn under Working on this…", () => {
   const i = ws.indexOf("<ThreadPrimitive.Messages components"), a = ws.indexOf("{atWork}", i), b = ws.indexOf("{serverBusy && atWork}", i), h = ws.indexOf("{held.map(", i);
   assert.ok(i > 0 && a > i && b > a && h > b, "messages, the running line, the server's running line, then the held lines");
 });
+
+// AN ACTION CARD'S PICK is as wide as what it shows, and the keyboard sees it (the scenario run, 2026-11-06: "Anyone" a word's gap from its chevron)
+test("an action card's choice sizes to its pick and rings on keyboard focus", () => {
+  assert.match(read("ActionCard.jsx"), /fieldSizing: "content", borderRadius: "4px", "&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`, outlineOffset: 1 \} \};/);
+});

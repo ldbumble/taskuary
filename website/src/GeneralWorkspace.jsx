@@ -66,6 +66,7 @@ import TelegramIcon from "@mui/icons-material/Telegram";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import KeyIcon from "@mui/icons-material/VpnKeyOutlined";
+import AlarmIcon from "@mui/icons-material/AccessTime";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -229,6 +230,8 @@ const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => {
     <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{x.words}</span>
   </div>;
 });
+// what a check-back come due asked to verify, from Taskuary's own line (checkback.TURN) - '' for any other brief
+export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
   const at = useAuiState((s) => s.message.createdAt);
@@ -238,6 +241,12 @@ const UserMessage = () => {
   const words = useAuiState((s) => textOf(s.message));
   const prev = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === s.message.id), p = ms[i - 1];
     return p?.role === "user" && !p.metadata?.custom?.brief ? (p.createdAt ? when(new Date(p.createdAt)) : "") : null; });
+  // ...and a CHECK-BACK come due is the input of the turn it wakes (checkback.TURN): its own "what", under a clock - long, it was Taskuary's
+  // instructions and drew nothing, and the turn stood with no input over it, read as a second agent (the scenario run, 2026-11-06)
+  const due = brief && chat ? checkBackDue(words) : "";
+  if (due) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="check-back">
+    <span className="tq-aui-arrived-head"><AlarmIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{["Check-back due", at && when(new Date(at))].filter(Boolean).join(" · ")}</span>
+    <span className="tq-aui-arrived-words" dir="auto">{due}</span></div></MessagePrimitive.Root>;
   if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
     : !mail?.length && words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
       <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{at ? when(new Date(at)) : ""}</span>
@@ -314,11 +323,12 @@ const WorkSteps = ({ data }) => {
 // ...its clock from the turn's own start: the server's `turn_started` when it has said it (`since`), and never before the newest input in the chat - the line just
 // typed is in the thread before the server's history has it, and the clock read the owner's line before that one, "249m 53s" over a turn
 // three seconds old (the scenario run, 2026-11-06)
-const AtWork = ({ since, ...props }) => {
+const AtWork = ({ since, began, ...props }) => {
   const folded = useAuiState((s) => { const m = s.thread.messages.at(-1);
     return m?.role === "assistant" && live(m) && (m.content || []).some((p) => p.type === "data" && p.name === "agent_steps"); });
   const typed = useAuiState((s) => turnBegan(s.thread.messages.filter((m) => m.role === "user").map((m) => m.createdAt)));
-  return folded ? null : <AgentBand {...props} since={Math.max(since || 0, typed || 0) || null} />;
+  // ...the server's own start wins when it has said it: a mail that joined mid-turn is newer than the turn and set its clock back to 0s
+  return folded ? null : <AgentBand {...props} since={began || Math.max(since || 0, typed || 0) || null} />;
 };
 const Nothing = () => null;
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
@@ -612,7 +622,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
+  serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
   onEnded, approve = null, chat = false, reading = null }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
@@ -774,7 +784,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       .catch((x) => setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))));
   };
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : `Answer ${name}'s question…`;
-  const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} starting={starting} />;
+  const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
@@ -1100,7 +1110,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // runs on some renders and not others - which is React #310, and it blanked the whole view.
   const name = dock ? "Taskuary" : agentName(task);
   const work = workOf(session?.trace);
-  const since = (session?.busy && session?.turn_started ? session.turn_started * 1000 : null) || turnStart(shownMessages);
+  const since = turnStart(shownMessages), began = session?.busy && session?.turn_started ? session.turn_started * 1000 : null;
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
@@ -1153,7 +1163,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
-        serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
+        serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null} />

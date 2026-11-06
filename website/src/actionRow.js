@@ -526,3 +526,17 @@ export function splitRow(row, on, list = []) {
   by.share = share;
   return { row: nav, by };
 }
+
+// THE TASK'S ONE ROW OF BUTTONS, IN ONE ORDER (TaskPage TaskButtons, the owner 2026-11-06): every move off every pane, Mark done, Hand it to a
+// person, Remind me, Not for me first in that order, then Change, then the rest as they came - a move that does not apply is simply absent.
+export const TASK_ORDER = ["done", "reopen", "hand", "remind", "nat"];
+const TASK_PANES = ["head", "from", "agent", "close", "share"];
+const verbKey = (v) => String(v?.id || "").split(":").pop();
+// the order, pure: [fixed in TASK_ORDER's order..., "change", ...the rest as they came]
+export const taskButtons = (by, skip = () => false) => {
+  const seen = new Set(), all = TASK_PANES.flatMap((k) => (by[k] || []).map((v) => ({ v, head: k === "head" || k === "share" || !!v.quiet })))
+    .filter(({ v }) => !v.card && !skip(v) && !seen.has(v.id) && seen.add(v.id));
+  const at = (x) => TASK_ORDER.indexOf(verbKey(x.v)), fixed = all.filter((x) => at(x) >= 0).sort((a, b) => at(a) - at(b));
+  const rest = all.filter((x) => at(x) < 0), change = (by.change || []).filter((v) => !skip(v));
+  return [...fixed, ...(change.length ? [{ change }] : []), ...rest];
+};

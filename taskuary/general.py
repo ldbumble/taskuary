@@ -318,6 +318,24 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
     return choice['pick'], choice['label'], model or saved_model or choice['model']
 
 
+# A MODEL IS CHOSEN ONLY WHEN THE OWNER PICKED IT (2026-11-06): a session carried its CLI's own default model ("default ·
+# claude-opus-5-5" in the picker) to the router as if picked, and brainroute.choose took any model as "you chose it" - so Auto never
+# put a quick task on the light gear nor a hard one on the strong. The pick's own model and the general card's are nobody's choice;
+# a session saved before this carries one of them as its Model, and it pins nothing either.
+def own_models(store, pick: str) -> set:
+    "The models `pick` runs when nobody chose one: its CLI connection's or AI card's own, and - on the general card's AI - that card's."
+    if not pick: return set()
+    o = next((o for o in provider_options(store) if o['pick'] == pick), None)
+    card = _selected(store)
+    return {m for m in ((o or {}).get('model'), card[2] if card[0] == pick else '') if m}
+
+
+def chosen_model(store, pick: str, model) -> str:
+    "`model` when the owner picked it for this task (the picker, Run another agent) - '' when it is only `pick`'s own default."
+    m = str(model or '').strip()
+    return '' if not m or m in own_models(store, pick) else m
+
+
 # The reason a general agent gives when there is nothing to run it on - said as it is, naming no AI the person does not have.
 NO_AI = 'No AI is connected'
 
@@ -1390,6 +1408,11 @@ class GeneralSession:
                      and origin.of_task(self.store, self.task_id)[0] != 'stranger')
         except Exception: return False
 
+    @property
+    def chosen(self) -> str:
+        "The model the owner picked for this task, '' for the pick's own default: only a pick goes to the router as one (chosen_model)."
+        return chosen_model(self.store, self.pick, self.model)
+
     def _remember_session(self):
         from . import continuity
         self.store.save_session(self.task_id, self.pick, self.model, self.cli_sid,
@@ -1770,7 +1793,7 @@ class GeneralSession:
             # search tool in this session" (TQ-0420). `research` is the grant reports already use -
             # Read/Glob/Grep/WebFetch/WebSearch, granted so a headless run need not click, and no
             # command, edit, write, or MCP tool. Looking is not acting.
-            build_args = dict(pick=self.pick, model=self.model or None, trace=visible,
+            build_args = dict(pick=self.pick, model=self.chosen or None, trace=visible,
                               cancel=cancel, resume=self.cli_sid or None, research=not hands, fallback_user=user,
                               # the task's CLI stays open between messages instead of starting again (clipool)
                               # ...keyed `general:` for an agent's work, which no clock ends (llm.make_cli_llm), `dock:` for the Assistant's chat
@@ -1838,7 +1861,7 @@ class GeneralSession:
                 if systems: system = f'{system}\n\n{systems}'
                 if said: system = f'{system}\n\n{said}'           # the fresh conversation hears of the mail as the first did
                 if prior: user = f'{prior}\n\n{user}'
-                build_args = dict(pick=self.pick, model=self.model or None,
+                build_args = dict(pick=self.pick, model=self.chosen or None,
                                   trace=visible, cancel=cancel, task_id=self.task_id)
                 if browser_tools or hands or desk:
                     build_args.update(cli_tools=True, extra_env=browser_env)
@@ -2196,7 +2219,7 @@ class GeneralSession:
             transcript = conversation_text(self.store, self.task_id)
             if transcript and hub.enabled(self.store):
                 try:
-                    brain = llm_mod.build_llm(self.store, pick=self.pick or None, model=self.model or None, job='memory')
+                    brain = llm_mod.build_llm(self.store, pick=self.pick or None, model=self.chosen or None, job='memory')
                     hub.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
                 except Exception as e:
                     logger.debug(f'hub: assistant conversation {self.task_id} learned nothing - {e}')

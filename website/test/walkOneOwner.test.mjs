@@ -29,7 +29,8 @@ test("every walk move is one POST to /api/walk/*, never the stream or a settle o
   // for the one the server's walk.below names (rule 7: the next item draws at once - Next and Mark done waited a round trip without it)
   const surface = view.slice(view.indexOf("const surface = useCallback"), view.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
   assert.equal((surface.match(/setMsgs\(\(m\) => \[\.\.\.m, \{[^}]*role: "assistant"/g) || []).length, 1, "one line drawn ahead of the answer, no more");
-  assert.match(surface, /const onIt = !!putDown && sameKey\(railNow, walkNow\?\.on, putDown/); assert.match(surface, /const below = onIt && walkNow\.below/);
+  assert.match(surface, /const \{ onIt, below \} = pressOnto\(walkNow, railNow, /);
+  assert.match(read("funnelPile.js"), /const onIt = !!putDown && sameKey\(rail, walk\?\.on, putDown, card\);\n\s+const below = onIt && walk\.below/);
   assert.match(surface, /card: belowItem, ahead: true/);
   assert.match(surface, /else landed\(data, off\(\)\);/);
 });

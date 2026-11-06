@@ -1,7 +1,7 @@
-// AN ITEM IN A TASK'S THREE SECTIONS (the owner, 2026-10-28: "even reports should come in with the 3 sections of came in-close out but they
-// should be small on the side like active agent. Want this to be consistent across. even fyi"): a report or an FYI on the table is the same
-// card a task is - its header line, then Came from | the middle | Close out left to right - with the section it is about open and the other
-// two the SLIM tabs a live agent leaves (TaskPage MINI_W): an arrow, a mark, a dot for where it stands, the words on hover. A tab's press opens
+// AN ITEM IN A TASK'S SECTIONS (the owner, 2026-10-28: "even reports should come in with the 3 sections ... Want this to be consistent across.
+// even fyi"): a report or an FYI on the table is the same card a task is - its header line, then Came from | the middle left to right (no Close
+// out, 2026-11-05) - with the section it is about open and the others the SLIM tabs a live agent leaves (TaskPage MINI_W): an arrow, a mark,
+// a dot for where it stands, the words on hover. A tab's press opens
 // its section; the one the item is about folds to its full tab while another is open, as a live agent's does. The pieces are the task's own
 // (TaskPage SectionTab, SECTION, SLOT, SectionHead), so the two read as one design. Every section stays mounted: the card's verbs (Foot) ride
 // the dock's row from wherever they are drawn, whichever section is open
@@ -94,13 +94,13 @@ export function ItemAsk({ ask, hand = null, onHand = null, came = "" }) {
 // "chat is on the came from tab. that's weird ... chat box is only on the agent tab") - the item still opens on what came in, never on Agent
 // `hands`: it takes a Send to agent with no box of its own to answer from (an FYI handful: ask null) - the box is drawn while a chip is on
 // `noAgent`: no Send to agent on its strip (an Advisor idea - the owner, 2026-11-06)
+// `moves`: what registers the item's row verbs (RowMoves, Foot), mounted out of sight - a section of its own once, "Nothing owed" on its tab
 const AGENT_STARTS = new Set(["regular_agent", "coding_agent", "send-general", "start-agent"]);
-export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null, hands = false, noAgent = false }) {
-  // NO CLOSE OUT ON AN ITEM (the owner, 2026-11-05: "reports/advisor/fyi to chat thing as well without close out"): every one said "Nothing
-  // owed". Its body stays mounted, unseen - the moves it registers (RowMoves, Foot) still ride the item's strip and the row
-  // ...NOR AN AGENT COLUMN (the owner, 2026-11-06: "the one bottom box with Came-from as a chip, with no side-column Agent"): the box is at the foot of
-  // the section the item is about, its Came-from a chip on it - an Agent section with nothing of its own is not drawn
-  const sections = all.filter((s) => s.key !== "close" && !(s.key === "agent" && !s.body)), closed = all.find((s) => s.key === "close");
+export default function ItemSections({ kind, label, title, aside, sections: all, about, here = about, height, itemKey, lays = false, ask = null, hands = false, noAgent = false,
+  moves = null }) {
+  // NO AGENT COLUMN WITH NOTHING OF ITS OWN (the owner, 2026-11-06: "the one bottom box with Came-from as a chip, with no side-column Agent"): the
+  // box is at the foot of the section the item is about, its Came-from a chip on it
+  const sections = all.filter((s) => !(s.key === "agent" && !s.body));
   const [open, setOpen] = useState(about), [hand, setHand] = useState(null);
   useEffect(() => { setOpen(about); setHand(null); }, [itemKey, about]);
   const takes = !!ask || hands, boxAt = sections.some((s) => s.key === "agent") ? "agent" : about;
@@ -171,7 +171,7 @@ export default function ItemSections({ kind, label, title, aside, sections: all,
           </Box>
         ))}
       </Box>
-      {closed && <Box data-tq-item-close-moves="" aria-hidden sx={{ display: "none" }}>{closed.body}</Box>}
+      {moves && <Box data-tq-item-moves="" aria-hidden sx={{ display: "none" }}>{moves}</Box>}
     </Box>
     </ItemLay.Provider>
   );

@@ -11,6 +11,8 @@
 // ...AND THREE DRAFTS, each written from the mail, edited, then accepted: the job (JOB.md), how you write (STYLE.md - it was written
 // silently after the job and its failure only logged) and who you are (SOUL.md). Each says its state, and a failure is said with
 // Write it again.
+// ...AND THE JOB WITH WHAT YOU WORK ON, ONE STEP (the owner, 2026-11-06): the workstreams the mail was grouped into sit under the job
+// description, their own line in place while the grouping runs, and one Next keeps both - never waiting on the grouping (aboutWork.js).
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, TextField, Typography } from "@mui/material";
 import api from "./api";
@@ -18,16 +20,13 @@ import { DIM, FAINT, INK } from "./theme.jsx";
 import { useVerbs } from "./actionRow.js";
 import { Md } from "./md.jsx";
 
+import { DRAFTS, STEPS, WS_LATER, canSkip, counter, skipTo, wsAnswer } from "./aboutWork.js";
+export { DRAFTS, MAIL_AT, STEPS, canSkip, skipTo } from "./aboutWork.js";
+
 const errText = (e) => e?.response?.data?.detail || e?.message || "That didn't work.";
-export const STEPS = ["name", "org", "role", "signature", "systems", "mailboxes", "job", "workstreams", "style", "soul"];
-export const MAIL_AT = STEPS.indexOf("mailboxes");
-// Skip before the mailbox step lands on it; on it there is no Skip; past it, Skip leaves the rest (null)
-export const skipTo = (at) => (at < MAIL_AT ? MAIL_AT : null);
-export const canSkip = (step) => step !== "mailboxes";
-export const DRAFTS = ["job", "workstreams", "style", "soul"];
 const KIND = { outlook: "Microsoft 365 / Outlook", gmail: "Gmail", imap: "Email (IMAP)" };
 const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", signature: "Your email signature",
-  systems: "Systems you work in", mailboxes: "Connect your sources", job: "Your job", workstreams: "What you work on", style: "How you write", soul: "Who you are" };
+  systems: "Systems you work in", mailboxes: "Connect your sources", job: "About your work", workstreams: "What you work on", style: "How you write", soul: "Who you are" };
 const ASK = {
   name: "What's your name?", org: "What organisation do you work for?",
   role: "What's your job title? Next, I write your job description from your email.",
@@ -42,12 +41,12 @@ const ASK = {
 const SAYS = {
   job: { running: "Reading three months of your email to write your job description - about a minute.",
     failed: (why) => `I couldn't write it from your email (${why}). Press Write it again, or say it in your own words.`,
-    ready: "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Next.",
+    ready: "This is your job as your email describes it, and below it what you work on. Is it right? Fix anything that's wrong, then press Next.",
     none: "Press Write it - I read your email and describe your job.", busy: "Writing your job description from your email…" },
   // HERE'S WHAT I THINK YOU WORK ON (the owner, 2026-11-01): six months of mail grouped into workstreams - rename one, mark it personal,
-  // or leave it out; a personal one is never learned from
+  // or leave it out; a personal one is never learned from. Drawn under the job since 2026-11-06, where `busy` is its line in place
   workstreams: { running: "Reading six months of your mail to see what you work on - about a minute.",
-    failed: (why) => `I couldn't tell what you work on from your mail (${why}). Press Write it again, or skip this step.`,
+    failed: (why) => `I couldn't tell what you work on from your mail (${why}).`,
     ready: "Here's what I think you work on. Rename any, mark the personal one, untick any that's wrong, then press Next.",
     none: "Press Write it - I read six months of your mail and list what you work on.", busy: "Grouping your mail into what you work on…" },
   style: { running: "Reading your sent mail to describe how you write - about a minute.",
@@ -128,6 +127,15 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   // a draft as the owner left it, kept: only when it was written or they wrote it themselves
   const accept = (k) => (drafts[k].state === "ready" || edited[k]) && texts[k].trim()
     ? api.post("/api/setup/first-run/about/accept", { doc: k, text: texts[k] }) : Promise.resolve();
+  // ...and the workstreams under the job, sent with the same Next - still grouping, kept with the defaults once they land (wsAnswer)
+  const acceptWs = () => { const x = wsAnswer(drafts.workstreams, texts.workstreams, edited.workstreams); return x ? api.post("/api/setup/first-run/about/accept", x) : Promise.resolve(); };
+  // ON ITS STEP THE GROUPING IS UNDER WAY (the owner, 2026-11-06): queued behind the job as the mailboxes are passed; one never started
+  // (setup reopened, a draft cleared) starts as the step opens - once, so a mail that shows nothing is not read over and over
+  const wsStarted = useRef(false);
+  useEffect(() => {
+    if (step !== "job" || !a || wsStarted.current || drafts.workstreams.state !== "none") return;
+    wsStarted.current = true; learn(["workstreams"]);
+  }, [step, a, drafts.workstreams.state]);
   const save = async () => {
     setBusy("save"); setErr("");
     try { await accept("soul"); await api.post("/api/setup/first-run/about", { ...a, job: drafts.job.state === "ready" || edited.job ? texts.job : "" }); onSaved?.(); }
@@ -150,7 +158,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
     if (step === "soul") return save();
     if (draft) {
       setBusy("save");
-      try { await accept(step); } catch (e) { setBusy(""); return setErr(errText(e)); }
+      try { await accept(step); if (step === "job") await acceptWs(); } catch (e) { setBusy(""); return setErr(errText(e)); }
       setBusy("");
     }
     setAt((i) => Math.min(i + 1, STEPS.length - 1));
@@ -206,17 +214,17 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   const moves = [
     ...(step === "systems" ? [<Button key="all" size="small" sx={quiet} onClick={() => setAll((v) => !v)}>{all ? "Show only mine" : "Show the full list"}</Button>] : []),
     ...(draft && draft.state !== "running" ? [
-      ...(text.trim() && step !== "workstreams" ? [<Button key="edit" size="small" sx={quiet} onClick={() => setEditing((v) => (v === step ? "" : step))}>
+      ...(text.trim() ? [<Button key="edit" size="small" sx={quiet} onClick={() => setEditing((v) => (v === step ? "" : step))}>
         {editing === step ? "Done editing" : "Edit"}</Button>] : []),
       <Button key="write" size="small" sx={quiet} onClick={() => { setEditing(""); learn([step]); }} disabled={!!busy}
         data-tq-setup-lit={writeLit ? "about" : undefined}>{draft.state === "none" ? "Write it" : "Write it again"}</Button>] : []),
   ];
-  const skipper = !again && canSkip(step);
+  const skipper = !again && canSkip(step), under = step === "job";          // what you work on, under the job
   return (
     <Box data-tq-firstrun-about={step} sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 720, width: "100%", mx: "auto" }}>
       <Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
         <Typography component="h2" sx={{ fontSize: 17, fontWeight: 600, color: INK, m: 0 }}>{LABEL[step]}</Typography>
-        <Typography sx={{ color: FAINT, fontSize: 12, whiteSpace: "nowrap" }}>About your work · {at + 1} of {STEPS.length}</Typography>
+        <Typography sx={{ color: FAINT, fontSize: 12, whiteSpace: "nowrap" }}>About your work · {counter(at)}</Typography>
       </Box>
       {["name", "org", "role"].includes(step) && <>
         <TextField key={step} size="small" fullWidth autoFocus value={a[step]} onChange={set(step)} onKeyDown={enter} sx={field}
@@ -263,22 +271,44 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
         {draft.state === "failed" && <Typography data-tq-draft-failed="" sx={{ color: "#9b2c2c", fontSize: 13.5 }}>
           {soon ? draft.why : `I couldn't write it: ${draft.why}`}</Typography>}
         {/* READ AS A DOCUMENT, not its markdown (the owner, 2026-10-16: the box showed "### What my job is"): Edit opens the text */}
-        {step === "workstreams" ? <WorkstreamsConfirm text={text} onChange={(v) => { setEdited((x) => ({ ...x, workstreams: true })); setTexts((x) => ({ ...x, workstreams: v })); }} />
-          : editing === step || !text.trim()
+        {editing === step || !text.trim()
           ? <TextField key={step} multiline fullWidth minRows={10} maxRows={22} value={text} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
             onChange={(e) => { const v = e.target.value; setEdited((x) => ({ ...x, [step]: true })); setTexts((x) => ({ ...x, [step]: v })); }}
             inputProps={{ "aria-label": LABEL[step] }} autoFocus={editing === step} />
-          : <Box data-tq-job-read="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1, maxHeight: "52vh", overflowY: "auto",
+          : <Box data-tq-job-read="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1, maxHeight: under ? "36vh" : "52vh", overflowY: "auto",
               "& h2": { fontSize: 15.5, fontWeight: 700, mt: 2, mb: 0.5, borderBottom: "1px solid #ece6db" }, "& h2:first-of-type": { mt: 0.5 },
               "& h3": { fontSize: 14.5, fontWeight: 700, mt: 1.5, mb: 0.5 }, "& h3:first-of-type": { mt: 0.5 }, "& ul": { pl: 2.5, my: 0.5 },
               "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={text} /></Box>}
       </>}</Box>}
+      {/* ...the job's own Edit and Write it again stay under the job, not under the list that follows it */}
+      {under && moves.length > 0 && <Box data-tq-job-moves="" sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: -1, mt: -0.75 }}>{moves}</Box>}
+      {under && <WorkstreamsSection d={drafts.workstreams} text={texts.workstreams} busy={!!busy} onAgain={() => learn(["workstreams"])}
+        onChange={(v) => { setEdited((x) => ({ ...x, workstreams: true })); setTexts((x) => ({ ...x, workstreams: v })); }} />}
       {note && !draft && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
       {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}
-      {(moves.length > 0 || skipper) && <Box data-tq-about-moves="" sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: -1, flexWrap: "wrap" }}>
-        {moves}
+      {((!under && moves.length > 0) || skipper) && <Box data-tq-about-moves="" sx={{ display: "flex", alignItems: "center", gap: 0.5, ml: -1, flexWrap: "wrap" }}>
+        {!under && moves}
         {skipper && <Button size="small" disabled={!!busy} onClick={skip} sx={{ ...quiet, ml: "auto" }}>Skip these questions</Button>}
       </Box>}
+    </Box>
+  );
+}
+
+// WHAT YOU WORK ON, UNDER THE JOB (the owner, 2026-11-06) - and the same list on About you: grouping, its line in place where the list
+// will be and why Next need not wait; failed, why and Write it again; else the list to answer. `d` is the draft {state, why}
+export function WorkstreamsSection({ d, text, onChange, onAgain = null, busy = false, later = WS_LATER, heading = true }) {
+  const quiet = { color: DIM, fontSize: 12.5, minWidth: 0, px: 1, ml: -1 };
+  return (
+    <Box data-tq-workstreams={d.state} sx={{ display: "flex", flexDirection: "column", gap: 1, mt: heading ? 1 : 0 }}>
+      {heading && <Typography component="h3" sx={{ fontSize: 15, fontWeight: 600, color: INK, m: 0 }}>What you work on</Typography>}
+      {d.state === "running" ? <>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
+          <Typography sx={{ color: DIM, fontSize: 13.5 }}>{SAYS.workstreams.busy}</Typography></Box>
+        {later && <Typography data-tq-workstreams-later="" sx={{ color: FAINT, fontSize: 12.5 }}>{later}</Typography>}
+      </> : d.state === "failed" ? <>
+        <Typography data-tq-draft-failed="" sx={{ color: "#9b2c2c", fontSize: 13.5 }}>{SAYS.workstreams.failed(d.why)}</Typography>
+        {onAgain && <Box><Button size="small" sx={quiet} disabled={busy} onClick={onAgain}>Write it again</Button></Box>}
+      </> : <WorkstreamsConfirm text={text} onChange={onChange} />}
     </Box>
   );
 }

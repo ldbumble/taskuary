@@ -234,12 +234,16 @@ def confirm(store, items: list, actor: str = 'owner') -> list:
         w = xs.get(it.get('slug'))
         if not w: continue
         if not it.get('keep', True): W.remove(store, w['slug'], actor); continue
-        w = {**w, 'name': ' '.join(str(it.get('name') or w['name']).split()) or w['name'], 'status': 'active',
+        # ...one already kept, answered again from About you, keeps its status (a quiet one stays put by) and its section as JOB.md has
+        # it: the draft written at setup would go over the owner's own edits there
+        had = W.section(store, w['slug'])
+        new = w['status'] == 'proposed'
+        w = {**w, 'name': ' '.join(str(it.get('name') or w['name']).split()) or w['name'], 'status': 'active' if new else w['status'],
              'personal': bool(it.get('personal', w['personal']))}
         xs2 = [x if x['slug'] != w['slug'] else w for x in W.streams(store, True)]
         W.save(store, xs2, actor)
         sec = store.get_setting(f"workstream_draft:{w['slug']}") or ''
-        if sec and not w['personal']: W.write_section(store, w['slug'], sec, actor)
+        if sec and not w['personal'] and not had: W.write_section(store, w['slug'], sec, actor)
     return W.streams(store)
 
 

@@ -12,7 +12,8 @@ The other Settings pages are documented where their subject is: **Mail rules**
 ([the deterministic layer](how-it-works#what-triage-actually-decides)), **Activity log** (shown in
 Developer mode), and **Updates** ([updating](index#updating)). Who you are, your documents and your
 memory are on a page of their own, **About you**, behind your initials in the top right corner. Playbooks are
-on the [Reports page](reports#playbooks).
+on the [Reports page](reports#playbooks). What you work on, the list setup grouped your mail into, is on
+About you too, under **You**: rename one, tick **Personal**, or untick one to leave it out. Each change saves as you make it.
 
 ## How to read this
 

@@ -361,6 +361,12 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.</p>
 <p>Past the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board&#39;s floor view is drawn to this number, so raising it widens the room instead of crowding it.</p>
 <p>Raise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this.</p>
+<h3 id="folders-agents-may-look-in-for-code">Folders agents may look in for code<a class="anchor" href="#folders-agents-may-look-in-for-code" aria-label="Link to this section">#</a></h3>
+<p><code>code_folders</code> · type: lines · default: blank</p>
+<p>One folder a line. A coding agent picks its checkout under these, or one Taskuary already knows.</p>
+<p>Taskuary no longer decides which repository a coding task belongs in. When nothing on the task says it - a GitHub item&#39;s own repository, the code you set with Change where the code is - the agent starts in the task&#39;s own folder with the list of repositories Taskuary knows, and picks one before it touches any code.</p>
+<p>It may also look for a checkout itself, and this list is where it may look: a git checkout under one of these folders, or one Taskuary already has a path for. Anything else is refused. A checkout it finds that Taskuary did not know joins the repository map, with a line saying where it was found.</p>
+<p>Blank means the usual places for code on this computer that exist: Documents, source/repos, repos, projects, code and src in your home folder. Keep it small - every folder here is one an agent may open.</p>
 <h2 id="coding-agent">Coding agent<a class="anchor" href="#coding-agent" aria-label="Link to this section">#</a></h2>
 <h3 id="hand-answers-to-the-working-agent">Hand answers to the working agent<a class="anchor" href="#hand-answers-to-the-working-agent" aria-label="Link to this section">#</a></h3>
 <p><code>answer_to_agent</code> · type: select · default: <code>ask</code></p>

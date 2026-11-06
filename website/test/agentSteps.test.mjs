@@ -116,7 +116,8 @@ test("summaries come from the call's own arguments", () => {
   assert.equal(describeCall("mcp__github__search_issues", { query: "budget" }).summary, "Used search issues (github) on 'budget'");
   assert.equal(describeCall("shell", { command: 'curl -s -X POST "$TASKUARY_URL/api/tools/run" -d \'{"type": "mssql"}\'' }).summary,
     "Looked up data in mssql");
-  assert.equal(describeCall("sync_messages", { new: 2 }).summary, "Checked for new mail (2 new)");
+  assert.equal(describeCall("sync_messages", { new: 2 }).summary, "Found 2 new messages on the thread");
+  assert.doesNotMatch(describeCall("sync_messages", {}).summary, /mail/, "not every task came by mail");
 });
 
 test("a failed or still-running call says so on its row", () => {

@@ -51,7 +51,8 @@ test("on the setup screen the same cards say their state in plain words; Connect
   for (const w of ["Not set up", "Connected", "Needs sign-in", "Not answering"]) assert.match(cv, new RegExp(`"${w}`), w);
   assert.match(fr, /connCardOf\(c, sources, \(\) => \{ moveOn\(\); setOpen[^\n]*, true\)/,"every connector card on the setup screen is plain");
   assert.doesNotMatch(fr, /last test failed|not set up/, "the CLI cards use the same plain words");
-  assert.match(cv, /chanCard = \(c\) => connCardOf\(c, sources, \(\) => setOpen\(\{ kind: "connector", id: c\.ConnectorId \}\)\);/, "Connections is unchanged");
+  assert.match(cv, /chanCard = \(c\) => \(\{ \.\.\.connCardOf\(c, sources, \(\) => setOpen\(\{ kind: "connector", id: c\.ConnectorId \}\)\),/, "Connections keeps its own words");
+  assert.doesNotMatch(fr, /CardRemove|remove: /, "the setup screen's cards carry no Remove");
 });
 
 test("the rail and the top bar's chip say what is next from the first run's own state", () => {

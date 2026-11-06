@@ -17,7 +17,9 @@ test("no page asks before it removes but a connection card: no confirm dialog an
   for (const f of readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f) && f !== "ui.jsx")) {
     const s = read(f);
     const asks = (s.match(/<ConfirmDelete\b/g) || []).length;
-    const allowed = f === "ConnectorsView.jsx" && asks === 1 && /function RemoveConnection\([\s\S]*?<ConfirmDelete open=\{asking\}/.test(s);
+    // ...the detail page's Remove and the same Remove on the card's face (the owner, 2026-11-05: "Remove = one press + one confirm")
+    const allowed = f === "ConnectorsView.jsx" && asks === 2 && /function RemoveConnection\([\s\S]*?<ConfirmDelete open=\{asking\}/.test(s)
+      && /function CardRemove\([\s\S]*?<ConfirmDelete open=\{asking\}/.test(s);
     if (asks && !allowed) bad.push(`${f}: <ConfirmDelete>`);
     if (/window\.confirm\(/.test(s)) bad.push(`${f}: window.confirm`);
   }

@@ -34,7 +34,7 @@ test("the folded Came from tab carries it under its first line, and leaves it ou
 test("What came in and the stacked Came from draw the line, a plain text, never a button", () => {
   assert.match(page, /data-tq-came-in-to=""/);
   assert.match(page, /\{toWent\(\)\}/, "under the sender in What came in");
-  assert.match(page, /\{!threeUp && toWent\(\)\}/, "and in the stacked Came from");
+  assert.match(page, /\{!twoUp && toWent\(\)\}/, "and in the stacked Came from");
   assert.match(page, /to: toLine\(cameIn\?\.Recipients\)\.short/, "and in the folded tab");
   const at = page.indexOf("const toWent");
   assert.doesNotMatch(page.slice(at, page.indexOf("const fromFacts", at)), /<Button|<Link|onClick/);

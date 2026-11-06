@@ -34,7 +34,7 @@ test("the Advisor's or the Assistant's pick lights its own send - Send never lig
 
 test("a close-out's pair: Approve and close and Approve, on the one list, and the close-out's yes lights Approve and close", () => {
   assert.equal(label("send_close", "closeout"), "Approve and close");
-  assert.match(hint("send_close", "closeout"), /^Runs the close-out, sends the reply, then closes the task - it stays open while an agent works on it/);
+  assert.match(hint("send_close", "closeout"), /^Runs what finishing it does on GitHub, sends the reply, then closes the task - it stays open while an agent works on it/);
   assert.ok(ALL_LABELS.includes("Approve and close"));
   const list = [{ id: "41:send_close", label: "Approve and close", group: "decide", tone: "p", card: true },
     { id: "41:approve", label: "Approve", group: "decide", tone: "s", card: true }, { id: "41:alt", label: "Decline", group: "decide", tone: "s", card: true }];

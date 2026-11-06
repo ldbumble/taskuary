@@ -12,7 +12,7 @@ test("an item's Agent tab types into the task chat's own box, at the pane's foot
   assert.match(items, /<Box sx=\{\{ position: "sticky", bottom: 0, bgcolor: SHADE/);
   assert.doesNotMatch(items, /InputBase/);
   assert.doesNotMatch(cards, /data-tq-(report|dash|idea|fyi)-agent="">\s*<div className="tq-thr-h"><b>No agent yet/);
-  assert.match(read("AgentSummary.jsx"), /\{box && <PromptBox text=\{text\} setText=\{setText\}/, "a task's first box is the same one");
+  assert.match(read("AgentSummary.jsx"), /<PromptBox text=\{text\} setText=\{setText\}/, "a to-do's first box is the same one");
 });
 test("the item, the paperclip's files and a dropped picture are one chip each, in one line inside the box", () => {
   const imgs = read("promptImages.jsx");

@@ -113,7 +113,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
   const conn = move === "ai" ? verbs.list.find((v) => v.label === CONNECT_AI && !v.disabled) : null;
   const pick = advised?.none ? (conn ? { id: conn.id } : move === "ai" ? null : { verb: move || "next" }) : advised;
   // ...LESS THE STAGE MOVES where the task lays its panes: those ride on their pane (actionRow.splitRow)
-  const { row, by: held } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null, verbs.list);
+  const { row, by: held } = splitRow(rowOf(verbs, pick), laidOf(verbs.list) || verbs.lay || null);
   // ...and the pane's spine presses as the bar does (CI, 0.3.10.5: Send to agent on a folded Agent spine pressed while the row held did
   // nothing - its button still named the card that drew it before the task page's card was registered again, and press found no verb there)
   const spineBy = verbs === now ? held : Object.fromEntries(Object.entries(held).map(([k, vs]) => [k, vs.map((v) => ({ ...v, of: liveOf(v.id)?.of ?? v.of }))]));

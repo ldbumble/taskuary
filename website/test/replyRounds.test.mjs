@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { closeoutRounds, roundHead, roundReviews } from "../src/closeoutRounds.js";
+import { replyRounds as closeoutRounds, roundReviews } from "../src/replyRounds.js";
 
 // CLOSE OUT IN ROUNDS (the owner, 2026-11-01): a reply, a close, new mail that reopened it - the new mail is the current round, with no
 // "Sent" of its own, and the old round is under it. Invented people.
@@ -24,8 +24,6 @@ test("reopened by new mail: the new message is the current round, unanswered, an
   assert.equal(old.sent[0].review.ReviewId, 11);
   assert.equal(old.close.to, "done");
   assert.deepEqual(roundReviews(world().reviews, rounds), [], "the old reply is not the current round's");
-  assert.equal(roundHead(old, { when: (s) => s.slice(5, 16) }).head, "Replied to Erin Blake · 10-30 12:36");
-  assert.equal(roundHead(old).line, "They were folded into 4100.");
 });
 
 test("a second reply is the current round's sent reply, never the older one", () => {
@@ -45,10 +43,8 @@ test("answered outside Taskuary counts as the round's reply; a close with a note
     { what: "closed", at: "2026-10-31 12:01:00", to: "done", note: "called her instead" });
   const rounds = closeoutRounds({ ...w, open: false });
   assert.equal(rounds.length, 3);
-  assert.equal(roundHead(rounds[1]).what, "You answered Erin Blake in Outlook");
-  assert.equal(roundHead(rounds[2]).what, "Closed with a note");
-  assert.equal(roundHead(rounds[2]).line, "called her instead");
-  assert.equal(roundHead({ ...rounds[2], close: { ...rounds[2].close, note: "" } }, { day: () => "Oct 31" }).head, "Marked done · Oct 31");
+  assert.equal(rounds[1].sent[0].msg?.SourceName, "Outlook", "answered outside: the round's reply is the owner's own message");
+  assert.equal(rounds[2].close?.note, "called her instead");
 });
 
 test("a Reopen drawn before the server says so is a new round; a draft closed unsent stays with the round it was closed in", () => {

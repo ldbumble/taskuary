@@ -18,7 +18,8 @@ test("the four answers are the server's and discard asks once more before it goe
   assert.match(body, /\/api\/tasks\/\$\{taskId\}\/landing/);
 });
 
-test("the close-out draws it only for a coding task where coding exists", () => {
+test("the coding chat draws it only for a coding task where coding exists", () => {
   const page = fs.readFileSync(path.join(process.cwd(), "src", "TaskPage.jsx"), "utf8");
-  assert.match(page, /canCode && t\?\.Kind === "coding" && <LandingCard/);
+  assert.match(page, /landing=\{canCode && t\.Kind === "coding" && <LandingCard /);
+  assert.equal((page.match(/<LandingCard /g) || []).length, 1, "once, in the chat");
 });

@@ -134,7 +134,7 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   assert.match(page, /api\.get\("\/api\/advice", \{ params: \{ key: `task:\$\{id\}` \} \}\)/);
   // ...its line is no strip over the bar now: a warning stands in the task beside its subject (advice.taskNote, 2026-10-26)
   assert.doesNotMatch(page, /data-tq-task-advice/);
-  assert.match(page, /const heard = canvas \? note : taskNote\(taskAdvice\);\n  const warn = notDone && !saidOld\(heard\) \? heard : null;/);
+  assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
   // ...THE TASKS TAB LIGHTS THE ADVISOR'S VERB (the design, phase A): Mark done was dark on every task; a line only for a fact
   assert.match(page, /setTaskAdvice\(data\?\.verb \? data : null\)/);
   assert.match(page, /const barLit = \(verb\) => !!taskAdvice && liveVerb\(taskAdvice\.verb\) === verb;/);

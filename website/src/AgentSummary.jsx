@@ -1,6 +1,6 @@
 // EACH TURN ENDS IN THREE PARTS (the closeout-in-chat spec, 2026-11-04): what this is about, what the agent did, and the next steps - the
 // drafts waiting on Send, the steps only the owner can take ("On you: …"), or "Nothing left to do here". Where the chat is the task's home the
-// drafts are their cards, inside Next steps (Task 4.2: `next`, what Close out held - TaskPage's own, so each draft is drawn once); elsewhere a
+// drafts are their cards, inside Next steps (`next`, TaskPage's chat cards, so each draft is drawn once); elsewhere a
 // line each. An On you step's mark says whose it is, never a press.
 import React, { useState } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
@@ -9,9 +9,6 @@ import api from "./api.js";
 import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
-import { readingOf } from "./threadReading.js";
-import { dayLabel, fmtTime12 } from "./dates.js";
-const dayWord = (at) => { const d = dayLabel(at); return d && d !== "Today" ? `${d} ` : ""; };
 import { MicButton } from "./ui.jsx";
 import { MESSAGE } from "./kinds.js";
 import { AttachImage, AttachRow, INLINE_CHIPS, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
@@ -93,16 +90,13 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
   );
 }
 
-// WHEN NO AGENT RAN (the spec's reply the drafter wrote): triage's reading, the drafter's why as "What I did", then the card - TaskPage's Close
-// out body (`cards`) - and the box. The box is Send to agent's road (the dispatch, which makes the task the general agent's) with the owner's
-// own words; from its first turn on the chat is the agent's. `box` off where the task's own agent form already starts it (a general task not begun).
-export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], cards = null, box = true, onStarted }) {
+// A TO-DO NO AGENT HAS TOUCHED (the owner, 2026-11-06): under what came in - which says the ask and the To do already - the cards the chat would
+// hold (`cards`: a draft and its Send, an email owed), the drafter's why over them, and the one box. The box is Send to agent's road (the
+// dispatch, which makes the task the general agent's) with the owner's own words; from its first turn on, the chat is the agent's.
+export function NoAgentChat({ task, reviews = [], cards = null, closed = "", onStarted }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [err, setErr] = useState("");
   const pics = usePromptImages({ files: true });          // ...a dropped, pasted or picked file goes with the words (the owner, 2026-11-05)
   const why = String((reviews || []).find((r) => r?.Status === "pending" && r.DraftWhy)?.DraftWhy || "").trim();
-  const { onYou } = nextSteps({ reviews, checklist, cards: false });
-  // ...the ask in one plain paragraph: what the thread wants (triage's reading), never its labelled lines
-  const ask = readingOf(task?.ThreadJson)?.asking || "";
   const send = async () => {
     const words = text.trim();
     if ((!words && !pics.paths.length) || busy || pics.busy) return;
@@ -114,28 +108,16 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
     catch (e) { setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then send it again."); }
     finally { setBusy(false); }
   };
-  // WHAT CAME IN, ON THE RIGHT, as every input in the chat is (the owner, 2026-11-05): each message of the task, oldest first - theirs by name,
-  // the owner's own as You - with its time; the read of it and the box under them
-  const said = (mails || []).filter((m) => m && (m.OwnText || m.ReadText || m.BodyText || m.Subject)).slice(-8);
-  const mine = (m) => m.Direction === "out" || m.Status === "context";
   return (
-    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", mt: 1, flex: "1 1 auto", minHeight: 0 }}>
-      {!!said.length && <div className="tq-aui-chat" style={{ display: "contents" }}><div className="tq-aui-message tq-aui-brief" data-tq-no-agent-inputs="">
-        {said.map((m) => <div key={m.MessageId} className="tq-aui-arrived" data-tq-chat-arrived="">
-          <span className="tq-aui-arrived-head">{[mine(m) ? "You" : (m.FromName || m.FromEmail || "Someone"), m.SentAt && `${dayWord(m.SentAt)}${fmtTime12(m.SentAt)}`].filter(Boolean).join(" · ")}</span>
-          <span className="tq-aui-arrived-words" title={String(m.OwnText || m.ReadText || m.BodyText || "")}>{String(m.OwnText || m.ReadText || m.BodyText || m.Subject || "").trim().slice(0, 600)}</span>
-        </div>)}
-      </div></div>}
-      <Box sx={{ pb: 1 }}>
-        {!!ask && <><Head first>What this is about</Head><Typography data-tq-chat-ask="" sx={LINE}>{ask}</Typography></>}
-        {!!why && <><Head first={!ask}>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
+    <Box data-tq-no-agent-chat="" sx={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+      {!!(cards || why) && <Box sx={{ pb: 1 }}>
+        {!!why && <><Head first>What I did</Head><Typography data-tq-draft-why="" sx={LINE}>{why}</Typography></>}
         {cards ? <Box>{hasReply(reviews) && <DraftHead />}{cards}</Box> : null}
-        {onYou.length ? <><Head>Next steps</Head><OnYou items={onYou} /></> : null}
-      </Box>
-      {/* ...the attachments and the box together at the pane's foot: a spacer above them takes the room (the owner, 2026-11-05) */}
-      {box && <Box aria-hidden sx={{ flex: "1 1 auto" }} />}
-      {box && <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder={MESSAGE}
-        label="Send to the agent" title="Starts the agent on this task with your words" boxAttrs={{ "data-tq-no-agent-box": "" }} sendAttrs={{ "data-tq-no-agent-send": "" }} />}
+      </Box>}
+      {/* ...a closed one says how it closed over the box - typing there reopens it (server._refuse_closed_chat) */}
+      {!!closed && <div className="tq-aui-closed" data-tq-chat-closed="">{closed}</div>}
+      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder={MESSAGE}
+        label="Send to the agent" title="Starts the agent on this task with your words" boxAttrs={{ "data-tq-no-agent-box": "" }} sendAttrs={{ "data-tq-no-agent-send": "" }} />
       {!!err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>
   );

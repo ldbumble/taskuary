@@ -114,7 +114,7 @@ export default function NewMeeting({ renderTo, options = [], initial, onPicked }
           <input type="time" aria-label="Time" value={time} onChange={(e) => setTime(e.target.value)} style={dateBox} />
           <Button size="small" disabled={!typed || !!busy} onClick={() => pick(typed)} data-tq-slot-typed="">Use this time</Button>
         </Box>
-        <Typography sx={{ fontSize: 11, color: FAINT }}>A pick drafts the invite on a task of its own - it waits in Close out for your {btn("approve")}.</Typography>
+        <Typography sx={{ fontSize: 11, color: FAINT }}>A pick drafts the invite on a task of its own - it waits in that task's chat for your {btn("approve")}.</Typography>
       </Box>}
 
       {no && <Alert severity="warning" sx={{ py: 0.25, fontSize: 12.5, alignItems: "center" }}

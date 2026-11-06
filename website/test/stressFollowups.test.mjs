@@ -12,11 +12,10 @@ test("with Developer mode off the New sheet is a general agent's alone: no live 
   assert.match(src("ui.jsx"), /devMode: data\.developer_mode \?\? false/, "off until the server says so - no coding UI while settings load (audit 2026-11-05)");
 });
 
-test("an Approve on a held step keeps the agent's pane: the Advisor's pick re-keys the page only with no agent on it", () => {
+test("an Approve on a held step keeps the agent's pane: the Advisor's pick never re-keys the page", () => {
   const s = src("TaskPage.jsx");
-  assert.match(s, /const advisedHeld = liveSession \|\| liveRun \? "" : advised;/);
-  assert.match(s, /mainKey = `[^`]*\|\$\{advisedHeld\}\|/);
-  assert.doesNotMatch(s, /mainKey = `[^`]*\|\$\{advised\}\|/);
+  assert.doesNotMatch(s, /mainKey = `[^`]*\|\$\{advised(Held)?\}\|/);
+  assert.doesNotMatch(s, /advisedHeld/);
 });
 
 test("the agent's state is said once, by the task header's pill - live or stopped, the pane heading carries no chip of its own", () => {

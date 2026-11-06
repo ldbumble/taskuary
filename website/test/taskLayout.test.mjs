@@ -1,8 +1,9 @@
-// THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): From | Work, and the work alone - full width - while an agent works
+// THE TASK PAGE'S LAYOUT: Came from | the one chat (the owner, 2026-11-06: no Close out anywhere), and the work alone - full width - while an agent works
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { CLOSE_BY_HAND, SECTIONS, advisorAt, chatHome, homeSection, liveTerminal, taskSections, cameFrom, agentStatus, agentWord, answeredOutside, outsideLine, reportLine, closeStatus, closeOut, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, sectionHere, waitingOn, workPane } from "../src/taskLayout.js";
+import { SECTIONS, homeSection, liveTerminal, soloTodo, cameFrom, agentStatus, agentWord, answeredOutside, reportLine, writeupAt, fromStatus, TAB_MOST, focusOf, fromLine, holderName, layoutOf, mainOf, nextInDrawer, sameWords, waitingOn, workPane } from "../src/taskLayout.js";
+import { STAGE, sectionOf } from "../src/stages.js";
 import { taskSource } from "./taskSource.mjs";
 
 test("two columns at rest, the whole width while an agent works - coding or general, working or waiting on you", () => {
@@ -14,15 +15,15 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   // ...and only a live session since 2026-10-25 (the owner: "keep the 2 columns for when agent is not working")
   assert.match(src, /const layout = layoutOf\(\{ sessionView \}\), wide = layout === "full";/);
   // ...the columns box steps aside but on a phone's stacked page; on the desk the THREE SECTIONS (the owner, 2026-10-27) are its children
-  assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{threeUp \? "sections" : sessionView \? "full" : stacked \? "stacked" : main\} sx=\{stacked \? COLUMNS : \{ display: "contents" \}\}>/);
+  assert.match(src, /<Box ref=\{columnsBox\} data-tq-columns="" data-tq-layout=\{twoUp \? "sections" : sessionView \? "full" : stacked \? "stacked" : main\} sx=\{stacked \? COLUMNS : \{ display: "contents" \}\}>/);
   // ...the work column steps aside (display: contents) so the terminal stays a flex child of its section, sized as it always was
-  assert.match(src, /sx=\{sessionView \|\| threeUp \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",\s+\.\.\.\(main === "work" \? MAIN : settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
+  assert.match(src, /sx=\{sessionView \|\| twoUp \? \{ display: "contents" \} : \{ minWidth: 0, display: "flex", flexDirection: "column", containerType: "inline-size",\s+\.\.\.\(main === "work" \? MAIN : settled \? \{ flex: "0 1 auto", minHeight: 0 \} : \{\}\) \}\}>/);
   // and on a phone's narrow body From is still a tab on the body's left edge over a live agent, opening a drawer laid OVER the main view (item
   // 6, the owner 2026-10-21; the tab 2026-10-26): absolutely placed, so the pane underneath is never resized; shut by the tab, its X, Escape
   // or a press outside. On the desk Came from is the first of the three sections instead
   assert.match(src, /\{fromDrawer && <Box component="button" type="button" ref=\{fromLineRef\} data-tq-from-line="" sx=\{DRAWER_TAB\(fromSide\)\}/);
   assert.match(src, /aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
-  assert.match(src, /const fromDrawer = main === "work" && !threeUp;/);
+  assert.match(src, /const fromDrawer = main === "work" && !twoUp;/);
   assert.match(src, /\{\(!fromDrawer \|\| fromSide\) && slot\("from",/);
   assert.match(src, /\.\.\.\(fromDrawer \? \{ \.\.\.card, px: 1\.5, py: 1\.25, \.\.\.FROM_SIDE \} : PHONE_FROM\(fromOpen\)\)/);
   assert.match(src, /const FROM_SIDE = \{ position: "absolute", top: 0, left: 0, bottom: 0,/);
@@ -68,9 +69,8 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   // the "From" title and its X head only the sidebar (2026-10-22: the columns have no title over From)
   assert.match(src, /\{fromDrawer && <Box sx=\{\{ display: "flex", alignItems: "center" \}\}>\s+<Typography sx=\{\{ \.\.\.label, flex: 1 \}\}>From<\/Typography>\s+<IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
   assert.match(src, /onClickCapture=\{stacked \? phoneFromTap : undefined\}/);
-  // ...while what a finished agent offers stays where it was: Close out and its record are drawn whenever no session fills the page
-  // ...(and in the three sections it is the third section, beside a live agent too as a slim tab - 2026-10-27)
-  assert.match(src, /\{\(!sessionView \|\| threeUp\) && slotKeys\.includes\("close"\) && slot\("close", <Box ref=\{closeOutRef\} data-tq-closeout=""/);
+  // ...and no third section: what Close out held is the chat's cards (2026-11-06)
+  assert.doesNotMatch(src, /slot\("close"|data-tq-closeout|closeOutRef/);
   // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")
   assert.match(src, /\{!sessionView && hasRecord && !resultRest && !chatPane && \(/);
   assert.match(src, /\{resultRest && !sessionView && !chatPane && <ResultSummary /);
@@ -120,9 +120,9 @@ test("the main view follows where the task is up to: the work with Came from on 
   // focus, never a word of the Advisor's - the lit tab reads main and focus, and focus is read off the task alone
   assert.equal(nextInDrawer({ main: "task", focus: "list", advice: { verb: "reply" } }), false, "advice lights no tab");
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf),
-  // or the one the Advisor's decision names its move is in (sectionHere, 2026-10-29)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : homeSection\(home, sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\), t\?\.Kind\) \};/);
+  // ...the right drawer and its lit tab went with the sections in a row (2026-10-27): the section the task is up to is its kind's and its
+  // stage's (homeSection) - never the Advisor's (2026-11-06: its decision names no section)
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -151,32 +151,25 @@ test("the work column opens the agent or the reply - and what the task is for wh
 
 // ...and an agent's Result stays open on a task nobody sent, where Stop and save opened an empty Close out under a Result folded to
 // two lines (the owner, 2026-10-22: "since it gets crunched down you can not really see the agent report")
-test("Stop and save on a task nobody sent keeps its Result open; a reply, a close or a hand-picked Close out still opens Close out", () => {
+test("Stop and save on a task nobody sent keeps its Result the move; a reply, a close or a reply opened by hand make the reply the move", () => {
   assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true }), "agent", "nothing in the reply half: the Result");
   assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: true, result: true }), "reply", "a reply is being drafted there");
   assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true, replyHas: true }), "reply", "a close, emails, a failed write-up");
-  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true, picked: true }), "reply", "Close out opened by hand");
+  assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: true, picked: true }), "reply", "the reply opened by hand");
   assert.equal(workPane({ stage: "reply", kind: "coding", hasSender: false, result: false }), "reply", "no Result: nothing to show instead");
 });
 
-test("Close out under a Result on a task nobody sent: no 'Nobody sent this one', no reply pill, the write-up under the Result", () => {
+test("a write-up under way is one line under the Result; one that failed is a card in the chat with its Try again", () => {
   const pending = { state: "pending", stage: "report" }, failed = { state: "failed", error: "no screen" };
-  assert.deepEqual(closeOut({ hasSender: false, result: true, writeup: pending }), { advice: false, chip: false, writeupAt: "result" });
-  assert.deepEqual(closeOut({ hasSender: false, result: true }), { advice: false, chip: false, writeupAt: null });
-  assert.equal(closeOut({ hasSender: false, result: true, writeup: failed }).writeupAt, "closeout", "a failure keeps its Try again in Close out");
-  // ...and a reply being drafted is the same one line in the Agent pane (2026-10-29: two spinners in Close out on one Stop)
-  assert.deepEqual(closeOut({ hasSender: true, result: true, writeup: pending }), { advice: true, chip: true, writeupAt: "result" });
-  assert.equal(closeOut({ hasSender: true, result: false, writeup: pending }).writeupAt, "result", "no Result yet: still the Agent pane");
-  assert.equal(closeOut({ hasSender: true, result: true, writeup: failed }).writeupAt, "closeout");
-  // ...and an open task nobody sent, nothing done yet, keeps its advice
-  assert.deepEqual(closeOut({ hasSender: false, result: false }), { advice: true, chip: true, writeupAt: null });
-  assert.equal(CLOSE_BY_HAND, "Mark done closes it, or close it with a note.");
+  assert.equal(writeupAt(pending), "result");
+  assert.equal(writeupAt(failed), "chat");
+  assert.equal(writeupAt(null), null);
   const src = taskSource();
-  assert.match(src, /\|\| \(co\.advice \? "Nobody sent this one[^"]*" : CLOSE_BY_HAND\)/);
-  // ...and no reply pill on Close out at all now: the header's pill says it, once (the task-view cleanup, owner-approved 2026-10-25)
-  assert.doesNotMatch(src, /<LifecycleChip kind="reply"/);
-  assert.match(src, /coOn && co\.writeupAt === "closeout" && <WriteupBlock/);
-  assert.match(src, /const lineAt = co\.writeupAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest && !chatPane \? "record" : "top";/);
+  // ...and no reply pill and no "Nobody sent this one" advice anywhere: the header's pill says where it stands (2026-10-25)
+  assert.doesNotMatch(src, /<LifecycleChip kind="reply"|Nobody sent this one|CLOSE_BY_HAND/);
+  assert.match(src, /const upAt = writeupAt\(writeup\), upFailed = upAt === "chat";/);
+  assert.match(src, /\{upFailed && <WriteupBlock/);
+  assert.match(src, /const lineAt = upAt !== "result" \? null : shows\("agent"\) && !sessionView && hasRecord && !resultRest && !chatPane \? "record" : "top";/);
   assert.equal((src.match(/<WriteupLine /g) || []).length, 2, "two spots, one lineAt: the line is drawn once");
   assert.match(src, /\{lineAt === "top" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
   assert.match(src, /\{lineAt === "record" && <WriteupLine view=\{writeup\} hasReply=\{!!replyMessage\} \/>\}/);
@@ -237,10 +230,10 @@ test("a task waiting on a person says who and when it was due", () => {
   assert.equal(waitingOn({ task: { ...task, Assignee: "agent:coding" }, now }), null, "an agent is not a person it waits on");
 });
 
-// THE THREE SECTIONS' CLOSED TABS (the owner, 2026-10-27): the flow's order, and a few short lines each - at the top who and what, at the
+// THE SECTIONS' CLOSED TABS (the owner, 2026-10-27): the flow's order, and a few short lines each - at the top who and what, at the
 // foot (a book's spine) the one status line
-test("the three sections come in the flow's order, and each closed tab says where it stands", () => {
-  assert.deepEqual(SECTIONS.map((s) => `${s.n} · ${s.name}`), ["1 · Came from", "2 · Agent", "3 · Close out"]);
+test("the two sections come in the flow's order, and each closed tab says where it stands", () => {
+  assert.deepEqual(SECTIONS.map((s) => `${s.n} · ${s.name}`), ["1 · Came from", "2 · Agent"]);
   // ...at a glance: on what and how many, then every message newest first - who and a short line each; the tab draws as many as fit
   assert.deepEqual(fromStatus({ channel: "WhatsApp", count: 5, sorted: "Sorted: a reply to send · regular priority",
     msgs: [{ who: "Erin Blake", words: "So let's\nbuild one." }, { who: "You", words: "A link" }, { who: "Erin Blake", words: "Look" }, { who: "Ray Colton", words: "Old" }] }),
@@ -266,14 +259,6 @@ test("the three sections come in the flow's order, and each closed tab says wher
   assert.deepEqual(agentStatus({ profile: "assistant", word: "finished", said: "Wrote a one-page plan.", made: "Plan for a first box", advisor: "Send" }),
     { lines: ["assistant · finished", "Wrote a one-page plan.", "Made: Plan for a first box"], foot: "✓ Done · Advisor: Send is next" });
   assert.deepEqual(agentStatus({}), { lines: ["not started"], foot: "" });
-  assert.deepEqual(closeStatus({ to: "Erin Blake", where: "WhatsApp", draft: "On it.", waiting: true }).lines,
-    ["Reply to Erin Blake in WhatsApp", "“On it.”", "Drafted · waiting for Send"]);
-  assert.deepEqual(closeStatus({ to: "Erin Blake", owed: true }).lines, ["Reply to Erin Blake", "Not drafted yet"]);
-  assert.deepEqual(closeStatus({ sent: true }).lines, ["Sent"]);
-  assert.deepEqual(closeStatus({ to: "Erin Blake", draft: "On it.", sent: true, sentWhen: "6:21 PM" }).lines, ["Reply to Erin Blake", "“On it.”", "Sent 6:21 PM"]);
-  assert.deepEqual(closeStatus({ emails: 2 }).lines, ["2 emails waiting for Send"]);
-  assert.deepEqual(closeStatus({}).lines, ["Nothing owed"]);
-  assert.deepEqual(closeStatus({ closed: true, note: "paid" }).lines, ["Closed · paid"]);
 });
 
 // the state matrix (2026-10-28): the Agent tab read "AGENT REPORT" - the report's marker, not what it said
@@ -287,25 +272,17 @@ test("a report's line is its Summary, never its AGENT REPORT marker", () => {
   assert.equal(reportLine("Summary: It says:"), "Summary: It says:".replace(/^Summary:\s*/, ""));
 });
 
-// ANSWERED OUTSIDE TASKUARY (the owner, 2026-10-29): Erin wrote twice in Teams, the owner answered her there. The Advisor's Mark done names
-// Close out as the section its move is in, so the task opens there - with its line there, not under an Agent nobody started
-test("the Advisor's pick names the section the task opens on, and its line stands there", () => {
-  assert.equal(sectionHere({ stage: "to_reply", advised: "close" }), "close");
-  assert.equal(sectionHere({ stage: "to_reply" }), "from", "no section named: the stage's");
-  assert.equal(sectionHere({ stage: "agent_working", advised: "close" }), "agent", "a live agent's page is its own");
-  assert.equal(sectionHere({ stage: "done", advised: "close" }), "close");
-  assert.equal(sectionHere({ stage: "to_reply", advised: "elsewhere" }), "from", "only one of the three sections");
-  assert.equal(advisorAt("close"), "close");
-  assert.equal(advisorAt(""), "agent");
-  assert.equal(closeStatus({ to: "Erin Blake", sent: true, advisor: "Mark done" }).foot, "Advisor: Mark done is next");
+// ANSWERED OUTSIDE TASKUARY (the owner, 2026-10-29): the Advisor's Mark done is lit for it, on the task's one row - its decision names no
+// section of the page (2026-11-06), so where the task opens is its kind's and stage's alone
+test("the Advisor's pick lights a button and names no section; its next move is said on the Agent's tab", () => {
+  assert.equal(agentStatus({ word: "finished", advisor: "Mark done" }).foot, "✓ Done · Advisor: Mark done is next");
   assert.equal(agentStatus({ word: "not started" }).foot, "");
   const src = taskSource();
-  assert.match(src, /sectionHere\(\{ stage: taskStage, advised(: advisedHeld)? \}\)/, "the opening section reads the Advisor's pick");
-  assert.match(src, /advisorNote && adviceIn === "close"/, "Close out draws the Advisor's line when its move is there");
-  assert.match(src, /advisorNote && adviceIn === "agent"/);
+  assert.doesNotMatch(src, /sectionHere|adviceIn|advisorAt|advisedHeld/);
+  assert.match(src, /advisor: warn\?\.advice\?\.label \|\| "" \}\)/);
 });
 
-test("Close out knows the owner answered outside Taskuary, and says so", () => {
+test("the chat knows the owner answered outside Taskuary: its Draft reply is not the lit move", () => {
   const ins = [1, 2].map((i) => ({ MessageId: i, Direction: "in", Status: "routed", FromName: "Erin Blake", SentAt: `2026-10-29 11:${i}0:00` }));
   const own = { MessageId: 3, Direction: "out", Status: "context", FromName: "You", Channel: "teams", SourceName: "Teams", SentAt: "2026-10-29 12:10:00" };
   assert.equal(answeredOutside({ messages: [...ins, own], outside: [own] }), own);
@@ -315,53 +292,49 @@ test("Close out knows the owner answered outside Taskuary, and says so", () => {
   const sentHere = { MessageId: "review:9", ReviewSent: true, Direction: "out", SentAt: "2026-10-29 12:20:00" };
   assert.equal(answeredOutside({ messages: [...ins, own, sentHere], outside: [own] }), null, "a reply sent from here since is not outside");
   assert.equal(answeredOutside({ messages: ins, outside: [] }), null);
-  const line = outsideLine({ who: "Erin Blake", where: "Teams", when: "at 12:10 PM" });
-  for (const w of ["Erin Blake", "in Teams", "at 12:10 PM", "outside Taskuary", "Mark done"]) assert.ok(line.includes(w), w);
   // ...and its Draft reply is not the lit move there: the empty draft box with its filled Draft with AI is not drawn, the reply button is outlined
   const src = taskSource();
   assert.match(src, /&& !writeup && !outside/);
   assert.match(src, /variant=\{outside \? "outlined" : "contained"\}/);
 });
 
-// WHERE THE CHAT IS HOME (phase 4, Task 4.1): a general or reply task shows Came from and the agent, opens on the agent, and Mark done,
-// Close with a note, Attach and Share ride the agent's strip; a plain task and a live terminal on one keep their three sections - a coding task
-// is the one chat too (2026-11-06)
-test("a task whose home is the chat shows Came from and the agent, and opens on the chat", () => {
-  assert.equal(chatHome({ kind: "general" }), true);
-  assert.equal(chatHome({ kind: "reply" }), true);
-  assert.equal(chatHome({ kind: "coding" }), true, "a coding task is the same one chat (2026-11-06)");
-  assert.equal(chatHome({ kind: "coding", terminal: true }), true, "...its live terminal a toggle inside it, never a column");
-  assert.equal(chatHome({ kind: "task" }), true, "a plain to-do is the one chat too - no Close out column anywhere (2026-11-06)");
-  assert.equal(homeSection(true, "from", "task"), "from", "...and it opens on what came in");
-  assert.equal(homeSection(true, "from", "reply"), "agent");
-  assert.equal(chatHome({ kind: "coding", chatted: true }), true);
-  assert.equal(chatHome({ kind: "general", terminal: true }), false);
-  // ...nor a kind not known yet: a coding task never draws two sections before its detail lands
-  assert.equal(chatHome({}), false);
-  assert.equal(chatHome({ kind: "" }), false);
-  // ...and the terminal that keeps three is a coding one: a general agent's own live chat ("assistant" mode) is still home
+// EVERY TASK IS CAME FROM AND ITS ONE CHAT (the owner, 2026-11-06, on a to-do still showing Close out: "i thought we removed this from everywhere?
+// ... there should no longer be close out code anywhere"): general, reply, coding - its live terminal a toggle inside the chat - and a plain
+// to-do, which opens on what came in; one no agent has touched is that section alone, the box at its foot
+test("no task kind or state lays a Close out section: Came from and the chat, a to-do nobody started Came from alone", () => {
+  assert.deepEqual(SECTIONS.map((s) => s.key), ["from", "agent"]);
+  for (const kind of ["general", "reply", "coding", "task", "research", "", undefined])
+    for (const stage of Object.keys(STAGE)) {
+      const at = homeSection(kind, stage);
+      assert.ok(SECTIONS.some((s) => s.key === at), `${kind} · ${stage} -> ${at}`);
+      assert.equal(at, kind === "task" ? sectionOf(stage) : "agent", `${kind} · ${stage}: every kind but a to-do opens on its chat`);
+    }
+  assert.ok(Object.values(STAGE).every((s) => s.section !== "close" && s.key !== "close_out"), "no stage names Close out");
+  assert.equal(homeSection("task", "todo"), "from", "a to-do opens on what came in");
+  assert.equal(homeSection("task", "agent_result"), "agent", "...and on its chat once an agent has a Result on it");
+  // ...a to-do nobody started is one section; once anything ran, or for any other kind, two
+  assert.equal(soloTodo({ kind: "task" }), true);
+  assert.equal(soloTodo({ kind: "task", started: true }), false);
+  for (const kind of ["general", "reply", "coding", ""]) assert.equal(soloTodo({ kind }), false, kind);
+  // ...a live CODING terminal is the toggle in its chat; a general agent's own live chat ("assistant" mode) is not one
   assert.equal(liveTerminal({ alive: true, mode: "pty" }), true);
   assert.equal(liveTerminal({ alive: true }), true);
   assert.equal(liveTerminal({ alive: true, mode: "assistant" }), false);
   assert.equal(liveTerminal({ alive: false, mode: "pty" }), false);
   assert.equal(liveTerminal(null), false);
-  assert.equal(liveTerminal(undefined), false);
-  assert.equal(chatHome({ kind: "general", terminal: liveTerminal({ alive: true, mode: "assistant" }) }), true);
-  assert.deepEqual(taskSections(true).map((s) => s.key), ["from", "agent"]);
-  assert.equal(taskSections(false), SECTIONS);
-  assert.equal(homeSection(true, "close"), "agent");
-  assert.equal(homeSection(false, "close"), "close");
   const src = taskSource();
-  assert.match(src, /function useTaskMoves\(sec, home = false\)/);
-  assert.match(src, /close = home \? sec === "agent" : sec === "close"/);
-  assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: liveTerminal\(term\), chatted: hasGeneralHistory \|\| \["done", "dropped"\]\.includes\(t\?\.Status\) \}\), secs = taskSections\(home\)/);
-  assert.match(src, /const workspaceMode = home && !wrapping \? "general" : agentWorkspaceMode/, "a chat task is always the chat");
-  // ...and Close out's slot is gone there (Task 4.2): its cards live in the agent's summary - on a desk; a phone's stacked page keeps its card
-  assert.match(src, /const cardsIn = CARDS_IN_SUMMARY && home && threeUp, slots = cardsIn \? secs : SECTIONS/);
-  assert.match(src, /const CARDS_IN_SUMMARY = true;/);
-  assert.match(src, /const closeBody = \(inChat\) => \{ const coOn = inChat \|\| shows\("reply"\);/);
+  assert.match(src, /const home = !!t;/);
+  assert.match(src, /secs = solo \? SECTIONS\.slice\(0, 1\) : SECTIONS;/);
+  assert.match(src, /const slots = secs, slotKeys = slots\.map\(\(s\) => s\.key\);/);
+  assert.match(src, /const workspaceMode = home && !wrapping \? "general" : agentWorkspaceMode/, "every task is always the chat");
+  assert.match(src, /\{t\.Kind === "coding" \|\| liveTerminal\(term\) \? <CodingChat /, "a live coding terminal on any kind is the coding chat's toggle");
   assert.match(src, /next=\{chatCards\}/);
-  // ...and a live agent's slim strip carries Mark done where the chat is home - Close out is no tab of its own there
-  assert.match(src, /const liveMoves = useSpineVerbs\("live"\), \{ done \} = useTaskMoves\(sec, home\);/);
-  assert.match(src, /\{home && done\.length > 0 && <Box data-tq-live-done=""/);
+  // ...the to-do's box at the foot of Came from, the chat's cards over it, and no Agent slot beside it
+  const from = src.slice(src.indexOf('slot("from",'), src.indexOf("THE WORK COLUMN"));
+  assert.match(from, /\{solo && <Box data-tq-solo-box="" sx=\{\{ mt: "auto", position: "sticky", bottom: 0/);
+  assert.match(from, /<NoAgentChat task=\{t\} reviews=\{detail\?\.reviews \|\| \[\]\} cards=\{chatCards\} closed=\{closedSaid\}/);
+  assert.match(src, /\{!solo && slot\("agent", <Box data-tq-work=/);
+  // ...the task's own moves ride the chat's strip
+  assert.match(src, /function useTaskMoves\(sec\) \{/);
+  assert.match(src, /close = sec === "agent";/);
 });

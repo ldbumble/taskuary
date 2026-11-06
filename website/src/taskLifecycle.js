@@ -32,10 +32,6 @@ const closedRowOverOpen = (listRow, detail) => ["closed", "dropped"].includes(li
 export const reopenedDetail = (d) => d?.task ? { ...d, task: { ...d.task, Status: "open", RemindAt: "" }, closedWhy: null,
   state: ["closed", "dropped"].includes(d.state) ? "yours" : d.state } : d;
 
-// ...and a CLOSED task with nobody to answer says who closed it and why (the detail's `closedWhy`), never the advice for an open
-// one ("Work it, or write what you found on the task") - on a done task that told the owner nothing (2026-10-21)
-export const closedLine = (task, closedWhy) => task?.Status !== "done" ? null
-  : closedWhy || "Closed. Nobody sent this one, so no reply was owed.";
 
 // `finished`: the agent closed the task itself (the server's state, taskstate.py) - its report is its result, never
 // "stopped and saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
@@ -185,12 +181,6 @@ export const replyPhase = (reviews = []) => {
 export const waitingEmails = (checklist = [], reviews = []) => {
   const pending = new Set(slotReviews(reviews).filter((r) => r.Status === "pending").map((r) => r.ReviewId));
   return (checklist || []).filter((i) => i.out && !i.done && pending.has(i.rid)).length;
-};
-// ...and every email still owed, drafted or not: its own address - its To, never the sender the task came from (the owner, 2026-11-02)
-export const owedEmails = (checklist = [], reviews = []) => {
-  const byRid = Object.fromEntries(slotReviews(reviews).map((r) => [r.ReviewId, r]));
-  return (checklist || []).filter((i) => i.out && !i.done)
-    .map((i) => ({ id: i.id, to: String(i.out.to || ""), name: String(i.out.name || ""), state: slotState(i, byRid[i.rid]) }));
 };
 
 // SOMETHING WENT OUT on the task's close-out: a reply sent, a pull request merged or an issue closed (an approved action), an email

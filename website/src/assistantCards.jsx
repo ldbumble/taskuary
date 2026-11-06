@@ -680,7 +680,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   const decide = async (verb) => {
     setBusy(verb); setErr("");
     try {
-      // Decline and Close out anyway belong to the close-out, whichever card is showing; the reply rides with them
+      // Decline and Finish anyway belong to the GitHub finish, whichever card is showing; the reply rides with them
       const onCo = ["close_pr", "merge_anyway"].includes(verb) && coRv ? coRv.ReviewId : card.rid;
       const withReply = mate || (onCo !== card.rid && !action);
       const { data } = await api.post(`/api/reviews/${onCo}/decide`, withReply
@@ -762,11 +762,11 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
   // YOUR MOVE, named: what the block decides, in its own words (the canvas's A+B, the owner 2026-09-28)
   const replyTo = String(mate ? mate.FromName || "them" : who).replace(/\s*<[^>]*>/g, "");
   const stopped = conflict || ((co || card.tid) && blocked);
-  const moveTitle = stopped ? "GitHub won't merge it yet" : action && !co ? "run what the agent proposed" : co ? "close out"
+  const moveTitle = stopped ? "GitHub won't merge it yet" : action && !co ? "run what the agent proposed" : co ? "finish it"
     : rv && !value.trim() && !stale ? "no reply drafted yet" : stale ? "the thread moved on" : `reply to ${replyTo}`;
   const via = SENDS_ON[String(mate?.Channel || rv?.Channel || "").toLowerCase()] || "by email";
   return (
-    <CardShell card={card} kicker={(co || card.tid) && blocked ? "can't close out yet" : co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
+    <CardShell card={card} kicker={(co || card.tid) && blocked ? "can't finish yet" : co || (card.tid && value.trim()) ? READY : action ? "an agent asks to act" : value.trim() ? "reply · draft ready" : "reply · no draft yet"}
       lead={action && !co ? <Lead text={rv?.Subject || card.title} /> : <Story card={card} state={card.summary ? "finished" : undefined} fallback={rv?.Subject} tail />} err={err}>
       <YourMove title={moveTitle} tone={stopped ? "alert" : null} go={verb} then={then}>
         {/* what GitHub says about this pull request now - why Close out is off, or the red it will merge past */}

@@ -465,20 +465,20 @@ export const shortParts = (m) => ({ ...m, back: m.backShort ?? m.back, next: m.n
 
 // THE STAGE MOVES RIDE ON THEIR PANE (the owner, 2026-10-29, after three mockups). The bar keeps what acts on the whole task - Back and
 // Next, Mark done, Change, Share, Close with a note, Attach a file. The moves that take the task a STAGE on belong to their pane: Send to
-// agent, Continue, Run another to Agent; Reply, Draft reply, Redraft and Hand it to a person to Close out; and Not a task and Remind me,
-// which are about where the task came from, to Came from (the owner, 2026-10-29). Folded, a pane carries them on its
+// agent, Continue, Run another - and Reply, Draft reply, Redraft, Hand it to a person and an invite's answers, whose cards are in the same
+// chat (the owner, 2026-11-06: no Close out) - to Agent; Not a task and Remind me, about where the task came from, to Came from (2026-10-29). Folded, a pane carries them on its
 // spine, between its name and its status; open, inside it - and never on the bar. A press opens that pane and starts the step there
 // (TaskPage's "a press opens its section"). ...and THE BAR IS BACK AND NEXT ALONE (the owner, 2026-10-29): what acts on the whole task -
 // Mark done first, Change, Share, Close with a note, Attach a file - goes to the task's title bar (`head`, `change`, `share`), and a live
 // agent's Stop and save to its pane's strip (`live`).
-// The task page's verbs say which pane is open and whether an agent is live (`laid`; none where it lays no panes - a phone, the Tasks
+// The task page's verbs say which pane is open (`laid`; none where it lays no panes - a phone, the Tasks
 // tab): carried WITH the verbs, so the row never draws a set where the item's moves and the panes they ride on disagree (row-draws-once).
 // The row draws the rest and hands the stage moves here, by pane (putSpineVerbs, useSpineVerbs)
-const CLOSE_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decline_invite", "propose_time", "find_time", "hand"]);
+const CHAT_STAGE = new Set(["reply", "redraft", "chase", "accept_invite", "decline_invite", "propose_time", "find_time", "hand"]);
 const FROM_STAGE = new Set(["nat", "remind", "watch"]);
 // ...a verb may name its pane itself (`stage`): an FYI's Should be a task rides its Came from, where a task's Not a task does
 export const stageOf = (v) => { const k = String(v?.id || "").split(":").pop(), t = typeOf(v);
-  return v?.stage || (CLOSE_STAGE.has(k) ? "close" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""); };
+  return v?.stage || (CHAT_STAGE.has(k) ? "agent" : FROM_STAGE.has(k) ? "from" : t === "agent" && k !== "save-end" && k !== "diff" ? "agent" : ""); };
 const NONE = [], ITEM_OWN = new Set(["mine"]);
 let spineVerbs = {}, spineSig = "";
 const spineSubs = new Set(), spineSub = (f) => { spineSubs.add(f); return () => spineSubs.delete(f); }, spineDraw = () => spineSubs.forEach((f) => f());
@@ -487,15 +487,10 @@ export const putSpineVerbs = (by) => { const s = JSON.stringify(by); if (s === s
 export const useSpineVerbs = (sec) => useSyncExternalStore(spineSub, () => spineVerbs[sec] || NONE);
 export const useSpineAll = () => useSyncExternalStore(spineSub, () => spineVerbs);
 // ...the row: Back and Next alone; each pane's stage moves in the move pill's order (`spine`: the word a folded pane shows - Draft reply
-// where nothing is drafted yet); the title bar's the task's own, Mark done first; a live agent's only its Stop and save, on its strip
-export function splitRow(row, on, list = []) {
+// where nothing is drafted yet); the title bar's the task's own, Mark done first - a live agent's too: the press stops and saves first
+export function splitRow(row, on) {
   if (!on) return { row, by: {} };
   const nav = { ...row, decide: [], agent: [], more: [] };
-  // ...and its Mark done on Close out (the owner, 2026-11-02: "Mark done always shows on Close out, which will save the result and move on"):
-  // a parked agent's task offered only Stop and save, and Mark done came back only once it had stopped. The press stops and saves first
-  if (on.live) { const all = [...row.decide, ...row.agent, ...row.more];
-    // ...and a CLOSED chat task keeps that layout (the owner, 2026-11-05): its Reopen stands where Mark done stood
-    return { row: nav, by: { live: all.filter((v) => String(v.id).split(":").pop() === "save-end"), head: all.filter((v) => isDone(v) || String(v.id).split(":").pop() === "reopen") } }; }
   // ...an item that lays ONE pane of its own (`only`: an FYI's Came from) takes that pane's moves off the bar and leaves it the rest
   if (on.only) { const { move, change } = pillsOf(row), here = [...move, ...change].filter((v) => stageOf(v) === on.only), off = (xs) => xs.filter((v) => !here.includes(v));
     return { row: { ...row, decide: off(row.decide), agent: off(row.agent), more: off(row.more) }, by: { [on.only]: here } }; }
@@ -511,13 +506,7 @@ export function splitRow(row, on, list = []) {
     return { row: nav, by }; }
   const by = {};
   const { move, change } = pillsOf(row);
-  // ...and a task whose chat is home lays no Close out (taskLayout.chatHome): its moves - Reply, Hand it to a person, an invite's answers - ride the Agent's
-  for (const v of [...move, ...change]) { const k = on.home && stageOf(v) === "close" ? "agent" : stageOf(v); if (k) (by[k] ||= []).push(v); }
-  // ...and a draft's own Redraft, which the row never draws (it is the card's, under the draft, while Close out is open): on the folded
-  // spine it stands for the draft - filled when it is the Advisor's pick (rowOf's lit) - and Reply, which only opens that draft, steps aside
-  const redraft = list.filter((x) => x.card && stageOf(x) === "close").map((v) => ({ ...v, tone: row.lit === v.id ? "p" : "s" }));
-  if (redraft.length) by.close = [...redraft, ...(by.close || []).filter((v) => !redraft.some((r) => r.label === v.label) && v.id !== "reply")];
-  if (on.home) delete by.close;
+  for (const v of [...move, ...change]) { const k = stageOf(v); if (k) (by[k] ||= []).push(v); }
   const { move: all, change: changes, share } = pillsOf(row), rest = all.filter((v) => !stageOf(v));
   // ...Mark done first, then what is lit (a start held for its folder, the Advisor's pick): the title bar folds from its end, never a lit move
   const lit = (v) => !isDone(v) && v.tone === "p";
@@ -530,7 +519,7 @@ export function splitRow(row, on, list = []) {
 // THE TASK'S ONE ROW OF BUTTONS, IN ONE ORDER (TaskPage TaskButtons, the owner 2026-11-06): every move off every pane, Mark done, Hand it to a
 // person, Remind me, Not for me first in that order, then Change, then the rest as they came - a move that does not apply is simply absent.
 export const TASK_ORDER = ["done", "reopen", "hand", "remind", "nat"];
-const TASK_PANES = ["head", "from", "agent", "close", "share"];
+const TASK_PANES = ["head", "from", "agent", "share"];
 const verbKey = (v) => String(v?.id || "").split(":").pop();
 // the order, pure: [fixed in TASK_ORDER's order..., "change", ...the rest as they came]
 export const taskButtons = (by, skip = () => false) => {

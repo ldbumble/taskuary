@@ -71,6 +71,5 @@ test("no Earlier runs fold under a run; the whole history still reads in order w
   const src = readFileSync(new URL("../src/AgentRecord.jsx", import.meta.url), "utf8"), page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(src, /<EarlierRuns runs=\{runHeads\(rec\.sessions\)\.slice\(1\)\} \/>/, "none under the Result at rest");
   assert.match(src, /earlier = null;/, "none under the open record");
-  assert.match(page, /<AgentRecord \{\.\.\.recordProps\} history live=\{term\.sid\} \/>/, "under a live terminal");
   assert.match(page, /<AgentRecord \{\.\.\.recordProps\} history title="Before they wrote again" \/>/, "every run folded once the sender wrote again");
 });

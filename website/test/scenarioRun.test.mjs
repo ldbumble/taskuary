@@ -47,6 +47,15 @@ test("the open chat reads the task again when it moves, unless a turn is streami
   assert.match(ws, /onLive\("task-changed", \(ev\) => \{ if \(quietRef\.current && touches\(ev, task\.TaskId\)\) refresh\(\); \}\)/);
 });
 
+// A REPORT MADE A TASK says where it went on its row - and squeezed, its words drop out whole, never "Mo…" (the scenario run, 2026-11-06)
+test("a moved row's words wrap away whole before they are cut", () => {
+  const css = read("assistantView.css"), av = read("AssistantView.jsx");
+  assert.match(css, /\.tq-pile-moved \{[^}]*flex-direction: row-reverse; flex-wrap: wrap;[^}]*height: 1\.5em; overflow: hidden;/);
+  assert.match(css, /\.tq-pile-moved \.w \{ flex: 0 0 auto; \}/);
+  assert.match(css, /\.tq-pile-moved \{ flex: 0 1000 auto; min-width: 5em;/, "it gives way before the title, down to its ref");
+  assert.ok(av.indexOf('<span className="ref" role="link"') < av.indexOf('<span className="w">Moved to Tasks ·</span>'), "the ref comes first in the page");
+});
+
 // A CHECK-BACK COME DUE is the input of the turn it wakes, on the right under a clock (the scenario run, 2026-11-06): long, it was drawn as
 // nothing, and the turn stood under the one before with no input over it
 test("a check-back's turn opens on what it was set to verify", () => {

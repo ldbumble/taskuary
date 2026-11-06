@@ -71,6 +71,15 @@ class CommentsReachTheTimelineTests(unittest.TestCase):
         say.assert_called_once()
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')   # the agent has it
 
+    def test_a_session_held_for_a_stranger_reopens_the_task_for_the_owner(self):
+        from taskuary import origin, terminal
+        s, tid = _armed()
+        s.update_task(tid, {'Status': 'in_progress'}, 'test')
+        at = ci.landing_of(s, tid)
+        with mock.patch.object(github, 'pr_review_comments', return_value=_comments('Change this.')),              mock.patch('taskuary.terminal.say_to_task', side_effect=origin.Refusal(terminal.STRANGER_NOW)):
+            self.assertEqual(ci.pull_comments(s, tid, at), 1)
+        self.assertEqual(s.get_task(tid)['Status'], 'open')
+
     def test_a_strangers_comment_lands_on_the_timeline_but_is_not_typed_into_the_agent(self):
         """Anyone may comment on a public pull request, and typed text is keystrokes into an agent
         with its permission checks off (audit 2026-09-02)."""

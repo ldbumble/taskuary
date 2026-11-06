@@ -228,7 +228,8 @@ def test_claude_and_codex_launch_through_their_pinned_adapter_driving_the_owner_
         assert l['cmd'][:2] == ['npx', '-y'] and pkg in l['cmd'][2] and l['cmd'][2].split('@')[-1][0].isdigit()   # pinned
         assert f'/opt/bin/{name}' in l['env'].values() and l['mode'] == clis.ADAPTERS[name]['mode']
     with mock.patch.object(agents.pathcache, 'which', return_value='/usr/local/bin/claude-agent-acp'), \
-         mock.patch.object(agents, '_resolve_cmd', return_value=['/opt/bin/claude']):
+         mock.patch.object(agents, '_resolve_cmd', return_value=['/opt/bin/claude']), \
+         mock.patch.object(agents.acpadapter, 'runs_pinned', return_value=True):
         assert agents.acp_launch({'cmd': 'claude', 'args': []})['cmd'] == ['/usr/local/bin/claude-agent-acp']          # installed: no npx
 
 

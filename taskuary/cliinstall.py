@@ -246,10 +246,43 @@ def update(name: str, runner=None) -> dict:
         if why:                                         # "up to date" over a CLI that cannot start is no update
             last = f'{now} still does not start: {why}'
             logger.warning(f'{name}: {r["how"]} update left a CLI that does not start - {why}'); continue
-        _set('done', name, out.strip()[-400:] or f'{name} is up to date', now, verb='update')
+        said = _connector(name, runner, verb='update')
+        _set('done', name, (out.strip()[-300:] or f'{name} is up to date') + (f'. {said}' if said else ''), now, verb='update')
         logger.info(f'updated {name}')
         return state()
     _set('failed', name, f'could not update {name}: {last}', verb='update')
+    return state()
+
+
+def _connector(name: str, runner=None, verb: str = 'install') -> str:
+    """ONE MORE STEP for a CLI whose agents run through an adapter (acpadapter): its connector, pinned, right behind the CLI. What it
+    said, or '' for a CLI with none. Never what decides the CLI's own install - without it agents still start, slower."""
+    from . import acpadapter
+    if not acpadapter.row(name): return ''
+    _set('installing', name, acpadapter.STEP, verb=verb)
+    try: return acpadapter.install(name, runner=runner).get('said', '')
+    except Exception as e:
+        logger.warning(f'{name}: the agent connector step raised - {e}'); return ''
+
+
+def connector(name: str, runner=None) -> dict:
+    """The card's own Install / Update press for the connector alone, on the install's one phase, so the page polls it the same way."""
+    from . import acpadapter
+    if not acpadapter.row(name):
+        _set('failed', name, f'{name} needs no agent connector', verb='connector'); return state()
+    _set('installing', name, acpadapter.STEP, verb='connector')
+    try: st = acpadapter.install(name, runner=runner)
+    except Exception as e: st = {'said': f'the agent connector did not install: {e}'}
+    _set('done' if st.get('status') == 'installed' else 'failed', name, st.get('said', ''), verb='connector')
+    return state()
+
+
+def start_connector(name: str) -> dict:
+    with _LOCK:
+        if _STATE['phase'] == 'installing': return state()
+        _STATE.pop('sid', None); _STATE.pop('taskId', None)
+        _set('installing', name, 'installing the agent connector…', verb='connector')
+    threading.Thread(target=connector, args=(name,), daemon=True, name=f'connector-{name}').start()
     return state()
 
 
@@ -508,7 +541,8 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
             continue
         if found:
             ensure_on_path(Path(found).parent)
-            _set('done', name, f'{name} is installed', found)
+            said = _connector(name, runner)
+            _set('done', name, f'{name} is installed' + (f'. {said}' if said else ''), found)
             # ...and its hooks, right behind it (the owner, 2026-09-20: "add it to the install after
             # installing the cli"). User scope, so no checkout has to exist yet; a session refreshes them.
             try:

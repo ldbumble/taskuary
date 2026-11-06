@@ -115,4 +115,9 @@ def start(store, name: str, actor: str = 'owner', label: str = '', login: bool =
     term.SESSIONS[t.sid] = t
     store.add_comment(tid, actor, 'human', f'{what} is being set up in a live session.')
     store.audit('terminal', tid, 'cli_setup', actor, detail={'name': name, 'sid': t.sid})
-    return {**t.info(), 'taskId': tid, 'existing': False}
+    # ...and its agent connector beside it, while the owner answers the CLI's own questions: the card's line says it is installing
+    # (acpadapter.start - nothing, with no npm or one already here)
+    from . import acpadapter
+    try: con = acpadapter.start(name)
+    except Exception: con = False
+    return {**t.info(), 'taskId': tid, 'existing': False, 'connector': 'installing' if con else ''}

@@ -9,11 +9,12 @@
 // What gets posted is the row's `install` - the RECIPE it is an install of - never its name: a
 // profile is named for its job, and every install ships one called "coding".
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import UpgradeIcon from "@mui/icons-material/Upgrade";
 import api from "./api";
 import { FAINT } from "./theme.jsx";
+import { connectorLine } from "./cliConnector.js";
 
 const POLL_MS = 1500, GIVE_UP_MS = 12 * 60 * 1000;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,7 +24,9 @@ export const recipeOf = (cli) => (typeof cli === "string" ? cli : cli?.install |
 // phase the server keeps for both. `codex update` takes a minute on a slow line for the same
 // reason `npm install -g` does, which is why neither holds a request open.
 const VERBS = { install: { path: "/api/cli/install", ing: "installing", noun: "installer" },
-                update: { path: "/api/cli/update", ing: "updating", noun: "updater" } };
+                update: { path: "/api/cli/update", ing: "updating", noun: "updater" },
+                // the agent connector alone (acpadapter.py): the CLI's own install takes this step, this is for a CLI that was here first
+                connector: { path: "/api/cli/connector", ing: "installing the agent connector for", noun: "agent connector" } };
 
 export const useCliInstall = ({ terminal = false } = {}) => {
   const [busy, setBusy] = useState("");
@@ -75,7 +78,8 @@ export const useCliInstall = ({ terminal = false } = {}) => {
 
   const install = useCallback((cli) => run(cli, "install"), [run]);
   const update = useCallback((cli) => run(cli, "update"), [run]);
-  return { install, update, busy, note, setNote, pane, setPane };
+  const connector = useCallback((cli) => run(cli, "connector"), [run]);
+  return { install, update, connector, busy, note, setNote, pane, setPane };
 };
 
 // "not on this machine — Install". Drawn only where there is a way in: `installable` is the
@@ -116,5 +120,24 @@ export const UpdateLine = ({ cli, busy, onUpdate, sx = {} }) => {
       sx={{ fontSize: 11.5, whiteSpace: "nowrap", color: FAINT, ...sx }}>
       {busy === recipeOf(cli) ? "updating…" : "Update"}
     </Button>
+  );
+};
+
+// "Faster agent start: install the connector" - one quiet line on a CLI card whose CLI is here, with its state and the press that
+// helps (cliConnector.js). Its own press goes through the same installer as Install and Update, as one more visible terminal step.
+export const ConnectorLine = ({ cli, busy, onInstall, sx = {} }) => {
+  const l = connectorLine(cli);
+  if (!l) return null;
+  return (
+    <Box data-connector-line={cli.connector.status} sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, minHeight: 26, ...sx }}>
+      <Typography variant="caption" sx={{ color: FAINT }}>
+        {l.text}{l.state && <> · <span style={{ fontVariantNumeric: "tabular-nums" }}>{l.state}</span></>}
+      </Typography>
+      {l.press && <Button size="small" variant="text" disabled={!!busy} onClick={() => onInstall(cli)}
+        title={`npm install -g ${cli.connector.pkg}@${cli.connector.want} - agents on ${cli.label} then start without fetching it each time`}
+        sx={{ fontSize: 11.5, minWidth: 0, py: 0, whiteSpace: "nowrap" }}>
+        {busy === recipeOf(cli) ? "installing…" : l.press}
+      </Button>}
+    </Box>
   );
 };

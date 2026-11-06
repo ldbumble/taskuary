@@ -150,11 +150,48 @@ def chat_check(store, c: dict, q: str, n: int = 0, admits=None) -> dict:
             'steps': [step(n + 1, 'read', f"Looked for \"{q}\" in WhatsApp's chats: {'coming in' if first else 'switched on'}", why, ok=ok)]}
 
 
+# A SLOW AGENT START on Claude Code or Codex is most often its agent connector (acpadapter) not installed: every start then fetches it
+# through npx - seconds more, and a download the first time. Asked by the CLI's own name, or "the agent connector".
+CLI_CARD = 'Open AI CLI agents'
+
+
+def agent_cli(name: str) -> str:
+    "The CLI with a connector that `name` means ('claude', 'Claude Code', 'codex cli', 'the agent connector'), or ''."
+    from . import acpadapter, cliinstall, clis
+    w = ' '.join(str(name or '').lower().replace('the ', ' ').split())
+    hit = next((k['name'] for k in clis.KNOWN if acpadapter.row(k['name']) and w in (k['name'], k['label'].lower(), k['name'] + ' cli')), '')
+    if hit or not ('agent' in w and 'connector' in w): return hit
+    return next((k for k in clis.ADAPTERS if cliinstall.find(k)), '')
+
+
+def agent_start(name: str, n: int = 0) -> dict:
+    "Whether this CLI's agents start through its installed connector - and the card that installs it when they do not."
+    from . import acpadapter, clis
+    st, label = acpadapter.state(name), next((k['label'] for k in clis.KNOWN if k['name'] == name), name)
+    have, want, s = st.get('have'), st.get('want'), st.get('status')
+    card = {'label': 'Update the connector' if s in ('update', 'other') else 'Install the connector', 'href': '#cli-agents'}
+    why = {'installed': f"{label}'s agent connector {want} is installed, so agents start without fetching it - a slow first turn is the "
+                        "model itself, or the CLI signing in",
+           'installing': f"{label}'s agent connector is installing right now - the next agent starts faster",
+           'missing': f"{label}'s agent connector is not installed, so every agent start fetches it through npx - a few seconds more, and "
+                      "a download the first time. Faster agent start, on its card, installs it",
+           'update': f"{label}'s agent connector {have} is older than the {want} this Taskuary runs, so every start fetches {want} through "
+                     "npx instead. Update, on its card, replaces it",
+           'other': f"{label}'s agent connector {have} is not the {want} this Taskuary runs, so every start fetches {want} through npx "
+                    "instead. Install, on its card, puts the right one in",
+           'no_npm': f"there is no npm on this computer, so {label}'s agents start the CLI directly, without its connector. Installing "
+                     "Node.js, then the connector on its card, makes the start quicker"}.get(s, f'{label} needs no agent connector')
+    ok = s in ('installed', 'installing') or not st
+    return {'name': label, 'type': '', 'cid': None, 'ok': ok, 'why': why, 'repair': '', 'fix': None if ok else card, 'log': [],
+            'steps': [step(n + 1, 'read', f"Checked {label}'s agent connector: {s.replace('_', ' ') if s else 'none needed'}", why, ok=ok)]}
+
+
 def health(store, name: str = '', connector_id=None, n: int = 0, chat: str = '') -> dict:
     """What the app knows about one connection now: {name, type, cid, ok, why, repair, fix, steps}. `repair` is the simple repair it
     has ('' when none), `fix` the place that fixes it when no repair here can ({label, href}). No name: everything failing (the bell).
     `chat`: one WhatsApp chat by its name - whether it comes in and where it went (chat_check); a name that is no connection's is
     tried as a chat's too, since "the team chat isn't coming in" names the chat, not the card."""
+    if not str(connector_id or '').strip() and (cli := agent_cli(name)): return agent_start(cli, n)
     c = find(store, name, connector_id)
     wa = next((x for x in sorted(appfacts.connections(store), key=lambda x: not x['active']) if x['type'] == 'whatsapp'), None)
     if not c and wa and wa['active'] and (chat or name):

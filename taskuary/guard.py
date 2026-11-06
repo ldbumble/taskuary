@@ -90,7 +90,7 @@ DENIED = (
     (r'POST|PUT|PATCH|DELETE', r'^/api/(invoice-batches|reports/\d+/invoice-batches)(/|$)',
      'preparing or changing an invoice batch is the owner\'s decision'),
     (r'POST', r'^/api/deps/', 'installing software on this machine is the owner\'s decision'),
-    (r'POST', r'^/api/cli/(install|update)', "installing or updating a coding CLI runs a vendor installer on this machine - the owner's decision"),
+    (r'POST', r'^/api/cli/(install|update|connector)', "installing or updating a coding CLI or its agent connector runs an installer on this machine - the owner's decision"),
     (r'POST', r'^/api/cli/setup', "setting a coding CLI up runs it on this machine, and signs in as the owner - their decision"),
     (r'POST', r'^/api/setup/first-run/', "choosing the AI that reads the mail, or the mailbox it reads, is the owner's decision"),
     (r'POST', r'^/api/signature(/|$)', "the signature under the owner's email is theirs to read off their mail and check"),

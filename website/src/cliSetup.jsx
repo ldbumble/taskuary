@@ -34,7 +34,8 @@ export const useCliSetup = () => {
       put(setPane, { sid: data.sid, taskId: data.taskId, name });
       // a second press reattaches: say so, or the owner waits for a pane that is already theirs
       put(setNote, { text: data.existing ? "that set-up is already open — it is the pane below"
-                                         : "answer it in the pane below — it will ask for its settings, then the sign-in" });
+                                         : "answer it in the pane below — it will ask for its settings, then the sign-in"
+                                           + (data.connector ? ". Its agent connector is installing beside it, for a faster agent start" : "") });
       put(setOpening, ""); return data;
     } catch (e) {
       put(setNote, { bad: true, text: e?.response?.data?.detail || e?.message || "that did not work" });

@@ -8786,6 +8786,25 @@ def cli_update(body: CliInstallBody):
     store.audit('connector', 0, 'cli_update_started', ACTOR, detail={'name': name})
     return out
 
+@app.post('/api/cli/connector')
+@app.post('/api/cli/connector/terminal')
+def cli_connector(body: CliInstallBody):
+    """Install or update a CLI's agent connector alone (acpadapter) - the card's "Faster agent start" line. The CLI's own install
+    takes this step already; this is for a CLI that was here first. On guard.DENIED beside /api/cli/install, on the same phase."""
+    from . import acpadapter, cliinstall
+    name = str(body.name or '')
+    if not acpadapter.row(name): raise HTTPException(422, f'{name} needs no agent connector')
+    now = cliinstall.state()
+    if now['phase'] == 'installing' and now['name'] != name:
+        raise HTTPException(409, f'{now["name"]} is {now.get("verb") or "install"}ing right now - one at a time')
+    if body.terminal:
+        from . import cli_install_terminal
+        try: out = cli_install_terminal.start(store, name, verb='connector', actor=ACTOR)
+        except (ValueError, RuntimeError, OSError) as e: raise HTTPException(422, str(e))
+    else: out = cliinstall.start_connector(name)
+    store.audit('connector', 0, 'cli_connector_started', ACTOR, detail={'name': name})
+    return out
+
 @app.get('/api/cli/install/state')
 def cli_install_state():
     """Which phase the install is in, and the absolute path once there is one. The page saves
@@ -9193,7 +9212,7 @@ def _agent_work(store_, books=None):
 
 @app.get('/api/cli/connections')
 def list_cli_connections():
-    from . import clis, climodels
+    from . import acpadapter, clis, climodels
     known = {r['name']: r for r in clis.detect(store) if not r.get('profile')}
     configured = cfg.get('cli_connections', {})
     rows = []
@@ -9208,6 +9227,8 @@ def list_cli_connections():
                # the profiles on it - Remove names them before it leaves them with no CLI
                'used_by': [n for n, p in cfg.get('agents', {}).items() if p.get('provider') == f'cli:{name}']}
         if name in configured: row['installed'] = hub_agents.runs_here(command)
+        # the agent connector's own line (acpadapter): npm's cached answer, for a CLI that is here and runs its agents through one
+        if row.get('installed') and acpadapter.row(base): row['connector'] = acpadapter.state(base)
         rows.append(row)
     return {'data': rows}
 

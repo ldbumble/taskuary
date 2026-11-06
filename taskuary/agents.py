@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
-from . import acp as acp_mod, aiusage, pathcache, redact, spawn
+from . import acp as acp_mod, acpadapter, aiusage, pathcache, redact, spawn
 from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
@@ -1377,6 +1377,9 @@ def acp_launch(profile: dict) -> dict:
         return {'cmd': cmd, 'env': {}, 'mode': '', 'meta': None, 'adapter': ''}
     # the adapter's own command when it is installed (`npm i -g` puts it on PATH: ~2.3 s a start quicker, measured), else npx, pinned
     own = pathcache.which(ad['bin'])
+    # ...but only the PINNED one (acpadapter.runs_pinned): a global left by an older release speaks what that release spoke, so npx
+    # fetches the pinned version instead and the card's line offers Update
+    if own and not acpadapter.runs_pinned(ad, own): own = None
     # ...and no npx is a start failure, not a missing CLI: the owner's claude is there, and the argv road runs it (a machine with no
     # Node on PATH answered every general turn "'npx' not found on PATH" and nothing else - 2026-11-06)
     try: cmd = list(profile.get('acp_cmd') or ([own] if own else _resolve_cmd('npx') + ['-y', ad['pkg']]))

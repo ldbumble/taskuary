@@ -1083,11 +1083,12 @@ def opening_geometry(store) -> tuple:
 
 def open_session(store, agent: str = None, task_id: int = None, repo: str = None, cwd: str = None,
                  rows: int = 0, cols: int = 0, actor: str = 'owner', model: str = None,
-                 seed_fn=None, resume: str = None, brain: str = None, pty: bool = False) -> Term:
+                 seed_fn=None, resume: str = None, brain: str = None, pty: bool = False, sid: str = None) -> Term:
     """Start a terminal: a configured agent CLI, or a plain shell when agent is None.
 
     A task's claude or codex with 'Run CLI agents over ACP' on opens over ACP instead (acpcoding.py): the same argv, seed and registry
-    entry, no pty. `pty` forces the terminal - the fallback when its adapter does not start.
+    entry, no pty. `pty` forces the terminal - the fallback when its adapter does not start. `sid`: an idled-out ACP session's own
+    (acpcoding.wake), so it comes back as the same run.
 
     `seed_fn(cwd) -> str` builds the first prompt once the working directory is known. CLIs
     that take an interactive prompt on the command line get it THERE - the session starts with
@@ -1173,6 +1174,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # too - Taskuary's tools, the send filter, the theme and hooks file - carried to the adapter; what follows that is a pty's own is not
     from . import acpcoding
     acp_road = bool(agent and not pty and acpcoding.wanted(store, profile, mode, task_id))
+    if task_id and not sid: acpcoding.IDLED.pop(task_id, None)       # any other start on the task supersedes a session that idled out
     # Reopening the CLI's own conversation, by its own id. The prompt is TYPED into a resumed pane
     # rather than handed over on the command line: `claude --resume <id> "..."` and its equivalents
     # differ per CLI, and the typed road is the one verified against every TUI here.
@@ -1234,7 +1236,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         try: base = len(_resolve_cmd(profile['cmd']))
         except FileNotFoundError: base = 1
         t = acpcoding.ACPCoding(store, profile, argv, acpcoding.carried(argv[base:]), cwd, label, task_id, agent, cli_named(profile, argv),
-                                model or profile.get('model'), resume or '', rows, cols, mode,
+                                model or profile.get('model'), resume or '', rows, cols, mode, sid=sid,
                                 fallback=lambda: open_session(store, agent, task_id, None, cwd, rows, cols, actor, model, seed_fn, resume, brain, pty=True))
     else: t = Term(argv, cwd, label, task_id, agent, rows, cols, store, cli=cli_named(profile, argv), mode=mode)
     SESSIONS[t.sid] = t
@@ -2654,6 +2656,27 @@ def asking_lines(sid: str, n: int = 4) -> list:
 
 def mode_of_task(tid) -> str: return next((t.mode for t in list(SESSIONS.values()) if t.alive and t.task_id == tid), '')
 
+# THE STRANGER GAP (2026-11-06): a task that became a stranger's AFTER its session started full - a new sender on the thread, a batch's
+# outside item - kept every relay road open into that session: an answer, a phone's tell_agent, a teammate's line, the Assistant's.
+# Each road asks this at the moment it would deliver; a yes means nothing goes in, the task says so once, and the caller refuses with it.
+STRANGER_NOW = ("This task's sender is not someone you trust any more - the running agent was given nothing; "
+                "stop it or restart it in the stranger's mode")
+
+def stranger_now(store, tid, t=None) -> str:
+    "STRANGER_NOW when the live session on `tid` (or `t`) runs full and the task now reads as a stranger's - said once on the task - else ''."
+    t = t or next((x for x in list(SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)
+    # ...a general chat (send_prompt) is no full-tools CLI: its floor is its own (general.py), judged at every turn it takes
+    if not t or not tid or getattr(t, 'mode', 'full') == 'auto' or hasattr(t, 'send_prompt'): return ''
+    from . import origin
+    try: o = origin.of_task(store, tid)[0]
+    except Exception as e: o = 'stranger'; logger.warning(f'task {tid}: could not read who wrote on it, so nothing goes in - {e}')
+    if o != 'stranger': return ''
+    try:
+        last = next((c for c in reversed(store.list_comments(tid)) if c.get('Actor') == 'router'), None)
+        if (last or {}).get('Body') != STRANGER_NOW: store.add_comment(tid, 'router', 'agent', STRANGER_NOW)
+    except Exception as e: logger.debug(f'task {tid}: the stranger line was not filed - {e}')
+    return STRANGER_NOW
+
 def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool = False) -> bool:
     """Type an inbound answer INTO the task's live session. The agent asked a question, the
     hub asked the person, the person answered - the answer belongs in front of the agent,
@@ -2662,10 +2685,13 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     Accepts a message as a DB row (BodyText/OwnText/FromName) or an ingest dict (body/own_text/from_name).
     `new`: not an answer but new work triage joined to the task (ingest._pass_coding) - said as such, to the agent and on the task.
     What the agent gets is the sender's NEW words (triage.agent_words): never the quoted chain under them, never an address or a
-    number - and a line the session never took is cleared out of its box and said as not delivered, so it waits for the owner."""
+    number - and a line the session never took is cleared out of its box and said as not delivered, so it waits for the owner.
+    Raises origin.Refusal(STRANGER_NOW) when the task turned a stranger's under a full session (stranger_now): nothing goes in."""
     from .triage import agent_words, sender_called, wrapper_of
-    t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
+    from . import acpcoding, origin
+    t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None) or acpcoding.wake(store, task_id)
     if not t: return False
+    if (why := stranger_now(store, task_id, t)): raise origin.Refusal(why)
     who, mid = sender_called(msg), msg.get('MessageId') or msg.get('message_id')
     wrapper = msg.get('wrapper') or (wrapper_of(store.message_verdict(mid)) if mid and hasattr(store, 'message_verdict') else ())
     body = agent_words(msg, wrapper)

@@ -467,6 +467,7 @@ def _continue(store, tid, rid, site, actor, code=False):
     if not sess:
         store.add_comment(tid, actor, 'agent', f'{did}, but no agent is running on this task to tell - open it to continue.')
         return False
+    if term.stranger_now(store, tid, sess): return False             # the task says why nothing went in
     # ...and the chat shows what woke the agent's next answer (the owner, 2026-11-05: "why is there taskuary twice"): a short trigger line
     try:
         from .general import BRIEF_ACTOR, USER_TYPE

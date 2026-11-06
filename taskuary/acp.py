@@ -57,8 +57,10 @@ class ACPClient:
 
     def __init__(self, cmd, args=None, cwd=None, env=None, timeout=1200, on_update=None, permit=None):
         self.timeout, self.on_update, self.session_id, self.permit = timeout, on_update, None, permit
-        self._id, self._replies, self._alive = 0, queue.Queue(), True
-        self._caps, self._write_lock, self.options = {}, threading.Lock(), []
+        # ...a reply goes to ITS caller by id: a steer (steer) waits beside the turn's own session/prompt, and one shared queue handed
+        # each caller the other's reply to drop
+        self._id, self._waiters, self._idlock, self._alive = 0, {}, threading.Lock(), True
+        self._caps, self._meta, self._write_lock, self.options = {}, {}, threading.Lock(), []
         try:
             self.p = spawn.popen([cmd] + list(args or []), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
@@ -83,14 +85,15 @@ class ACPClient:
                 except ValueError:
                     logger.debug(f'acp: not JSON, ignored: {line[:200]}'); continue
                 method, mid = m.get('method'), m.get('id')
-                if method is None: self._replies.put(m)                 # a reply to us
+                if method is None:                                      # a reply to us - to whoever is still waiting on it
+                    if (q := self._waiters.get(m.get('id'))): q.put(m)
                 elif mid is None: self._notified(m)                     # a notification
                 else: self._asked(m)                                    # a request TO us
         except Exception as e:
             logger.debug(f'acp: pump ended - {e}')
         finally:
             self._alive = False
-            self._replies.put(None)          # wake anyone waiting rather than let them hang
+            for q in list(self._waiters.values()): q.put(None)      # wake anyone waiting rather than let them hang
 
     def _notified(self, m):
         if m.get('method') != 'session/update' or not self.on_update: return
@@ -120,16 +123,16 @@ class ACPClient:
             return pick(params.get('options'), False)
 
     def request(self, method, params=None, timeout=None):
-        self._id += 1
-        mine = self._id
-        self._send({'jsonrpc': '2.0', 'id': mine, 'method': method, **({'params': params} if params else {})})
-        while True:
-            m = self._replies.get(timeout=timeout or self.timeout)
+        with self._idlock: self._id += 1; mine = self._id; q = self._waiters[mine] = queue.Queue()
+        try:
+            if not self._alive: q.put(None)
+            else: self._send({'jsonrpc': '2.0', 'id': mine, 'method': method, **({'params': params} if params else {})})
+            m = q.get(timeout=timeout or self.timeout)
             if m is None:
                 raise ACPAgentError(f'the agent stopped during {method}' + (f': {"".join(self._err)[:300]}' if self._err else ''))
-            if m.get('id') != mine: continue              # a reply to a request we gave up on
             if 'error' in m: raise ACPAgentError(f"{method}: {m['error'].get('message', m['error'])}")
             return m.get('result')
+        finally: self._waiters.pop(mine, None)            # a reply to a request we gave up on is dropped by the pump
 
     # ── protocol ────────────────────────────────────────────────────────────────────────────
     def connect(self) -> dict:
@@ -140,12 +143,24 @@ class ACPClient:
         except queue.Empty: raise ACPStartError(f'no answer to initialize in 90s{self._said()}')
         except ACPStartError: raise
         except ACPAgentError as e: raise ACPStartError(str(e)) from e
-        self._caps = r.get('agentCapabilities') or {}
+        self._caps, self._meta = r.get('agentCapabilities') or {}, r.get('_meta') or {}
         return self._caps
 
     def _said(self) -> str: return f': {"".join(self._err)[:300]}' if self._err else ''
     def can(self, capability) -> bool: return bool(self._caps.get(capability))
     def can_resume(self) -> bool: return 'resume' in (self._caps.get('sessionCapabilities') or {})
+    def can_steer(self) -> bool: return bool(((self._meta or {}).get('steering') or {}).get('supported'))
+
+    # MID-TURN INPUT (the steering extension both coding adapters advertise at initialize as _meta.steering.supported - claude-agent-acp
+    # 0.101.0 and codex-acp 2.5.0, read from their code 2026-11-06): `_session/steering` puts words INTO the running turn instead of
+    # queueing a session/prompt behind it. With idleBehavior promptRequired an idle session takes nothing and says so - the words stay ours
+    # to send as the next session/prompt, never a turn the adapter starts on its own that nobody is waiting on.
+    STEER = '_session/steering'
+    def steer(self, text, timeout: float = 60) -> str:
+        "'injected' when the words joined the running turn; else what the adapter said ('promptRequired': no turn runs; 'failed'), or ''."
+        r = self.request(self.STEER, {'sessionId': self.session_id, 'prompt': [{'type': 'text', 'text': str(text or '')}],
+                                      '_meta': {'steering': {'idleBehavior': 'promptRequired'}}}, timeout=timeout) or {}
+        return str(r.get('outcome') or '')
 
     def _opened(self, r, session_id=None) -> str:
         r = r or {}

@@ -2001,6 +2001,7 @@ def _hand_to_agent(store, cfg: dict, tid, msg: dict, actor: str):
         # a stranger's words reach only a session started in auto mode - full, none or anything unknown waits for the next start
         if origin.of_task(store, tid)[0] == 'stranger' and terminal.mode_of_task(tid) != 'auto': return
         terminal.say_to_task(store, tid, msg, actor)
+    except origin.Refusal as e: logger.info(f'answer_to_agent held for task {tid}: {e}')
     except Exception as e: logger.warning(f'answer_to_agent failed for task {tid}: {e}')
 
 
@@ -2016,7 +2017,8 @@ def live_agent(store, tid) -> str:
     from . import general, terminal
     # ...and one that IDLED OUT is still the task's agent (general.idle_out): what comes in is its next turn, and starts it again (_pass_general)
     if tid in general.OPENING or general.session_for(tid) or general.idled(tid, store): return 'general'
-    if tid in CODING_OPENING or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
+    from . import acpcoding                    # ...and a coding session over ACP that idled out, the same (acpcoding.wake)
+    if tid in CODING_OPENING or acpcoding.idled(tid, store) or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
     return 'run' if any(x['Status'] == 'running' for x in store.list_runs(tid)) else ''
 
 
@@ -2342,6 +2344,13 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - Continue picks it up.")
 
 
+def _said_coding(store, tid, msg: dict) -> bool:
+    "say_to_task's word on a new line, a stranger's hold counted as said: the task already carries why nothing went in."
+    from . import origin, terminal
+    try: return terminal.say_to_task(store, tid, msg, 'router', new=True)
+    except origin.Refusal: return True
+
+
 def _pass_coding(store, tid, msg: dict):
     """The line typed into the live coding session (terminal.say_to_task: codex's own queue, else typed - a TUI working takes it
     as its next turn). A pane still reopening is waited for until its own seed went in; a chooser on screen is never typed into
@@ -2355,7 +2364,7 @@ def _pass_coding(store, tid, msg: dict):
     except Exception: chooser = False
     if chooser:
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message was not typed in: the agent has a choice open on screen. It waits for you.")
-    elif not terminal.say_to_task(store, tid, msg, 'router', new=True):
+    elif not _said_coding(store, tid, msg):
         store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the coding session ended - Continue picks it up.")
 
 

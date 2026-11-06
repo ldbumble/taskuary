@@ -147,6 +147,70 @@ def test_a_resume_is_the_agents_own_conversation(world, monkeypatch):
     assert until(lambda: q.client and not q.busy) and not [u for u in codingchat.acp_updates(tid, q.sid) if u['sessionUpdate'] == 'user_message_chunk']
 
 
+def test_words_typed_while_it_works_go_into_the_turn_where_the_adapter_steers(world, monkeypatch):
+    """MID-TURN STEERING (both coding adapters advertise _meta.steering at initialize): the box's words join the running turn through
+    _session/steering - drawn as the owner's, no second turn - rather than waiting for its end. Without the advertisement they wait (above)."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_HANG', '1'); monkeypatch.setenv('FAKE_ACP_STEER', '1')
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: t.in_turn) and t.steerable()
+    out = waitroom.add(s, tid, 'also the tax line', 'owner')
+    assert (out['delivered'], out['state']) == (1, 'steered') and s.waiting_notes(tid) == []
+    assert idle(t)
+    said = [x for k, x in t.history if k == 'said'][-1]
+    assert 'steered:' in said and 'also the tax line' in said and 'turn=1' in said and t.turns == 1
+    ups = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk']
+    assert any(u['content']['text'] == 'also the tax line' and '_meta' not in u for u in ups)              # theirs, in the chat
+    assert any('while the agent worked' in c['Body'] for c in s.list_comments(tid))
+    # ...and at rest nothing steers: the next words are a turn of their own
+    assert not t.steerable()
+    t.prompt('and keep it short'); assert idle(t, 2)
+    assert 'heard: and keep it short' in [x for k, x in t.history if k == 'said'][-1]
+
+
+def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input_brings_it_back(world, monkeypatch):
+    """QUIET WHEN IDLE, as the general agent (general.idle_out, its period clipool.IDLE_SECONDS): nothing said in the chat, the chat the
+    same, and the next input reopens the same run (its sid) on the agent's own conversation - session/resume."""
+    from taskuary import clipool
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_RESUME', '1')
+    t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
+    assert acpcoding.idle_sweep() == [] and t.alive                                                    # not idle long enough
+    monkeypatch.setattr(clipool, 'IDLE_SECONDS', 0.1); time.sleep(0.2)
+    s.add_waiting(tid, 'a held note', 'owner')
+    assert t.idle_why() == 'notes wait for it' and acpcoding.idle_sweep() == []
+    s.deliver_waiting([w['WId'] for w in s.waiting_notes(tid)], 'typed')
+    said_before, sid = [c['Body'] for c in s.list_comments(tid)], t.sid
+    assert acpcoding.idle_sweep() == [tid]
+    assert not t.alive and t.sid not in terminal.SESSIONS and acpcoding.idled(tid, s)
+    assert [c['Body'] for c in s.list_comments(tid)] == said_before                                     # not a word on the task
+    chat = codingchat.chat(s, tid)
+    assert chat['live'] and chat['live']['sid'] == sid and not chat['live']['working']                  # the same chat, at rest
+    assert any(x['sid'] == sid and x['source'] == 'acp' for x in chat['sessions'])
+    monkeypatch.setattr(clipool, 'IDLE_SECONDS', 30 * 60)
+    waitroom.add(s, tid, 'now round the tax', 'owner')
+    q = terminal.session_for(tid)
+    assert q is not t and q.sid == sid and isinstance(q, acpcoding.ACPCoding) and not acpcoding.idled(tid, s)
+    assert idle(q)
+    said = [x for k, x in q.history if k == 'said'][-1]
+    assert 'now round the tax' in said and 'resumed=sess_fake_1' in said
+    assert any(k == 'brief' and 'look at the totals' in x for k, x in q.history)                         # its history carried on
+    assert not any('Reopened' in c['Body'] for c in s.list_comments(tid)) and len(terminal.SESSIONS) == 1   # one wake, never a fresh start beside it
+
+
+def test_the_plan_it_writes_is_in_the_coding_chat(world, monkeypatch):
+    "The agent's plan (an ACP `plan` update) is kept beside the task as it arrives and handed to the chat, every entry and its status."
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_CODE', str(repo / 'totals.py'))
+    t = open_(s, tid, repo); assert idle(t)
+    ups = codingchat.chat(s, tid)['sessions'][-1]['updates']
+    plans = [u for u in ups if u['sessionUpdate'] == 'plan']
+    assert len(plans) == 2
+    assert [(e['content'], e['status']) for e in plans[-1]['entries']] == [('Read the file', 'completed'), ('Add the comment', 'completed')]
+    assert [(e['content'], e['status']) for e in plans[0]['entries']][-1] == ('Add the comment', 'in_progress')
+    assert t.witness.snapshot([], str(repo), '')['todos']
+
+
 class Pane:
     "A pty stand-in: the fallback's terminal, without starting a real one."
     def __init__(self, argv, cwd, label, task_id=None, agent=None, rows=32, cols=110, store=None, cli='', mode='full'):

@@ -110,8 +110,8 @@ step. Without it, every start fetches the connector through `npx`: a few seconds
 and a download on the first one.
 
 A card whose CLI was already here says so in one quiet line: **Faster agent start: install the
-connector**, with **Install**. After a Taskuary update moves to a newer connector, the same line
-offers **Update**; an older copy is never used, so until then agents fetch the right one through
+connector**, with **Install connector**. After a Taskuary update moves to a newer connector, the same line
+offers **Update connector** (the CLI's own **Update** beside it updates the CLI); an older copy is never used, so until then agents fetch the right one through
 `npx`. With no npm on the computer, the line says so and agents still work: Taskuary starts the CLI
 directly. Ask the Assistant "why is my Claude agent slow to start" and it checks this for you.
 

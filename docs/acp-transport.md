@@ -221,8 +221,11 @@ owner's own - `origin.launch_mode` `full` - the switch on, a CLI with an adapter
 **What the owner sees.** Every `session/update` goes to `codingchat.record_update` (stamped `_at` as it arrives), and the coding chat
 draws it with the log road's own rows (`codingChat.stepsFromAcp`): words, the work folded into "N steps", each edit its own
 "Edited ledger.py (+1 −0)" row opening on its numbered diff, the plan as one checklist (the turn's newest). The box sends a prompt; one
-written while a turn runs waits and goes in, with anything else that waited, as **one** prompt when the turn ends - the waiting room's
-notes too, drawn as the owner's own lines with Taskuary's framing as its brief. **Stop** (a ✕ while a turn runs,
+written while a turn runs goes **into that turn** where the adapter advertised mid-turn input at `initialize` (`_meta.steering.supported`,
+both claude-agent-acp 0.101.0 and codex-acp 2.5.0): a `_session/steering` request with `idleBehavior: promptRequired`, so an idle
+session takes nothing and the words become the next `session/prompt`. Where it is not advertised, or the turn ended meanwhile, it waits
+and goes in, with anything else that waited, as **one** prompt when the turn ends - the waiting room's notes too, drawn as the owner's
+own lines with Taskuary's framing as its brief. **Stop** (a ✕ while a turn runs,
 `POST /api/tasks/<id>/agent/cancel`) is `session/cancel`: the turn ends, the session stays. A permission is acpgate's: the rules
 answer first, what they hold is the owner's Allow/Reject card in the chat and on a bound channel (`permissions.ask`).
 
@@ -286,11 +289,18 @@ short name left the paths absolute on the card - fixed (the folder by its long n
 
 ### Not built in step 2
 
-- **Mid-turn input**: both adapters advertise `_meta.steering` (and claude `promptQueueing`); words still wait for the turn's end.
-- **The plan** was not exercised live - neither CLI wrote one for a one-line edit; the checklist is pinned by the unit test.
+- **The plan** was not exercised live - neither CLI wrote one for a one-line edit; the checklist is pinned by the unit test and by a
+  pytest whose fake agent writes one during a coding turn (`test_the_plan_it_writes_is_in_the_coding_chat`).
 - **`fs` and `terminal` client capabilities**: not advertised; the agent keeps its own hands and shell.
 - **Native-ACP CLIs for coding** (gemini `--acp` and the rest): their general road works; the coding road is claude and codex.
-- **Idle**: a coding session holds its adapter and CLI until it is closed, as a pty does - no idle reaping.
+
+### Idle
+
+A coding session over ACP nobody has spoken to for the general agent's idle period (`clipool.IDLE_SECONDS`, 30 minutes) closes
+**quietly**, as the general agent's does (`acpcoding.idle_out`, `general.idle_out`): no line in the chat, no report, the task untouched,
+the chat drawn as it was. Never while a turn runs, notes wait, or a question is the owner's. The next input - the box, a waiting-room
+note, a relayed mail - brings it back as the same run (its sid) on `session/resume` (`acpcoding.wake`), one wake at a time. A pty still
+holds its CLI until it is closed.
 
 ## Risks
 

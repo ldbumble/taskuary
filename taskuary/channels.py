@@ -2219,7 +2219,10 @@ def poll_channels(store, backfill_hours: float = 0, progress=None, only=None) ->
     Independent HTTP waits overlap. SQLite writes hop onto one writer thread. Drain of
     the same conversation stays sequential - that is a later pass, not this one."""
     from .llm import build_llm
-    try: llm = build_llm(store, job='triage')
+    from .ingest import _deferring
+    # ...and no brain at all for a DEFERRED poll - the chat doorway's once-a-second read (server._poll_quick): what it reads is stored
+    # for the drain, which builds its own brain to judge it, so the one built here every second was never called (2026-11-06)
+    try: llm = None if _deferring() else build_llm(store, job='triage')
     except Exception: llm = None
     read_it = wants_read(store)   # asked once per run, not once per message
     # a mailbox card whose source row was never created polls nothing at all, and looks connected

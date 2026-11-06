@@ -385,6 +385,7 @@ def _tell(store, tid: int, text: str, wait: bool = False) -> None:
     from . import terminal as term, workerstate as ws
     sess = ws._live(tid)
     if not sess: return store.add_comment(tid, 'taskuary', 'agent', f'{text} (No agent is running on this task to tell.)')
+    if term.stranger_now(store, tid, sess): return None           # the task says why nothing went in
     def go():
         try:
             if hasattr(sess, 'send_prompt'): sess.send_prompt(text, as_owner=False)

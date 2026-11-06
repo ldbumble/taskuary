@@ -79,12 +79,14 @@ class Metered:
     def __init__(self, store, rid, brain):
         for k, v in (('_store', store), ('_rid', rid), ('_brain', brain)): object.__setattr__(self, k, v)
     def __call__(self, *a, **kw):
+        from .brainroute import rid_of
+        rid = rid_of(object.__getattribute__(self, '_rid'))      # the route row is written here, on the first call (brainroute.Lazy)
         m, t0 = {}, time.monotonic()
         tok = _METER.set(m)
         try: return object.__getattribute__(self, '_brain')(*a, **kw)
         finally:
             _METER.reset(tok)
-            record(object.__getattribute__(self, '_store'), object.__getattribute__(self, '_rid'), int((time.monotonic() - t0) * 1000), m)
+            record(object.__getattribute__(self, '_store'), rid, int((time.monotonic() - t0) * 1000), m)
     def __bool__(self): return bool(object.__getattribute__(self, '_brain'))
     def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)

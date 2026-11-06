@@ -11,7 +11,9 @@ Set in its environment, for the tests that need more:
   FAKE_ACP_ASK=<command> the permission it asks for is to run that shell command (kind execute)
   FAKE_ACP_CODE=<file>   a coding turn: a plan, an edit of that file asked for (kind edit, its location) and, once allowed, made -
                          a comment line on top, sent back as a diff - then `git status` run, its output streamed as terminal deltas
-  FAKE_ACP_HANG=1        a turn that only ends when it is cancelled (session/cancel)
+  FAKE_ACP_HANG=1        a turn that only ends when it is cancelled (session/cancel) - or steered
+  FAKE_ACP_STEER=1       it advertises mid-turn input (_meta.steering.supported, as claude-agent-acp and codex-acp do): `_session/steering`
+                         joins the running turn, which then ends saying what it was steered with; with no turn running it is promptRequired
 It offers config options (mode, model, effort) the way claude-agent-acp and codex-acp do, and says what they were set to.
 """
 import json, os, sys
@@ -80,7 +82,8 @@ for line in sys.stdin:
         caps = {'loadSession': True, 'promptCapabilities': {'image': False}}
         if os.environ.get('FAKE_ACP_RESUME') == '1': caps['sessionCapabilities'] = {'resume': {}}
         reply(mid, {'protocolVersion': msg['params'].get('protocolVersion', 1), 'agentCapabilities': caps,
-                    'agentInfo': {'name': 'fake-acp', 'version': '0'}, 'authMethods': []})
+                    'agentInfo': {'name': 'fake-acp', 'version': '0'}, 'authMethods': [],
+                    **({'_meta': {'steering': {'supported': True}}} if os.environ.get('FAKE_ACP_STEER') == '1' else {})})
     elif method == 'session/new':
         # the cwd we were given is echoed back so a test can prove the run was placed correctly
         os.environ['FAKE_ACP_CWD'] = str(msg['params'].get('cwd') or '')
@@ -122,6 +125,13 @@ for line in sys.stdin:
                          'options': [{'optionId': 'reject-once', 'name': 'Reject', 'kind': 'reject_once'},
                                      {'optionId': 'allow-always', 'name': 'Always', 'kind': 'allow_always'},
                                      {'optionId': 'allow-once', 'name': 'Allow once', 'kind': 'allow_once'}]}})
+    elif method == '_session/steering' and os.environ.get('FAKE_ACP_STEER') == '1':
+        if _prompt_id is None:
+            reply(mid, {'outcome': 'promptRequired', 'reason': 'noRunningTurn'}); continue
+        steered = ' '.join(str(b.get('text') or '') for b in msg['params'].get('prompt') or [])
+        reply(mid, {'outcome': 'injected'})
+        update('agent_message_chunk', content={'type': 'text', 'text': f'steered: {steered} - {_heard}'})
+        reply(_prompt_id, {'stopReason': 'end_turn'}); _prompt_id = None
     elif method == 'session/cancel':
         if _prompt_id is not None:
             reply(_prompt_id, {'stopReason': 'cancelled'}); _prompt_id = None

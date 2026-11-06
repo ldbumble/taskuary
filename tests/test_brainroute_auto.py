@@ -54,7 +54,7 @@ def test_the_first_matching_rule_wins_and_a_switched_off_one_is_skipped(s):
     rs = [{**r, 'on': False} if r['id'] == 'drafts-strong' else r for r in brainroute.rules(s)]
     brainroute.save_rules(s, rs)
     assert brainroute.choose(s, 'draft', task=_task(s)).rule == 'work'
-    assert [r['id'] for r in brainroute.rules(s)] == ['drafts-strong', 'quick-jobs', 'hard-work', 'work', 'unsure', 'sensitive']
+    assert [r['id'] for r in brainroute.rules(s)] == ['drafts-strong', 'quick-jobs', 'hard-work', 'quick-work', 'work', 'unsure', 'sensitive']
 
 
 def test_a_rule_names_only_what_the_router_knows(s):
@@ -129,3 +129,12 @@ def test_a_reply_to_a_hard_task_is_written_on_the_strong_model(s):
     with mock.patch.object(llm, 'make_llm', lambda t, conf, key: seen.append(conf['model']) or (lambda *a, **k: 'Yes - by Thursday.')):
         responder.draft_reply(s, tid)
     assert seen == ['claude-opus-5'] and s.brain_routes(tid, limit=1)[0]['Rule'] == 'hard-work'
+
+
+def test_general_work_triage_judged_quick_runs_light_in_auto(s):
+    """The owner, 2026-11-05: "haiku or sonnet instead of opus for regular agent stuff based off triage complexity" - quick -> light,
+    plain -> standard (the card's model), hard -> strong. Fixed mode is the cards, as before."""
+    assert brainroute.choose(s, 'general', task=_task(s, 'quick')).tier == 'fixed'
+    s.set_setting('ai_route_mode', 'auto', 'owner')
+    q, p, h = (brainroute.choose(s, 'general', task=_task(s, d)) for d in ('quick', None, 'hard'))
+    assert (q.tier, q.rule) == ('light', 'quick-work') and (p.tier, p.rule) == ('standard', 'work') and (h.tier, h.rule) == ('strong', 'hard-work')

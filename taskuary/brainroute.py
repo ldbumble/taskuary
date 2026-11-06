@@ -189,6 +189,9 @@ GEAR_OF = {'light': 'light', 'standard': 'main', 'strong': 'strong'}
 DEFAULT_RULES = [
     {'id': 'quick-jobs', 'when': {'job': ['triage', 'rank', 'memory', 'summary']}, 'use': {'tier': 'light'}},
     {'id': 'hard-work', 'when': {'job': ['draft', 'general', 'coding'], 'difficulty': ['hard']}, 'use': {'tier': 'strong'}},
+    # ...and general work triage judged QUICK runs on the brain's quick gear - a lookup or a short answer does not need the big model
+    # (the owner, 2026-11-05: "haiku or sonnet instead of opus for regular agent stuff based off triage complexity"). In Auto only
+    {'id': 'quick-work', 'when': {'job': ['general', 'quick_work'], 'difficulty': ['quick']}, 'use': {'tier': 'light'}},
     # ...and the Advisor, which decides every light since 2026-11-02 (the owner: no hard-coded rules) - on the standard model
     {'id': 'work', 'when': {'job': ['draft', 'general', 'coding', 'quick_work', 'advisor']}, 'use': {'tier': 'standard'}},
     # an answer that could not be read, or one its model said it was unsure of, is asked once of a strong model - only for the jobs

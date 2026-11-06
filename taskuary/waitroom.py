@@ -185,16 +185,19 @@ def deliver(store, tid: int) -> dict:
     # the drip: one note per stop, the rest keep their place in line
     notes = pending[:1] if drip(store) else pending
     left = len(pending) - len(notes)
+    # MID-TURN, INTO THE TURN (the owner, 2026-11-06): an ACP coding session whose adapter steers (acpcoding.steerable) takes the words now,
+    # into the turn at work, rather than at its end - the parked road below, under every one of its holds
+    steer = st == 'working' and t is not None and term.is_acp(t) and bool(getattr(t, 'steerable', lambda: False)())
     # A STRANGER'S WORDS NEVER REACH FULL TOOLS UNASKED (the Advisor design rev 2): a session started full on a task a stranger has written on
     # since - a batch's outside contributor among them - gets nothing typed in; the owner's Continue picks it up under the reviewer
-    if st in ('asking', 'parked') and full_on_stranger(store, tid, t):
+    if (st in ('asking', 'parked') or steer) and full_on_stranger(store, tid, t):
         why = HELD_STRANGER
         last = next((c for c in reversed(store.list_comments(tid)) if c.get('Actor') == 'router'), None)
         if (last or {}).get('Body') != why: store.add_comment(tid, 'router', 'agent', why)
         return {'delivered': 0, 'state': 'held_stranger', 'why': why, 'left': len(pending)}
     # NEVER INTO THE OWNER'S HALF-TYPED WORDS (2026-11-02): the owner typed in the box while the agent worked, it stopped, and the note
     # went in mid-sentence - one garbled prompt, their words split around it. It keeps its place; the next tick looks again.
-    if st in ('asking', 'parked') and term.owner_drafting(t):
+    if (st in ('asking', 'parked') or steer) and term.owner_drafting(t):
         return {'delivered': 0, 'state': 'owner_typing', 'left': len(pending)}
     # A TEAMMATE NEVER ANSWERS WHAT THE AGENT ASKED THE OWNER (agentchannels.py): their line waits for its next plain stop, and the owner's
     # own answer - the card, the box, their reply on the channel - is what lets the question go
@@ -220,7 +223,7 @@ def deliver(store, tid: int) -> dict:
         store.deliver_waiting([x['WId'] for x in notes], 'answered')
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'answered', 'left': left})
         return {'delivered': len(notes), 'state': 'answered', 'left': left}
-    if st == 'parked':
+    if st == 'parked' or steer:
         from . import general
         if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left); how = 'typed into'
         # ...an ACP coding session (acpcoding.py) takes it as its next prompt, the batch as Taskuary's brief and each of the owner's own notes
@@ -228,18 +231,23 @@ def deliver(store, tid: int) -> dict:
         elif term.is_acp(t):
             t.prompt(' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x),
                      shown=[parts(x.get('Note'))[0] for x in notes if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)])
-            how = 'sent to'
+            how = 'sent into the running turn of' if steer else 'sent to'
         # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two
         else: how = term.tell(t, ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x))
         store.deliver_waiting([x['WId'] for x in notes], 'typed')
-        store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session once the agent stopped.'
+        store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session'
+                          + (' while the agent worked.' if steer else ' once the agent stopped.')
                           + (f' {left} still waiting for its next stop.' if left else ''))
         store.audit('task', tid, 'waitroom_deliver', 'router', 'agent', {'n': len(notes), 'how': 'typed', 'left': left})
-        return {'delivered': len(notes), 'state': 'parked', 'left': left}
+        return {'delivered': len(notes), 'state': 'steered' if steer else 'parked', 'left': left}
     if st == 'no_session':
         task = store.get_task(tid) or {}
         if task.get('Status') not in ('open', 'in_progress'): return {'delivered': 0, 'state': 'closed'}
         if not has_room(store): return {'delivered': 0, 'state': 'full'}
+        # ...a coding session that IDLED OUT (acpcoding.idle_out) comes back as the same run on its own conversation, and the notes are its
+        # next prompt - to the owner nothing stopped
+        from . import acpcoding
+        if (woke := acpcoding.wake(store, tid)): return deliver(store, tid) if term.is_acp(woke) else {'delivered': 0, 'state': 'working'}
         # General work reopens in its connector-backed conversation. Coding work still reopens
         # the configured CLI. The waiting room therefore feeds the same underlying session no
         # matter which of its two renderers (assistant or terminal) the owner happens to prefer.
@@ -271,8 +279,10 @@ def tick(store) -> int:
     # The same clock also backs chat hand-raises. It must look at every session, not only tasks
     # with queued notes, and it is separate so note delivery remains deterministic.
     from . import general, handraise
-    try: general.idle_sweep()                  # a chat agent idle past its period closes quietly (general.idle_out)
-    except Exception as e: logger.warning(f'idle sweep failed: {e}')
+    from . import acpcoding
+    for sweep in (general.idle_sweep, acpcoding.idle_sweep):    # a chat or ACP coding agent idle past its period closes quietly (idle_out)
+        try: sweep()
+        except Exception as e: logger.warning(f'idle sweep failed: {e}')
     try: handraise.tick(store)
     except Exception as e: logger.warning(f'hand raise tick failed: {e}')
     n = 0

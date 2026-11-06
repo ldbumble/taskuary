@@ -117,7 +117,9 @@ def sessions(store, tid: int) -> list:
 
 
 def chat(store, tid: int) -> dict:
-    "What the coding chat draws (CodingChat.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI."
-    from . import permissions
-    return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(_live(int(tid))),
+    """What the coding chat draws (CodingChat.jsx): the sessions' steps or ACP updates, the mail that came in, and the live CLI - one that
+    idled out (acpcoding.idle_out) still, at rest: the chat stays as it was, and its box is the input that brings it back."""
+    from . import acpcoding, permissions
+    t = _live(int(tid)) or (acpcoding.IDLED.get(int(tid)) if acpcoding.idled(int(tid), store) else None)
+    return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(t),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for

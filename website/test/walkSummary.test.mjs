@@ -92,3 +92,13 @@ test("an agent's finished work names the task, whatever field holds the agent", 
   const g = gistOf({ rows: [{ key: "p", kind: "agentdone", lane: "report", who: "coding", agent: null, title: "Recurring export timeout failures" }] });
   assert.equal(g, "Recurring export timeout failures");
 });
+
+// AN ADVISOR IDEA IS NAMED BY ITS OWN WORDS on the day's opener, as on the rail (the owner, 2026-11-06: "Advisor  Advisor  4")
+test("an Advisor band's gist is the first idea's words, never the word Advisor again", () => {
+  const rows = [{ key: "i1", kind: "idea", lane: "idea", who: "Advisor", title: "Payworth charges went up 12% since July" },
+    { key: "i2", kind: "idea", lane: "idea", who: "Advisor", title: "Three vendors bill late every month" }];
+  const g = gistOf({ rows });
+  assert.ok(g.startsWith("Payworth charges went up"), g);
+  assert.ok(g.endsWith("+1"), g);
+  assert.ok(!/^Advisor/.test(g));
+});

@@ -32,8 +32,9 @@ const cut = (t, n = 40) => t.length <= n ? t : `${t.slice(0, n).replace(/\s+\S*$
 // ...and an agent's FINISHED work (kind agentdone), whose "who" is the agent itself with no agent field beside it (TQ-1016 live)
 const byAgent = (i) => isAgentRow(i) || i?.kind === "agentdone"
   || (!!i?.agent && (!String(i?.who || "").trim() || String(i.who).trim().toLowerCase() === String(i.agent).toLowerCase()));
+// ...and an Advisor idea by its own words, as its rail row reads (the owner, 2026-11-06: the Tasks card said "Advisor  Advisor  4")
 const gistWord = (i) => whoOf(i) === "Report" ? String(i.title || "").split(/ [-—] /)[0]
-  : byAgent(i) && i.title ? cut(String(i.title).trim()) : whoOf(i);
+  : (byAgent(i) || i?.kind === "idea") && i.title ? cut(String(i.title).trim()) : whoOf(i);
 export const gistOf = (g, max = 2) => {
   const ws = [...new Set(g.rows.map(gistWord))].filter(Boolean);
   // a task's title is a sentence: two side by side cut each other off ("I need you to find every…, Thom…") - one, and the count of the rest

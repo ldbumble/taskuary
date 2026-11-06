@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import api from "./api.js";
 import { label } from "./buttons.js";
+import { useAgents } from "./ui.jsx";
 import { BORDER, CATPPUCCIN, FAINT, PANEL, mono } from "./theme.jsx";
 import { fitFrame, isPaste, isPress, keyMessage, mayShape, pasteMessages, mouseMessage, parseMessage, shortUrl, viewportFor, viewportMoved,
   wheelMessage } from "./browserSplit.js";
@@ -29,6 +30,7 @@ const btn = { ...mono, fontSize: 10.5, lineHeight: 1, px: 0.9, py: 0.45, borderR
 export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, onFold, overlay = false, yourTurn = false, clearRight = false,
   filling = false, waiting = [], turn = null, onHandBack, onDecided, ended = false }) {
   const box = useRef(null), canvas = useRef(null), sendRef = useRef(null), img = useRef(null), fit = useRef(null);
+  const { devMode } = useAgents();
   const [live, setLive] = useState(false);
   const [url, setUrl] = useState(url0);
   /* THE PAGE THE SERVER SAYS IT IS ON. A reopened task mounts this before the parent's first poll, so
@@ -252,9 +254,10 @@ Take over to drive it yourself; close the session to close it."
         <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
           title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
           sx={{ ...btn, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
-          {driving ? "Hand back" : "Take over"}
+          {driving ? "I'm done" : "Take over"}
         </Box>
-        <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>
+        {/* ...Snapshot only in Developer mode (audit, 2026-11-05): a frame filed as an attachment is a developer's record */}
+        {devMode && <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>}
         {onFold && <Box component="button" onClick={onFold} title={overlay ? "back to the terminal" : "fold the browser away - the browser chip above the terminal brings it back"} sx={btn}>{overlay ? "✕" : "›"}</Box>}
       </Box>
       {/* the page. tabIndex so keystrokes land here while driving; the canvas swallows the wheel
@@ -318,7 +321,7 @@ Take over to drive it yourself; close the session to close it."
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             {/* ...only over a page that has drawn: "click the page and type" stood over a pane with no frame in it (2026-11-04) */}
-            {!live ? "waiting for the page to draw — type once it shows" : handed.current ? "your turn — the agent is waiting on you; click the page and type" : "you are driving — the agent's next command still runs; hand back when done"}
+            {!live ? "Loading the page…" : handed.current ? "your turn — the agent is waiting on you; click the page and type" : "you are driving — the agent's next command still runs; press I'm done when finished"}
           </Typography>
         )}
         {asked && !driving && (
@@ -397,7 +400,7 @@ function TurnBar({ turn, onHandBack }) {
         {!pressing && <Box component="span" sx={{ color: "#a8a196" }}> · do it on the page, and the agent goes on when it moves on</Box>}
       </Typography>
       <Box component="button" onClick={back} disabled={busy} sx={press}
-        title="The agent looks at the page as you left it and carries on">{busy ? "handing back…" : "Done — hand back to the agent"}</Box>
+        title="The agent looks at the page as you left it and carries on">{busy ? "handing back…" : "I'm done"}</Box>
       {err && <Typography role="alert" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.red, flexBasis: "100%" }}>{err}</Typography>}
     </Box>
   );

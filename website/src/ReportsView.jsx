@@ -682,7 +682,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   }
 
   return (
-    <SideRail title="Reports & routines" q={q} setQ={setQ} placeholder="Search reports and routines…"
+    <SideRail title="Reports" q={q} setQ={setQ} placeholder="Search reports and routines…"
       items={railItems} value={bucket} onChange={setBucket}
       note="Reports only read data and summarize it. Routines write data or keep state. Their connections live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
@@ -1587,7 +1587,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 230 }}
                     onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value })}>
-                    <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
+                    <MenuItem value="" sx={{ fontSize: 12 }}>the AI that sorts your mail (default)</MenuItem>
                     {/* only brains that can actually answer: a connector with no key saved is
                         not a choice, it is a trap. A saved pick that lost its key stays
                         visible - disabled - instead of silently vanishing. Labels are worded

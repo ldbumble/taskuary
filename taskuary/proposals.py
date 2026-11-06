@@ -156,7 +156,6 @@ SETTING_ALLOW = {
     'poll_minutes': 'how often the mailboxes are read',
     'funnel_hours': 'how far back the pipe reaches',
     'funnel_max': 'how much the pipe holds at once',
-    'timeline_fade': 'how old rows dim on the work rail',
     'calendar_enabled': 'read your calendar',
     'playbooks_enabled': 'let agents follow and propose playbooks',
     'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are rows on the work rail, not tasks)',
@@ -164,7 +163,7 @@ SETTING_ALLOW = {
 # ...and the same rule for a CONNECTOR's own switches, which is where "PRs are Timeline items, not
 # tasks" actually lives (store.github_permissions reads the connector first).
 CONNECTOR_ALLOW = {'github': {'use_as_tracker': 'treat GitHub issues/PRs as the tracker'}}
-SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off'), 'timeline_fade': ('none', 'soft', 'normal', 'strong')}
+SETTING_VALUES = {'answer_to_agent': ('auto', 'ask', 'off')}   # timeline_fade retired with the Timeline (audit, 2026-11-05)
 
 
 def _switch_ok(store, name) -> bool:

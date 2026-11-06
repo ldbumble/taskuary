@@ -2020,7 +2020,7 @@ export const ToRow = ({ to, onSave, disabled }) => {
           {/* ...opened on the address it has: "change" emptied To while the footer still named the old one (the UI audit, 2026-10-21) */}
           {!disabled && <Typography {...pressable(() => { setText(bareAddresses(to).join(", ")); setOpen(true); })} data-tq-to-change
             sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
-            change</Typography>}
+            Change</Typography>}
         </>
       )}
       {!!err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
@@ -2062,7 +2062,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
         <Typography {...pressable(() => setOpen(true))}
           sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
                 "&:hover": { textDecoration: "underline" } }}>
-          {(cc || []).length ? "+ someone else" : "+ loop someone in"}
+          {(cc || []).length ? "Add another" : "Add CC"}
         </Typography>
       )}
       {!!err && open && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}

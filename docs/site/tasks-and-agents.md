@@ -195,7 +195,7 @@ the terminal.
 
 With the optional `agent-browser` tool installed, the page the agent is on appears live beside
 the terminal - or, for a general agent, beside the chat when you have a part in it. **Take over** hands you the mouse and keyboard for a password or a 2FA code the
-agent must never type; **Snapshot** keeps the frame on the task as an attachment. On the Wall, a
+agent must never type; **Snapshot** (Developer mode) keeps the frame on the task as an attachment. On the Wall, a
 narrow tile shows a "browser" chip that opens the page over the session.
 
 **Signing in.** At a sign-in page the agent stops and asks, and the task waits on "Sign in to

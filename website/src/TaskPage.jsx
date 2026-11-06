@@ -111,6 +111,7 @@ import { closeoutOf } from "./reviewProposal.js";
 import { isCardReview } from "./actionCard.js";
 import { AgentRecord, ResultSummary } from "./AgentRecord.jsx";
 import EarlierRounds from "./CloseoutRounds.jsx";
+import LandingCard from "./LandingCard.jsx";
 import AiUsed from "./AiUsed.jsx";
 import MoreDrafts from "./MoreDrafts.jsx";
 import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
@@ -2824,6 +2825,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Handoff key={handSaid ? `${handSaid.to}|${handSaid.note}` : "h"} taskId={selected} said={handSaid} onLeave={() => { setHandoff("sending"); onLeave?.(); }}
           onStay={(msg) => { setHandoff(true); onStay?.(msg); }} onSent={handedOff} />
       </Box>}
+      {/* HOW ITS BRANCH LANDS, on a coding task in Developer mode (LandingCard.jsx): the diff since it started, and the one question */}
+      {coOn && canCode && t?.Kind === "coding" && <LandingCard taskId={t.TaskId} onChanged={() => { loadDetail(selected); onChanged?.(); }} />}
       {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
           again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
       {coOn && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>

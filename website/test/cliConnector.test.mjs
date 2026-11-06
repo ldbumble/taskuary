@@ -1,5 +1,5 @@
 // The agent connector's line on a CLI card (the owner, 2026-11-06: "will the adapters get installed when you set up claude code cli tool
-// in the card section. we need to do that"): its state in words, and the one press that helps - Install, Update, or none.
+// in the card section. we need to do that"): its state in words, and the one press that helps - Install connector, Update connector, or none.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,15 +9,21 @@ import { connectorLine } from "../src/cliConnector.js";
 const cli = (connector, installed = true) => ({ name: "claude", label: "Claude Code", installed, connector });
 const at = (status, have = "") => cli({ status, have, want: "0.101.0", pkg: "@agentclientprotocol/claude-agent-acp" });
 
-test("a CLI here without its connector offers Install, and says not installed", () => {
-  assert.deepEqual(connectorLine(at("missing")), { text: "Faster agent start: install the connector", state: "not installed", press: "Install" });
+test("a CLI here without its connector offers Install connector, and says not installed", () => {
+  assert.deepEqual(connectorLine(at("missing")), { text: "Faster agent start: install the connector", state: "not installed", press: "Install connector" });
 });
 
-test("an older connector after a release moves the pin offers Update, with both versions", () => {
+test("an older connector after a release moves the pin offers Update connector, with both versions", () => {
   const l = connectorLine(at("update", "0.100.2"));
-  assert.equal(l.press, "Update");
+  assert.equal(l.press, "Update connector");
   assert.equal(l.state, "0.100.2 installed · 0.101.0 available");
-  assert.equal(connectorLine(at("other", "0.102.0")).press, "Install");      // a newer one is not "updated" down to the pin
+  assert.equal(connectorLine(at("other", "0.102.0")).press, "Install connector");      // a newer one is not "updated" down to the pin
+});
+
+test("on a card whose CLI is outdated too, its press is never the CLI's own plain Update", () => {
+  for (const s of ["missing", "update", "other"]) assert.match(connectorLine(at(s, "0.100.2")).press, /^(Install|Update) connector$/);
+  const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
+  assert.match(read("cliInstall.jsx"), /"updating…" : "Update"\}/);            // the CLI's own stays "Update"
 });
 
 test("installed, installing and no npm are said, with nothing to press", () => {

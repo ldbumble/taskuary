@@ -137,6 +137,15 @@ def reply_target(store, task_id: int):
     return own or (store.promised_in(store.get_task(task_id)) or {}).get('MessageId') or (rows[0]['MessageId'] if rows else None)
 
 
+# THE OWNER'S OWN ASK HAS NOBODY TO REPLY TO (the owner, 2026-11-06: "What is this? doesn't make any sense" - an agent saved a reply on a task
+# they made themselves, and narrated the refusal to them). Said in its first prompt, and the reply tools are not offered on it
+OWN_ASK = "This task is your owner's own ask - there is nobody to reply to; answer in the chat."
+def no_correspondent(store, task_id: int) -> bool:
+    "Nobody but the owner is behind the task: a reply would have no one to go to (agent_reply keeps it as the result instead)."
+    mid = reply_target(store, task_id)
+    return not mid or (not store.held_review(task_id) and no_one_behind((store.get_message(mid) or {}).get('Channel')))
+
+
 def answers_for(store, task_id: int, mid: int, to: str = '') -> int | None:
     """The mail that holds the ask a reply to `mid` answers: the newest of triage's asks that is on the task, in `mid`'s conversation, no newer than
     `mid` - and, with `to`, written by the person `mid` is from. None when triage read no ask there: the reply then answers `mid` as it always did."""
@@ -395,7 +404,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         from . import session_artifacts
         art = session_artifacts.result(store, task_id, text, agent)
         store.add_comment(task_id, agent, 'agent', f'{agent} saved its answer on the task as the result - nobody is waiting on a reply, so nothing will be sent.')
+        # ...and what the agent reads back says so as a fact to act on, never a refusal to tell the owner about
         return {'ok': True, 'saved': 'result', 'artifact_id': art.get('ArtifactId'),
+                'says': f"{OWN_ASK} Your words are kept as the task's result - nothing failed, so say nothing about saving them.",
                 'not_attached': [f'{n}: nobody is waiting on a reply, so there is nothing to attach it to' for n, _ in files or []]}
     sent = answered_by_work(store, task_id, mid)
     if sent and not (follow_up or owner_asked_since(store, task_id, sent.get('DecidedAt'))):

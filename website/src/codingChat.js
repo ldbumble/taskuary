@@ -12,8 +12,14 @@ const ACP_TOOL = { read: "Read", edit: "Edit", delete: "Delete", move: "Move", s
 const textOf = (c) => (typeof c === "string" ? c : Array.isArray(c) ? c.map(textOf).join("") : c?.type === "text" ? c.text || "" : c?.content ? textOf(c.content) : "");
 const ARGS = ["command", "cmd", "pattern", "query", "url", "file_path", "path", "filePath", "absolute_path", "description", "prompt", "glob", "title"];
 const small = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k, v]) => ARGS.includes(k) && typeof v === "string" && v.trim()));
+// A COMMAND'S OUTPUT IS ITS OWN STEP'S (the owner, 2026-11-06: "hate this terminal button. it's also not a terminal"): opened under its row, as
+// an edit's diff is - Codex streams it (`terminal_output_delta`), Claude hands it with the result, fenced (acpcoding._unfence)
+const unfence = (s) => String(s || "").replace(/^\s*```[\w-]*\n([^]*?)\n?```\s*$/, "$1");
+const outOf = (u) => (u.content || []).filter((c) => c?.type === "content").map((c) => unfence(textOf(c.content))).join("\n")
+  || (typeof u.rawOutput === "string" ? u.rawOutput : u.rawOutput?.formatted_output || u.rawOutput?.output || u.rawOutput?.stdout || "");
 export function stepsFromAcp(updates) {
   const out = [], byId = new Map();
+  let o;
   // ...the agent's words arrive a token at a time: one step per run of chunks, as a log has one per block. A prompt Taskuary sent marks itself
   // its brief (`_meta.taskuary`), as mark_briefs marks a log's
   // ...each step at the moment its first update came in (`_at`, stamped as it was kept): ACP itself carries no time
@@ -34,6 +40,11 @@ export function stepsFromAcp(updates) {
         byId.set(u.toolCallId, s); out.push(s);
       }
       if (u.rawInput && typeof u.rawInput === "object") s.args = { ...s.args, ...small(u.rawInput) };
+      // ...and where it is: running, done or failed, as ACP says - a call still running is drawn running, whatever came after it
+      if (u.status) s.status = u.status;
+      const d = u._meta?.terminal_output_delta?.data;
+      if (d) s.out = (s.out || "") + d;
+      else if (!s.out && (u.status === "completed" || u.status === "failed") && (o = outOf(u))) s.output = o;
       const loc = (u.locations || []).find((l) => l?.path)?.path;
       if (loc && !["path", "file_path", "filePath", "absolute_path"].some((k) => s.args[k])) s.args.file_path = loc;      // the key a log names a file by
       const diffs = (u.content || []).filter((c) => c?.type === "diff");
@@ -41,17 +52,21 @@ export function stepsFromAcp(updates) {
       else if (loc && ["Edit", "Delete", "Move"].includes(s.name)) s.file = loc;
     }
   }
-  return out.map(({ open, ...s }) => (s.text != null && s.k !== "tool" ? { ...s, text: s.text.trim() } : s)).filter((s) => s.k === "tool" || s.k === "plan" || s.text);
+  return out.map(({ open, out: streamed, ...s }) => (s.text != null && s.k !== "tool" ? { ...s, text: s.text.trim() }
+    : streamed ? { ...s, output: streamed } : s)).filter((s) => s.k === "tool" || s.k === "plan" || s.text);
 }
 
 // ── one session's steps -> the trace events stepsOf reads ────────────────────────────────────────
 // a step the record kept without its arguments (saved before they were) is read off its one line of text
 const argsOf = (s) => (s.args && Object.keys(s.args).length ? s.args
   : { file_path: s.file || s.text, command: s.detail || s.text, ...(s.detail ? { description: s.text } : {}), pattern: s.text, query: s.text, url: s.text });
-const eventsOf = (steps, running) => steps.flatMap((s, i) => {
-  const id = `t${i}`;
-  if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s) } },
-    ...(running && i === steps.length - 1 ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }])];
+// ...a call over ACP is running until ACP says it ran (`status`); a log's, until something came after it. A turn that is over has nothing running
+const OVER = ["completed", "failed"];
+const runs = (s, running, last) => running && (s.status ? !OVER.includes(s.status) : last);
+const eventsOf = (steps, running, tail = true) => steps.flatMap((s, i) => {
+  const id = `t${i}`, output = String(s.output || "").trim();
+  if (s.k === "tool") return [{ type: "tool_call", name: s.name, detail: { tool_call_id: id, args: argsOf(s), output } },
+    ...(runs(s, running, tail && i === steps.length - 1) ? [] : [{ type: "tool_result", name: id, detail: { tool_call_id: id, result: output, is_error: s.status === "failed" } }])];
   if (s.k === "plan") return [{ type: "tool_call", name: "TodoWrite", detail: { tool_call_id: id, args: { todos: s.items || [] } } },
     { type: "tool_result", name: id, detail: { tool_call_id: id, result: "" } }];
   if (s.k === "said") return [{ type: "progress", name: "text", detail: s.text }];
@@ -79,7 +94,7 @@ export function turnParts(steps, { running = false } = {}) {
   const parts = [], run = [];
   const flush = (last) => {
     if (!run.length) return;
-    for (const st of stepsOf(eventsOf(run, running && last), { keepStart: false })) {
+    for (const st of stepsOf(eventsOf(run, running, last), { keepStart: false })) {
       if (st.kind === "said") parts.push({ type: "said", text: st.summary });
       else { const w = parts.at(-1)?.type === "work" ? parts.at(-1) : (parts.push({ type: "work", steps: [] }), parts.at(-1)); w.steps.push(st); }
     }
@@ -97,11 +112,15 @@ export function turnParts(steps, { running = false } = {}) {
 
 // ── the chat: what came in, what the owner said, and each turn - oldest first ────────────────────
 const at = (x) => String(x || "").replace("T", " ").slice(0, 19);
-export function chatRows({ sessions = [], mails = [] } = {}) {
+export function chatRows({ sessions = [], mails = [], live = null, permissions = [] } = {}) {
+  // THE TURN THAT ENDED IS NOT WORKING (the owner's live coding task, 2026-11-06: the turn ended on "Should I go ahead?", the chip said "agent
+  // waiting on you", and "Working on this…" still turned under the answer): a live session is one that is alive, not one at work - it works
+  // while the server says so (codingchat.live_of `working`), and a question on screen or a permission card is the owner's turn
+  const working = (live ? live.working !== false : true), waiting = !!live?.asking || !!permissions?.length;
   const rows = [];
   sessions.forEach((ses, si) => {
     const steps = (ses.source === "acp" ? stepsFromAcp(ses.updates) : ses.steps || []).map((s) => ({ ...s, at: at(s.at) || at(ses.at) }));
-    const live = !!ses.live && si === sessions.length - 1;
+    const now = !!ses.live && si === sessions.length - 1 && working;
     let turn = null;
     const close = () => { if (turn) rows.push(turn); turn = null; };
     steps.forEach((s) => {
@@ -113,7 +132,7 @@ export function chatRows({ sessions = [], mails = [] } = {}) {
     close();
     // ...its newest turn is the one at work while its CLI runs
     const last = rows.at(-1);
-    if (live && last?.kind === "turn" && last.sid === ses.sid) last.running = true;
+    if (now && last?.kind === "turn" && last.sid === ses.sid) last.running = true;
   });
   // ...each mail where it came in: over the first entry at or after it, a run of them one row (the general chat's Arrived)
   const out = [], pending = [...mails].sort((a, b) => at(a.joined || a.at).localeCompare(at(b.joined || b.at)));
@@ -121,7 +140,7 @@ export function chatRows({ sessions = [], mails = [] } = {}) {
   for (const r of rows) { if (r.at) take(r.at); out.push(r); }
   take(null);
   return out.map((r, i) => (r.kind === "turn"
-    ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, parts: turnParts(r.steps, { running: !!r.running }), answer: lastSaid(r.steps) }
+    ? { kind: "turn", id: `r${i}`, at: r.at, running: !!r.running, waiting: !!r.running && waiting, parts: turnParts(r.steps, { running: !!r.running }), answer: lastSaid(r.steps) }
     : { ...r, id: `r${i}` }));
 }
 const lastSaid = (steps) => [...steps].reverse().find((s) => s.k === "said")?.text || "";

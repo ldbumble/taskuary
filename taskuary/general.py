@@ -1196,12 +1196,14 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # chat is not told it may make one
     # ...and a connector card's walk owes nobody an answer: it ends when the card's Test passes (aisetup.CARD_TOOLS), never by
     # closing the task and drafting a reply to a sender there is not
-    owed = sources and task.get('SourceRef') != 'connector:setup'
+    nobody = not stranger and wrapup.no_correspondent(store, tid)
+    owed = sources and task.get('SourceRef') != 'connector:setup' and not nobody
     # THE AGENT NEVER CLOSES A CHAT TASK (the owner, 2026-11-05: "agent should never close once it's open until we hit close"): every
     # general task is told the owner ends it - Mark done, Send and close, Close with a note - never CHAT_LINE's closing marker
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + selfclose.owner_closes_line()
     if not dock and owner_answered_last(store, tid): system = system + '\n\n' + selfclose.OWNER_ANSWERED_LINE
     if owed: system = system + '\n\n' + selfclose.REPLY_LINE
+    elif nobody and not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF): system = system + '\n\n' + wrapup.OWN_ASK
     if owed and (miss := wrapup.refused_line(store, tid)): system = system + '\n\n' + miss      # a file its reply does not carry (wrapup._told)
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE

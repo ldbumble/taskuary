@@ -44,7 +44,7 @@
 .tq-cc-plan li[data-tq-plan-item=done] { color: #77736b; }
 .tq-cc-plan li[data-tq-plan-item=done] > svg { color: #3f7a4f; }
 .tq-cc-plan li[data-tq-plan-item=now] { font-weight: 600; }
-.tq-cc-term { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 9px; border: 1px solid #dfdbd3; border-radius: 99px;
+/* the agent's screen, while it asks (CodingChat): a card in the stream with the live terminal in it */
+.tq-cc-screen { flex-shrink: 0; margin: 8px 0 12px; border: 1px solid #dfdbd3; border-radius: 10px; overflow: hidden; background: #fbfaf7; }
+.tq-cc-screen-head { padding: 7px 12px; font-size: 13px; font-weight: 600; color: #292824; border-bottom: 1px solid #ece6da; }
   background: #f4f1ec; color: #6e685f; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
-.tq-cc-term:hover { color: #292824; background: #ece6da; }
-.tq-cc-term[aria-pressed=true] { background: #292824; border-color: #292824; color: #fbfaf7; }

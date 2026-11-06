@@ -52,6 +52,19 @@ class LandingTests(unittest.TestCase):
         self.assertIn('+TWO', s['diff'])
         self.assertIn('How should it land?', s['line'])
 
+    def test_changes_are_the_whole_work_so_far_committed_or_not_new_files_too(self):
+        # the header's Changes (the owner, 2026-11-06: "where is the diff button to see code changed?"), while the agent still works
+        self.branch()
+        with open(os.path.join(self.cwd, 'ledger.py'), 'a', encoding='utf-8', newline='\n') as f: f.write('four\n')
+        with open(os.path.join(self.cwd, 'rounding.py'), 'w', encoding='utf-8', newline='\n') as f: f.write('def r(x): return round(x, 2)\n')
+        c = landing.changes(self.s, self.tid)
+        self.assertEqual(c['base'], 'master')
+        for line in ('+TWO', '+four', '+def r(x)', '+++ b/rounding.py'): self.assertIn(line, c['diff'])
+        git(self.cwd, 'checkout', '-q', '--', 'ledger.py'); git(self.cwd, 'checkout', '-q', 'master')        # ...the checkout moved on: what it committed is what is its
+        c = landing.changes(self.s, self.tid)
+        self.assertIn('+TWO', c['diff']); self.assertNotIn('+four', c['diff'])
+        self.assertIsNone(landing.changes(self.s, Factory(self.s).task(title='Never started', kind='coding')))
+
     def test_work_straight_on_the_base_asks_nothing_and_never_offers_discard(self):
         commit(self.cwd, 'ledger.py', 'one\nTWO\nthree\n')
         s = landing.state(self.s, self.tid)

@@ -5588,6 +5588,14 @@ def task_landing(tid: int, full: bool = False):
     if not hub_agents.developer_mode(store): return {'data': None}
     return {'data': landing.state(store, tid, full=full)}
 
+@app.get('/api/tasks/{tid}/changes')
+def task_changes(tid: int):
+    "A coding task's work so far as one diff (landing.changes) - the header's Changes, while the agent works. Developer mode only."
+    from . import landing
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if not hub_agents.developer_mode(store): return {'data': None}
+    return {'data': landing.changes(store, tid)}
+
 @app.get('/api/tasks/{tid}/coding-chat')
 def task_coding_chat(tid: int):
     """A coding task as the one chat (codingchat.py): every session's steps - the CLI's own log, or its ACP updates - the mail that came
@@ -5775,7 +5783,9 @@ async def mcp_rpc(request: Request, task: int = 0):
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)
         out = agenttools.call(store, task, name, args, doors)
         return out.body.decode() if isinstance(out, JSONResponse) else out
-    def one(m): return agenttools.rpc(m, run) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
+    from .wrapup import no_correspondent
+    skip = agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()
+    def one(m): return agenttools.rpc(m, run, skip) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
     out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
     if not out: return Response(status_code=202)
     return JSONResponse(out if isinstance(msg, list) else out[0])

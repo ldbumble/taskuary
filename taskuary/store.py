@@ -803,6 +803,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
                     'code_folders': '',             # where a coding agent may look for its checkout; blank = the usual homes (repochoice.folders)
+                    # how much of an agent's work its task chat shows by default (chatDetail.js): every tool call for coding, the summary for the rest
+                    'chat_detail_coding': 'everything', 'chat_detail_other': 'summary',
                     'concierge_fast': 'auto',   # the Assistant's CLI in fast mode: codex yes, claude no (llm.fast_on)
                     'acp_cli': '1',                 # general agents' CLI runs over ACP, argv as the fallback (agents.acp_on, acpgate)
                     'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)

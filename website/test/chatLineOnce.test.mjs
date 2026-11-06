@@ -39,8 +39,8 @@ test("the chat draws its held lines through notShown, and a failed answer takes 
   assert.match(gw, /notShown\(held, mineDrawn\)\.map\(\(l\) =>/);
   assert.doesNotMatch(gw, /\{held\.map\(\(l\) => <div key=\{l\.id\}/);
   assert.match(gw, /\.catch\(\(x\) => \{ setHeld\(\(h\) => h\.filter\(\(l\) => l\.id !== id\)\); c\.setText\(w\)/);
-  // ...and the coding chat matches its held lines the same way: by the words however spelled, after the hold
-  assert.match(read("CodingChat.jsx"), /stillHeld\(h, rows\.filter\(\(r\) => r\.kind === "you"\)/);
+  // ...and a coding source's lines are held the same way, on the same road: its typed lines are the thread's own (chatStream.rowMessages)
+  assert.match(gw, /\(road \? road\(w, files\.map\(\(a\) => a\.path\)\) : api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant\/messages`/);
 });
 
 // 2. THE FILES LEAVE THE BOX WITH THE SEND. They were cleared only when the agent's whole turn was done - minutes of chips over a box that had
@@ -72,7 +72,6 @@ test("every prompt box carries its chips inside, on the words' line", () => {
   assert.ok(at('className="tq-aui-attach"') < at("{chips && <AttachRow") && at("{chips && <AttachRow") < at("{input}") && at("{input}") < at("<MicButton")
     && at("<MicButton") < at("{extra}") && at("{extra}") < at("{send}"), "paperclip, chips, words, mic, the box's own buttons, Send");
   assert.match(read("GeneralWorkspace.jsx"), /<OneBox root=\{ComposerPrimitive\.Root\}/);
-  assert.match(read("CodingChat.jsx"), /<PromptBox text=\{text\} setText=\{setText\} pics=\{pics\}/);
   const dock = read("AssistantView.jsx");
   assert.doesNotMatch(dock, /<ImageTray pics=\{pics\} cannot=\{dockCannot\} sx=\{\{ width: "100%", mb: 0\.75 \}\} \/>/, "the dock's files are not a row over its box");
   assert.match(dock, /<AttachImage pics=\{pics\} sx=\{\{ color: DIM \}\} \/>\s*<ImageTray pics=\{pics\} cannot=\{dockCannot\} sx=\{DOCK_CHIPS\} \/>/);
@@ -91,20 +90,19 @@ test("every tq-aui-composer is the one OneBox, and it always has the paperclip a
   assert.match(one, /<IconButton size="small" className="tq-aui-attach"[^>]*onClick=\{\(\) => pick\.current\?\.click\(\)\}/);
   assert.match(one, /<MicButton size=\{18\} [^>]*onText=\{onMic\} \/>/);
   assert.doesNotMatch(one, /\{(onFiles|onMic) &&|\{!?\w+ \? <IconButton|\{\w+ && <MicButton/, "neither is drawn on a condition");
-  // ...used by every box: the general chat, a task's first box and an item's (PromptBox), the coding chat
+  // ...used by every box: the one chat (general and coding alike), a task's first box and an item's (PromptBox)
   assert.match(read("GeneralWorkspace.jsx"), /<OneBox root=\{ComposerPrimitive\.Root\}/);
   assert.match(box, /<PromptBox /);
   assert.match(read("ItemSections.jsx"), /<PromptBox /);
-  assert.match(read("CodingChat.jsx"), /<PromptBox /);
-  // ...and the coding chat's files reach its CLI the way the general chat's do: named after the words by their paths
-  assert.match(read("CodingChat.jsx"), /const said = withImages\(w, files\);/);
+  // ...and a coding CLI's files reach it named after the words by their paths
+  assert.match(read("GeneralWorkspace.jsx"), /const said = withImages\(w, files\);/);
 });
 
 // ...AND EVERY BOX ON A TASK PAGE (the owner, 2026-11-06: "stop building each unique prompt box. it should be shared"): Continue's note and the
 // Send to agent / Run another agent form are the one PromptBox too, and no box that talks to an agent draws a field of its own
 test("every box on a task page that talks to an agent is the one PromptBox / OneBox - no field of its own", () => {
   const own = /<TextField\b|<textarea\b|component="textarea"|<InputBase\b/;
-  for (const f of ["ContinueBox.jsx", "CodingChat.jsx", "ItemSections.jsx"]) {
+  for (const f of ["ContinueBox.jsx", "ItemSections.jsx"]) {
     assert.doesNotMatch(read(f), own, `${f} draws a field of its own`);
     assert.match(read(f), /<PromptBox /, f);
   }

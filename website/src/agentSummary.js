@@ -51,3 +51,14 @@ export const hasReply = (reviews) => (reviews || []).some((r) => r && r.Kind !==
 const answerWords = (w) => { const t = String(w || "").trim(); return !!t && (t.length <= 500 || /https?:\/\/|\b[A-Za-z]:\\|(^|\s)\/(Users|home|mnt|tmp)\/|\\\\\S+/.test(t)); };
 export const answerShown = (summary, words) => !String(words || "").trim() ? false
   : typeof summary?.answer_is_result === "boolean" ? summary.answer_is_result : answerWords(words);
+
+// A DRAFT UNDER ITS OWN TURN (latest-wins): the chat payload says, per pending draft, the turn that wrote it (`turn`, its message id) and whether
+// it is `stale` - made before the owner's newest message - with its time. A stale one stays on its turn with a quiet line, and never stands
+// under the newest turn's Next steps. Read with defaults, so a payload without them draws as before
+export const draftTurn = (r) => r?.turn ?? r?.Turn ?? null;
+export const staleDraft = (r) => !!(r?.stale ?? r?.Stale);
+export const draftAt = (r) => r?.drafted_at ?? r?.DraftedAt ?? r?.at ?? "";
+const pendingReply = (r) => r?.Status === "pending" && r.Kind !== "action" && r.Kind !== "slot" && String(r.DraftText || "").trim();
+// ...the newest turn's Next steps hold the drafts only while one of them is fresh
+export const freshNext = (reviews) => { const ps = (reviews || []).filter(pendingReply); return !ps.length || ps.some((r) => !staleDraft(r)); };
+export const staleOn = (reviews, turnId) => (reviews || []).filter((r) => pendingReply(r) && staleDraft(r) && turnId != null && String(draftTurn(r)) === String(turnId));

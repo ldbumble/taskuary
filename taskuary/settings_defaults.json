@@ -44,6 +44,8 @@
     "agent_context_file": "1",
     "agent_hooks": "1",
     "auto_sessions": "4",
+    "chat_detail_coding": "everything",
+    "chat_detail_other": "summary",
     "code_folders": "",
     "auto_sessions_light": "5",
     "hand_sound": "chime",

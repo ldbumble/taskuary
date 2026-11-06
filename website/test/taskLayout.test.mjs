@@ -327,7 +327,9 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   assert.match(src, /secs = solo \? SECTIONS\.slice\(0, 1\) : SECTIONS;/);
   assert.match(src, /const slots = secs, slotKeys = slots\.map\(\(s\) => s\.key\);/);
   assert.match(src, /const workspaceMode = home && !wrapping \? "general" : agentWorkspaceMode/, "every task is always the chat");
-  assert.match(src, /\{t\.Kind === "coding" \|\| liveTerminal\(term\) \? <CodingChat /, "a live coding terminal on any kind is the coding chat's toggle");
+  // ...ONE chat for every kind: the page never picks between two (the component reads its own source, chatStream.chatSource)
+  assert.doesNotMatch(src, /<CodingChat |liveTerminal\(term\) \? </, "no coding/general branch picks the chat");
+  assert.equal((src.match(/<GeneralWorkspace /g) || []).length, 1);
   assert.match(src, /next=\{chatCards\}/);
   // ...the to-do's box at the foot of Came from, the chat's cards over it, and no Agent slot beside it
   const from = src.slice(src.indexOf('slot("from",'), src.indexOf("THE WORK COLUMN"));

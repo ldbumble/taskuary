@@ -69,7 +69,7 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
 // plain to-do - is Came from and its chat; a draft's Send, the emails owed, the landing, the hand-off and the close are cards in the chat,
 // and the task's buttons ride its strip. One is open and fills the width, the other a closed tab that says where it stands.
 export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent", n: 2, name: "Agent" }];
-// ...a live CODING terminal: a general agent's own chat is a session too (mode "assistant"); a coding CLI's is a toggle in its chat (CodingChat)
+// ...a live CODING terminal: a general agent's own chat is a session too (mode "assistant"); a coding CLI's is a toggle in its chat (GeneralWorkspace)
 export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
 // ...A PLAIN TO-DO NO AGENT HAS TOUCHED IS ONE SECTION (the owner, 2026-11-06: the "Agent - not started" column beside a to-do): what came in,
 // the box under it - typing there starts the agent, and its chat then joins as the second section. `started`: any agent ever on it

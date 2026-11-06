@@ -75,7 +75,7 @@ def _target(args) -> str:
     return _cut(' '.join(str(v).split()), TARGET_N)
 
 
-# THE CODING CHAT DRAWS A STEP FROM ITS OWN ARGUMENTS (codingChat.js -> agentSteps.describeCall: "Read store.py", "Ran pytest"), and an
+# THE CODING CHAT DRAWS A STEP FROM ITS OWN ARGUMENTS (chatStream.js -> agentSteps.describeCall: "Read store.py", "Ran pytest"), and an
 # edit as its diff ("Edited budget.py (+12 −3)", the owner 2026-11-06: "i do like you can review the code diffs"). Kept small: the strings
 # a step line is built from, each cut short, and an edit's own before/after - never a tool's output
 ARG_N, EDIT_N = 300, 20000
@@ -185,7 +185,7 @@ def _codex(path: Path) -> list:
         elif t in ('function_call', 'custom_tool_call', 'local_shell_call'):
             args = p.get('arguments') or p.get('input') or (p.get('action') or {})
             if t == 'custom_tool_call' and p.get('name') == 'apply_patch':
-                # ...each file with its own part of the patch, the diff the coding chat draws (codingChat.js)
+                # ...each file with its own part of the patch, the diff the coding chat draws (chatStream.js)
                 cuts = re.split(r'^\*\*\* (?:Update|Add|Delete) File: (.+)$', re.sub(r'\n?\*\*\* End Patch\s*$', '', str(args)), flags=re.M)
                 out += [{'k': 'tool', 'name': 'apply_patch', 'text': _cut(f, TARGET_N), 'file': f, 'at': at, 'edit': {'patch': p.strip('\n')[:EDIT_N]}}
                         for f, p in zip(cuts[1::2], cuts[2::2])] or [_tool('apply_patch', '', at)]

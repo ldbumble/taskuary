@@ -47,6 +47,8 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
 import LinesSetting from "./LinesSetting.jsx";
+import DetailSlider, { chatDefaultsChanged } from "./DetailSlider.jsx";
+import { asLevel } from "./chatDetail.js";
 import { label as btnLabel } from "./buttons.js";
 import PhoneChats from "./PhoneChats.jsx";
 import ChatPicker from "./ChatPicker.jsx";
@@ -534,7 +536,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const saveSetting = async (name, value, el) => {
     const { ok } = await run(() => api.patch("/api/settings", { name, value }));
     if (!ok && el) el.value = settings.find((s) => s.Name === name)?.Value ?? "";
-    if (ok && name === "developer_mode") refreshCapabilities();     // coding comes or goes on every screen, this one's Coding agent group too
+    if (ok && name === "developer_mode") refreshCapabilities();
+    if (ok) chatDefaultsChanged(name, value);                        // an open chat follows its kind's new default     // coding comes or goes on every screen, this one's Coding agent group too
     load();
   };
   const [jsonBad, setJsonBad] = useState({});           // a JSON knob's problem, said under its box until fixed
@@ -672,6 +675,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     }
     // THE EMAIL SIGNATURE (responder.signed): the exact block under every email, read off the sent mail and checked here
     if (m.type === "signature") return <SignatureSetting value={s.Value || ""} save={(v) => saveSetting(s.Name, v)} />;
+    // ...the chat's detail level, the one slider every chat corner draws too (DetailSlider)
+    if (m.type === "detail") return <DetailSlider value={asLevel(s.Value) || asLevel(s.Default) || "summary"} label={m.label} says={false} onChange={(v) => saveSetting(s.Name, v)} />;
     if (m.type === "lines") return <LinesSetting value={s.Value || ""} fallback={s.Default || ""} save={(v) => saveSetting(s.Name, v)} />;
     if (m.type === "sound") {
       return (

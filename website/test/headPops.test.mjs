@@ -12,7 +12,7 @@ test("both live in the header's corner, each a popover; neither is mounted at th
   assert.match(head, /\{canCode && t\.Kind === "coding" && <HeadPop id="agent-channels" title="Talk to this agent from…"[\s\S]*<AgentChannels taskId=\{t\.TaskId\} pop \/><\/HeadPop>\}/);
   assert.match(page, /<Popover open=\{!!at\} anchorEl=\{at\}/);
   assert.equal((page.match(/<AiUsed /g) || []).length, 1, "once, in the header");
-  for (const f of ["CodingChat.jsx", "GeneralWorkspace.jsx"]) assert.doesNotMatch(read(f), /<AgentChannels |\{tail\}|\btail=\{/, f);
+  for (const f of ["GeneralWorkspace.jsx"]) assert.doesNotMatch(read(f), /<AgentChannels |\{tail\}|\btail=\{/, f);
   assert.doesNotMatch(page, /\btail=\{/);
   // ...the same content: open from the start in the popover, its fold only where it is not one
   assert.match(read("AiUsed.jsx"), /const \[open, setOpen\] = useState\(pop\)/);

@@ -9,7 +9,7 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("an agent whose steps stream into the thread says it is working once, not a second copy of its newest step", () => {
   const ws = read("GeneralWorkspace.jsx");
   assert.match(ws, /const atWork = dock \? <Thinking provider=\{provider\} \/> : <AtWork /);
-  assert.match(ws, /return folded \? null : <AgentBand \{\.\.\.props\} since=/);
+  assert.match(ws, /return folded && level !== "summary" \? null : <AgentBand \{\.\.\.props\} since=/);
   assert.match(ws, /<ThreadPrimitive\.If running>\s*\{atWork\}/);
   assert.match(ws, /\{serverBusy && atWork\}/);
 });

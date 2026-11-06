@@ -89,7 +89,7 @@ export function numbered(h) {
   });
 }
 
-// ── what an edit in a session's record carries, as hunks (sessionrecord._edit / codingChat.stepsFromAcp) ──
+// ── what an edit in a session's record carries, as hunks (sessionrecord._edit / chatStream.stepsFromAcp) ──
 // Claude's own patch (`hunks`, line numbers and all), a Codex patch (`patch`), or the before/after the tool was handed (`parts`): a WHOLE
 // file's before and after (ACP's diff content, `whole`) is cut into hunks with git's context; a snippet's lines are shown whole, unnumbered
 export function editHunks(edit) {

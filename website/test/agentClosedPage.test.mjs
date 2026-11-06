@@ -41,7 +41,7 @@ test("a closed task says who closed it and why, never the advice for an open one
   assert.match(src, /const rowState = pageState\(listRow, detail\)/);
   // ...the chat's last line: its agent's done sentence, else the owner's close - never "Nobody sent this one" advice
   assert.match(src, /const closedSaid = t\?\.Status === "done" \? \(detail\?\.closedWhy \? `✓ \$\{detail\.closedWhy\}`/);
-  assert.equal((src.match(/closedLine=\{closedSaid\}/g) || []).length, 2, "the general chat and the coding chat alike");
+  assert.equal((src.match(/closedLine=\{closedSaid\}/g) || []).length, 1, "the one chat, every kind");
   assert.doesNotMatch(src, /Nobody sent this one/);
   // ...said at the top of Agent work, the step it opens on - in its body, as the heading carries no sentence (taskControls)
   const agent = src.slice(src.indexOf('{shows("agent") && <>'), src.indexOf("<AgentRecord {...recordProps} story={storyAt"));

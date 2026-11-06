@@ -7,9 +7,9 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 // A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer)
 test("an ended turn draws a step that never got its result as done, never spinning", () => {
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /if \(!now && \(data\?\.steps \|\| \[\]\)\.some\(\(s\) => s\.status === "running"\)\) data = \{ \.\.\.data, steps: data\.steps\.map\(\(s\) => \(s\.status === "running" \? \{ \.\.\.s, status: "done" \} : s\)\) \};/);
+  assert.match(ws, /const calm = \(st\) => \(!now && st\.status === "running" \? \{ \.\.\.st, status: "done", alongside: false \}/);
   // ...and in a chat a turn with no summary says no "failed" either
-  assert.match(ws, /return <AgentSteps data=\{chat \? \{ \.\.\.data, steps: \(data\?\.steps \|\| \[\]\)\.map\(\(s\) => \(s\.status === "error" \|\| s\.status === "recovered"/);
+  assert.match(ws, /: chat && \(st\.status === "error" \|\| st\.status === "recovered"\) \? \{ \.\.\.st, status: "done" \} : st\);/);
 });
 
 // "ran 0s" on a turn this pane streamed: the runtime's own message is stamped as it begins - the server's copy replaces it once the run ends

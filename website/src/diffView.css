@@ -33,7 +33,7 @@
 .tq-dv-str { color: #8b6f3a; }
 .tq-dv-com { color: #8b877e; font-style: italic; }
 .tq-dv-num { color: #7a5a8a; }
-/* in the coding chat (CodingChat.jsx): an edit is a step row that opens on its diff, and the Terminal a small toggle in the box */
+/* in the coding chat (GeneralWorkspace.jsx, its coding source): an edit is a step row that opens on its diff, and the Terminal a small toggle in the box */
 .tq-cc-edit { margin: 2px 0 6px; }
 .tq-cc-edit > summary { color: #3d3a33; font-weight: 500; }
 .tq-cc-diff { margin: 4px 0 6px 21px; border: 1px solid #e1dcd5; border-radius: 7px; overflow: hidden; background: #fff; }
@@ -44,7 +44,7 @@
 .tq-cc-plan li[data-tq-plan-item=done] { color: #77736b; }
 .tq-cc-plan li[data-tq-plan-item=done] > svg { color: #3f7a4f; }
 .tq-cc-plan li[data-tq-plan-item=now] { font-weight: 600; }
-/* the agent's screen, while it asks (CodingChat): a card in the stream with the live terminal in it */
+/* the agent's screen, while it asks (GeneralWorkspace): a card in the stream with the live terminal in it */
 .tq-cc-screen { flex-shrink: 0; margin: 8px 0 12px; border: 1px solid #dfdbd3; border-radius: 10px; overflow: hidden; background: #fbfaf7; }
 .tq-cc-screen-head { padding: 7px 12px; font-size: 13px; font-weight: 600; color: #292824; border-bottom: 1px solid #ece6da; }
   background: #f4f1ec; color: #6e685f; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }

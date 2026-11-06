@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { chatRows, stepsFromAcp } from "../src/codingChat.js";
+import { chatRows, stepsFromAcp } from "../src/chatStream.js";
 import { editHunks, headerOf, hunksOf, hunkText, langOf, numbered, parseUnified, tokens } from "../src/diffView.js";
 
 const before = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
@@ -42,7 +42,7 @@ const ses = (more) => ({ sid: "s1", cli: "claude", at: "2026-11-06 09:00:00", ..
 // the rows a person reads: ids and stamps aside, an ACP session has no per-step clock
 const shape = (rows) => rows.map(({ id, at, ...r }) => r);
 // ...and a command's output, which only ACP hands over (a log keeps the command alone)
-const noOutput = (rows) => rows.map((r) => (r.parts ? { ...r, parts: r.parts.map((p) => (p.steps ? { ...p, steps: p.steps.map(({ detail, ...s }) => s) } : p)) } : r));
+const noOutput = (rows) => rows.map((r) => (r.parts ? { ...r, parts: r.parts.map((p) => (p.steps ? { ...p, steps: p.steps.map(({ detail, id, ...s }) => s) } : p)) } : r));
 
 test("a session's log and the same session over ACP draw the same chat rows", () => {
   const log = chatRows({ sessions: [ses({ source: "Claude Code log", steps: LOG })] });
@@ -130,8 +130,8 @@ test("the highlighter colours by language and keeps every character", () => {
   assert.deepEqual(tokens("x", ""), [{ t: "", s: "x" }]);
 });
 
-test("the coding chat's box types into the running CLI, or picks the session back up", () => {
-  const src = fs.readFileSync(new URL("../src/CodingChat.jsx", import.meta.url), "utf8");
+test("the one chat's box, on a coding source, types into the running CLI, or picks the session back up", () => {
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/waitroom/);
   assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/continue-work/);
   assert.match(src, /\/api\/tasks\/\$\{tid\}\/coding-chat/);
@@ -155,11 +155,11 @@ test("over ACP each step keeps the moment it came in, and the plan is one checkl
 
 test("over ACP the box is a prompt and Stop ends the turn; there is no Terminal button, and a pty's asking screen is a card in the stream", () => {
   // the owner, 2026-11-06: "hate this terminal button. it's also not a terminal"
-  const src = fs.readFileSync(new URL("../src/CodingChat.jsx", import.meta.url), "utf8");
-  assert.match(src, /\/api\/tasks\/\$\{tid\}\/agent\/cancel/);
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/agent\/cancel/);
   assert.match(src, /data-tq-plan/);
   assert.doesNotMatch(src, /terminal-toggle|TerminalIcon|<span>Terminal<\/span>/);
-  assert.match(src, /asking = !!live\?\.asking && !acp/);
+  assert.match(src, /screenAsks = coding && !!cc\.live\?\.asking && !acp/);
   assert.match(src, /data-tq-chat-screen[^]*The agent's screen is asking something[^]*<TerminalPane/);
 });
 
@@ -211,8 +211,8 @@ test("a turn that ended on a question is not working, though its session is aliv
   // ...and at work but waiting on the owner's press (a permission card, a screen that asks): running, but waiting - no "Working on this…"
   assert.equal(rows({ working: true }, [{ id: "p1" }]).at(-1).waiting, true);
   assert.equal(rows({ working: true, asking: true }).at(-1).waiting, true);
-  const src = fs.readFileSync(new URL("../src/CodingChat.jsx", import.meta.url), "utf8");
-  assert.match(src, /r\.running && !r\.waiting && !r\.parts\.some\(stillRuns\)/);
+  const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  assert.match(src, /const codingBusy = coding && !!cc\.live\?\.working && !screenAsks && !perms\.length;/);
 });
 
 test("the general chat's ACP trace keeps the words where they were said: the answer takes only what came after the last call", async () => {

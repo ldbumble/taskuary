@@ -16,7 +16,10 @@ test("the general workspace has no view switcher - the conversation is the only 
   const strip = workspace.slice(workspace.indexOf("const tools = (<>"), workspace.indexOf("{dock && <Box"));
   for (const word of [">Terminal<", ">Numbers<", ">Assistant<", '"Browser"']) assert.doesNotMatch(strip, new RegExp(word));
   assert.match(strip, /Full screen/, "the whole-window toggle stays, like a coding agent's");
-  assert.doesNotMatch(workspace, /paneFor|taskuary_general_view|SemanticPanel|TerminalPane/);
+  assert.doesNotMatch(workspace, /paneFor|taskuary_general_view|SemanticPanel/);
+  // ...a coding CLI's screen is drawn only as the card while it asks - never a body to switch to
+  assert.equal((workspace.match(/<TerminalPane /g) || []).length, 1);
+  assert.match(workspace, /\{screenAsks && <div className="tq-cc-screen" data-tq-chat-screen=""/);
 });
 
 test("the chat renders with or without a live session - a session only adds the browser split", () => {
@@ -66,7 +69,7 @@ test("on the canvas the chat's brain and Full screen sit in the agent step's hea
 });
 
 test("the chat box says the agent, never \"the assistant\" over an analyst (email walk 2026-10-29; the owner, 2026-11-06)", () => {
-  assert.match(workspace, /placeholder=\{askWords \|\| \(dock \? "Tell Taskuary what to do next…" : MESSAGE\)\}/, "one prompt wording (audit 2026-11-05)");
+  assert.match(workspace, /placeholder=\{askWords \|\| placeholder \|\| \(dock \? "Tell Taskuary what to do next…" : MESSAGE\)\}/, "one prompt wording (audit 2026-11-05)");
   assert.doesNotMatch(workspace, /Tell the assistant what to do next/);
 });
 

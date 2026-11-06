@@ -9,6 +9,6 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("a chat task has no strip stop; the box stops any turn at work", () => {
   assert.doesNotMatch(read("TaskPage.jsx"), /onStop=|data-tq-strip-stop|STRIP_LIVE_H/, "no strip of any task carries a stop");
   const ws = read("GeneralWorkspace.jsx");
-  assert.match(ws, /\{working && <ThreadPrimitive\.If running=\{false\}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"/);
+  assert.match(ws, /\{\(road \? stopShown : working\) && <ThreadPrimitive\.If running=\{false\}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"/);
   assert.match(ws, /onClick=\{onStop\}><CloseIcon fontSize="small" \/><\/button><\/ThreadPrimitive\.If>\}/);
 });

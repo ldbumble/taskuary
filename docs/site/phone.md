@@ -53,13 +53,13 @@ numbered line here, and on WhatsApp the same choices come again as a **poll** un
 tap picks - even when the only choice is **Next**. A number or a tap runs exactly what the desktop's button runs,
 and no model reads it. Only words you type go to the model.
 
-![A number or a poll tap runs the desktop's action; Not for me asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model](img/phone-choices.svg "A pick is the button; words are words.")
+![A number or a poll tap runs the desktop's action; Not for me asks how far, Send to agent asks what it should do, an unclear checkout asks which repository; typed words go to the model](img/phone-choices.svg "A pick is the button; words are words.")
 
 | You send | What happens |
 |---|---|
 | a number, or a tap in the poll | the desktop button with that name, run at once - and if the model is still answering something you typed, that answer is dropped and the pick goes first |
 | **Not for me** | "How far?" — just this once, from now on, or a rule in Settings; the answer you pick runs |
-| **Send to agent** | "Which agent?" — triage's pick first, the other one next; the answer you pick runs |
+| **Send to agent** | "What should it do?" — type it or send a voice note, or tap **Send to agent** again to hand it over as it is |
 | a coding job with no clear checkout | "Which repository?" — the best guess first; the one you pick starts |
 | **More** | the rest of a long message - or, on a finished agent, its report - then the same choices |
 | an old number, after you have already replied | nothing — a list answers one reply, then its numbers are gone |
@@ -71,9 +71,9 @@ Typed words are answered by the **Assistant's** brain - the same one, and the sa
 
 ### Approving things
 
-A drafted reply comes to the chat with its **Close out** choice - the same button as on the desktop, as a
-number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as
-approving on the page. The chat never pings you on its own: it speaks when you write to it or hand it the walk.
+A drafted reply comes to the chat with the draft and the desktop's own choices under it - **Send**, **Send and
+close**, **Redraft** - as numbers or poll taps. Nothing goes out without that pick: approving on your phone is the same
+deliberate act as approving on the page. The chat never pings you on its own: it speaks when you write to it or hand it the walk.
 
 What you type goes the same way: anything that sends or closes - a reply, a hand-off, **Mark done** - asks yes or no
 first. A small change that sends nothing and closes nothing is done at once and said: a priority, the kind of work, its

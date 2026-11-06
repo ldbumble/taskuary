@@ -19,8 +19,8 @@ flowchart LR
   A -->|Next| N["The desktop's Next - the next item, no summary reprinted"]
   A -->|an action word| D{"Does its card ask a question?"}
   D -->|no| R["Runs now - the receipt, then the next item if the table was settled"]
-  D -->|Not ours| H["How far? - once / from now on / a rule in Settings / Cancel"]
-  D -->|Send to agent| W["Which agent? - triage's pick / the other one / Cancel"]
+  D -->|Not for me| H["How far? - once / from now on / a rule in Settings / Cancel"]
+  D -->|Send to agent| W["What should it do? - your words or a voice note / Send to agent as it is / Cancel"]
   D -->|coding, checkout unclear| C["Which repository? - best guess first / Cancel"]
   H --> R
   W --> R
@@ -43,7 +43,7 @@ flowchart LR
 | 4 | A list answers one reply; after any reply its numbers are gone | a "2" typed three turns later fired a list nobody was looking at |
 | 5 | A receipt that can be undone offers **Undo** as a choice | the undo existed only as the typed word |
 | 6 | No typed word is a shortcut: "next", "undo", "set up" go to the model like any other words; the morning message's options are pills | a table of typed words ran the walk, set-up and undo with no model, and had to be kept in step with the vocabulary by hand |
-| 7 | Phone approvals (typed "approve" / "reject" on a tagged ping) are gone; a draft is sent by its Close out pill (was "Send the reply") | a bare "yes" approved whichever review had pinged last, and the verdict words were a second vocabulary |
+| 7 | Phone approvals (typed "approve" / "reject" on a tagged ping) are gone; a draft is sent by its Send pill (was "Send the reply", then Close out) | a bare "yes" approved whichever review had pinged last, and the verdict words were a second vocabulary |
 | 8 | On WhatsApp the choices also come as a poll on the last bubble (2 to 12 of them, each cut to 100 characters); only the newest poll in a chat counts | a poll is the one tappable thing WhatsApp lets an account send |
 | 9 | A poll vote (the bridge marks it) is the choice it names; the same words typed are words | a poll vote arrives as the choice's own words, but only a tap is a pill |
 | 10 | Walking a section, an act moves on inside it exactly as Next does; the section's end is said, then the walk goes on (2026-09-30) | Make a task on the first report put TQ-0001 up in the middle of Walk Reports |

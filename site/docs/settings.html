@@ -37,7 +37,7 @@
 <div class="entry">
       <a class="page" href="./">Start here</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#try-the-demo">Try the demo</a><a class="sec" href="./#command-line-options">Command-line options</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#try-the-demo">Try the demo</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#command-line-options">Command-line options</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#next">Next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
@@ -506,11 +506,6 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>The zone the app&#39;s clock speaks. Blank = this machine&#39;s local time.</p>
 <p>Timestamps are stored in the server machine&#39;s local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.</p>
 <p>Use an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load.</p>
-<h3 id="fade-bottom-of-timeline">Fade bottom of Timeline<a class="anchor" href="#fade-bottom-of-timeline" aria-label="Link to this section">#</a></h3>
-<p><code>timeline_fade</code> · type: select · default: <code>normal</code></p>
-<p>How tall the soft fade is at the bottom edge of the Timeline viewport.</p>
-<p>Options: <code>off</code>, <code>gentle</code>, <code>normal</code>, <code>sharp</code></p>
-<p>Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed.</p>
 <h3 id="work-rail-lookback-days">Work rail lookback (days)<a class="anchor" href="#work-rail-lookback-days" aria-label="Link to this section">#</a></h3>
 <p><code>feed_days</code> · type: number · default: <code>14</code></p>
 <p>How many days back the Work rail reads. Display only — nothing is deleted.</p>

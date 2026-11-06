@@ -37,7 +37,7 @@
 <div class="entry">
       <a class="page" href="./">Start here</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Start here's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#try-the-demo">Try the demo</a><a class="sec" href="./#command-line-options">Command-line options</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#next">Next</a></div>
+      <div class="secs" hidden><a class="sec" href="./#what-taskuary-is">What Taskuary is</a><a class="sec" href="./#install-on-windows">Install on Windows</a><a class="sec" href="./#install-with-python">Install with Python</a><a class="sec" href="./#your-first-run">Your first run</a><a class="sec" href="./#try-the-demo">Try the demo</a><a class="sec" href="./#choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="./#updating">Updating</a><a class="sec" href="./#what-leaves-your-machine">What leaves your machine</a><a class="sec" href="./#where-your-data-lives">Where your data lives</a><a class="sec" href="./#command-line-options">Command-line options</a><a class="sec" href="./#docker">Docker</a><a class="sec" href="./#next">Next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
@@ -153,7 +153,7 @@ conversation with two doors.</p>
 numbered line here, and on WhatsApp the same choices come again as a <strong>poll</strong> under the message, so one
 tap picks - even when the only choice is <strong>Next</strong>. A number or a tap runs exactly what the desktop&#39;s button runs,
 and no model reads it. Only words you type go to the model.</p>
-<p><figure><img src="img/phone-choices.svg" alt="A number or a poll tap runs the desktop's action; Not for me asks how far, Send to agent asks which agent, an unclear checkout asks which repository; typed words go to the model" loading="lazy"><figcaption>A pick is the button; words are words.</figcaption></figure></p>
+<p><figure><img src="img/phone-choices.svg" alt="A number or a poll tap runs the desktop's action; Not for me asks how far, Send to agent asks what it should do, an unclear checkout asks which repository; typed words go to the model" loading="lazy"><figcaption>A pick is the button; words are words.</figcaption></figure></p>
 <table>
 <thead>
 <tr>
@@ -171,7 +171,7 @@ and no model reads it. Only words you type go to the model.</p>
 </tr>
 <tr>
 <td><strong>Send to agent</strong></td>
-<td>&quot;Which agent?&quot; — triage&#39;s pick first, the other one next; the answer you pick runs</td>
+<td>&quot;What should it do?&quot; — type it or send a voice note, or tap <strong>Send to agent</strong> again to hand it over as it is</td>
 </tr>
 <tr>
 <td>a coding job with no clear checkout</td>
@@ -194,9 +194,9 @@ and no model reads it. Only words you type go to the model.</p>
 (Settings → How mail is sorted → Assistant). A Claude Assistant runs at <strong>low effort</strong> unless its model names one
 (<code>claude-sonnet-5@medium</code>): a turn is a short answer, and Sonnet&#39;s own default is high.</p>
 <h3 id="approving-things">Approving things<a class="anchor" href="#approving-things" aria-label="Link to this section">#</a></h3>
-<p>A drafted reply comes to the chat with its <strong>Close out</strong> choice - the same button as on the desktop, as a
-number or a poll tap. Nothing goes out without that pick: approving on your phone is the same deliberate act as
-approving on the page. The chat never pings you on its own: it speaks when you write to it or hand it the walk.</p>
+<p>A drafted reply comes to the chat with the draft and the desktop&#39;s own choices under it - <strong>Send</strong>, <strong>Send and
+close</strong>, <strong>Redraft</strong> - as numbers or poll taps. Nothing goes out without that pick: approving on your phone is the same
+deliberate act as approving on the page. The chat never pings you on its own: it speaks when you write to it or hand it the walk.</p>
 <p>What you type goes the same way: anything that sends or closes - a reply, a hand-off, <strong>Mark done</strong> - asks yes or no
 first. A small change that sends nothing and closes nothing is done at once and said: a priority, the kind of work, its
 repository, <strong>Remind me</strong> with a day, <strong>Watch it</strong>, or &quot;mark the FYI read&quot;.</p>

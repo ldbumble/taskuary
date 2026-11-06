@@ -37,7 +37,7 @@
 <div class="entry on">
       <a class="page" href="./" aria-current="page">Start here</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Start here's sections"></button>
-      <div class="secs"><a class="sec" href="#what-taskuary-is" data-sec="what-taskuary-is">What Taskuary is</a><a class="sec" href="#install-on-windows" data-sec="install-on-windows">Install on Windows</a><a class="sec" href="#install-with-python" data-sec="install-with-python">Install with Python</a><a class="sec" href="#try-the-demo" data-sec="try-the-demo">Try the demo</a><a class="sec" href="#command-line-options" data-sec="command-line-options">Command-line options</a><a class="sec" href="#docker" data-sec="docker">Docker</a><a class="sec" href="#your-first-run" data-sec="your-first-run">Your first run</a><a class="sec" href="#choosing-the-ai-setup" data-sec="choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="#where-your-data-lives" data-sec="where-your-data-lives">Where your data lives</a><a class="sec" href="#what-leaves-your-machine" data-sec="what-leaves-your-machine">What leaves your machine</a><a class="sec" href="#updating" data-sec="updating">Updating</a><a class="sec" href="#next" data-sec="next">Next</a></div>
+      <div class="secs"><a class="sec" href="#what-taskuary-is" data-sec="what-taskuary-is">What Taskuary is</a><a class="sec" href="#install-on-windows" data-sec="install-on-windows">Install on Windows</a><a class="sec" href="#install-with-python" data-sec="install-with-python">Install with Python</a><a class="sec" href="#your-first-run" data-sec="your-first-run">Your first run</a><a class="sec" href="#try-the-demo" data-sec="try-the-demo">Try the demo</a><a class="sec" href="#choosing-the-ai-setup" data-sec="choosing-the-ai-setup">Choosing the AI setup</a><a class="sec" href="#updating" data-sec="updating">Updating</a><a class="sec" href="#what-leaves-your-machine" data-sec="what-leaves-your-machine">What leaves your machine</a><a class="sec" href="#where-your-data-lives" data-sec="where-your-data-lives">Where your data lives</a><a class="sec" href="#command-line-options" data-sec="command-line-options">Command-line options</a><a class="sec" href="#docker" data-sec="docker">Docker</a><a class="sec" href="#next" data-sec="next">Next</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./how-it-works">How it works</a>
@@ -114,8 +114,8 @@
 mail, chats, issue trackers, monitoring, your finance system — decides what each thing actually
 is, and brings you the few that need you. Coding jobs go to a coding agent in your repository.
 Answers come back as drafts you approve. Nothing is sent without you.</p>
-<p>It keeps its data in a SQLite file in your home directory and serves its interface at
-<code>http://127.0.0.1:7787</code>. There is no account to create and no server to rent.</p>
+<p>Getting started is three steps: install it, connect your mail, and open your first task. There is
+no account to create and no server to rent.</p>
 <h2 id="what-taskuary-is">What Taskuary is<a class="anchor" href="#what-taskuary-is" aria-label="Link to this section">#</a></h2>
 <p>Three sentences, because the rest of this site is detail:</p>
 <ol>
@@ -147,7 +147,46 @@ taskuary-desktop
 <div class="callout note"><p class="eyebrow">Which platform gets the most use</p><p>CI runs the full test matrix on Windows, Linux and macOS. Development happens mostly on Windows,
 so the terminal, the desktop shell and the agent presets are best exercised there; macOS and
 Linux may still have rough edges.</p>
-</div><h2 id="try-the-demo">Try the demo<a class="anchor" href="#try-the-demo" aria-label="Link to this section">#</a></h2>
+</div><h2 id="your-first-run">Your first run<a class="anchor" href="#your-first-run" aria-label="Link to this section">#</a></h2>
+<p>The first time it opens, the Assistant asks three questions. Each one is answered by clicking a
+card, and the cards are the same ones the <a href="connections">Connections</a> page shows. The line at the
+top always says what to do next, and so do the Work list and the <strong>Setup</strong> chip in the top bar.</p>
+<ol>
+<li><strong>What AI do you have?</strong> Click the one you already pay for: Claude, ChatGPT, Gemini or
+Copilot. Taskuary connects it, checks that it answers, and uses it to sort what comes in. If it
+is not installed, the click installs it. If it needs you to sign in once, the card says
+<strong>Needs sign-in</strong> and <strong>Set it up</strong> opens the AI&#39;s own sign-in. <strong>More AI</strong> lists every other
+AI on this computer and every API provider, for when you would rather paste a key.</li>
+<li><strong>Where does your work come in?</strong> Connect your main source: your email, a chat or a task
+system. Email is the usual one and comes first. Microsoft 365 or Outlook signs in through your
+company&#39;s own Microsoft app: your IT registers it once (the card shows the steps), you paste its
+two IDs and sign in. Gmail needs an App Password, which Google makes at
+<a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a> once 2-Step
+Verification is on. Any other mailbox takes its address, server and password. If your work
+arrives somewhere else, <strong>More chat and task options</strong> has Teams, Slack, WhatsApp, Discord,
+monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
+connected and passes its test. Before Taskuary writes your job description it asks you to
+connect your other sources too.</li>
+<li><strong>Any other connection you&#39;d like to set up?</strong> While what came in is read, WhatsApp, Teams,
+Slack and Telegram are offered, and <strong>More connections</strong> shows the rest. This one is optional:
+press <strong>Walk me through my tasks</strong> when you are ready.</li>
+</ol>
+<h3 id="open-your-first-task">Open your first task<a class="anchor" href="#open-your-first-task" aria-label="Link to this section">#</a></h3>
+<p>Once a source is connected, what came in lands on the rail on the left, the things that need you
+first. Click one to open it: <strong>Came from</strong> shows the message, and the <strong>Agent</strong> chat below it says
+what Taskuary made of it and what it has set up for you - a drafted reply waits there for your
+<strong>Send</strong>. <strong>Next</strong> brings the one below it; <strong>Walk me through my tasks</strong> takes you through all of
+them in order.</p>
+<p><strong>Setup</strong> on the top bar opens the same three questions again whenever you want to
+change the AI or your sources. Setup does not overwrite an existing user&#39;s model or connection
+configuration.</p>
+<p>After that, connect a coding CLI if you want code written, or add a report for numbers you check
+by hand. <strong>Settings → How mail is sorted</strong> lets you use different models for different jobs. Reports
+and the Hub can wait until you have a workflow that needs them.</p>
+<p>Two reports exist from the start: the <strong>End of day checkup</strong> and the <strong>Advisor</strong>, which looks for
+useful follow-ups and patterns in your work. You can review or remove either in Reports. The
+Morning digest is available as an optional report.</p>
+<h2 id="try-the-demo">Try the demo<a class="anchor" href="#try-the-demo" aria-label="Link to this section">#</a></h2>
 <p>You do not have to connect anything to see what Taskuary does:</p>
 <pre><code class="language-bash">taskuary --demo                    # or: docker compose --profile demo up
 </code></pre>
@@ -156,7 +195,101 @@ and replayed sessions where coding agents would work. Nothing it offers can reac
 nothing sends, no connection can be created or given a secret, no shell or CLI starts, and no tool
 runs. A request that would touch something real is refused, and says so. It keeps its data in a
 throwaway folder: what you change stays until you stop it, and the next start is a fresh demo.</p>
-<h2 id="command-line-options">Command-line options<a class="anchor" href="#command-line-options" aria-label="Link to this section">#</a></h2>
+<h2 id="choosing-the-ai-setup">Choosing the AI setup<a class="anchor" href="#choosing-the-ai-setup" aria-label="Link to this section">#</a></h2>
+<p>Triage reads many messages cheaply; coding changes a repository rarely and wants a strong model.
+Taskuary lets those be different brains, and the choice is mostly about what you already pay for.</p>
+<table>
+<thead>
+<tr>
+<th>Setup</th>
+<th>Triage, drafts, summaries</th>
+<th>Coding sessions</th>
+<th>Fits you if</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Two brains</strong> (recommended)</td>
+<td>a small cloud model on an API key</td>
+<td>your coding CLI&#39;s full model</td>
+<td>you have a low-cost API key</td>
+</tr>
+<tr>
+<td><strong>One brain, two gears</strong></td>
+<td>the CLI&#39;s <em>light</em> model</td>
+<td>the same CLI&#39;s main model</td>
+<td>you have one CLI subscription and no key</td>
+</tr>
+<tr>
+<td><strong>One brain, one gear</strong></td>
+<td>the CLI&#39;s full model</td>
+<td>the same model</td>
+<td>simplest, and expensive for routine mail</td>
+</tr>
+<tr>
+<td><strong>Local brain</strong></td>
+<td>Ollama or any OpenAI-compatible local server</td>
+<td>a coding CLI, optionally the same local model</td>
+<td>no key, and no mail leaving the machine</td>
+</tr>
+</tbody></table>
+<p>With no cloud key, set the AI that sorts your mail to your configured CLI in
+<a href="settings#how-mail-is-sorted">Settings</a>, and give that CLI a light model on its connector card so
+routine triage does not burn the coding model.</p>
+<h2 id="updating">Updating<a class="anchor" href="#updating" aria-label="Link to this section">#</a></h2>
+<p><strong>Settings → Updates</strong> shows the running build and the latest release, and installs it in place:
+the exe is swapped or <code>pip install</code> runs, and the app reopens. Connections and settings are
+untouched.</p>
+<p>For the Python install you can also do it yourself:</p>
+<pre><code class="language-bash">pip install --upgrade taskuary
+</code></pre>
+<h2 id="what-leaves-your-machine">What leaves your machine<a class="anchor" href="#what-leaves-your-machine" aria-label="Link to this section">#</a></h2>
+<p>Taskuary calls the services you configure and nothing else. Hosted AI providers and coding CLIs
+receive the prompts their work needs. With a model running on your machine, those prompts stay
+on it too; connected services such as mail still use their own connections either way.</p>
+<p>Before a prompt reaches a hosted model, a headless CLI run or the first turn of an agent pane,
+Taskuary replaces recognisable credentials with labelled placeholders. The original message is
+never altered. A reply that still contains one of those placeholders is refused rather than sent.
+These are deterministic shape rules — they catch API keys and passwords that look like API keys
+and passwords, and they cannot catch every secret.</p>
+<h2 id="where-your-data-lives">Where your data lives<a class="anchor" href="#where-your-data-lives" aria-label="Link to this section">#</a></h2>
+<p>Taskuary keeps its data in a SQLite file in your home directory and serves its interface at
+<code>http://127.0.0.1:7787</code>.</p>
+<p>The Python and desktop installs keep everything in <code>~/.taskuary/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>taskuary.db</code></td>
+<td>the SQLite database — messages, tasks, settings, the audit log</td>
+</tr>
+<tr>
+<td><code>config.toml</code></td>
+<td>local configuration</td>
+</tr>
+<tr>
+<td><code>taskuary.log</code></td>
+<td>the application log</td>
+</tr>
+<tr>
+<td><code>playbooks/*.md</code></td>
+<td>one page per kind of job an agent has learned to do</td>
+</tr>
+<tr>
+<td><code>context/</code></td>
+<td>the context file each coding session is handed at startup</td>
+</tr>
+</tbody></table>
+<p><code>TASKUARY_HOME</code> moves all of it. Docker uses <code>/data</code> inside the container. <code>TASKUARY_HOST</code>,
+<code>TASKUARY_PORT</code> and <code>TASKUARY_TOKEN</code> override server settings at runtime without being written
+back to the config file.</p>
+<div class="callout warn"><p class="eyebrow">Before you expose it beyond localhost</p><p>Set <code>[server].token</code> in the config or provide <code>TASKUARY_TOKEN</code>, and send that token in the
+<code>X-Taskuary-Token</code> header. An unauthenticated Taskuary reachable from the network gives whoever
+finds it your mail, your repositories and an agent that can run commands.</p>
+</div><h2 id="command-line-options">Command-line options<a class="anchor" href="#command-line-options" aria-label="Link to this section">#</a></h2>
 <p>The everyday options for the Python install are:</p>
 <table>
 <thead>
@@ -198,131 +331,6 @@ the Assistant, its rail, Reports and Connections; coding CLIs and the optional W
 host programs, because both need a machine of their own.</p>
 <p>The compose file binds to localhost. Set <code>TASKUARY_TOKEN</code> before publishing the port anywhere
 else.</p>
-<h2 id="your-first-run">Your first run<a class="anchor" href="#your-first-run" aria-label="Link to this section">#</a></h2>
-<p>The first time it opens, the Assistant asks three questions. Each one is answered by clicking a
-card, and the cards are the same ones the <a href="connections">Connections</a> page shows. The line at the
-top always says what to do next, and so do the Work list and the <strong>Setup</strong> chip in the top bar.</p>
-<ol>
-<li><strong>What AI do you have?</strong> Click the one you already pay for: Claude, ChatGPT, Gemini or
-Copilot. Taskuary connects it, checks that it answers, and uses it to sort what comes in. If it
-is not installed, the click installs it. If it needs you to sign in once, the card says
-<strong>Needs sign-in</strong> and <strong>Set it up</strong> opens the AI&#39;s own sign-in. <strong>More AI</strong> lists every other
-AI on this computer and every API provider, for when you would rather paste a key.</li>
-<li><strong>Where does your work come in?</strong> Connect your main source: your email, a chat or a task
-system. Email is the usual one and comes first. Microsoft 365 or Outlook signs in through your
-company&#39;s own Microsoft app: your IT registers it once (the card shows the steps), you paste its
-two IDs and sign in. Gmail needs an App Password, which Google makes at
-<a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a> once 2-Step
-Verification is on. Any other mailbox takes its address, server and password. If your work
-arrives somewhere else, <strong>More chat and task options</strong> has Teams, Slack, WhatsApp, Discord,
-monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
-connected and passes its test. Before Taskuary writes your job description it asks you to
-connect your other sources too.</li>
-<li><strong>Any other connection you&#39;d like to set up?</strong> While what came in is read, WhatsApp, Teams,
-Slack and Telegram are offered, and <strong>More connections</strong> shows the rest. This one is optional:
-press <strong>Walk me through my tasks</strong> when you are ready.</li>
-</ol>
-<p><strong>Setup</strong> on the top bar opens the same three questions again whenever you want to
-change the AI or your sources. Setup does not overwrite an existing user&#39;s model or connection
-configuration.</p>
-<p>After that, connect a coding CLI if you want code written, or add a report for numbers you check
-by hand. <strong>Settings → How mail is sorted</strong> lets you use different models for different jobs. Reports
-and the Hub can wait until you have a workflow that needs them.</p>
-<p>Two reports exist from the start: the <strong>End of day checkup</strong> and the <strong>Advisor</strong>, which looks for
-useful follow-ups and patterns in your work. You can review or remove either in Reports. The
-Morning digest is available as an optional report.</p>
-<h2 id="choosing-the-ai-setup">Choosing the AI setup<a class="anchor" href="#choosing-the-ai-setup" aria-label="Link to this section">#</a></h2>
-<p>Triage reads many messages cheaply; coding changes a repository rarely and wants a strong model.
-Taskuary lets those be different brains, and the choice is mostly about what you already pay for.</p>
-<table>
-<thead>
-<tr>
-<th>Setup</th>
-<th>Triage, drafts, summaries</th>
-<th>Coding sessions</th>
-<th>Fits you if</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>Two brains</strong> (recommended)</td>
-<td>a small cloud model on an API key</td>
-<td>your coding CLI&#39;s full model</td>
-<td>you have a low-cost API key</td>
-</tr>
-<tr>
-<td><strong>One brain, two gears</strong></td>
-<td>the CLI&#39;s <em>light</em> model</td>
-<td>the same CLI&#39;s main model</td>
-<td>you have one CLI subscription and no key</td>
-</tr>
-<tr>
-<td><strong>One brain, one gear</strong></td>
-<td>the CLI&#39;s full model</td>
-<td>the same model</td>
-<td>simplest, and expensive for routine mail</td>
-</tr>
-<tr>
-<td><strong>Local brain</strong></td>
-<td>Ollama or any OpenAI-compatible local server</td>
-<td>a coding CLI, optionally the same local model</td>
-<td>no key, and no mail leaving the machine</td>
-</tr>
-</tbody></table>
-<p>With no cloud key, set the triage brain to your configured CLI in
-<a href="settings#how-mail-is-sorted">Settings</a>, and give that CLI a light model on its connector card so
-routine triage does not burn the coding model.</p>
-<h2 id="where-your-data-lives">Where your data lives<a class="anchor" href="#where-your-data-lives" aria-label="Link to this section">#</a></h2>
-<p>The Python and desktop installs keep everything in <code>~/.taskuary/</code>:</p>
-<table>
-<thead>
-<tr>
-<th>File</th>
-<th>What it is</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>taskuary.db</code></td>
-<td>the SQLite database — messages, tasks, settings, the audit log</td>
-</tr>
-<tr>
-<td><code>config.toml</code></td>
-<td>local configuration</td>
-</tr>
-<tr>
-<td><code>taskuary.log</code></td>
-<td>the application log</td>
-</tr>
-<tr>
-<td><code>playbooks/*.md</code></td>
-<td>one page per kind of job an agent has learned to do</td>
-</tr>
-<tr>
-<td><code>context/</code></td>
-<td>the context file each coding session is handed at startup</td>
-</tr>
-</tbody></table>
-<p><code>TASKUARY_HOME</code> moves all of it. Docker uses <code>/data</code> inside the container. <code>TASKUARY_HOST</code>,
-<code>TASKUARY_PORT</code> and <code>TASKUARY_TOKEN</code> override server settings at runtime without being written
-back to the config file.</p>
-<div class="callout warn"><p class="eyebrow">Before you expose it beyond localhost</p><p>Set <code>[server].token</code> in the config or provide <code>TASKUARY_TOKEN</code>, and send that token in the
-<code>X-Taskuary-Token</code> header. An unauthenticated Taskuary reachable from the network gives whoever
-finds it your mail, your repositories and an agent that can run commands.</p>
-</div><h2 id="what-leaves-your-machine">What leaves your machine<a class="anchor" href="#what-leaves-your-machine" aria-label="Link to this section">#</a></h2>
-<p>Taskuary calls the services you configure and nothing else. Hosted AI providers and coding CLIs
-receive the prompts their work needs. With a model running on your machine, those prompts stay
-on it too; connected services such as mail still use their own connections either way.</p>
-<p>Before a prompt reaches a hosted model, a headless CLI run or the first turn of an agent pane,
-Taskuary replaces recognisable credentials with labelled placeholders. The original message is
-never altered. A reply that still contains one of those placeholders is refused rather than sent.
-These are deterministic shape rules — they catch API keys and passwords that look like API keys
-and passwords, and they cannot catch every secret.</p>
-<h2 id="updating">Updating<a class="anchor" href="#updating" aria-label="Link to this section">#</a></h2>
-<p><strong>Settings → Updates</strong> shows the running build and the latest release, and installs it in place:
-the exe is swapped or <code>pip install</code> runs, and the app reopens. Connections and settings are
-untouched.</p>
-<p>For the Python install you can also do it yourself:</p>
-<pre><code class="language-bash">pip install --upgrade taskuary
-</code></pre>
 <h2 id="next">Next<a class="anchor" href="#next" aria-label="Link to this section">#</a></h2>
 <ul>
 <li><a href="how-it-works">How it works</a> — one message from arrival to approval.</li>

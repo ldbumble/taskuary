@@ -443,7 +443,7 @@ def main():
         r, out = got
         # ...saying to WHOM it was saved: "reply saved" alone let a question meant for one requester sit as an answer to another (2026-11-02)
         to = f" to {out['to']}" if not drafting and out.get('to') else ''
-        if text or not out.get('ok'): print("saved on the task as its result - nobody is waiting on a reply, so nothing will be sent." if out.get('saved') == 'result'
+        if text or not out.get('ok'): print(out.get('says') or "saved on the task as its result." if out.get('saved') == 'result'
                                             else f"{'email' if drafting else 'reply'}{to} saved on the task, waiting on the owner to approve and send it." if out.get('ok')
                                             else f"not saved: {out.get('why') or out.get('detail') or r.text[:200]}")
         if out.get('ok') and out.get('people'):

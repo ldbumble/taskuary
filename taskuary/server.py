@@ -5744,7 +5744,9 @@ async def mcp_rpc(request: Request, task: int = 0):
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)
         out = agenttools.call(store, task, name, args, doors)
         return out.body.decode() if isinstance(out, JSONResponse) else out
-    def one(m): return agenttools.rpc(m, run) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
+    from .wrapup import no_correspondent
+    skip = agenttools.REPLY_TOOLS if no_correspondent(store, task) else ()
+    def one(m): return agenttools.rpc(m, run, skip) if isinstance(m, dict) else {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'not a request'}}
     out = await run_in_threadpool(lambda: [r for r in map(one, msg if isinstance(msg, list) else [msg]) if r is not None])   # the doors are sync
     if not out: return Response(status_code=202)
     return JSONResponse(out if isinstance(msg, list) else out[0])

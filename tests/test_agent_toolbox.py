@@ -52,6 +52,10 @@ class TheServer(unittest.TestCase):
         self.assertIn('None of them sends', r['result']['instructions'])
         n = c.post(f'/api/mcp?task={self.tid}', headers=hdr(self.tid), json={'jsonrpc': '2.0', 'method': 'notifications/initialized'})
         self.assertEqual(n.status_code, 202)
+        # ...on a task somebody wrote in on: the owner's own ask is offered no reply tools (test_own_ask_no_reply)
+        self.s.add_message({'TaskId': self.tid, 'ExternalId': 'r0', 'ConversationId': 'conv-r', 'Channel': 'email', 'FromName': 'Gail Moreno',
+                            'FromEmail': 'gail@northwind.example', 'Subject': 'Renewal terms', 'BodyText': 'Ready for the call?',
+                            'SentAt': '2026-10-21 08:00:00', 'Status': 'routed'})
         tools = {t['name']: t for t in rpc(self.tid, 'tools/list').json()['result']['tools']}
         self.assertIn('search_messages', tools); self.assertIn('propose_reply', tools)
         self.assertTrue(tools['search_messages']['annotations']['readOnlyHint'])

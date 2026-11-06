@@ -8,7 +8,7 @@ import test from "node:test";
 import { chatRows, chatSource, eventsOf, rowMessages, stepsFromAcp, turnParts, workCount } from "../src/chatStream.js";
 import { SHIPPED, defaultDetail, detailFor, keepOwnDetail, ownDetail } from "../src/chatDetail.js";
 import { notShown, stillHeld } from "../src/heldLines.js";
-import { freshNext, staleOn } from "../src/agentSummary.js";
+import { freshNext, staleOn, withTurns } from "../src/agentSummary.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const gw = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
@@ -264,4 +264,10 @@ test("a draft stays under its own turn; a stale one is never under the newest tu
   assert.deepEqual(staleOn([fresh, stale], "m1").map((r) => r.ReviewId), [2]); assert.deepEqual(staleOn([stale], "m2"), []);
   assert.deepEqual(staleOn([{ ...fresh }], "m1"), [], "a payload without the fields draws as before");
   assert.match(gw, /next=\{custom\.folded \|\| !freshNext\(work\.reviews\) \? null : work\.next\}/);
+  // ...read off the payload's `drafts` (general.draft_turns), under the message whose id is the draft's turn
+  const got = withTurns([{ ReviewId: 7, Status: "pending", DraftText: "On it." }], [{ review: 7, turn: "comment-12", at: "2026-11-06 14:48:00", stale: true, before: "2026-11-06 15:00:00" }]);
+  assert.deepEqual(staleOn(got, "comment-12").map((r) => r.drafted_at), ["2026-11-06 14:48:00"]);
+  assert.match(gw, /reviews: withTurns\(reviews, data\?\.drafts\)/);
+  assert.match(gw, /work\.next && freshNext\(work\.reviews\) && chat/);
+  assert.match(gw, /nextAt\?\.next && freshNext\(nextAt\.reviews\)/);
 });

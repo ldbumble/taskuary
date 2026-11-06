@@ -33,6 +33,11 @@
 .tq-dash-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-content: start; }
 .tq-dash-grid > .w1 { grid-column: span 1; } .tq-dash-grid > .w2 { grid-column: span 2; }
 .tq-dash-grid > .w3 { grid-column: span 3; } .tq-dash-grid > .w4 { grid-column: span 4; }
+/* the setup page: each tile under its own sentence, and the add box closing the grid (DashboardEditor.jsx) */
+.tq-dash-frame { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tq-dash-frame > .tq-dash-card { flex: 1; }
+.tq-dash-frame.dragging { opacity: .45; }
+.tq-dash-grid > .tq-dash-add { grid-column: 1 / -1; }
 @container (max-width: 860px) {
   .tq-dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tq-dash-grid > .w3, .tq-dash-grid > .w4 { grid-column: span 2; }

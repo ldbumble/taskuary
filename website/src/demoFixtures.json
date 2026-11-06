@@ -25713,13 +25713,15 @@
      "kind": "stat",
      "title": "Came in",
      "source": "mail",
-     "agg": "count"
+     "agg": "count",
+     "said": "How many messages came in"
     },
     {
      "kind": "stat",
      "title": "New tasks",
      "source": "tasks",
-     "agg": "count"
+     "agg": "count",
+     "said": "How many new tasks arrived"
     },
     {
      "kind": "stat",
@@ -25730,7 +25732,8 @@
       "state": "open"
      },
      "range": false,
-     "good": "down"
+     "good": "down",
+     "said": "How many tasks are open right now, lower is better"
     },
     {
      "kind": "stat",
@@ -25739,7 +25742,8 @@
      "agg": "median",
      "y": "hours",
      "unit": "h",
-     "good": "down"
+     "good": "down",
+     "said": "The median hours from an ask to my reply, lower is better"
     },
     {
      "kind": "progress",
@@ -25750,7 +25754,8 @@
       "state": "closed"
      },
      "range": 7,
-     "target": 15
+     "target": 15,
+     "said": "Tasks closed in the last 7 days, toward a target of 15"
     },
     {
      "kind": "stat",
@@ -25759,7 +25764,8 @@
      "agg": "median",
      "y": "minutes",
      "unit": "min",
-     "good": "none"
+     "good": "none",
+     "said": "The median minutes an agent session takes"
     },
     {
      "kind": "bar",
@@ -25773,7 +25779,8 @@
       "Task closed"
      ],
      "share": true,
-     "w": 2
+     "w": 2,
+     "said": "How far what came in got, stage by stage, each as a share of what came in"
     },
     {
      "kind": "stacked",
@@ -25781,7 +25788,8 @@
      "source": "mail",
      "x": "day",
      "series": "channel",
-     "w": 2
+     "w": 2,
+     "said": "Messages in per day, split by channel, stacked"
     },
     {
      "kind": "stacked",
@@ -25789,7 +25797,8 @@
      "source": "agents",
      "x": "day",
      "series": "outcome",
-     "w": 2
+     "w": 2,
+     "said": "Agent sessions per day, split by how they ended"
     },
     {
      "kind": "bar",
@@ -25800,7 +25809,8 @@
       "state": "open"
      },
      "range": false,
-     "w": 2
+     "w": 2,
+     "said": "Open tasks right now, by kind"
     },
     {
      "kind": "bar",
@@ -25808,7 +25818,8 @@
      "source": "mail",
      "x": "sender",
      "limit": 8,
-     "w": 2
+     "w": 2,
+     "said": "Who sends the most messages, top 8"
     },
     {
      "kind": "list",
@@ -25822,7 +25833,8 @@
      "range": false,
      "sort": "arrived",
      "limit": 6,
-     "w": 4
+     "w": 4,
+     "said": "The open tasks that have waited longest on me, with how long, at most 6"
     }
    ],
    "route": {
@@ -27903,13 +27915,15 @@
      "where": {
       "state": "open"
      },
-     "range": false
+     "range": false,
+     "said": "The count of tasks where state is open right now"
     },
     {
      "kind": "stat",
      "title": "Came in",
      "source": "mail",
-     "agg": "count"
+     "agg": "count",
+     "said": "How many messages came in"
     },
     {
      "kind": "stat",
@@ -27918,7 +27932,8 @@
      "agg": "count",
      "where": {
       "became_task": "yes"
-     }
+     },
+     "said": "The count of mail in where became task is yes"
     },
     {
      "kind": "progress",
@@ -27928,7 +27943,8 @@
      "where": {
       "state": "closed"
      },
-     "target": 25
+     "target": 25,
+     "said": "The count of tasks where state is closed, toward a target of 25"
     },
     {
      "kind": "stacked",
@@ -27936,7 +27952,8 @@
      "source": "mail",
      "x": "day",
      "series": "channel",
-     "w": 2
+     "w": 2,
+     "said": "The count of mail in per day, split by channel, stacked"
     },
     {
      "kind": "bar",
@@ -27947,7 +27964,8 @@
       "state": "open"
      },
      "range": false,
-     "w": 2
+     "w": 2,
+     "said": "Open tasks right now, by kind"
     },
     {
      "kind": "bar",
@@ -27955,7 +27973,8 @@
      "source": "mail",
      "x": "sender",
      "limit": 6,
-     "w": 2
+     "w": 2,
+     "said": "The count of mail in per sender, top 6"
     },
     {
      "kind": "list",
@@ -27969,7 +27988,8 @@
      "range": false,
      "sort": "-arrived",
      "limit": 8,
-     "w": 2
+     "w": 2,
+     "said": "A list of tasks, each reading its title with its kind under it where state is open right now, sorted by arrived, highest first, at most 8"
     }
    ],
    "route": {
@@ -28713,7 +28733,8 @@
      "source": "spend",
      "agg": "sum",
      "y": "amount",
-     "unit": "USD"
+     "unit": "USD",
+     "said": "The total amount of AP payments"
     },
     {
      "kind": "stat",
@@ -28722,7 +28743,8 @@
      "agg": "sum",
      "y": "amount",
      "range": 7,
-     "unit": "USD"
+     "unit": "USD",
+     "said": "The total amount of AP payments in the last 7 days"
     },
     {
      "kind": "stacked",
@@ -28732,7 +28754,8 @@
      "y": "amount",
      "agg": "sum",
      "series": "vendor",
-     "w": 4
+     "w": 4,
+     "said": "The total amount of AP payments per day, split by vendor, stacked"
     },
     {
      "kind": "bar",
@@ -28742,7 +28765,8 @@
      "y": "amount",
      "agg": "sum",
      "limit": 5,
-     "w": 2
+     "w": 2,
+     "said": "The total amount of AP payments per vendor, top 5"
     },
     {
      "kind": "bar",
@@ -28751,7 +28775,8 @@
      "x": "category",
      "y": "amount",
      "agg": "sum",
-     "w": 2
+     "w": 2,
+     "said": "The total amount of AP payments per category"
     }
    ],
    "route": {

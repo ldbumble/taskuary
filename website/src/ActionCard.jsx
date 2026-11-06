@@ -16,6 +16,8 @@ import { hint } from "./buttons.js";
 import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "in";
+// ...a post's picture is a preview at a glance, not half the screen (the owner, 2026-11-05): its press opens it whole (FileDialog)
+const IMG_MAX = 180;
 const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0 };
 
 export default function ActionCard({ row, tid, live = true, onChanged }) {
@@ -65,7 +67,7 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
             sx={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", border: 0, outline: 0, px: 1.5, py: 0.5, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent" }} />
         : <Typography data-tq-act-text="" sx={{ px: 1.5, py: 0.5, fontSize: 13.5, lineHeight: 1.5, color: gone ? INK : DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{p[tk]}</Typography>}
       {pic && <Box component="img" data-tq-act-image={img.value} src={attUrl(pic)} alt={p.alt || pic.name} onClick={() => setViewing(pic)}
-        sx={{ display: "block", width: "100%", maxHeight: 320, objectFit: "contain", bgcolor: "#f6f4f1", mt: 0.75, cursor: "zoom-in", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }} />}
+        sx={{ display: "block", width: "100%", maxHeight: IMG_MAX, objectFit: "contain", bgcolor: "#f6f4f1", mt: 0.75, cursor: "zoom-in", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>
         {gone ? <Typography data-tq-act-done="" sx={{ fontSize: 13, color: "#47654a", fontWeight: 600 }}>✓ {done ? w.done : st.said}
           {go && <> · <a href={go} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT }}>See it on {row?.network}<OpenInNewIcon sx={{ fontSize: 12, ml: 0.25, verticalAlign: "-1px" }} /></a></>}</Typography>

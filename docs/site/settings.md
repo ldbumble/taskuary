@@ -12,6 +12,8 @@ The other Settings pages are documented where their subject is: **Mail rules**
 ([the deterministic layer](how-it-works#what-triage-actually-decides)), **Activity log** (shown in
 Developer mode), and **Updates** ([updating](index#updating)). Who you are, your documents, your
 playbooks and your memory are on a page of their own, **About you**, beside Settings in the sidebar.
+What you work on, the list setup grouped your mail into, is there too, under **You**: rename one,
+tick **Personal**, or untick one to leave it out. Each change saves as you make it.
 
 ## How to read this
 

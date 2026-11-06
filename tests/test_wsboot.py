@@ -85,6 +85,82 @@ def test_the_setup_screen_is_a_draft_the_owner_answers(monkeypatch):
     assert sorted(w['slug'] for w in W.streams(s)) == ['ledger-app', 'northwind-finance-systems']
 
 
+def _settled(s, timeout=10):
+    import time
+    for _ in range(int(timeout / 0.02)):
+        if firstrun.drafts(s)['workstreams']['state'] != 'running': return
+        time.sleep(0.02)
+    raise AssertionError('the grouping never settled')
+
+
+def test_one_next_with_the_grouping_done_keeps_the_list_as_left_and_the_job(monkeypatch):
+    """ABOUT YOUR WORK IS ONE STEP (the owner, 2026-11-06): the job and the workstreams under it, one Next for both."""
+    s = world()
+    monkeypatch.setattr('taskuary.llm.build_llm', lambda *a, **k: namer())
+    firstrun.learn(s, {}, wait=True, docs=('workstreams',))
+    rows = json.loads(firstrun.drafts(s)['workstreams']['text'])
+    firstrun.accept(s, 'workstreams', json.dumps([{**r, 'name': 'Ledger migration'} if r['slug'] == 'ledger-app' else r for r in rows]))
+    got = {w['slug']: w for w in W.streams(s)}
+    assert set(got) == {'northwind-finance-systems', 'ledger-app', 'personal'} and got['ledger-app']['name'] == 'Ledger migration'
+    assert got['personal']['personal'] and not firstrun._drafts(s)['workstreams'].get('keep')
+    # ...the answers came back on the step when setup is opened again: not grouped from the mail a second time
+    assert json.loads(firstrun.about(s)['workstreams'])[0]['kept'] is True
+
+
+def test_one_next_while_the_grouping_runs_keeps_the_defaults_once_it_lands(monkeypatch):
+    """Next never waits on the grouping: pressed while it runs, every workstream is kept once it lands - all ticked, none personal."""
+    import threading
+    s, go = world(), threading.Event()
+    def slow(system, user, **k): go.wait(10); return namer()(system, user, **k)
+    monkeypatch.setattr('taskuary.llm.build_llm', lambda *a, **k: slow)
+    firstrun.learn(s, {}, docs=('workstreams',))
+    assert firstrun.drafts(s)['workstreams']['state'] == 'running'
+    assert firstrun.accept(s, 'workstreams', '')['state'] == 'running'        # the screen's Next, with nothing to answer yet
+    assert W.streams(s) == []
+    go.set(); _settled(s)
+    got = {w['slug']: w for w in W.streams(s)}
+    assert set(got) == {'northwind-finance-systems', 'ledger-app', 'personal'} and not any(w['personal'] for w in got.values())
+    assert 'Q4 budget due 2026-11-15' in W.section(s, 'northwind-finance-systems')
+    assert wsboot.proposals(s) == [] and firstrun.drafts(s)['workstreams']['state'] == 'ready'
+    # ...and nothing running, an empty answer keeps nothing
+    s2 = world(); monkeypatch.setattr('taskuary.llm.build_llm', lambda *a, **k: namer())
+    firstrun.learn(s2, {}, wait=True, docs=('workstreams',)); firstrun.accept(s2, 'workstreams', '')
+    assert W.streams(s2) == [] and len(wsboot.proposals(s2)) == 3
+
+
+def test_a_grouping_that_fails_after_next_keeps_nothing_and_says_why(monkeypatch):
+    import threading
+    s, go = world(), threading.Event()
+    def broken(system, user, **k): go.wait(10); raise RuntimeError('the AI is down')
+    monkeypatch.setattr('taskuary.llm.build_llm', lambda *a, **k: broken)
+    firstrun.learn(s, {}, docs=('workstreams',)); firstrun.accept(s, 'workstreams', '')
+    go.set(); _settled(s)
+    d = firstrun._drafts(s)['workstreams']
+    assert d['state'] == 'failed' and not d['keep'] and W.streams(s) == []
+
+
+def test_about_you_changes_what_you_work_on_later_and_a_left_out_one_comes_back(monkeypatch):
+    """The same list on About you: renamed, Personal, left out - unticked there it is put back among the unanswered, never deleted."""
+    s = world()
+    monkeypatch.setattr('taskuary.llm.build_llm', lambda *a, **k: namer())
+    firstrun.learn(s, {}, wait=True, docs=('workstreams',))
+    firstrun.accept(s, 'workstreams', json.dumps([{'slug': 'northwind-finance-systems'}, {'slug': 'ledger-app'}]))
+    page = json.loads(firstrun.workstreams_page(s)['text'])
+    assert {(r['slug'], r['kept']) for r in page} == {('northwind-finance-systems', True), ('ledger-app', True), ('personal', False)}
+    assert page[-1]['slug'] == 'personal'                                            # the kept ones first
+    nw = next(r for r in page if r['slug'] == 'northwind-finance-systems')
+    assert nw['section'].startswith('- I run finance systems') and '###' not in nw['section']   # the name is the row's box, not a heading again
+    assert next(r for r in page if r['slug'] == 'personal')['keep'] is False         # unanswered: unticked here, never kept by a save
+    # the owner's own words in the section survive a rename from About you
+    s.save_doc('job', s.get_doc('job').replace('Q4 budget due 2026-11-15', 'Q4 budget moved to 2026-12-01'), 'owner')
+    firstrun.answer_workstreams(s, [{'slug': 'northwind-finance-systems', 'name': 'Northwind finance', 'keep': True}])
+    assert W.get(s, 'northwind-finance-systems')['name'] == 'Northwind finance' and 'moved to 2026-12-01' in W.section(s, 'northwind-finance-systems')
+    firstrun.answer_workstreams(s, [{'slug': 'ledger-app', 'keep': False}])
+    assert [w['slug'] for w in W.streams(s)] == ['northwind-finance-systems'] and W.get(s, 'ledger-app')['status'] == 'proposed'
+    firstrun.answer_workstreams(s, [{'slug': 'ledger-app', 'keep': True}, {'slug': 'personal', 'keep': True, 'personal': True}])
+    assert {w['slug'] for w in W.streams(s)} == {'northwind-finance-systems', 'ledger-app', 'personal'} and W.personal(s) == {'personal'}
+
+
 def test_a_new_sources_hat_is_added_when_sure_and_asked_on_a_card_when_not():
     s = world()
     wsboot.propose(s, namer()); wsboot.confirm(s, [{'slug': 'northwind-finance-systems'}, {'slug': 'personal', 'keep': False}])

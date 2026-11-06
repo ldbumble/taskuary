@@ -644,7 +644,7 @@ def about(store) -> dict:
     return {'name': a.get('name') or ('' if o['owner'] in ('the owner', '') else o['owner']), 'email': o.get('owner_email') or '',
             'org': a.get('org') or store.get_setting('owner_company') or '', 'role': a.get('role') or store.get_setting('owner_title') or '',
             'systems': list(a.get('systems') or []), 'job': learned_job(store), 'style': learned_job(store, 'style'),
-            'soul': learned_job(store, 'soul'), 'done': bool(a.get('done')), 'offered': _offered(),
+            'soul': learned_job(store, 'soul'), 'workstreams': _ws_text(store), 'done': bool(a.get('done')), 'offered': _offered(),
             'signature': str(store.get_setting('email_signature') or ''),
             # the name read off the address when the mail connected is a guess the mail's own signature may correct; an answer is not
             'guessed': [] if a.get('name') else ['name']}
@@ -731,7 +731,8 @@ def _who(store, ans: dict):
 # 2026-10-20: "make it visible here"). One queue, one at a time, in this order - who you are reads the job written before it.
 DRAFTS = ('job', 'workstreams', 'style', 'soul')
 # ...and WHAT YOU WORK ON (the owner, 2026-11-01: a one-screen "Here's what I think you work on" at first setup): six months of the mail
-# grouped into workstreams (wsboot.propose), its text the proposals as JSON - the screen renames, marks personal, or leaves one out
+# grouped into workstreams (wsboot.propose), its text the proposals as JSON - the screen renames, marks personal, or leaves one out.
+# Since 2026-11-06 it shares the job's screen, About your work, under the job description: one Next for both (keep_when_ready)
 _JOB, _LOCK = {}, threading.Lock()
 
 
@@ -764,9 +765,14 @@ def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
             try:
                 if d == 'workstreams': _propose(store)
                 else: histgen.generate(store, d)
-                st.update(state='ready', why='')
+                # Next pressed on About your work while this was still grouping (keep_when_ready): kept as the screen had them by default
+                with _LOCK:              # ...under the lock: a Next landing between the check and "ready" would be lost
+                    keep = d == 'workstreams' and st.get('keep') and not st['again']
+                    if keep: st['keep'] = False
+                    else: st.update(state='ready', why='')
+                if keep: _keep_all(store); st.update(state='ready', why='')
             except Exception as e:
-                logger.info(f'setup: {d} not learned from the mail - {e}'); st.update(state='failed', why=_unread(store, e))
+                logger.info(f'setup: {d} not learned from the mail - {e}'); st.update(state='failed', why=_unread(store, e), keep=False)
             with _LOCK:
                 if st['again']: st.update(state='running', again=False); ds['_q'].append(d)
     if wait: go()
@@ -796,11 +802,55 @@ def _propose(store):
         raise RuntimeError('your mail did not show separate workstreams yet')
 
 
+def _keep_all(store):
+    """The screen's defaults, kept for an owner who moved on before the list was there: every one ticked, none personal."""
+    from . import wsboot
+    wsboot.confirm(store, [{'slug': p['slug'], 'keep': True, 'personal': False} for p in wsboot.proposals(store)], 'owner')
+
+
+def keep_when_ready(store) -> bool:
+    """ONE NEXT FOR ABOUT YOUR WORK (the owner, 2026-11-06): the job and what you work on are one step, and Next never waits on the
+    grouping - pressed while it runs, the workstreams are kept with the defaults once it lands. False when nothing is running."""
+    st = _drafts(store)['workstreams']
+    with _LOCK:
+        if st['state'] != 'running': return False
+        st['keep'] = True
+    return True
+
+
+def workstreams_page(store) -> dict:
+    """About you's list of what you work on - {state, why, text}: the kept ones ticked, any the mail proposed and nobody answered
+    unticked, as the setup screen's rows. Running or failed while setup's grouping is."""
+    from . import workstreams as W, wsboot
+    st = (_JOB.get(id(store)) or {}).get('workstreams') or {}
+    if st.get('state') in ('running', 'failed'): return {'state': st['state'], 'why': st.get('why') or '', 'text': ''}
+    rows = [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': _sec(W.section(store, w['slug'])), 'kept': True}
+            for w in W.streams(store)]
+    rows += [{**{k: p[k] for k in ('slug', 'name', 'about', 'personal', 'section')}, 'kept': False, 'keep': False} for p in wsboot.proposals(store)]
+    return {'state': 'ready' if rows else 'none', 'why': '', 'text': json.dumps(rows) if rows else ''}
+
+
+def answer_workstreams(store, items: list, actor: str = 'owner') -> dict:
+    """About you's answer, only the rows changed: kept, renamed, Personal as setup's screen (wsboot.confirm) - but a kept one unticked
+    here is put back among the unanswered, never deleted, so ticking it again brings it back with everything it was placed by."""
+    from . import workstreams as W, wsboot
+    xs = {w['slug']: w for w in W.streams(store, True)}
+    got = [i for i in items or [] if isinstance(i, dict) and i.get('slug') in xs]
+    put_by = {i['slug'] for i in got if i.get('keep') is False and xs[i['slug']]['status'] != 'proposed'}
+    if put_by: W.save(store, [{**w, 'status': 'proposed'} if w['slug'] in put_by else w for w in W.streams(store, True)], actor)
+    wsboot.confirm(store, [i for i in got if i['slug'] not in put_by], actor)
+    return workstreams_page(store)
+
+
+# a kept one's section as JOB.md has it, under its "### name" heading - the row already shows the name in its box
+def _sec(s: str) -> str: return re.sub(r'^### [^\n]*\n?', '', s or '').strip()
+
+
 def _ws_text(store) -> str:
     """The workstreams screen's draft: the proposals and the ones already kept, as JSON [{slug, name, about, personal, section, kept}]."""
     from . import workstreams as W, wsboot
     rows = [{**{k: p[k] for k in ('slug', 'name', 'about', 'personal', 'section')}, 'kept': False} for p in wsboot.proposals(store)]
-    rows += [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': W.section(store, w['slug']), 'kept': True}
+    rows += [{'slug': w['slug'], 'name': w['name'], 'about': w['about'], 'personal': w['personal'], 'section': _sec(W.section(store, w['slug'])), 'kept': True}
              for w in W.streams(store)]
     return json.dumps(rows) if rows else ''
 
@@ -825,6 +875,7 @@ def accept(store, name: str, text: str) -> dict:
     if name not in DRAFTS: raise ValueError(f'no setup draft called {name}')
     if name == 'workstreams':           # the screen's answer: [{slug, name, personal, keep}] - kept ones go live, their sections into JOB.md
         from . import wsboot
+        if not str(text or '').strip() and keep_when_ready(store): return job_state(store, name)    # Next while it still groups
         try: items = json.loads(text or '[]') or []
         except ValueError: raise ValueError('the workstreams answer is not a list')
         wsboot.confirm(store, [i for i in items if isinstance(i, dict)], 'owner')

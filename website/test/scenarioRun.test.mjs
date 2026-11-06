@@ -10,3 +10,7 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("the folded What I did line carries its whole words as its title", () => {
   assert.match(read("AgentSummary.jsx"), /<Box component="summary" title=\{did\} sx=\{\{ \.\.\.HEAD, mt: 0, cursor: "pointer", whiteSpace: "nowrap"/);
 });
+// THE RAIL'S FOOT FADE reaches the card's inner edge: a pixel short, a row's top showed through as a dark sliver (the scenario run, 2026-11-06)
+test("the rail's bottom fade sits on the card's inner edge", () => {
+  assert.match(read("FeedView.jsx"), /position: "absolute", left: "1px", right: "1px", bottom: 0, zIndex: 6,/);
+});

@@ -102,6 +102,10 @@ TOOLS = {
     'reply_not_needed': ('own', "The reply waiting on this task is no longer needed - someone else answered, the owner already did. `why` "
                          "says it in one line. The draft stays, marked, with the owner's Send still on it - nothing is sent, deleted or "
                          "closed; a new reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
+    'withdraw_draft': ('own', "The reply draft waiting on this task no longer answers the newest message - take it off the table. `why` says "
+                       "in one line what changed. It is kept under Not sent with the owner's Bring it back - nothing is sent or deleted. To "
+                       "correct it instead, just propose the new reply: it takes the old one's place.", _S({'why': _STR}, ('why',)),
+                       ('POST', '/api/agent/withdraw-draft')),
     'propose_email': ('propose', "Draft one more email this task needs (to someone, with a subject). It waits with a Send button for "
                       "the owner - nothing is sent.", _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH}, ('text',)),
                       ('POST', '/api/agent/draft')),
@@ -136,7 +140,7 @@ NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')   
 
 
 # ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: the reply tools are not offered at all
-REPLY_TOOLS = ('propose_reply', 'reply_not_needed')
+REPLY_TOOLS = ('propose_reply', 'reply_not_needed', 'withdraw_draft')
 def listing(skip=()) -> list:
     "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
     return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c]} for n, (c, d, s, _) in TOOLS.items() if n not in skip]
@@ -232,6 +236,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         from . import repochoice
         return _out(repochoice.says_found(repochoice.find(store, str(a.get('query') or '')), repochoice.folders(store)))
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
+    if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or '')))
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
         return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who))

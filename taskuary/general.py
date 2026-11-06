@@ -376,6 +376,59 @@ def owner_answered_last(store, tid: int) -> bool:
     "The newest message on the task's thread is the owner's own: they answered it themselves, outside Taskuary."
     rows = store._rows(JOINED, (tid,))
     return bool(rows) and bool(rows[-1].get('Own'))
+# LATEST MESSAGE WINS (the owner, 2026-11-06): corrected after a draft was waiting, the agent answered the thread's first ask again and the
+# draft it had left - mostly a reply already sent - stood under the newest turn as the answer. Each turn now hears which message is newest,
+# the draft waiting and when it was made, and what already went (selfclose.LATEST_LINE); the chat is told which turn a draft is (draft_turns)
+def newest_message(store, tid: int) -> dict | None:
+    "The newest message on the task - the owner's own line in the chat or a mail that joined it: {who, at, words}. Taskuary's briefs are not one."
+    said = [c for c in store.list_comments(tid) if c.get('ActorType') == USER_TYPE and c.get('Actor') != BRIEF_ACTOR]
+    mail = store._rows(JOINED, (tid,))
+    a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body')} if said else None
+    m = mail[-1] if mail else None
+    b = {'who': 'the owner (their own reply on the thread)' if m.get('Own') else m.get('FromName') or m.get('FromEmail') or 'someone',
+         'at': str(m.get('JoinedAt') or ''), 'words': m.get('OwnText') or m.get('BodyText') or m.get('Subject')} if m else None
+    return max((x for x in (a, b) if x), key=lambda x: x['at'], default=None)
+
+def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
+
+def latest_block(store, tid: int) -> str:
+    "LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none."
+    from . import selfclose
+    from .continuity import clock
+    new, sent = newest_message(store, tid), wrapup.sent_replies(store, tid)
+    rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
+    rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
+    answered = any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid))
+    if not (rv or sent or answered): return ''
+    out = [selfclose.LATEST_LINE]
+    if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
+    if rv:
+        s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
+        m = store.get_message(rv.get('AnswersMid') or rv.get('MessageId')) or {}
+        to, before = m.get('FromName') or m.get('FromEmail') or '', bool(new) and at < new['at']
+        out.append(f"THE DRAFT WAITING NOW (rv{rv['ReviewId']}{', to ' + to if to else ''}, drafted at {clock(at)}"
+                   f"{' - BEFORE the newest message' if before else ''}): {_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")
+    if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
+        f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
+    return '\n\n'.join(out)
+
+def draft_turns(store, tid: int) -> list:
+    """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
+    any did), at (when it was drafted), stale (a later turn answered a newer message and left it untouched), before (that message's time)}."""
+    rows = store.list_comments(tid)
+    ins = sorted([str(c.get('CreatedAt') or '') for c in rows if c.get('ActorType') == USER_TYPE] + [str(x['JoinedAt']) for x in store._rows(JOINED, (tid,))])
+    outs = [c for c in rows if c.get('ActorType') == ASSISTANT_TYPE]
+    out = []
+    for rv in store._rows("SELECT ReviewId, CreatedAt FROM review WHERE TaskId=? AND Status='pending' AND Kind IN ('draft_reply','draft') "
+                          "AND IFNULL(DraftText,'')<>'' ORDER BY ReviewId", (tid,)):
+        s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
+        turn = s['CommentId'] if s else next((c['CommentId'] for c in outs if str(c.get('CreatedAt') or '') >= at), None)
+        later = next((i for i in ins if i > at), None)
+        stale = bool(later) and any(str(c.get('CreatedAt') or '') > later and c['CommentId'] != turn for c in outs)
+        out.append({'review': rv['ReviewId'], 'turn': f'comment-{turn}' if turn else None, 'at': at, 'stale': stale, 'before': later if stale else None})
+    return out
+
+
 def shown_history(store, tid: int) -> list:
     """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
     each answer with the `summary` filed after it."""
@@ -1211,6 +1264,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}')
                    + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
+    if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF) and (lb := latest_block(store, tid)): system += f'\n\n{lb}'
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
     from .terminal import TICK_HEAD, _tickable
@@ -1963,6 +2017,12 @@ class GeneralSession:
         from . import selfclose
         reply, named = selfclose.attach_markers(reply)
         who = selfclose.reply_who(reply)        # ...who hears it, as the marker says (2026-11-06)
+        # ...and a draft it takes back (selfclose.LATEST_LINE): first, so a corrected reply in the same answer is the one left standing
+        reply, wd = selfclose.withdraw_marker(reply)
+        if wd is not None:
+            from . import verdicts
+            got = verdicts.withdraw(self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant')
+            if not got.get('ok'): logger.info(f"task {self.task_id}: the draft was not withdrawn - {got.get('why')}")
         reply, drafted = selfclose.reply_marker(reply)
         reply, showing = selfclose.show_markers(reply)
         _show_files(self.store, self.task_id, showing, paths)

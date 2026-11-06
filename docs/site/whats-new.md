@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.6 - 2026-11-05
+
+- An agent's lesson goes to LEARNED.md, named for its kind of job - never a card on the playbook
+- A lesson is only what changes how the next job like it is done: a lasting fact, a rule about the owner, a route that works - never a log of clicks
+- The general agent reads what LEARNED.md has learned about the owner: the trusted lines nearest its task, small, the rest on ask
+- A message that changes nothing gets one line from the agent - nothing new, the plan stands - not a re-run
+- The check before a turn shows only when it found new messages, and never calls a WhatsApp thread mail
+
 ## 0.3.11.5 - 2026-11-05
 
 - An agent can check back on its own task later, on the reminders' clock

@@ -2418,12 +2418,16 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
 # fyi, a watch, an aside, the owner's own answer on any channel - is the agent's next turn when it has a conversation there or a reply
 # waiting: what changed, in their words, and triage's reading of who handled what. Whether a reply is still owed is the agent's call
 # (its reply_not_needed), never a rule here. Coding tasks are as they were: their own carry-on takes new work, nothing else.
+# ...and a message that changes nothing is said so in a line (the owner, 2026-11-05: "it can just say this is the same result nothing
+# changed if it wants")
 REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may need no reply any more (then mark the waiting draft with '
           '`taskuary --reply-not-needed "<why>"` or the reply_not_needed tool - it stays for the owner, never deleted), new research, a '
           'corrected or an added draft, or nothing left at all. Open with one plain line on what changed, in the owner\'s terms - "I see you answered '
           'Ray there", "Gail took care of it" - then either that we are good, nothing left (nothing_left true), or what is still open as next '
-          'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. You never send or close '
-          'anything. End with the [[TASKUARY-SUMMARY]] block.')
+          'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. When the new message '
+          'changes nothing - it repeats what you already had, or adds nothing to act on - say exactly that in one line ("Nothing new here: '
+          'the plan above still stands") and stop: no re-research, no rewritten answer, the earlier draft stays as it is. You never send '
+          'or close anything. End with the [[TASKUARY-SUMMARY]] block.')
 _QUIET_WAKE = ('the task is closed', 'not an assistant task', 'no agent conversation', 'triage could not read it',
                'passing lines to the agent is switched off')
 

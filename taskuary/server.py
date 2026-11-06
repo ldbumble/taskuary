@@ -2510,7 +2510,8 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
         try:
             fresh, stale = _refresh_for_turn(task_id)
             if stale: put({'type': 'progress', 'name': 'sync_messages', 'detail': stale})
-            if fresh.get('polled'):
+            # ...shown only when it found something: an empty check before every turn was machinery in the chat (the owner, 2026-11-05)
+            if fresh.get('polled') and fresh.get('added'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': fresh.get('added', 0)}})
             session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)

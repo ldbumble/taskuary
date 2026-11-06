@@ -236,3 +236,9 @@ def test_the_general_agent_reads_the_learned_lines_nearest_its_task():
     assert len(general.learned_block(s, 'x', budget=10)) < 200, 'held to its budget: the first line, never the whole doc'
     with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):
         assert 'WHAT TASKUARY HAS LEARNED' not in general._prompt(s, tid)[0], "a stranger's task is never told who the owner is"
+
+
+def test_a_message_that_changes_nothing_is_said_so_in_one_line():
+    """The owner, 2026-11-05: "the agent gets new message which is new input it can just say this is the same result nothing changed"."""
+    from taskuary import ingest
+    assert 'changes nothing' in ingest.REPLAN and 'Nothing new here' in ingest.REPLAN and 'the earlier draft stays' in ingest.REPLAN

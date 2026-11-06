@@ -77,7 +77,7 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   // its chat stands with the box under it - no Result block, no "The whole conversation", no Continue to press first
   assert.ok(!(await page.$$eval("[data-tq-task-page] button", (bs) => bs.filter((b) => b.offsetParent).map((b) => b.getAttribute("aria-label") || b.textContent.trim()))).includes("Stop and save"),
     "no Stop and save on a chat task");
-  const stopped = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room=chat] .tq-aui-input", { visible: true, timeout: 30000 });
+  const stopped = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room] .tq-aui-input", { visible: true, timeout: 30000 });   // resting live or saved: the same box
   await page.waitForFunction(() => !document.querySelector("[data-tq-task-page] .tq-aui-input")?.disabled, { timeout: 30000 });
   assert.equal(await page.$("[data-tq-result-summary], [data-tq-full-result], [data-tq-continue-card]"), null, "the chat is the whole Agent section");
   assert.ok(!(await page.$$eval("[data-tq-task-page] button, [data-tq-row] button", (bs) => bs.filter((b) => b.offsetParent).map((b) => b.textContent.trim()))).includes("Continue"),

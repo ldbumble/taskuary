@@ -256,7 +256,7 @@ BRING_UP = [
     ('where do I change my signature', 'signature', '#settings=config&group=Replies&key=email_signature'),
     ('the sync interval', 'sync interval', '#settings=config&group=Sync%20%26%20startup&key=poll_minutes'),
     ('desktop notifications', 'desktop notification', '#settings=config&group=Notifications&key=hand_desktop'),
-    ('which AI does triage', 'triage brain', '#settings=config&group=How%20mail%20is%20sorted&key=triage_ai'),
+    ('which AI sorts my mail', 'AI that sorts your mail', '#settings=config&group=How%20mail%20is%20sorted&key=triage_ai'),
     ('the assistant model', 'assistant model', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_model'),
     ('stop marking mail read in my inbox setting', 'mark read source', '#settings=config&group=Sync%20%26%20startup&key=mark_read_enabled'),
     ('how many days back it catches up', 'catch-up window', '#settings=config&group=Sync%20%26%20startup&key=startup_sync_days'),
@@ -282,7 +282,7 @@ BRING_UP = [
     ('what it learned', 'learned', '#settings=docs&doc=learned'),
     ('the audit log', 'audit log', '#settings=audit'),
     ('agent profiles', 'profiles', '#profiles'),
-    ('the routing rules', 'routing policies', '#settings=policies'),
+    ('the mail rules', 'mail rules', '#settings=policies'),
     # ...Taskuary's own update, by any words for it: Updates, its button lit - never an agent (the owner, 2026-10-23: "i asked assistant to
     # update taskuary and it pulled up general agent")
     ('check for updates', 'updates', '#settings=updates&key=update'),

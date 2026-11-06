@@ -68,7 +68,8 @@ class PollFitsTests(unittest.TestCase):
                 self.assertLessEqual(len(sub), db.POLL_MAX, act['section'])
         _, sets = db.browse(s, 'settings')
         for _, act in sets:
-            self.assertLessEqual(len(db.browse(s, 'settings', act['section'])[1]), db.POLL_MAX, act['section'])
+            if act.get('section'):      # ...the More page carries no section of its own
+                self.assertLessEqual(len(db.browse(s, 'settings', act['section'])[1]), db.POLL_MAX, act['section'])
 
     def test_the_morning_menu_fits_with_every_section_on_the_rail(self):
         self.assertLessEqual(3 + len(db.WALKED) + len(ra.SCRIPT_LINES) - 3, db.POLL_MAX)

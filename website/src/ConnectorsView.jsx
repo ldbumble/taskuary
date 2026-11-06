@@ -1345,7 +1345,7 @@ function KbSearch({ conn }) {
 
 const WINRM_HOWTO = [
   "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
-  "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
+  "A box you can RDP into (like NWWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
   "If Test fails with 'WinRM unreachable', enable PS remoting on the remote box once: open an elevated PowerShell THERE and run Enable-PSRemoting -Force.",
   "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands under Reports on your work rail.",
 ];
@@ -1927,7 +1927,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "Cloud & infrastructure", cards: [
       ...dataCards(["aws", "azure"]),
       ...specialCards("winrm", "Remote Windows (WinRM)", "winrm",
-        "remote windows winrm rdp powershell remoting azweb01 " + WINRM_HOWTO.join(" ")),
+        "remote windows winrm rdp powershell remoting nwweb01 " + WINRM_HOWTO.join(" ")),
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
@@ -2861,7 +2861,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
       {tab === "Setup" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-          <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
+          <TextField label="machine name" placeholder="NWWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setCfg({ ...cfg, host: e.target.value })} onBlur={boxes.flush} InputProps={{ endAdornment: boxes.tick("host") }} />
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
             <Button variant="contained" disableElevation disabled={busy === "test" || !cfg.host} onClick={runTest}

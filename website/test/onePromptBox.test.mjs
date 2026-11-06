@@ -18,7 +18,18 @@ test("the item, the paperclip's files and a dropped picture are one chip each, i
   const imgs = read("promptImages.jsx");
   assert.match(imgs, /export function AttachChip\(/);
   assert.match(imgs, /display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0\.5, minWidth: 0, maxWidth: "100%", overflowX: "auto"/);
-  assert.match(read("AgentSummary.jsx"), /<AttachRow sx=\{\{ pt: 0\.5 \}\}>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/AttachRow>/);
+  assert.match(read("AgentSummary.jsx"), /<AttachRow sx=\{\{ flex: "0 0 100%", pt: 0\.25, px: 0\.5 \}\}>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/AttachRow>/);
   assert.match(read("ItemSections.jsx"), /<AttachChip key=\{i\.key\} data-tq-item-chip=\{i\.key\} name=\{i\.title\}/);
   assert.match(read("GeneralWorkspace.jsx"), /<AttachRow className="tq-aui-attachments"/);
+});
+
+// ...AND IT LOOKS THE ONE BOX: the chat composer's own classes, paperclip left and the filled Send, so a task's first words (which start its
+// agent) leave the box as it was (the scenario run, 2026-11-06)
+test("the box before an agent wears the chat composer's classes", () => {
+  const box = read("AgentSummary.jsx");
+  assert.match(box, /<Box component="form" className="tq-aui-composer" data-tq-prompt-box=""/);
+  assert.match(box, /<Box component="textarea" className="tq-aui-input"/);
+  assert.match(box, /<button type="submit" className="tq-aui-send"/);
+  assert.ok(box.indexOf("<AttachImage pics={pics}") < box.indexOf('className="tq-aui-input"'), "the paperclip comes first, as in the chat");
+  assert.match(read("ItemSections.jsx"), /import "\.\/generalWorkspace\.css";/);
 });

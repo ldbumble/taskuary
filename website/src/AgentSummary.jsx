@@ -3,7 +3,7 @@
 // drafts are their cards, inside Next steps (Task 4.2: `next`, what Close out held - TaskPage's own, so each draft is drawn once); elsewhere a
 // line each. An On you step's mark says whose it is, never a press.
 import React, { useState } from "react";
-import { Box, CircularProgress, IconButton, Typography } from "@mui/material";
+import { Box, CircularProgress, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps } from "./agentSummary.js";
@@ -146,19 +146,19 @@ export function PromptBox({ text, setText, pics, busy = false, onSend, placehold
   boxAttrs = {}, sendAttrs = {} }) {
   const empty = !(text.trim() || pics.imgs.length);
   return <>
-    <Box component="form" data-tq-prompt-box="" onSubmit={(e) => { e.preventDefault(); onSend(); }} {...pics.drop}
-      sx={{ px: 1, py: 0.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff", flexShrink: 0, minWidth: 0 }}>
+    {/* ...and it LOOKS the one box too: the chat's own composer classes (generalWorkspace.css) - paperclip left, the words, the mic, the filled
+        Send - so the first word typed into a task, which starts its agent, leaves the box where and as it was (the scenario run, 2026-11-06:
+        this box had its paperclip on the right and a bare arrow, and changed shape the moment the agent came) */}
+    <Box component="form" className="tq-aui-composer" data-tq-prompt-box="" onSubmit={(e) => { e.preventDefault(); onSend(); }} {...pics.drop}
+      sx={{ flexShrink: 0, minWidth: 0 }}>
       {/* ...what goes with the words, in one line inside the box: the item it came from first, then the files (AttachRow) */}
-      {!!(chips || pics.imgs.length || pics.busy || pics.err) && <AttachRow sx={{ pt: 0.5 }}>{chips}{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>}
-      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5 }}>
-        <Box component="textarea" ref={inputRef} {...boxAttrs} rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }} placeholder={placeholder} aria-label={label}
-          sx={{ flex: 1, minWidth: 0, resize: "none", border: 0, outline: 0, font: "inherit", fontSize: 13.5, lineHeight: 1.5, color: INK, bgcolor: "transparent", py: 0.5 }} />
-        <AttachImage pics={pics} size={17} sx={{ width: 28, height: 28 }} />
-        <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
-        <IconButton type="submit" size="small" {...sendAttrs} aria-label={label} title={title} disabled={busy || pics.busy || empty}>
-          {busy ? <CircularProgress size={14} /> : <SendIcon fontSize="small" />}</IconButton>
-      </Box>
+      {!!(chips || pics.imgs.length || pics.busy || pics.err) && <AttachRow sx={{ flex: "0 0 100%", pt: 0.25, px: 0.5 }}>{chips}{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>}
+      <AttachImage pics={pics} size={18} sx={{ width: 30, height: 30, mb: "2px" }} />
+      <Box component="textarea" className="tq-aui-input" ref={inputRef} {...boxAttrs} rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }} placeholder={placeholder} aria-label={label} />
+      <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
+      <button type="submit" className="tq-aui-send" {...sendAttrs} aria-label={label} title={title} disabled={busy || pics.busy || empty}>
+        {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <SendIcon fontSize="small" />}</button>
     </Box>
   </>;
 }

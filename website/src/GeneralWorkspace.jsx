@@ -616,7 +616,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
-  onEnded, approve = null, chat = false, reading = null }) {
+  onEnded, approve = null, chat = false, reading = null, came = null, noAi = null, closedLine = "" }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -840,13 +840,18 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           </ThreadPrimitive.If>
           {/* ...a chat no turn has summed up yet: what Close out held, under the thread (Task 4.2) */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
-          {!dock && !chat && nextAt?.next && !summed && !working && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
+          {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
+          {!dock && nextAt?.next && !summed && !working && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
               whose press opens Close out at it - working or not, since the agent saves it mid-turn */}
           {!dock && approve}
+          {/* ...AND HOW IT CLOSED, the stream's last line (the owner, 2026-11-06): a closed task is the same chat, its close said in it */}
+          {!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
+            {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
+            {!dock && noAi}
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
                 then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
             {/* ...and ONE DOOR: while the conversation is open the box is how it goes on (no Continue on the bar, 2026-09-29), but once its
@@ -857,7 +862,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               This task is closed. Press {btn("reopen")}{chat ? "" : <>, then {btn("continue")},</>} to pick the conversation back up.</div> : noComposer ? null : <>
             <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
               {/* ...its files inside it, the one attachment look in one line (promptImages AttachChip; the owner, 2026-11-05) */}
-              {!!attachmentsRef.current.length && <AttachRow className="tq-aui-attachments" sx={{ flex: "0 0 100%", pt: 0.25, px: 0.5 }}>
+              {/* ...and WHERE IT CAME FROM rides the box as a chip (the owner, 2026-11-06: one prompt box everywhere) - a press opens it */}
+              {(!!attachmentsRef.current.length || !!came) && <AttachRow className="tq-aui-attachments" sx={{ flex: "0 0 100%", pt: 0.25, px: 0.5 }}>
+                {came && <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
+                  sx={{ cursor: came.onOpen ? "pointer" : "default" }} />}
                 {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</AttachRow>}
               <IconButton size="small" onClick={onAttach} title="Attach a file - or paste or drop one here" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
@@ -895,7 +903,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, approve = null, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "" }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -1159,7 +1167,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
-          ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null} />
+          ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
+        came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""}
+        noAi={chat && !dock && !data?.providers?.length && !noAiSaid && !data?.demo
+          ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
     </OutputsCtx.Provider>
     </WorkCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider></ChatCtx.Provider>
@@ -1272,7 +1283,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       {/* ...but not where it is already said or no longer matters (`noAiSaid`, the owner 2026-10-25): a closed task, or a failure whose own
           line is that no AI is connected - the banner was the same fact a third time under it */}
       {/* ...nor in the demo, whose turns were written in advance and whose box answers that it is the demo (server._demo_turn) */}
-      {!data?.providers?.length && !noAiSaid && !data?.demo && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
+      {!chat && !data?.providers?.length && !noAiSaid && !data?.demo && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
         action={<ConnectAi variant="outlined" />}>No AI is connected, so this work cannot run yet - connect one under {placeName("ai")}.</Alert>}
       {/* ...never in a chat task (the owner, 2026-11-05: no banners): a conversation picked back up reads as the same conversation */}
       {session?.resume_notice && !(chat && !dock) && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}

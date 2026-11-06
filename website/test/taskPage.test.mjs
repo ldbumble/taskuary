@@ -91,7 +91,7 @@ test("an agent waiting on you keeps its terminal in view; its row has no Answer 
   assert.doesNotMatch(page, /id: "answer_agent"|answerAgent|askKey/);
   assert.doesNotMatch(page, /data-tq-agent-asks|seenAsk|>Show details</);
   assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview,/);
-  assert.match(page, /\.\.\.\(liveSession \? \[\s+(\/\/[^\n]*\n\s+)*\.\.\.\(!pendingReview \? \[stopSave\] : \[\]\),\s+\.\.\.\(liveCodingSession \? \[\{ id: "diff"[^\n]*\n\s+\.\.\.\(pendingReview \? \[stopSave\] : \[\]\),/,
+  assert.match(page, /\.\.\.\(liveSession \? \[\s+(\/\/[^\n]*\n\s+)*\.\.\.\(!pendingReview && !chatPane \? \[stopSave\] : \[\]\),\s+\.\.\.\(liveCodingSession \? \[\{ id: "diff"[^\n]*\n\s+\.\.\.\(pendingReview && !chatPane \? \[stopSave\] : \[\]\),/,
     "first on the row while nothing waits on approval; after Review changes when a reply does");
 });
 

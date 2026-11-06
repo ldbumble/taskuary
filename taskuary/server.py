@@ -2264,8 +2264,10 @@ def _assistant_payload(task_id: int, session=None):
     from . import general, proposals as _proposals
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
-    if not general.handles(task):
-        raise HTTPException(422, 'assistant view is available for general, research, marketing, and triage tasks')
+    # ...READ on any task but a coding one (the owner, 2026-11-06: one prompt box everywhere): a reply task, or a closed one from before the chat,
+    # opens on its chat; what is typed there makes it the general agent's (_chat_kind), as Send to agent's dispatch did
+    if str(task.get('Kind') or '') == 'coding':
+        raise HTTPException(422, 'a coding task is worked in its terminal, not a chat')
     session = session or general.session_for(task_id)
     messages = general.shown_history(store, task_id)
     # each page or picture belongs to the answer that made it: the turn files its answer after what it published or showed,
@@ -2365,12 +2367,22 @@ def _chat_failed(e):
 CLOSED_CHAT = (f"This task is closed. Press {buttons.label('reopen')}, then {buttons.label('continue')}, "
                'to pick the conversation back up.')
 
+def _chat_kind(task_id: int):
+    """WHAT IS TYPED IN A TASK'S ONE BOX STARTS THE GENERAL AGENT (the owner, 2026-11-06: no separate Send to agent form): a task of another
+    kind - a reply, your own task - becomes the general agent's first, as Send to agent's dispatch switched it. A coding task is never one."""
+    from . import general
+    t = store.get_task(task_id) or {}
+    if not t or general.handles(t) or str(t.get('Kind') or '') == 'coding' or general.is_dock(t): return
+    store.update_task(task_id, {'Kind': 'general'}, ACTOR)
+    store.audit('task', task_id, 'kind_by_typing', ACTOR, detail={'from': t.get('Kind')})
+
 def _refuse_closed_chat(task_id: int):
     """A CLOSED task's conversation is read-only. Typing into it started a live session on a done task: the pane said
     "assistant is waiting on you" over a task that read done, and the bar offered only Reopen (the owner, 2026-10-14: "we need
     to have general agent closed until i reopen and then continue session"). Reopen, then Continue, picks it up. The
     dock - the assistant that runs Taskuary - is never a task you close, so it is never refused."""
     from . import general
+    _chat_kind(task_id)
     t = store.get_task(task_id) or {}
     if t.get('Status') not in ('done', 'dropped') or general.is_dock(t): return
     # ...EXCEPT A CHAT TASK, WHERE TYPING IS THE WAY ON (the owner, 2026-11-05: "typing into chat should continue it or restart it ... we can

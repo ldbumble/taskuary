@@ -7,7 +7,9 @@ import api from "./api";
 import { ALERT, ROLES } from "./theme.jsx";
 import { fmtTime } from "./dates.js";
 
-export default function QueuedStart({ taskId, queued, onChanged, compact = false }) {
+// `line`: A CHAT TASK'S ONE LINE (the owner, 2026-11-06): over the chat it is a line and its Cancel - "Waiting its turn - starts by itself when a
+// slot frees up" - and a start that failed says so, its retry what is typed in the box below (never a Start now of its own)
+export default function QueuedStart({ taskId, queued, onChanged, compact = false, line = false }) {
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   if (!queued) return null;
   const failed = queued.state === "failed", retrying = queued.state === "retrying", ranked = queued.value != null;
@@ -26,6 +28,15 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
       .finally(() => setBusy(""));
   };
   const c = failed ? { bg: "#f3e7e9", bd: ALERT, ink: ALERT } : { bg: ROLES.working.tint, bd: ROLES.working.solid, ink: ROLES.working.ink };
+  if (line) return (
+    <Box data-tq-queued-line={queued.state || "waiting"} onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "baseline", gap: 1, minWidth: 0, px: 0.5, py: 0.25 }}>
+      <Typography noWrap title={queued.lastError || ""} sx={{ flex: 1, minWidth: 0, fontSize: 12.5, color: failed ? ALERT : ROLES.working.ink }}>
+        {failed ? `Couldn't start - ${why || "it ran out of tries"}. Type below to try again.` : retrying ? `Couldn't start yet - trying again${at ? ` at ${at}` : " shortly"}`
+          : queued.behind ? `Waiting on ${queued.behind} - starts by itself when it is done` : "Waiting its turn - starts by itself when a slot frees up"}</Typography>
+      <Button size="small" disabled={!!busy} onClick={(e) => act(e, "cancel")} sx={{ fontSize: 11.5, minHeight: 0, py: 0, px: 0.75, flexShrink: 0 }}>
+        {busy === "cancel" ? "Cancelling…" : "Cancel"}</Button>
+      {err && <Typography variant="caption" sx={{ color: ALERT }}>{err}</Typography>}
+    </Box>);
   return (
     <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: c.bg, border: `1px solid ${c.bd}55`,
       borderLeft: `3px solid ${c.bd}`, borderRadius: 1.25 }}>

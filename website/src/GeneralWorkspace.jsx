@@ -865,6 +865,10 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                   to stop the run; abandoning the tab just detaches from it (server.py). */}
               <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response"
                 onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
+              {/* ...AND A TURN THIS PANE DID NOT START has the same stop (the owner, 2026-11-05: the task's own stop icon went from a chat): a turn
+                  woken by new mail, or one running when the page was opened, runs on the server, and the runtime's Cancel above stays hidden */}
+              {working && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
+                title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}
               <ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>
             </ComposerPrimitive.Root>
             {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}

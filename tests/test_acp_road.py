@@ -7,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from taskuary import acp, acpgate, agents, clipool, clis, shellgate
+from taskuary import acp, acpgate, agents, clipool, clis, permissions, shellgate
 from taskuary.store import MemoryStore
 
 FAKE = [sys.executable, str(Path(__file__).parent / 'fake_acp_server.py')]
@@ -38,7 +38,8 @@ def test_a_plain_call_is_allowed_once_never_always():
 def test_a_push_is_held_for_the_owner_and_the_step_reads_held_not_failed():
     s = MemoryStore()
     tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'general', 'Status': 'open'}, 'owner')
-    with mock.patch.object(shellgate, 'trusted', return_value=''):
+    # nobody answers the owner's buttons (permissions.ask) in time: the Approve card is filed and the call refused, as before
+    with mock.patch.object(shellgate, 'trusted', return_value=''), mock.patch('taskuary.permissions.TIMEOUT', 0.3):
         out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
     assert 'denied' in out[0]
     perm = next(d for k, _n, d in ev if k == 'permission')
@@ -47,6 +48,45 @@ def test_a_push_is_held_for_the_owner_and_the_step_reads_held_not_failed():
     assert res['is_error'] and res['result'].startswith(shellgate.HELD)          # agentSteps reads this as "held"
     assert any(json.loads(r.get('DraftText') or '{}').get('command') == 'git push origin main'
                for r in s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,)))     # the owner's Approve card
+
+
+def _answering(option):
+    "The owner pressing a button on the held call as soon as it is up (the task chat's card, permissions.answer)."
+    def go():
+        for _ in range(200):
+            p = permissions.pending(store=STORE[0])
+            if p: return permissions.answer(STORE[0], p[0]['tid'], p[0]['id'], option)
+            threading.Event().wait(0.05)
+    t = threading.Thread(target=go, daemon=True); t.start(); return t
+STORE = [None]
+
+
+@pytest.mark.parametrize('option,granted', [('allow_once', True), ('reject_once', False)])
+def test_a_held_push_is_the_owners_buttons_and_their_answer_is_the_answer(option, granted):
+    s = STORE[0] = MemoryStore()
+    tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+    with mock.patch.object(shellgate, 'trusted', return_value=''):
+        t = _answering(option)
+        out, ev = run(profile(), env={'FAKE_ACP_ASK': 'git push origin main'}, store=s, task_id=tid)
+        t.join(5)
+    perm = next(d for k, _n, d in ev if k == 'permission')
+    assert perm['answer'] == (acpgate.ALLOWED if granted else acpgate.REFUSED)
+    assert out[0].startswith('granted') == granted
+    # answered on the spot: no Approve card waits as well
+    assert not s._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
+    assert not permissions.pending(tid, s)
+
+
+def test_the_automatic_rules_still_answer_first_and_never_reach_the_owner():
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Fix the budget total', 'Kind': 'coding', 'Status': 'open'}, 'owner')
+    with mock.patch.object(permissions, 'ask', side_effect=AssertionError('the owner was asked')):
+        out, ev = run(profile(), store=s, task_id=tid)
+    assert next(d for k, _n, d in ev if k == 'permission')['answer'] == acpgate.ALLOWED
+    cmd = 'curl -X POST https://hooks.vendor.example/notify -d "{}"'
+    with mock.patch.object(permissions, 'ask', side_effect=AssertionError('the owner was asked')):
+        assert acpgate.answerer({'store': s, 'task_id': tid, 'cwd': HERE})({'toolCall': {'toolCallId': 'c', 'kind': 'execute', 'rawInput': {'command': cmd}},
+            'options': [{'optionId': 'y', 'kind': 'allow_once'}, {'optionId': 'n', 'kind': 'reject_once'}]}) == {'outcome': 'selected', 'optionId': 'n'}
 
 
 @pytest.mark.parametrize('cmd', ['curl -X POST https://hooks.vendor.example/notify -d "{}"',

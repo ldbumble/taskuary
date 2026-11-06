@@ -11,9 +11,13 @@
 
 <p align="center"><b>⭐ Please star Taskuary if you find it helpful</b> — it is how other people find it.</p>
 
-## Your work manager. Locally. Securely. In control.
+## Your work, in the right order.
 
-**A personal AI assistant for your job.** Mail, chats and tickets become tasks, the agents you already use (Claude Code, Codex, Gemini) do the work, and nothing goes out until you approve. Open source, runs on your machine, no subscription.
+**Taskuary is your AI work partner.** Most AI tools help you finish a task. Taskuary helps you manage the entire responsibility.
+
+Taskuary understands your role and responsibilities, pulls in work from mail, chats and business systems, spots what needs attention and what is slipping, and works alongside you to get it done - with you approving anything that leaves.
+
+Mail, chats, approvals and reports land in one list, and you can work that list from your phone over WhatsApp or Telegram. When the work is code, it hands it to the coding agents you already use - Claude Code, Codex, Gemini. Runs on your computer and keeps your data in one file there. Only what a task needs goes to the AI model you choose, with secrets removed first ([Privacy](docs/PRIVACY.md)). Free and open source, no subscription.
 
 ![The Assistant's Game view: an office where every task, message and agent is a figure, opening on the whole floor and zooming into each room - the Agent Floor, the Meeting Room where people wait on you, the Gym, the Coffee Room, the Memory Archive, and the Assistant Core.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
@@ -262,7 +266,8 @@ The rules are deterministic rather than a model's judgement, because by the time
 judge, the credential would already be in a prompt. So they catch credentials with a
 recognizable shape—provider keys, tokens, credentialed URLs, connection strings, private
 keys—and they will not catch a sentence like "the wifi password is bluefish17". Report anything
-you find through [SECURITY.md](SECURITY.md).
+you find through [SECURITY.md](SECURITY.md). The whole picture - what stays, what leaves, and for whom - is in
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Install
 
@@ -329,6 +334,7 @@ The documentation is at **[taskuary.com/docs](https://taskuary.com/docs/)**.
 - [How it works](https://taskuary.com/docs/how-it-works)—the work rail, the five roads, what triage decides, the operator documents
 - [Connections](https://taskuary.com/docs/connections)—channels, AI providers, work systems, and report sources
 - [Tasks and agents](https://taskuary.com/docs/tasks-and-agents)—the task, the agent work and the reply as three separate lives
+- [Privacy](docs/PRIVACY.md)—what runs on your computer, what leaves it, and what Taskuary is not certified for
 - [Security](https://taskuary.com/docs/security)—prompt injection: what Taskuary does about it, what it does not do yet, and what to set
 - [Assistant buttons](https://taskuary.com/docs/assistant)—every button under an Assistant card, the one question two of them ask, and the words that work typed
 - [What the Assistant sees](https://taskuary.com/docs/assistant-tools)—every tool the Assistant has, and the summary it gets on every turn

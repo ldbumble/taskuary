@@ -39,25 +39,25 @@ Keep roughly within the lengths noted; they're what the layout holds without ref
 
 ---
 
-## The copy as it stands (2026-10-15 - "Your work manager" voice)
+## The copy as it stands (2026-11-05 - "Your AI work partner" voice)
 
-Short, plain, one idea per line. Two lines from the mockup this voice came from were left out on purpose: **"HIPAA
+What it is: **Taskuary is your AI work partner.** Short, plain, one idea per line. Two lines from the mockup this voice came from were left out on purpose: **"HIPAA
 Certified"** (there is no official HIPAA certification and Taskuary has had no compliance audit - a public claim we
 cannot back) and **"Free in beta, limited time"** (the site says MIT licensed, free, no subscription; "limited time"
 contradicts it). Put either back only with that settled.
 
 | # | Slot | Now |
 |---|---|---|
-| 1a | Headline | `Your work manager.` / accent line `Locally. Securely. In control.` |
-| 1b | Under it | `Mail, chats and tickets become one list, in the right order. Taskuary drafts the replies, your AI agents do the work, and nothing goes out without your yes.` |
+| 1a | Headline | `Your work,` / accent line `in the right order.` |
+| 1b | Under it | `Most AI tools help you finish a task. Taskuary helps you manage the entire responsibility.` (bold) then `Taskuary understands your role and responsibilities, pulls in work from mail, chats and business systems, spots what needs attention and what is slipping, and works alongside you to get it done - with you approving anything that leaves.` |
 | 1c | Button / line under | `Download today` / `Windows · or pip install taskuary on macOS and Linux · try it in your browser` |
-| 1d | Four promises | `Runs on your computer` - Your data stays with you. · `Private by design` - No account. No cloud. · `Free and open source` - No subscription. · `Minutes to set up` - Download and start working. |
+| 1d | Four promises | `Runs on your computer` - Your data stays with you. · `Private by design` - Only what a task needs goes to the AI model you choose, with secrets removed first. · `Free and open source` - No subscription. · `Minutes to set up` - Download and start working. |
 | 2 | Three steps | `01 · IT ARRIVES` Everything in one place - Email, Teams, Slack, WhatsApp, tickets and reports - one list, in the order it came in. · `02 · IT GETS SORTED` Only what's yours - It reads the whole thread, drafts the answers, and turns real work into tasks. · `03 · IT GETS DONE` You say yes - Agents do the work while you're elsewhere. Nothing goes out until you approve. |
-| 3 | What it does | `Your work, in the right order.` / One list for everything people ask of you - sorted, started, and waiting on your yes. |
-| 3a-f | Six cards | Nothing goes out without you · Watch the work happen · Reports in plain English · Tell it once · Uses the AI you have · Your data stays home - one line each |
+| 3 | What it does | `Everything people ask of you, in one list.` / Sorted, started, and waiting on your yes. |
+| 3a-f | Six cards | Nothing goes out without you · Watch the work happen · Reports in plain English · Tell it once · Uses the AI you have · Your data stays home (`Runs on your computer and keeps your data in one file there. Only what a task needs goes to the AI model you choose, with secrets removed first.` + a Privacy link) - one line each |
 | 4 | Download | `Download today.` / One app, three ways to install. Everything stays in one folder on your computer. New to it? Start here. |
 | 5 | Open source | `Built in the open.` / MIT licensed, and running its author's own inbox every day. |
-| 6 | Bottom strip | `it arrives → it gets sorted → it gets done` |
-| - | Tab title / previews | `Taskuary — your work manager. Locally. Securely. In control.` · search: `Your work manager: mail, chats and tickets in one list, in the right order - worked, and waiting for your yes. Runs on your computer. Free.` |
+| 6 | Bottom strip | links incl. Privacy (docs/PRIVACY.md) · `it arrives → it gets sorted → it gets done` |
+| - | Tab title / previews | `Taskuary — your AI work partner. Your work, in the right order.` · search and social preview: `Your AI work partner. Mail, chats and tickets become one list in the right order; your agents do the work, and nothing goes out until you approve. Free, open source, runs on your computer.` |
 
-The README (both languages), the package description and the docs' header tag carry the same headline.
+The README (both languages), the package description, the CLI help and the docs' header tag carry the same lines.

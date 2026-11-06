@@ -1,4 +1,4 @@
-Taskuary is a work assistant that runs on your own machine. It reads the places work arrives —
+Taskuary is your AI work partner, and it runs on your own machine. It reads the places work arrives —
 mail, chats, issue trackers, monitoring, your finance system — decides what each thing actually
 is, and brings you the few that need you. Coding jobs go to a coding agent in your repository.
 Answers come back as drafts you approve. Nothing is sent without you.

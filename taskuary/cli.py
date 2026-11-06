@@ -248,7 +248,8 @@ def _sign_form(args, stranger):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog='taskuary', description='Your work manager. Locally. Securely. In control.')
+    ap = argparse.ArgumentParser(prog='taskuary', description='Your AI work partner. Mail, chats and tickets become one list in the right order; '
+                                 'your agents do the work, and nothing goes out until you approve. Free, open source, runs on your computer.')
     ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
     ap.add_argument('--port', type=_port, help='override [server].port')
     ap.add_argument('--no-browser', action='store_true', help="don't open a browser tab when the server starts")

@@ -10,13 +10,12 @@
 // fold arrows - and an item that `lays` its moves has every one of them on the strip of the section it is about, and on that section's spine
 // folded; the bar is Back and Next. A phone's stacked sections keep the row as it was
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Box, Chip, CircularProgress, IconButton, InputBase, Typography } from "@mui/material";
-import SendIcon from "@mui/icons-material/ArrowUpward";
+import { Box, Typography } from "@mui/material";
 import api from "./api.js";
 import { LinkPopups, Md } from "./md.jsx";
-import { MicButton } from "./ui.jsx";
 import { label as btn } from "./buttons.js";
-import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
+import { AttachChip, usePromptImages } from "./promptImages.jsx";
+import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS, FOCUS_EDGE, MINI_W, OPEN_MIN, PaneStrip, SECTION, SHADE, SLOT, STRIP_H, SectionHead, SectionTab, tabW, useStackBelow } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
@@ -63,8 +62,10 @@ export function ItemAsk({ ask, hand = null, onHand = null }) {
   };
   // ...A CHAT, as a task's is (the owner, 2026-11-05: "add the reports/advisor/fyi to chat thing as well without close out"): what it says and what
   // matters as plain paragraphs, the owner's words a right-hand bubble, the answer the full width - no labels, no card around it, the box the one box
+  // ...THE SAME BOX IN THE SAME PLACE (the owner, 2026-11-05: "the box should be where it always is, not moved up. Don't have separate code"): the
+  // task chat's own PromptBox, held at the foot of the pane whatever is above it; Send to agent puts the item on it as a chip - nothing moves
   return <Box data-tq-item-ask={ask?.kind || (hand ? "agent" : "")} data-tq-item-hand={hand ? hand.items.length : undefined}
-    sx={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0, minWidth: 0, px: { xs: 0.5, sm: 1 } }}>
+    sx={{ display: "flex", flexDirection: "column", gap: 1, flex: "1 0 auto", minWidth: 0, px: { xs: 0.5, sm: 1 } }}>
     {ls.map((l) => <Typography key={l.k} data-tq-item-reading={l.k} title={SAYS[l.k]}
       sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere" }}>{l.text}</Typography>)}
     {said.map((t, i) => <React.Fragment key={i}>
@@ -72,25 +73,15 @@ export function ItemAsk({ ask, hand = null, onHand = null }) {
         bgcolor: "#e7efe6", border: "1px solid #cfdccd", borderRadius: "13px", px: 1.5, py: 1 }}>{t.q}</Typography>
       <Box data-tq-item-answer="" sx={{ fontSize: 13.5, lineHeight: 1.55, color: INK, overflowWrap: "anywhere", "& p": { my: 0.25 } }}><LinkPopups><Md text={t.a} /></LinkPopups></Box>
     </React.Fragment>)}
-    <Box {...pics.drop} sx={{ border: `1px solid ${hand ? "#b9c3cb" : BORDER}`, borderRadius: "8px", px: 1, py: 0.25, bgcolor: "#fff" }}>
-      {!!(hand || pics.imgs.length || pics.busy || pics.err) && <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.5, pt: 0.5 }}>
-        {hand?.items.map((i) => <Chip key={i.key} size="small" data-tq-item-chip={i.key} label={`📎 ${i.title}`} onDelete={busy ? undefined : () => drop(i.key)}
-          title={`${btn(hand.verb)} - it gets ${i.title}`} sx={{ maxWidth: "100%", bgcolor: "#e4e9ee", fontSize: 12.5 }} />)}
-        <ImageTray pics={pics} cannot={hand ? null : () => ASK_ONLY} />
-      </Box>}
-      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5 }}>
-        <InputBase inputRef={input} multiline maxRows={5} value={text} disabled={busy}
-          placeholder={hand ? `What should the agent do with ${hand.items.length > 1 ? "these" : "it"}?` : "Ask about anything here…"}
-          inputProps={{ "aria-label": hand ? btn(hand.verb) : "Ask about this" }}
-          onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-          sx={{ flex: 1, minWidth: 0, fontSize: 13.5, py: 0.5 }} />
-        <AttachImage pics={pics} size={16} sx={{ width: 26, height: 26 }} />
-        <MicButton size={16} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
-        <IconButton size="small" aria-label={hand ? btn(hand.verb) : "Ask"} data-tq-item-send={hand ? "agent" : "ask"} disabled={busy || pics.busy || !text.trim()}
-          onClick={send} sx={{ p: 0.5 }}>{busy ? <CircularProgress size={14} /> : <SendIcon sx={{ fontSize: 17 }} />}</IconButton>
-      </Box>
+    <Box aria-hidden sx={{ flex: "1 1 auto" }} />
+    <Box sx={{ position: "sticky", bottom: 0, bgcolor: SHADE, pt: 0.5, mx: -0.5, px: 0.5 }}>
+      <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} cannot={hand ? null : () => ASK_ONLY}
+        placeholder={hand ? `What should the agent do with ${hand.items.length > 1 ? "these" : "it"}?` : "Ask about anything here…"}
+        label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
+        chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}
+          title={`${btn(hand.verb)} - it gets ${i.title}`} />) : null} />
+      {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "#a33", pt: 0.5 }}>{err}</Typography>}
     </Box>
-    {err && <Typography role="alert" sx={{ fontSize: 12.5, color: "#a33" }}>{err}</Typography>}
   </Box>;
 }
 

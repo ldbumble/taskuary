@@ -4,7 +4,7 @@ import { says, subState } from "./laneSays.js";
 import {
   AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime,
 } from "@assistant-ui/react";
-import { Alert, Box, Button, Chip, CircularProgress, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import SendIcon from "@mui/icons-material/ArrowUpward";
@@ -17,7 +17,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
-import { IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
+import { AttachChip, AttachRow, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
@@ -828,14 +828,6 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {!dock && approve}
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
-            {!!attachmentsRef.current.length && (
-              <div className="tq-aui-attachments">
-                {attachmentsRef.current.map((a) => (
-                  <Chip key={a.path} size="small" icon={<AttachFileIcon />} label={a.name}
-                    onDelete={() => onClearAttachments(a.path)} />
-                ))}
-              </div>
-            )}
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
                 then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
             {/* ...and ONE DOOR: while the conversation is open the box is how it goes on (no Continue on the bar, 2026-09-29), but once its
@@ -845,6 +837,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               {/* ...where the chat is home the box below IS Continue: Reopen alone brings it back */}
               This task is closed. Press {btn("reopen")}{chat ? "" : <>, then {btn("continue")},</>} to pick the conversation back up.</div> : noComposer ? null : <>
             <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
+              {/* ...its files inside it, the one attachment look in one line (promptImages AttachChip; the owner, 2026-11-05) */}
+              {!!attachmentsRef.current.length && <AttachRow className="tq-aui-attachments" sx={{ flex: "0 0 100%", pt: 0.25, px: 0.5 }}>
+                {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</AttachRow>}
               <IconButton size="small" onClick={onAttach} title="Attach a file - or paste or drop one here" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
               </IconButton>

@@ -141,6 +141,33 @@ def test_an_agent_that_dies_at_initialize_runs_on_the_command_line_and_says_so_o
     assert seen == [1, 0]                                                       # said once in the log, not on every run
 
 
+def test_claude_with_no_way_to_launch_its_adapter_answers_on_the_command_line_kept_and_resumed(tmp_path):
+    """No npx on PATH (a machine without Node; the browser harness's bare PATH) and no adapter installed: the ACP road cannot start,
+    and that is a start failure, not a missing CLI. The general agent's kept conversation is warmed on the argv road and every turn -
+    the first, and a resumed one after it - is answered by the owner's own claude. It used to answer "'npx' not found on PATH"."""
+    script = tmp_path / 'script.json'
+    script.write_text(json.dumps([{'when': 'price', 'first': 'Payworth is cheapest at 4 a head.'}, {'when': 'south', 'first': 'The south office is on Payworth.'}]))
+    fake = [sys.executable, str(Path(__file__).parent / 'fake_claude.py')]
+    def resolve(c):
+        if c == 'npx': raise FileNotFoundError("'npx' not found on PATH - is the CLI installed?")
+        return list(fake)
+    key, env = 'general:test-acp-no-npx', {'FAKE_CLAUDE_SCRIPT': str(script), 'FAKE_CLAUDE_SPAWN': '0', 'FAKE_CLAUDE_THINK': '0'}
+    prof = {'cmd': 'claude', 'args': clis.preset_args('claude'), 'acp_ok': True, 'keep_alive': key, 'cwd': str(tmp_path)}
+    s, ev = MemoryStore(), []
+    trace = lambda kind, name, detail=None: ev.append((kind, name, detail))
+    try:
+        with mock.patch.object(agents, '_resolve_cmd', side_effect=resolve), mock.patch.object(agents.pathcache, 'which', return_value=None), \
+             agents.run_context(s, None):
+            assert agents._acp_road(prof, s)                                    # the switch is on and claude has an adapter: it tries
+            assert agents.warm_cli(prof, extra_env=env, store=s) and clipool.is_live(key)      # warmed: the argv process, since ACP cannot start
+            out1 = agents.run_cli(prof, 'The owner says: compare them on price.', trace, extra_env=env, store=s)
+            out2 = agents.run_cli(prof, 'The owner says: look at the south office first', trace, resume=out1[1], extra_env=env, store=s)
+        assert 'Payworth is cheapest' in out1[0] and 'south office is on Payworth' in out2[0]
+        assert out1[1] and out2[1] == out1[1]                                    # one conversation, resumed
+        assert any(n == 'acp' and 'did not start' in str(d) for _k, n, d in ev)  # said on the run's launch line, quietly
+    finally: clipool.close(key)
+
+
 def test_the_switch_off_keeps_every_run_on_the_command_line():
     s = MemoryStore(); s.set_setting(agents.ACP_SETTING, '0', 'owner')
     with mock.patch.object(agents, 'run_acp', side_effect=AssertionError('must not take the ACP road')), \

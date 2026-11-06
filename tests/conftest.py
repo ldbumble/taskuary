@@ -493,6 +493,16 @@ def isolated_runtime_boundaries():
 
 
 @pytest.fixture(autouse=True)
+def no_real_acp_adapters(request, monkeypatch):
+    """The ACP road (agents._acp_road) launches claude and codex through npm adapters (clis.ADAPTERS): a test driving a fake `claude`
+    would fetch and start the real adapter instead - minutes on CI, and the argv road's own behaviour never tested. Only the ACP
+    road's own tests see the adapters."""
+    if request.module.__name__.rsplit('.', 1)[-1] in ('test_acp_road',) or request.node.get_closest_marker('acp'): return
+    from taskuary import clis
+    monkeypatch.setattr(clis, 'ADAPTERS', {})
+
+
+@pytest.fixture(autouse=True)
 def no_connection_brains():
     """A test's brains are the agent rows IT wrote. agents.connection_brains reads config.toml, and the
     test home's carries the `claude` connection cli_connections.migrate split off the default coding agent

@@ -82,7 +82,7 @@
 <div class="entry on">
       <a class="page" href="./phone" aria-current="page">On your phone</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide On your phone's sections"></button>
-      <div class="secs"><a class="sec" href="#the-doorways" data-sec="the-doorways">The doorways</a><a class="sec" href="#what-it-can-do" data-sec="what-it-can-do">What it can do</a><a class="sec" href="#the-morning-line" data-sec="the-morning-line">The morning line</a><a class="sec" href="#handing-over" data-sec="handing-over">Handing over</a><a class="sec" href="#agent-channels-a-chat-into-one-coding-agent" data-sec="agent-channels-a-chat-into-one-coding-agent">Agent channels: a chat into one coding agent</a><a class="sec" href="#what-it-will-not-do" data-sec="what-it-will-not-do">What it will not do</a><a class="sec" href="#sections-for-later-and-browsing-on-the-phone" data-sec="sections-for-later-and-browsing-on-the-phone">Sections, For later and browsing, on the phone</a></div>
+      <div class="secs"><a class="sec" href="#settings-phone-chats" data-sec="settings-phone-chats">Settings → Phone &amp; chats</a><a class="sec" href="#the-doorways" data-sec="the-doorways">The doorways</a><a class="sec" href="#what-it-can-do" data-sec="what-it-can-do">What it can do</a><a class="sec" href="#the-morning-line" data-sec="the-morning-line">The morning line</a><a class="sec" href="#handing-over" data-sec="handing-over">Handing over</a><a class="sec" href="#agent-channels-a-chat-into-one-coding-agent" data-sec="agent-channels-a-chat-into-one-coding-agent">Agent channels: a chat into one coding agent</a><a class="sec" href="#what-it-will-not-do" data-sec="what-it-will-not-do">What it will not do</a><a class="sec" href="#sections-for-later-and-browsing-on-the-phone" data-sec="sections-for-later-and-browsing-on-the-phone">Sections, For later and browsing, on the phone</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
@@ -114,9 +114,20 @@
 the same conversation and the same assistant — not a notification feed and not a second, weaker
 bot. It can walk you through your work, answer questions about it, and carry out the things the
 page can carry out.</p>
+<h2 id="settings-phone-chats">Settings → Phone &amp; chats<a class="anchor" href="#settings-phone-chats" aria-label="Link to this section">#</a></h2>
+<p>Every chat that reaches Taskuary from outside is set on one page, <strong>Settings → Phone &amp; chats</strong>. The
+WhatsApp and Telegram connection cards link to it.</p>
+<ul>
+<li><strong>The Assistant from your phone</strong> — your private Assistant chat on each channel: which chat it is
+(or the steps to pick one), whether it listens any time or only during a walk, the morning line,
+and <strong>Walk me through them in WhatsApp</strong> (or Telegram) to hand the walk over from the desktop.</li>
+<li><strong>Agent channels</strong> — shown only with <strong>Developer mode</strong> on: every chat bound to a coding agent,
+what it talks to, its repository and its people, with <strong>Unbind</strong>, and <strong>Add a channel</strong>
+(<a href="#agent-channels-a-chat-into-one-coding-agent">below</a>).</li>
+</ul>
 <h2 id="the-doorways">The doorways<a class="anchor" href="#the-doorways" aria-label="Link to this section">#</a></h2>
 <p>A doorway is one chat, on one channel, that the assistant is allowed to speak in. Set it up in
-<strong>Settings → Assistant on your phone</strong>, which lists every channel you have connected and lets you
+<strong>Settings → Phone &amp; chats</strong>, which lists every channel you have connected and lets you
 pick the chat and whether it may listen.</p>
 <ol>
 <li>Connect WhatsApp or Telegram under <a href="connections#chat">Connections</a>.</li>
@@ -126,7 +137,7 @@ yourself</strong> chat.</li>
 assistant for it.</li>
 </ol>
 <p>The Assistant then offers <strong>Walk me through them in WhatsApp</strong> (or Telegram) for each chat set up
-this way. <strong>Which chat the Assistant offers</strong> in the same section picks one — WhatsApp, Telegram,
+this way — on its own page and on Phone &amp; chats. <strong>Which chat the Assistant offers</strong> in the same section picks one — WhatsApp, Telegram,
 or both.</p>
 <div class="callout rule"><p class="eyebrow">Only chats you are alone in</p><p>The picker offers nothing but chats with one member: you. Groups cannot be selected, because an
 answer may name anything in your workspace. The rule is enforced again when a message arrives, so
@@ -201,7 +212,7 @@ deliberate act as approving on the page. The chat never pings you on its own: it
 first. A small change that sends nothing and closes nothing is done at once and said: a priority, the kind of work, its
 repository, <strong>Remind me</strong> with a day, <strong>Watch it</strong>, or &quot;mark the FYI read&quot;.</p>
 <h2 id="the-morning-line">The morning line<a class="anchor" href="#the-morning-line" aria-label="Link to this section">#</a></h2>
-<p>Off unless you switch it on (Settings → Assistant on your phone). Once a day, the assistant can then open with a short line about the day ahead — what slipped, what is
+<p>Off unless you switch it on (Settings → Phone &amp; chats). Once a day, the assistant can then open with a short line about the day ahead — what slipped, what is
 waiting, today&#39;s meetings. It is the morning brief&#39;s voice, cut to the length of something you
 read while walking.</p>
 <p>It fires once per day, not once per app start, and it is the same cap the brief itself uses: if
@@ -218,6 +229,14 @@ walk&#39;s position belongs to the conversation rather than to the surface you s
 Telegram chat or group, a Slack channel, or a Teams chat. Open a coding task, unfold <strong>Talk to this
 agent from…</strong> at the foot of its chat, pick the channel and the chat, and bind it. What you write
 there goes into the agent as if you had typed it in its box, and its answers come back to the chat.</p>
+<p>Every binding is listed in <strong>Settings → Phone &amp; chats → Agent channels</strong>, with Unbind. <strong>Add a
+channel</strong> there binds a chat to <strong>the coding agents</strong> — all of them, yours alone: say &quot;agents&quot; for
+the list, &quot;TQ-0123 your words&quot; to tell one, or &quot;land TQ-0123&quot;. A repository folder keeps it to the
+agents working there. Your Assistant chat reaches the coding agents the same way while Developer
+mode is on, so it needs no binding of its own.</p>
+<p>What each channel needs from you: Telegram and Slack cannot say which messages are yours, so the
+form asks your own <strong>numeric Telegram id</strong> or your <strong>Slack member ID</strong> (U…); Teams posts with your
+own <strong>Microsoft sign-in</strong>.</p>
 <p>You can let teammates in, so a few people can work on one project with the same agent:</p>
 <ul>
 <li><strong>Named people only.</strong> You add each teammate by name and by their id on that channel (a phone

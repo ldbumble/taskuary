@@ -137,6 +137,7 @@ AGENT_WRITES = (
     (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
     (r'POST', r'^/api/agent/ask-stronger$', "the session's own question to a stronger model (askstronger), on its OWN task - an answer in words, nothing moves"),
     (r'POST', r'^/api/agent/note-peers$', "a note to another agent (peers.py), from the session's OWN task - framed as a peer's, it approves nothing"),
+    (r'POST', r'^/api/agent/use-repo$', "the checkout the session's OWN task is worked in (repochoice.use) - inside the folders the owner allows, never over their pick"),
     (r'POST', r'^/api/agent/propose-land$', "how the session's OWN branch should land, marked on the owner's question (landing.propose) - it lands nothing"),
     (r'POST', r'^/api/agent/sign-form$', "`taskuary --sign-form`: a PDF on the session's OWN task filled and signed into its folder (handsign) - nothing leaves"),
     (r'POST', r'^/api/mcp$', "Taskuary's own tools for the session (agenttools): each one is a door on this list or a read, on its OWN task"),
@@ -154,6 +155,7 @@ AGENT_WRITES = (
 AGENT_READS = (
     (r'GET', r'^/api/agent/messages(/[mM]?\d+)?$',
      "`taskuary --search/--message`: the owner's mail and messages, read-only (mailsearch.py) - never a stranger's task"),
+    (r'GET', r'^/api/agent/repos$', "the find_repos tool: the git checkouts under the folders agents may look in (repochoice.find) - never a stranger's task"),
     (r'GET', r'^/api/agent/memory$', "`taskuary --memory`: LEARNED.md, read on demand (context.MEMORY_LINE) - never a stranger's task"),
 )
 

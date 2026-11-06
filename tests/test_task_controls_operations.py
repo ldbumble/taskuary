@@ -77,7 +77,7 @@ class TaskControls(unittest.TestCase):
         2026-09-22, TQ-0666)."""
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')
         self.s.upsert_agent('coding', 'coding', 'cli', '{}')
-        why = 'I could not tell which checkout this belongs in, and guessing would put an agent in C:/ledger.'
+        why = 'no local path for org/app, and a search of your code folders found no checkout with that git remote'
         with mock.patch.object(server.hub_term, 'session_for', return_value=None), \
              mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError(why)):
             _, r = self.run_op('dispatch.prepare', tid, {'kind': 'coding'})
@@ -85,7 +85,7 @@ class TaskControls(unittest.TestCase):
         self.assertEqual(out['status'], 'error')                       # still not a success: nothing started
         self.assertEqual(out['outcome']['dispatch'], 'needs_repo')     # ...but the page can ask which one
         self.assertEqual(out['outcome']['taskId'], tid)
-        self.assertIn('could not tell which checkout', out['outcome']['reason'])
+        self.assertIn('no local path', out['outcome']['reason'])
 
     def test_coding_start_on_a_task_with_a_live_worker_is_refused_without_a_duplicate(self):
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'general'}, 'owner')

@@ -69,10 +69,13 @@ class ProjectRelationshipTests(unittest.TestCase):
             projects.learn_task_repository(self.s, tid, 'noble/app')
         incoming = self.task(body='Payroll timesheet failure')
         profile = {'cwd_map': {'noble/app': 'C:/src/noble', 'other/payroll': 'C:/src/payroll'}}
-        self.assertEqual(terminal.guess_repo(self.s, incoming, profile),
-                         ('noble/app', 'learned from 2 owner repository choices for Paul Rivera'))
+        # ...told to the coding agent as a hint beside the repositories it picks from - never picked for it (repochoice, 2026-11-06)
+        from taskuary import repochoice
+        self.assertIsNone(terminal.guess_repo(self.s, incoming, profile)[0])
+        self.assertIn('noble/app - learned from 2 owner repository choices for Paul Rivera', repochoice.block(self.s, incoming, 'C:/scratch', profile))
 
-    def test_triage_receives_only_the_matching_project_context(self):
+    def test_triage_is_handed_no_project_context(self):
+        """Where coding work is done is the coding agent's pick (repochoice, 2026-11-06): triage is not shown the sender's repositories."""
         for _ in range(2):
             tid = self.task(repo='noble/app')
             projects.learn_task_repository(self.s, tid, 'noble/app')
@@ -84,10 +87,7 @@ class ProjectRelationshipTests(unittest.TestCase):
             return '{"intent":"task","kind":"coding","why":"requires a check"}'
         out, _ = judge(self.s, msg, brain)
         self.assertEqual(out['intent'], 'task')
-        self.assertEqual(seen['user']['project_context']['project'], 'noble/app')
-        self.assertEqual(seen['user']['project_context']['repositories'], ['noble/app'])
-        # how much it counts for is the guide's (section 4): supporting evidence, not proof
-        self.assertIn("`project_context` (the sender's past repository choices) is supporting evidence, not proof", seen['system'])
+        self.assertNotIn('project_context', seen['user']); self.assertNotIn('project_context', seen['system'])
 
     def test_soul_lists_people_and_channels_but_not_private_identifiers(self):
         for i in range(2):

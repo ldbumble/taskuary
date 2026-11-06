@@ -47,6 +47,7 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
 import { recipientLabel, recipientOptions } from "./recipientOptions.js";
+import LinesSetting from "./LinesSetting.jsx";
 import { label as btnLabel } from "./buttons.js";
 import PhoneChats from "./PhoneChats.jsx";
 import { CHANNEL_NAME, PHONE_GROUP, PHONE_PAGE, SETUP_STEPS, canHandOver, doorwayStatus } from "./phoneChats.js";
@@ -687,6 +688,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     }
     // THE EMAIL SIGNATURE (responder.signed): the exact block under every email, read off the sent mail and checked here
     if (m.type === "signature") return <SignatureSetting value={s.Value || ""} save={(v) => saveSetting(s.Name, v)} />;
+    if (m.type === "lines") return <LinesSetting value={s.Value || ""} fallback={s.Default || ""} save={(v) => saveSetting(s.Name, v)} />;
     if (m.type === "sound") {
       return (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>

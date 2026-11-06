@@ -77,7 +77,7 @@ def test_the_guide_keeps_banter_off_the_title_and_asks_for_an_offer():
     assert 'banter or small talk about it' in triage.REFINES and 'keeps its title' in triage.REFINES
     assert 'Banter about the ask' in g and 'adds nothing to do' in g
     assert triage.OFFER.startswith('- **offer**') and 'I can register you for the webinar' in triage.OFFER
-    assert '"offer": null' in triage.SHIPPED and 'offer' in triage.verdict_schema([], None, [], [])['schema']['properties']
+    assert '"offer": null' in triage.SHIPPED and 'offer' in triage.verdict_schema()['schema']['properties']
 
 
 # ── a long draft-for-feedback mail, judged general, goes to the assistant told its job ends in the reply ────────────────────
@@ -105,12 +105,11 @@ def test_a_joining_general_verdict_on_a_reply_task_starts_the_assistant():
     assert 'REPLY OWED to Erin Blake' in ingest.reply_job(s, tid)
 
 
-def test_a_joining_coding_verdict_takes_its_repository_and_starts_the_coding_agent():
+def test_a_joining_coding_verdict_starts_the_coding_agent_which_picks_its_repository():
     s = store(); tid = reply_task(s)
-    with mock.patch.object(ingest, 'repo_candidates', return_value=[{'repo': 'northwind/ledger', 'about': 'invoicing'}]):
-        _out, spawned = ingested(s, mail(**WORK), says(intent='task', kind='coding', repository='northwind/ledger', repo_reason='the invoice code',
-                                                        title='Invoice total bug', needs_repo_choice=False))
-    assert s.get_task(tid)['Kind'] == 'coding' and s.task_has_tag(tid, f'{ingest.TRIAGE_REPO_TAG}northwind/ledger')
+    _out, spawned = ingested(s, mail(**WORK), says(intent='task', kind='coding', repository='northwind/ledger', title='Invoice total bug'))
+    t = s.get_task(tid)
+    assert t['Kind'] == 'coding' and 'repo' not in str(t.get('Tags') or '')            # where is the agent's pick (repochoice)
     assert spawned == ['_auto_code']
 
 

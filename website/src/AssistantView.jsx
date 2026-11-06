@@ -950,6 +950,8 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
 // WHAT THE CHAT'S ROAD CANNOT CARRY, said on the chip (the owner, 2026-11-05): the turn names a file's path - an AI on this computer opens it,
 // an API one is handed pictures only (general._images)
 const dockCannot = (i) => (i.image ? "" : "read only by an AI on this computer");
+// ...and its chips ride the box's own line, beside the paperclip, never a row over it (the owner, 2026-11-06: every box, chips left of the words)
+const DOCK_CHIPS = { flex: "0 1 auto", maxWidth: 220, minWidth: 0, pb: 0 };
 function Line({ m, lastBrief = false, live, last, further = false, actions, fresh, tableChips = [], barHolds = false, pageOver = false, canvas = null }) {
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
@@ -3634,6 +3636,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     <div className="tq-compose-field" onMouseDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); composeRef.current?.focus(); } }}>
     <div className="tq-compose-tools">
     <AttachImage pics={pics} sx={{ color: DIM }} />
+    <ImageTray pics={pics} cannot={dockCannot} sx={DOCK_CHIPS} />
     <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onActive={setDictating} ctl={micRef} onInterim={setHeard}
       onText={(t) => setText((v) => (v.trim() ? `${v.trimEnd()} ${t}` : t))} />
     <Tooltip title="Send an emoji response">
@@ -3867,7 +3870,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                 by it (advice.stripWord's quiet pick), so it leaves the same mark */}
             {!shownAdvice && !litNow && stripPick?.verb === "next" && advice?.none && advice.for === onTable && <div hidden data-tq-advice="" data-tq-silent="" data-tq-advice-verb="next" />}
           </>}
-          {!firstRun && !chatApart && <ImageTray pics={pics} cannot={dockCannot} sx={{ width: "100%", mb: 0.75 }} />}
           {/* ONE ROW: the row's groups and the box share a line (the one-row chat bar, 2026-10-26) - the box a pill at its end while at rest,
               widened while it is used, the groups folding into their ▾ for the room (ActionRow measures what is left; Next and the lit
               move never fold). With no row - the day's opener, a phone, whose row rides with its task view - the box is the whole line */}
@@ -3880,7 +3882,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {!chatApart && composeBox}
           </div>
           </div>
-          {chatApart && <div className="tq-chat-unit" data-tq-chat-unit=""><ImageTray pics={pics} cannot={dockCannot} sx={{ width: "100%", mb: 0.75 }} />{composeBox}</div>}
+          {chatApart && <div className="tq-chat-unit" data-tq-chat-unit="">{composeBox}</div>}
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
             slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>

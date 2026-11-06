@@ -111,6 +111,8 @@ import LandingCard from "./LandingCard.jsx";
 import CodingChat from "./CodingChat.jsx";
 import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
+import CodeChanges from "./CodeChanges.jsx";
+import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import AgentChannels from "./AgentChannels.jsx";
 import TokenOutlinedIcon from "@mui/icons-material/TokenOutlined";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
@@ -616,13 +618,14 @@ const rowBtn = (v, word = v.label) => <button key={v.id} type="button" className
 const EVEN_ROW = { ...ROW_LOOK, display: "flex", alignItems: "center", gap: 1, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" };
 // A QUIET CORNER BUTTON IN THE TASK'S HEADER (the owner, 2026-11-06: "AI used" and "Talk to this agent from…" must not sit at the bottom of the
 // chat): an icon with its tooltip beside Expand and the X, its content in a popover under it
-function HeadPop({ id, icon, title, children }) {
+// ...`wide`: a popover with code in it (Changes) - a diff at 380px is a column of wrapped lines
+function HeadPop({ id, icon, title, children, wide = false }) {
   const [at, setAt] = useState(null);
   return <>
     <Tooltip title={title}><IconButton size="small" data-tq-head-pop={id} aria-label={title} aria-haspopup="dialog" aria-expanded={!!at}
       onClick={(e) => setAt(e.currentTarget)} sx={{ color: "#41525f", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
     <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { "data-tq-head-pop-body": id, sx: { p: 1.5, width: 380, maxWidth: "92vw", maxHeight: "60vh", overflowY: "auto" } } }}>
+      transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { "data-tq-head-pop-body": id, sx: { p: 1.5, width: wide ? 760 : 380, maxWidth: "92vw", maxHeight: wide ? "75vh" : "60vh", overflowY: "auto" } } }}>
       {at && children}</Popover>
   </>;
 }
@@ -2974,6 +2977,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...what AI the task used, and - a coding task in Developer mode - the chats its agent can be talked to from: quiet corner
                       buttons, each its popover (the owner, 2026-11-06: never at the bottom of the chat) */}
                   <HeadPop id="ai-used" title="AI used" icon={<TokenOutlinedIcon sx={{ fontSize: 16 }} />}><AiUsed taskId={t.TaskId} pop /></HeadPop>
+                  {canCode && t.Kind === "coding" && <HeadPop id="changes" title="Changes" wide icon={<DifferenceOutlinedIcon sx={{ fontSize: 16 }} />}>
+                    <CodeChanges taskId={t.TaskId} /></HeadPop>}
                   {canCode && t.Kind === "coding" && <HeadPop id="agent-channels" title="Talk to this agent from…" icon={<ForumOutlinedIcon sx={{ fontSize: 16 }} />}>
                     <AgentChannels taskId={t.TaskId} pop /></HeadPop>}
                   {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.

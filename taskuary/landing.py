@@ -114,6 +114,30 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     return out
 
 
+NEW_N = 40                           # new files read into one Changes diff: past this, the agent made a tree, not a fix
+
+
+def changes(store, tid: int) -> dict | None:
+    """THE TASK'S WORK SO FAR, AS ONE DIFF (the owner, 2026-11-06: "where is the diff button to see code changed?"): everything since the
+    checkout's HEAD when the task's first session opened (mark_start) - committed or not, new files too - while the agent works, not only
+    at landing. None when no session of it started in a checkout."""
+    r = record(store, tid)
+    # ...its own branch as the checkout shows it, read as state() reads it: only while no peer's session is in the same checkout
+    alone = bool(r.get('cwd')) and _alone(tid, r['cwd'])
+    if alone: r = seen(store, tid)
+    cwd, start, base, br = r.get('cwd'), r.get('start'), r.get('base'), r.get('branch') or ''
+    if not (cwd and start and os.path.isdir(cwd) and sha(cwd, start)): return None
+    # the working tree is this task's only while its own branch is checked out (the base, when it made none) and no peer works in it -
+    # else what it committed is what is its
+    own = bool(br) and bool(sha(cwd, f'refs/heads/{br}'))
+    if alone and head_branch(cwd) == (br if own else base):
+        new = [l for l in _git(cwd, 'ls-files', '--others', '--exclude-standard').splitlines() if l.strip()][:NEW_N]
+        # ...a new file's diff from nothing: git's own --no-index, which exits 1 when the two differ - its output is the diff
+        diff = '\n'.join([_git(cwd, 'diff', start), *(_run(cwd, 'diff', '--no-index', '--', '/dev/null', f)[1] for f in new)])
+    else: diff = _git(cwd, 'diff', start, br if own else base)
+    return {'base': base, 'start': start[:7], 'since': r.get('at'), 'diff': diff[:DIFF_CAP], 'cut': len(diff) > DIFF_CAP}
+
+
 def said(s: dict) -> str:
     "One line: what changed and what is asked."
     if not s: return ''

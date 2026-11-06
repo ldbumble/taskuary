@@ -5,13 +5,13 @@
 // of the agent on the left - its words, its work folded into "N steps", every edit its own row that opens on the diff - then the drafted reply
 // with Send (`next`, Close out's own cards), the landing card, how it closed, and the AI it used. One thin box under it all: what is typed goes
 // into the running CLI (the waiting room types it in - terminal.type_into), or picks the session back up when none runs (/continue-work).
-// The live terminal is a "Terminal" toggle on the chat, inside it, never a second column: it opens by itself only when the CLI's screen asks
-// what nothing typed here can answer (a chooser, a permission prompt, a sign-in), and the owner can open it to watch.
+// NO TERMINAL BUTTON (the owner, 2026-11-06: "hate this terminal button. it's also not a terminal"). A command's output opens under its own step,
+// as an edit's diff does. Only a CLI in its terminal (the pty road) can have a SCREEN that asks what nothing typed here answers - a sign-in, a
+// permission it draws - and then that screen is a card in the stream, live, for as long as it asks.
 // OVER ACP (acpcoding.py) the box is a prompt (sent when the turn ends, if one runs), Stop ends the turn (session/cancel), a permission is a
-// card here, and the Terminal is its commands' live output - offered only once there is some, never a blank pane.
+// card here.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box } from "@mui/material";
-import TerminalIcon from "@mui/icons-material/TerminalRounded";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
@@ -90,6 +90,10 @@ const Work = ({ steps, running }) => {
   return <details className="tq-aui-working-fold"><summary>{n ? plural(n, "step") : "Along the way"}</summary><AgentSteps data={{ steps }} /></details>;
 };
 
+// IN THE ORDER IT HAPPENED (the owner, 2026-11-06: "the quick update was put above the spinning stuff ... never write above what was written
+// already"): a group of steps with a call still running stays open with its spinner, and what the agent says after it draws below it; the
+// turn's own "Working on this…" only when nothing on screen spins already, and never while it waits on the owner
+const stillRuns = (p) => p.type === "work" && p.steps.some((s) => s.status === "running");
 const Turn = ({ r }) => (
   <div className="tq-aui-message tq-aui-agent" data-tq-coding-turn={r.running ? "running" : ""}>
     <div className="tq-aui-role">{AGENT_TURN}{r.at && <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>· {when(r.at)}</span>}</div>
@@ -97,17 +101,17 @@ const Turn = ({ r }) => (
       {r.parts.map((p, i) => p.type === "said" ? <Md key={p.id} text={p.text} />
         : p.type === "edit" ? <EditRow key={p.id} p={p} />
         : p.type === "plan" ? <PlanRow key={p.id} p={p} />
-        : <Work key={p.id} steps={p.steps} running={r.running && i === r.parts.length - 1} />)}
-      {r.running && <div className="tq-aui-thinking" role="status"><i /><i /><i /><span>Working on this…</span></div>}
+        : <Work key={p.id} steps={p.steps} running={r.running && (i === r.parts.length - 1 || stillRuns(p))} />)}
+      {r.running && !r.waiting && !r.parts.some(stillRuns) && <div className="tq-aui-thinking" role="status"><i /><i /><i /><span>Working on this…</span></div>}
     </div>
   </div>);
 
 export default function CodingChat({ task, term = null, next = null, landing = null, closedLine = "", came = null, reading = null, onChanged }) {
   const tid = task.TaskId;
   const [data, setData] = useState(null), [text, setText] = useState(""), [held, setHeld] = useState([]), [err, setErr] = useState(""),
-    [termPick, setTermPick] = useState(null), [sending, setSending] = useState(false);
+    [sending, setSending] = useState(false);
   const load = useCallback(() => api.get(`/api/tasks/${tid}/coding-chat`).then(({ data: d }) => setData(d?.data || null)).catch(() => {}), [tid]);
-  useEffect(() => { setData(null); setHeld([]); setText(""); setErr(""); setTermPick(null); load(); }, [tid, load]);
+  useEffect(() => { setData(null); setHeld([]); setText(""); setErr(""); load(); }, [tid, load]);
   // the page's own session (TaskPage `term`) is the first word that a CLI runs: the chat's read follows it
   const pageLive = term?.alive && term.mode !== "assistant" && term.taskId === tid ? term : null;
   const live = data?.live || (pageLive ? { sid: pageLive.sid, cli: pageLive.cli, asking: false, working: !pageLive.waiting } : null);
@@ -120,9 +124,8 @@ export default function CodingChat({ task, term = null, next = null, landing = n
   // words however spelled back, and only a line logged SINCE the hold, so a "yes" said earlier never takes a new "yes" away
   const yours = useMemo(() => rows.filter((r) => r.kind === "you").length, [rows]);
   useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, rows.filter((r) => r.kind === "you").map((r) => ({ role: "user", content: [{ type: "text", text: r.text }] }))) : h)); }, [rows]);
-  // ...a session over ACP has a terminal only once a command printed something (codingchat.live_of `terminal`)
-  const hasTerm = !!live && live.terminal !== false, acp = live?.transport === "acp";
-  const termShown = hasTerm && (termPick ?? !!live.asking);
+  // ...the screen is a card only on the pty road, and only while it asks (codingchat.live_of `asking`)
+  const acp = live?.transport === "acp", asking = !!live?.asking && !acp && !!live.sid;
   const stop = () => api.post(`/api/tasks/${tid}/agent/cancel`).then(() => setTimeout(load, 600)).catch((x) => setErr(x?.response?.data?.detail || x?.message || "It did not stop"));
   const vp = useRef(null), stuck = useRef(true);
   useEffect(() => { const v = vp.current; if (v && stuck.current) v.scrollTop = v.scrollHeight; }, [rows.length, held.length, !!next, !!landing]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -157,28 +160,25 @@ export default function CodingChat({ task, term = null, next = null, landing = n
           {held.map((l) => <YouRow key={l.id} text={l.text} held />)}
           {/* WHAT THE AGENT WAITS ON THE OWNER'S PRESS FOR (permissions.py): one card each, answered here or by the owner on a bound chat */}
           <PermissionCards taskId={tid} items={data?.permissions || []} onAnswered={load} />
-          {live?.working && !rows.at(-1)?.running && <div className="tq-aui-thinking" role="status"><i /><i /><i /><span>{live.cli || "The agent"} is working…</span></div>}
+          {/* THE AGENT'S SCREEN, WHILE IT ASKS: the live terminal in the stream, answered there; gone once it stops asking */}
+          {asking && <div className="tq-cc-screen" data-tq-chat-screen="" role="group" aria-label="The agent's screen is asking something">
+            <div className="tq-cc-screen-head">The agent's screen is asking something</div>
+            <TerminalPane sid={live.sid} height="300px" onExit={load} /></div>}
+          {live?.working && !asking && !data?.permissions?.length && !rows.some((r) => r.running) && <div className="tq-aui-thinking" role="status"><i /><i /><i /><span>{live.cli || "The agent"} is working…</span></div>}
           {/* THE DRAFTED REPLY, with its Send (Close out's own cards, TaskPage closeBody) - then the branch's landing, then how it closed */}
           {next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
             <Box component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1, mb: 0.25 }}>Suggested reply</Box>{next}</Box>}
           {landing}
           {closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
         </div>
-        {termShown && <Box data-tq-chat-terminal="" sx={{ flex: "0 0 46%", minHeight: 220, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
-          <TerminalPane sid={live.sid} height="100%" onExit={load} /></Box>}
         <div className="tq-aui-footer">
-          {live?.asking && !termShown && <div className="tq-aui-hint" role="status" style={{ margin: "0 0 6px" }}>The agent's screen is asking something - open the Terminal to answer it.</div>}
-          {/* THE ONE BOX (AgentSummary.PromptBox): paperclip, the Came-from chip and the files, the words, the mic, the Terminal toggle, Send */}
+          {/* THE ONE BOX (AgentSummary.PromptBox): paperclip, the Came-from chip and the files, the words, the mic, Stop over ACP, Send */}
           <PromptBox text={text} setText={setText} pics={pics} busy={false} sendOff={sending} onSend={send} label="Message the agent" title="Send"
             placeholder={closed ? "Write to pick it back up…" : live ? MESSAGE : "Write to pick the session back up…"}
             chips={came ? <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
               sx={{ cursor: came.onOpen ? "pointer" : "default" }} /> : null}
-            /* THE TERMINAL, A TOGGLE ON THE CHAT: only while a CLI runs */
-            extra={<>{acp && live.working && <button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
-              title="Stops this turn - the session stays, and what you type next carries on" onClick={stop}><CloseIcon fontSize="small" /></button>}
-              {hasTerm && <button type="button" className="tq-cc-term" data-tq-terminal-toggle="" aria-pressed={termShown ? "true" : "false"}
-              title={termShown ? "Hide the agent's terminal" : "Watch the agent's terminal - and answer what only it can"} onClick={() => setTermPick(!termShown)}>
-              <TerminalIcon sx={{ fontSize: 15 }} /><span>Terminal</span></button>}</>} />
+            extra={acp && live.working && <button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
+              title="Stops this turn - the session stays, and what you type next carries on" onClick={stop}><CloseIcon fontSize="small" /></button>} />
           {err && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{err}</div>}
           <div className="tq-aui-hint">{acp ? (live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
             : live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}</div>

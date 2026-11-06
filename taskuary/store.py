@@ -811,8 +811,9 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'assistant_ai': '', 'assistant_model': '',
                     # Drafting's own brain and model (aidefaults, brainroute) - blank = the triage brain, as before
                     'draft_ai': '', 'draft_model': '',
-                    # which AI does each job (brainroute): fixed = the cards, exactly as before; auto = the rules, '' = the shipped ones
-                    'ai_route_mode': 'fixed', 'ai_route_rules': '', 'ai_route_strong_cap': '',
+                    # which AI does each job (brainroute): auto = triage's judgement picks the model (the owner, 2026-11-06), fixed =
+                    # the cards exactly as before; rules '' = the shipped ones
+                    'ai_route_mode': 'auto', 'ai_route_rules': '', 'ai_route_strong_cap': '',
                     # the agent's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'agent_context_file': '1',
@@ -1428,6 +1429,10 @@ class SQLiteStore:
                 self.cx.execute('DELETE FROM setting WHERE Name=?', (old,))
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
+            # AUTO ROUTING ON (the owner, 2026-11-06: "it should be on auto routing by default"). The old seed was 'fixed' with no
+            # writer; a Fixed the owner chose carries who saved it (brainroute.set_panel, the Settings row), so only the seed moves
+            self.cx.execute("UPDATE setting SET Value='auto', UpdatedBy='migration' WHERE Name='ai_route_mode' AND Value='fixed' "
+                            "AND COALESCE(UpdatedBy, '')=''")
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),

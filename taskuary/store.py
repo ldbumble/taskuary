@@ -509,6 +509,11 @@ CREATE TABLE IF NOT EXISTS waitroom (WId INTEGER PRIMARY KEY, TaskId INTEGER, No
 CREATE TABLE IF NOT EXISTS boardnote (NoteId INTEGER PRIMARY KEY, TaskId INTEGER, Agent TEXT,
   Cwd TEXT, Kind TEXT, Body TEXT, Files TEXT, CreatedAt TEXT, ReadBy TEXT);
 CREATE INDEX IF NOT EXISTS idx_boardnote_cwd ON boardnote(Cwd, NoteId);
+-- ...and what one agent says TO another (peers.py): one row per receiving task, fanned out when it is sent. Scope says who it was
+-- addressed to (task | repo | all); ReadAt is set when it rides into that task's agent's next turn.
+CREATE TABLE IF NOT EXISTS peernote (PeerNoteId INTEGER PRIMARY KEY, FromTask INTEGER, ToTask INTEGER, Scope TEXT, Repo TEXT,
+  Body TEXT, CreatedAt TEXT, ReadAt TEXT);
+CREATE INDEX IF NOT EXISTS idx_peernote_to ON peernote(ToTask, ReadAt);
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
 -- ...and each line's standing (learnedlines.py, phase C 2026-10-23): who reads it, watching / in_use / wrong / forgotten, the owner's
@@ -5681,6 +5686,18 @@ class SQLiteStore:
         if who in seen: return
         self._exec('UPDATE boardnote SET ReadBy=? WHERE NoteId=?', (','.join(seen + [who]), note_id))
     def get_note(self, note_id: int): return self._one('SELECT * FROM boardnote WHERE NoteId=?', (note_id,))
+    # ── notes between agents (peers.py) ──
+    def add_peer_note(self, frm, to, scope: str, repo: str, body: str) -> int:
+        return self._insert('peernote', {'FromTask': frm, 'ToTask': to, 'Scope': scope, 'Repo': repo or '', 'Body': body, 'CreatedAt': _now()},
+                            ('FromTask', 'ToTask', 'Scope', 'Repo', 'Body', 'CreatedAt'))
+    def peer_notes(self, to: int, unread: bool = True) -> list:
+        return self._rows('SELECT * FROM peernote WHERE ToTask=?' + (' AND ReadAt IS NULL' if unread else '') + ' ORDER BY PeerNoteId', (int(to),))
+    def peer_notes_read(self, ids: list) -> int:
+        if not ids: return 0
+        self._exec(f"UPDATE peernote SET ReadAt=? WHERE PeerNoteId IN ({','.join('?' * len(ids))})", [_now(), *ids])
+        return len(ids)
+    def tasks_with_peer_notes(self) -> list:
+        return [r['ToTask'] for r in self._rows('SELECT DISTINCT ToTask FROM peernote WHERE ReadAt IS NULL')]
 
     def list_sources(self, active_only=True):
         return self._rows('SELECT * FROM source' + (' WHERE Active=1' if active_only else ''))

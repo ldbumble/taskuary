@@ -720,6 +720,12 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # a setup session kept no transcript on purpose (secrets were typed into it) and has no report to write
     if task.get('Kind') == aisetup.KIND: return aisetup.finish(store, tid, actor)
     if task.get('SourceRef') == aisetup.WALK_REF: return aisetup.finish_walk(store, tid, actor)      # a card's walk: its Test was the report
+    # ...a coding task's branch is read off the shared checkout NOW, while its HEAD is still the agent's: the close-out's landing question
+    # asks about that branch even after another agent switches the checkout (landing.py)
+    if str(task.get('Kind') or '').lower() == 'coding':
+        from . import landing
+        try: landing.seen(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: its branch was not read at the close - {e}')
     # General work already has a durable, turn-by-turn record in task comments. It does not need a
     # coding-transcript summarizer or a synthetic AGENT REPORT; close the shared session and the
     # task, leaving that conversation intact.

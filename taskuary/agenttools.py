@@ -60,6 +60,11 @@ TOOLS = {
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
+    # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
+    'check_back': ('own', "Check back on this task later: at `when` (\"tomorrow 9am\", \"in 2 days\", \"2026-11-12\", \"in 3 hours\") you are "
+                   "woken here with `what` as your next turn - a payment that should clear, a reply expected by a date, a form that takes a "
+                   "day. One per task; a new one replaces it. Nothing is sent and the task stays where it is.",
+                   _S({'when': _STR, 'what': _STR}, ('when', 'what')), ('POST', '/api/agent/check-back')),
     'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
                       "mail. It becomes a pending reply with a Send button for the owner - nothing is sent.",
                       _S({'text': _STR, 'to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
@@ -178,6 +183,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
+    if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
     if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach'))))
     if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''),

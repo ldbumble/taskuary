@@ -5441,6 +5441,18 @@ def agent_not_needed(body: AgentNotNeededBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return verdicts.not_needed(store, body.task_id, body.why, body.agent)
 
+class AgentCheckBackBody(BaseModel): task_id: int; when: str; what: str; agent: str = 'agent'
+
+@app.post('/api/agent/check-back')
+def agent_check_back(body: AgentCheckBackBody, request: Request):
+    """`taskuary --check-back WHEN "WHAT"` (and the check_back tool) from the session working the task: its own follow-up, woken on the
+    reminders' clock with that note as its next turn (checkback.py). Nothing is sent, the task stays where it is."""
+    from . import checkback
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: return checkback.set_check(store, body.task_id, body.when, body.what, body.agent)
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''
@@ -5524,6 +5536,7 @@ async def mcp_rpc(request: Request, task: int = 0):
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
+             'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'reply': lambda tid, text, to='', files=(): agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files)), request),
              'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),

@@ -122,7 +122,8 @@ GENESIS = '0' * 64
 # the channels Taskuary writes itself - its reports and the Advisor's ideas - which carry no sender address
 OWN_CHANNELS = ('report', 'assistant')
 TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Source', 'SourceRef', 'Tags', 'RemindAt', 'AskedVia', 'DueAt',
-             'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy', 'WatchedAt', 'WatchBack', 'ThreadJson')
+             'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy', 'WatchedAt', 'WatchBack', 'ThreadJson',
+             'CheckBackAt', 'CheckBackWhat')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
             'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass', 'MeetJson')
@@ -1157,6 +1158,9 @@ class SQLiteStore:
             # back on the walk ('moved', 'handled', 'quiet') until their next move
             for col in ('WatchedAt', 'WatchBack'):
                 if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
+            # a check-back its agent set (the owner, 2026-11-05: checkback.py): when the same task's agent wakes, and what it is to verify
+            for col in ('CheckBackAt', 'CheckBackWhat'):
+                if col not in tcols: self.cx.execute(f'ALTER TABLE task ADD COLUMN {col} TEXT')
             # what the owner asked for, and where (asks.py): the door, and the last lane said there - kept on the task,
             # so a restart never repeats what was already told
             # ...a watch on a task nobody works (what, and the last reply already seen), and where a reminder was set
@@ -2171,7 +2175,8 @@ class SQLiteStore:
         if fields.get('Status') in ('done', 'dropped'):
             # a closed task waits on nobody: their later line is judged as any line on a closed thread (ingest._reopen)
             # ...and a closed task is watched by nobody (watch.py): Mark done ends a watch like any task
-            self._exec('UPDATE task SET WaitingOn=NULL, WatchedAt=NULL, WatchBack=NULL WHERE TaskId=?', (task_id,))
+            # ...and checked back on by nobody: a check-back is the agent's, and a closed task has none at work (checkback.py)
+            self._exec('UPDATE task SET WaitingOn=NULL, WatchedAt=NULL, WatchBack=NULL, CheckBackAt=NULL, CheckBackWhat=NULL WHERE TaskId=?', (task_id,))
             self._exec("UPDATE review SET Status='superseded', DecidedBy=?, DecidedAt=? "
                        "WHERE TaskId=? AND Status='pending'", (actor, _now(), task_id))
             # ...and so does the Advisor idea the task was MADE from: left open, 96 ideas outlived their closed tasks

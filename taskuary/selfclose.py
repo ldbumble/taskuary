@@ -343,7 +343,10 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'need the owner, say what you got and what you are unsure about in one or two plain sentences above it; offer choices '
                 f'(through [[TASKUARY-ASK]]) only when there are real ones. When the owner\'s newest message CORRECTS you, add "corrections": '
                 f'[{{"kind": "redraft" (their words for the draft) or "ask" (you read what the task wants wrongly), "review": <the draft\'s id or null>, '
-                f'"said": "<what they corrected, in their words where you can>"}}] - never show them as anything.')
+                f'"said": "<what they corrected, in their words where you can>"}}] - never show them as anything. The three parts are for a real ask. '
+                f'When what came in needs nothing from you or the owner - you judge that from the thread, not from its wording alone - the whole turn is '
+                f'ONE plain line saying what it was ("Ray thanked you."), and the block is {SUMMARY_OPEN}{{"did": "<that same line>", "about": "", '
+                f'"on_you": []}}{SUMMARY_CLOSE}: no draft, no new research, and the draft already waiting is left as it is, never written again.')
 _SUMMARY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?SUMMARY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?SUMMARY\s*\]\]', re.I | re.S)
 # ...and one that never closed: a live line is cut to 300-400 characters before it is drawn (agents.py), and a turn can end without
 # the closing tag - the opening tag through to the end goes, and so does a tag cut off part-way at the very end ("[[TASKUA")

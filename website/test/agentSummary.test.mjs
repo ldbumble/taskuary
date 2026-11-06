@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { answerShown, chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps } from "../src/agentSummary.js";
+import { answerShown, chatReplyShown, foldedSummaries, hasReply, lastAnswerSummed, nextSteps, oneLine } from "../src/agentSummary.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
@@ -26,6 +26,23 @@ test("a newest answer with no summary folds every summary, so the cards follow i
   assert.equal(lastAnswerSummed([{ id: "a", role: "assistant", summary: {} }, { id: "w", role: "user", brief: true }]), false);
   assert.deepEqual([...foldedSummaries([{ id: "a", role: "assistant", summary: {} }, { id: "w", role: "user", brief: true }])], ["a"]);
   assert.equal(lastAnswerSummed([{ id: "a", role: "assistant", summary: {} }, { id: "t", role: "user", content: [] }]), false);
+});
+
+// A NOTHING-NEW TURN IS ONE LINE (the owner, 2026-11-06): the agent's own judgement, filed as a summary with only `did`
+test("a one-line turn is its line, and the real answer before it keeps its draft open", () => {
+  assert.equal(oneLine({ did: "Ray thanked you." }), true);
+  assert.equal(oneLine({ did: "Ray thanked you.", about: "" , on_you: [] }), true);
+  assert.equal(oneLine({ about: "Ray wants the renewal term", did: "Drafted it." }), false);
+  assert.equal(oneLine({ did: "Checked it.\nDrafted the reply." }), false);
+  assert.equal(oneLine({ did: "Drafted it.", drafted: [{ review: 4 }] }), false);
+  assert.equal(oneLine({ did: "" }), false); assert.equal(oneLine(null), false);
+  const msgs = [{ id: "a", role: "assistant", summary: { about: "Ray asks", did: "Drafted Ray a reply." } }, { id: "w", role: "user", brief: true },
+    { id: "b", role: "assistant", summary: { did: "Ray thanked you." } }];
+  assert.deepEqual([...foldedSummaries(msgs)], []);
+  // ...but a real answer after it folds both, as ever
+  assert.deepEqual([...foldedSummaries([...msgs, { id: "c", role: "assistant", summary: { about: "x", did: "y" } }])], ["a", "b"]);
+  const src = read("AgentSummary.jsx");
+  assert.ok(src.indexOf("oneLine(summary)") < src.indexOf("if (folded)"), "a one-line turn draws before any heads or Next steps");
 });
 
 test("Next steps: nothing left only when no draft waits and no On you step is unticked", () => {

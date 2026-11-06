@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
-import { hasReply, nextSteps } from "./agentSummary.js";
+import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
 import { isCardReview } from "./actionCard.js";
 import { Md } from "./md.jsx";
 import { readingOf } from "./threadReading.js";
@@ -62,6 +62,8 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
       {["Drafted", who(r) && `to ${who(r)}`, fate(r)].filter(Boolean).join(" · ")}</Typography>
     <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
+  // ...a nothing-new turn is its one line, folded or not: no heads, no Next steps, and the draft stays on the turn that wrote it (oneLine)
+  if (oneLine(summary)) return <>{<Box data-tq-summary="line" className="tq-aui-summary" sx={LINE}><Md text={did} /></Box>}{made}{lead}</>;
   if (folded) return did || drafted.length ? (<>
     {did && <Box component="details" data-tq-summary="folded" className="tq-aui-summary" sx={{ mt: 0.75 }}>
       {/* ...one line: what it did, cut where the line ends - the whole of it a press away */}

@@ -2426,8 +2426,10 @@ REPLAN = ('Re-plan the WHOLE next step from here, not only the draft: it may nee
           'Ray there", "Gail took care of it" - then either that we are good, nothing left (nothing_left true), or what is still open as next '
           'steps. Start the summary\'s "did" with that same line: the owner reads the summary, not the words above it. When the new message '
           'changes nothing - it repeats what you already had, or adds nothing to act on - say exactly that in one line ("Nothing new here: '
-          'the plan above still stands") and stop: no re-research, no rewritten answer, the earlier draft stays as it is. You never send '
-          'or close anything. End with the [[TASKUARY-SUMMARY]] block.')
+          'the plan above still stands") and stop: no re-research, no rewritten answer, the earlier draft stays as it is. And when it '
+          'needs no real response at all - a thanks, an acknowledgement, a sign-off; your judgement of the thread, not a word list - the '
+          'whole turn is ONE line saying what it was ("Ray thanked you."), with a summary of only that line as "did", "about" empty, no steps '
+          'and no draft. You never send or close anything. End with the [[TASKUARY-SUMMARY]] block.')
 _QUIET_WAKE = ('the task is closed', 'not an assistant task', 'no agent conversation', 'triage could not read it',
                'passing lines to the agent is switched off')
 

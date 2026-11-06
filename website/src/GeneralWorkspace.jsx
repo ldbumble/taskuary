@@ -217,22 +217,23 @@ const ChannelMark = ({ channel }) => {
 };
 // ...and a burst from one sender reads as one: the next message of the same person on the same channel carries its time alone (the owner's
 // four WhatsApp messages in a minute, 2026-11-05: the same "WhatsApp message from … · sent to Taskuary" over each)
+// ...icon, who and when - no "sent to Taskuary" (the owner, 2026-11-05: every input goes to it; the words said nothing)
 const sameAs = (a, b) => !!a && !!b && a.who === b.who && String(a.channel || "") === String(b.channel || "");
-const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i, all) => (
+const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => (
   <div key={i} className={`tq-aui-arrived${sameAs(all[i - 1], x) ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
     <span className="tq-aui-arrived-head">{sameAs(all[i - 1], x) ? when(x.at) || "" : <><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</>}</span>
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at)].filter(Boolean).join(" · ")}</>}</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
-  const agent = React.useContext(AgentNameCtx), at = useAuiState((s) => s.message.createdAt);
+  const at = useAuiState((s) => s.message.createdAt);
   // ...a brief with no mail but a SHORT line of its own is a trigger of Taskuary's ("Signed in to the site") - on the right, with the time;
   // a long one is Taskuary's instructions to the agent, never drawn
   const words = useAuiState((s) => textOf(s.message));
-  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} agent={agent} /></MessagePrimitive.Root>
+  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
     : words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
-      <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{[at && when(new Date(at)), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+      <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{at ? when(new Date(at)) : ""}</span>
       <span className="tq-aui-arrived-words">{words}</span></div></MessagePrimitive.Root> : null;
   // ...and what the owner types is theirs on the right, under their mark and the time ("if user interjects it will show user logo")
   if (chat) return (

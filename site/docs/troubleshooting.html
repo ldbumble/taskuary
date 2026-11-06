@@ -97,7 +97,7 @@
 <div class="entry on">
       <a class="page" href="./troubleshooting" aria-current="page">When something is wrong</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide When something is wrong's sections"></button>
-      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#report-a-bug" data-sec="report-a-bug">Report a bug</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
+      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#an-agent-is-slow-to-start" data-sec="an-agent-is-slow-to-start">An agent is slow to start</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#report-a-bug" data-sec="report-a-bug">Report a bug</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./whats-new">What's new</a>
@@ -208,6 +208,16 @@ it comes back to you rather than disappearing. Only <strong>Later</strong> holds
 <p><strong>Stop and save</strong> ends the session, files what it did and drafts the reply for you to
 approve; it leaves the task state alone and sends nothing. If you want the task closed, <strong>Mark
 done</strong> does both.</p>
+<h2 id="an-agent-is-slow-to-start">An agent is slow to start<a class="anchor" href="#an-agent-is-slow-to-start" aria-label="Link to this section">#</a></h2>
+<p>Claude Code and Codex agents start through a small <strong>agent connector</strong> (an npm package). Installing
+the CLI from its card under <strong>Connections → AI CLI agents</strong> installs the connector too, as one more
+step. Without it, every start fetches the connector through <code>npx</code>: a few seconds more each time,
+and a download on the first one.</p>
+<p>A card whose CLI was already here says so in one quiet line: <strong>Faster agent start: install the
+connector</strong>, with <strong>Install</strong>. After a Taskuary update moves to a newer connector, the same line
+offers <strong>Update</strong>; an older copy is never used, so until then agents fetch the right one through
+<code>npx</code>. With no npm on the computer, the line says so and agents still work: Taskuary starts the CLI
+directly. Ask the Assistant &quot;why is my Claude agent slow to start&quot; and it checks this for you.</p>
 <h2 id="a-report-returned-nothing">A report returned nothing<a class="anchor" href="#a-report-returned-nothing" aria-label="Link to this section">#</a></h2>
 <p>Open the report row: the last run shows what it read, what came out, and the error if it failed.</p>
 <ul>

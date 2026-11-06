@@ -285,7 +285,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             # its folder is its cwd already; --add-dir says so to Claude whatever cwd a resume or a profile brings (R25)
             prof['args'] = clis.auto_args(c, args) + ['--add-dir', sd, '--settings', origin.session_settings(store, task_id)]
             prof['acp_ok'] = False      # the reviewer rides argv; ACP's own permission answer allows everything
-        elif stranger_mode == 'look': prof['args'] = clis.readonly_args(c, args)
+        elif stranger_mode == 'look': prof['args'], prof['acp_ok'] = clis.readonly_args(c, args), False     # its floor is argv's too
         if stranger_mode in ('auto', 'look'):
             prof['strict_env'], prof['cwd'] = True, sd
             # ...and its token is bound to this task, never the shared one a caller's session env carried (R28)
@@ -352,7 +352,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         disk itself, and the prompt already names their paths. `want` is accepted and dropped
         too, and takes_want is never set: there is no wire to put a schema on, so the prompt and
         the caller's recheck (ask_json) are the whole contract here."""
-        from .agents import run_cli
+        from .agents import run_cli, run_context
         kwargs = {'cancel': cancel} if cancel is not None else {}
         if extra_env: kwargs['extra_env'] = extra_env
         run_prof, prompt = shaped(system, user)
@@ -361,8 +361,10 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         # chat's second round (a look-up, the gate's retry) went out with no id, which clipool reads as New chat - so it
         # killed the live CLI and started another, 15 s against 2.6 s warm, and the round lost the turn it was answering.
         # A chat already under way did this all along: its rounds resume one session. One-shot brains keep their own id.
-        out, sid, _diff = run_cli(run_prof, prompt, trace or (lambda *a: None),
-                                  resume=llm.session_id if keep else resume, **kwargs)
+        # ...and the store and task the ACP road's permission answers read (acpgate: the send filter, a step held on THIS task)
+        with run_context(store, task_id if not no_hands else None):
+            out, sid, _diff = run_cli(run_prof, prompt, trace or (lambda *a: None),
+                                      resume=llm.session_id if keep else resume, **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
         llm.session_id = sid or resume
         if stranger_mode in ('auto', 'look') and sid: store.set_setting(f'stranger_sid:{task_id}', sid, 'router')   # born in the stranger's folder
@@ -392,8 +394,9 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         """A kept conversation's process started before its first call, on these instructions (agents.warm_cli). False when
         nothing keeps: a one-shot brain starts its CLI per call, as it always has. `swap`: only a live one launched otherwise is replaced."""
         if not keep: return False
-        from .agents import warm_cli
-        return warm_cli(shaped(system, '')[0], resume=llm.session_id, extra_env=extra_env, swap=swap)
+        from .agents import warm_cli, run_context
+        with run_context(store, task_id if not no_hands else None):
+            return warm_cli(shaped(system, '')[0], resume=llm.session_id, extra_env=extra_env, swap=swap)
     llm.session_id, llm.warm = resume, warm
     # ...and whether it can look a fact up: only a quick call's own flags give the web (clis.quick_web), and a stranger's look has no tools
     from .clis import quick_web

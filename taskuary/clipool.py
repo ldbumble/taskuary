@@ -204,6 +204,49 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
                 lv.close(); raise
 
 
+# ── an ACP conversation: a connection, not a process we write lines to (agents.run_acp) ─────────────────────────────────────────
+# The same pool, so the idle clock, MAX_LIVE, New chat (close) and shutdown treat it as they treat a claude process. Opening one
+# takes seconds (an adapter's start, initialize, session/new), so it happens OUTSIDE the lock.
+def _stale(lv, sig, resume) -> bool:
+    return not lv.alive() or lv.sig != sig or (not resume and lv.turns > 0) or bool(resume and lv.sid and resume != lv.sid)
+
+
+def _put(key: str, lv):
+    with _LOCK:
+        old = _POOL.get(key)
+        if old is not None and old is not lv: _POOL.pop(key).close()
+        if len(_POOL) >= MAX_LIVE:
+            out = min((k for k, v in _POOL.items() if not v.lock.locked()), key=lambda k: _POOL[k].used, default=None)
+            if out: _POOL.pop(out).close()
+        _POOL[key] = lv
+
+
+def take(key: str, sig: tuple, open_conn, resume=None):
+    "The live ACP conversation for `key`: the open one when it still fits (same launch, same conversation), else `open_conn()`."
+    with _LOCK:
+        lv = _POOL.get(key)
+        if lv is not None and _stale(lv, sig, resume) and not lv.lock.locked(): _POOL.pop(key).close(); lv = None
+    if lv is not None: return lv
+    lv = open_conn(); _put(key, lv)
+    return lv
+
+
+def warm_with(key: str, sig: tuple, open_conn, resume=None, swap: bool = False) -> bool:
+    "warm() for an ACP conversation: True when one was opened. `swap`: only a live, idle one opened otherwise is replaced."
+    with _LOCK: lv = _POOL.get(key)
+    if swap and (lv is None or lv.lock.locked()): return False
+    if lv is not None and not _stale(lv, sig, resume): return False
+    take(key, sig, open_conn, resume)
+    return True
+
+
+def drop(key: str, lv) -> None:
+    "Close a conversation that failed or was cancelled - only if it is still the one under `key`."
+    with _LOCK:
+        if _POOL.get(key) is lv: _POOL.pop(key)
+    lv.close()
+
+
 def close(prefix: str) -> int:
     """Close every live conversation whose key starts with `prefix` - New chat, a finished general task."""
     with _LOCK:

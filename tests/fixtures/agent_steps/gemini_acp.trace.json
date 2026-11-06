@@ -1,5 +1,15 @@
 [
  {
+  "type": "progress",
+  "name": "text",
+  "detail": "I'll find the budget review thread first, then check the status board code."
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "I'll find the budget review thread first, then check the status board code."
+ },
+ {
   "type": "tool_call",
   "name": "execute",
   "detail": {
@@ -13,7 +23,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "Shell (pending)"
+  "detail": "→ Shell"
  },
  {
   "type": "tool_result",
@@ -22,11 +32,6 @@
    "result": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g1 (completed)"
  },
  {
   "type": "tool_call",
@@ -42,7 +47,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "Shell (pending)"
+  "detail": "→ Shell"
  },
  {
   "type": "tool_result",
@@ -51,11 +56,6 @@
    "result": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g2 (completed)"
  },
  {
   "type": "tool_call",
@@ -71,7 +71,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "ReadFile (pending)"
+  "detail": "→ ReadFile"
  },
  {
   "type": "tool_result",
@@ -80,11 +80,6 @@
    "result": "export const StatusBoard = () => null;",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g3 (completed)"
  },
  {
   "type": "tool_call",
@@ -100,7 +95,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "ReadFile (pending)"
+  "detail": "→ ReadFile"
  },
  {
   "type": "tool_result",
@@ -109,11 +104,6 @@
    "result": "export const BudgetTable = () => null;",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g4 (completed)"
  },
  {
   "type": "tool_call",
@@ -130,7 +120,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "SearchText (pending)"
+  "detail": "→ SearchText"
  },
  {
   "type": "tool_result",
@@ -139,11 +129,6 @@
    "result": "Found 2 matches",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g5 (completed)"
  },
  {
   "type": "tool_call",
@@ -159,7 +144,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "GoogleSearch (pending)"
+  "detail": "→ GoogleSearch"
  },
  {
   "type": "tool_result",
@@ -168,11 +153,6 @@
    "result": "results",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g6 (completed)"
  },
  {
   "type": "tool_call",
@@ -188,7 +168,7 @@
  {
   "type": "live",
   "name": "gemini",
-  "detail": "WebFetch (pending)"
+  "detail": "→ WebFetch"
  },
  {
   "type": "tool_result",
@@ -197,10 +177,5 @@
    "result": "Budget reviews close when the owner signs off.",
    "is_error": false
   }
- },
- {
-  "type": "live",
-  "name": "gemini",
-  "detail": "g7 (completed)"
  }
 ]

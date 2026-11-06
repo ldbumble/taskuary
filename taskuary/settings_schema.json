@@ -284,6 +284,13 @@
       "desc": "The CLI agent that works tasks when nothing names one.",
       "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
     },
+    "acp_cli": {
+      "group": "Agent permissions",
+      "label": "Run CLI agents over ACP",
+      "type": "switch",
+      "desc": "General agents on Claude Code, Codex, Gemini and the other CLIs run through the Agent Client Protocol: every tool call and permission is a request Taskuary sees and answers. Off: they run on the command line as before.",
+      "help": "On (the default): each tool an agent wants to use is asked for first, and Taskuary answers by its own rules - its own tools and anything that only reads or works in the agent's folder are allowed; a tool that sends mail or chat, a push, a publish or a delete outside the folder waits for you, as it does in a pane. What the agent did is shown step by step, the same as before. Claude Code and Codex speak it through a small adapter, started with npx (installed with `npm i -g @agentclientprotocol/claude-agent-acp @agentclientprotocol/codex-acp`, each start is about 2 seconds quicker); it drives the CLI you already have, with its own login.\n\nIf an agent cannot start that way, that run goes on the command line instead and the log says so once. Off: every CLI run goes on the command line. Coding sessions in a terminal are not affected."
+    },
     "general_agent_hands": {
       "group": "Agent permissions",
       "label": "General agents can",

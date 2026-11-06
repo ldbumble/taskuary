@@ -30,7 +30,11 @@ class ForScreenTests(unittest.TestCase):
         said = '3 + 3 is 6.\n\n[[TASKUARY-REPLY]]\n3 + 3 is 6.\n[[/TASKUARY-REPLY]]'
         self.assertEqual(selfclose.reply_marker(said), ('3 + 3 is 6.', '3 + 3 is 6.'))
         self.assertEqual(selfclose.reply_marker('Here is the draft:\n[[TASKUARY-REPLY]]\nHi Erin, done.\n[[/TASKUARY-REPLY]]'),
-                         ('Here is the draft:\nHi Erin, done.', 'Hi Erin, done.'))
+                         ('Here is the draft:\n\nHi Erin, done.', 'Hi Erin, done.'))
+        # ...glued to the words before it, the letter still stands as its own paragraph - the one without_draft takes out of the chat
+        text, said = selfclose.reply_marker("Ray's reply is drafted.[[TASKUARY-REPLY]]Hi Ray - yes, 24 months.[[/TASKUARY-REPLY]]")
+        self.assertEqual(text, "Ray's reply is drafted.\n\nHi Ray - yes, 24 months.")
+        self.assertEqual(selfclose.without_draft(text, said), "Ray's reply is drafted.")
 
     def test_the_done_line_leaves_the_progress_line(self):
         """[[TASKUARY-DONE]] stayed in the box, and with it the last paragraph no longer matched the answer, so the answer was

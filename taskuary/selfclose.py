@@ -401,7 +401,9 @@ def reply_marker(text: str) -> tuple:
     # ...said once: an agent that wrote the answer out and then marked the same words had both left on screen (2026-10-15)
     flat = lambda s: ' '.join(s.split())
     if said and flat(said) in flat(rest): return rest.strip(), said
-    return (text[:m.start()] + said + text[m.end():]).strip(), said or None
+    # ...and a paragraph of its own where it stood: glued to the words before it ("Drafted.Hi Ray - ..."), the letter was no paragraph
+    # without_draft could find, and the chat drew it in the answer AND as its card (the scenario run, 2026-11-06)
+    return '\n\n'.join(x for x in (text[:m.start()].rstrip(), said, text[m.end():].lstrip()) if x).strip(), said or None
 
 
 # ...and said in ONE place: the draft is Close out's to show (the owner, 2026-11-02: "in agent we should just say 'agent drafted a message'").

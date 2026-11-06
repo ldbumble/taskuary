@@ -19,7 +19,7 @@ test("the page opens at the server's answer, before the re-reads; a failure says
   const f = body("const reopen = async () => {");
   assert.ok(f.indexOf("reopenedDetail(d)") < f.indexOf("loadDetail(id)"), "drawn open before the detail is read again");
   assert.doesNotMatch(f, /await load/, "the re-reads are not waited on");
-  assert.match(f, /catch \(e\) \{ setReopening\(null\); if \(!stale\(id\)\) setErr\(opError\(e,/);
+  assert.match(f, /catch \(e\) \{ clearTimeout\(cap\); done\(\); if \(!stale\(id\)\) setErr\(opError\(e,/);
 });
 
 test("both Reopen buttons are disabled and say Reopening… while it is on its way", () => {

@@ -18,7 +18,6 @@ import TuneIcon from "@mui/icons-material/Tune";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import api from "./api";
 import { OPEN_SEARCH, openAppLink } from "./appLinks.js";
-import { markReopen } from "./reopenFromSearch.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
 import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
@@ -222,8 +221,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
     onClose();
     // a setting or a connection: the page that holds it, by its link - the road every in-app link takes, which brings it to view
     if (h.href) { searchPicked(); openAppLink(h.href); }
-    // ...a closed task opens reopened, as if Reopen task were pressed on it (reopenFromSearch.js, the owner 2026-11-02)
-    else if (h.type === "task") { markReopen(h.tid, h.status); onOpenTask?.(h.tid, h); }
+    // ...a closed task opens as it is, in its chat - typing to it reopens it (the owner, 2026-11-06)
+    else if (h.type === "task") onOpenTask?.(h.tid, h);
     else if (h.type === "source") onPickSource?.(h.pick);
     else if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h);
     if (find) focusOpened(find);
@@ -306,7 +305,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
               {g.group}<Box component="span" sx={{ fontWeight: 500 }}>{groupCount(g)}</Box></Box>
             {g.hits.map((h) => { i += 1; const n = i; return (
               <Row key={h.id} hit={h} words={words} on={n === at} onPick={pick} onHover={() => n !== at && setAt(n)} onMessage={aloneAs(res) ? null : message}
-                onTask={(tid) => { const find = opened({ tid }); markReopen(tid, h.status); onClose(); onOpenTask?.(tid); focusOpened(find); }} />); })}
+                onTask={(tid) => { const find = opened({ tid }); onClose(); onOpenTask?.(tid); focusOpened(find); }} />); })}
           </Box>
         ))}
         {settled && aloneAs(res) && <Box data-tq-search-alone="" sx={{ px: 2.5, py: 1.25, fontSize: 12.5, color: DIM }}>{nothingYet(aloneAs(res))}

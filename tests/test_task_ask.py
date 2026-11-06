@@ -312,7 +312,7 @@ class ContractTests(unittest.TestCase):
             return json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'asks for a change'})
         triage.classify_intent({'subject': 'Re: Hosting', 'body': 'check back in'}, llm=fake, system=self.DOC,
                                soul='The owner runs IS at a care provider.', notes=['2026-09-01 - not ours'],
-                               repos=[{'repo': 'acme/app', 'about': 'the portal'}], playbooks='- pto: PTO requests')
+                               playbooks='- pto: PTO requests')
         self.assertTrue(seen['sys'].rstrip().endswith(triage.TASK_FIELDS.rstrip()), seen['sys'][-400:])
 
     def test_the_shape_is_asked_for_under_the_message_too(self):

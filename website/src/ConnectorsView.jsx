@@ -160,7 +160,7 @@ const META = {
       "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
     fields: [["Assistant chat id", "assistant_chat", "",
-      "Your own private chat with the bot — the assistant walks you through your work there, and the chat here can hand its walk to it"],
+      "Your own private chat with the bot — the assistant walks you through your work there. Easier picked on Settings → Phone & chats"],
       pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
@@ -2498,6 +2498,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
               chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
               for an id you already know.
             </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
+              <Typography variant="caption" sx={{ color: FAINT }}>Your private chat with the Assistant, and the chats that reach your coding agents, are set on</Typography>
+              <PhoneChatsLink onNavigate={onNavigate} />
+            </Box>
             {/* one line at any width: wrapped on a phone, it shrank to one line as "Syncing…" and the list under it jumped */}
             {/* the reason sits on a wrapper: a disabled button takes no hover, so its own title never shows */}
             <Box component="span" title={sync.why} data-tq-sync-why={sync.why || undefined} sx={{ display: "inline-flex", maxWidth: "100%", mb: 1 }}>
@@ -3806,6 +3810,11 @@ const WaPair = ({ conn, reload, onStatus, onTurnedAway }) => {
 
 /* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
    direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
+// the Assistant chat and the agent channels are set on one page, Settings > Phone & chats - a WhatsApp or Telegram card links there
+const PhoneChatsLink = ({ onNavigate }) => (
+  <Button size="small" data-tq-phone-chats-link="" sx={{ fontSize: 11 }} onClick={() => { openAppLink("settings=phone"); onNavigate?.("Settings"); }}>
+    Settings → Phone & chats</Button>
+);
 const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null }) => {
   const saveConn = useSaveConnector(reload);
   const [rows, setRows] = useState(null);
@@ -3889,7 +3898,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
     <Box ref={boxRef} data-tq-wa-chats="" sx={{ mb: 1.5, maxWidth: 620 }}>
       {/* THE CHOICE LIVES IN ONE PLACE, and it is not here. "Which chat can the assistant reach me
           in" is one question across WhatsApp and Telegram, and the standing permission is the other
-          half of it - so both are Settings -> Assistant on your phone. This card keeps what is
+          half of it - so both are Settings -> Phone & chats. This card keeps what is
           genuinely the connector's: the pairing, and what comes in (the owner, 2026-09-17). */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
         border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
@@ -3900,10 +3909,7 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle, ask = null 
           </Typography>
           {guideJid && <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10, display: "block" }} noWrap>{guideJid}</Typography>}
         </Box>
-        <Button size="small" sx={{ fontSize: 11 }} onClick={() => {
-          openAppLink(`settings=config&group=${encodeURIComponent("Assistant on your phone")}`);
-          onNavigate?.("Settings");
-        }}>Settings → Assistant on your phone</Button>
+        <PhoneChatsLink onNavigate={onNavigate} />
       </Box>
       <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 600, display: "block" }}>
         WHAT COMES IN

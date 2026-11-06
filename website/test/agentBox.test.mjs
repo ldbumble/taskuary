@@ -13,10 +13,10 @@ const runForm = box.slice(box.indexOf("export function RunForm"), box.indexOf("e
 const ask = box.slice(box.indexOf("export function AgentAsk"));
 
 test("the box has the words, the mic and the paperclip, and says the one prompt wording", () => {
-  assert.match(runForm, /<TextField [^>]*value=\{value\}/);
-  assert.match(runForm, /<AttachImage pics=\{pics\}/);
-  assert.match(runForm, /<MicButton [^>]*onText=\{add\}/);
-  assert.match(runForm, /const add = \(x\) => onValue\(\(cur\) => \(cur \? `\$\{cur\} \$\{x\}` : x\)\)/, "a voice note lands after what is typed");
+  // ...the ONE box (AgentSummary.PromptBox): its paperclip and mic are OneBox's own, and a voice note lands after what is typed (micInto)
+  assert.match(runForm, /<PromptBox text=\{value\} setText=\{setText\} pics=\{pics\}/);
+  assert.match(runForm, /const setText = onValue;/);
+  assert.match(read("AgentSummary.jsx"), /export const micInto = \(put\) => \(t\) => put\(\(w\) => \(w\.trim\(\) \? `\$\{w\.trimEnd\(\)\} \$\{t\}` : t\)\);/);
   assert.match(box, /export const ASK_WHAT = MESSAGE;/);
 });
 

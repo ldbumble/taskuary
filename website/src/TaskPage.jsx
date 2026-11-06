@@ -1236,10 +1236,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     }
     catch (e) {
       const msg = e?.response?.data?.detail || "Could not start a terminal";
-      // Both repo guards are questions: either the repo is known but its path is missing, or
-      // several checkouts exist and this task did not identify one confidently. Ask here, retain
-      // the attempted launch, and continue it as soon as the owner chooses.
-      if (/no local path|could not tell which checkout/i.test(msg)) {
+      // A repository somebody named whose folder is missing is a question: ask here, retain the attempted launch, and continue it as
+      // soon as the owner chooses. One nothing named is no question - the agent picks it once it starts (repochoice.py).
+      if (/no local path/i.test(msg)) {
         setErr(""); setRepoPick(true); setResumeAfterRepo(body);
       } else setErr(msg);
     }
@@ -2111,7 +2110,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // chooser and resume this start on the answer. Printing the sentence instead sent the owner
       // looking for a task menu that no longer exists (2026-09-22).
       const msg = e?.response?.data?.detail || e?.message || "Could not start the coding agent";
-      if (e?.outcome?.dispatch === "needs_repo" || /no local path|could not tell which checkout/i.test(msg)) {
+      if (e?.outcome?.dispatch === "needs_repo" || /no local path/i.test(msg)) {
         setErr(""); setRepoPick(true); setResumeAfterRepo({ dispatch: true });
       } else { setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startCodingAgent }); }
     } finally { endStart(id); }
@@ -2593,20 +2592,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />}
                       actions={<>
                         {!generalOnly && <span title={runWhy(true) || undefined}><Button size="small" variant="contained" disableElevation
-                          disabled={!!startingAgent || startRepo === "" || runPics.busy || !agentsRead || !!runWhy(true)}
+                          disabled={!!startingAgent || runPics.busy || !agentsRead || !!runWhy(true)}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           data-tq-agent-start="coding" onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : btn("coding_agent")}
                         </Button></span>}
-                        {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
-                            the pick resumes this start - the same road a start that ran into the question takes */}
-                        {!generalOnly && startRepo === "" && <>
-                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>{PICK_CODE} first</Typography>
-                          <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
-                            startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                            title="Which checkout the session works in - the session starts once you pick"
-                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>{PICK_CODE.toLowerCase()}</Button>
-                        </>}
+                        {/* NO REPOSITORY CHOSEN IS NO HOLD (the owner, 2026-11-06): the agent picks it once it starts (use_repo) - the
+                            RepoSelect below still pins one first when the owner chooses */}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}

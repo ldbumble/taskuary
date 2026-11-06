@@ -79,14 +79,14 @@ test("Next steps: an Approve still pending is never Nothing left to do here", ()
 
 test("the chat draws the summary, and the turn's working is one line with its steps folded under it", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /import AgentSummary from "\.\/AgentSummary\.jsx";/);
+  assert.match(view, /import AgentSummary, \{ OneBox \} from "\.\/AgentSummary\.jsx";/);
   assert.match(view, /foldedSummaries\(/);
   assert.match(view, /data-tq-working=""/);
   assert.match(view, /Working on this…/);
   const card = read("AgentSummary.jsx");
   for (const h of ["What this is about", "What I did", "Next steps", "Nothing left to do here", "data-tq-summary", "data-tq-on-you"])
     assert.ok(card.includes(h), h);
-  assert.doesNotMatch(card, /<Button|onClick/, "the summary draws no press of its own yet (Task 4.2 brings the cards)");
+  assert.doesNotMatch(card.slice(0, card.indexOf("export function NoAgentChat")), /<Button|onClick/, "the summary draws no press of its own yet (Task 4.2 brings the cards)");
   assert.doesNotMatch(card + view.slice(view.indexOf("<AgentSummary")), /onChanged=\{work/, "no prop nothing reads yet (Task 4.2 adds it with the cards)");
 });
 

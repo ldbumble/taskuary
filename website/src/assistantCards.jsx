@@ -1200,7 +1200,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     } catch (e) {
       const msg = errText(e);
       // Compatibility with an older server response when this card already knows its task.
-      if (card.tid && /could not tell which checkout|no local path/i.test(msg))
+      if (card.tid && /no local path/i.test(msg))
         setRepoAsk({ taskId: card.tid, agent: "" });   // blank: the server finds the coding profile
       else setErr(msg);
     }
@@ -1581,10 +1581,10 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
   // ...A HANDFUL GETS THE SAME BOX A SINGLE ONE DOES, by the same road (the owner, 2026-11-06): its ask, under Came from
   const ask = useItemAsk(card, "fyi");
   return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask} hands={batch}
-    title={batch ? `${plural(n, "message")} - nothing to decide` : card.title}
+    title={batch ? plural(n, "message") : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
     sections={[
-      { key: "from", n: 1, name: STEPS[0].name, lines: [`${plural(n, "message")} · nothing to decide`, ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
+      { key: "from", n: 1, name: STEPS[0].name, lines: [plural(n, "message"), ...items.slice(0, 3).map((i) => `${whoName(i.who)}: “${i.title || ""}”`)],
         foot: "✓ Sorted: FYI",
         // ...and triage's miss said where a task's Not a task is (the owner, 2026-10-29): Should be a task, from the row's own verbs
         ...(batch ? {} : { moves: <PaneMoves sec="from" /> }),
@@ -1681,7 +1681,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose, onAge
         </FyiMessage>))} />
   );
   return (
-    <CardShell card={card} kicker={`${items.length} fyi · nothing to decide`}
+    <CardShell card={card} kicker={`${items.length} fyi`}
       lead={<Lead text={`${plural(items.length, "message")} just want${items.length === 1 ? "s" : ""} you to know something.`} />} err={err}>
       {/* THE BOX, like every card's: one line per message - who, what, and its first line - and nothing
           else. The two doors each line wore ("Full message", "Talk about it") made four fyi a card of

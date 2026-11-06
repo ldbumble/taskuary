@@ -66,6 +66,10 @@ def target_cwd(store, tid: int, agent: str) -> str:
     prof = json.loads(row.get('Config') or '{}')
     try: repo, _ = term.guess_repo(store, tid, prof)
     except Exception: repo = None
+    # ...nothing placed it: it opens in its task's own folder until its agent picks a checkout (repochoice), and shares it with nobody
+    if not repo and not (prof.get('cwd') and not prof.get('cwd_map')):
+        from . import repochoice
+        return repochoice.scratch(tid)
     return (prof.get('cwd_map') or {}).get(repo or '') or prof.get('cwd') or os.getcwd()
 
 

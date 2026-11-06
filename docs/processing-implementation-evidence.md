@@ -1034,6 +1034,11 @@ exist" into a visible repository choice instead of a session in some other check
 
 Tests: `tests/test_repo_choice_triage.py` (8 cases). No existing assertion changed. No frontend change; packaged assets unchanged.
 
+Superseded 2026-11-06: triage no longer names a repository at all. A structural fact still places a coding task
+(`terminal.guess_repo`: the owner's `repo:` tag, a GitHub or GitLab item's own repository, then the agent's own `agent-repo:` pick);
+otherwise the session opens in the task's own folder with a REPOSITORIES block and the agent picks with the `use_repo` tool
+(`taskuary/repochoice.py`, `tests/test_repo_left_to_the_agent.py`).
+
 ### Final preservation corrections and repository-selection integration
 
 The exact `fb43c92` email-identity routing and `bc55b0c` repository-selection changes

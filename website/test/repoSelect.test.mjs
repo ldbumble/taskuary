@@ -20,7 +20,8 @@ test("the Start panel shows the repository and pins it before the session starts
   assert.match(view, /<RepoSelect taskId=\{selected\}/);
   assert.match(view, /api\.put\(`\/api\/tasks\/\$\{id\}\/repo`, \{ repo: startRepo/);
   // ...and with no coding tool chosen it stays off (owner-approved, 2026-10-21)
-  assert.match(view, /disabled=\{!!startingAgent \|\| startRepo === "" \|\| runPics\.busy \|\| !agentsRead \|\| !!runWhy\(true\)\}/);
+  // ...nothing chosen is no hold: the agent picks its checkout (repochoice.py, 2026-11-06)
+  assert.match(view, /disabled=\{!!startingAgent \|\| runPics\.busy \|\| !agentsRead \|\| !!runWhy\(true\)\}/);
   // the picker above already names it: a second "repo · …" by Cancel said it twice (the owner, 2026-10-13)
   assert.doesNotMatch(view, /repo · \{repoOf\(t\)\}/);
 });
@@ -32,10 +33,8 @@ test("the next-run box takes the mic and pictures like Continue, and both starts
   assert.match(form, /<RunForm [^>]*value=\{run\.instruction\} onValue=\{runText\} pics=\{runPics\}/);
   const box = readFileSync(fileURLToPath(new URL("../src/RunForm.jsx", import.meta.url)), "utf8");
   const runForm = box.slice(box.indexOf("export function RunForm"), box.indexOf("export function AgentAsk"));
-  assert.match(runForm, /\{\.\.\.pics\.drop\}/);
-  assert.match(runForm, /<AttachImage pics=\{pics\}/);
-  assert.match(runForm, /<MicButton [^>]*onText=\{add\}/);
-  assert.match(runForm, /<ImageTray pics=\{pics\}/);
+  // ...the one box draws them (AgentSummary.PromptBox: drop, paperclip, mic, the files as chips)
+  assert.match(runForm, /<PromptBox text=\{value\} setText=\{setText\} pics=\{pics\}/);
   assert.match(view, /instructions: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
   assert.match(view, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
 });

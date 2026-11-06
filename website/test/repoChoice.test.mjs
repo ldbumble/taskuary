@@ -6,9 +6,10 @@ import path from "node:path";
 
 const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
 
-test("an uncertain task repo opens the chooser and resumes the attempted launch", () => {
+test("a named repo with no local checkout opens the chooser and resumes the attempted launch", () => {
   const tasks = taskSource();
-  assert.match(tasks, /could not tell which checkout/);
+  assert.match(tasks, /no local path/);
+  assert.doesNotMatch(tasks, /could not tell which checkout/);       // nothing named is the agent's pick, not a question (repochoice.py)
   assert.match(tasks, /setResumeAfterRepo\(body\)/);
   assert.match(tasks, /openTerm\(\{ \.\.\.launch, repo: data\.repo, cwd: null \}\)/);
 });

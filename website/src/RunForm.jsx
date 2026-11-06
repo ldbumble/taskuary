@@ -6,9 +6,10 @@
 // email and its files, the report's rows - and your words lead what the agent is told. An empty box is allowed: the item alone is
 // the job. Start is the only press that starts.
 import React, { useEffect, useRef, useState } from "react";
-import { Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
-import { AgentPicker, MicButton, TaskuaryMark, useAgents } from "./ui.jsx";
-import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
+import { Box, Button, CircularProgress, Typography } from "@mui/material";
+import { AgentPicker, TaskuaryMark, useAgents } from "./ui.jsx";
+import { usePromptImages, withImages } from "./promptImages.jsx";
+import { PromptBox } from "./AgentSummary.jsx";
 import { cannotStart, useCapabilities } from "./capabilities.js";
 import { choice, label as btn } from "./buttons.js";
 import { useViewExtras } from "./pageView.js";
@@ -20,8 +21,10 @@ export const ASK_WHAT = MESSAGE;
 
 // The box itself, drawn the same wherever it opens. `onValue` takes a value or an updater: the mic's words land after the press,
 // so they are appended to what is in the box THEN, not to what was there when recording started.
+// ...ITS WORDS ARE THE ONE BOX (AgentSummary.PromptBox, the owner 2026-11-06: "stop building each unique prompt box. it should be shared"): the
+// paperclip, the files, the words, the mic. Its press stays the form's own (`actions`: Start), so the box draws no Send of its own
 export function RunForm({ title, picker, note, value, onValue, pics, placeholder = ASK_WHAT, children, actions, autoFocus = false, sx }) {
-  const add = (x) => onValue((cur) => (cur ? `${cur} ${x}` : x));
+  const setText = onValue;     // the words, typed or dictated: `onValue` takes a value or an updater
   return (
     <Box data-tq-agent-box="" sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}`, ...sx }}>
       {title && <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 600, mb: 0.75 }}>{title}</Typography>}
@@ -29,15 +32,7 @@ export function RunForm({ title, picker, note, value, onValue, pics, placeholder
         {picker}
         {note && <Typography variant="caption" sx={{ color: FAINT }}>{note}</Typography>}
       </Box>
-      <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={value} autoFocus={autoFocus}
-        onChange={(e) => onValue(e.target.value)} placeholder={placeholder} {...pics.drop}
-        InputProps={{ endAdornment: (
-          <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
-            <AttachImage pics={pics} sx={{ width: 30, height: 30 }} />
-            <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }} onText={add} />
-          </Box>) }}
-        sx={{ mt: 0.85, bgcolor: "#fff", "& .MuiInputBase-root": { alignItems: "flex-start" } }} />
-      <ImageTray pics={pics} sx={{ mt: 0.75 }} />
+      <Box sx={{ mt: 0.85 }}><PromptBox text={value} setText={setText} pics={pics} placeholder={placeholder} label={title || "What to do"} autoFocus={autoFocus} /></Box>
       {children}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>{actions}</Box>
     </Box>

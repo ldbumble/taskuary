@@ -12,7 +12,7 @@ import api from "./api";
 
 export const IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
 export const MAX_IMAGES = 8;
-const IMAGE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
+export const IMAGE_ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 export const isImagePath = (p) => /\.(png|jpe?g|gif|webp)$/i.test(String(p || ""));
 
 // one file to the server: a picture through the image road (its type check), anything else through the file road; { path, name, image }

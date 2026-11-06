@@ -33,6 +33,6 @@ test("Delete is at once, and Recently deleted under the shelf restores it", () =
 test("the Reports page and Settings' own sections offer no playbooks", () => {
   const r = src("ReportsView.jsx"), v = src("SettingsView.jsx");
   assert.doesNotMatch(r, /usePlaybooks|PlaybookRow|key: "playbooks"/);
-  assert.match(v, /: \["config", "profiles", "policies", \.\.\.\(devMode \? \["audit"\] : \[\]\), "updates"\];/);
+  assert.match(v, /: \["config", "profiles", "policies", PHONE_PAGE, \.\.\.\(devMode \? \["audit"\] : \[\]\), "updates"\];/);
   assert.doesNotMatch(v, /g:playbooks|NewPlaybookDialog/);
 });

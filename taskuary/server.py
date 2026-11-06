@@ -5544,6 +5544,27 @@ def task_landing(tid: int, full: bool = False):
     if not hub_agents.developer_mode(store): return {'data': None}
     return {'data': landing.state(store, tid, full=full)}
 
+@app.get('/api/tasks/{tid}/coding-chat')
+def task_coding_chat(tid: int):
+    """A coding task as the one chat (codingchat.py): every session's steps - the CLI's own log, or its ACP updates - the mail that came
+    in, and the live CLI, for the page to draw in the general chat's own rows (codingChat.js)."""
+    from . import codingchat
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    return {'data': codingchat.chat(store, tid)}
+
+class RevertBody(BaseModel): parts: list[dict]
+
+@app.post('/api/tasks/{tid}/landing/revert')
+def task_land_revert(tid: int, body: RevertBody, request: Request):
+    "The parts of the diff the owner turned down in review, taken back out of the task's branch in one commit (landing.revert)."
+    from . import landing
+    _owner_only(request, "what is taken out of a branch before it lands is the owner's review")
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if not hub_agents.developer_mode(store): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
+    try: return landing.revert(store, tid, body.parts, ACTOR)
+    except landing.Refused as e: raise HTTPException(409, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+
 class LandBody(BaseModel): how: str
 
 @app.post('/api/tasks/{tid}/landing')

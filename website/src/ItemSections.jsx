@@ -16,6 +16,7 @@ import { LinkPopups, Md } from "./md.jsx";
 import { label as btn } from "./buttons.js";
 import { AttachChip, usePromptImages } from "./promptImages.jsx";
 import { PromptBox } from "./AgentSummary.jsx";
+import "./generalWorkspace.css";
 import { FOCUS, FOCUS_EDGE, MINI_W, OPEN_MIN, PaneStrip, SECTION, SHADE, SLOT, STRIP_H, SectionHead, SectionTab, tabW, useStackBelow } from "./TaskPage.jsx";
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";

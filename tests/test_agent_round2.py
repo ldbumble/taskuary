@@ -52,28 +52,15 @@ class PlaybooksLearnTests(unittest.TestCase):
         self.assertEqual(summ['lesson']['text'], 'Payworth is vendor 4471'); self.assertEqual(summ['check_back']['what'], 'the bill posted')
         self.assertNotIn('lesson', selfclose.summary_marker(summary(lesson={'playbook': 'bill', 'text': ' '}))[1])
 
-    def test_a_lesson_is_a_proposal_on_its_playbook_and_a_second_joins_the_same_card(self):
+    def test_a_lesson_goes_to_learned_md_named_for_its_playbook_and_no_card_is_made(self):
+        """The owner, 2026-11-05: "i thought we were using same memory learned.md" - one memory; the playbook page is theirs alone."""
         s = MemoryStore(); tid = owner_task(s)
-        made = playbooks.take_lesson(s, tid, {'playbook': 'bill', 'text': 'Payworth is vendor 4471 in QuickBooks, not "Payworth Inc"'})
-        playbooks.take_lesson(s, tid, {'playbook': 'Bill', 'text': 'The card feed lags a day: search yesterday too'})
-        rvs = [r for r in s.list_reviews('pending') if r['TaskId'] == tid]
-        self.assertEqual(len(rvs), 1); self.assertEqual(rvs[0]['ReviewId'], made['reviewId'])
-        p = json.loads(rvs[0]['DraftText'])
-        self.assertEqual(p['action'], 'amend_playbook'); self.assertEqual(len(p['lessons']), 2)
-        self.assertIn('- The card feed lags a day', p['text']); self.assertIn('ask first: a new vendor', p['text'])
-        # ...the playbook's own card, not a close-out owed: it neither blocks the task nor lights an act's Approve
-        self.assertFalse(proposals.owed(s, tid)); self.assertIsNone(proposals.held_pending(s, tid)); self.assertTrue(proposals.playbook_pending(s, tid))
-
-    def test_approve_files_the_lessons_onto_the_page_as_it_is_now(self):
-        s = MemoryStore(); tid = owner_task(s)
-        playbooks.take_lesson(s, tid, {'playbook': 'bill', 'text': 'Payworth is vendor 4471'})
-        playbooks.write('bill', BILL.replace('alone:     bills under $500', 'alone:     bills under $300'))      # the owner's edit meanwhile
-        rv = next(r for r in s.list_reviews('pending') if r['TaskId'] == tid)
-        proposals.execute(s, rv)
-        page = playbooks.read('bill')
-        self.assertIn('bills under $300', page); self.assertEqual(playbooks.lessons_of(page), ['Payworth is vendor 4471'])
-        self.assertIn('Payworth is vendor 4471', playbooks.parse(page)['body'])          # ...so the next agent reads it
-        self.assertIsNone(playbooks.take_lesson(s, owner_task(s), {'playbook': 'bill', 'text': 'payworth is vendor 4471'}))   # had already
+        with mock.patch('taskuary.learn.learn_from') as lf:
+            self.assertEqual(playbooks.take_lesson(s, tid, {'playbook': 'bill', 'text': 'Payworth is vendor 4471 in QuickBooks'}), {'learned': True})
+        said = lf.call_args[0][1]
+        self.assertIn('Payworth is vendor 4471', said); self.assertIn(playbooks.parse(BILL)['title'], said)
+        self.assertEqual([r for r in s.list_reviews('pending') if r['TaskId'] == tid], [])
+        self.assertEqual(playbooks.read('bill'), BILL, 'the page is untouched')
 
     def test_a_lesson_no_playbook_takes_goes_to_learned_md_and_a_secret_goes_nowhere(self):
         s = MemoryStore(); tid = owner_task(s)
@@ -94,10 +81,9 @@ class PlaybooksLearnTests(unittest.TestCase):
         s = MemoryStore(); a_claude(self); tid = owner_task(s)
         reply = 'Posted the bill as Payworth (vendor 4471).\n' + summary(lesson={'playbook': 'bill', 'text': 'Payworth is vendor 4471'},
                                                                           check_back={'when': 'in 2 days', 'what': 'the bill shows paid'})
-        seen = turn(s, tid, reply)
+        with mock.patch('taskuary.learn.learn_from') as lf: seen = turn(s, tid, reply)
         self.assertIn(general.LESSON_LINE, seen['prompt']); self.assertIn(general.CHECK_BACK_LINE, seen['prompt'])
-        rv = next(r for r in s.list_reviews('pending') if r['TaskId'] == tid)
-        self.assertEqual(json.loads(rv['DraftText'])['lessons'], ['Payworth is vendor 4471'])
+        self.assertTrue(any('Payworth is vendor 4471' in c[0][1] for c in lf.call_args_list), 'the lesson went to LEARNED.md')
         t = s.get_task(tid); self.assertEqual(t['CheckBackWhat'], 'the bill shows paid'); self.assertTrue(t['CheckBackAt'])
         kept = [json.loads(c['Body']) for c in s.list_comments(tid) if c['ActorType'] == general.SUMMARY_TYPE]
         self.assertTrue(kept and not any('lesson' in k or 'check_back' in k for k in kept))     # taken off the summary, never drawn

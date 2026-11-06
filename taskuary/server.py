@@ -229,6 +229,10 @@ async def _lifespan(_app):
         from . import dashboards                                   # ...and a saved dashboard's cuts on them
         if (n := dashboards.migrate_priorities(store)): logger.info(f'{n} dashboard(s) now cut on regular / important / urgent')
     except Exception as e: logger.warning(f'priority rename skipped: {e}')
+    try:                           # ...and the built-in dashboard's AI-use tiles, once (2026-11-06)
+        from . import dashboards
+        if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
+    except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
     learn.note_verdicts(store)     # an older install's notes table, written into LEARNED.md once and dropped (memorylines.migrate)
     _fold_habits()                 # one habit card each, folded into the one habits row (habits.py, 2026-11-01)
     try: blackboard.schedule_due(store)   # a retry that was backing off when the app closed is re-armed, not reset (PW-085)
@@ -11303,6 +11307,13 @@ def ai_routes(task: int = None, limit: int = 20):
     """The newest brain routes - which AI each call ran on and why - for one task or all. Read-only; no prompt or answer is kept."""
     if task is None: return {'routes': _brainroute().recent(store, limit=max(1, min(int(limit), 200)))}
     return {'routes': store.brain_routes(task, limit=max(1, min(int(limit), 200)))}
+
+
+@app.get('/api/tasks/{tid}/ai-used')
+def task_ai_used(tid: int):
+    """Every AI call and agent run on this task - when, the job, model, quick/normal/hard, tokens and time - for its "AI used" fold."""
+    from . import aiusage
+    return aiusage.for_task(store, tid)
 
 
 class RouteRulesBody(BaseModel):

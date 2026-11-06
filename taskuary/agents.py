@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
-from . import acp as acp_mod, pathcache, redact, spawn
+from . import acp as acp_mod, aiusage, pathcache, redact, spawn
 from .store import task_ref
 from .clis import preset_args
 from .clipool import TimedOut
@@ -1410,6 +1410,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             # Normalize both into one stream so assistant-ui does not care which CLI is logged in.
             if isinstance(j, dict) and j.get('type') == 'thread.started':
                 streamed_sid = j.get('thread_id') or streamed_sid
+            if isinstance(j, dict) and j.get('type') == 'turn.completed': aiusage.codex_turn(j.get('usage'))     # what the turn used
             if isinstance(j, dict) and j.get('type') in ('item.started', 'item.updated', 'item.completed'):
                 item = j.get('item') or {}
                 iid = item.get('id') or f"item-{len(raw)}"
@@ -1454,7 +1455,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         raise RuntimeError(f'{name} exit {p.returncode}: {why}')
     # OpenCode can report provider errors in JSON while its process exits successfully.
     if stream_error: raise RuntimeError(f'{name}: {redact.scrub(stream_error)[:500]}')
-    if final is not None: out, sid = str(final.get('result') or '').strip(), final.get('session_id')
+    if final is not None: aiusage.claude_result(final); out, sid = str(final.get('result') or '').strip(), final.get('session_id')
     elif streamed_out: out, sid = streamed_out, streamed_sid
     elif structured_stream: out, sid = '', streamed_sid
     else: out, sid = parse_cli_json('\n'.join(raw))
@@ -1591,6 +1592,7 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         if limit: raise RateLimited(rate_limit_msg(name, limit), limit)
         if _SIGNED_OUT.search(said): raise RuntimeError(signed_out_msg(name, said, cmd[0] if cmd else ''))
         raise RuntimeError(f'{name}: {said[:500]}')
+    aiusage.claude_result(final)                       # a turn that failed still used what it used
     if final.get('is_error'):
         said = str(final.get('result') or final.get('subtype') or 'the CLI reported an error')
         limit = rate_limited(raw) or rate_limited(said)

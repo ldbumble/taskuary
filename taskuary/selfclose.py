@@ -462,6 +462,25 @@ def attach_markers(text: str) -> tuple:
 # ...and what it SHOWS the owner. Words are the answer; a picture, a chart or a page only when it makes the answer easier
 # to understand (the owner, 2026-10-09: "only if the agent thinks it's a good way to understand things - random scratch
 # stuff not"). Nothing it writes on the way is shown: only a file it names this way lands in the chat, under this turn.
+# LATEST MESSAGE WINS (the owner, 2026-11-06: "Latest message should recalculate all the prior messages. it's just resending the original
+# response that was already sent"): corrected after a draft was waiting, the agent answered the first ask of the thread again and left that
+# draft standing under its newest turn, reading as the answer to the correction. Every turn is told it answers the NEWEST message, read
+# against all before it, what is pending and what already went (general.latest_block) - and how to take a draft back: this marker, on a road
+# with no shell, or `taskuary --withdraw-draft` / the withdraw_draft tool (verdicts.withdraw). The model judges; no word list does
+LATEST_LINE = ('LATEST MESSAGE WINS: your answer is to the newest message, read against everything before it - redo the answer from the whole '
+               'conversation, never answer an earlier ask again. If a draft is pending, either replace it with a corrected one (write the new '
+               'reply: it takes the place of the old one) or withdraw it (say why in one line); never leave an earlier draft standing as if it '
+               'answered this. Never draft again what already went out below; write only what is new since.')
+WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
+WITHDRAW_LINE = (f'To withdraw the pending draft, put {WITHDRAW_MARK} on its own line - or, with a shell, run `taskuary --withdraw-draft "<why>"` '
+                 '(the withdraw_draft tool). It is kept under Not sent for the owner; nothing is sent or deleted.')
+_WITHDRAW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?WITHDRAW\s*:?\s*(.*?)\s*\]\][ \t]*\n?', re.I | re.M)
+def withdraw_marker(text: str) -> tuple:
+    "(text with the withdraw line taken out, its why) - why None when it wrote none, '' when it gave no reason."
+    m = _WITHDRAW_RE.search(text or '')
+    return (text, None) if not m else (_WITHDRAW_RE.sub('', text).strip(), ' '.join(m.group(1).split()))
+
+
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
 SHOW_LINE = ('SHOWING YOUR ANSWER: when a chart, an image, a table or a small page makes your answer easier to understand than '
              'words alone, make it as a file in your working folder (.png .jpg .svg .html .md .csv .pdf) and name it on its own line: '

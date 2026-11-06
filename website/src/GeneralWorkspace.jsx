@@ -26,7 +26,7 @@ import { AgentSteps } from "./AgentStepRows.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
-import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp } from "./agentWork.js";
+import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp, turnBegan } from "./agentWork.js";
 import { instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, Md } from "./md.jsx";
@@ -36,6 +36,7 @@ import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
 import ActionCard from "./ActionCard.jsx";
+import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
 import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
@@ -132,17 +133,17 @@ const Thinking = ({ provider }) => (
 // Four facts, said once, above the trail. Nothing here is new information - the trace and the task
 // already carried all of it (agentWork.js).
 const AgentBand = ({ name, provider, work, since, starting = "" }) => {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now()), [shown] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const doing = doingNow(work);
   // STARTED, NOTHING SAID YET: one line - "Starting the researcher on Codex…" - and its clock, never a tall empty pane with a spinner at
   // its foot while the CLI comes up (the owner, 2026-10-21: "it stayed like that for a while")
+  // ...the same quiet line as "Working on this…", no box around it (the owner, 2026-11-05: no boxes), and its clock from no earlier than this
+  // line came up: a turn carried on by new mail has no input of its own yet, and it counted from the one before - "62m 16s" at its start
   if (starting && !work.steps.length) return (
-    <div className="tq-aui-band" role="status" aria-live="polite" data-tq-starting-line="">
-      <div className="tq-aui-band-head">
-        <span className="tq-aui-band-dot" /><span>{starting}</span>
-        <em>{since ? elapsedText(now - since) : ""}</em>
-      </div>
+    <div className="tq-aui-working" role="status" aria-live="polite" data-tq-starting-line="">
+      <span className="tq-aui-band-dot" /><span>{starting}</span>
+      <em>{elapsedText(now - Math.max(since || 0, shown))}</em>
     </div>
   );
   // ...and then ONE QUIET LINE (the closeout-in-chat spec, 2026-11-04): "Working on this…" and its clock. The band said who, what now, which
@@ -214,10 +215,13 @@ const ChannelMark = ({ channel }) => {
   const Icon = c === "whatsapp" ? WhatsAppIcon : c === "telegram" ? TelegramIcon : c === "email" || !c ? MailOutlineIcon : ChatBubbleOutlineIcon;
   return <Icon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />;
 };
-const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i) => (
-  <div key={i} className="tq-aui-arrived" data-tq-chat-arrived="">
-    <span className="tq-aui-arrived-head"><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</span>
+// ...and a burst from one sender reads as one: the next message of the same person on the same channel carries its time alone (the owner's
+// four WhatsApp messages in a minute, 2026-11-05: the same "WhatsApp message from … · sent to Taskuary" over each)
+const sameAs = (a, b) => !!a && !!b && a.who === b.who && String(a.channel || "") === String(b.channel || "");
+const Arrived = ({ mail, agent }) => mail.filter((x) => !x.own).map((x, i, all) => (
+  <div key={i} className={`tq-aui-arrived${sameAs(all[i - 1], x) ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
+    <span className="tq-aui-arrived-head">{sameAs(all[i - 1], x) ? when(x.at) || "" : <><ChannelMark channel={x.channel} />
+      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at && when(x.at), `sent to ${agent}`].filter(Boolean).join(" · ")}</>}</span>
     <span className="tq-aui-arrived-words" title={x.words}>{x.words}</span>
   </div>));
 const UserMessage = () => {
@@ -265,13 +269,17 @@ const WorkSteps = ({ data }) => {
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
   const key = foldKey(useAuiState((s) => s.message.id)), [open, setOpen] = useState(() => OPEN_FOLDS.has(key));
   useEffect(() => { setOpen(OPEN_FOLDS.has(key)); }, [key]);
-  if (!at || (!now && !ended)) return <AgentSteps data={data} />;
+  // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
+  // its result before the answer was filed is drawn done, never circling
+  if (!now && (data?.steps || []).some((s) => s.status === "running")) data = { ...data, steps: data.steps.map((s) => (s.status === "running" ? { ...s, status: "done" } : s)) };
+  const chat = React.useContext(ChatCtx), keepOut = !chat;
+  // ...and in a chat a step is never "failed" (below) - a turn that ended with no summary too: its "failed" stood under a plain answer
+  if (!at || (!now && !ended)) return <AgentSteps data={chat ? { ...data, steps: (data?.steps || []).map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) } : data} />;
   // a failure is never folded away: it is its own line under the fold (a retried one that worked is "recovered", and folds with the rest)
   // ...where the chat is home and the turn ENDED in its summary, a step that failed on the way is part of the way, folded with the rest (the
   // owner, 2026-11-05: "what are all those failures?") - only a turn that failed keeps its failures out
   // ...IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a internal thought failure, for the user the task is getting done.
   // failure means nothing"): working or ended, every step rides the one fold as a plain step - a TURN that failed says so in its own words
-  const chat = React.useContext(ChatCtx), keepOut = !chat;
   const all = data?.steps || [], bad = keepOut ? all.filter((s) => s.kind === "error" || s.status === "error") : [], n = all.filter(isWork).length;
   const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
   const calm = chat ? all.map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) : all;
@@ -310,7 +318,7 @@ const Ticking = ({ since }) => {
 };
 const RanFor = () => {
   const at = useAuiState((s) => s.message.createdAt), id = useAuiState((s) => s.message.id);
-  const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? ms[i - 1].createdAt : null; });
+  const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? turnBegan(ms.slice(0, i).map((m) => m.createdAt)) : null; });
   // ...a turn still running has not "ran" anything yet: its stamp read "ran 0s" over "Working on this…" (the chat-model stress run, 2026-11-05)
   // ...and the live message is drawn anew at every step, so its own time is the latest step's: the turn began at the server's `since`, else
   // at the line it answers
@@ -342,8 +350,13 @@ const AssistantMessage = () => {
   // ...nor a picture its post card already carries (the owner saw the chart twice: shown by the turn, and on the post)
   const postPics = new Set(posts.map((p) => String(p.post?.image || "").split(/[\\/]/).pop()).filter(Boolean));
   const rest = chat ? shownRest.filter((p) => !madeNames.has(p.name) && !postPics.has(String(p.name || "").split(/[\\/]/).pop())) : shownRest;
+  const running = useAuiState((s) => live(s.message));
+  // ...and it copies at its corner (the owner, 2026-11-05): what the turn says - its words, else its summary's parts
+  const said = custom?.summary && !answerShown(custom.summary, words)
+    ? [custom.summary.about, custom.summary.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : words;
   return (
-    <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
+    <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}`}>
+      {chat && !!said && !running && <CopyCorner text={said} label="Copy this answer" />}
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
       <div className="tq-aui-agent-body">
         {/* ...where the chat is home, a turn that ended in its summary IS that summary: the agent's own prose above it said the same at
@@ -653,11 +666,16 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   shown.current = messages;
   const applied = useRef(revision);
   useEffect(() => {
-    if (applied.current === revision) return;
-    applied.current = revision;
-    // this pane's own stream is the live truth while it runs; its `done` files the server's copy
-    if (runtime.thread.getState().isRunning) return;
-    runtime.thread.reset(initial(shown.current));
+    if (applied.current === revision) return undefined;
+    // this pane's own stream is the live truth while it runs; its `done` files the server's copy - taken the moment the run ends: kept, the
+    // turn this pane streamed wore the runtime's own stamp, made as it began, and read "ran 0s" over an answer that took minutes (the owner,
+    // 2026-11-05)
+    if (!runtime.thread.getState().isRunning) { applied.current = revision; runtime.thread.reset(initial(shown.current)); return undefined; }
+    const off = runtime.thread.subscribe(() => {
+      if (runtime.thread.getState().isRunning || applied.current === revision) return;
+      applied.current = revision; off(); runtime.thread.reset(initial(shown.current));
+    });
+    return off;
   }, [revision, runtime]);
   const prompted = useRef(null);
   useEffect(() => {
@@ -940,7 +958,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
   const clearAttachments = useCallback((path) => setAttachments((old) => path ? old.filter((a) => a.path !== path) : []), []);
-  const sent = useCallback((payload) => accept(payload), [accept]);
+  const sent = useCallback((payload) => { accept(payload); setRevision((k) => k + 1); }, [accept]);
   /* THE SESSION IS KNOWN AT THE START OF THE TURN, not its end. The stream's first event carries it
      (server.assistant_stream puts `start` before the prompt is sent), and nothing read it: the pane
      learned its session only from `done`, so a browser that opened ten seconds into a first turn was

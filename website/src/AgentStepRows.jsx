@@ -41,13 +41,18 @@ export const StepRow = ({ step }) => {
   if (step.kind === "said") return <div className="tq-aui-said"><Md text={step.summary} /></div>;
   if (step.kind === "note" || step.kind === "error") return <div className={`tq-aui-note tq-aui-note-${step.kind}`}>{step.summary}</div>;
   // ...and the one at work now says what it is doing, with a quiet spinner where its word was
+  // ...one still at work while later ones finished runs alongside them, and says so (agentSteps `alongside`)
   const head = <><Mark step={step} /><span>{stepLabel(step)}</span>
-    {step.status === "running" ? <CircularProgress size={10} thickness={5} className="tq-aui-step-spin" aria-label="working" />
+    {step.status === "running" ? <>{step.alongside && <em data-tq-step-alongside="">still working in parallel</em>}
+      <CircularProgress size={10} thickness={5} className="tq-aui-step-spin" aria-label="working" /></>
       : step.status !== "done" && <em>{STATUS_WORD[step.status] || "failed"}</em>}</>;
   const cls = `tq-aui-step tq-aui-step-${step.kind} tq-aui-tool-${step.status === "done" ? "complete" : step.status}`;
   // ...a step that FAILED opens on why, in one plain line, and only then the tool's raw output, folded (the owner, 2026-11-05: "i clicked on it it
   // made no sense" - a stack of tool text with no reason in front of it)
   const failed = ["error", "recovered"].includes(step.status);
+  // ...a helper's own steps open under its row (agentSteps `kids`), never interleaved with the main agent's
+  if (step.kids?.length) return <details className={`${cls} tq-aui-step-helper`} data-tq-helper=""><summary>{head}</summary>
+    <div className="tq-aui-helper-steps"><AgentSteps data={{ steps: step.kids }} /></div></details>;
   return step.detail
     ? <details className={cls}><summary>{head}</summary>
       {failed && <div className="tq-aui-step-why" data-tq-step-why="">{whyFailed(step.detail)}{step.status === "recovered" ? " It tried again another way, and that worked." : ""}</div>}

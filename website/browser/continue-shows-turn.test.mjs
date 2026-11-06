@@ -49,11 +49,10 @@ const click = (page, label, within = "body") => page.evaluate((label, within) =>
   const b = [...document.querySelectorAll(`${within} button`)].find((x) => !x.disabled && x.textContent.trim() === label && x.offsetParent);
   if (!b) throw new Error(`no ${label} to press`); b.click();
 }, label, within);
-// the pane says the agent is on it: its working line, a typing mark, or the box's own "Add something for it to pick up…"
+// the pane says the agent is on it: its working line or a typing mark (the box says "Message Taskuary…" working or not - audit 2026-11-05)
 const working = (page) => page.evaluate(() => {
   const pane = document.querySelector("[data-tq-task-page]");
-  return !!pane && (/working|thinking|Continuing…/i.test(pane.innerText) || !!pane.querySelector(".tq-typing, [data-tq-starting], [aria-busy='true']")
-    || !!pane.querySelector('textarea[placeholder^="Add something for it to pick up"]'));
+  return !!pane && (/working|thinking|Continuing…/i.test(pane.innerText) || !!pane.querySelector(".tq-typing, [data-tq-starting], [aria-busy='true']"));
 });
 
 test("a stopped general agent: Continue and a line typed after it show at once, working, then the answer", { timeout: 300000 }, async (t) => {

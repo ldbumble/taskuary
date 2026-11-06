@@ -2673,7 +2673,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const nextRunForm = (
                     <RunForm title={report || detail?.transcript || term?.alive || generalStarted ? labelOfRow("run-another") : labelOfRow("start-agent")}
                       value={run.instruction} onValue={runText} pics={runPics} autoFocus={restartOpen}
-                      placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : ASK_WHAT}
+                      placeholder={ASK_WHAT}
                       note={goalRun ? "It starts on the goal's next step, with what you write here." : "It gets the task, its messages and files, and what was saved last time."}
                       /* coding asks ONE question (which CLI); a hand-off asks three - which profile, which brain, which model - and all
                          three reach the session. */

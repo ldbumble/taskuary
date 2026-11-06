@@ -108,7 +108,7 @@ test("the general assistant's own window is left exactly as it was", () => {
   assert.match(view, /\{dock && busy && \(/);                       // the dock keeps its own "still working" banner
   assert.match(view, /const name = dock \? "Taskuary" : agentName\(task\)/);   // the dock's turns stay Taskuary's
   assert.match(view, /keepStart = true/);                           // and it keeps the trace's start line
-  assert.match(view, /placeholder=\{askWords \|\| \(working \? /);   // and its composer keeps its own words
+  assert.match(view, /placeholder=\{askWords \|\| \(dock \? "Tell Taskuary what to do next…" : /);   // and its composer keeps its own words
   assert.match(view, /const askWords = dock \|\| !asking \? "" : /);   // ...a question's words are never the dock's
 });
 

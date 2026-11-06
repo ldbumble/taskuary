@@ -70,7 +70,7 @@ import { RemindPicker } from "./RemindMe.jsx";
 import { SlotPicker } from "./CalendarPick.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
-import { ASK_MEETING, ASK_REPORT, AgentAsk } from "./RunForm.jsx";
+import { AgentAsk } from "./RunForm.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import { handToItem } from "./ItemSections.jsx";
@@ -3767,7 +3767,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               <AgentAsk inline coding={agentOn.coding} title={`${btn(agentOn.coding ? "coding_agent" : "regular_agent")}${agentOn.item.ref ? ` · ${agentOn.item.ref}` : ""}`}
                 what={agentOn.item.kind === "report" ? "It gets this report and its rows." : agentOn.item.kind === "meeting" ? "It gets the meeting: when, who, where and what the invite says."
                   : agentOn.item.mid ? "It gets the message and its attachments." : "It gets this item."}
-                placeholder={agentOn.item.kind === "report" ? ASK_REPORT : agentOn.item.kind === "meeting" ? ASK_MEETING : undefined}
                 view={{ item: { kind: agentOn.item.kind || "item", id: agentOn.item.key, ...(agentOn.item.ref ? { ref: agentOn.item.ref } : {}), title: agentOn.item.title || "" },
                   title: `${btn(agentOn.coding ? "coding_agent" : "regular_agent")} - ${agentOn.item.kind === "meeting" ? "the meeting " : ""}${agentOn.item.title || agentOn.item.ref || "this item"}` }}
                 onClose={() => setAgentOn(null)} onStart={(o) => startOnItem(agentOn.item, o)} />

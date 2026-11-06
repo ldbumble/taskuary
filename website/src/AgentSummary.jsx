@@ -13,6 +13,7 @@ import { readingOf } from "./threadReading.js";
 import { dayLabel, fmtTime12 } from "./dates.js";
 const dayWord = (at) => { const d = dayLabel(at); return d && d !== "Today" ? `${d} ` : ""; };
 import { MicButton } from "./ui.jsx";
+import { MESSAGE } from "./kinds.js";
 import { AttachImage, AttachRow, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
@@ -131,7 +132,7 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
       </Box>
       {/* ...the attachments and the box together at the pane's foot: a spacer above them takes the room (the owner, 2026-11-05) */}
       {box && <Box aria-hidden sx={{ flex: "1 1 auto" }} />}
-      {box && <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder="Tell me what's wrong, or ask about anything here…"
+      {box && <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} placeholder={MESSAGE}
         label="Send to the agent" title="Starts the agent on this task with your words" boxAttrs={{ "data-tq-no-agent-box": "" }} sendAttrs={{ "data-tq-no-agent-send": "" }} />}
       {!!err && <Typography role="alert" sx={{ px: 1.5, pb: 1, fontSize: 12.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>

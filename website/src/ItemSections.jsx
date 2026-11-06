@@ -20,6 +20,7 @@ import { FOCUS, FOCUS_EDGE, MINI_W, OPEN_MIN, PaneStrip, SECTION, SHADE, SLOT, S
 import { BORDER, DIM, INK, frameInner } from "./theme.jsx";
 import { layTable, onPressing, useSpineAll } from "./actionRow.js";
 import { itemLines, readingOf } from "./threadReading.js";
+import { MESSAGE } from "./kinds.js";
 
 // a section's white card on the warm ground, as a task's focus is
 export const ItemPart = ({ children, sx = null, ...rest }) => <Box {...rest} sx={{ ...FOCUS, px: { xs: 1.25, sm: 2 }, minWidth: 0, ...sx }}>{children}</Box>;
@@ -76,7 +77,7 @@ export function ItemAsk({ ask, hand = null, onHand = null }) {
     <Box aria-hidden sx={{ flex: "1 1 auto" }} />
     <Box sx={{ position: "sticky", bottom: 0, bgcolor: SHADE, pt: 0.5, mx: -0.5, px: 0.5 }}>
       <PromptBox text={text} setText={setText} pics={pics} busy={busy} onSend={send} inputRef={input} cannot={hand ? null : () => ASK_ONLY}
-        placeholder={hand ? `What should the agent do with ${hand.items.length > 1 ? "these" : "it"}?` : "Ask about anything here…"}
+        placeholder={MESSAGE}
         label={hand ? btn(hand.verb) : "Ask about this"} sendAttrs={{ "data-tq-item-send": hand ? "agent" : "ask" }}
         chips={hand?.items.length ? hand.items.map((i) => <AttachChip key={i.key} data-tq-item-chip={i.key} name={i.title} onRemove={busy ? null : () => drop(i.key)}
           title={`${btn(hand.verb)} - it gets ${i.title}`} />) : null} />

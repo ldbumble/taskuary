@@ -375,7 +375,7 @@ class DecisionTests(unittest.TestCase):
         with phone(): out = concierge.say(s, 'remind me to renew the Cardinal contract next week', key=None,
                                           llm=lambda *a, **k: 'Noted.\nCALL: {"kind": "mine", "params": {"text": "renew the Cardinal contract next week"}}')
         p = out['proposal']
-        self.assertEqual((p['kind'], p['label'], p['params']['kind']), ('task.create_from_text', 'Put it on my list', 'task'))
+        self.assertEqual((p['kind'], p['label'], p['params']['kind']), ('task.create_from_text', 'Make it a task', 'task'))
         self.assertIn('renew the Cardinal contract', p['params']['text']); self.assertNotIn('Nothing is on the table', out['say'])
 
     def test_the_contract_line_is_parsed_and_the_words_alone_decide_nothing(self):

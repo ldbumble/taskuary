@@ -48,9 +48,9 @@ where **Next** reads it in turn. Nothing fires for absence; something has to loo
 whether to make it a rule, phrased as a question on its own idea row: "You've put down all 12 mails
 from newsletter@vendor.example and acted on none. Make it a rule so they are filed without reaching
 you? (Rules run before the AI.)" **Make it a rule** writes the rule under Settings → Rules, named
-"(learned)" and saying it was promoted from learning; **Not ours** is the no, and the same question
+"(learned)" and saying it was promoted from learning; **Not for me** is the no, and the same question
 comes back only once the evidence has tripled. The bars are counts, never a reading: eight threads
-from one sender put down (Not ours, Not a task, Ignore this sender) and none taken up is an ignore
+from one sender put down (Not for me, Ignore this sender) and none taken up is an ignore
 rule; twenty from an automated sender is a skip; three automated senders on one domain with twelve
 between them is a domain rule; five of one sender's tasks marked urgent by hand, none ever put down,
 is an escalate rule. Never an ignore or a skip for a colleague or for anyone you have written to (an
@@ -64,7 +64,7 @@ agent runs end with the same error this week on at least two tasks, or after two
 that brought the failure. It also goes up when the Assistant's fix-it check gives up on the same
 connection twice in two weeks. These are counts, not the AI's reading: a refused sign-in is yours to
 fix, and a task with words from someone you have not vouched for is never read. Each problem is
-raised once, and **Not ours** keeps it down
+raised once, and **Not for me** keeps it down
 ([Troubleshooting](troubleshooting#report-a-bug)).
 
 **Looking out for you.** Once a day the Advisor stops thinking about the app and thinks about your
@@ -94,7 +94,7 @@ personal workstream.
 
 What passes is an ordinary idea row: **Send to agent** has an agent draft the pitch or build the fix
 (its brief carries the next step, the pitch and the messages to read first), **Make a task**,
-**Remind me**, **Not ours**, and **No more ideas like this**, which stops that whole family. What you
+**Remind me**, **Not for me**, and **No more ideas like this**, which stops that whole family. What you
 did with each idea, and what the second look held back, is what the next day's pass reads first - it never raises again what it said before;
 each family is held to the same 80% bar as the Advisor's other kinds of line. It costs two calls on
 the Advisor's model a day (three at most, when an answer has to be asked for again), it does not look

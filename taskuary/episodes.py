@@ -119,7 +119,7 @@ def build(store, since: str) -> list:
             m = next(iter(store.list_messages(a['EntityId'])), None) if a['EntityType'] == 'task' else store.get_message(a['EntityId'])
             if m and _skip(store, m): continue
             did = {'handoff': f"handed it to {d.get('to') or 'someone'}" + (', the sender on copy' if (m or {}).get('FromEmail') and str(m['FromEmail']).lower() in [str(x).lower() for x in d.get('cc') or []] else ''),
-                   'not_mine_delete': 'said Not ours', 'not_a_task_delete': 'said Not a task', 'create_from_message': 'made it a task by hand'}[a['Action']]
+                   'not_mine_delete': 'said Not for me (not ours)', 'not_a_task_delete': 'said Not for me (not a task)', 'create_from_message': 'made it a task by hand'}[a['Action']]
             out.append((f"task{a['EntityId']}" if a['EntityType'] == 'task' else f"msg{a['EntityId']}", a['CreatedAt'], str((m or {}).get('FromEmail') or '').lower(),
                         f"{_head(m, store) if m else a['EntityType']} · you: {did}"))
         from .workstreams import is_personal          # ...nothing under a personal workstream, an idea or a promise either (2026-11-01)

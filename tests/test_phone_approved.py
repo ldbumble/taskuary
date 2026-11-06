@@ -121,9 +121,9 @@ class FyiLeadsWithGotItTests(PhoneCase):
         one = self.ph.tap(next(b for b in batch[-1][1] if 'Quarterly newsletter' in b))
         btns = one[-1][1]
         self.assertEqual(btns[0], 'Got it', btns)
-        self.assertNotIn('Send to agent', btns); self.assertIn('Should be a task', btns); self.assertIn('Not ours', btns)   # an FYI's Put it on my list (2026-10-29)
-        self.assertNotIn('Should be a task:', text_of(one))                    # no "then" line for a verb that does not lead
-        self.assertRegex(text_of(self.ph.tap('Should be a task')), r'TQ-\d{4} is on your list\.')
+        self.assertNotIn('Send to agent', btns); self.assertIn('Make it a task', btns); self.assertIn('Not for me', btns)   # an FYI's Put it on my list (2026-10-29)
+        self.assertNotIn('Make it a task:', text_of(one))                    # no "then" line for a verb that does not lead
+        self.assertRegex(text_of(self.ph.tap('Make it a task')), r'TQ-\d{4} is on your list\.')
 
 
 class ReportLeadsWithNextTests(PhoneCase):
@@ -136,8 +136,8 @@ class ReportLeadsWithNextTests(PhoneCase):
         self.assertIn('Helpdesk tickets by day', text_of(got))
         btns = got[-1][1]
         self.assertEqual(btns[0], 'Next', btns)
-        self.assertNotIn('Put it on my list', btns)
-        self.assertNotIn('Put it on my list:', text_of(got))
+        self.assertNotIn('Make it a task', btns)
+        self.assertNotIn('Make it a task:', text_of(got))
 
 
 class ShortOpenerTests(PhoneCase):
@@ -186,7 +186,7 @@ class HeldStrangerChoicesTests(PhoneCase):
         _held(self.f, self.s); self.ph.ready()
         got = self.ph.walk()
         btns = got[-1][1]
-        self.assertEqual(btns[:2], ['Trust them', 'Not ours'], btns)
+        self.assertEqual(btns[:2], ['Trust them', 'Not for me'], btns)
         self.assertNotIn('Send to agent', btns); self.assertNotIn('Send to coding agent', btns)
         self.assertIn('Next', btns)
         self.assertIn('do you know this sender?', text_of(got))

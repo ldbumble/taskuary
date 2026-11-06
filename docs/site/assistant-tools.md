@@ -55,7 +55,7 @@ The "Redraft" button ("Draft with AI" when nothing is drafted yet): write the dr
 
 ### `mine`
 
-The "Put it on my list" button: make it a task on the owner's own list - no agent.
+The "Make it a task" button: make it a task on the owner's own list - no agent.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -80,7 +80,7 @@ The "Send to coding agent" button: send it to a coding agent. Not sure which rep
 
 ### `not_ours`
 
-The "Not ours" button: file it, just this once - its card asks whether from now on, or as a rule.
+The "Not for me" button: file it, just this once - its card asks whether from now on, or as a rule.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -546,9 +546,9 @@ Close a SET at once. "Close all the tasks from Priya" is select sender: Priya. R
 
 ### `pipe.remove`
 
-Not ours for a SET at once - "dismiss the spam", "get rid of these newsletters" - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.
+Not for me for a SET at once - "dismiss the spam", "get rid of these newsletters" - then triage learns from each; otherwise it teaches nothing. Never touches work waiting on the owner, an agent at work, a draft waiting for its Send or a goal - those are left and said. Runs at once; the receipt lists every row as its link.
 
-- `select` - (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each task removed (Not a task), nothing deleted
+- `select` - (below; `keys`: the rows you judged, from pipe.read): each mail is filed, each task removed (Not for me), nothing deleted
 - `learn` (optional) - true only when the owner says "from now on" too
 
 <p class="runs">Runs at once and says what it changed.</p>
@@ -564,7 +564,7 @@ Stop a SET's senders for good - only when the owner says so ("and stop them", "b
 
 ### `pipe.mine`
 
-Put it on my list for a SET of mail; each becomes a task of the owner's, no agent. A row already a task is left as it is.
+Make it a task for a SET of mail; each becomes a task of the owner's, no agent. A row already a task is left as it is.
 
 - `select`
 

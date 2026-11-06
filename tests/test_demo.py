@@ -495,7 +495,7 @@ class TheDemoOpensOnItsTourTests(unittest.TestCase):
                 if named.endswith('?'): continue                      # the chat's own suggestion, not a row
                 self.assertTrue(any(t.startswith(named) for t in titles), (named, titles))
         labels = {v['label'] for v in json.loads((Path(demo.__file__).with_name('buttons.json')).read_text(encoding='utf-8'))['verbs'].values()}
-        for b in ('Next', 'Back', 'Send', 'Remind me', 'Not a task'): self.assertIn(b, labels)
+        for b in ('Next', 'Back', 'Send', 'Remind me', 'Not for me'): self.assertIn(b, labels)
         self.assertIn("What's on me right now?", [ask for _, ask, _ in demo.PROMPTS], 'the chat answers the question the tour asks')
 
     def test_the_first_view_opens_on_it_until_it_is_done(self):

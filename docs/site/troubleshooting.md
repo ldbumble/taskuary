@@ -192,7 +192,7 @@ move that opens the same popup:
 
 A failure you can fix yourself, such as a sign-in that was refused, is never counted. Neither is a
 task that carries words from someone you have not vouched for. Each problem is raised once. Put it
-down with **Not ours** and it stays down.
+down with **Not for me** and it stays down.
 
 ## Still wrong
 

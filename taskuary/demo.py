@@ -1155,7 +1155,7 @@ TOUR_STEPS = (                           # in the order they are read: the to-do
     'Walk your work with Next and Back - Next goes down the rail, Back comes up it',
     'Watch an agent work: open "northwind/importers#214" and read its run in the Agent pane',
     'Send a reply: open "Invoice 88213 - past due", read the draft under Next steps and press Send - nothing leaves the demo',
-    'Put one off from Came from: Remind me, or Not a task, on "New starter on Monday"',
+    'Put one off from Came from: Remind me, or Not for me, on "New starter on Monday"',
     'Open a report under Reports, then ask the chat pill "What\'s on me right now?"',
 )
 

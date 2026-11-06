@@ -16,7 +16,7 @@ on the task's own bar.
 
 | Section | What it records | Its moves | What it never does by itself |
 |---|---|---|---|
-| **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not a task**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
+| **Came from** | The message, what triage made of it and why, the ask, and who owns it | **Remind me**, **Watch it**, **Not for me**, **Change ▾** (split or merge, who does it, priority, where the code is) | Changing the task does not start or stop an agent. Who works it is decided in the **Agent** section - **Send to agent** or **Start** |
 | **Agent** | One or more runs by a coding agent, and the Result each left - on a general task, the one chat | **Send to agent**, **Stop and save** while it runs, then **Continue** and **Run another agent** on a coding task; on a general task, the box under the chat | Ending a session does not mark the task done or send a reply |
 | **Close out** (coding tasks) | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | **Draft reply** / **Reply**, **Send and close**, **Send**, **Redraft**, **Hand it to a person**, **Mark done**, **Close with a note**, **Attach a file**, **Share**; on GitHub **Approve and close**, **Approve**, **Decline**, **Not yet** | Closing the task: **Send and close** sends the reply and then closes it (kept open while an agent works on it); **Approve and close** does the same after the merge or the issue's close; **Send** and **Approve** never close it — the task stays open until you **Mark done** |
 
@@ -34,7 +34,7 @@ when it stops.
 
 ### Who is allowed to close it
 
-![Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
+![Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not for me; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
 
 There is one close, **Mark done**. Close out's **Send and close** is a Send and then that close, in one press. A plain
 **Send**, or approving an agent's act, never closes a task by itself (the owner's rule: sending and closing are two steps). Mark done always does the
@@ -48,7 +48,7 @@ it leaves your work rail, and the "yours to end" mark comes off.
 | **Send and close** in Close out | Sends the reply; once it went, Mark done. Sent nowhere it cannot confirm, it waits for **Check delivery** or **Send anyway** first | an agent is still working on it, or anything else on it still waits on you (a held step, another reply) - the task says why |
 | **Tick the last checklist box** | Mark done | an agent is still working on it |
 | **Hand it to a person** | Forwards it, and the task waits on them (📤 waiting on them) | always - **Mark done** when it is finished |
-| **Not ours** / **Not a task** | Deleted if nothing was done on it, otherwise Mark done | never |
+| **Not for me** | Deleted if nothing was done on it, otherwise Mark done | never |
 | **Mark done** on a channel that cannot send (the draft stays unsent) | Mark done | never |
 | **An agent says it is finished** (`taskuary --done`) | The session is written up; the task waits for you with its close-out (below) and the draft if a reply is owed, otherwise it is done | its close-out or a reply waits on you, or you opened the session yourself |
 | **Approve** on GitHub, or **Decline** | Merges or closes the pull request, or closes the issue, and posts your reply - only that | always - **Mark done** when you are finished |

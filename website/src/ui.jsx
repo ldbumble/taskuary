@@ -976,7 +976,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
         <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>Cancel</Button>
         <Button size="small" variant="contained" disableElevation
           disabled={busy || !note.trim() || (scope === "subject" && !topic.trim())} onClick={save}
-          sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
+          sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not for me — remember this"}</Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: ROLES.bad.ink, fontWeight: 600, display: "block", mt: 0.75 }}>
         {err} — your note is still here.

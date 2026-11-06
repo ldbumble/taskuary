@@ -62,7 +62,7 @@ decide whether to press Start. It is a warning, not a gate.
 
 A scam aimed at you rather than the agent - a sender posing as someone else to get a password, a code,
 a sign-in or a payment - is noted too, and its warning says so: "Looks like a scam aimed at you - don't
-click or pay." Filed as FYI, its row lights Not ours, and Send to agent waits behind the ▾.
+click or pay." Filed as FYI, its row lights Not for me, and Send to agent waits behind the ▾.
 
 **Nothing leaves without you.** Replies go out only after you approve them, and the agent cannot name
 the recipient. It answers the message on file. Pushes, pull requests and tool runs an agent

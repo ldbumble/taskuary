@@ -10,9 +10,13 @@
 
 <p align="center"><b>⭐ 如果 Taskuary 对你有帮助，请给它一个 Star</b> —— 这是别人发现它的方式。</p>
 
-## 你的工作管家。本地运行，安全可靠，尽在掌控。
+## 你的工作，井然有序。
 
-**一个为你的工作服务的个人 AI 助手。** 邮件、聊天和工单变成任务，由你已经在用的智能体（Claude Code、Codex、Gemini）完成，未经你批准，什么都不会发出。开源，在你的电脑上运行，无需订阅。
+**Taskuary 是你的 AI 工作伙伴。** 大多数 AI 工具帮你完成一项任务；Taskuary 帮你管好整份职责。
+
+Taskuary 了解你的角色和职责，从邮件、聊天和业务系统中汇集工作，发现需要关注和正在延误的事项，并与你一起把事情做完——任何要发出去的内容都由你批准。
+
+邮件、聊天、审批和报表汇成一个列表；在手机上也能通过 WhatsApp 或 Telegram 处理这个列表。遇到编程工作时，它会交给你已经在用的编程智能体——Claude Code、Codex、Gemini。在你的电脑上运行，数据保存在本机的一个文件里。只有任务需要的内容才会发送给你选择的 AI 模型，并且会先去除其中的密钥等机密（[隐私说明（英文）](docs/PRIVACY.md)）。免费开源，无需订阅。
 
 ![助手的游戏视图：每个任务、消息和智能体都是办公室里的一个人物，先展示整层办公室，再依次放大到各个房间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
@@ -28,10 +32,6 @@ Taskuary 仍处于早期阶段，目前为 **v0.3.11.6**，1.0 之前可能出�
 <p align="center"><sub>真实界面，虚构数据。演示不会连接外部服务、发送消息或运行智能体。</sub></p>
 
 <p align="center"><b><a href="https://taskuary.com/docs/">阅读文档（英文）</a></b> —— 安装、初次运行、连接哪些系统，以及每一项设置。</p>
-
-想从 Qwen Code 开始？可以使用 **本地 Taskuary + Ollama 分拣消息 + Qwen Code 编程**，
-无需把 Claude Code、Codex 或 Gemini 作为必选依赖。
-Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Code](#使用-qwen-code)。
 
 ## Taskuary 能做什么
 
@@ -136,6 +136,10 @@ Came from 显示事项本身。不需要你处理的消息会成批出现：一�
 
 ### 使用你选择的编程 CLI
 
+想从 Qwen Code 开始？可以使用 **本地 Taskuary + Ollama 分拣消息 + Qwen Code 编程**，
+无需把 Claude Code、Codex 或 Gemini 作为必选依赖。
+Qwen Code 使用哪个云端或本地模型，由你配置。见[使用 Qwen Code](#使用-qwen-code)。
+
 支持 Qwen Code、OpenCode、Kimi Code、Claude Code、Codex、Gemini、Cursor、Copilot、Muse Code、Devin，
 也支持其他能够从标准输入接收提示词的 CLI。配置连接后，为不同智能体设置职责和指令，
 在 Taskuary 中跟进会话、回答问题和审核结果。
@@ -199,7 +203,7 @@ Taskuary 在本机运行。使用云端模型时，完成工作所需的上下�
 
 这套检测采用确定性规则，识别有特定结构的凭据，并不能发现所有秘密。
 例如，“Wi-Fi 密码是 bluefish17”这样的普通句子未必能被识别。
-安全问题请通过 [SECURITY.md](SECURITY.md) 报告。
+安全问题请通过 [SECURITY.md](SECURITY.md) 报告。哪些数据留在本机、哪些会发出、发给谁，详见 [docs/PRIVACY.md](docs/PRIVACY.md)（英文）。
 
 ## 安装
 
@@ -284,6 +288,7 @@ taskuary --demo
 
 - [入门指南](https://taskuary.com/docs/)：安装、初始配置、Docker 和数据存储。
 - [工作原理](https://taskuary.com/docs/how-it-works)：完整流程、五条路径、学习机制和配置文档。
+- [隐私说明](docs/PRIVACY.md)：哪些在本机运行、哪些会离开本机，以及 Taskuary 没有哪些认证（英文）。
 - [连接](https://taskuary.com/docs/connections)：消息渠道、AI、业务系统和报表来源。
 - [任务与智能体](https://taskuary.com/docs/tasks-and-agents)：任务、智能体工作与回复是三条独立的生命周期。
 - [助手按钮](https://taskuary.com/docs/assistant)：助手卡片下的每个按钮、其中两个会问的那个问题，以及可以直接输入的词。

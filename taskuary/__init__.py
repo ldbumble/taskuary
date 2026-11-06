@@ -1,4 +1,5 @@
-"""Taskuary - your work manager. Locally. Securely. In control. Your agents do the work, you approve."""
+"""Taskuary - your AI work partner. Mail, chats and tickets become one list in the right order; your agents do the work,
+and nothing goes out until you approve. Free, open source, runs on your computer."""
 # ONE place holds the version and it is pyproject.toml, because that is the one the git tag has
 # to match (RELEASING.md). A second copy here said 0.2.0 through the whole of 0.2.1: the CLI
 # banner, the API and the header pill all reported it, and the header's own tooltip told the

@@ -60,7 +60,7 @@ class ACPClient:
         # ...a reply goes to ITS caller by id: a steer (steer) waits beside the turn's own session/prompt, and one shared queue handed
         # each caller the other's reply to drop
         self._id, self._waiters, self._idlock, self._alive = 0, {}, threading.Lock(), True
-        self._caps, self._meta, self._write_lock, self.options = {}, {}, threading.Lock(), []
+        self._caps, self._meta, self._write_lock, self.options, self.last_turn = {}, {}, threading.Lock(), [], {}
         try:
             self.p = spawn.popen([cmd] + list(args or []), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace',
@@ -186,11 +186,16 @@ class ACPClient:
         "A session config option by its id or its category ('model', 'thought_level', 'mode'); {} when the agent offers none."
         return next((o for o in self.options if want in (o.get('id'), o.get('category'))), {})
 
+    def values(self, want) -> list:
+        "The values option `want` offers - a select's options, flat or in the protocol's groups ({group, options})."
+        return [x.get('value') for g in self.option(want).get('options') or [] if isinstance(g, dict)
+                for x in (g.get('options') if isinstance(g.get('options'), list) else [g]) if isinstance(x, dict) and x.get('value')]
+
     def set_option(self, want, value) -> bool:
         """session/set_config_option. False, and nothing sent, when the agent has no such option or not that value - a model
         it does not list is said, never sent to fail the session. Both adapters list their models and efforts here."""
         o = self.option(want)
-        if not o or value in (None, '') or (o.get('options') and value not in [x.get('value') for x in o['options']]): return False
+        if not o or value in (None, '') or (o.get('options') and value not in self.values(want)): return False
         if o.get('currentValue') == value: return True
         r = self.request('session/set_config_option', {'sessionId': self.session_id, 'configId': o['id'], 'value': value}, timeout=60)
         self.options = (r or {}).get('configOptions') or self.options
@@ -204,6 +209,7 @@ class ACPClient:
         argv road. Its words before are steps in the trace (agents.ACPSteps); joined into the answer they read "I'll list the
         files... There are 3 files" as one reply. All of it when it said nothing after its last call."""
         said, cut = [], [0]
+        self.last_turn = {}
         outer = self.on_update
         def collect(u):
             kind = u.get('sessionUpdate')
@@ -220,6 +226,7 @@ class ACPClient:
                                                 'prompt': [{'type': 'text', 'text': str(text or '')}]}) or {}
         finally:
             self.on_update = outer
+        self.last_turn = r              # ...the whole PromptResponse: its `usage` and _meta are what the turn used (aiusage.acp)
         last = ''.join(x for x in said[cut[0]:] if x).strip()
         return r.get('stopReason'), last or ''.join(x for x in said if x).strip()
 

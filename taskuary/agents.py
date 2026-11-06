@@ -4,12 +4,13 @@ over STDIN (argv length limits are real on Windows), JSON output parsed when ava
 (Claude-style {result, session_id} -> resumable sessions), git diff captured around the
 run so code changes are first-class, every run traced + audited.
 """
-import json, os, re, shutil, subprocess, threading, time
+import contextlib, contextvars, json, os, re, shutil, subprocess, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
 from . import acp as acp_mod, aiusage, pathcache, redact, spawn
+from . import clis as clis_mod
 from .store import task_ref
 from .clis import preset_args
 from .clipool import TimedOut
@@ -1143,92 +1144,338 @@ def repair_role_assignees(store) -> int:
     return fixed
 
 
-def acp_tracer(trace, name: str):
-    """An ACP session/update as the SAME trace events the argv road emits - tool_call with its arguments, tool_result with its
-    output - so a general agent on gemini reads like one on claude. Over ACP it was a `live` line only ("ReadFile (completed)"),
-    and the canvas drew it as raw text in the progress box (2026-10-21). The line still goes out, for the pane and the Board."""
-    seen = set()
-    def show(u):
-        # the agent's words arrive one TOKEN per update ("Hello", "!", "Shell", "command") and are
-        # returned whole as the result; traced one by one they buried the tool calls between them
-        # (a copilot turn left 40 one-word trace lines, measured 2026-09-20). Tools and plans are the
-        # progress worth a line.
+class ACPSteps:
+    """ACP session/update as the SAME trace events the argv road emits - tool_call with its arguments, tool_result with its output,
+    progress for what it said and thought - so a general agent on any CLI reads alike on the canvas (website/src/agentSteps.js).
+
+    An update is not a step. Claude's adapter announces a call with NO input and a generic title ("Read File", "Terminal") and then
+    streams its input in a run of tool_call_updates; Codex's announces a web search with an empty query and fills it at the end, and
+    streams a command's output as terminal deltas. Traced update by update that read "Read File" with no file, then the same call
+    again. So a call is held until its input SETTLES - a permission asked for it, a status that says it runs or ran, the next thing
+    the agent does - and traced once, by the tool's own name (Claude's `Read`, `Bash`, `mcp__taskuary__my_task`; Codex's command)
+    with its full input, exactly as stream-json names it. Words and thoughts arrive a token at a time and are traced as whole
+    paragraphs. `flush` at the end of the turn closes whatever is still open, so no step spins after the turn is over."""
+
+    def __init__(self, trace, name: str, held: dict = None):
+        self.trace, self.name, self.held = trace, name, held if held is not None else {}
+        self.calls, self.said, self.thought, self.plans = {}, [], [], 0
+
+    # ── words ───────────────────────────────────────────────────────────────────────────────
+    def _words(self):
+        if self.thought:
+            t = ''.join(self.thought).strip(); self.thought = []
+            if t: self.trace('progress', 'thinking', t)
+        if self.said:
+            t = ''.join(self.said).strip(); self.said = []
+            if t: self.trace('progress', 'text', t); self.trace('live', self.name, ' '.join(t.split())[:400])
+
+    # ── tool calls ──────────────────────────────────────────────────────────────────────────
+    def _merge(self, u: dict) -> dict:
+        iid = str(u.get('toolCallId') or f'acp-{len(self.calls)}')
+        c = self.calls.setdefault(iid, {'id': iid, 'raw': {}, 'out': [], 'shown': False, 'done': False})
+        if isinstance(u.get('rawInput'), dict) and u['rawInput']: c['raw'] = dict(u['rawInput'])
+        for k in ('title', 'kind', 'name', 'status'):
+            if u.get(k): c[k] = u[k]
+        if (tn := ((u.get('_meta') or {}).get('claudeCode') or {}).get('toolName')): c['tool'] = tn
+        if u.get('locations'): c['locations'] = u['locations']
+        for b in u.get('content') or []:
+            if isinstance(b, dict) and b.get('type') == 'content': c['text'] = acp_mod._text_of(b.get('content'))
+        meta = u.get('_meta') or {}
+        if (d := (meta.get('terminal_output_delta') or {}).get('data')) and sum(map(len, c['out'])) < 20000: c['out'].append(str(d))
+        if 'terminal_exit' in meta: c['exit'] = (meta['terminal_exit'] or {}).get('exit_code')
+        if isinstance(u.get('rawOutput'), str): c['raw_out'] = u['rawOutput']
+        return c
+
+    @staticmethod
+    def _call(c: dict) -> tuple:
+        "(the tool's name, its arguments) in the vocabulary describeCall reads - the same names stream-json and codex JSONL use."
+        raw, kind = dict(c['raw']), c.get('kind') or ''
+        if raw.get('type') == 'webSearch':                     # codex: one item for a search and for a page it opened
+            act = raw.get('action') or {}
+            if act.get('type') in ('openPage', 'findInPage'): return 'fetch', {'url': act.get('url') or raw.get('query') or ''}
+            return 'web search', {'query': raw.get('query') or act.get('query') or ''}
+        if raw.get('server') and raw.get('tool'):              # codex MCP: {server, tool, arguments}
+            return f"mcp__{raw['server']}__{raw['tool']}", dict(raw.get('arguments') or {})
+        paths = [l.get('path') for l in c.get('locations') or [] if isinstance(l, dict) and l.get('path')]
+        if paths and not any(raw.get(k) for k in ('path', 'file_path', 'absolute_path', 'filePath')): raw['path'] = paths[0]
+        if len(paths) > 1 and kind == 'move': raw.setdefault('to', paths[1])
+        if c.get('title'): raw.setdefault('title', c['title'])
+        return c.get('tool') or c.get('name') or kind or c.get('title') or 'tool', raw
+
+    @staticmethod
+    def _settled(c: dict) -> bool: return any(v not in (None, '', [], {}) for k, v in c['raw'].items() if k not in ('type', 'id', 'cwd'))
+
+    def _show(self, c: dict):
+        if c['shown']: return
+        c['shown'] = True
+        name, args = self._call(c)
+        self.trace('tool_call', name, {'tool_call_id': c['id'], 'args': args})
+        self.trace('live', self.name, f"→ {c.get('title') or name}"[:400])
+
+    def _finish(self, c: dict, failed: bool = None):
+        if c['done']: return
+        self._show(c); c['done'] = True
+        out = ''.join(c['out']).strip() or c.get('text') or c.get('raw_out') or ''
+        bad = (c.get('status') == 'failed' or c.get('exit') not in (None, 0)) if failed is None else failed
+        if c['id'] in self.held: out, bad = self.held[c['id']], True          # Taskuary's own answer, not the adapter's "user refused"
+        self.trace('tool_result', c['id'], {'result': out, 'is_error': bool(bad)})
+
+    def _settle_others(self, but=None):
+        for c in self.calls.values():
+            if c['id'] != but and not c['shown'] and self._settled(c): self._show(c)
+
+    def asked(self, tc: dict):
+        "A permission request for a call: its input is final, so it is traced now - before the answer is."
+        if not isinstance(tc, dict) or not tc.get('toolCallId'): return
+        # ...what the call announced, not the ask's copy, which only fills gaps: Codex asks with its own kind ("execute" for a file
+        # it announced as a read) and the command wrapped in `powershell.exe -Command '...'`
+        if (c := self.calls.get(str(tc['toolCallId']))):
+            tc = {k: v for k, v in tc.items() if k in ('toolCallId', 'locations') or (k == 'rawInput' and not c['raw']) or not c.get(k)}
+        self._words(); self._show(self._merge(tc))
+
+    def __call__(self, u: dict):
         kind = u.get('sessionUpdate')
-        if kind == 'agent_message_chunk': return
+        if kind == 'agent_message_chunk':
+            if self.thought: self._words()
+            self._settle_others(); self.said.append(acp_mod._text_of(u.get('content'))); return
+        if kind == 'agent_thought_chunk':
+            if self.said: self._words()
+            self._settle_others(); self.thought.append(acp_mod._text_of(u.get('content'))); return
         if kind in ('tool_call', 'tool_call_update'):
-            iid = u.get('toolCallId') or f'acp-{len(seen)}'
-            if iid not in seen and (kind == 'tool_call' or u.get('rawInput') or u.get('title')):
-                seen.add(iid)
-                args = dict(u['rawInput']) if isinstance(u.get('rawInput'), dict) else {}
-                loc = next((l.get('path') for l in u.get('locations') or [] if isinstance(l, dict) and l.get('path')), None)
-                if loc and not any(args.get(k) for k in ('path', 'file_path', 'absolute_path', 'filePath')): args['path'] = loc
-                if u.get('title'): args.setdefault('title', u['title'])
-                trace('tool_call', u.get('kind') or u.get('title') or 'tool', {'tool_call_id': iid, 'args': args})
-            if iid in seen and u.get('status') in ('completed', 'failed'):
-                out = ' '.join(acp_mod._text_of(c.get('content')) for c in u.get('content') or [] if isinstance(c, dict)).strip()
-                trace('tool_result', iid, {'result': out, 'is_error': u.get('status') == 'failed'})
-        elif kind == 'plan':
+            self._words()
+            c = self._merge(u)
+            self._settle_others(but=c['id'])
+            st = u.get('status')
+            if st in ('completed', 'failed'): self._finish(c)
+            elif (st == 'in_progress' or (kind == 'tool_call_update' and c.get('out'))) and self._settled(c): self._show(c)
+            return
+        if kind == 'plan':
+            self._words(); self._settle_others()
             steps = [str((e or {}).get('content') or '') for e in u.get('entries') or []]
             if any(steps):
-                iid = f'plan-{len(seen)}'; seen.add(iid)
-                trace('tool_call', 'update_plan', {'tool_call_id': iid, 'args': {'plan': [s for s in steps if s]}})
-                trace('tool_result', iid, {'result': ''})
-        line = acp_mod.trace_line(u)
-        if line: trace('live', name, line)
-    return show
+                iid = f'plan-{self.plans}'; self.plans += 1
+                self.trace('tool_call', 'update_plan', {'tool_call_id': iid, 'args': {'plan': [s for s in steps if s]}})
+                self.trace('tool_result', iid, {'result': ''})
+
+    def flush(self, stop: str = None):
+        "The turn is over: what it said is traced, and every call still open ends - done at a normal end, failed at any other."
+        self._words()
+        for c in list(self.calls.values()):
+            if c['shown'] or self._settled(c) or c.get('title'): self._finish(c, failed=None if c.get('status') in ('completed', 'failed') else stop not in (None, 'end_turn'))
+
+
+def acp_tracer(trace, name: str, held: dict = None) -> ACPSteps: return ACPSteps(trace, name, held)
+
+
+# ── the ACP road ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ACP_SETTING = 'acp_cli'
+_FELL_BACK: set = set()
+# THE STORE AND TASK A RUN IS FOR, beside run_cli's arguments rather than in them: the ACP road's permission answers need both
+# (acpgate - the send filter's verdicts, a step held on this task), and run_cli's signature is the one every caller and test fake
+# shares. make_cli_llm sets it around its call; a run with none reads the switch's default and holds nothing on a task.
+_RUN = contextvars.ContextVar('taskuary_run', default=(None, None))
+
+
+@contextlib.contextmanager
+def run_context(store, task_id=None):
+    tok = _RUN.set((store, task_id))
+    try: yield
+    finally: _RUN.reset(tok)
+
+
+def acp_on(store) -> bool:
+    "The owner's 'Run CLI agents over ACP' (Settings, Agents). On unless switched off; a run with no store reads the default."
+    try: v = store.get_setting(ACP_SETTING) if store is not None else None
+    except Exception: v = None
+    return str('1' if v is None else v).strip().lower() not in ('0', 'false', 'off', 'no')
+
+
+def _acp_road(profile: dict, store=None) -> bool:
+    "Does this run go over ACP: a run marked for it (llm: a general agent's run with hands), the switch on, and a way to launch it."
+    if not (profile.get('acp_ok') and acp_on(store if store is not None else _RUN.get()[0])): return False
+    return bool(profile.get('acp') or profile.get('acp_cmd') or clis_mod.acp_adapter(profile.get('cmd') or ''))
+
+
+# A HEADLESS CLAUDE'S ARGV, AS WHAT THE ADAPTER TAKES. Everything make_cli_llm put on the command line still has to reach the run:
+# Taskuary's own tools (--mcp-config), the owner's send tools left out (--disallowedTools), the agent's instructions (the system
+# prompt file), the browser hold (--settings). The adapter takes them as Claude Agent SDK options in _meta.claudeCode.options;
+# the ones the protocol owns itself - print mode, the output format, the bypass, the model, resume - are its, and dropped.
+_CLAUDE_DROP = {'-p', '--print', '--verbose', '--dangerously-skip-permissions', '--allow-dangerously-skip-permissions', '--include-partial-messages'}
+_CLAUDE_DROP_VALUED = {'--output-format', '--input-format', '--model', '--resume', '-r', '--permission-mode', '--fallback-model'}
+_CODEX_DROP = {'exec', 'e', '--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', '--dangerously-bypass-hook-trust', '--full-auto'}
+_CODEX_DROP_VALUED = {'--sandbox', '-s', '--model', '-m', '--ask-for-approval', '-a'}
+
+
+def _read(path) -> str:
+    try: return Path(path).read_text(encoding='utf-8')
+    except OSError: return ''
+
+
+def claude_acp_options(args: list) -> dict:
+    """claude's -p argv -> the SDK options the claude-agent-acp adapter spreads into its query (_meta.claudeCode.options)."""
+    opt, extra, it = {}, {}, iter(list(args or []))
+    for a in it:
+        a = str(a)
+        if a in _CLAUDE_DROP: continue
+        if a in _CLAUDE_DROP_VALUED: next(it, None); continue
+        if not a.startswith('-'): continue                                        # a prompt or a stray value: never an option
+        if a == '--disallowedTools': opt.setdefault('disallowedTools', []).extend(x for x in str(next(it, '')).split(',') if x)
+        elif a == '--allowedTools': opt.setdefault('allowedTools', []).extend(x for x in str(next(it, '')).split(',') if x)
+        elif a == '--append-system-prompt-file': opt['systemPrompt'] = {'type': 'preset', 'preset': 'claude_code', 'append': _read(next(it, ''))}
+        elif a == '--system-prompt-file': opt['systemPrompt'] = _read(next(it, ''))
+        elif a == '--add-dir': opt.setdefault('additionalDirectories', []).append(str(next(it, '')))
+        elif a == '--settings': opt['settings'] = str(next(it, ''))
+        elif a == '--setting-sources': opt['settingSources'] = [x for x in str(next(it, '')).split(',') if x]
+        else:
+            # --mcp-config <file>, --strict-mcp-config: passed through as Claude's own flags (the SDK's extraArgs), so the CLI
+            # reads the file and expands its ${TASKUARY_TOKEN} from the environment - no token is written anywhere
+            nxt = next(it, None)
+            if nxt is not None and not str(nxt).startswith('-'): extra[a.lstrip('-')] = str(nxt)
+            else:
+                extra[a.lstrip('-')] = None
+                if nxt is not None: it = iter([nxt, *it])
+    if extra: opt['extraArgs'] = extra
+    return opt
+
+
+def _toml_value(v: str):
+    try: import tomllib
+    except ImportError: import tomli as tomllib
+    try: return tomllib.loads(f'v = {v}')['v']
+    except Exception: return v                                                   # a bare word: codex reads it as a string too
+
+
+def codex_acp_config(args: list) -> dict:
+    """codex exec's argv -> CODEX_CONFIG, which the codex-acp adapter hands Codex as the session's config: every `-c key=value`
+    (Taskuary's MCP server with its headers named by env var, the owner's send tools disabled - agenttools.codex_args,
+    sendfilter.codex_args) as the same dotted key. The rest is the protocol's: the mode replaces the sandbox and approval flags."""
+    cfg, it = {}, iter(list(args or []))
+    for a in it:
+        a = str(a)
+        if a in ('-c', '--config'):
+            kv = str(next(it, ''))
+            if '=' in kv: k, v = kv.split('=', 1); cfg[k.strip()] = _toml_value(v.strip())
+        elif a in _CODEX_DROP_VALUED: next(it, None)
+        elif a not in _CODEX_DROP and a.startswith('-'): logger.debug(f'acp: codex flag {a} has no ACP spelling - left out')
+    return cfg
+
+
+def acp_launch(profile: dict) -> dict:
+    """How this profile's CLI is started as an ACP agent: {'cmd', 'env', 'mode', 'meta', 'adapter'}.
+    A native CLI is its own binary with its ACP arguments (`gemini --acp`); claude and codex are their adapter (clis.ADAPTERS)
+    driving the binary the owner already has - the one _resolve_cmd finds, so it is the same login, settings and hooks."""
+    name, family = profile['cmd'], _cli_name(profile['cmd'])
+    ad = {} if profile.get('acp') else clis_mod.acp_adapter(name)
+    if not ad:
+        cmd = _resolve_cmd(name) + list(profile.get('acp') or [])
+        if profile.get('model'):
+            from .climodels import split_pick
+            model, _ = split_pick(profile['model'])
+            if model: cmd += [profile.get('model_arg') or '--model', model]
+        return {'cmd': cmd, 'env': {}, 'mode': '', 'meta': None, 'adapter': ''}
+    # the adapter's own command when it is installed (`npm i -g` puts it on PATH: ~2.3 s a start quicker, measured), else npx, pinned
+    own = pathcache.which(ad['bin'])
+    cmd = list(profile.get('acp_cmd') or ([own] if own else _resolve_cmd('npx') + ['-y', ad['pkg']]))
+    cli = (_resolve_cmd(name) or [name])[-1]
+    env = {k: v.replace('{cli}', cli) for k, v in ad['env'].items()}
+    args = list(profile.get('args') or clis_mod.preset_args(name) or [])
+    meta = None
+    if family == 'claude':
+        opts = claude_acp_options(args)
+        if opts: meta = {'claudeCode': {'options': opts}}
+    elif family == 'codex' and (cfg := codex_acp_config(args)): env['CODEX_CONFIG'] = json.dumps(cfg)
+    return {'cmd': cmd, 'env': env, 'mode': ad['mode'], 'meta': meta, 'adapter': ad['pkg']}
+
+
+def _long(cwd):
+    """The folder by its real, long name. Codex's Windows sandbox refused every command in a folder named by its 8.3 short name
+    (a temp folder under a long user name) with "Access to the path is denied", and the agent asked to escalate each one (2026-11-06)."""
+    return os.path.realpath(cwd) if cwd and os.path.isdir(cwd) else cwd
+
+
+def _acp_sig(launch: dict, cwd, env: dict) -> tuple:
+    "What a kept connection was opened with: a different command, folder, environment's names, options or mode is a new one (clipool._sig)."
+    return (tuple(launch['cmd']), str(cwd or ''), hash(tuple(sorted(env))), json.dumps(launch['meta'], sort_keys=True, default=str), launch['mode'])
+
+
+def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace):
+    """A connected session, ready for a prompt: started, initialized, the conversation opened (resumed where there is one),
+    its mode, model and effort set. ACPStartError for anything before the session exists - nothing has run, so run_cli takes
+    the argv road instead."""
+    try: client = acp_mod.ACPClient(launch['cmd'][0], launch['cmd'][1:], cwd=cwd, env=env, timeout=timeout)
+    except PermissionError as e: raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
+    try:
+        caps = client.connect()
+        try:
+            if resume and (caps.get('loadSession') or client.can_resume()): client.load_session(resume, cwd, meta=launch['meta'])
+            else:
+                if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
+                client.new_session(cwd, meta=launch['meta'])
+        except acp_mod.ACPAgentError as e:
+            # a CLI that is not signed in answers session/new in its own words: said as a sign-in, not as a broken app (2026-10-25)
+            if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
+            raise acp_mod.ACPStartError(f'session: {e}') from e
+        if launch['mode'] and not client.set_option('mode', launch['mode']):
+            logger.warning(f"acp: {name} has no '{launch['mode']}' mode - it runs in {client.option('mode').get('currentValue') or 'its own'}")
+        return client
+    except BaseException:
+        client.close(); raise
+
+
+def _acp_gears(client, profile: dict, name: str, trace):
+    "The run's model and effort as session config options; one the agent does not offer is said, and it runs on its own."
+    if not profile.get('model'): return
+    from .climodels import split_pick
+    for cat, want in zip(('model', 'thought_level'), split_pick(profile['model'])):
+        if want and not client.set_option(cat, want):
+            o = client.option(cat)
+            trace('progress', 'acp', f"{name} offers no {'model' if cat == 'model' else 'effort'} '{want}' over ACP - it runs on "
+                                     f"{o.get('currentValue') or 'its default'}")
 
 
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.
 
-    Two things are better here than on the argv road, and they are the reason this exists. The
-    session id is RETURNED by session/new rather than scraped out of a vendor's temp directory
-    afterwards, and the agent's progress arrives as typed events rather than as text to parse.
-
-    It fails loudly on purpose. There is no fallback to the argv road: a silent fallback would
-    hide which of the two is broken, and this transport is new.
+    The session id is RETURNED by session/new rather than scraped out of a vendor's temp directory, the progress arrives as typed
+    events, and every tool call the agent asks to make is answered by acpgate - Taskuary's rules, not a bypass flag. A kept
+    conversation (keep_alive: a general agent's task, the Assistant) holds its connection between turns in clipool, as the argv
+    road holds its claude process, so a turn after the first pays no start-up. ACPStartError means nothing ran: run_cli falls back.
     """
     profile = with_cmd(profile, store); name = profile['cmd']
-    cmd = _resolve_cmd(name) + list(profile.get('acp') or [])
-    if profile.get('model'):
-        from .climodels import split_pick
-        model, _ = split_pick(profile['model'])
-        if model: cmd += [profile.get('model_arg') or '--model', model]
-    cwd = profile.get('cwd')
+    launch, cwd, keep = acp_launch(profile), _long(profile.get('cwd')), profile.get('keep_alive')
+    env = {**spawn_env(profile, extra_env), **launch['env']}
+    from . import acpgate, clipool
+    sig = _acp_sig(launch, cwd, env)
+    opener = lambda: acp_mod.Conversation(_acp_open(name, launch, cwd, env, resume, profile.get('timeout'), trace), sig)
+    conv = clipool.take(keep, sig, opener, resume) if keep else opener()
+    client = conv.client
     trace('prompt', 'prompt_sent_to_agent', prompt)
-    trace('tool', 'cli', f'{name} over acp cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
+    trace('tool', 'cli', f"{name} over acp{' via ' + launch['adapter'] if launch['adapter'] else ''} cwd={cwd or os.getcwd()}"
+                         + (f' resume={resume}' if resume else '') + (f' live={keep}' if keep else ''))
     head0 = _git(cwd, 'rev-parse', 'HEAD')
-    env = spawn_env(profile, extra_env)
-
-    try:
-        client = acp_mod.ACPClient(cmd[0], cmd[1:], cwd=cwd, env=env,
-                                   timeout=profile.get('timeout'), on_update=acp_tracer(trace, name))
-    except PermissionError as e:
-        raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
+    held = {}
+    steps = ACPSteps(trace, name, held)
+    ctx_store, task_id = _RUN.get()
+    gate = acpgate.answerer({'store': store if store is not None else ctx_store, 'task_id': task_id, 'cli': _cli_name(name), 'cwd': cwd,
+                             'sid': client.session_id}, trace, held)
+    client.on_update, client.permit = steps, lambda params: (steps.asked(params.get('toolCall')), gate(params))[1]
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)
-    watcher = None
     if cancel is not None:
         # A browser Cancel asks the agent to stop first; killing the process is the backstop for
         # an agent that does not honour session/cancel.
         def _cancel():
             cancel.wait()
-            if cancel.is_set(): client.cancel(); client.close()
-        watcher = threading.Thread(target=_cancel, daemon=True); watcher.start()
+            if cancel.is_set() and conv.lock.locked(): client.cancel(); time.sleep(2); clipool.drop(keep, conv) if keep else client.close()
+        threading.Thread(target=_cancel, daemon=True).start()
+    stop, ok = None, False
     try:
-        try:
-            caps = client.connect()
-            if resume and caps.get('loadSession'): client.load_session(resume, cwd)
-            else:
-                if resume: trace('progress', 'acp', f'{name} cannot reload a session; starting a fresh one')
-                client.new_session(cwd)
+        with conv.lock:
+            if launch['adapter']: _acp_gears(client, profile, name, trace)     # a native CLI took its model on its command line
             stop, said = client.prompt(prompt)
-        except acp_mod.ACPAgentError as e:
-            # a CLI that is not signed in answers session/new in its own words: said as a sign-in, not as a broken app (2026-10-25)
-            if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), cmd[0] if cmd else '')) from e
-            raise
-        if stop and stop not in ('end_turn', 'cancelled'):
-            trace('progress', 'acp', f'the turn ended early: {stop}')
+            conv.turns += 1; conv.used = time.time()
+        ok = True
+        if stop and stop not in ('end_turn', 'cancelled'): trace('progress', 'acp', f'the turn ended early: {stop}')
         diff = ''
         if cwd:
             head1 = _git(cwd, 'rev-parse', 'HEAD')
@@ -1236,9 +1483,22 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
             unc = _git(cwd, 'diff', 'HEAD')
             if unc: diff = '\n'.join(x for x in (diff, unc) if x).strip()
         return said, client.session_id, (diff[:150000] or None)
+    except acp_mod.ACPAgentError as e:
+        if _SIGNED_OUT.search(str(e)): raise RuntimeError(signed_out_msg(name, str(e), launch['cmd'][0])) from e
+        raise
     finally:
+        steps.flush(stop if ok else 'error')
+        client.on_update, client.permit = None, None
         with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.discard(client.p)
-        client.close()
+        if not keep: client.close()
+        elif not ok: clipool.drop(keep, conv)          # a turn that failed part-way is never sent again on that connection (MID_TURN)
+
+
+def _fell_back(name: str, why, trace):
+    "An ACP start that failed: said once in the log per CLI, and on this run's launch line; the run goes on over argv."
+    if name not in _FELL_BACK:
+        _FELL_BACK.add(name); logger.warning(f'acp: {name} did not start over ACP ({why}) - running it on its command line instead')
+    trace('tool', 'acp', f'{name} over acp did not start ({str(why)[:200]}) - this run uses the command line')
 
 
 def spawn_env(profile: dict, extra_env: dict = None) -> dict:
@@ -1257,11 +1517,13 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # in the run's own trace two lines below. task_context() writes each message's BodyText in
     # verbatim, so mail is the likeliest way one arrives here. See redact.py.
     prompt = redact.scrub(prompt)
-    # The ACP road, for the profiles marked for it: the general agent's tool-using runs on a CLI
-    # that speaks the protocol natively. Everything else - triage, the drafter, coding sessions,
-    # every pane - stays on the argv road below. See docs/acp-transport.md.
-    if profile.get('acp') and profile.get('acp_ok'):
-        return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
+    # The ACP road, for the profiles marked for it: the general agent's tool-using runs, on a CLI that speaks the protocol natively
+    # or through its adapter (claude, codex), while the owner's 'Run CLI agents over ACP' is on. Triage, the drafter, coding
+    # sessions and every pane stay on the argv road below - and so does a run whose agent did not start over ACP (ACPStartError:
+    # nothing ran), said once in the log. See docs/acp-transport.md.
+    if _acp_road(profile, store):
+        try: return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
+        except acp_mod.ACPStartError as e: _fell_back(str(profile.get('cmd') or ''), e, trace)
     profile = with_cmd(profile, store); name = profile['cmd']
     family = _cli_name(name)
     args = list(profile.get('args') or preset_args(name) or ['-p'])
@@ -1535,11 +1797,26 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=No
     brain, a CLI with no stream-json input): there is nothing to have ready."""
     profile = with_cmd(profile, store); name = profile['cmd']
     args = list(profile.get('args') or preset_args(name) or ['-p'])
+    if profile.get('keep_alive') and _acp_road(profile, store): return _warm_acp(profile, resume, extra_env, store, swap)
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool
     try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name),
                              cwd=profile.get('cwd'), env=spawn_env(profile, extra_env), resume=resume, swap=swap)
     except PermissionError as e: raise FileNotFoundError(denied_msg(name, name, e)) from e
+
+
+def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
+    """warm_cli for a kept conversation on the ACP road: its connection opened and its session ready before the first turn - the
+    adapter's start-up (3-5 s, measured) paid while the owner reads. A start that fails warms nothing; the turn falls back then."""
+    from . import clipool
+    name, launch, cwd = profile['cmd'], acp_launch(profile), _long(profile.get('cwd'))
+    env = {**spawn_env(profile, extra_env), **launch['env']}
+    sig = _acp_sig(launch, cwd, env)
+    try:
+        return clipool.warm_with(profile['keep_alive'], sig, lambda: acp_mod.Conversation(
+            _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None), sig), resume, swap=swap)
+    except acp_mod.ACPStartError as e:
+        logger.info(f'acp: {name} not warmed - {e}'); return False
 
 
 def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env):

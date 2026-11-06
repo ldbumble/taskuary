@@ -55,6 +55,48 @@ class EachBackendTracesTheTurn(unittest.TestCase):
         self.assertEqual(sum(e['type'] == 'tool_call' for e in ev), 7)
         same(self, 'gemini_acp', ev)
 
+    def test_claude_and_codex_over_their_acp_adapters_trace_each_call_once_with_its_whole_input(self):
+        """Recorded shapes (claude-agent-acp 0.101.0, codex-acp 2.5.0, 2026-11-06): Claude announces a call with no input and a
+        generic title, then streams the input; Codex announces a web search empty and fills it when it ends, and asks for a read
+        with its own kind and a wrapped command. Each call is ONE tool_call, by the tool's own name, with the input it settled on."""
+        for backend in ('claude_acp', 'codex_acp'):
+            ev, trace = recorder()
+            show = agents.acp_tracer(trace, backend.split('_')[0])
+            for u in json.loads((D / f'{backend}.json').read_text(encoding='utf-8')):
+                if '_ask' in u: show.asked(u['_ask'])
+                else: show(u)
+            show.flush('end_turn')
+            calls = [e for e in ev if e['type'] == 'tool_call']
+            self.assertEqual(len(calls), 7, backend)
+            self.assertEqual(len({c['detail']['tool_call_id'] for c in calls}), 7, backend)
+            self.assertTrue(all(c['detail']['args'] for c in calls), backend)                       # never "Read File" with no file
+            self.assertEqual(sum(e['type'] == 'tool_result' for e in ev), 7, backend)              # every one ends: no spinner left
+            same(self, backend, ev)
+
+    def test_every_acp_tool_kind_becomes_one_plain_step(self):
+        """read, edit, delete, move, search, execute, think, fetch and other - as a native ACP CLI sends them, named by kind and
+        title only - plus a thought, a plan, a failed command, one Taskuary held, and one still open when the turn ends.
+        website/test/agentSteps.test.mjs reads the trace and asserts each step's words against the stream-json spelling of it."""
+        from taskuary import shellgate
+        ev, trace = recorder()
+        show = agents.acp_tracer(trace, 'gemini', held={'k-held': f'{shellgate.HELD}: push the agent\'s commits out of this computer'})
+        for u in json.loads((D / 'kinds_acp.json').read_text(encoding='utf-8')):
+            if '_ask' in u: show.asked(u['_ask'])
+            else: show(u)
+        show.flush('end_turn')
+        ids = [e['detail']['tool_call_id'] for e in ev if e['type'] == 'tool_call']
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(sorted(ids), sorted(e['name'] for e in ev if e['type'] == 'tool_result'))      # the open call ended too
+        same(self, 'kinds_acp', ev)
+
+    def test_a_call_still_open_when_a_turn_is_stopped_ends_as_not_done(self):
+        ev, trace = recorder()
+        show = agents.acp_tracer(trace, 'gemini')
+        show({'sessionUpdate': 'tool_call', 'toolCallId': 'c1', 'title': 'npm test', 'kind': 'execute', 'status': 'in_progress',
+              'rawInput': {'command': 'npm test'}})
+        show.flush('cancelled')
+        self.assertEqual([e['detail'] for e in ev if e['type'] == 'tool_result'], [{'result': '', 'is_error': True}])
+
     def test_an_openai_connector_reports_its_own_web_searches(self):
         ev, trace = recorder()
         fixture = json.loads((D / 'openai_responses.json').read_text(encoding='utf-8'))

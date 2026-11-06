@@ -74,6 +74,25 @@ KNOWN = [
      'args': ['--permission-mode', 'dangerous', '--respect-workspace-trust=false', '-p'], 'acp': ['acp']},
 ]
 
+# CLAUDE AND CODEX SPEAK ACP THROUGH AN ADAPTER, not natively (docs/acp-transport.md): an npm package that drives the CLI the
+# owner already has - its binary, its login - and answers on stdio. Per CLI: the adapter (PINNED: an adapter is a protocol
+# translator, and a new release is a new set of update shapes to check), how it is told which binary to drive ({cli}: the
+# CLI's own resolved path), and the session mode that makes it ASK before it acts, so every tool call reaches acpgate.
+#   claude  `default`: it asks for every tool the owner's own settings do not already allow (measured: Read, Glob, Bash, Edit,
+#           WebFetch and WebSearch each asked, 2026-11-06). Its other modes answer for us: auto, acceptEdits, bypassPermissions.
+#   codex   `workspace-write`: commands run in Codex's own sandbox without asking, and whatever needs the network or a folder
+#           outside the workspace is blocked and then ASKED for - a push, a fetch, an upload. `agent-full-access` asks nothing.
+# The @zed-industries packages were renamed to these; their claude adapter (0.16.2) failed session/new on Claude Code 2.1.318.
+ADAPTERS = {'claude': {'pkg': '@agentclientprotocol/claude-agent-acp@0.101.0', 'bin': 'claude-agent-acp',
+                       'env': {'CLAUDE_CODE_EXECUTABLE': '{cli}'}, 'mode': 'default'},
+            'codex': {'pkg': '@agentclientprotocol/codex-acp@2.5.0', 'bin': 'codex-acp',
+                      'env': {'CODEX_PATH': '{cli}'}, 'mode': 'workspace-write'}}
+
+
+def acp_adapter(cmd: str) -> dict:
+    "The adapter row for a CLI that speaks ACP only through one ({} for every other CLI)."
+    return ADAPTERS.get({'cursor-agent': 'cursor'}.get(_base(cmd), _base(cmd)), {})
+
 
 # Optional TOOLS a coding agent may use - not agents, so the wizard never offers them as one, and
 # none is a pip package, so pyproject's extras cannot name them. Declared here so the app can say

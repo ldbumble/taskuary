@@ -1,0 +1,733 @@
+[
+ {
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+   "type": "text",
+   "text": "I'll find"
+  }
+ },
+ {
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+   "type": "text",
+   "text": " the budget review thread"
+  }
+ },
+ {
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+   "type": "text",
+   "text": " first, then check the status board code."
+  }
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_01",
+  "sessionUpdate": "tool_call",
+  "name": "Bash",
+  "rawInput": {},
+  "status": "pending",
+  "title": "Terminal",
+  "kind": "execute",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_01",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\""
+  },
+  "title": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\""
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_01",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\"",
+   "description": "Search the mail for the budget review"
+  }
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_01",
+   "name": "Bash",
+   "status": "pending",
+   "rawInput": {
+    "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\"",
+    "description": "Search the mail for the budget review"
+   },
+   "title": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\"",
+   "kind": "execute",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "Bash"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}"
+    },
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_01",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_01",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}"
+    }
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_02",
+  "sessionUpdate": "tool_call",
+  "name": "Bash",
+  "rawInput": {},
+  "status": "pending",
+  "title": "Terminal",
+  "kind": "execute",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_02",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
+  },
+  "title": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_02",
+   "name": "Bash",
+   "status": "pending",
+   "rawInput": {
+    "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\""
+   },
+   "title": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\"",
+   "kind": "execute",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "Bash"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}"
+    },
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_02",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Bash"
+   }
+  },
+  "toolCallId": "toolu_02",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}"
+    }
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_03",
+  "sessionUpdate": "tool_call",
+  "name": "Read",
+  "rawInput": {},
+  "status": "pending",
+  "title": "Read File",
+  "kind": "read",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_03",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "file_path": "/home/alex/northwind/portal/src/Components/Budget/StatusBoard.js"
+  },
+  "title": "Read StatusBoard.js",
+  "locations": [
+   {
+    "path": "/home/alex/northwind/portal/src/Components/Budget/StatusBoard.js"
+   }
+  ]
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_03",
+   "name": "Read",
+   "status": "pending",
+   "rawInput": {
+    "file_path": "/home/alex/northwind/portal/src/Components/Budget/StatusBoard.js"
+   },
+   "title": "Read StatusBoard.js",
+   "kind": "read",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "Read"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "export const StatusBoard = () => null;"
+    },
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_03",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_03",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "export const StatusBoard = () => null;",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "export const StatusBoard = () => null;"
+    }
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_04",
+  "sessionUpdate": "tool_call",
+  "name": "Read",
+  "rawInput": {},
+  "status": "pending",
+  "title": "Read File",
+  "kind": "read",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_04",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "file_path": "/home/alex/northwind/portal/src/Components/Budget/BudgetTable.js"
+  },
+  "title": "Read BudgetTable.js",
+  "locations": [
+   {
+    "path": "/home/alex/northwind/portal/src/Components/Budget/BudgetTable.js"
+   }
+  ]
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_04",
+   "name": "Read",
+   "status": "pending",
+   "rawInput": {
+    "file_path": "/home/alex/northwind/portal/src/Components/Budget/BudgetTable.js"
+   },
+   "title": "Read BudgetTable.js",
+   "kind": "read",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "Read"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "export const BudgetTable = () => null;"
+    },
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_04",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Read"
+   }
+  },
+  "toolCallId": "toolu_04",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "export const BudgetTable = () => null;",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "export const BudgetTable = () => null;"
+    }
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Grep"
+   }
+  },
+  "toolCallId": "toolu_05",
+  "sessionUpdate": "tool_call",
+  "name": "Grep",
+  "rawInput": {},
+  "status": "pending",
+  "title": "grep",
+  "kind": "search",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Grep"
+   }
+  },
+  "toolCallId": "toolu_05",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "pattern": "approvedTotal"
+  },
+  "title": "grep \"approvedTotal\""
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Grep"
+   }
+  },
+  "toolCallId": "toolu_05",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "pattern": "approvedTotal",
+   "path": "src"
+  }
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_05",
+   "name": "Grep",
+   "status": "pending",
+   "rawInput": {
+    "pattern": "approvedTotal",
+    "path": "src"
+   },
+   "title": "grep \"approvedTotal\"",
+   "kind": "search",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "Grep"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "Found 2 matches"
+    },
+    "toolName": "Grep"
+   }
+  },
+  "toolCallId": "toolu_05",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "Grep"
+   }
+  },
+  "toolCallId": "toolu_05",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "Found 2 matches",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "Found 2 matches"
+    }
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebSearch"
+   }
+  },
+  "toolCallId": "toolu_06",
+  "sessionUpdate": "tool_call",
+  "name": "WebSearch",
+  "rawInput": {},
+  "status": "pending",
+  "title": "Web search",
+  "kind": "fetch",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebSearch"
+   }
+  },
+  "toolCallId": "toolu_06",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "query": "northwind budget review policy"
+  },
+  "title": "Search \"northwind budget review policy\""
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_06",
+   "name": "WebSearch",
+   "status": "pending",
+   "rawInput": {
+    "query": "northwind budget review policy"
+   },
+   "title": "Search \"northwind budget review policy\"",
+   "kind": "fetch",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "WebSearch"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "results"
+    },
+    "toolName": "WebSearch"
+   }
+  },
+  "toolCallId": "toolu_06",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebSearch"
+   }
+  },
+  "toolCallId": "toolu_06",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "results",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "results"
+    }
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebFetch"
+   }
+  },
+  "toolCallId": "toolu_07",
+  "sessionUpdate": "tool_call",
+  "name": "WebFetch",
+  "rawInput": {},
+  "status": "pending",
+  "title": "Fetch",
+  "kind": "fetch",
+  "content": [],
+  "locations": []
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebFetch"
+   }
+  },
+  "toolCallId": "toolu_07",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "url": "https://docs.northwind.example/budget/review"
+  },
+  "title": "Fetch https://docs.northwind.example/budget/review"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebFetch"
+   }
+  },
+  "toolCallId": "toolu_07",
+  "sessionUpdate": "tool_call_update",
+  "rawInput": {
+   "url": "https://docs.northwind.example/budget/review",
+   "prompt": "When does a review close?"
+  }
+ },
+ {
+  "_ask": {
+   "toolCallId": "toolu_07",
+   "name": "WebFetch",
+   "status": "pending",
+   "rawInput": {
+    "url": "https://docs.northwind.example/budget/review",
+    "prompt": "When does a review close?"
+   },
+   "title": "Fetch https://docs.northwind.example/budget/review",
+   "kind": "fetch",
+   "content": [],
+   "_meta": {
+    "claudeCode": {
+     "toolName": "WebFetch"
+    }
+   }
+  },
+  "options": [
+   {
+    "optionId": "allow-once",
+    "name": "Yes",
+    "kind": "allow_once"
+   },
+   {
+    "optionId": "reject",
+    "name": "No",
+    "kind": "reject_once"
+   }
+  ]
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolResponse": {
+     "stdout": "Budget reviews close when the owner signs off."
+    },
+    "toolName": "WebFetch"
+   }
+  },
+  "toolCallId": "toolu_07",
+  "sessionUpdate": "tool_call_update"
+ },
+ {
+  "_meta": {
+   "claudeCode": {
+    "toolName": "WebFetch"
+   }
+  },
+  "toolCallId": "toolu_07",
+  "sessionUpdate": "tool_call_update",
+  "status": "completed",
+  "rawOutput": "Budget reviews close when the owner signs off.",
+  "content": [
+   {
+    "type": "content",
+    "content": {
+     "type": "text",
+     "text": "Budget reviews close when the owner signs off."
+    }
+   }
+  ]
+ },
+ {
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+   "type": "text",
+   "text": "The budget review is waiting on Gail Moreno's sign-off: TQ-1142 holds the thread,"
+  }
+ },
+ {
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+   "type": "text",
+   "text": " and the status board reads approvedTotal"
+  }
+ },
+ {
+  "sessionUpdate": "agent_message_chunk",
+  "content": {
+   "type": "text",
+   "text": " before the review closes, so it shows last month's figure until then."
+  }
+ }
+]

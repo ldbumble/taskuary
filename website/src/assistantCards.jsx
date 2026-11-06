@@ -1143,7 +1143,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
   // should go in the coming from tab like fyi's"): what the Advisor noticed opens in Came from - the idea, its suggestion and the mail it is
   // based on - Agent and Close out beside it; its moves are the same ones, on its panes (ItemLay), and the bar is Back and Next
   if (table != null) return (
-    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays ask={ask} title={card.title}
+    <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays ask={ask} title={card.title} noAgent
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
       sections={[
         { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`],
@@ -1593,7 +1593,8 @@ export function FyiMessage({ item, onHead = null, open: held = null, moved = nul
 // Close out the slim tabs. Nothing in here is a new move: a message's own are under it, the item's ride the row (`foot`), said in Close out
 function FyiSections({ card, table, items, msgs, foot, err, next }) {
   const nav = React.useContext(CardNav), n = items.length, batch = card.kind === "fyis";
-  const ask = useItemAsk(!batch && card, "fyi");
+  // ...A HANDFUL GETS THE SAME BOX A SINGLE ONE DOES, by the same road (the owner, 2026-11-06): its ask, under Came from
+  const ask = useItemAsk(card, "fyi");
   return <ItemSections kind={batch ? "fyis" : "fyi"} itemKey={card.key} label="FYI" height={table} about="from" lays={!batch} ask={ask} hands={batch}
     title={batch ? `${plural(n, "message")} - nothing to decide` : card.title}
     aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}</>}
@@ -1606,7 +1607,7 @@ function FyiSections({ card, table, items, msgs, foot, err, next }) {
         body: <><ItemPart className="tq-item-msgs" sx={{ py: 0.25 }}>{msgs}</ItemPart><CardErr err={err} /></> },
       { key: "agent", n: 2, name: STEPS[1].name, icon: <TerminalIcon aria-hidden sx={{ fontSize: 17, color: "#746e64" }} />, lines: ["not started"],
         // ...an empty chat over the box is "no agent yet" (the owner, 2026-11-05); a handful, which has no box until a line is handed on, says how
-        body: batch ? <div className="tq-item-note" data-tq-fyi-agent="">{`To hand them to an agent, press a line under Came from - ${btn("regular_agent")} is among its moves; every line comes here, and you take off the ones it should not read.`}</div> : null },
+        body: null },
       { key: "close", n: 3, name: STEPS[2].name, lines: ["Nothing owed", batch ? `${btn("next", "batch")} marks ${n === 1 ? "it" : `all ${n}`} read` : "Nothing to decide"],
         body: <ItemPart data-tq-fyi-close="">
           <div className="tq-card-note">Nothing to decide - {n === 1 ? "it only wants" : "they only want"} you to know.</div>

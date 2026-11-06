@@ -122,7 +122,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the three sections (2026-10-27): the section the task is up to is the stage's (sectionOf),
   // or the one the Advisor's decision names its move is in (sectionHere, 2026-10-29)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : homeSection\(home, sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\)\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: writingUp \? "agent" : homeSection\(home, sectionHere\(\{ stage: taskStage, advised: advisedHeld \}\), t\?\.Kind\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -331,8 +331,9 @@ test("a task whose home is the chat shows Came from and the agent, and opens on 
   assert.equal(chatHome({ kind: "reply" }), true);
   assert.equal(chatHome({ kind: "coding" }), true, "a coding task is the same one chat (2026-11-06)");
   assert.equal(chatHome({ kind: "coding", terminal: true }), true, "...its live terminal a toggle inside it, never a column");
-  assert.equal(chatHome({ kind: "task" }), false);
-  assert.equal(chatHome({ kind: "task", chatted: true }), true, "a closed task, or one a chat was had on, opens on the chat (2026-11-06)");
+  assert.equal(chatHome({ kind: "task" }), true, "a plain to-do is the one chat too - no Close out column anywhere (2026-11-06)");
+  assert.equal(homeSection(true, "from", "task"), "from", "...and it opens on what came in");
+  assert.equal(homeSection(true, "from", "reply"), "agent");
   assert.equal(chatHome({ kind: "coding", chatted: true }), true);
   assert.equal(chatHome({ kind: "general", terminal: true }), false);
   // ...nor a kind not known yet: a coding task never draws two sections before its detail lands

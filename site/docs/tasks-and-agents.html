@@ -52,7 +52,7 @@
 <div class="entry on">
       <a class="page" href="./tasks-and-agents" aria-current="page">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Tasks and agents's sections"></button>
-      <div class="secs"><a class="sec" href="#a-tasks-three-lives" data-sec="a-tasks-three-lives">A task's three lives</a><a class="sec" href="#sending-work-to-an-agent" data-sec="sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="#a-general-task-is-one-chat" data-sec="a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="#coding-agents-and-general-agents" data-sec="coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs"><a class="sec" href="#a-tasks-two-sections" data-sec="a-tasks-two-sections">A task's two sections</a><a class="sec" href="#sending-work-to-an-agent" data-sec="sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="#a-general-task-is-one-chat" data-sec="a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="#coding-agents-and-general-agents" data-sec="coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="#sessions-and-transcripts" data-sec="sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="#several-agents-in-one-repository" data-sec="several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="#checklists-and-closing" data-sec="checklists-and-closing">Checklists and closing</a><a class="sec" href="#replies" data-sec="replies">Replies</a><a class="sec" href="#profiles-and-playbooks" data-sec="profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="#the-task-view-and-the-board" data-sec="the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="#the-work-rail" data-sec="the-work-rail">The work rail</a><a class="sec" href="#how-work-is-ordered" data-sec="how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -113,15 +113,17 @@
 <p>A task in Taskuary is three records, not one: the durable job, the agent work done on it, and how it
 is closed out - the reply to whoever asked, and on GitHub the merge or the closed issue. They start and finish independently, and keeping them apart is what stops
 the word &quot;done&quot; meaning three different things.</p>
-<h2 id="a-tasks-three-lives">A task&#39;s three lives<a class="anchor" href="#a-tasks-three-lives" aria-label="Link to this section">#</a></h2>
-<p>A <strong>coding</strong> task shows them as three sections, left to right — <strong>1 Came from → 2 Agent → 3 Close
-out</strong>. The section the task is up to opens; the other two fold to slim columns beside it that still
-say where they stand. Each section carries its own moves: on its spine while folded, on a strip
-across its top while open.</p>
-<p>A <strong>general</strong> or <strong>reply</strong> task has two: <strong>Came from</strong> and <strong>Agent</strong>, and its Agent section is one chat.
-There is no Close out on it: the reply, the post or the file the agent set up sits in the chat, under
-that turn&#39;s <strong>Next steps</strong> (<a href="#a-general-task-is-one-chat">A general task is one chat</a>). <strong>Mark done</strong> is
-on the task&#39;s own bar.</p>
+<h2 id="a-tasks-two-sections">A task&#39;s two sections<a class="anchor" href="#a-tasks-two-sections" aria-label="Link to this section">#</a></h2>
+<p>Every task - general, reply, coding or a plain to-do - is two sections, left to right: <strong>Came from</strong> and
+<strong>Agent</strong>, and its Agent section is one chat. The section the task is up to opens; the other folds to a
+slim column beside it that still says where it stands. The reply, the post, the emails it owes, the file
+the agent set up and, on a coding task, how its branch lands all sit in the chat, under that turn&#39;s <strong>Next
+steps</strong> (<a href="#a-general-task-is-one-chat">A general task is one chat</a>), each with its own <strong>Send</strong>. <strong>Mark
+done</strong> and the task&#39;s other moves are one row on the chat&#39;s strip.</p>
+<p>A plain to-do no agent has touched is <strong>Came from</strong> alone, with the box at its foot: type there and the
+agent starts, and its chat opens beside it. A coding agent&#39;s live terminal is a <strong>Terminal</strong> toggle inside
+its chat, never a column of its own. <strong>AI used</strong> and, on a coding task, <strong>Talk to this agent from…</strong> are
+small buttons in the task&#39;s top-right corner.</p>
 <table>
 <thead>
 <tr>
@@ -139,29 +141,21 @@ on the task&#39;s own bar.</p>
 </tr>
 <tr>
 <td><strong>Agent</strong></td>
-<td>One or more runs by a coding agent, and the Result each left - on a general task, the one chat</td>
-<td><strong>Send to agent</strong>, <strong>Stop and save</strong> while it runs, then <strong>Continue</strong> and <strong>Run another agent</strong> on a coding task; on a general task, the box under the chat</td>
-<td>Ending a session does not mark the task done or send a reply</td>
-</tr>
-<tr>
-<td><strong>Close out</strong> (coding tasks)</td>
-<td>The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue)</td>
-<td><strong>Draft reply</strong> / <strong>Reply</strong>, <strong>Send and close</strong>, <strong>Send</strong>, <strong>Redraft</strong>, <strong>Hand it to a person</strong>, <strong>Mark done</strong>, <strong>Close with a note</strong>, <strong>Attach a file</strong>, <strong>Share</strong>; on GitHub <strong>Approve and close</strong>, <strong>Approve</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
-<td>Closing the task: <strong>Send and close</strong> sends the reply and then closes it (kept open while an agent works on it); <strong>Approve and close</strong> does the same after the merge or the issue&#39;s close; <strong>Send</strong> and <strong>Approve</strong> never close it — the task stays open until you <strong>Mark done</strong></td>
+<td>The one chat: the agent&#39;s turns, and the cards it set up - the reply to whoever asked with <strong>Send and close</strong>, <strong>Send</strong> and <strong>Redraft</strong>, the emails it owes, an invite&#39;s answers, the hand-off, and the last act where the task lives (merge its pull request, close its issue: <strong>Approve and close</strong>, <strong>Approve</strong>, <strong>Decline</strong>)</td>
+<td>The box under the chat; <strong>Mark done</strong>, <strong>Hand it to a person</strong>, <strong>Close with a note</strong>, <strong>Attach a file</strong>, <strong>Share</strong> on its strip</td>
+<td>Ending a session does not mark the task done or send a reply; <strong>Send</strong> and <strong>Approve</strong> never close it - the task stays open until you <strong>Mark done</strong> (or press a <strong>... and close</strong>)</td>
 </tr>
 </tbody></table>
-<p><strong>Mark done</strong> always comes first on Close out, or on a chat task&#39;s bar, and is never folded away. When a strip runs out of
+<p><strong>Mark done</strong> always comes first on the task&#39;s row of moves, and is never folded away. When a strip runs out of
 room, the rest of its moves fold into a <strong>▾</strong> at its end. The task&#39;s title bar holds only its status,
 <strong>Expand</strong> and <strong>×</strong>.</p>
 <p>Under the task is one small bar, <strong>Nav</strong>: <strong>Back</strong> and <strong>Next</strong>, each greyed where there is nowhere to
 go. The chat is a separate pill in the corner; type there and a window opens out of it, about the
 task on the table.</p>
-<p>While a coding agent&#39;s session is live, it takes the whole width: Came from and Close out fold to their
-spines, and the Agent strip holds only <strong>Stop and save</strong>. Its Result, and <strong>Continue</strong>, come back
-when it stops.</p>
+<p>While an agent works, its chat takes the whole width and Came from folds to its spine.</p>
 <h3 id="who-is-allowed-to-close-it">Who is allowed to close it<a class="anchor" href="#who-is-allowed-to-close-it" aria-label="Link to this section">#</a></h3>
 <p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not for me; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
-<p>There is one close, <strong>Mark done</strong>. Close out&#39;s <strong>Send and close</strong> is a Send and then that close, in one press. A plain
+<p>There is one close, <strong>Mark done</strong>. A draft&#39;s <strong>Send and close</strong> is a Send and then that close, in one press. A plain
 <strong>Send</strong>, or approving an agent&#39;s act, never closes a task by itself (the owner&#39;s rule: sending and closing are two steps). Mark done always does the
 same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
 it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
@@ -184,7 +178,7 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <td>always - sending and closing are two steps</td>
 </tr>
 <tr>
-<td><strong>Send and close</strong> in Close out</td>
+<td><strong>Send and close</strong> under a draft in the chat</td>
 <td>Sends the reply; once it went, Mark done. Sent nowhere it cannot confirm, it waits for <strong>Check delivery</strong> or <strong>Send anyway</strong> first</td>
 <td>an agent is still working on it, or anything else on it still waits on you (a held step, another reply) - the task says why</td>
 </tr>
@@ -228,7 +222,7 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <h3 id="the-close-out-what-finishes-it-where-it-lives">The close-out: what finishes it where it lives<a class="anchor" href="#the-close-out-what-finishes-it-where-it-lives" aria-label="Link to this section">#</a></h3>
 <p>Mail is answered by the reply. A pull request is merged, and an issue closed. Whatever the system, the card has the
 same three buttons - only the line under them says what they do there. None of them closes the task: <strong>Mark done</strong> does -
-except <strong>Approve and close</strong>, which the task page&#39;s Close out puts first where your reply rides with the close-out: it
+except <strong>Approve and close</strong>, which the card in the task&#39;s chat puts first where your reply rides with the close-out: it
 approves, sends the reply, then closes the task (kept open while an agent works on it). <strong>Approve</strong> beside it does the
 same and leaves the task open; when the line is tight it folds into the <strong>▾</strong> beside <strong>Approve and close</strong>.</p>
 <table>
@@ -240,7 +234,7 @@ same and leaves the task open; when the line is tight it folds into the <strong>
 </thead>
 <tbody><tr>
 <td><strong>Approve and close</strong> (<strong>Send and close</strong> on a reply alone)</td>
-<td>Does what <strong>Approve</strong> does, then closes the task - in Close out, where your reply goes with it</td>
+<td>Does what <strong>Approve</strong> does, then closes the task - in the chat, where your reply goes with it</td>
 </tr>
 <tr>
 <td><strong>Approve</strong> (<strong>Send</strong> on a reply alone)</td>
@@ -460,7 +454,7 @@ task page, the Board, the assistant&#39;s cards and the phone all use the same o
 </thead>
 <tbody><tr>
 <td>The agent said it was done</td>
-<td>its <strong>Close out</strong> card if its work lives on GitHub, then ✅ <strong>agent finished</strong> - ready to send if a reply is owed</td>
+<td>its close-out card in the chat if its work lives on GitHub, then ✅ <strong>agent finished</strong> - ready to send if a reply is owed</td>
 <td>a new message on it</td>
 </tr>
 <tr>
@@ -603,10 +597,9 @@ outlives the job that produced it.</p>
 the task on its own. Closing a task ticks every remaining box: a closed task with open items is a lie about its own
 state.</p>
 <h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
-<p>On a coding task, Close out holds the reply whenever the task has an incoming sender. It shows one of three
-things: no draft yet (<strong>Draft reply</strong>), a draft ready (<strong>Send</strong>, <strong>Redraft</strong>), or a reply sent. Type your own
-or generate one, edit it, send it. On a general or reply task the draft is a card under the newest turn&#39;s
-<strong>Next steps</strong> in the chat, with its To, Cc, attachments and <strong>Send</strong>; ask in the box for a different one.</p>
+<p>On every task the draft is a card under the newest turn&#39;s <strong>Next steps</strong> in the chat, with its To, Cc,
+attachments and <strong>Send</strong>; it shows no draft yet (<strong>Draft reply</strong>), a draft ready (<strong>Send</strong>, <strong>Redraft</strong>), or a
+reply sent. Edit it in place, or ask in the box for a different one.</p>
 <p>One reply is special. A <strong>clarification</strong> stops the active agent when it is sent and moves the
 task to waiting, because an external answer is now required. An ordinary reply from an
 owner-controlled task is just an update: it leaves both the task status and any useful session
@@ -719,13 +712,13 @@ server and the Assistant alike (<code>taskuary/stages.json</code>). The first ro
 <tr>
 <td>done</td>
 <td>closed</td>
-<td>Close out - how it closed, the note, what went out</td>
+<td>Agent - the chat, how it closed, the note, what went out</td>
 <td>—</td>
 </tr>
 <tr>
-<td>close out</td>
+<td>to send</td>
 <td>a draft or emails wait for <strong>Send</strong>, or something went out</td>
-<td>Close out</td>
+<td>Agent - the chat, the draft&#39;s card in it</td>
 <td>over the work</td>
 </tr>
 <tr>
@@ -737,7 +730,7 @@ server and the Assistant alike (<code>taskuary/stages.json</code>). The first ro
 <tr>
 <td>to reply</td>
 <td>somebody wrote and nothing is drafted</td>
-<td>Came from, with Close out&#39;s move lit</td>
+<td>Came from, with Agent&#39;s move lit</td>
 <td>on the folded sections</td>
 </tr>
 <tr>

@@ -52,7 +52,7 @@
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Tasks and agents's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-three-lives">A task's three lives</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
+      <div class="secs" hidden><a class="sec" href="./tasks-and-agents#a-tasks-two-sections">A task's two sections</a><a class="sec" href="./tasks-and-agents#sending-work-to-an-agent">Sending work to an agent</a><a class="sec" href="./tasks-and-agents#a-general-task-is-one-chat">A general task is one chat</a><a class="sec" href="./tasks-and-agents#coding-agents-and-general-agents">Coding agents and general agents</a><a class="sec" href="./tasks-and-agents#sessions-and-transcripts">Sessions and transcripts</a><a class="sec" href="./tasks-and-agents#several-agents-in-one-repository">Several agents in one repository</a><a class="sec" href="./tasks-and-agents#checklists-and-closing">Checklists and closing</a><a class="sec" href="./tasks-and-agents#replies">Replies</a><a class="sec" href="./tasks-and-agents#profiles-and-playbooks">Profiles and playbooks</a><a class="sec" href="./tasks-and-agents#the-task-view-and-the-board">The task view and the Board</a><a class="sec" href="./tasks-and-agents#the-work-rail">The work rail</a><a class="sec" href="./tasks-and-agents#how-work-is-ordered">How work is ordered</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./security">Security</a>
@@ -392,9 +392,9 @@ held until the ask it opens arrives.</p>
 </tbody></table>
 <p>A tracker is the clearest case for <code>trigger</code>: an issue assigned to you is, by definition, work
 addressed to you, and triage settles most of them without an AI call at all.</p>
-<h3 id="github-what-close-out-does">GitHub: what Close out does<a class="anchor" href="#github-what-close-out-does" aria-label="Link to this section">#</a></h3>
-<p>The GitHub connection has a <strong>Close out</strong> step: what finishing a task does on GitHub when you press
-<strong>Close out</strong>. These are your choices - what each repository <em>requires</em> (branch protection, required checks
+<h3 id="github-what-finishing-a-task-does">GitHub: what finishing a task does<a class="anchor" href="#github-what-finishing-a-task-does" aria-label="Link to this section">#</a></h3>
+<p>The GitHub connection has a <strong>Finishing a task</strong> step: what finishing a task does on GitHub when you press
+<strong>Approve</strong> on its card in the task&#39;s chat. These are your choices - what each repository <em>requires</em> (branch protection, required checks
 and reviews) is read from GitHub for every pull request, and the card only offers what it allows.</p>
 <table>
 <thead>
@@ -405,7 +405,7 @@ and reviews) is read from GitHub for every pull request, and the card only offer
 </tr>
 </thead>
 <tbody><tr>
-<td>Close out on a pull request</td>
+<td>Finishing a task from a pull request</td>
 <td>Merges it · Only closes the task</td>
 <td>Contents: write</td>
 </tr>
@@ -430,22 +430,22 @@ and reviews) is read from GitHub for every pull request, and the card only offer
 <td>Actions: write</td>
 </tr>
 <tr>
-<td>Close out on an issue closes it</td>
+<td>Finishing a task from an issue closes it</td>
 <td>on</td>
 <td>Issues: write</td>
 </tr>
 <tr>
-<td>Post your reply as the close-out&#39;s comment</td>
+<td>Post your reply as the closing comment</td>
 <td>on - even with <em>Reply to issue/PR authors</em> off</td>
 <td>Issues / Pull requests: write</td>
 </tr>
 <tr>
-<td>Close out anyway, past the repository&#39;s own rules</td>
+<td>Finish anyway, past the repository&#39;s own rules</td>
 <td><strong>off</strong> - admin tokens only, and only on your press</td>
 <td>Administration</td>
 </tr>
 </tbody></table>
-<p>A repository you follow can override the pull-request choice, the merge method and Close out anyway.
+<p>A repository you follow can override the pull-request choice, the merge method and Finish anyway.
 <strong>Check the token</strong> asks GitHub, per repository, whether the token may do what these settings turn on.</p>
 <h3 id="jira-monday-com-and-linear-what-goes-back">Jira, Monday.com and Linear: what goes back<a class="anchor" href="#jira-monday-com-and-linear-what-goes-back" aria-label="Link to this section">#</a></h3>
 <p>These three trackers can be written to as well as read. Every write waits for your press, because
@@ -485,8 +485,8 @@ following an item when it moves or changes hands.</p>
 <td>The team&#39;s first <em>completed</em> state</td>
 </tr>
 </tbody></table>
-<p><strong>Close out on a tracker task.</strong> When the agent on a task from one of these items finishes, Close
-out proposes <strong>comment and move to done</strong>, with the comment drafted from the agent&#39;s result. You can
+<p><strong>Finishing a tracker task.</strong> When the agent on a task from one of these items finishes, its chat
+proposes <strong>comment and move to done</strong>, with the comment drafted from the agent&#39;s result. You can
 edit the comment, then press <strong>Approve</strong>. Taskuary reads the item again when the card is drawn. If
 the tracker has no done state, or the workflow offers no move to it from the item&#39;s current status,
 the card says so and Approve posts the comment alone. If the item is already done, it posts only the

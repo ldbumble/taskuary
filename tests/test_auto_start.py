@@ -102,45 +102,26 @@ class AutoStartTests(unittest.TestCase):
         self.assertIn(f"No AI is set up for an agent to run on yet ({words.name('ai')})", last_reason(s))
         self.assertTrue(any(c.startswith('Waiting for you:') and c.endswith('No agent has started on it.') for c in comments(s, out['task_id'])))
 
-    def test_coding_with_no_repository_stays_coding_and_the_coding_agent_is_asked_which(self):
-        """Coding stays coding (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
-        into a general agent?"): the task keeps its kind and its "pick a repository" mark, and the coding agent is
-        asked which checkout before anything starts."""
+    def test_coding_with_no_repository_is_started_like_any_coding_work(self):
+        """Where it is done is the coding agent's to pick once it starts (repochoice, the owner 2026-11-06): no hold, no question to a
+        light model first, nothing about repositories written on the task - only its kind."""
         s = store()
-        with mock.patch.object(ingest, 'repo_candidates', return_value=[{'repo': 'org/a', 'about': 'a'}, {'repo': 'org/b', 'about': 'b'}]):
-            out, spawned = ingested(s, mail(subject='fix the thing', body='fix the export in the thing'), 'coding',
-                                    needs_repo_choice=True, repo_reason='two repositories are plausible')
-        self.assertEqual(spawned, ['_choose_then_start'])
-        self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
-        self.assertTrue(s.task_has_tag(out['task_id'], ingest.NEEDS_REPO_TAG))
-        self.assertTrue(any('coding agent is asked to choose' in c for c in comments(s, out['task_id'])))
-
-    def test_the_coding_agents_pick_places_the_task_and_starts_it(self):
-        s = store()
-        tid = s.create_task({'Title': 'fix the export', 'Kind': 'coding', 'Status': 'open'}, 't')
-        s.tag_task(tid, ingest.NEEDS_REPO_TAG)
-        with mock.patch.object(ingest, 'choose_repo', return_value=('org/b', 'the export lives there')), \
-             mock.patch.object(ingest, 'auto_start_ok', return_value=(True, 'a colleague')), \
-             mock.patch.object(ingest, '_auto_code') as start:
-            ingest._choose_then_start(s, tid, {}, None)
-        self.assertTrue(s.task_has_tag(tid, ingest.TRIAGE_REPO_TAG + 'org/b'))
-        self.assertFalse(s.task_has_tag(tid, ingest.NEEDS_REPO_TAG))
-        start.assert_called_once()
-        with mock.patch.object(ingest, 'choose_repo', return_value=(None, 'none fits')), mock.patch.object(ingest, '_auto_code') as start2:
-            ingest._choose_then_start(s, tid, {}, None)
-        start2.assert_not_called()
+        out, spawned = ingested(s, mail(subject='fix the thing', body='fix the export in the thing'), 'coding',
+                                needs_repo_choice=True, repo_reason='two repositories are plausible')
+        self.assertNotIn('_choose_then_start', spawned)
+        t = s.get_task(out['task_id'])
+        self.assertEqual(t['Kind'], 'coding'); self.assertNotIn('repo', str(t.get('Tags') or ''))
+        self.assertFalse(any('repositor' in c.lower() for c in comments(s, out['task_id'])))
 
     def test_a_github_item_keeps_its_own_repository_and_its_hand_promotion(self):
-        """PW-093: a pull request belongs to the repository it came from, and github work queues for
-        the owner to promote - the no-repository reroute must not touch either."""
+        """PW-093: a pull request belongs to the repository it came from, and github work queues for the owner to promote."""
+        from taskuary import terminal
         s = store()
-        with mock.patch.object(ingest, 'repo_candidates', return_value=[{'repo': 'org/a', 'about': 'a'}, {'repo': 'org/b', 'about': 'b'}]):
-            out, spawned = ingested(s, mail(channel='github', source_name='org/a', no_auto=True,
-                                            subject='PR: fix the export', body='fix the export'), 'coding',
-                                    needs_repo_choice=True, repo_reason='two repositories are plausible')
+        out, spawned = ingested(s, mail(channel='github', source_name='org/a', no_auto=True,
+                                        subject='PR: fix the export', body='fix the export'), 'coding')
         self.assertEqual(spawned, [])
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'coding')
-        self.assertTrue(s.task_has_tag(out['task_id'], ingest.NEEDS_REPO_TAG))
+        self.assertEqual(terminal.guess_repo(s, out['task_id'], {})[0], 'org/a')
 
     def test_a_second_message_on_the_task_does_not_start_a_second_worker(self):
         s = store()

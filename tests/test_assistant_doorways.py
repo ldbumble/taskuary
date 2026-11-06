@@ -100,6 +100,13 @@ def test_the_endpoint_carries_the_standing_permission_too(store):
     assert 'standing' in body and isinstance(body['data'], list)
 
 
+def test_the_endpoint_says_where_the_walk_is_now(monkeypatch):
+    """Settings > Phone & chats offers Walk me through them, or Walk it here while a walk is out - so the page reads which, in the same answer."""
+    assert c.get('/api/assistant/doorways').json()['handoff'] is None
+    monkeypatch.setattr(remote_assistant, 'handoff', lambda s: {'channel': 'telegram', 'chat': '4242'})
+    assert c.get('/api/assistant/doorways').json()['handoff'] == {'channel': 'telegram', 'chat': '4242'}
+
+
 def test_the_endpoint_refuses_a_group_with_a_reason_you_can_read():
     r = c.post('/api/assistant/doorways', json={'channel': 'telegram', 'chat': '-100999'})
     assert r.status_code == 422

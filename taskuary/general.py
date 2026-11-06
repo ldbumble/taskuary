@@ -1073,8 +1073,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "
         "something, or changed a record unless a tool actually did it. Ask when a necessary fact is "
         "missing. Do not turn this into a coding task or instruct a coding CLI.\n"
-        # Work that no repository can carry now lands here rather than stalling as a held coding task
-        # (ingest: no_repo). Some of it needs a tool nobody has wired - adding somebody to a Teams invite
+        # Work that no repository can carry lands here rather than stalling as a held coding task.
+        # Some of it needs a tool nobody has wired - adding somebody to a Teams invite
         # wants calendar WRITE, and Taskuary's calendar is read-only. Saying so in one line is the answer;
         # a job that quietly does nothing is the failure (the owner, 2026-09-07: "if it's not capable of
         # doing it, then it will say so").
@@ -1543,7 +1543,7 @@ class GeneralSession:
         # The others find theirs already taken and end quietly: the turn that took them answers for them.
         mine = object() if as_owner and not brief and not kept else None
         if mine is not None:
-            with self._wlock: self._waiting.append((mine, text))
+            with self._wlock: self._waiting.append((mine, text, list(attachments or [])))
         if not self._take(WAIT_TURN, cancel):
             if mine is not None:
                 with self._wlock: self._waiting = [w for w in self._waiting if w[0] is not mine]
@@ -1559,7 +1559,8 @@ class GeneralSession:
         if mine is not None:
             with self._wlock:
                 if not any(w[0] is mine for w in self._waiting): self._lock.release(); return ''     # an earlier turn took it with its own
-                lines, self._waiting = [w[1] for w in self._waiting], []
+                # ...each line with the files sent with it (the owner, 2026-11-06): the turn that took a line carried only its own
+                lines, attachments, self._waiting = [w[1] for w in self._waiting], list(dict.fromkeys(p for w in self._waiting for p in w[2])), []
             text = '\n\n'.join(lines)
         if len(lines) > 1:
             together = (f"THE OWNER SENT {len(lines)} MESSAGES while you worked - the last {len(lines)} USER turns. Read them together: a later "

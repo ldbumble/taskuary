@@ -36,7 +36,7 @@ test("with no coding tool connected, Start is the general agent and nothing asks
   assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*labelOfRow\("start-agent"\),\n\s+disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: openBox/);
   assert.match(page, /const generalOnly = handOff \|\| !canCode \|\| goalRun;/);
   assert.match(page, /\{!generalOnly && <RepoSelect/);
-  assert.match(page, /\{!generalOnly && startRepo === "" && <>/);
+  assert.doesNotMatch(page, /startRepo === "" && <>/);              // no repository chosen is the agent's pick, never a hold
   // the coding agent is one press back from a hand-off - only where a coding tool is connected
   assert.match(page, /\{handOff && canCode && !goalRun && <Button[^\n]*\n[^\n]*\n[^\n]*choice\("agent", "coding_agent"\)/);
   // ...except a start already HELD for it: then choosing where the code is is the way on, whatever is connected (the walk, 2026-10-18)

@@ -68,6 +68,13 @@ CASES = [
     Q('navigation', 'show me the new starter task', None, [c('tasks.list', contains='new starter'), 'That is [TQ-0002](#task=2).'], 'read:tasks.list', freq=3),
     Q('navigation', 'bring up the census sync bug', None, [c('tasks.list', contains='census sync'), f'That is [{T12}](#task=12).'], 'read:tasks.list', freq=3),
     Q('navigation', 'open the audit log', None, 'Here: [Audit](#settings=audit).', 'link:#settings=audit', tools=('pages',), freq=1),
+    # ...the chats that reach Taskuary from outside, on one page (the owner, 2026-11-06: "it's not clear where that is")
+    Q('navigation', 'how do I talk to my coding agent from WhatsApp', None,
+      'Bind the chat under Agent channels: [Phone & chats](#settings=phone).', 'link:#settings=phone', tools=('pages',), freq=3),
+    Q('navigation', 'walk through my tasks on my phone', None,
+      'Pick your Assistant chat there, then press Walk me through them: [Phone & chats](#settings=phone).', 'link:#settings=phone', tools=('pages',), freq=4),
+    Q('navigation', 'which chats can talk to my coding agents?', None, 'They are listed here: [Phone & chats](#settings=phone).', 'link:#settings=phone',
+      tools=('pages',), freq=2),
     # ── bulk: sets of items ──
     Q('bulk', 'Clear all the FYI, please.', 'todo', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=5),
     Q('bulk', 'mark all the fyi read', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=5),
@@ -283,6 +290,8 @@ BRING_UP = [
     ('the audit log', 'audit log', '#settings=audit'),
     ('agent profiles', 'profiles', '#profiles'),
     ('the mail rules', 'mail rules', '#settings=policies'),
+    ('my phone settings', 'phone & chats', '#settings=phone'),
+    ('the agent channels', 'agent channels', '#settings=phone'),
     # ...Taskuary's own update, by any words for it: Updates, its button lit - never an agent (the owner, 2026-10-23: "i asked assistant to
     # update taskuary and it pulled up general agent")
     ('check for updates', 'updates', '#settings=updates&key=update'),

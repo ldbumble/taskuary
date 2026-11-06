@@ -12,6 +12,7 @@ the context it was built from. SOUL.md stays with triage. Writing style rides on
 is writing. Live coordination appears only when live peers exist; a continuation carries this
 task's own last result, never a stranger's notes.
 """
+import inspect
 import json, pathlib, unittest
 from unittest import mock
 
@@ -119,7 +120,7 @@ class NoBlanketSoulTests(unittest.TestCase):
         from taskuary import triage
         s = MemoryStore()
         self.assertTrue((s.doc('soul') or '').strip())
-        self.assertIn('soul', str(triage.classify_intent.__doc__ or '').lower() + str(ingest.ingest_message.__code__.co_names))
+        self.assertIn('soul', inspect.signature(triage.classify_intent).parameters)
 
 
 class ScopedExtrasTests(unittest.TestCase):

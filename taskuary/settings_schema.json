@@ -446,6 +446,13 @@
       "desc": "How many unattended agent sessions may run together. The rest queue.",
       "help": "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this."
     },
+    "code_folders": {
+      "group": "Agents",
+      "label": "Folders agents may look in for code",
+      "type": "lines",
+      "desc": "One folder a line. A coding agent picks its checkout under these, or one Taskuary already knows.",
+      "help": "Taskuary no longer decides which repository a coding task belongs in. When nothing on the task says it - a GitHub item's own repository, the code you set with Change where the code is - the agent starts in the task's own folder with the list of repositories Taskuary knows, and picks one before it touches any code.\n\nIt may also look for a checkout itself, and this list is where it may look: a git checkout under one of these folders, or one Taskuary already has a path for. Anything else is refused. A checkout it finds that Taskuary did not know joins the repository map, with a line saying where it was found.\n\nBlank means the usual places for code on this computer that exist: Documents, source/repos, repos, projects, code and src in your home folder. Keep it small - every folder here is one an agent may open."
+    },
     "auto_sessions_light": {
       "group": "Coding agent",
       "label": "Quick answers and subagents per agent",

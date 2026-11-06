@@ -30,7 +30,7 @@ class WrapperIsTheModelsWordTests(unittest.TestCase):
         llm = lambda *a, **k: json.dumps({'intent': 'reply_only', 'why': 'asks about pay', 'wrapper': [WRAP, 'not in the mail']})
         v = triage.classify_intent({'subject': 'raise', 'body': SAMPLE, 'from_name': 'Erin Blake'}, llm=llm)
         self.assertEqual(v.get('wrapper'), [WRAP])
-        self.assertIn('wrapper', triage.verdict_schema([], None, [], [])['schema']['properties'])
+        self.assertIn('wrapper', triage.verdict_schema()['schema']['properties'])
 
     def test_the_phone_reads_it_the_same_way(self):
         from taskuary import remote_assistant

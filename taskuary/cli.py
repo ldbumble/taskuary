@@ -108,9 +108,10 @@ def _open_keyed(url):
 AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'reply_not_needed', 'board', 'learned', 'upvote', 'downvote', 'comment',
               'search', 'message', 'memory',        # ...and the owner's mail history and memory, which a stranger's task never reads
               'sign_form',                          # ...and the owner's signature, which never goes on a stranger's form
-              'check_back')                         # ...and a wake of its own later, which a stranger's words never schedule
+              'check_back',                         # ...and a wake of its own later, which a stranger's words never schedule
+              'use_repo')                           # ...and which of the owner's checkouts it works in (repochoice)
 STRANGER_ACTS = AGENT_ACTS[:12]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
-OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
+OWNER_ACTS = ('prompts', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
             "session never borrows it. Restart the session from its task.")
 def _flag(a): return '--' + a.replace('_', '-')
@@ -265,12 +266,6 @@ def main():
     # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
     # the owner's own verdicts, score the configured classifier over them, or export a set that
     # can leave the machine (people and prose removed) - see evalset.py
-    # coding tasks triage could not name a repository for cannot start at all: the agent wants a
-    # checkout and there is none to give it. They are the assistant's work now (ingest: no_repo), but
-    # rows that arrived before that rule are still sitting on the board unstartable.
-    ap.add_argument('--reroute-held', action='store_true',
-                    help='move open coding tasks that have no nameable repository to the agent that '
-                         'needs none, and start them; prints what moved, then exits')
     # the rows filed before triage was asked for a summary and a checklist: their ask is the raw
     # email, footer and quoted thread included, and they have no todos at all
     ap.add_argument('--backfill-asks', action='store_true',
@@ -374,6 +369,9 @@ def main():
     # ...and its own follow-up on the task (checkback.py, the owner 2026-11-05): woken then with the note as its next turn
     ap.add_argument('--check-back', nargs=2, metavar=('WHEN', 'WHAT'), help='wake this task\'s agent at WHEN ("tomorrow 9am", "in 2 days", '
                     '"2026-11-12") to verify WHAT - a payment that should clear, a reply due by a date; one per task, a new one replaces it')
+    # ...and the checkout it works in, for a CLI without the use_repo tool (repochoice.py, the owner 2026-11-06)
+    ap.add_argument('--use-repo', nargs='+', metavar=('NAME_OR_PATH', 'WHY'), help="work this task in that git checkout - a repository from "
+                    'your REPOSITORIES list or a folder - and say why in a few words; the task records it')
     ap.add_argument('--search', metavar='WORDS', nargs='?', const='',
                     help="search the owner's own mail and messages in Taskuary - with --from, --subject, --since, --until - "
                          'and print each hit: its id, when, who, subject, thread and a snippet')
@@ -493,6 +491,18 @@ def main():
         r, out = got
         print(f"check-back set for {out.get('when')}: {out.get('what')} - you are woken on this task then" if out.get('ok')
               else f"not set: {out.get('detail') or r.text[:200]}")
+        return
+    if args.use_repo:
+        import os, sys
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to work in a checkout'); return
+        target, why = args.use_repo[0], ' '.join(args.use_repo[1:])
+        got = _post('/api/agent/use-repo', {'task_id': int(tid), 'path_or_name': target, 'why': why}, stranger)
+        if not got: return
+        r, out = got
+        print(out.get('says') if out.get('ok') else f"not used: {out.get('detail') or r.text[:200]}")
         return
     if args.tick or args.untick:
         import os, sys
@@ -616,16 +626,6 @@ def main():
         for r in reversed(rows):
             ref = f" {task_ref(r['TaskId'])}" if r.get('TaskId') else ''
             print(f"  [{r['Kind']}] {r['Agent']}{ref} {bb._ago(r['CreatedAt'])}: {r['Body']}")
-        return
-    if args.reroute_held:
-        import sys
-        from . import ingest
-        from .store import SQLiteStore, task_ref
-        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        except (AttributeError, OSError): pass
-        moved = ingest.reroute_held_no_repo(SQLiteStore(config.db_path()))
-        for t in moved: print(f"{task_ref(t['TaskId'])} -> general: {t['Title']}")
-        print(f"{plural(len(moved), 'task')} moved.")
         return
     if args.backfill_asks:
         import sys

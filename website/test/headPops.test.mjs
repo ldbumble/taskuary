@@ -16,5 +16,5 @@ test("both live in the header's corner, each a popover; neither is mounted at th
   assert.doesNotMatch(page, /\btail=\{/);
   // ...the same content: open from the start in the popover, its fold only where it is not one
   assert.match(read("AiUsed.jsx"), /const \[open, setOpen\] = useState\(pop\)/);
-  assert.match(read("AgentChannels.jsx"), /return pop \? <Box data-tq-agent-channels="pop">\{inner\}<\/Box>/);
+  assert.match(read("AgentChannels.jsx"), /if \(pop\) return <Box data-tq-agent-channels="pop">/);
 });

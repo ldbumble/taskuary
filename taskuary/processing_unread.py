@@ -301,7 +301,11 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
             triage = action.get('triage') or {}
             lane = processing_all.idea_lane(idea)
             slip, late, quiet, day = funnel.slipped_followup(store, action, now)   # a quiet thread past the person's day: the owner's move
-            if slip == 'answered': store.set_idea_status(idea['IdeaId'], 'done', 'funnel'); late = 0
+            # ...once: a line already done re-marked on every build left a dirty row each time, so the pile's cache never held and every
+            # read of the rail - and the walk's peek beside it in the same request - built it again (perf 2026-11-06)
+            if slip == 'answered':
+                if idea.get('Status') in ('open', 'snoozed'): store.set_idea_status(idea['IdeaId'], 'done', 'funnel')
+                late = 0
             elif slip: lane = slip
             base.update(idea=idea['IdeaId'], idea_kind=idea.get('Kind'), action=action, workstream=idea.get('Workstream') or '',
                         priority=triage.get('priority'), tid=action.get('tid') or tid,

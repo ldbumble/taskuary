@@ -1,8 +1,8 @@
 import React, { useRef, useState } from "react";
-import { Box, Button, Popover, TextField, Typography } from "@mui/material";
+import { Box, Button, Popover, Typography } from "@mui/material";
 import api from "./api.js";
-import { MicButton } from "./ui.jsx";
-import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
+import { usePromptImages } from "./promptImages.jsx";
+import { PromptBox } from "./AgentSummary.jsx";
 import { label } from "./buttons.js";
 
 // CONTINUE SESSION (A19, the owner, 2026-09-25: "should work for both coding and non coding agents? Maybe add a new
@@ -15,11 +15,10 @@ import { label } from "./buttons.js";
 // `initial`: words the box opens holding - the owner's notes when the Assistant lit Continue with them ("rerun it with these notes: ...")
 // `asked`: the question the run was still asking when it ended (workerstate.left_asking) - the box is its answer, and says so
 export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "", asked = "", signin = "" }) {
-  const [note, setNote] = useState(initial || "");
+  const [note, setText] = useState(initial || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const pics = usePromptImages();
-  const said = note.trim() || pics.imgs.length;
   const word = label(asked ? "answer_agent" : "continue");
   // ...once: a double press (or Ctrl+Enter then a click) posted /continue-work twice before `busy` was drawn (the agents walk, 2026-10-26)
   const flight = useRef(false);
@@ -41,19 +40,11 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
       {!asked && signin && <Typography data-tq-left-signin={signin} sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>
         {`Sign in to ${signin} to continue. Continue opens the agent browser on that page again - sign in there, or fill it in securely from the link it shows.`}</Typography>}
       {asked && <Typography data-tq-left-asking sx={{ fontSize: 12.5, color: "#2b3a45", overflowWrap: "anywhere" }}>{asked}</Typography>}
-      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder={asked ? "Your answer - it goes to the agent as it picks up" : "Anything to tell it as it picks up? (optional) - paste or drop a picture too"}
-        value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} {...pics.drop}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}
-        InputProps={{ endAdornment: (
-          <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
-            <AttachImage pics={pics} sx={{ width: 30, height: 30 }} />
-            <MicButton size={18} sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }} onText={(t) => setNote((v) => (v ? `${v} ${t}` : t))} />
-          </Box>) }}
-        sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7", alignItems: "flex-start" } }} />
-      <ImageTray pics={pics} />
+      {/* THE ONE BOX (AgentSummary.PromptBox, the owner 2026-11-06: "it should be shared"): paperclip, pictures, words, mic, and its Send is
+          Continue - empty is allowed, the agent carries on as it was */}
+      <PromptBox text={note} setText={setText} pics={pics} busy={busy} onSend={go} emptyOk autoFocus label={word} title={word}
+        placeholder={asked ? "Your answer - it goes to the agent as it picks up" : "Anything to tell it as it picks up? (optional)"} />
       <Box sx={{ display: "flex", gap: 0.75 }}>
-        <Button size="small" variant="contained" disableElevation disabled={busy || pics.busy} onClick={go}>
-          {busy ? "Continuing…" : word}</Button>
         <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
       </Box>
       {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}

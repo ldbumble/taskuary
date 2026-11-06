@@ -251,8 +251,8 @@ def greet_unchosen(store, connector, chat: str) -> bool:
     store.set_setting(key, str(time.time()), 'telegram-poll')
     mine = chat_of(connector) == str(chat)
     text = (f'This is your Assistant chat. To walk here, press "Walk me through them in Telegram" on the desktop, or let it listen any time '
-            f'under {words.name("settings")} → Assistant on your phone.' if mine else
-            f'To talk to Taskuary here, choose this chat on the desktop: {words.name("settings")} → Assistant on your phone.')
+            f'under {words.name("phone")}.' if mine else
+            f'To talk to Taskuary here, choose this chat on the desktop: {words.name("phone")}.')
     try: messengers.tg_send(store, str(chat), text, connector_id=connector.get('ConnectorId'))
     except Exception as e:
         logger.warning(f'telegram: the first-contact line did not go - {e}'); return False

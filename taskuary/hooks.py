@@ -636,6 +636,11 @@ def _same_dir(a: str, b: str) -> bool:
     except OSError: return os.path.normcase(os.path.normpath(str(a or ''))) == os.path.normcase(os.path.normpath(str(b or '')))
 
 
+def _here(t, cwd: str) -> bool:
+    "The folder a hook names is the pane's: where its process started, or the checkout it moved to with use_repo (repochoice)."
+    return _same_dir(t.cwd, cwd) or _same_dir(getattr(t, 'opened_in', '') or t.cwd, cwd)
+
+
 def receive(payload: dict, cli: str) -> dict:
     """A hook fired: find the session it belongs to (same checkout, same CLI, most recently active unless
     already bound to this CLI session id) and hand its observations to the witness."""
@@ -645,7 +650,7 @@ def receive(payload: dict, cli: str) -> dict:
     # process - no argv, no checkout - so reading argv[0] to judge it raised IndexError and took the
     # whole hook with it, costing the coding agent beside it its said-and-did (2026-09-07).
     mine = [t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and getattr(t, 'argv', None)
-            and cli in os.path.basename(str(t.argv[0])).lower() and _same_dir(t.cwd, cwd)]
+            and cli in os.path.basename(str(t.argv[0])).lower() and _here(t, cwd)]
     if not mine: return {'bound': False}
     # the pane's own id, or the one it was resumed from (Codex forks a resumed thread: terminal.open_session)
     t = next((x for x in mine if sid and sid in (getattr(x, 'ext_id', ''), getattr(x, 'resumed_from', ''))), None)
@@ -693,7 +698,7 @@ def _pane(payload: dict, cli: str):
     from . import terminal as term
     cwd, sid = str(payload.get('cwd') or ''), str(payload.get('session_id') or '')
     return next((t for t in list(term.SESSIONS.values()) if t.alive and t.task_id and getattr(t, 'argv', None)
-                 and cli in os.path.basename(str(t.argv[0])).lower() and _same_dir(t.cwd, cwd)
+                 and cli in os.path.basename(str(t.argv[0])).lower() and _here(t, cwd)
                  and sid and sid in (getattr(t, 'ext_id', ''), getattr(t, 'resumed_from', ''))), None)
 
 

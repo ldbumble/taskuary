@@ -676,24 +676,24 @@ class TerminalTests(unittest.TestCase):
         self.assertIn('Work ONLY in the repository', seed)
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
 
-    def test_no_repo_is_guessed_from_the_task_words_when_triage_named_none(self):
-        """The task's words are never scored against the SOUL.md map (2026-10-11, "everything should be ai"): triage
-        read the ask with the map in front of it, and when it named no repository the owner picks one."""
+    def test_no_repo_is_guessed_from_the_task_words(self):
+        """The task's words are never scored against the SOUL.md map (2026-10-11, "everything should be ai"), and triage names no
+        repository either (2026-11-06): with nothing structural on the task, the coding agent picks one (repochoice)."""
         prof = {'cwd_map': {'northwind/Census': 'C:/src/Census', 'northwind/Reports': 'C:/src/Reports'}}
         server.store.save_doc('soul', '## Repository map\n'
                               '- **northwind/Census**: employee portal - PTO, payroll imports, timesheets\n'
                               '- **northwind/Reports**: nightly financial reporting pipeline\n', 'test')
         pto = c.post('/api/tasks', json={'Title': 'PTO import maps the wrong month',
                                          'Summary': 'the payroll timesheet import is off'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, pto, prof), (None, 'triage named no repository - choose one'))
+        self.assertEqual(terminal.guess_repo(server.store, pto, prof), (None, 'no repository yet - the coding agent picks one'))
         named = c.post('/api/tasks', json={'Title': 'Reports is failing at 2am'}).json()['taskId']
         self.assertIsNone(terminal.guess_repo(server.store, named, prof)[0])
         verdict = c.post('/api/tasks', json={'Title': 'PTO import', 'Tags': 'triage-repo:northwind/Census'}).json()['taskId']
-        self.assertEqual(terminal.guess_repo(server.store, verdict, prof)[0], 'northwind/Census')     # triage's verdict still routes
+        self.assertIsNone(terminal.guess_repo(server.store, verdict, prof)[0])                        # an old triage pick routes nothing
         tagged = c.post('/api/tasks', json={'Title': 'anything', 'Tags': 'repo:northwind/Reports'}).json()['taskId']
         self.assertEqual(terminal.guess_repo(server.store, tagged, prof), ('northwind/Reports', 'tagged on the task'))
-        # nothing to match against, or nothing that matches: the agent's own folder, not a wrong repo
-        self.assertEqual(terminal.guess_repo(server.store, pto, {}), (None, None))
+        # nothing to match against, or nothing that matches: the task's own folder, not a wrong repo
+        self.assertEqual(terminal.guess_repo(server.store, pto, {}), (None, 'no repository yet - the coding agent picks one'))
         blank = c.post('/api/tasks', json={'Title': 'zzz qqq'}).json()['taskId']
         self.assertIsNone(terminal.guess_repo(server.store, blank, prof)[0])
 
@@ -1205,14 +1205,18 @@ class RepoRoutingTests(unittest.TestCase):
         return c.post('/api/tasks', json={'Title': title, 'Summary': summary, 'Kind': 'coding'}).json()['taskId']
 
     def test_the_only_configured_repo_is_not_taken_while_the_map_knows_others(self):
-        """No verdict from triage and no guess from the words (2026-10-11): the owner chooses, and the one checkout
-        with a path is not quietly taken for them - that is how the reimbursement task opened in the wrong tree."""
+        """No guess from the words (2026-10-11) and none from triage (2026-11-06): the one checkout with a path is not quietly
+        taken - that is how the reimbursement task opened in the wrong tree. The session opens in the task's folder; the agent picks."""
         prof = json.loads(server.store.get_agent('coding')['Config'])
         tid = self._task('Reimbursement app', 'approving reimbursements shows an error on each transaction')
-        self.assertEqual(terminal.guess_repo(server.store, tid, prof), (None, 'triage named no repository - choose one'))
-        with mock.patch.object(terminal, 'Term') as worker, self.assertRaisesRegex(ValueError, 'could not tell which checkout'):
-            terminal.open_session(server.store, 'coding', tid, None)
-        worker.assert_not_called()
+        self.assertEqual(terminal.guess_repo(server.store, tid, prof), (None, 'no repository yet - the coding agent picks one'))
+        from taskuary import repochoice
+        with mock.patch.object(terminal, 'Term') as worker, mock.patch.object(terminal, 'agent_argv', return_value=['claude']), \
+             mock.patch.object(terminal, 'pretrust'), mock.patch('taskuary.hooks.install_user'):
+            worker.return_value = mock.Mock(sid='onlyrepo', cwd='x')
+            try: terminal.open_session(server.store, 'coding', tid, None)
+            finally: terminal.SESSIONS.pop('onlyrepo', None)
+        self.assertTrue(repochoice.is_scratch(tid, worker.call_args[0][1]))
         # the picker still lists every repo, with whether it can be opened - ordering it is not choosing
         ranked = terminal.rank_repos(server.store, tid, prof)
         self.assertEqual({r for r, _s, _h in ranked}, {'northwind/portal', 'northwind/Census'})

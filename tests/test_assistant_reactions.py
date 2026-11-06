@@ -1380,9 +1380,10 @@ class WhichCheckoutTests(unittest.TestCase):
     def test_our_own_report_goes_to_our_own_checkout(self):
         s = store()
         tid = self._report_task(s)
-        repo, why = terminal.guess_repo(s, tid, self.PROFILE)
-        self.assertEqual(repo, 'ldbumble/taskuary')
-        self.assertIn('own', why)
+        # ...said to the agent as a hint beside the repositories it picks from, never picked for it (repochoice, 2026-11-06)
+        self.assertIsNone(terminal.guess_repo(s, tid, self.PROFILE)[0])
+        from taskuary import repochoice
+        self.assertIn("Taskuary's own machinery, which lives in ldbumble/taskuary", repochoice.block(s, tid, 'C:/scratch', self.PROFILE))
 
     def test_a_coding_job_handed_off_from_the_chat_is_not_our_own_work(self):
         """TQ-0713 (the owner, 2026-09-24: "it opened it in wrong one"): a hand-off typed in the Assistant was
@@ -1439,12 +1440,16 @@ class WhichCheckoutTests(unittest.TestCase):
                        'Status': 'routed'})
         repo, why = terminal.guess_repo(s, tid, self.PROFILE)
         self.assertIsNone(repo, f'nothing here names a checkout (why={why})')
+        # ...and it opens in the task's own folder, never the profile's checkout: the agent picks one (repochoice)
         s.upsert_agent('coding', 'coding', 'cli', json.dumps(self.PROFILE))
-        with self.assertRaises(ValueError) as caught:
+        seen = {}
+        class T:
+            def __init__(self, argv, cwd, *a, **k): seen['cwd'] = cwd; self.sid, self.cwd = 'x', cwd
+        with mock.patch.object(terminal, 'Term', T), mock.patch.object(terminal, 'agent_argv', return_value=['claude']), \
+             mock.patch.object(terminal, 'pretrust'), mock.patch('taskuary.hooks.install_user'), mock.patch('taskuary.agenttools.session_args', return_value=[]):
             terminal.open_session(s, 'coding', tid, None, None)
-        self.assertIn('could not tell which checkout', str(caught.exception))
-        self.assertIn('Pick the repository', str(caught.exception))
-        self.assertNotIn('ledger', str(caught.exception).split('would put an agent in')[0])
+        from taskuary import repochoice
+        self.assertTrue(repochoice.is_scratch(tid, seen['cwd']), seen['cwd'])
 
     def test_a_repo_the_owner_tagged_always_wins(self):
         s = store()
@@ -1700,35 +1705,6 @@ class ApiActionsTests(unittest.TestCase):
         c = self.client(s)
         got = c.get(f"/api/tasks/{out['task_id']}").json()['task']
         self.assertEqual(got['Status'], 'done')                            # one record, both doors
-
-
-    def test_work_with_no_nameable_repository_is_rerouted_off_the_board(self):
-        """The rows that arrived before "no repository = the assistant's" existed. They cannot start as
-        coding jobs at all, so they sit unstartable - TQ-0401 did (the owner: "Why was this a coding
-        agent?")."""
-        s = store()
-        with mock.patch.object(ingest, '_spawn'):
-            held = arrive(s, subject='Can you add Nathan to the call he wants to join', body='he wants to join',
-                          channel='teams', who='Gail', email='gail@vendor.example', conv='c:teams',
-                          llm=brain('task', 'coding'))
-        tid = held['task_id']
-        s.tag_task(tid, ingest.NEEDS_REPO_TAG, actor='triage')
-        self.assertEqual(s.get_task(tid)['Kind'], 'coding')
-        # ...and one that a repository WAS named for: a real choice waiting, left alone
-        with mock.patch.object(ingest, '_spawn'):
-            named = arrive(s, subject='Fix the export', body='Rows drop.', conv='c:exp', hours=2, llm=brain('task', 'coding'))
-        s.tag_task(named['task_id'], ingest.NEEDS_REPO_TAG, actor='triage')
-        s.tag_task(named['task_id'], f'{ingest.TRIAGE_REPO_TAG}acme/exports', actor='triage')
-
-        with mock.patch.object(ingest, '_spawn') as spawn:
-            moved = ingest.reroute_held_no_repo(s)
-        self.assertEqual([t['TaskId'] for t in moved], [tid])
-        self.assertEqual(s.get_task(tid)['Kind'], 'general')                 # the agent that needs no repo
-        self.assertEqual(s.get_task(named['task_id'])['Kind'], 'coding')     # ...the named one is untouched
-        self.assertTrue(spawn.called, 'and it actually starts')
-        self.assertIn('needs no repository', ' '.join(c['Body'] for c in s.list_comments(tid)))
-        with mock.patch.object(ingest, '_spawn'):
-            self.assertEqual(ingest.reroute_held_no_repo(s), [])             # nothing left to move: it is idempotent
 
 
 # ── the inline verbs, and what Next now settles (2026-09-07) ─────────────────────────────────

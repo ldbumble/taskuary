@@ -641,9 +641,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           position: "relative", pl: "2px", pr: 1, pt: 0, pb: 3 }}>
           {setupRail ? null : top}
         </Box>
+        {/* ...down to the card's inner edge: a pixel short of it, the top of a row scrolled to a fractional offset showed through under the fade
+            as a dark sliver on the card's bottom border (the scenario run, 2026-11-06); the card's own rounded clip keeps the corners */}
         {bottomFade && more && (
           <Box data-tq-bottom-fade={fade} aria-hidden sx={{
-            position: "absolute", left: "1px", right: "1px", bottom: "1px", zIndex: 6,
+            position: "absolute", left: "1px", right: "1px", bottom: 0, zIndex: 6,
             height: bottomFade.height, pointerEvents: "none",
             background: `linear-gradient(transparent, ${PANEL} ${bottomFade.solidAt}%)`,
           }} />

@@ -18,7 +18,10 @@ import { ACCENT, ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 const initials = (s) => String(s || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "in";
 // ...a post's picture is a preview at a glance, not half the screen (the owner, 2026-11-05): its press opens it whole (FileDialog)
 const IMG_MAX = 180;
-const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0 };
+// ...as wide as the pick it shows, its chevron beside it - sized to its longest choice, "Anyone" stood a word's gap from its own arrow - and
+// a ring when the keyboard is on it (the scenario run, 2026-11-06: no outline at all)
+const PICK = { font: "inherit", fontSize: 11.5, color: INK, border: 0, background: "transparent", padding: 0, cursor: "pointer", outline: 0,
+  fieldSizing: "content", borderRadius: "4px", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } };
 
 export default function ActionCard({ row, tid, live = true, onChanged }) {
   const p = row?.post || {}, act = actionFor(p.type), st = stateOf(row, live), tk = textKey(act);

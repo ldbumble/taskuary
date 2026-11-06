@@ -5,7 +5,6 @@ import {
   AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime,
 } from "@assistant-ui/react";
 import { Alert, Box, Button, CircularProgress, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
-import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
@@ -18,7 +17,7 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
-import { AttachChip, AttachRow, IMAGE_TYPES, INLINE_CHIPS, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
+import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, notShown, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
@@ -44,7 +43,7 @@ import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSpl
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { level } from "./priority.js";
 import "./generalWorkspace.css";
-import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
+import { ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
@@ -56,7 +55,7 @@ import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
-import AgentSummary from "./AgentSummary.jsx";
+import AgentSummary, { OneBox } from "./AgentSummary.jsx";
 import { answerShown, foldedSummaries, lastAnswerSummed } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
@@ -889,40 +888,24 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
               {/* ...where the chat is home the box below IS Continue: Reopen alone brings it back */}
               This task is closed. Press {btn("reopen")}{chat ? "" : <>, then {btn("continue")},</>} to pick the conversation back up.</div> : noComposer ? null : <>
-            <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
-              {/* ...its files inside it, the one attachment look in one line (promptImages AttachChip; the owner, 2026-11-05) */}
-              {/* ...and WHERE IT CAME FROM rides the box as a chip (the owner, 2026-11-06: one prompt box everywhere) - a press opens it */}
-              <IconButton size="small" onClick={onAttach} title="Attach a file - or paste or drop one here" className="tq-aui-attach">
-                <AttachFileIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-              {/* ...ONE THIN LINE: the chips sit at the box's left, the words after them (the owner, 2026-11-06: "keep the prompt box thin...
-                  put the from you in the left side of the prompt box and text won't go there") */}
-              {(!!attachmentsRef.current.length || !!came) && <AttachRow className="tq-aui-attachments" sx={INLINE_CHIPS}>
+            {/* THE ONE BOX (AgentSummary.OneBox): paperclip, chips, words, mic, stop, Send - the same component as every other box, assistant-ui's
+                composer its root, input and Send. Its files inside it, the one attachment look in one line (the owner, 2026-11-05), and WHERE IT CAME
+                FROM a chip at its left (2026-11-06: "keep the prompt box thin... put the from you in the left side of the prompt box") - a press opens it */}
+            <OneBox root={ComposerPrimitive.Root} rootProps={{ onSubmit: answerTyped }} onFiles={onAttach}
+              chips={attachmentsRef.current.length || came ? <>
                 {came && <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
                   sx={{ cursor: came.onOpen ? "pointer" : "default" }} />}
-                {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</AttachRow>}
-              <ComposerPrimitive.Input
-                className="tq-aui-input"
-                onKeyDown={holdLine}
-                /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
-                placeholder={askWords || (dock ? "Tell Taskuary what to do next…" : MESSAGE)}
-              />
-              {/* the one mic, dictating into the box - every other composer had it and this one did not (the owner,
-                  2026-09-29: "where is mic to ask it question?") */}
-              <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => {
-                const c = runtime.thread.composer, was = c.getState().text;
-                c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t);
-              }} />
-              {/* stopping is an ACT: closing this page is not one. The button tells the server
-                  to stop the run; abandoning the tab just detaches from it (server.py). */}
-              <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response"
-                onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
-              {/* ...AND A TURN THIS PANE DID NOT START has the same stop (the owner, 2026-11-05: the task's own stop icon went from a chat): a turn
-                  woken by new mail, or one running when the page was opened, runs on the server, and the runtime's Cancel above stays hidden */}
-              {working && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
-                title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}
-              <ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>
-            </ComposerPrimitive.Root>
+                {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</> : null}
+              /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
+              input={<ComposerPrimitive.Input className="tq-aui-input" onKeyDown={holdLine} placeholder={askWords || (dock ? "Tell Taskuary what to do next…" : MESSAGE)} />}
+              onMic={(t) => { const c = runtime.thread.composer, was = c.getState().text; c.setText(was.trim() ? `${was.trimEnd()} ${t}` : t); }}
+              /* stopping is an ACT: closing this page is not one. The button tells the server to stop the run; abandoning the tab just detaches
+                 from it (server.py) - and A TURN THIS PANE DID NOT START has the same stop (the owner, 2026-11-05): a turn woken by new mail, or one
+                 running when the page was opened, runs on the server, and the runtime's Cancel stays hidden */
+              extra={<><ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response" onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
+                {working && <ThreadPrimitive.If running={false}><button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
+                  title="Stops this turn - the chat stays, and what you type next carries on" onClick={onStop}><CloseIcon fontSize="small" /></button></ThreadPrimitive.If>}</>}
+              send={<ComposerPrimitive.Send className="tq-aui-send" aria-label={!dock && asking ? "Send your answer" : "Send"} onClick={answerTyped}><SendIcon fontSize="small" /></ComposerPrimitive.Send>} />
             {askErr && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{askErr}</div>}
             <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste, drop or attach a file</div></>}
           </div>
@@ -954,7 +937,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // a turn this pane is streaming itself: `data.session` is not re-read during it, so it alone says the agent is not idle (SessionPane)
   const [streaming, setStreaming] = useState(false);
   const threadBusy = useCallback((b) => { setStreaming(b); onBusyChange?.(b); }, [onBusyChange]);
-  const fileRef = useRef(null);
   const selectionRef = useRef({ connectorId: "", model: "" });
   const attachmentsRef = useRef([]);
   selectionRef.current = { connectorId, model };
@@ -1012,7 +994,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
       }
       setAttachments((old) => [...old, ...added]);
     } catch (e) { setError(errText(e)); }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+    finally { setUploading(false); }
   };
   // one path (a chip's x), or the paths a send took - never the whole box, so a file added since stays
   const clearAttachments = useCallback((paths) => setAttachments((old) => (paths == null ? [] : old.filter((a) => ![paths].flat().includes(a.path)))), []);
@@ -1193,7 +1175,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           .filter((r) => !(chat && (shownMessages.some((m) => m.id === r.after) || (data?.cards || []).some((p) => p.post?.image === r.path))))]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments} onAttachBack={attachBack}
-        onAttach={() => fileRef.current?.click()}
+        onAttach={upload}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
@@ -1332,7 +1314,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
               <Md text={textOf(m)} /></>}</Box>)}
         </Box>
       </Box>}
-      <input ref={fileRef} hidden type="file" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching…</Box>}
       {!dock && !chat && <ThreadReading reading={data?.thread} mails={mails} variant="chat" />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>

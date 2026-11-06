@@ -2,8 +2,9 @@
 // drafts waiting on Send, the steps only the owner can take ("On you: …"), or "Nothing left to do here". Where the chat is the task's home the
 // drafts are their cards, inside Next steps (Task 4.2: `next`, what Close out held - TaskPage's own, so each draft is drawn once); elsewhere a
 // line each. An On you step's mark says whose it is, never a press.
-import React, { useState } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import React, { useRef, useState } from "react";
+import { Box, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/ArrowUpward";
 import api from "./api.js";
 import { hasReply, nextSteps, oneLine } from "./agentSummary.js";
@@ -14,7 +15,7 @@ import { dayLabel, fmtTime12 } from "./dates.js";
 const dayWord = (at) => { const d = dayLabel(at); return d && d !== "Today" ? `${d} ` : ""; };
 import { MicButton } from "./ui.jsx";
 import { MESSAGE } from "./kinds.js";
-import { AttachImage, AttachRow, INLINE_CHIPS, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
+import { AttachRow, IMAGE_ACCEPT, INLINE_CHIPS, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 // ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
@@ -141,26 +142,42 @@ export function NoAgentChat({ task, reviews = [], checklist = [], mails = [], ca
   );
 }
 
-// ONE PROMPT BOX (the owner, 2026-11-05: "the box should be where it always is, not moved up. Don't have separate code. It's the same prompt box,
-// just with the Came from attached and your prompt in one"): a task's chat before its first agent and an item's Agent tab type into this one, at
-// the foot of their pane - what it goes with as chips on it (`chips`), the words, a file, the mic, Send. `cannot`: why a file cannot go (ImageTray)
-export function PromptBox({ text, setText, pics, busy = false, onSend, placeholder, label = "", title, chips = null, inputRef = null, cannot = null,
-  boxAttrs = {}, sendAttrs = {} }) {
-  const empty = !(text.trim() || pics.imgs.length);
-  return <>
-    {/* ...and it LOOKS the one box too: the chat's own composer classes (generalWorkspace.css) - paperclip left, the words, the mic, the filled
-        Send - so the first word typed into a task, which starts its agent, leaves the box where and as it was (the scenario run, 2026-11-06:
-        this box had its paperclip on the right and a bare arrow, and changed shape the moment the agent came) */}
-    <Box component="form" className="tq-aui-composer" data-tq-prompt-box="" onSubmit={(e) => { e.preventDefault(); onSend(); }} {...pics.drop}
-      sx={{ flexShrink: 0, minWidth: 0 }}>
-      {/* ...what goes with the words, in one line inside the box: the item it came from first, then the files (AttachRow) */}
-      <AttachImage pics={pics} size={18} sx={{ width: 30, height: 30 }} />
-      {!!(chips || pics.imgs.length || pics.busy || pics.err) && <AttachRow sx={INLINE_CHIPS}>{chips}{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>}
-      <Box component="textarea" className="tq-aui-input" ref={inputRef} {...boxAttrs} rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }} placeholder={placeholder} aria-label={label} />
-      <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />
-      <button type="submit" className="tq-aui-send" {...sendAttrs} aria-label={label} title={title} disabled={busy || pics.busy || empty}>
-        {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <SendIcon fontSize="small" />}</button>
-    </Box>
-  </>;
+// ONE BOX, ONE COMPONENT (the owner, 2026-11-06: "you moved the attached thing to the same line but you removed mic and attach icons???" - the
+// coding chat's box was a form of its own with a bare textarea). Every prompt box is this: left to right the paperclip, the chips (what it came
+// from, the files), the words, the mic, the box's own buttons (`extra`: a Terminal toggle, a stop), Send. The paperclip and the mic are not
+// props to leave out. `root`: the form element (assistant-ui's Composer root in the general chat), `input` and `send` the box's own; `onFiles`
+// takes what the paperclip picked, `accept` narrows it, `onMic` the words dictated
+export function OneBox({ root = "form", rootProps = {}, onFiles, accept, attachBusy = false, attachTitle = "Attach a file - or paste or drop one here",
+  chips = null, input, onMic, extra = null, send }) {
+  const Root = root, pick = useRef(null);
+  return <Root className="tq-aui-composer" data-tq-one-box="" {...rootProps}>
+    <Tooltip title={attachBusy ? "Uploading…" : attachTitle}><span>
+      <IconButton size="small" className="tq-aui-attach" data-tq-box-attach="" aria-label={attachTitle.replace(/ - .*/, "")} disabled={attachBusy} onClick={() => pick.current?.click()}
+        sx={{ width: 30, height: 30, p: 0, color: "#6e685f" }}><AttachFileIcon sx={{ fontSize: 18 }} /></IconButton></span></Tooltip>
+    <input ref={pick} hidden type="file" multiple accept={accept} onChange={(e) => { onFiles([...(e.target.files || [])]); e.target.value = ""; }} />
+    {/* ...what goes with the words, in one line inside the box, left of them: the item it came from first, then the files (AttachRow) */}
+    {chips && <AttachRow className="tq-aui-attachments" sx={INLINE_CHIPS}>{chips}</AttachRow>}
+    {input}
+    <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={onMic} />
+    {extra}
+    {send}
+  </Root>;
+}
+export const micInto = (put) => (t) => put((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t));   // dictated words after the typed ones
+
+// ...a task's chat before its first agent, an item's Agent tab, the coding chat: words in a textarea, files through usePromptImages
+// (`chips`: what it goes with; `cannot`: why a file cannot go; `extra`: the box's own buttons; `emptyOk`: Send with nothing typed - the item alone
+// is the job; `onSend` null: a box whose press is the form's own (RunForm's Start), so Enter adds nothing and no Send is drawn)
+export function PromptBox({ text, setText, pics, busy = false, onSend = null, placeholder, label = "", title, chips = null, inputRef = null, cannot = null,
+  boxAttrs = {}, sendAttrs = {}, extra = null, sendOff = false, emptyOk = false, autoFocus = false }) {
+  const empty = !emptyOk && !(text.trim() || pics.imgs.length), any = !!(chips || pics.imgs.length || pics.busy || pics.err), go = () => onSend?.();
+  return <OneBox rootProps={{ "data-tq-prompt-box": "", onSubmit: (e) => { e.preventDefault(); go(); }, ...pics.drop, style: { flexShrink: 0, minWidth: 0 } }}
+    onFiles={pics.add} accept={pics.files ? undefined : IMAGE_ACCEPT} attachBusy={pics.busy} attachTitle={`Attach ${pics.files ? "a file" : "an image"} - or paste or drop one here`}
+    chips={any ? <>{chips}{fileChips(pics, cannot)}{fileState(pics)}</> : null}
+    input={<Box component="textarea" className="tq-aui-input" ref={inputRef} {...boxAttrs} rows={1} value={text} disabled={busy} autoFocus={autoFocus} onChange={(e) => setText(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); go(); } }}
+      placeholder={placeholder} aria-label={label} />}
+    onMic={micInto(setText)} extra={extra}
+    send={onSend && <button type="submit" className="tq-aui-send" {...sendAttrs} aria-label={label} title={title} disabled={busy || pics.busy || empty || sendOff}>
+      {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <SendIcon fontSize="small" />}</button>} />;
 }

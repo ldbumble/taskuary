@@ -18,7 +18,7 @@ from pathlib import Path
 from time import sleep
 from typing import NamedTuple
 
-from . import redact
+from . import aiusage, redact
 
 # Everything that can answer a PROMPT. This list is what populates every brain picker, so a model
 # that cannot emit text does not belong in it however good it is: `typesafe` (Jev) answers typed
@@ -323,6 +323,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         kwargs = {'cancel': cancel} if cancel is not None else {}
         if extra_env: kwargs['extra_env'] = extra_env
         run_prof, prompt = shaped(system, user)
+        if run_prof.get('model'): aiusage.note(str(run_prof['model']).split('@')[0])
         # A KEPT conversation goes on with the session its last call was on, not the id this brain was built with: a new
         # chat's second round (a look-up, the gate's retry) went out with no id, which clipool reads as New chat - so it
         # killed the live CLI and started another, 15 s against 2.6 s warm, and the round lost the turn it was answering.
@@ -379,7 +380,7 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
 
     `job` says what the call is FOR (brainroute.JOBS) and brainroute.choose says which brain runs it. Every call
     site in taskuary/ names one (tests/test_brainroute.py); a caller that does not is triage, as it always was."""
-    from . import demo, brainroute, origin
+    from . import demo, brainroute, origin, aiusage
     r = brainroute.choose(store, job or 'triage', task=task_id, want_pick=pick, want_model=model, gear=gear)
     # the demo answers from a script: no key, no CLI, no request leaving the machine - and its route is logged, so its reason shows
     if demo.enabled():
@@ -393,6 +394,7 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
         brainroute.outcome(store, rid, f'refused:{type(e).__name__}' if isinstance(e, (origin.RefusedForStranger, origin.Refusal)) else 'error'); raise
     if brain is None: brainroute.outcome(store, rid, 'error' if r.pick else 'refused:no AI')
     elif getattr(brain, 'is_failover', False): brain.route = (store, rid)
+    brain = aiusage.metered(store, rid, brain)       # what each call used - model, tokens, time - on this route row
     # Auto mode: a one-shot job whose answer comes back unreadable or unsure may ask a strong model ONCE (brainroute.step_up)
     if brain and r.escalate:
         brain = _StepUp(brain, lambda why: brainroute.step_up(store, r, rid, task_id, why, lambda p: _scrub(_build_llm(
@@ -818,7 +820,8 @@ def _list_models(t, cfg: dict, key: str) -> list:
 # it"). The router spells it the way a CLI pick does - 'gpt-5@high', '@low' for the card's own model - and make_llm splits it off:
 # Anthropic takes output_config.effort, OpenAI and Azure OpenAI reasoning_effort (the Responses API reasoning.effort). A model that
 # turns it down is asked once more without it, and is not offered it again in this process. Every other provider never sees it.
-EFFORT_TAKERS = ('anthropic', 'openai', 'azure_openai')
+# ...and the HIPAA AI card: its gateway (LiteLLM) carries reasoning_effort on to the Gemini and Claude models behind it (2026-11-06)
+EFFORT_TAKERS = ('anthropic', 'openai', 'azure_openai', 'hipaa_ai')
 EFFORT_WORDS = ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 _NO_EFFORT = set()         # (type, endpoint, model) that refused an effort - asked plainly from then on
 _EFFORT_REFUSED = re.compile(r'reasoning_effort|reasoning\.effort|effort|output_config', re.I)
@@ -864,13 +867,15 @@ def make_llm(t, cfg: dict, key: str):
         cli = anthropic.Anthropic(api_key=key)
         model = cfg.get('model') or PROVIDER_DEFAULT['anthropic']
         ek = ('anthropic', '', model)
-        def ask(**kw):
+        def asked(**kw):
             if effort and ek not in _NO_EFFORT:
                 try: return cli.messages.create(**kw, output_config={'effort': effort})
                 except anthropic.BadRequestError as e:
                     if not _EFFORT_REFUSED.search(str(e)): raise
                     _no_effort(ek, e)
             return cli.messages.create(**kw)
+        def ask(**kw):
+            r = asked(**kw); aiusage.anthropic(r); return r       # a paused web turn's every leg is counted
         def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
             # images FIRST: every provider reads a picture better when the question follows it
             content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}}
@@ -973,9 +978,11 @@ def make_llm(t, cfg: dict, key: str):
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
-                    if r.status_code == 400 and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
+                    # ...a proxy may turn it down with a 422 of its own (the gateway in front of another provider's model)
+                    if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
                         _no_effort(ek, r.text); r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
+                        aiusage.openai(r.json())
                         ch = (r.json().get('choices') or [{}])[0]
                         said = said_text(ch.get('message') or {})
                         if said.strip(): return said
@@ -1090,7 +1097,7 @@ def _responses_web(t, cfg, headers, model, system, user, images, max_tokens, eff
             _no_effort((t, url, model), r.text); r = post_retrying(url, headers, body, 180)
     except requests.RequestException as e: _log_web(t, e); return None
     if r.status_code != 200: _log_web(t, f'{r.status_code} {r.text[:200]}'); return None
-    out = r.json()
+    out = r.json(); aiusage.openai(out)
     for o in out.get('output') or []:
         if o.get('type') != 'web_search_call': continue
         act = o.get('action') or {}

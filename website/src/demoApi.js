@@ -171,6 +171,8 @@ const read = (url) => {
     files: [], added: 0, removed: 0, scope: "task",
     why: "This demo has no checkout to inspect. In your own Taskuary, this shows the agent's changes.",
   };
+  // a task's "AI used" (aiusage.for_task) from a recording made before it existed: nothing to list, never a failure
+  if (/^\/api\/tasks\/\d+\/ai-used$/.test(p)) return { rows: [], total: { calls: 0 } };
   // the Agent work card's record (sessionrecord.py): the demo keeps no CLI logs, so each filed report is a session
   const m0 = p.match(/^\/api\/tasks\/(\d+)\/record$/);
   if (m0) return demoRecord(state["/api/tasks/detail"]?.[m0[1]]);

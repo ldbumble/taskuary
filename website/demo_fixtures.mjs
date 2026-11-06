@@ -76,6 +76,8 @@ for (const t of (out["/api/tasks"]?.data || [])) {
     o.url = `data:${o.content_type};base64,${Buffer.from(await f.arrayBuffer()).toString("base64")}`;
     (out["/api/task-outputs"] ||= {})[`${t.TaskId}/${o.path}`] = o.url;
   }
+  const used = await fetch(`${BASE}/api/tasks/${t.TaskId}/ai-used`).catch(() => null);      // the task's "AI used" fold (aiusage.for_task)
+  if (used && used.ok) out[`/api/tasks/${t.TaskId}/ai-used`] = await used.json();
   const diff = await fetch(`${BASE}/api/tasks/${t.TaskId}/diff`).catch(() => null);
   if (diff && diff.ok) out[`/api/tasks/${t.TaskId}/diff`] = await diff.json();
 }

@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 from unittest import mock
 
-from taskuary import llm
+from taskuary import brainroute, llm
 from taskuary.store import MemoryStore
 
 
@@ -242,3 +242,23 @@ class WrongAddressTests(unittest.TestCase):
         with _Site(self.allow, 302, 'text/html', '', [('Location', 'https://admin.example/login')]) as site:
             out = firstrun.choose_key(s, 'hipaa_ai', self.CODE, cid=cid, config={'base_url': site.url})
         self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_NOT_GATEWAY))
+
+
+# the effort setting, as the OpenAI and Azure cards take it (2026-11-06)
+def _posted(body, status=200):
+    r = mock.Mock(); r.status_code, r.text = status, json.dumps(body); r.json.return_value = body; return r
+
+
+def test_hipaa_ai_takes_effort_and_drops_it_quietly_when_its_gateway_refuses():
+    sent = []
+    def post(url, headers=None, json=None, timeout=None):
+        sent.append(dict(json))
+        if 'reasoning_effort' in json: return _posted({'error': {'message': 'reasoning_effort is not supported for this model'}}, 422)
+        return _posted({'choices': [{'message': {'content': 'ok'}}]})
+    llm._NO_EFFORT.clear()
+    fn = llm.make_llm('hipaa_ai', {'base_url': 'https://ai.northwind.example/v1', 'model': 'hipaa-ai@high'}, 'hai-code-123')
+    with mock.patch('taskuary.llm.requests.post', side_effect=post): assert fn('s', 'u') == 'ok'
+    assert sent[0]['reasoning_effort'] == 'high' and 'reasoning_effort' not in sent[1] and sent[0]['model'] == 'hipaa-ai'
+    s = MemoryStore(); cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1, 'ConfigJson': json.dumps({'model': 'hipaa-ai'})}, 'owner')
+    assert brainroute.lift(s, f'connector:{cid}', 'strong', cfg={}) == 'hipaa-ai@high'

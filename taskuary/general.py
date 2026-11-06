@@ -904,7 +904,10 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "the browser instead of the API, the file read another way, a narrower or wider search. Never run the same failing call "
            "unchanged more than twice. Give a route up only after three genuinely different ways have failed, or when the next one needs "
            "the owner (a sign-in, a decision, money); then hand back one line per way you tried and what it returned, and the one thing "
-           "only the owner can unblock. A turn that quits at the first error, or calls a half-done job done, is the failure.")
+           "only the owner can unblock. A turn that quits at the first error, or calls a half-done job done, is the failure.\n"
+           # ...AND A STRONGER MIND WHEN IT IS STUCK (the owner, 2026-11-06: "if it needs it, it calls it") - askstronger.py, no cap
+           "STUCK ON A HARD JUDGEMENT OR A REASONING STEP? Ask a stronger model with the ask_stronger tool - the question, and the context "
+           "it needs. Never for routine steps.")
 # HOW A TURN WORKS (the owner, 2026-11-05: "adapt the best parts" of the open-source assistants): a question does not stop the work, each
 # step is judged by what came back, and done is the goal met - not the boxes ticked. Rides with the goal on every task the agent works
 WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: ask your one question, then do everything that does not hang on its answer - drafts, "

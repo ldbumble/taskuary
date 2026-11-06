@@ -5,7 +5,7 @@
 // its width are every kind's; a y is asked only of an aggregate that adds one up
 export const BINDS = { stat: ["agg", "y", "unit", "good"], progress: ["agg", "y", "target"], line: ["x", "agg", "y"], area: ["x", "agg", "y"],
   bar: ["x", "agg", "y", "limit"], stacked: ["x", "series", "agg", "y"], table: ["columns", "sort", "limit"], list: ["label", "meta", "sort", "limit"] };
-export const MAX_SOURCES = 6, MAX_COMPONENTS = 12;                 // dashboards.MAX_SOURCES, MAX_COMPONENTS
+export const MAX_SOURCES = 8, MAX_COMPONENTS = 18;                 // dashboards.MAX_SOURCES, MAX_COMPONENTS
 
 // "state=open, kind=reply" <-> {state: "open", kind: "reply"}: a component's where, typed the way it reads
 export const whereText = (w) => Object.entries(w || {}).map(([k, v]) => `${k}=${v}`).join(", ");

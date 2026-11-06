@@ -265,7 +265,9 @@ def complete(token: str, model: str, system: str, user: str, max_tokens: int, wa
             except ValueError: continue
             kind = ev.get('type')
             if kind == 'response.output_text.delta': out.append(ev.get('delta') or '')
-            elif kind == 'response.completed': done = True; break
+            elif kind == 'response.completed':
+                from . import aiusage
+                aiusage.openai({'model': model, **(ev.get('response') or {})}); done = True; break
             elif kind in ('response.failed', 'error'):
                 err = (ev.get('response') or {}).get('error') or ev.get('error') or {}
                 raise RuntimeError(_CALL_ERRORS.get(err.get('code')) or f"ChatGPT plan call failed: {err.get('message') or err.get('code') or kind}")

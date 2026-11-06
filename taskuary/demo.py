@@ -902,9 +902,11 @@ def seed(store) -> int:
             store.lore_comment(lid, 'Try it on the next two launches and compare escaped issues.', 'owner')
         elif kind == 'technical_solve':
             store.lore_comment(lid, 'The same elapsed-time budget should apply to report polling.', 'assistant')
+    seed_ai_usage(store)
     seed_dashboard(store)
     made += seed_agent_day(store, f)
     made += seed_tour(store, f)
+    seed_ai_usage(store)          # ...and the morning's asks, for their "AI used" folds
     logger.info(f'demo: seeded {made} items of invented work')
     return made
 
@@ -1310,6 +1312,39 @@ def seed_history_work(store, f, past) -> None:
         for kind, t in (('working', start), (end, at(start, mins))):
             eid = store.add_worker_event({'TaskId': tid, 'Sid': sid, 'Kind': kind, 'Source': 'demo', 'EventId': f'demo-{sid}-{kind}'})
             store._exec('UPDATE worker_event SET CreatedAt=? WHERE Id=?', (t, eid))
+
+
+# WHAT THE AI USED (aiusage.py): the demo has no AI, so each task's calls are written out - triage on the quick model, a draft or a
+# summary on the normal one, and on the asks an agent worked a run on the normal or hard model, with tokens and minutes that look like
+# a real week's. Derived from the task id, so every demo draws the same numbers.
+AI_MODELS = {'light': 'claude-haiku-4-5', 'standard': 'claude-sonnet-4-5', 'strong': 'claude-opus-4-1'}
+
+
+def seed_ai_usage(store) -> int:
+    """Route rows with usage for every task that has none yet. Returns how many were written."""
+    n, have = 0, {r['TaskId'] for r in store._rows('SELECT DISTINCT TaskId FROM brainroute WHERE TaskId IS NOT NULL')}
+    for t in store._rows("""SELECT t.TaskId, t.Kind, COALESCE((SELECT MIN(m.SentAt) FROM message m WHERE m.TaskId=t.TaskId), t.CreatedAt) Born
+                            FROM task t ORDER BY t.TaskId"""):
+        tid = t['TaskId']
+        if tid in have: continue
+        try: born = datetime.strptime(str(t['Born'] or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+        except ValueError: born = datetime.now()
+        k = tid * 7919
+        calls = [('triage', 'light', 2600 + k % 2400, 140 + k % 160, 1800 + k % 2600, 0)]
+        if tid % 3: calls.append(('draft', 'standard', 5200 + k % 5000, 380 + k % 420, 6500 + k % 7000, 4))
+        if t['Kind'] in ('coding', 'general') or tid % 4 == 0:
+            hard = tid % 5 == 0
+            job = 'coding' if t['Kind'] == 'coding' else 'general'
+            calls.append((job, 'strong' if hard else 'standard', 60000 + k % 340000, 4000 + k % 22000, (6 + k % 40) * 60000, 9))
+            calls.append(('summary', 'light', 3800 + k % 3000, 260 + k % 200, 2400 + k % 1800, 60))
+        for job, tier, i, o, ms, after in calls:
+            at = (born + timedelta(minutes=after)).strftime('%Y-%m-%d %H:%M:%S')
+            store.add_brain_route({'At': at, 'Job': job, 'TaskId': tid, 'Pick': 'cli:claude', 'Model': '', 'Tier': tier, 'Rule': 'demo',
+                                   'Why': 'Written for the demo - no AI ran', 'Outcome': 'ok', 'Ran': AI_MODELS[tier], 'TokensIn': i,
+                                   'Cached': int(i * 0.6) if job in ('general', 'coding') else 0, 'TokensOut': o, 'Ms': ms, 'Calls': 1,
+                                   'Sid': f'demo-run-{tid}' if job in ('general', 'coding') else None})
+            n += 1
+    return n
 
 
 class Replay:

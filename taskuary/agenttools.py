@@ -135,9 +135,11 @@ ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'own': {'
 NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')     # the owner's close-out, a workflow's own repair, a push past review
 
 
-def listing() -> list:
-    "tools/list: every tool with what it does and whether it only reads."
-    return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c]} for n, (c, d, s, _) in TOOLS.items()]
+# ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: the reply tools are not offered at all
+REPLY_TOOLS = ('propose_reply', 'reply_not_needed')
+def listing(skip=()) -> list:
+    "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
+    return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c]} for n, (c, d, s, _) in TOOLS.items() if n not in skip]
 
 
 def _out(text, fence_it: bool = False) -> str:
@@ -295,8 +297,9 @@ def proposal_of(args: dict) -> dict:
 PROTOCOLS = ('2025-06-18', '2025-03-26', '2024-11-05')
 
 
-def rpc(msg: dict, run) -> dict | None:
-    """One JSON-RPC message in, its answer out (None for a notification). `run(name, args)` executes a tool and returns text."""
+def rpc(msg: dict, run, skip=()) -> dict | None:
+    """One JSON-RPC message in, its answer out (None for a notification). `run(name, args)` executes a tool and returns text; `skip`: the
+    tools this session is not offered (REPLY_TOOLS on the owner's own ask)."""
     mid, m, p = msg.get('id'), msg.get('method'), msg.get('params') or {}
     ok = lambda r: {'jsonrpc': '2.0', 'id': mid, 'result': r}
     err = lambda code, text: {'jsonrpc': '2.0', 'id': mid, 'error': {'code': code, 'message': text}}
@@ -308,10 +311,10 @@ def rpc(msg: dict, run) -> dict | None:
                    'instructions': "Taskuary's tools reach the owner's saved mail, chats, tasks, people, calendar and documents. None "
                                    "of them sends: to answer anyone, propose it and the owner presses Send."})
     if m == 'ping': return ok({})
-    if m == 'tools/list': return ok({'tools': listing()})
+    if m == 'tools/list': return ok({'tools': listing(skip)})
     if m == 'tools/call':
         name = p.get('name')
-        if name not in TOOLS: return err(-32602, f'unknown tool {name!r}')
+        if name not in TOOLS or name in skip: return err(-32602, f'unknown tool {name!r}')
         try: return ok({'content': [{'type': 'text', 'text': run(name, p.get('arguments') or {})}], 'isError': False})
         except (ValueError, KeyError, TypeError, PermissionError, LookupError) as e:
             return ok({'content': [{'type': 'text', 'text': f'{type(e).__name__}: {e}'}], 'isError': True})

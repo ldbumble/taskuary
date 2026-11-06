@@ -2044,7 +2044,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # how this session ENDS. Without it the only ending is a person clicking Done, so a task
     # finished overnight produced no report and the sender got no answer (selfclose.py).
     from . import selfclose
-    if selfclose.stays_open(store, tid): parts.append(selfclose.STAY_LINE)
+    from .wrapup import OWN_ASK, no_correspondent
+    if not stranger and no_correspondent(store, tid):
+        parts.append(f"{OWN_ASK} No `taskuary --reply` or propose_reply here. " + ('Summarize, then wait.' if selfclose.stays_open(store, tid) else
+                     'WHEN FINISHED: run `taskuary --done "<one sentence>" --no-reply`.' if selfclose.mode(store) != 'off' else ''))
+    elif selfclose.stays_open(store, tid): parts.append(selfclose.STAY_LINE)
     elif selfclose.mode(store) != 'off': parts.append(selfclose.SEED_LINE)
     # that earlier agents worked out what is still true here, and how to look it up and judge it (handbook.pointer). The
     # wall says what is happening in this checkout this hour; the Hub says what is still true next month. A pointer, not the

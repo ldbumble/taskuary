@@ -75,12 +75,14 @@ def test_route_rows_do_not_move_the_display_caches():
     assert s._writes == before and len(s.brain_routes()) == 1
 
 
-def test_retention_keeps_a_month():
+def test_retention_keeps_the_row_90_days_and_its_reason_a_month():
+    "The AI-use dashboard reads 90 days of what each call used (aiusage); the reason line is still dropped after a month."
     s = MemoryStore(); now = datetime(2026, 10, 25, 9, 0)
-    for days in (40, 31, 29, 1):
+    for days in (100, 91, 40, 29, 1):
         s.add_brain_route({'At': (now - timedelta(days=days)).isoformat(sep=' ', timespec='seconds'), 'Job': 'triage', 'Why': f'{days}'})
     assert retention.tick(s, now)['routes_trimmed'] == 2
-    assert sorted(r['Why'] for r in s.brain_routes()) == ['1', '29']
+    rows = s.brain_routes()
+    assert len(rows) == 3 and sorted(r['Why'] or '' for r in rows) == ['', '1', '29']
 
 
 def test_why_for_a_task_with_no_ai_call_is_blank():

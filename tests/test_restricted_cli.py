@@ -83,11 +83,11 @@ def test_a_session_that_drops_its_task_and_token_keeping_its_sid_is_a_stranger_s
 
 
 # ── what a session may run ──────────────────────────────────────────────────────────────────────────────────────────
-@pytest.mark.parametrize('argv', [('--prompts',), ('--prompts', '5'), ('--link',), ('--evalset', 'build'), ('--reroute-held',),
+@pytest.mark.parametrize('argv', [('--prompts',), ('--prompts', '5'), ('--link',), ('--evalset', 'build'),
                                   ('--backfill-asks',), ('--demo',), (), ('--no-browser',), ('--port', '7999')])
 def test_a_stranger_s_session_is_refused_everything_but_the_agent_commands(monkeypatch, argv):
     t = _task(); _session(monkeypatch, t, True)
-    for f in ('promptmap.render', 'evalset.run', 'ingest.reroute_held_no_repo', 'ingest.backfill_asks', 'desktop.Server', 'launchkey.remote_link'):
+    for f in ('promptmap.render', 'evalset.run', 'ingest.backfill_asks', 'desktop.Server', 'launchkey.remote_link'):
         monkeypatch.setattr(f'taskuary.{f}', mock.Mock(side_effect=AssertionError(f)))
     monkeypatch.setattr(cli, '_busy', lambda h, p: True); monkeypatch.setattr(cli, '_is_taskuary', lambda u: True)
     with pytest.raises(SystemExit) as e: _run(monkeypatch, *argv)

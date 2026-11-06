@@ -212,3 +212,16 @@ def test_answered_elsewhere_on_a_thread_item_is_a_done_not_a_turn_down(s):
     iid, t = followup_idea(s, 6); card = next(c for c in rail(s) if c.get('idea') == iid)
     assert run(s, 'task.elsewhere', card, 'he called').status_code == 200
     assert s.get_idea(iid)['Status'] == 'done' and s.get_task(t)['Status'] == 'open'
+
+def test_a_line_their_reply_ended_is_marked_done_once(s):
+    # re-marked on every build, it left a dirty row each time: the pile's cache never held and every read of the rail built it again
+    mid = s.add_message({'ConversationId': 'c7', 'Channel': 'email', 'Subject': 'Budget', 'FromEmail': RAY, 'FromName': 'Ray Colton', 'SentAt': ago(days=7), 'BodyText': 'q', 'Status': 'filed'})
+    iid = s.upsert_idea({'key': 'followup:c7', 'kind': 'followup', 'text': 'No answer from Ray in 6 days on "Budget" - follow up?', 'sig': 'x',
+                         'action': {'type': 'followup', 'mid': mid, 'who_email': RAY, 'asked_at': ago(days=6)}}, ago(hours=1))['IdeaId']
+    s.add_message({'ConversationId': 'c7', 'Channel': 'email', 'Subject': 'Re: Budget', 'FromEmail': RAY, 'FromName': 'Ray Colton', 'SentAt': ago(days=1), 'BodyText': 'Here it is.', 'Status': 'filed'})
+    marks, was = [], s.set_idea_status
+    s.set_idea_status = lambda i, *a, **k: (marks.append(i), was(i, *a, **k))
+    rail(s)
+    assert s.get_idea(iid)['Status'] == 'done' and set(marks) == {iid}
+    n = len(marks); rail(s); rail(s)
+    assert len(marks) == n

@@ -460,21 +460,16 @@ SENDER_PAST = 3          # ...and how many of them
 
 
 def sender_history(store, msg: dict, days: int = SENDER_DAYS, limit: int = SENDER_PAST) -> list:
-    """How this sender's last few asks were worked - kind, repository, title - newest first. recently_closed reaches back
+    """How this sender's last few asks were worked - kind and title - newest first. recently_closed reaches back
     three days on purpose (a repeating check speaks in hours), so a person whose every ask for a month went to the coding
     agent on one repository was judged cold the week after: a payroll lead's fourth T&E data fix went to the general
     assistant with the right repository named (TQ-0955, 2026-10-05). Evidence for the model to weigh, never a rule."""
     conv, sender, _text, own = _arrival_keys(msg)
     if own or not sender: return []
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-    from .ingest import TRIAGE_REPO_TAG
-    out = []
-    for t in store.tasks_from_sender(sender, since, limit):
-        tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
-        repo = next((x[len(TRIAGE_REPO_TAG):] for x in tags if x.startswith(TRIAGE_REPO_TAG)), '')
-        out.append({'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'kind': t.get('Kind') or 'task',
-                    'repository': repo, 'status': t.get('Status') or '', 'when': str(t.get('CreatedAt') or '')[:10]})
-    return out
+    # ...never WHERE: the repository is the coding agent's pick (repochoice), not triage's to weigh (the owner, 2026-11-06)
+    return [{'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '', 'kind': t.get('Kind') or 'task',
+             'status': t.get('Status') or '', 'when': str(t.get('CreatedAt') or '')[:10]} for t in store.tasks_from_sender(sender, since, limit)]
 
 
 def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECENT) -> list:

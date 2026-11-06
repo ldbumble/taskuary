@@ -24,7 +24,8 @@ test("a section's name, its anchor and its crumb come from one place", () => {
 
 test("every section the rail offers is a heading the page actually stamps", () => {
   // A rail entry whose anchor nobody renders scrolls nowhere and highlights nothing.
-  assert.match(src, /const cfgGroups = GROUPS\.filter\(\(g\) => \(panels\[g\] \|\| rowsOf\(g\)\.length\) && \(g !== "Coding agent" \|\| canCode\)\);/,
+  // ...but the phone's group, which Phone & chats draws (phoneChats.test.mjs)
+  assert.match(src, /const cfgGroups = GROUPS\.filter\(\(g\) => g !== PHONE_GROUP && \(panels\[g\] \|\| rowsOf\(g\)\.length\) && \(g !== "Coding agent" \|\| canCode\)\);/,
     "Configuration draws every group that has something in it, in the schema's order");
   assert.match(src, /\{cfgGroups\.map\(\(g\) => \(/);
   assert.match(src, /<SectionHead page="config" name=\{g\} \/>/);
@@ -39,9 +40,9 @@ test("Configuration is one page, not a strip of tabs", () => {
   assert.ok(!/FilterPills/.test(src), "the pill strip is gone - it was the thing that ran off the edge");
   assert.ok(!/cfgTab/.test(src), "and so is the state that remembered which tab you were on");
   // (Notifications lost its panel with the notify pushes, 2026-10-02 - its sound and desktop switches are plain rows)
-  for (const g of ["How mail is sorted", "Assistant on your phone"]) {
-    assert.ok(src.includes(`"${g}":`), `${g} still gets its panel above its knobs`);
-  }
+  // (the phone's panel moved to Settings > Phone & chats with its knobs, 2026-11-06)
+  assert.ok(src.includes(`"How mail is sorted":`), "How mail is sorted still gets its panel above its knobs");
+  assert.match(src, /assistant=\{<><PhoneDoorways [^>]*\/>\{rowsOf\(PHONE_GROUP\)\.map\(knobRow\)\}/, "the phone's panel sits above its knobs on Phone & chats");
   assert.ok(schema.groups.length > 8, "the point of the change: there are a lot of them, and more coming");
 });
 

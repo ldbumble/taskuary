@@ -178,10 +178,12 @@ class TriageUsesItTests(unittest.TestCase):
             self.assertIn(asked, plain['schema']['properties'], asked)
         for unasked in ('repository', 'relationship', 'playbook', 'profile'):
             self.assertNotIn(unasked, plain['schema']['properties'], unasked)
-        with_repos = triage.verdict_schema(repos=[{'repo': 'a/b'}], candidates=[], playbooks='- pto: x')
-        for asked in ('repository', 'needs_repo_choice', 'repo_reason', 'relationship', 'related_message_ids',
-                      'existing_task_id', 'playbook', 'thread'):
+        with_repos = triage.verdict_schema(candidates=[], playbooks='- pto: x')
+        for asked in ('relationship', 'related_message_ids', 'existing_task_id', 'playbook', 'thread'):
             self.assertIn(asked, with_repos['schema']['properties'], asked)
+        # ...and never where coding work is done: the coding agent picks its repository (repochoice, 2026-11-06)
+        for never in ('repository', 'needs_repo_choice', 'repo_reason'): self.assertNotIn(never, with_repos['schema']['properties'], never)
+        self.assertNotIn('repos', inspect.signature(triage.verdict_schema).parameters)
         # triage picks no worker for a task (the owner, 2026-11-04): no schema can ask for one
         self.assertNotIn('profile', with_repos['schema']['properties'])
         self.assertNotIn('profiles', inspect.signature(triage.verdict_schema).parameters)

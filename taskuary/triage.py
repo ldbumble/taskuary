@@ -47,7 +47,7 @@ FIELDS = {
     'sender_check': "sender_check is what is known about the sender's mail domain: whether the receiving server verified the From "
                     "(from_verified), how much earlier mail came from that organisation that was never read as danger, the AI tools set "
                     "up here, and a sign-in the owner started here moments ago - facts to weigh a scam on, never a verdict.",
-    'sender_history': "sender_history is how this sender's last few asks were worked, newest first: each one's kind and repository.",
+    'sender_history': "sender_history is how this sender's last few asks were worked, newest first: each one's kind.",
     'recently_closed': "recently_closed is work on this thread, sender or subject that was closed in the last few days, each with its "
                        "tid and how it ended - the finding the agent wrote, or the ask if no agent ran.",
     'open_work': "open_work is the OPEN tasks this message touches, each with its tid.",
@@ -264,7 +264,7 @@ def thread_of(j: dict, earlier: set):
     return th if any(th.values()) else None
 
 
-def verdict_schema(repos=None, candidates=None, playbooks=None, same=False, goals=False, coding=True, workflows=None,
+def verdict_schema(candidates=None, playbooks=None, same=False, goals=False, coding=True, workflows=None,
                    earlier=False, thread_task=False, notes=False, workstreams=False, watched=False) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
@@ -274,7 +274,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, same=False, goal
     Two rules shape it. Strict mode's: every property is required, so an OPTIONAL field is a
     nullable one instead, and nothing outside the list may be answered. And ours: it names only
     the fields the prompt EXPLAINED. Given a wider schema on a plain mail, the model dutifully
-    filled in a `relationship` and a `repo_reason` for a thread that had neither (TQ-0665)."""
+    filled in a `relationship` for a thread that had none (TQ-0665). It never asks WHERE coding work is done: the coding agent picks
+    its repository (repochoice, the owner 2026-11-06)."""
     # WATCH (the owner, 2026-11-03): a thread the owner cares about that somebody else will handle - a task already under Watching (watch.py)
     p = {'intent': {'type': 'string', 'enum': list(INTENTS)},
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
@@ -320,8 +321,6 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, same=False, goal
     if workflows: p['workflow'] = {'type': ['string', 'null']}
     # which of the owner's workstreams it belongs to (workstreams.py, the owner 2026-11-01: triage sorts by them), null when unsure
     if workstreams: p['workstream'] = {'type': ['string', 'null']}
-    if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
-                       repo_reason={'type': 'string'})
     if candidates is not None:
         p.update(relationship={'type': ['string', 'null'], 'enum': ['new', 'continues', 'answers', 'uncertain', None]},
                  related_message_ids={'type': ['array', 'null'], 'items': {'type': 'integer'}},
@@ -706,22 +705,6 @@ def parse_outputs(j: dict) -> list:
             if isinstance(o, dict) and str(o.get('to') or '').strip()][:12]
 
 
-def repo_choice_of(j: dict, repos: list) -> dict:
-    """The verdict's repository, validated against the known ones (PW-094): a name not on the list is
-    dropped and becomes the owner's choice, as does anything the model called ambiguous."""
-    known = {str(r.get('repo') or '').strip().lower(): str(r.get('repo') or '').strip() for r in repos if r.get('repo')}
-    named = str(j.get('repository') or '').strip()
-    reason = ' '.join(str(j.get('repo_reason') or '').split())[:200]
-    if named and named.lower() not in known:
-        return {'repository': None, 'needs_repo_choice': True,
-                'repo_reason': f'triage named a repository that is not configured ({named[:60]})' + (f' - {reason}' if reason else '')}
-    repo = known.get(named.lower()) if named else None
-    needs = bool(j.get('needs_repo_choice')) or (repo is None and len(known) > 1 and j.get('kind') == 'coding')
-    return {'repository': repo if not bool(j.get('needs_repo_choice')) else None, 'needs_repo_choice': needs, 'repo_reason': reason}
-
-
-REPO_ABOUT = 600        # how much of a repository's description the routing question is given
-
 RELATIONSHIPS = ('new', 'continues', 'answers', 'uncertain')
 
 
@@ -762,7 +745,7 @@ class Unreadable(ValueError):
 def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, images=None,
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
-                    project: dict = None, candidates: list = None, repos: list = None,
+                    candidates: list = None,
                     routing_history: list = None, seen: set = None, job: str = None,
                     coding: bool = True, workflows: str = None, connected: list = None, workstreams: str = None) -> dict:
     """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
@@ -801,11 +784,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
     the day is dropped. This replaced a second classifier (same_ask) that could disagree with
     this one about the same line.
 
-    `repos` are the known repositories - [{repo, about}] from the SOUL map and the learned project
-    graph. Given, the verdict also names `repository` (one of them or null), `needs_repo_choice` and
-    `repo_reason` for a task; the sender's project associations (project_context) are supporting
-    evidence, never proof. Validated by repo_choice_of (PW-092/094): an unknown name is dropped and
-    turns into a choice for the owner, as does anything the model calls ambiguous.
+    WHERE coding work is done is not triage's to say (the owner, 2026-11-06: "let's take repo decision out of the triage - remove it
+    completely"): it names the kind, and the coding agent picks its repository when it starts (repochoice.use, terminal.guess_repo).
 
     `playbooks` is the menu of the owner's playbooks (playbooks.menu: slug, title and `when` each).
     A message that is an instance of one is answered with its slug, and that slug is what seeds
@@ -900,13 +880,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                                **({'addressed_to_you': how,
                                    'recipients': len(msg.get('to') or []) + len(msg.get('cc') or [])} if how else {}),
                                **(thread or {}),
-                               **({'project_context': project} if project else {}),
                                **({'routing_history': routing_history} if routing_history else {}),
                                **({'same_day_lines': [{k: c.get(k) for k in ('id', 'who', 'when', 'text', 'task_id')} for c in candidates]}
                                   if candidates is not None else {}),
-                               # 160 cut every real description mid-clause - taskuary lost "do the work, you approve", ledger
-                               # lost the noun its whole sentence was about. This is the one line the model routes on.
-                               **({'known_repositories': [{'repo': r.get('repo'), 'about': (r.get('about') or '')[:REPO_ABOUT]} for r in repos]} if repos else {}),
                                # what this install can reach - an offer is only what an agent can do with these (B25, 2026-10-29)
                                **({'connected_systems': list(connected)} if connected is not None else {}),
                                **({'body_truncated': True} if body_cut else {}),
@@ -949,7 +925,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
-            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
+            answer = ask_json(llm, system, user, want=verdict_schema(candidates, playbooks, same=bool(same_ids), goals=bool(goal_steps),
                                                                      coding=coding, workflows=workflows, earlier=bool(earlier_ids), thread_task=bool(home),
                                                                      notes=bool(note_ids), workstreams=bool(workstreams), watched=watched),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
@@ -1009,7 +985,6 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 try: gt = int(sv.get('task')) if sv.get('task') is not None else None
                 except (TypeError, ValueError): gt = None
                 if gt in goal_steps and str(sv.get('step')) in goal_steps[gt]: out['serves'] = {'task': gt, 'step': str(sv['step']), 'done': sv.get('done') is True}
-                if repos and out['intent'] == 'task': out.update(repo_choice_of(j, repos))
                 # the work, named (PW-074): a title and summary of what was asked - validated, never
                 # trusted; the router falls back when absent. Kept on EVERY verdict now, not only on
                 # the two that become work: an fyi and a triaged report are rows the owner reads too,

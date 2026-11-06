@@ -3,10 +3,22 @@ the same conversation and the same assistant — not a notification feed and not
 bot. It can walk you through your work, answer questions about it, and carry out the things the
 page can carry out.
 
+## Settings → Phone & chats
+
+Every chat that reaches Taskuary from outside is set on one page, **Settings → Phone & chats**. The
+WhatsApp and Telegram connection cards link to it.
+
+- **The Assistant from your phone** — your private Assistant chat on each channel: which chat it is
+  (or the steps to pick one), whether it listens any time or only during a walk, the morning line,
+  and **Walk me through them in WhatsApp** (or Telegram) to hand the walk over from the desktop.
+- **Agent channels** — shown only with **Developer mode** on: every chat bound to a coding agent,
+  what it talks to, its repository and its people, with **Unbind**, and **Add a channel**
+  ([below](#agent-channels-a-chat-into-one-coding-agent)).
+
 ## The doorways
 
 A doorway is one chat, on one channel, that the assistant is allowed to speak in. Set it up in
-**Settings → Assistant on your phone**, which lists every channel you have connected and lets you
+**Settings → Phone & chats**, which lists every channel you have connected and lets you
 pick the chat and whether it may listen.
 
 1. Connect WhatsApp or Telegram under [Connections](connections#chat).
@@ -16,7 +28,7 @@ pick the chat and whether it may listen.
    assistant for it.
 
 The Assistant then offers **Walk me through them in WhatsApp** (or Telegram) for each chat set up
-this way. **Which chat the Assistant offers** in the same section picks one — WhatsApp, Telegram,
+this way — on its own page and on Phone & chats. **Which chat the Assistant offers** in the same section picks one — WhatsApp, Telegram,
 or both.
 
 :::rule Only chats you are alone in
@@ -81,7 +93,7 @@ repository, **Remind me** with a day, **Watch it**, or "mark the FYI read".
 
 ## The morning line
 
-Off unless you switch it on (Settings → Assistant on your phone). Once a day, the assistant can then open with a short line about the day ahead — what slipped, what is
+Off unless you switch it on (Settings → Phone & chats). Once a day, the assistant can then open with a short line about the day ahead — what slipped, what is
 waiting, today's meetings. It is the morning brief's voice, cut to the length of something you
 read while walking.
 
@@ -104,6 +116,16 @@ With **Developer mode** on, a chat can talk straight to one running coding agent
 Telegram chat or group, a Slack channel, or a Teams chat. Open a coding task, unfold **Talk to this
 agent from…** at the foot of its chat, pick the channel and the chat, and bind it. What you write
 there goes into the agent as if you had typed it in its box, and its answers come back to the chat.
+
+Every binding is listed in **Settings → Phone & chats → Agent channels**, with Unbind. **Add a
+channel** there binds a chat to **the coding agents** — all of them, yours alone: say "agents" for
+the list, "TQ-0123 your words" to tell one, or "land TQ-0123". A repository folder keeps it to the
+agents working there. Your Assistant chat reaches the coding agents the same way while Developer
+mode is on, so it needs no binding of its own.
+
+What each channel needs from you: Telegram and Slack cannot say which messages are yours, so the
+form asks your own **numeric Telegram id** or your **Slack member ID** (U…); Teams posts with your
+own **Microsoft sign-in**.
 
 You can let teammates in, so a few people can work on one project with the same agent:
 

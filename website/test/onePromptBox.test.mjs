@@ -17,7 +17,8 @@ test("an item's Agent tab types into the task chat's own box, at the pane's foot
 test("the item, the paperclip's files and a dropped picture are one chip each, in one line inside the box", () => {
   const imgs = read("promptImages.jsx");
   assert.match(imgs, /export function AttachChip\(/);
-  assert.match(imgs, /display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0\.5, minWidth: 0, maxWidth: "100%", overflowX: "auto"/);
+  assert.match(imgs, /display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0\.5, minWidth: 0, maxWidth: "100%", overflow: "hidden"/);
+  assert.doesNotMatch(imgs, /overflowX: "auto"/, "the row never scrolls sideways: a few chips, then +N more (the owner, 2026-11-06)");
   assert.match(read("AgentSummary.jsx"), /<AttachRow sx=\{\{ flex: "0 0 100%", pt: 0\.25, px: 0\.5 \}\}>\{chips\}\{fileChips\(pics, cannot\)\}\{fileState\(pics\)\}<\/AttachRow>/);
   assert.match(read("ItemSections.jsx"), /<AttachChip key=\{i\.key\} data-tq-item-chip=\{i\.key\} name=\{i\.title\}/);
   assert.match(read("GeneralWorkspace.jsx"), /<AttachRow className="tq-aui-attachments"/);
@@ -32,4 +33,18 @@ test("the box before an agent wears the chat composer's classes", () => {
   assert.match(box, /<button type="submit" className="tq-aui-send"/);
   assert.ok(box.indexOf("<AttachImage pics={pics}") < box.indexOf('className="tq-aui-input"'), "the paperclip comes first, as in the chat");
   assert.match(read("ItemSections.jsx"), /import "\.\/generalWorkspace\.css";/);
+});
+
+// MANY ATTACHMENTS: a few chips, then "+N more" that opens the whole list - one chip everywhere (the owner, 2026-11-06)
+test("an attachment row shows a few, then +N more, and every file chip is the one AttachChip", async () => {
+  const { attachSplit, ATTACH_FEW } = await import("../src/promptImages.jsx").catch(() => ({}));
+  const src = read("promptImages.jsx");
+  assert.match(src, /export const attachSplit = \(n, few = ATTACH_FEW\) => \(n > few \+ 1 \? few : n\)/);
+  assert.match(src, /name=\{`\+\$\{more\.length\} more`\}/);
+  assert.match(src, /<Popover open=\{!!at\}/);
+  if (attachSplit) { assert.equal(attachSplit(2), 2); assert.equal(attachSplit(ATTACH_FEW + 1), ATTACH_FEW + 1); assert.equal(attachSplit(9), ATTACH_FEW); }
+  for (const f of ["ReplyFiles.jsx", "Attachments.jsx"]) {
+    assert.match(read(f), /<AttachRow/, f); assert.match(read(f), /<AttachChip /, f);
+  }
+  assert.doesNotMatch(read("ReplyFiles.jsx"), /<Chip /);
 });

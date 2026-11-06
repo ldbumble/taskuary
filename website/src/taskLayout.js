@@ -103,11 +103,15 @@ export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent
 // ...AND A CODING TASK, ITS TERMINAL LIVE OR NOT (the owner, 2026-11-06: "combine the close out action in the coding cli as well. basically making
 // general and coding agent more similar"): its chat is the session, the drafted reply and the landing in one stream (CodingChat.jsx), the
 // terminal a toggle inside it - no Close out column
-export const chatHome = ({ kind, terminal = false, chatted = false } = {}) => !!kind && (kind === "coding" || (!terminal && (isGeneralKind(kind) || kind === "reply" || chatted)));
+// ...and a PLAIN TASK too (the owner, 2026-11-06, on a to-do still showing Close out: "i thought we removed this from everywhere?"): every kind
+// is Came from + the one chat; there is no Close out column anywhere
+export const chatHome = ({ kind, terminal = false } = {}) => !!kind && (kind === "coding" || !terminal);
 // ...a live CODING terminal, that is: a general agent's own chat is a session too (mode "assistant"), and its task stays home
 export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
 export const taskSections = (home) => (home ? SECTIONS.filter((s) => s.key !== "close") : SECTIONS);
-export const homeSection = (home, here) => (home ? "agent" : here);
+// ...a plain to-do opens where triage put it - on what came in (the owner, 2026-11-05: "if the triage says it is just a todo ... it should
+// open on the came from section only"); every other kind opens on its chat
+export const homeSection = (home, here, kind) => (home && kind !== "task" ? "agent" : here);
 // ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four
 // short lines, each clamped so a tab never scrolls. Words quoted are somebody's own; each line only where there is something to say.
 // ...and read like a book's SPINE (the owner, 2026-10-27): its `lines` at the top under the name, its `foot` - the one status line - at the

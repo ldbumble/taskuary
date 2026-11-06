@@ -1830,7 +1830,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...nor the task's status under a live agent (the overnight run, 2026-11-03): Approve on a general agent's held delete moved the task from
   // waiting to in progress, the page re-read where it was up to with the step still listed, and jumped to an empty Close out over the agent
   const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${liveSession ? "live" : t?.Status}|${advisedHeld}|${!!writingUp}|${home}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : homeSection(home, sectionHere({ stage: taskStage, advised: advisedHeld })) };
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: writingUp ? "agent" : homeSection(home, sectionHere({ stage: taskStage, advised: advisedHeld }), t?.Kind) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
@@ -1838,7 +1838,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pickKey = `${selected}|${!!term?.alive}|${sessionView}|${stacked}|${threeUp}|${["done", "dropped"].includes(t?.Status)}|${home}`;
   // ...and never a section the task no longer lays (a held Close out once a chat-home task drops it): its home instead
   const picked = secPick.key === pickKey ? secPick.sec : mainHeld.current.sec;
-  const section = threeUp ? (!picked || slotKeys.includes(picked) ? picked : "agent") : null, hereSec = homeSection(home, sectionHere({ stage: taskStage, advised }));
+  const section = threeUp ? (!picked || slotKeys.includes(picked) ? picked : "agent") : null, hereSec = homeSection(home, sectionHere({ stage: taskStage, advised }), t?.Kind);
   // ...and the Advisor's line stands in that section, the one it is about
   const adviceIn = advisorAt(advised);
   // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -

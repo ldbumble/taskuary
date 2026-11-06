@@ -65,6 +65,7 @@ def lane_word(item: dict) -> str:
     move, any action, "agent ready for you" (build marks its row `chat`; the owner, 2026-11-05), on the phone and in the Assistant's words as
     on the rail. A coding task keeps its own."""
     it = item or {}
+    if it.get('chat_done'): return lanes.word('chat_done')
     if it.get('chat') and it.get('lane') in CHAT_READY_LANES: return lanes.word('chat_ready')
     return lanes.word('owed') if owed_no_draft(item) else (LANE_WORDS.get(str(it.get('lane') or '')) or ('',))[0]
 
@@ -980,6 +981,13 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # Timeline, reading the session, said "is waiting on you". No words on the tail decide it any more (2026-10-11):
         # a session with no state of its own is parked, never "asked you" from a "?" in what it wrote.
         asking = t.get('state') == 'asking'
+        # ...A CHAT AGENT THE OWNER ALREADY ANSWERED is done for now (taskstate.chat_moved_on, the owner 2026-11-06): after a Send its row said
+        # "agent ready for you" and "Taskuary is waiting on you" - it is the task's wrap-up, "agent done", until something is typed again
+        from . import general, taskstate
+        if not asking and t.get('mode') == 'assistant' and general.handles(task) and taskstate.chat_moved_on(store, tid):
+            out.append(_item(f"wrap:{tid}", 'wrapup', 'report', task.get('Title') or f'task {tid}', who='you', when=t.get('started'), tid=tid,
+                             priority=task.get('Priority'), chat_done=True, why='your reply went out - the agent is done for now, and the task is still open'))
+            continue
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
                          channel=src,

@@ -62,7 +62,7 @@ test("a held act waits on the live canvas, and the sign-in ask never invites the
   assert.match(gw, /const actsHere = viewShown \? \(data\?\.browserActs \|\| \[\]\)\.filter\(\(r\) => !heldOn\(r, session\?\.sid\)\) : data\?\.browserActs \|\| \[\];/);
   assert.match(gw, /data-tq-browser-acts=""/);
   assert.match(gw, /acts\.map\(\(r\) => <ReviewDecision key=\{r\.ReviewId\} review=\{r\} onChanged=\{onDraftDecided\} \/>\)/);
-  assert.match(gw, /startsWith\("signin:"\) \? "Message the agent - never your password" : `Answer \$\{name\}'s question…`/);
+  assert.match(gw, /startsWith\("signin:"\) \? "Message the agent - never your password" : "Answer the agent's question…"/);
   // the sign-in ask is the question and a link, no card and no presses (the owner, 2026-11-03)
   assert.match(gw, />fill it in securely<\/a>/);
   assert.doesNotMatch(gw, /Sign in here opens a page|then press Signed in|>Sign in here</);

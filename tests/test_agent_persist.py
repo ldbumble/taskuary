@@ -111,6 +111,17 @@ def test_answer_is_result_rides_the_summary_only_when_said():
     assert 'answer_is_result' not in selfclose.summary_marker(f'The list.\n{block()}')[1]
 
 
+# ── a nothing-new turn is one line (the owner, 2026-11-06) ────────────────────────────────────
+def test_a_one_line_turn_files_its_line_alone_and_the_agent_is_told_it_may():
+    said = f"Ray thanked you.\n{selfclose.SUMMARY_OPEN}{json.dumps({'did': 'Ray thanked you.', 'about': '', 'on_you': []})}{selfclose.SUMMARY_CLOSE}"
+    rest, out = selfclose.summary_marker(said)
+    assert rest == 'Ray thanked you.' and out['did'] == 'Ray thanked you.' and out['about'] == '' and out['on_you'] == []
+    # ...the model judges it: the instructions say ONE line and no draft, and never hand it a list of words to match
+    from taskuary import ingest
+    for words in (selfclose.SUMMARY_LINE, ingest.REPLAN):
+        assert 'ONE' in words and 'no draft' in words
+
+
 # ── a refusal says why, and what to do next ─────────────────────────────────────────────────
 def test_a_refused_proposal_tells_the_agent_why_and_the_next_move():
     from taskuary import proposals

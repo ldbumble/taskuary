@@ -13,9 +13,16 @@ const isDraft = (r) => !!r && r.Kind !== "action" && r.Kind !== "slot" && r.Stat
 // words, a mail - makes it history: it folds, its card goes, and the turn that answers draws its own card if it drafts one
 export const lastAnswerSummed = (messages) => { const m = (messages || []).filter((x) => x && !x.held).at(-1); return !!m?.summary; };
 export const turnIsLast = (messages, id) => (messages || []).filter((x) => x && !x.held).at(-1)?.id === id;
+// A NOTHING-NEW TURN IS ONE LINE (the owner, 2026-11-06: "Ray thanked you." - no three parts, the earlier draft not redrawn): the agent judges it
+// and files a summary with only `did`, one line - no `about`, no steps, no draft of its own (selfclose.SUMMARY_LINE, ingest.REPLAN)
+export const oneLine = (s) => { const did = String(s?.did || "").trim();
+  return !!did && !did.includes("\n") &&!String(s?.about || "").trim() && !(s?.on_you || []).length && !(s?.drafted || []).length; };
 export const foldedSummaries = (messages) => {
-  const ids = (messages || []).filter((m) => m?.summary).map((m) => m.id);
-  return new Set(lastAnswerSummed(messages) ? ids.slice(0, -1) : ids);
+  const ms = (messages || []).filter((m) => m?.summary), ids = ms.map((m) => m.id);
+  if (!lastAnswerSummed(messages)) return new Set(ids);
+  // ...and one-line turns after a real answer leave it open, its draft and Send where they were: they answered nothing to fold it under
+  const real = ms.findLastIndex((m) => !oneLine(m.summary)), keep = new Set([ids.at(-1), ...(ms.slice(real + 1).every((m) => oneLine(m.summary)) && real >= 0 ? [ids[real]] : [])]);
+  return new Set(ids.filter((id) => !keep.has(id)));
 };
 
 const isHeld = (r) => !!r && r.Kind === "action" && r.Status === "pending";

@@ -38,3 +38,50 @@ def test_a_section_heading_still_carries_the_rail(world):
     server._pile_along(force=False)
     out = json.loads(server.walk_open(server.RailWalkBody(level='reports')).body)
     assert out['item']['key'] == Walk(s, src).key('R1') and out['pile'] and out['pile']['walk']
+
+
+# NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): the page's Next, Back and close ask for the light answer - the move
+# saved, the walk's word with the row below it, and the rail read behind it
+def _walk(route, **body):
+    from taskuary import server
+    return json.loads(getattr(server, f'walk_{route}')(server.RailWalkBody(light=True, **body)).body)
+
+
+def test_a_light_next_answers_without_building_the_rail_and_names_the_row_below(world):
+    from taskuary import funnel, server
+    s, src = world
+    w = Walk(s, src)
+    first = w.do('start')['item']['key']
+    server._pile_along(force=False)
+    with mock.patch.object(funnel, 'build', wraps=funnel.build) as built:
+        out = _walk('next', from_key=first, press='light-p1')
+    assert built.call_count == 0, 'the light Next built the rail before answering'
+    on = out['item']['key']
+    assert on != first and out['walk']['on'] == on and out['walk']['above'] and out['walk']['below'], out['walk']
+    # ...a rail rides only when it cost nothing (the cache, nothing moved since): else none, and the walk's word is whole without it
+    assert out['pile'] is None or out['pile']['walk']['on'] == on
+    # ...the row it names below is the one the next press brings, and the rail read behind says the same
+    p = server._pile_along(force=False)
+    assert p['walk']['on'] == on and p['walk']['below'] == out['walk']['below']
+    again = _walk('next', from_key=on, press='light-p2')
+    assert again['item']['key'] == out['walk']['below'], 'a second press moved from the row on screen, one row on'
+    # ...and a repeat of the first press is the same answer, never a second move
+    assert _walk('next', from_key=first, press='light-p1')['item']['key'] == on
+
+
+def test_a_light_back_names_the_row_above_and_below(world):
+    from taskuary import server
+    s, src = world
+    w = Walk(s, src)
+    first = w.do('start')['item']['key']; second = w.do('next')['item']['key']
+    out = _walk('back', from_key=second, press='light-b1')
+    assert out['item']['key'] == first and out['walk']['below'] == second
+
+
+def test_the_heavy_answer_still_carries_the_rail(world):
+    """Without `light` (the phone, an older page) the rail rides as before."""
+    from taskuary import server
+    s, src = world
+    first = Walk(s, src).do('start')['item']['key']
+    out = json.loads(server.walk_next(server.RailWalkBody(from_key=first, press='heavy-h1')).body)
+    assert out['pile'] and out['pile']['walk']['on'] == out['item']['key']

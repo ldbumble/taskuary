@@ -27,7 +27,8 @@ test("a held rail dates from when the server began reading it, never later than 
 test("landed holds the rail the turn brought and only falls back to its own load without one", () => {
   const landed = between("const landed = useCallback", "// a line of the assistant's own that needs no turn");
   assert.match(landed, /if \(data\.pile\) holdPile\(data\.pile\);/, "the rail the move left, with the next answer prepared in it");
-  assert.match(landed, /\/\/ \.\.\.no rail rides along: read it, with the walk beside it\n\s+else loadPile\(true\);/);
+  // ...a light answer's walk word put on the rail on screen, and the rail read behind it (Next turns blue as the move saves, 2026-11-06)
+  assert.match(landed, /\/\/ \.\.\.no rail rides along[^\n]*\n[^\n]*\n\s+else \{ const p = withWalk\(pileRef\.current, data\.walk\);[^\n]*loadPile\(true\); \}/);
   assert.doesNotMatch(landed, /say\(data\.say\); loadPile\(true\)/, "the unconditional reload after every turn is gone");
   const hold = between("const holdPile = useCallback", "const landed = useCallback");
   assert.match(hold, /forcedLoadStartedAt\.current = heldSince\(data\)/);

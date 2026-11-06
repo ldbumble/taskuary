@@ -9,7 +9,7 @@ import { nothingMatches } from "./searchHits.js";
 import { placeName } from "./words.js";
 import { focusPlace, openAppLink, ownerHref } from "./appLinks.js";
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
   DialogTitle, IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
 } from "@mui/material";
 import { ButtonBar } from "./ButtonBar.jsx";
@@ -46,10 +46,11 @@ import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, section
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
 import RoleStart from "./RoleStart.jsx";
-import { recipientLabel, recipientOptions } from "./recipientOptions.js";
 import LinesSetting from "./LinesSetting.jsx";
 import { label as btnLabel } from "./buttons.js";
 import PhoneChats from "./PhoneChats.jsx";
+import ChatPicker from "./ChatPicker.jsx";
+import { noChats } from "./chatPicker.js";
 import { CHANNEL_NAME, PHONE_GROUP, PHONE_PAGE, SETUP_STEPS, canHandOver, doorwayStatus } from "./phoneChats.js";
 import SmartphoneIcon from "@mui/icons-material/Smartphone";
 
@@ -223,8 +224,6 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   return (
     <Box sx={{ mb: 2 }}>
       {(rows || []).map((r) => {
-        const picked = r.options.find((o) => o.to === r.chat)
-          || (r.chat ? { to: r.chat, name: recipientLabel({ to: r.chat }), mine: true } : null);
         return (
           <Box key={`${r.channel}-${r.connectorId}`} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
             <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
@@ -238,27 +237,12 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
                 </Box>
               ) : (
                 <>
-                  <Autocomplete size="small" sx={{ flex: 1, minWidth: 260 }} autoHighlight disabled={busy === r.channel}
-                    options={r.options} value={picked}
-                    getOptionLabel={(o) => (o ? recipientLabel(o) : "")}
-                    isOptionEqualToValue={(o, v) => o.to === v.to}
-                    filterOptions={(o, st) => recipientOptions(o, st.inputValue, o.length)}
-                    onChange={(_e, v) => choose(r.channel, v?.to || "")}
-                    noOptionsText={r.channel === "whatsapp"
-                      ? "no private chat seen yet — message yourself on WhatsApp, then press Look again"
-                      : "no private chat seen yet — send your bot a direct message, then press Look again"}
-                    renderOption={(props, o) => (
-                      <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
-                        <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>{recipientLabel(o)}</Typography>
-                        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10, fontFamily: "monospace" }}>{o.to}</Typography>
-                      </li>
-                    )}
-                    renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }}
-                      placeholder="not connected — pick the chat that is only you" />} />
+                  {/* the one chat picker (ChatPicker.jsx) - Agent channels below draw the same one */}
+                  <ChatPicker options={r.options} value={r.chat || ""} disabled={busy === r.channel} onChange={(to) => choose(r.channel, to)}
+                    onLook={r.chat ? null : lookAgain} looking={looking} noOptionsText={noChats(r.channel)}
+                    placeholder="not connected — pick the chat that is only you" />
                   {r.chat && <Button size="small" disabled={busy === r.channel}
                     onClick={() => choose(r.channel, "")} sx={{ fontSize: 11.5 }}>disconnect</Button>}
-                  {!r.chat && <Button size="small" disabled={looking} onClick={lookAgain} sx={{ fontSize: 11.5 }}
-                    title="Read the chats again - after you message yourself or your bot">{looking ? "Looking…" : "Look again"}</Button>}
                 </>
               )}
             </Box>

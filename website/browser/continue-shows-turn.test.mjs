@@ -43,13 +43,7 @@ async function agentWorld(t) {
 const pageText = (page) => page.evaluate(() => document.querySelector("[data-tq-task-page]")?.innerText || "");
 const inTask = (page, re, timeout = 30000) => page.waitForFunction((src) => new RegExp(src).test(document.querySelector("[data-tq-task-page]")?.innerText || ""),
   { timeout, polling: 50 }, re.source).catch(async () => { throw new Error(`no ${re} on the task:\n${(await pageText(page)).slice(0, 2000)}`); });
-const visible = (page, label, within = "body") => page.waitForFunction((label, within) => [...document.querySelectorAll(`${within} button`)]
-  .some((b) => !b.disabled && b.textContent.trim() === label && b.offsetParent), { timeout: 30000 }, label, within);
-const click = (page, label, within = "body") => page.evaluate((label, within) => {
-  const b = [...document.querySelectorAll(`${within} button`)].find((x) => !x.disabled && x.textContent.trim() === label && x.offsetParent);
-  if (!b) throw new Error(`no ${label} to press`); b.click();
-}, label, within);
-// the pane says the agent is on it: its working line or a typing mark (the box says "Message Taskuary…" working or not - audit 2026-11-05)
+// the pane says the agent is on it: its working line or a typing mark (the box says "Message the agent…" working or not - the owner, 2026-11-06)
 const working = (page) => page.evaluate(() => {
   const pane = document.querySelector("[data-tq-task-page]");
   return !!pane && (/working|thinking|Continuing…/i.test(pane.innerText) || !!pane.querySelector(".tq-typing, [data-tq-starting], [aria-busy='true']"));
@@ -65,13 +59,12 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   const made = await w.api("/api/tasks", { Title: "Compare payroll vendors", Summary: "Compare three payroll vendors on price for Northwind", Kind: "general" });
   await page.evaluate((id) => { location.hash = `task=${id}`; }, made.taskId);
 
-  // started, answered, stopped and saved: the agent the owner came back to
-  // ...a chat task opens on its Agent section with the start box already up, whose own Send to agent is the start (phase 4.1): the
-  // opener is pressed only where the box is not - pressing the box's start there began the agent with nothing said
-  await visible(page, "Send to agent");
-  if (!(await page.evaluate(() => !!document.querySelector("[data-tq-run-form] textarea")?.offsetParent))) await click(page, "Send to agent");
-  await page.waitForSelector("[data-tq-run-form] textarea", { visible: true, timeout: 15000 });
-  await click(page, "Send to agent", "[data-tq-run-form]");
+  // started, answered: the agent the owner came back to
+  // ...ONE PROMPT BOX (the owner, 2026-11-06): a chat task opens on its chat with the one box under it - no Send to agent form, no button of its
+  // own; what is typed there starts the agent
+  assert.equal(await page.$("[data-tq-run-form]"), null, "no separate Send to agent form on a chat task");
+  const first = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room] .tq-aui-input", { visible: true, timeout: 30000 });
+  await first.type("compare them on price."); await page.keyboard.press("Enter");
   await inTask(page, /Payworth is cheapest/);
   // ...a chat task has no Stop and save any more (the owner, 2026-11-05: "the stop you can get rid of it"): the answered agent rests,
   // its chat stands with the box under it - no Result block, no "The whole conversation", no Continue to press first

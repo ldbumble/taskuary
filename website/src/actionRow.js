@@ -516,16 +516,35 @@ export function splitRow(row, on) {
   return { row: nav, by };
 }
 
-// THE TASK'S ONE ROW OF BUTTONS, IN ONE ORDER (TaskPage TaskButtons, the owner 2026-11-06): every move off every pane, Mark done, Hand it to a
-// person, Remind me, Not for me first in that order, then Change, then the rest as they came - a move that does not apply is simply absent.
-export const TASK_ORDER = ["done", "reopen", "hand", "remind", "nat"];
-const TASK_PANES = ["head", "from", "agent", "share"];
+// THE TASK'S ONE ROW OF BUTTONS, IN SECTIONS (TaskPage TaskButtons; the owner, 2026-11-06: "make it sections and not all different sizes"):
+// every move off every pane, grouped by what it does, the groups in this order with a hairline between them. A verb's place is its index in
+// its group's list; a verb not listed goes where its kind says (an agent's verb to Agent, a closing one to Finish), else to More. `change` is
+// the Change ▾ menu. Change THIS table to move a button - the row, its dividers and its fold all read it.
+export const TASK_GROUPS = [
+  ["finish", "Finish", ["done", "reopen", "close-note", "send_close", "approve", "elsewhere"]],
+  ["later", "Pass on", ["hand", "remind", "nat", "watch", "defer", "let_go", "not_ours", "not_ours_sender", "not_ours_kind", "block_sender"]],
+  ["agent", "Agent", ["run-another", "send-general", "start-agent", "continue", "strong-again", "rerun", "diff", "attach", "email-file", "save-end", "prepare",
+    "reply", "redraft", "palt", "reject", "chase", "email", "copy", "accept_invite", "decline_invite", "propose_time", "find_time"]],
+  ["more", "More", ["share", "change"]],
+];
+const GROUP_BY_TYPE = { agent: "agent", reply: "agent", close: "finish" };
 const verbKey = (v) => String(v?.id || "").split(":").pop();
-// the order, pure: [fixed in TASK_ORDER's order..., "change", ...the rest as they came]
+export const groupOf = (v) => (v === "change" ? "more" : TASK_GROUPS.find(([, , ks]) => ks.includes(verbKey(v)))?.[0] || GROUP_BY_TYPE[typeOf(v)] || "more");
+const rankIn = (x) => { const k = x.change ? "change" : verbKey(x.v), gi = TASK_GROUPS.findIndex(([g]) => g === x.grp), ks = TASK_GROUPS[gi][2], i = ks.indexOf(k);
+  return [gi, i < 0 ? ks.length : i]; };
+const TASK_PANES = ["head", "from", "agent", "share"];
+// the order, pure: each entry { v, head, grp } or { change, grp: "more" }, by group, then the group's list, then as they came
 export const taskButtons = (by, skip = () => false) => {
-  const seen = new Set(), all = TASK_PANES.flatMap((k) => (by[k] || []).map((v) => ({ v, head: k === "head" || k === "share" || !!v.quiet })))
+  const seen = new Set(), all = TASK_PANES.flatMap((k) => (by[k] || []).map((v) => ({ v, head: k === "head" || k === "share" || !!v.quiet, grp: groupOf(v) })))
     .filter(({ v }) => !v.card && !skip(v) && !seen.has(v.id) && seen.add(v.id));
-  const at = (x) => TASK_ORDER.indexOf(verbKey(x.v)), fixed = all.filter((x) => at(x) >= 0).sort((a, b) => at(a) - at(b));
-  const rest = all.filter((x) => at(x) < 0), change = (by.change || []).filter((v) => !skip(v));
-  return [...fixed, ...(change.length ? [{ change }] : []), ...rest];
+  const change = (by.change || []).filter((v) => !skip(v)), xs = [...all, ...(change.length ? [{ change, grp: "more" }] : [])];
+  return xs.map((x, n) => [x, ...rankIn(x), n]).sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[3] - b[3]).map(([x]) => x);
 };
+// what never folds: Mark done (a closed task's Reopen in its place) and the lit move
+export const pinnedMove = (v) => !!v && (isDone(v) || verbKey(v) === "reopen" || v.tone === "p");
+// THE FOLD (the row is ONE line): `drop` moves go into the ▾ from the right - More first, then Agent, then Pass on, Finish last - never a pinned
+// one. Returns the items still in view, in the row's order
+export const foldRow = (items, drop) => { const loose = items.filter((x) => !pinnedMove(x.v)), out = new Set(drop > 0 ? loose.slice(-drop) : []);
+  return { shown: items.filter((x) => !out.has(x)), out: items.filter((x) => out.has(x)), loose: loose.length }; };
+// the items in view cut into their sections, consecutive runs of one group: a hairline between two runs, none beside a group with nothing in it
+export const sectionsOf = (items) => items.reduce((a, x) => { const g = x.grp || "more", l = a.at(-1); if (l?.grp === g) l.items.push(x); else a.push({ grp: g, items: [x] }); return a; }, []);

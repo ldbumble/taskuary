@@ -23,7 +23,7 @@ import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
-import { onPressed, onPressing, press, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
+import { foldRow, onPressed, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -519,10 +519,10 @@ function useTaskMoves(sec) {
     change: sec === "from" ? change : NO_MOVES };
 }
 const NO_MOVES = [];
-function ChangeMoves({ change }) {
+function ChangeMoves({ change, even = false }) {
   const [at, setAt] = useState(null);
   return <>
-    <button type="button" className="tq-ab s task" aria-haspopup="menu" aria-expanded={!!at} data-tq-more="change"
+    <button type="button" className={even ? "tq-ab row" : "tq-ab s task"} aria-haspopup="menu" aria-expanded={!!at} data-tq-more="change"
       title="Split or merge, who does it or the priority" onClick={(e) => setAt(e.currentTarget)}>{"Change ▾"}</button>
     <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
       {change.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
@@ -551,18 +551,18 @@ const foldArrows = (keys, k) => { const i = keys.indexOf(k), last = keys.length 
   return [...(i > 0 ? [["left", i === last ? "›" : "‹", keys[i - 1]]] : []), ...(i >= 0 && i < last ? [["right", i ? "›" : "‹", keys[i + 1]]] : [])]; };
 const TASK_KEYS = ["from", "agent"];
 // ONE ROW OF TASK BUTTONS (the owner, 2026-11-06: "same place but can be on spine or on top if the agent spine is open but it should be one code
-// easy to change"): every move the task has, gathered off every pane (actionRow.splitRow), in ONE fixed order - Mark done, Hand it to a person,
-// Remind me, Not for me, Change ▾ - then the rest where they apply (Send and close, Reply, Close with a note, Share…); a move that does not apply
-// is absent and the rest keep their order. Drawn once, where BUTTONS_AT says: "strip", the open pane's white strip (the Agent's when it is open);
-// "spine", Came from's spine. One line on a strip, its words never wrapped - what does not fit folds into its ▾
+// easy to change"): every move the task has, gathered off every pane (actionRow.splitRow), in SECTIONS (actionRow.TASK_GROUPS: Finish | Pass on
+// | Agent | More), a hairline between them; a move that does not apply is absent, an empty section is not drawn. Drawn once, where BUTTONS_AT says:
+// "strip", the open pane's white strip (the Agent's when it is open); "spine", Came from's spine. One line on a strip, its words never wrapped -
+// what does not fit folds into its ▾ from the right
 export const BUTTONS_AT = "strip";
 function TaskButtons({ skip = () => false, spine = false }) {
   const by = useSpineAll(), list = taskButtons(by, skip);
   const up = list.filter((x) => x.change || !x.v.tucked || x.v.tone === "p"), tucked = list.filter((x) => !up.includes(x)).map((x) => x.v);
-  const items = up.map((x) => (x.change ? { key: "change", change: x.change } : { key: x.v.id, v: x.v, head: x.head }));
+  const items = up.map((x) => (x.change ? { key: "change", change: x.change, grp: x.grp } : { key: x.v.id, v: x.v, head: x.head, grp: x.grp }));
   if (spine) return items.length ? <Box data-tq-spine-moves="task" role="group" aria-label="Task moves" sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
     {items.map((x) => (x.change ? <ChangeMoves key="change" change={x.change} /> : stageBtn(x.v, x.v.spine || x.v.label, !!x.head)))}</Box> : null;
-  return <MovesLine items={items} tucked={tucked} sec="task" name="Task" />;
+  return <MovesLine items={items} tucked={tucked} sec="task" name="Task" even />;
 }
 // ...one line: what does not fit folds into its ▾ from the end - never Mark done nor what is lit
 export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
@@ -573,15 +573,16 @@ export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec] }) {
   const items = [...own(done), ...up.map((v) => ({ key: v.id, v, head: !!v.quiet })), ...own(task), ...(change.length ? [{ key: "change", change }] : [])];
   return <MovesLine items={items} tucked={tucked} sec={sec} name={name} />;
 }
-function MovesLine({ items, tucked, sec, name }) {
+// ...`even` (the task's row, the owner 2026-11-06: "not all different sizes"): every button one size and one outlined look, the lit one alone
+// filled, its sections apart by a hairline (actionRow.sectionsOf) - the ▾ in More's place at the end
+function MovesLine({ items, tucked, sec, name, even = false }) {
   // ...what folds is never Mark done nor what is lit: the others go into the ▾ from the end, wherever the lit one stands (a lit Propose a new time
   // at the row's end was cut off at the strip's edge while the moves before it held their places)
   const box = useRef(null), [drop, setDrop] = useState(0), [, refit] = useState(0), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setDrop(0); }, [sig]);
-  const pinned = (x) => !!x.v && (isDoneMove(x.v) || x.v.tone === "p"), loose = items.filter((x) => !pinned(x));
-  const out = new Set(loose.slice(Math.max(0, loose.length - drop)));
-  useLayoutEffect(() => { const b = box.current; if (b && drop < loose.length && b.scrollWidth > b.clientWidth + 1) setDrop((k) => k + 1); });
+  const { shown, out, loose } = foldRow(items, drop);
+  useLayoutEffect(() => { const b = box.current; if (b && drop < loose && b.scrollWidth > b.clientWidth + 1) setDrop((k) => k + 1); });
   // ...and a width change measures again even when nothing was folded: a pane narrowing into a half (side by side) left its last move cut off
   // at the edge until some unrelated draw folded it seconds later
   useEffect(() => {
@@ -593,16 +594,30 @@ function MovesLine({ items, tucked, sec, name }) {
     return () => ro.disconnect();
   }, []);
   if (!items.length && !tucked.length) return null;
-  const shown = items.filter((x) => !out.has(x)), rest = [...items.filter((x) => out.has(x)).flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
-  return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${name} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
+  const rest = [...out.flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
+  const btn = (x) => (x.change ? <ChangeMoves key="change" change={x.change} even={even} /> : even ? rowBtn(x.v) : stageBtn(x.v, x.v.label, !!x.head));
+  const fold = rest.length > 0 && <button key="fold" type="button" className={even ? "tq-ab row" : "tq-ab s task"} aria-label="More" aria-haspopup="menu" data-tq-more={sec}
+    onClick={(e) => setAt(e.currentTarget)}>▾</button>;
+  const secs = even ? sectionsOf([...shown, ...(fold ? [{ key: "fold", grp: "more", fold }] : [])]) : [];
+  return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${name} moves`} sx={even ? EVEN_ROW : { ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
     "& .tq-ab": { flexShrink: 0 } }}>
-    {shown.map((x) => (x.change ? <ChangeMoves key="change" change={x.change} /> : stageBtn(x.v, x.v.label, !!x.head)))}
-    {rest.length > 0 && <button type="button" className="tq-ab s task" aria-label="More" aria-haspopup="menu" data-tq-more={sec} onClick={(e) => setAt(e.currentTarget)}>▾</button>}
+    {even ? secs.map((g, i) => [i > 0 && <span key={`sep-${g.grp}`} className="tq-row-sep" aria-hidden="true" />,
+      <Box key={g.grp} component="span" data-tq-row-group={g.grp} sx={{ display: "flex", gap: 0.75, flexShrink: 0 }}>{g.items.map((x) => x.fold || btn(x))}</Box>])
+      : <>{shown.map(btn)}{fold}</>}
     <Menu open={!!at} anchorEl={at} onClose={() => setAt(null)}>
       {rest.map((v) => <MenuItem key={v.id} dense disabled={v.disabled} data-tq-verb={v.id} sx={{ fontSize: 12.5 }}
         onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></Box>;
 }
 const isDoneMove = (v) => v.id === "done" || /:done$/.test(String(v.id));
+// THE TASK ROW'S ONE BUTTON: one height, padding, font and radius for every move, outlined; the lit one (the Advisor's pick) alone filled
+const rowBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab row${v.tone === "p" ? " p" : ""}`} disabled={v.disabled} data-tq-verb={v.id}
+  title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
+export const ROW_BTN = { height: 28, minHeight: 28, px: 1.5, fontSize: 12, fontWeight: 600, lineHeight: 1, borderRadius: 99, border: "1px solid #b9c3cc",
+  bgcolor: "#fff", color: INK, boxSizing: "border-box", display: "inline-flex", alignItems: "center", flexShrink: 0, whiteSpace: "nowrap" };
+const EVEN_ROW = { display: "flex", alignItems: "center", gap: 1, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
+  "& .tq-ab.row": ROW_BTN, "& .tq-ab.row:hover:not(:disabled)": { bgcolor: "#f1f4f7", borderColor: ACCENT },
+  "& .tq-ab.row.p": { bgcolor: ACCENT, borderColor: ACCENT, color: "#fff" }, "& .tq-ab.row.p:hover:not(:disabled)": { bgcolor: "#46586a", borderColor: "#46586a" },
+  "& .tq-row-sep": { width: "1px", height: 18, bgcolor: "#d8d1c5", flexShrink: 0 } };
 // A QUIET CORNER BUTTON IN THE TASK'S HEADER (the owner, 2026-11-06: "AI used" and "Talk to this agent from…" must not sit at the bottom of the
 // chat): an icon with its tooltip beside Expand and the X, its content in a popover under it
 function HeadPop({ id, icon, title, children }) {

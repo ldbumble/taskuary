@@ -11543,6 +11543,7 @@ class RouteRulesBody(BaseModel):
     mode: str = None                    # 'fixed' | 'auto'; None = leave alone
     rules: list = None                  # the whole ordered list; None = leave alone
     cap: str = None                     # strong calls a day; '' = no cap; None = leave alone
+    by_level: dict = None               # {quick|normal|hard: {pick, model}} - an AI per level; {} = the cards'; None = leave alone
 
 
 @app.get('/api/ai/route_rules')
@@ -11553,10 +11554,11 @@ def ai_route_rules():
 
 @app.post('/api/ai/route_rules')
 def set_ai_route_rules(body: RouteRulesBody):
-    try: out = _brainroute().set_panel(store, body.mode, body.rules, body.cap, ACTOR)
+    try: out = _brainroute().set_panel(store, body.mode, body.rules, body.cap, ACTOR, body.by_level)
     except ValueError as e: raise HTTPException(422, str(e))
     store.audit('setting', 0, 'route_rules', ACTOR, detail={k: v for k, v in (('mode', body.mode), ('cap', body.cap)) if v is not None}
-                | ({'rules': len(body.rules)} if body.rules is not None else {}))
+                | ({'rules': len(body.rules)} if body.rules is not None else {})
+                | ({'by_level': sorted(body.by_level)} if body.by_level is not None else {}))
     return out
 
 

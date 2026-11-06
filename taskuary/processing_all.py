@@ -167,12 +167,12 @@ def wait_settled(store, wait: float = SETTLE_WAIT) -> bool:
     # ...and woken, not waited for: asleep between ticks, it cost every build after a write ~half its 0.25 s interval (perf 2026-11-06)
     if (st := status())['dirty_generation'] <= st['reconciled_generation'] or st.get('status') == 'conflicted': return True
     if (kick := getattr(worker, 'kick', None)): kick()
-    deadline = time.monotonic() + wait
+    deadline, tick = time.monotonic() + wait, 0.002              # a woken reconcile takes milliseconds: look again soon, then less often
     while True:
         st = status()
         if st['dirty_generation'] <= st['reconciled_generation'] or st.get('status') == 'conflicted': return True
         if time.monotonic() >= deadline: return False
-        time.sleep(SETTLE_TICK)
+        time.sleep(tick); tick = min(SETTLE_TICK, tick * 2)
 
 
 def _json(value):

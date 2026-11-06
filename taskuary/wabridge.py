@@ -620,7 +620,10 @@ def check_link(store, c: dict, read=None, now: float = None):
     if st.get('connected'):
         if _LINK['down']: logger.info(f"whatsapp link is back after {now - _LINK['down']:.0f}s")
         _LINK.update(down=0.0, err=None); return None
-    if not _LINK['down']: _LINK['down'] = now; logger.warning(f"whatsapp bridge answers but is not connected to WhatsApp: {(st.get('reconnect') or {}).get('reason') or 'no reason given'}")
+    # A DROP THE BRIDGE RECOVERS FROM IS NOT A WARNING (the owner, 2026-11-06: "Stream Errored (ack)" in the console, back 60 s later):
+    # WhatsApp's servers end the stream now and then and the bridge reconnects by itself. Said quietly here; the card and the bell speak
+    # only when it stays down (LINK_GRACE below), is logged out, or stops reconnecting
+    if not _LINK['down']: _LINK['down'] = now; logger.info(f"whatsapp link dropped ({(st.get('reconnect') or {}).get('reason') or 'no reason given'}) - the bridge reconnects by itself")
     if (st.get('qr') or st.get('pairingCode')) and not st.get('loggedOut'):
         _LINK['err'] = 'WhatsApp is not paired on this computer - nothing comes in until you pair it on the WhatsApp card'
     elif st.get('loggedOut'):

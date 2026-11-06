@@ -3,6 +3,9 @@
 // refresh re-reads the sources (dashboards.py). The composer's words land here; the buttons do the talking.
 // ...and every one is CONFIGURABLE (the owner, 2026-10-24: "it should be configurable ... with sources layout like reports"): its
 // sources are a report's source cards, its components are cards beside them, and the built-in one is edited like any other.
+// ...and A TILE IS ONE SENTENCE (the owner, 2026-11-06, of the field grid each component had: "it's useless ... it's not generalized ...
+// maybe we should just use text to say what it shows"): the owner writes what a tile shows, the AI binds it to the sources once
+// (POST /api/dashboards/tile) and it draws in place. The page set up is the page drawn - each tile under its own sentence.
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Autocomplete, Box, Button, CircularProgress, MenuItem, Select, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -14,7 +17,8 @@ import api from "./api";
 import SetupWithAi from "./SetupWithAi.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import { RANGES } from "./dashboard/slice.js";
-import { BINDS, MAX_COMPONENTS, MAX_SOURCES, OWN_KEYS, runCfg, freshKey, orphans, sigOf, whereOf, whereText, windowOf, withField, withKind, withWindow } from "./dashboard/setup.js";
+import { MAX_COMPONENTS, MAX_SOURCES, OWN_KEYS, copyTile, runCfg, freshKey, orphans, saidOf, sigOf, swapTile, tileAsk, wantsDrawing, withField } from "./dashboard/setup.js";
+import { useCapabilities } from "./capabilities.js";
 import { SourceCard, SourceTest } from "./ReportsView.jsx";
 import { WORKFLOW_TYPES } from "./sourceShape.js";
 import { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
@@ -26,7 +30,6 @@ import { fmtTime12 } from "./ui.jsx";
 
 const errOf = (e, fallback) => e?.response?.data?.detail || e?.message || fallback;
 
-const COLUMN = new Set(["x", "y", "series", "label", "meta", "sort"]), NUMBER = new Set(["target", "limit"]);
 const NOT_ROWS = new Set(["assistant", "dashboard", ...WORKFLOW_TYPES]);   // compose.NOT_A_SOURCE: a dashboard reads data views only
 
 // THE READY ONES (dashboards.TEMPLATES): what the End of day checkup is to reports - one press draws it over this install's own rows,
@@ -69,54 +72,29 @@ function ColumnField({ label, value, cols, onChange, multiple = false, placehold
         onInputChange={(_e, v) => { if (v !== (value ?? "")) onChange(v); }} renderInput={input} />;
 }
 
-// ONE COMPONENT, SET UP: a source card's frame (its place, Duplicate, Remove, drag to move), the preset and what it binds
-export function ComponentCard({ c, index, count, sources, columns, dragging, onDragStart, onDragEnd, onDropHere, onChange, onCopy, onRemove }) {
-  const F = DASH.fields, cols = columns[c.source] || [];
-  const [w, setW] = useState(whereText(c.where));
-  useEffect(() => { if (JSON.stringify(whereOf(w)) !== JSON.stringify(c.where)) setW(whereText(c.where)); }, [JSON.stringify(c.where)]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const set = (k, v) => onChange(withField(c, k, k === "w" && v !== "" ? Number(v) : v));
-  const sel = (k, value, opts, sx = {}) => (
-    <Select size="small" value={value} onChange={(e) => set(k, e.target.value)} sx={{ fontSize: 12.5, bgcolor: "#fff", ...sx }}
-      inputProps={{ "aria-label": F[k] }}>{opts.map(([v, l]) => <MenuItem key={v} value={v} sx={{ fontSize: 12.5 }}>{l}</MenuItem>)}</Select>
-  );
-  const field = (k) => {
-    if (k === "agg") return <Box key={k}>{sel(k, c.agg || "count", Object.entries(DASH.aggs), { width: "100%" })}</Box>;
-    if (k === "y" && (c.agg || "count") === "count") return null;
-    if (k === "good") return <Box key={k} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography variant="caption" sx={{ color: DIM, flex: "none" }}>{F.good}</Typography>
-      {sel(k, c.good || "up", Object.entries(DASH.goods), { flex: 1 })}</Box>;
-    if (k === "columns") return <ColumnField key={k} multiple label={F.columns} value={c.columns} cols={cols} onChange={(v) => set(k, v)} />;
-    if (COLUMN.has(k)) return <ColumnField key={k} label={F[k]} value={c[k]} cols={cols} onChange={(v) => set(k, v)} />;
-    return <TextField key={k} size="small" label={F[k]} type={NUMBER.has(k) ? "number" : "text"} value={c[k] ?? ""} sx={{ bgcolor: "#fff" }}
-      onChange={(e) => set(k, NUMBER.has(k) && e.target.value !== "" ? Number(e.target.value) : e.target.value)} />;
+// ONE TILE'S SENTENCE: the owner's words, drawn into a tile on Enter or on leaving the line ("drawing…" while the AI binds it), and the
+// AI's no said under it in plain words. The words stay as typed when it fails, to be said another way. No AI: the line only reads.
+export function SaidLine({ c = null, canAsk, ask, onDrawn, placeholder, clearOnDraw = false }) {
+  const [text, setText] = useState(saidOf(c)), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  useEffect(() => { setText(saidOf(c)); setErr(""); }, [c]);     // drawn, or another tile dragged into this place
+  const draw = async () => {
+    if (!canAsk || busy || !wantsDrawing(text, c)) return;
+    setBusy(true); setErr("");
+    try {
+      const { data } = await api.post("/api/dashboards/tile", ask(text.trim()));
+      if (data?.component) { onDrawn(data.component); if (clearOnDraw) setText(""); }
+      else setErr(data?.error || "It could not be drawn.");
+    } catch (e) { setErr(errOf(e, "It could not be drawn.")); }
+    setBusy(false);
   };
   return (
-    <Box data-tq-dash-component={index} draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onDragOver={(e) => e.preventDefault()} onDrop={onDropHere}
-      sx={{ ...card, width: { xs: "100%", sm: 354 }, p: 1.25, display: "flex", flexDirection: "column", gap: 1, opacity: dragging ? 0.45 : 1,
-        cursor: "grab", "&:active": { cursor: "grabbing" } }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-        <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />
-        <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>component {index + 1} of {count}</Typography>
-        <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate" sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }} />
-        <CloseIcon onClick={onRemove} titleAccess="Remove this component" sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#6b2733" } }} />
-      </Box>
-      {/* the preset: a kind changed keeps what both read (title, source, where, window) and drops the bindings the old one had */}
-      <Select size="small" value={c.kind} inputProps={{ "aria-label": "preset" }} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
-        onChange={(e) => onChange(withKind(c, e.target.value))}>
-        {Object.entries(DASH.kinds).map(([k, l]) => <MenuItem key={k} value={k} sx={{ fontSize: 12.5 }}>{l}</MenuItem>)}
-      </Select>
-      <TextField size="small" label={F.title} value={c.title || ""} sx={{ bgcolor: "#fff" }} onChange={(e) => set("title", e.target.value)} />
-      {sel("source", sources.some((s) => s.key === c.source) ? c.source : "", [["", "-"], ...sources.map((s) => [s.key, s.label || s.key])])}
-      {(BINDS[c.kind] || []).map(field)}
-      <TextField size="small" label={F.where} value={w} sx={{ bgcolor: "#fff" }} placeholder="state=open"
-        onChange={(e) => { setW(e.target.value); set("where", whereOf(e.target.value)); }} />
-      <Box sx={{ display: "flex", gap: 1 }}>
-        <Select size="small" value={windowOf(c)} displayEmpty onChange={(e) => onChange(withWindow(c, e.target.value))} inputProps={{ "aria-label": F.range }}
-          sx={{ fontSize: 12.5, bgcolor: "#fff", flex: 1, minWidth: 0 }}>
-          {Object.entries(DASH.windows).map(([v, l]) => <MenuItem key={v} value={v} sx={{ fontSize: 12.5 }}>{l}</MenuItem>)}
-        </Select>
-        {sel("w", String(c.w || ""), [["", `${F.w}: as its kind`], ...Object.entries(DASH.widths)], { flex: "0 0 128px" })}
-      </Box>
+    <Box sx={{ flex: 1, minWidth: 0 }}>
+      <TextField variant="standard" fullWidth multiline maxRows={3} value={text} placeholder={placeholder} disabled={busy}
+        onChange={(e) => setText(e.target.value)} onBlur={draw}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); draw(); } }}
+        InputProps={{ readOnly: !canAsk, sx: { fontSize: 13, color: INK, lineHeight: 1.4 } }} inputProps={{ "aria-label": placeholder || DASH.said }} />
+      {busy && <Typography sx={{ fontSize: 11.5, color: FAINT, mt: 0.25 }}>{DASH.drawing}</Typography>}
+      {err && <Typography role="alert" sx={{ fontSize: 12, color: "#8a3b2f", mt: 0.25 }}>{err}</Typography>}
     </Box>
   );
 }
@@ -144,6 +122,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [said, setSaid] = useState("");
   const [title, setTitle] = useState(draft?.config?.title || ""), [sched, setSched] = useState(() => scheduleOf(draft?.config || {}));
   const [drag, setDrag] = useState(null);       // {what: "sources"|"components", i}
+  const canAsk = useCapabilities().ai !== false;  // no AI: a tile is moved, copied or removed, never added or changed
   // the sources the rows on screen were read from, and the ones saved: a component edit redraws those rows in place, a source edit
   // reads them again (a ready one came drawn already - the demo refuses /preview, and it would be the same rows)
   const read = useRef(null), kept = useRef(null);
@@ -237,7 +216,30 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
   const typeOptions = types.filter((t) => t.status === "builtin" && !NOT_ROWS.has(t.type));
   const move = (what, set, to) => { if (!drag || drag.what !== what || drag.i === to) return;
     set((cur) => { const n = [...cur]; const [m] = n.splice(drag.i, 1); n.splice(to, 0, m); return n; }); setDrag(null); };
-  const shown = [...problems, ...orphans(spec).map((c) => `${c.title || DASH.kinds[c.kind]}: ${DASH.orphan}`)];
+  const shown = [...problems, ...orphans(spec).map((c) => `${c.title || saidOf(c)}: ${DASH.orphan}`)];
+  const icon = { fontSize: 14, color: FAINT, cursor: "pointer", flex: "none", mt: 0.5 };
+  // each tile drawn under its sentence, with its move, Copy and Remove; the answer lands on the tile asked about wherever it went since
+  const frame = (c, i, node, w) => (
+    <div className={`tq-dash-frame w${w}${drag?.what === "components" && drag.i === i ? " dragging" : ""}`} data-tq-dash-tile={i}
+      onDragOver={(e) => e.preventDefault()} onDrop={() => move("components", setComps, i)}>
+      {/* two lines held for every sentence, so the tiles of one row start level whatever their words' length */}
+      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 0.5, minHeight: 44 }}>
+        <Box draggable onDragStart={() => setDrag({ what: "components", i })} onDragEnd={() => setDrag(null)} title={DASH.move}
+          sx={{ cursor: "grab", flex: "none", mt: 0.5, "&:active": { cursor: "grabbing" } }}><DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} /></Box>
+        <SaidLine c={c} canAsk={canAsk} ask={(t) => tileAsk(spec, t, c)} onDrawn={(n) => setComps((cur) => swapTile(cur, c, n))} />
+        {comps.length < MAX_COMPONENTS && <ContentCopyIcon onClick={() => setComps((cur) => copyTile(cur, i))} titleAccess={DASH.copy}
+          sx={{ ...icon, "&:hover": { color: "#55697a" } }} />}
+        <CloseIcon onClick={() => setComps((cur) => cur.filter((_, k) => k !== i))} titleAccess={DASH.remove_tile}
+          sx={{ ...icon, fontSize: 15, "&:hover": { color: "#6b2733" } }} />
+      </Box>
+      {node}
+    </div>
+  );
+  const addTile = canAsk && comps.length < MAX_COMPONENTS && (
+    <div className="tq-dash-add" data-tq-dashboard-add-tile="">
+      <SaidLine canAsk ask={(t) => tileAsk(spec, t)} onDrawn={(n) => setComps((cur) => [...cur, n])} placeholder={DASH.add_tile} clearOnDraw />
+    </div>
+  );
   return (
     <Box data-tq-dashboard-editor="" sx={{ display: "flex", flexDirection: "column", gap: 1.5, minWidth: 0 }}>
       {note?.text && <Alert severity={note.severity} onClose={() => setNote(null)} sx={{ fontSize: 12.5 }}>{note.text}</Alert>}
@@ -261,7 +263,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
       {err && <Alert severity="error">{err}</Alert>}
       {shown.length > 0 && <Alert severity="warning" sx={{ fontSize: 12.5 }}>{shown.map((p) => <div key={p}>{p}</div>)}</Alert>}
 
-      {/* THE SETTINGS GO ABOVE THE DASHBOARD (the owner, 2026-10-25): what it reads and what it shows, then the page they make */}
+      {/* THE SETTINGS GO ABOVE THE DASHBOARD (the owner, 2026-10-25): what it reads first, then what it shows - the page itself, set up in place */}
       {/* ── what it reads: a report's own source cards, laid out as a report lays them (ReportsView.SourceCard) ── */}
       <Section title={DASH.sources} hint={DASH.sources_hint}>
         {srcs.map((s, i) => (
@@ -282,7 +284,7 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
           onClick={() => setSrcs((cur) => [...cur, { key: freshKey(cur), label: DASH.datasets.tasks[0], type: "taskuary_data", dataset: "tasks", days: 90, date: "arrived" }])} />}
       </Section>
 
-      {/* ── what it shows: one card per component, in the order the grid draws them ── */}
+      {/* ── what it shows: the dashboard drawn, each tile under its sentence, the add box closing its grid ── */}
       <Section title={DASH.shows} hint={DASH.shows_hint}>
         <Box sx={{ width: "100%", display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.25 }}>
           <Typography variant="caption" sx={{ color: DIM }}>{DASH.opens_on}</Typography>
@@ -293,22 +295,14 @@ export default function DashboardEditor({ sourceId = null, draft = null, types =
           <Typography variant="caption" sx={{ color: DIM, ml: 1 }}>{DASH.slice_by}</Typography>
           <Box sx={{ width: 200 }}><ColumnField label="" placeholder={DASH.nothing} value={spec.filters?.segment} cols={allCols} onChange={(v) => setFilter("segment", v)} /></Box>
         </Box>
-        {comps.map((c, i) => (
-          <ComponentCard key={i} c={c} index={i} count={comps.length} sources={srcs} columns={columns}
-            dragging={drag?.what === "components" && drag.i === i} onDragStart={() => setDrag({ what: "components", i })} onDragEnd={() => setDrag(null)}
-            onDropHere={() => move("components", setComps, i)}
-            onChange={(n) => setComps((cur) => cur.map((x, k) => (k === i ? n : x)))}
-            onCopy={() => comps.length < MAX_COMPONENTS && setComps((cur) => [...cur.slice(0, i + 1), { ...c }, ...cur.slice(i + 1)])}
-            onRemove={() => setComps((cur) => cur.filter((_, k) => k !== i))} />
-        ))}
-        {comps.length < MAX_COMPONENTS && <AddCard label={DASH.add} data-tq-dashboard-add-component=""
-          onClick={() => setComps((cur) => [...cur, { kind: "stat", title: DASH.kinds.stat, source: srcs[0]?.key || "", agg: "count" }])} />}
+        {!canAsk && <Typography data-tq-dashboard-no-ai="" sx={{ width: "100%", fontSize: 12, color: FAINT }}>{DASH.no_ai_tiles}</Typography>}
+        {!data && sourceId != null && busy !== "preview" && <Typography sx={{ width: "100%", fontSize: 12.5, color: INK }}>{DASH.never}</Typography>}
+        {/* ...drawn afresh when what it opens on changes: the page's range and segment are its own state from then on */}
+        <Box data-tq-dashboard-preview="" sx={{ width: "100%", minWidth: 0 }}>
+          <Dashboard key={`${spec.filters?.range}-${spec.filters?.segment}`} spec={spec} data={data} stale={busy === "run" || busy === "preview"}
+            frame={frame} after={addTile} />
+        </Box>
       </Section>
-
-      {busy === "preview" && !data ? <CircularProgress size={20} />
-        // ...drawn afresh when what it opens on changes: the page's range and segment are its own state from then on
-        : data ? <Box data-tq-dashboard-preview=""><Dashboard key={`${spec.filters?.range}-${spec.filters?.segment}`} spec={spec} data={data} stale={busy === "run" || busy === "preview"} /></Box>
-          : sourceId != null && <Typography sx={{ fontSize: 12.5, color: INK }}>{DASH.never}</Typography>}
     </Box>
   );
 }

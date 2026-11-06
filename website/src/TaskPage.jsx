@@ -1857,7 +1857,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         {!isOpen(k) && tabFor(k)}
         {stripOn(k) && <PaneStrip sec={k} home={home} keys={slotKeys} live={sessionView && k === "agent"} skip={stripSkip[k]}
           fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
-          onStop={sessionView && k === "agent" ? () => press("save-end") : null}
+          /* ...never on a chat task (the owner, 2026-11-05: "we don't need the stop agent button ... it does nothing"): its Stop and save filed the
+             last answer as the report, drafted a reply the agent had already drafted and closed a session that closes itself when idle - a turn
+             at work is stopped by the chat box's own stop (GeneralWorkspace), and Mark done still ends it all */
+          onStop={sessionView && k === "agent" && !home ? () => press("save-end") : null}
           pair={canPair ? { on: paired, with: paired ? slots.find((s) => s.key !== k && isOpen(s.key))?.key : null, flip: pairFlip(k) } : null} />}
         {body}</Box>);
   // ...the open section draws its half of the work: the Agent its own, Close out the reply; Came from leaves the halves as they were

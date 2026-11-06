@@ -886,7 +886,11 @@ _ACTION = ("NEXT STEPS - DO WHAT YOU CAN DO. Be the helpful assistant: whatever 
            "handing it back. When the work calls for an act - an email, a post, a payment, a form, a report - set it up through Taskuary's "
            "own roads, done up to the one press that sends it; it shows under Next steps as what it is (the email with its Send, the post "
            "as a post with its Post button, the form filled up to its last button), and nothing goes before the owner presses:\n"
-           "- a reply or an email: propose_reply / propose_email, with any file it carries in `attach`\n"
+           "- a reply or an email: propose_reply / propose_email, with any file it carries in `attach`. WHO HEARS IT IS YOURS TO DECIDE: "
+           "address it to the people who need to know what is being answered, not by habit to everyone on the thread. Something "
+           "sensitive (pay, health, a complaint, a person's own situation) goes to that one person only (`only`), and you say so. When the "
+           "right next step answers an earlier mail in the thread rather than the newest, reply to that one (`answers`), and say so. Your "
+           "summary's next steps tell the owner whom it goes to and why whenever it is not the plain reply to everyone on the newest mail\n"
            "- a post, send or order on a connected system: propose {{\"action\": \"run_tool\", \"type\": ..., \"connector_id\": ..., ...}} "
            "(the propose tool; with no tools, a line TASKUARY-PROPOSE {{...}}) - a post's words in `text` and its picture in `image` (a file "
            "in your task folder), not in a file beside it. {roads}\n"
@@ -1944,12 +1948,13 @@ class GeneralSession:
         # what gets shown - the sentence after it becomes the closing comment.
         from . import selfclose
         reply, named = selfclose.attach_markers(reply)
+        who = selfclose.reply_who(reply)        # ...who hears it, as the marker says (2026-11-06)
         reply, drafted = selfclose.reply_marker(reply)
         reply, showing = selfclose.show_markers(reply)
         _show_files(self.store, self.task_id, showing, paths)
         files = _files_to_attach(self.store, self.task_id, named, paths)
         if drafted or files:
-            out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files, sid=self.sid)
+            out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files, sid=self.sid, **(who if drafted else {}))
             if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
             for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
         # ...and the letter is Close out's to show: the pane keeps the words around it (selfclose.without_draft) - a draft marked in this

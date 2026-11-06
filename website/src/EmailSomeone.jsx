@@ -5,8 +5,9 @@
 // (outbox.task_email). It waits in Close out as one of the task's outputs - edit it, attach more, Send - and the task
 // stays open until Mark done (slots._left). Nothing is sent from here.
 import React, { useEffect, useState } from "react";
-import { Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
+import { Box, Button, Checkbox, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel,
   MenuItem, Select, TextField, Typography } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import api from "./api";
 import { ChatRecipient, EmailRecipients } from "./NewSheet.jsx";
 import { ACCENT, BORDER, DIM, FAINT, INK } from "./theme.jsx";
@@ -130,12 +131,12 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
         )}
         {err && <Typography variant="body2" sx={{ color: "#a33b3b" }}>{err}</Typography>}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+      <ButtonBar>
         <Button variant="contained" disableElevation onClick={go} disabled={busy || !ready}>
           {busy ? <CircularProgress size={15} /> : label("redraft", "none")}
         </Button>
-      </DialogActions>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+      </ButtonBar>
     </Dialog>
   );
 }

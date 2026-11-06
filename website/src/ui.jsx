@@ -10,8 +10,9 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCapabilities, NO_CODING_TOOL } from "./capabilities.js";
 import { bareAddresses } from "./replyDelivery.js";
 import { keepAddresses, linkParts } from "./mailLinks.js";
-import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import SearchIcon from "@mui/icons-material/Search";
 import BlockIcon from "@mui/icons-material/Block";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
@@ -145,11 +146,11 @@ export const Confirm = ({ open, title, text, confirmLabel = "OK", onConfirm, onC
         <DialogContentText sx={{ fontSize: 13, color: DIM, whiteSpace: "pre-wrap" }}>{text}</DialogContentText>
         {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+      <ButtonBar>
         <Button variant="contained" disableElevation onClick={go} disabled={busy}>
           {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : confirmLabel}</Button>
-      </DialogActions>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+      </ButtonBar>
     </Dialog>
   );
 };
@@ -171,13 +172,11 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
         </DialogContentText>
         {err && <Alert severity="error" sx={{ mt: 1.5, fontSize: 12.5 }}>{err}</Alert>}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        {/* Cancel is the default focus and sits where the eye lands: the safe one is not the
-            one you hit by reflex */}
-        <Button onClick={onClose} disabled={busy} autoFocus sx={{ fontSize: 12.5 }}>Cancel</Button>
-        <Button onClick={go} disabled={busy} color="error" variant="contained" disableElevation
-          sx={{ fontSize: 12.5 }}>{busy ? "…" : confirmLabel}</Button>
-      </DialogActions>
+      <ButtonBar>
+        {/* Cancel is the default focus and sits where the eye lands - first: the safe one is not the one you hit by reflex */}
+        <Button onClick={onClose} disabled={busy} autoFocus>Cancel</Button>
+        <Button onClick={go} disabled={busy} color="error" variant="contained" disableElevation>{busy ? "…" : confirmLabel}</Button>
+      </ButtonBar>
     </Dialog>
   );
 };

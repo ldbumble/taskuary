@@ -1,5 +1,6 @@
 import React from "react";
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from "@mui/material";
+import { Box, Button, Dialog, DialogContent, DialogTitle, Typography } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import { DIM, FAINT, INK } from "./theme.jsx";
 
 // PW-239: the click did not send. The new message and the triage change are shown; the owner's own
@@ -28,10 +29,10 @@ export default function ApprovalInterrupt({ it, onResolve }) {
           </Typography>
         )}
       </DialogContent>
-      <DialogActions>
-        <Button size="small" sx={{ color: DIM }} onClick={() => onResolve("cancel")}>Cancel</Button>
+      <ButtonBar>
         <Button size="small" variant="contained" disableElevation onClick={() => onResolve("review")}>Review the update</Button>
-      </DialogActions>
+        <Button size="small" onClick={() => onResolve("cancel")}>Cancel</Button>
+      </ButtonBar>
     </Dialog>
   );
 }

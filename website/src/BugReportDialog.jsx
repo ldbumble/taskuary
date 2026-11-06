@@ -1,7 +1,8 @@
 // "Report this bug": the draft the server scrubbed, shown whole and editable, sent by opening GitHub's new-issue page.
 // Nothing leaves without the person pressing Send, and what leaves is exactly what the boxes hold.
 import React, { useEffect, useState } from "react";
-import { Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel, TextField, Typography } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import api from "./api";
 import { snapshot } from "./lastError.js";
 import { fullReport, issueUrl, joinBody, techOf } from "./bugReport.js";
@@ -90,18 +91,18 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
         </>}
       {note && <Typography sx={{ color: DIM, fontSize: 12.5, mt: 1.5 }} role="status">{note}</Typography>}
     </DialogContent>
-    <DialogActions sx={{ px: 3, pb: 2, flexWrap: "wrap", gap: 1 }}>
-      {supportUrl && <Button href={supportUrl} target="_blank" rel="noopener noreferrer" sx={{ mr: "auto", color: DIM, textTransform: "none" }}>Open GitHub</Button>}
+    <ButtonBar>
       {refused ? <>
         <Button onClick={() => copyText(rawError(req), "Copied.")}>Copy the error</Button>
         <Button onClick={onClose}>Close</Button>
       </> : <>
-        {!draft && <Button onClick={onClose}>Close</Button>}
-        {shot && !shotOnClip && <Button onClick={() => say(copyShot(shot), SHOT_ON, true)}>Copy the screenshot</Button>}
-        <Button onClick={() => copyText(fullReport(title, body()), "Copied.")} disabled={!draft || busy}>Copy full report</Button>
         <Button variant="contained" onClick={send} disabled={!draft || busy || !title.trim()}>{busy ? "Opening…" : "Send"}</Button>
+        <Button onClick={() => copyText(fullReport(title, body()), "Copied.")} disabled={!draft || busy}>Copy full report</Button>
+        {shot && !shotOnClip && <Button onClick={() => say(copyShot(shot), SHOT_ON, true)}>Copy the screenshot</Button>}
+        {!draft && <Button onClick={onClose}>Close</Button>}
       </>}
-    </DialogActions>
+      {supportUrl && <><ButtonBar.Sep /><Button href={supportUrl} target="_blank" rel="noopener noreferrer">Open GitHub</Button></>}
+    </ButtonBar>
   </Dialog>;
 }
 

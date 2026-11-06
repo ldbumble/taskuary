@@ -2,6 +2,15 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.8 - 2026-11-05
+
+- One message everywhere: Taskuary is your AI work partner - your work, in the right order
+- An input bubble is its icon, who and when - no "sent to Taskuary"
+- A post card's picture is a preview, capped at 180px
+- No stop icon on a chat task; the chat box stops any turn at work
+- The card holds still while the walk brings the next one
+- One prompt box at the pane's foot, one attachment chip in one line
+
 ## 0.3.11.7 - 2026-11-05
 
 - A mail read in mid-turn stands after that turn, over the re-think it woke

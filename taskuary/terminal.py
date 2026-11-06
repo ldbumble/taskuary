@@ -237,6 +237,7 @@ class Term:
         self.mode = mode                                  # 'full' or 'auto': how the CLI was started (a stranger's task never runs full)
         self.sid = uuid.uuid4().hex[:12]
         self.argv, self.cwd, self.label, self.task_id, self.agent = argv, cwd, label, task_id, agent
+        self.opened_in = cwd                              # where its process started; cwd moves with use_repo (repochoice)
         self.cli = cli                                    # what RUNS this, named by the profile - never argv[0]'s wrapper
         self.rows, self.cols = rows, cols                 # replaying the stream needs the real geometry
         self.started = datetime.now().isoformat(sep=' ', timespec='seconds')
@@ -1126,29 +1127,14 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
                              f'chip beside its agent, or the chooser this refusal opens - choose {repo} and '
                              f'give it the path; otherwise the session would open in '
                              f'{profile.get("cwd") or os.getcwd()} and work the wrong tree')
-    # ...and NO repo decided must not mean "the agent's default folder" either. That default is one
-    # particular checkout (ledger, on this box), so a task nothing matched opened there and an agent
-    # worked a tree it had no business in - the same failure the refusal above exists to prevent, one
-    # branch further along (the owner, 2026-09-03: "sent the coding agent the wrong repo again").
+    # ...and NO repo decided must not mean "the agent's default folder" either: that default is one particular checkout, and a task
+    # nothing placed opened there and worked a tree it had no business in (the owner, 2026-09-03: "sent the coding agent the wrong repo
+    # again"). It opens in the TASK'S OWN folder instead - no checkout, so it collides with nobody - and its first prompt lists the
+    # repositories for the agent to pick from with use_repo (repochoice, the owner 2026-11-06). Only a profile that routes no repos at
+    # all keeps a folder of its own.
     if not cwd and not repo and task_id and agent:
-        paths = profile.get('cwd_map') or {}
-        # ...and ONE path is not an answer either while the repo map knows others: "the only repo this agent has a path
-        # for" is how a reimbursement task opened in the integrations checkout. guess_repo no longer scores the words
-        # against the map (2026-10-11), so the owner picks - unless the task says it has no repository at all.
-        others = len(paths) == 1 and len(known_repos_of(store, profile)) > 1 and repo_tag(store.get_task(task_id) or {}) != NO_REPO
-        if len(paths) > 1 or others:
-            raise ValueError('I could not tell which checkout this belongs in, and guessing would put an '
-                             f"agent in {profile.get('cwd') or os.getcwd()}. Pick the repository on the task "
-                             '- the chooser this refusal opens, or the repo chip beside its agent - and say '
-                             'which one; or tag it, and every later session goes there.')
-        if len(paths) == 1: cwd = next(iter(paths.values()))
-        # ...and NOTHING AT ALL - no path, no folder of its own - is no answer either: the fallback below is the folder Taskuary was
-        # started in, which on the owner's machine is Taskuary's own checkout. A bug report about another app opened a coding agent
-        # there by itself (the overnight QA, 2026-10-30). The owner picks, unless the task says it has no repository at all.
-        elif not paths and not profile.get('cwd') and repo_tag(store.get_task(task_id) or {}) != NO_REPO:
-            raise ValueError('I could not tell which checkout this belongs in: no repository is set up for the coding agent, and '
-                             f'guessing would put it in {os.getcwd()}, the folder Taskuary started in. Pick the repository on the task '
-                             '- the chooser this refusal opens, or the repo chip beside its agent - and give it the path.')
+        from . import repochoice
+        cwd = profile['cwd'] if profile.get('cwd') and not profile.get('cwd_map') else repochoice.scratch(task_id)
     cwd = cwd or profile.get('cwd') or os.getcwd()
     if not os.path.isdir(cwd): raise ValueError(f'working directory does not exist: {cwd}')
     # WHICH CHECKOUT comes first, and only then which binary: resolving the CLI up here meant a box
@@ -1883,10 +1869,13 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # A general question is told so out loud. Without this the folder the CLI happens to have
     # started in was announced as "REPO: ... work only here", and an agent asked to prepare for a
     # meeting went reading that codebase for the answer.
+    from . import repochoice as _rc
     if repo_tag(t) == NO_REPO:
         parts.append('NO REPOSITORY - this is a general question, not a change to a codebase. '
                      'Answer it from what you are given and what you can look up; do not go '
                      'hunting for code to edit.')
+    # ...and a session no structure placed is in its task's own folder: it is handed the repositories to pick from (repochoice)
+    elif not repo and _rc.is_scratch(tid, cwd): parts.append(_rc.block(store, tid, cwd))
     elif repo or cwd: parts.append(f"REPO: {repo or cwd} - you are already in it; work only here.")
     # the blackboard: agents sharing THIS checkout, told to a newcomer once, up front. Another
     # repo's agents are deliberately absent - awareness costs prompt tokens, so it is spent
@@ -2249,56 +2238,28 @@ def our_own_repo(store, tid: int, known) -> str:
 
 
 def guess_repo(store, tid: int, profile: dict) -> tuple:
-    """Which checkout does this task belong in? The tag on the task wins - that is the override,
-    and the only thing that always does what it says.
+    """Which checkout does this task belong in, by STRUCTURE alone? The owner's tag wins - that is the override, and the only thing that
+    always does what it says. Then a GitHub or GitLab item's own repository, then the coding agent's own pick on this task (use_repo,
+    repochoice.AGENT_TAG). A repo so named is returned even when this agent has no path for it, because open_session must then REFUSE
+    rather than quietly open another folder - an agent editing the wrong checkout is far worse than one that will not start.
 
-    Then a GitHub item's own repository, then triage's verdict (a repository, or "choose one"). A
-    repo so named is returned even when this agent has no path for it, because open_session must
-    then REFUSE rather than quietly open the default folder - an agent editing the wrong checkout is
-    far worse than one that will not start. Without a verdict the owner chooses, unless the agent
-    has exactly one checkout; the task's words are never scored against the map (2026-10-11).
-
-    Taskuary deciding this is the point: an agent left to work it out reads SOUL.md over the API,
-    or guesses from the folder it happens to have started in."""
+    Nothing else decides it (the owner, 2026-11-06: "let's take repo decision out of the triage - remove it completely"): no verdict, no
+    word count, not "the only path there is". (None, why) opens the session in the task's own folder with the REPOSITORIES block, and the
+    agent picks (repochoice). A workflow's cwd and a continued session's cwd are start_on_task's, before this is asked."""
+    from .repochoice import AGENT_TAG
     t = store.get_task(tid) or {}
     tag = repo_tag(t)
-    # "no repository" is an ANSWER, not a missing one: a general question ("what does this mean",
-    # "prepare me for this meeting") has no checkout, and leaving the field blank used to hand it
-    # to the guess below - which then opened the highest-scoring repo and set an agent looking for
-    # code to change. Only the explicit tag stops that.
+    # "no repository" is an ANSWER, not a missing one: a general question ("what does this mean", "prepare me for this meeting") has no
+    # checkout, and the agent is told so instead of being handed the repositories to pick from
     if tag == NO_REPO: return None, 'a general question - no repository'
     if tag: return tag, 'tagged on the task'
-    # a GitHub item's own repository is authoritative (PW-093) - before anything triage or a word count says
-    direct = next((str(m.get('SourceName') or '').strip() for m in store.list_messages(tid)
-                   if str(m.get('Channel') or '') == 'github' and str(m.get('SourceName') or '').strip()), '')
-    if direct: return direct, 'the GitHub item belongs to this repository'
-    # triage's own decision, made with the request and the project map in front of it and written on
-    # the task (ingest: triage-repo: tag, needs-repo-choice tag); startup does not guess again (PW-092)
-    tags = str(t.get('Tags') or '')
-    picked = (re.search(r'triage-repo:([^\s,]+)', tags) or [None, None])[1]
-    note = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid))
-                 if str(c.get('Body') or '').startswith('Triage')), '')
-    if picked: return picked, f"triage selected this repository - {note.split(': ', 1)[-1] if ': ' in note else 'from the request and the project map'}"
-    if 'needs-repo-choice' in tags.split(','): return None, f"triage could not tell which repository - choose one ({note.split(': ', 1)[-1] if ': ' in note else 'more than one is plausible'})"
-    paths = profile.get('cwd_map') or {}
-    # no repo paths at all = this agent does not do repo routing. Naming one anyway would put a
-    # REPO line in the prompt for a folder the session is not in.
-    if not paths: return (None, None)
-    # NO GUESS FROM THE TASK'S WORDS (2026-10-11, "everything should be ai"; kind-routes-the-task): triage read the ask
-    # with the project map in front of it and named no repository, so a word-overlap score of the mail against SOUL.md -
-    # the old fallback here - was a second opinion nobody could argue with, and it is how a task that merely mentioned a
-    # topic opened in the checkout whose description shared its nouns. What is left is structure, not reading: our own
-    # machinery's checkout, a repository the OWNER's earlier choices tied to this work, the only path there is - and
-    # otherwise the owner chooses (open_session refuses with several paths; the dispatch answers needs_repo, RepoPicker).
-    known = known_repos_of(store, profile)
-    own = our_own_repo(store, tid, known)
-    if own: return own, "Taskuary's own work - our own checkout"
-    from .projects import repositories_for_task
-    related, relation_why = repositories_for_task(store, tid)
-    related = [r for r in related if r in known]
-    if len(related) == 1: return related[0], relation_why
-    if len(related) > 1: return None, relation_why + '; the project has several repositories, so choose one'
-    return (known[0], 'the only repository there is') if len(known) == 1 else (None, 'triage named no repository - choose one')
+    # a code host's item names its own repository (PW-093) - GitLab's project path as GitHub's owner/name
+    direct = next(((str(m.get('SourceName') or '').strip(), m['Channel']) for m in store.list_messages(tid)
+                   if str(m.get('Channel') or '') in ('github', 'gitlab') and str(m.get('SourceName') or '').strip() not in ('', 'GitLab')), None)
+    if direct: return direct[0], f"the {'GitHub' if direct[1] == 'github' else 'GitLab'} item belongs to this repository"
+    picked = (re.search(rf'(?:^|[\s,]){re.escape(AGENT_TAG)}([^\s,]+)', str(t.get('Tags') or '')) or [None, None])[1]
+    if picked: return picked, 'the coding agent chose it on this task'
+    return None, 'no repository yet - the coding agent picks one'
 
 
 def _as_general(store, tid: int, instruction: str = None, actor: str = 'owner') -> dict:

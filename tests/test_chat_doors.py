@@ -137,14 +137,14 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
     def test_an_uncertain_repo_asks_for_a_choice_and_keeps_the_new_task_id(self):
         mid = _msg('security app account', 'the login screen is empty')
         with mock.patch('taskuary.server.start_session',
-                        side_effect=HTTPException(422, 'I could not tell which checkout this belongs in')):
+                        side_effect=HTTPException(422, 'no local path for org/app, and a search of your code folders found no checkout with that git remote')):
             response = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coding'})
         self.assertEqual(response.status_code, 200)
         d = response.json()
         self.assertEqual(d['dispatch'], 'needs_repo')
         self.assertEqual(d['agent'], 'coding')
         self.assertEqual(_task(d['taskId'])['Kind'], 'coding')
-        self.assertIn('which checkout', d['reason'])
+        self.assertIn('no local path', d['reason'])
 
 
 class TheConversationWorks(unittest.TestCase):

@@ -37,7 +37,7 @@
     "profiles":          {"name": "Settings → Profiles", "href": "#profiles",
                           "does": "the agent profiles - each worker's standing instructions - and Start from a role, which sets the app up for a job role in one go: its worker, playbooks and where the mail goes"},
     "workflows":         {"name": "Reports → Routines", "href": "#report=workflows"},
-    "playbooks":         {"name": "About you → Playbooks", "href": "#about=playbooks",
+    "playbooks":         {"name": "Reports → Playbooks", "href": "#report=playbooks",
                           "does": "the owner's playbooks - how they do one kind of job, matched to the mail it fits - each with its on/off switch, and New playbook"},
     "setup":             {"name": "Setup", "href": "#setup"},
     "later":             {"name": "For later on your rail", "href": ""},

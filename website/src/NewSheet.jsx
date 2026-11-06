@@ -342,7 +342,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
-        askPlaybook(about, true); onClose?.(); openAppLink(`about=${NEW_PB}`);
+        askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
       } else if (kind === "goal") {
         // PLAN IT WITH NO AI SAYS SO (owner-approved, 2026-10-21): it promised "planning the steps; they land in a moment" and none came
         if (plan && !((await api.get("/api/agents")).data?.general_brains || []).length) {

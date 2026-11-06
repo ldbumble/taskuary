@@ -76,7 +76,8 @@ ACTIONS = {
                        ('slug', 'text'), 'playbooks_enabled'),
     # what the outcome ledger counted about a kind of work, as a block on its playbook (playbook_facts.py): reflection proposes it,
     # the owner's yes writes it - a derived line never edits a playbook on its own (spec 2026-10-12, build step 5)
-    'amend_playbook': ('add what the ledger learned to a playbook', ('slug', 'text'), 'playbooks_enabled'),
+    # ...and what an agent's turn found the hard way, as a lesson on the playbook it belongs to (playbooks.take_lesson, the owner 2026-11-05)
+    'amend_playbook': ('add what was learned to a playbook', ('slug', 'text'), 'playbooks_enabled'),
     # An instruction that BELONGS in a switch should be written there, not left as a note the
     # classifier merely weighs - but nothing may change a switch on its own. So it arrives as a
     # proposal: the assistant says which switch it means, the owner's click applies it, and only the
@@ -341,12 +342,15 @@ def closeout_pending(store, tid: int):
 # playbook proposal its agent left (approved or dismissed) are each said on the task, and only the owner's Mark done closes it
 # (2026-10-18: "sending and closing are two steps, never automatic"). A sent reply used to dismiss the undecided playbook.
 PLAYBOOK = 'write_playbook'
+# ...and a lesson an agent's turn left for a playbook (playbooks.take_lesson) is the same kind of ask: the owner's yes or no on how a kind of
+# job is done, never a close-out owed on the task - so it holds, settles and counts as the playbook does (the owner, 2026-11-05)
+PLAYBOOKS = (PLAYBOOK, 'amend_playbook')
 
 
 def playbook_pending(store, tid: int):
     """The playbook proposal still waiting on the owner's approve or dismiss, if any."""
     return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))
-                 if _action(r) == PLAYBOOK), None)
+                 if _action(r) in PLAYBOOKS), None)
 
 
 # A PLAYBOOK PROPOSAL IS ALWAYS SEEN (the owner, 2026-10-21). It is drafted after the task's ending, and a task that closed itself
@@ -381,7 +385,7 @@ def held_pending(store, tid) -> dict | None:
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId DESC", (int(tid),)):
         try: p = json.loads(r.get('DraftText') or '{}') or {}
         except (TypeError, ValueError): p = {}
-        if not isinstance(p, dict) or p.get('closeout') or p.get('action') in (PLAYBOOK, *CLOSEOUT): continue
+        if not isinstance(p, dict) or p.get('closeout') or p.get('action') in (*PLAYBOOKS, *CLOSEOUT): continue
         what = (p.get('what') or str(p.get('command') or '')[:160]) if p.get('action') in HELD_ACTS else ''
         return {'rid': r['ReviewId'], 'action': p.get('action') or '', 'what': ' '.join(str(what or r.get('Reason') or p.get('action') or 'a step').split())[:240]}
     return None
@@ -389,7 +393,7 @@ def held_pending(store, tid) -> dict | None:
 
 def owed(store, tid: int) -> bool:
     """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook."""
-    return any(_action(r) != PLAYBOOK for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
+    return any(_action(r) not in PLAYBOOKS for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
 
 
 def closed_out(store, tid: int, actor: str, said: str) -> bool:
@@ -484,7 +488,7 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     """After the owner answered a proposal: Approve ran only that act (the owner, 2026-10-18) - the task stays open for Mark
     done, and is said to be on them once nothing else of it waits; "not yet" on a close-out leaves it open and on them."""
     tid = rv.get('TaskId')
-    if tid and _action(rv) == PLAYBOOK: return playbook_answered(store, tid, actor)
+    if tid and _action(rv) in PLAYBOOKS: return playbook_answered(store, tid, actor)
     if not tid: return
     if _action(rv) == 'browser_act' and verb not in ('approve', 'edit'):           # dismissed: the waiting agent hears it was not done
         from . import browsergate
@@ -621,6 +625,8 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         if a == 'amend_playbook' and p.get('block') and not edited:      # the ledger's block onto the page as it is NOW (playbook_facts)
             from .people_pages import splice
             p['text'] = splice(playbooks.read(p['slug']) or p['text'], p['block'])
+        elif a == 'amend_playbook' and p.get('lessons') and not edited:   # ...and an agent's lessons, onto the page as it is NOW (take_lesson)
+            p['text'] = playbooks.with_lessons(playbooks.read(p['slug']) or p['text'], p['lessons'])
         slug = playbooks.write(p['slug'], p['text'])
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
     elif a == 'repair_workflow':

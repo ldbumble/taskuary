@@ -285,6 +285,29 @@ def menu(books: list = None, store=None) -> str:
     return '\n'.join(f"- {b['slug']}: {b['title']} - when: {b['when']}" for b in books if b['when'] and b.get('enabled', True))
 
 
+# ── the general agent's menu ─────────────────────────────────────────────────────────────
+# A MENU, NOT A PICK (the owner, 2026-11-05, from Hermes' skills index: "list every playbook's when + its path ... let the agent read the full
+# one itself when it decides it applies, including mid-task"): code handing one playbook to the agent decided for it what kind of job this is,
+# and a job that turned into another kind halfway never saw the second. One short line each keeps the brief lean (the 2026-11-05 rule); the
+# file is read whole only when the agent says it applies. Triage's match is said on its line - a reading, not a rule.
+MENU_MAX, MENU_WHEN = 30, 160
+
+
+def path_of(slug: str) -> Path: return folder() / f'{slugify(slug)}.md'
+
+
+def agent_menu(task: dict = None, store=None) -> str:
+    "Every playbook switched on, one line each - its slug, its `when` and its file. '' when there are none, or playbooks are off."
+    if store is not None and store.get_setting('playbooks_enabled', '1') != '1': return ''
+    books, mine = [b for b in list_all() if b['when'] and b.get('enabled', True)], of_task(task)
+    if not books: return ''
+    cut = lambda s: s if len(s) <= MENU_WHEN else s[:MENU_WHEN - 1] + '…'
+    lines = [f"- {b['slug']}: when {cut(' '.join(b['when'].split()))} -> {path_of(b['slug'])}" + (' (triage read this task as one)' if b['slug'] == mine else '')
+             for b in books[:MENU_MAX]]
+    return ("PLAYBOOKS - how this company does each kind of job. When one applies - now, or as the work turns into it - read its file whole "
+            "and follow it; it outranks your own way, and its `ask first` means ask the owner and wait:\n" + '\n'.join(lines))
+
+
 def tag(slug: str) -> str: return f'playbook:{slugify(slug)}'
 def of_task(task: dict) -> str | None: return (_TAG.search(str((task or {}).get('Tags') or '')) or [None, None])[1]
 
@@ -373,3 +396,69 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
     except Exception as e:
         logger.debug(f'playbooks: nothing drafted for task {task_id} - {e}')
         return None
+
+
+# ── a lesson from a turn: the playbook learns (the owner, 2026-11-05, from Hermes' skills that patch themselves) ─────────────
+# A turn that found its route after a dead end, was corrected by the owner, or had to dig out an id or a name leaves its lesson in the turn
+# summary (general.LESSON_LINE) - the model says whether there is one. It reaches the playbook it names as an `amend_playbook` proposal on
+# the task, drawn under the answer with its Approve (server's playbookDrafts) - the road a drafted playbook already takes; a turn's next
+# lesson for the same playbook joins the card still waiting. A lesson no playbook is named for goes to LEARNED.md (learn.learn_from), the one
+# road every learned fact takes - never a store of its own. The lessons sit in a marked block, so the owner's own lines are never touched.
+LESSONS_START, LESSONS_END, LESSONS_HEAD = '<!-- lessons:start -->', '<!-- lessons:end -->', '## Lessons from the work'
+LESSON_CHARS, LESSONS_MAX = 400, 40
+
+
+def lessons_of(text: str) -> list:
+    "The lessons already in the page's block."
+    if LESSONS_START not in (text or '') or LESSONS_END not in text: return []
+    body = text.split(LESSONS_START, 1)[1].split(LESSONS_END, 1)[0]
+    return [l[2:].strip() for l in body.splitlines() if l.startswith('- ') and l[2:].strip()]
+
+
+def with_lessons(text: str, lines: list) -> str:
+    "The page with each of `lines` in its lessons block once, the newest LESSONS_MAX kept; the block goes at the foot when there is none."
+    text, have = text or '', lessons_of(text)
+    seen = {l.lower() for l in have}
+    keep = [*have, *(l for l in dict.fromkeys(' '.join(str(x).split()) for x in lines or ()) if l and l.lower() not in seen)][-LESSONS_MAX:]
+    block = f"{LESSONS_START}\n{LESSONS_HEAD}\n" + '\n'.join(f'- {l}' for l in keep) + f"\n{LESSONS_END}"
+    if LESSONS_START in text and LESSONS_END in text:
+        head, rest = text.split(LESSONS_START, 1)
+        return head + block + rest.split(LESSONS_END, 1)[1]
+    return (text.rstrip('\n') + '\n\n' if text.strip() else '') + block + '\n'
+
+
+def _lesson_card(store, tid: int, slug: str):
+    "The lesson proposal for this playbook still waiting on the task, as (review, proposal) - or (None, None)."
+    for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' ORDER BY ReviewId DESC", (int(tid),)):
+        try: p = json.loads(r.get('DraftText') or '{}') or {}
+        except ValueError: continue
+        if isinstance(p, dict) and p.get('action') == 'amend_playbook' and p.get('slug') == slug and isinstance(p.get('lessons'), list): return r, p
+    return None, None
+
+
+def take_lesson(store, tid: int, lesson, agent: str = 'assistant'):
+    """The turn's lesson to its playbook's proposal (a new card, or the one waiting), else to LEARNED.md. Returns what was done: {'reviewId'},
+    {'learned': True}, or None for no lesson (empty, or carrying a secret - redact.scrub: what is learned is kept for good)."""
+    from .redact import scrub
+    from . import proposals
+    l = lesson if isinstance(lesson, dict) else {}
+    text = ' '.join(str(l.get('text') or '').split())[:LESSON_CHARS]
+    if not text or scrub(text) != text: return None
+    slug = slugify(l['playbook']) if str(l.get('playbook') or '').strip() else ''
+    page = read(slug) if slug and slug not in off() and store.get_setting('playbooks_enabled', '1') == '1' else None
+    if page is None:
+        from . import learn
+        learn.learn_from(store, f"agent_lesson on TQ-{tid}: what the agent found the hard way doing this kind of work - {text}")
+        return {'learned': True}
+    if text.lower() in {x.lower() for x in lessons_of(page)}: return None          # the page has it already
+    rv, p = _lesson_card(store, tid, slug)
+    if rv:
+        if text.lower() in {x.lower() for x in p['lessons']}: return {'reviewId': rv['ReviewId']}
+        ls = [*p['lessons'], text][-LESSONS_MAX:]
+        p = {**p, 'lessons': ls, 'text': with_lessons(page, ls), 'why': '; '.join(ls)[:300]}
+        store._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (json.dumps(p), rv['ReviewId']))
+        return {'reviewId': rv['ReviewId']}
+    made = proposals.queue(store, tid, {'action': 'amend_playbook', 'slug': slug, 'lessons': [text], 'text': with_lessons(page, [text]),
+                                        'why': text}, agent)
+    if made: logger.info(f'playbooks: {agent} proposed a lesson for "{slug}" on task {tid} (rv{made["reviewId"]})')
+    return made

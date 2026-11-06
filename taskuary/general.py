@@ -507,6 +507,24 @@ def take_corrections(store, tid: int, corrections) -> int:
         logger.warning(f'corrections on task {tid} not learned: {e}'); return 0
 
 
+def take_lesson_and_check(store, tid: int, lesson, check) -> None:
+    """The turn summary's lesson goes to its playbook as a proposal for the owner's yes, or to LEARNED.md (playbooks.take_lesson); its
+    check-back is set on the task (checkback.set_check). Never on a stranger's task: their words neither teach a playbook nor wake an agent
+    later. A check-back it could not read is said on the task, so the owner sees it was not set."""
+    if not (lesson or check): return
+    from . import origin
+    if origin.of_task(store, tid)[0] == 'stranger': return
+    if lesson:
+        from . import playbooks
+        try: playbooks.take_lesson(store, tid, lesson, 'assistant')
+        except Exception as e: logger.warning(f'task {tid}: the lesson was not kept - {e}')
+    if check:
+        from . import checkback
+        try: checkback.set_check(store, tid, check.get('when'), check.get('what'), 'assistant')
+        except ValueError as e: store.add_comment(tid, 'assistant', 'agent', f'The check-back was not set: {e}')
+        except Exception as e: logger.warning(f'task {tid}: the check-back was not set - {e}')
+
+
 def is_dock(task: dict | None) -> bool:
     """The global guide is stored like a chat, but is not work on the owner's task list."""
     return str((task or {}).get('SourceRef') or '') == DOCK_TAG
@@ -707,7 +725,8 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
 SOCIAL_LINE = HUB_LINE
 # THE TURN IS THE JOB: nothing wakes a general agent once its answer is filed, so background work it would wait on comes back to
 # nobody - "I'm waiting for the walkthrough to finish, then I'll write the brief" ended a researcher's turn (the owner, 2026-10-21)
-FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: nothing wakes you again until they write. Do not start "
+FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: nothing wakes you again until they write, or a "
+               "check-back you set comes due (CHECK BACK LATER). Do not start "
                "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
                "it to finish\" - wait for it now, or do it now, then answer. If part of it cannot be done, say which part and why.")
 # ...and a turn that ended on that anyway is woken once to finish it (GeneralSession.wake): what the judge says it still waits on, said back
@@ -876,6 +895,20 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: ask your one question, then 
              "record after the write. Never assume a click, an upload or a form fill landed.\n"
              "DONE MEANS THE GOAL IS MET AND CHECKED, not boxes ticked. A part that is unmet, or that you could not check, is named in your "
              "summary - nothing_left is false then. You still never close the task: the owner does.")
+# PLAYBOOKS LEARN (the owner, 2026-11-05, from Hermes' skills that patch themselves): a turn that found its way the hard way leaves the next
+# agent the way. The model says whether there is a lesson - no word triggers it; the owner's yes on the playbook's card files it
+# (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
+LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after a dead end, was corrected by the owner, or had to find an '
+               'id, a name or a route the next agent would otherwise hunt for again, add "lesson": {"playbook": "<the slug under PLAYBOOKS it '
+               'belongs to, or null>", "text": "<one or two lines: what works, where it is, what to avoid>"} to your summary. A lesson, not a log: '
+               "no dates, no people's names, nothing secret. Leave it out when there is none.")
+# CHECK BACK LATER (the owner, 2026-11-05, from OpenClaw's cron): what only time settles is checked by the same agent when it is due
+# (checkback.py), never promised and forgotten - FINISH_LINE's "nothing wakes you" has this one exception, and it is the agent's to set
+CHECK_BACK_LINE = ('CHECK BACK LATER: when the job hangs on something only time settles - a payment that should clear, a reply expected by a '
+                   'date, a form that takes a day - set a check-back: add "check_back": {"when": "<tomorrow 9am | in 2 days | YYYY-MM-DD>", '
+                   '"what": "<what to verify>"} to your summary (mid-turn: the check_back tool or `taskuary --check-back WHEN "WHAT"`). You are '
+                   'woken on this task then with that note; check it and answer. One per task - a new one replaces it. Never for what the '
+                   'owner owes you: ask them.')
 # ...and AGENT.md AS THE OWNER'S COPY MAY STILL READ IT: an edited copy stops tracking its template (store.py), and older wording told every
 # worker to stay at the prompt for an answer, keep to the brief and run `taskuary --done` - a coding session's way, not this agent's
 GENERAL_OVER = ("WHERE AGENT.md READS OTHERWISE, FOR YOU: you never run `taskuary --done` or close the task; a question you ask does not "
@@ -1012,10 +1045,13 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         doc = ensure_profile_document(store, role)
         profile_rules = _cut(_brief.rules(store, doc, 10**9), DOC_CHARS)      # THE profile number (doclimits), cut out loud
         if profile_rules: system += f'\n\nPROFILE RULES ({doc.upper()}.md)\n{profile_rules}'
-    # the procedure triage selected for this job rides here exactly as it rides in a coding brief
-    # (playbooks.seed_block) - one task-brief structure for either worker kind (PW-206)
+    # THE PLAYBOOKS AS A MENU (the owner, 2026-11-05): every one's `when` and its file, read whole by the agent when it says one applies
+    # (playbooks.agent_menu). A stranger's task still gets only triage's match, flattened (playbooks.seed_block, PW-206): its session is never
+    # pointed at the owner's files - and a brain with no hands, which cannot open the file, is handed that one whole too (send_prompt)
     from . import playbooks as _pbk
-    pbk = _pbk.seed_block(task)
+    pbm = '' if dock or outsider else _pbk.agent_menu(task, store)
+    pbk = _pbk.seed_block(task) if outsider else ''
+    if pbm: system += f'\n\n{pbm}'
     if pbk: system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(pbk, 3_000)
     # A setup walkthrough's procedure is a shipped SKILL the worker reads and adapts, never dialogue
     # branching in here or a second assistant system prompt competing with this one (PW-190). It rides
@@ -1111,7 +1147,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     if not dock and task.get('SourceRef') not in ('connector:setup', SETUP_REF):
         system += (f'\n\n{STRANGER_GOAL_LINE if stranger else GOAL_LINE}' + ('' if stranger else f'\n\n{action_line(store)}')
-                   + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}')
+                   + f'\n\n{WORK_LINE}\n\n{selfclose.SUMMARY_LINE}' + ('' if stranger else f'\n\n{LESSON_LINE}\n\n{CHECK_BACK_LINE}'))
     if stranger and not dock: system = system + '\n\n' + origin.no_history_line(store, tid)     # closed on purpose, and said so
     md = store.checklist_markdown(tid, ids=True) if hasattr(store, 'checklist_markdown') else ''
     ours = lambda o: '' if stranger else o   # triage's title, summary and checklist about a stranger's mail are the stranger's words
@@ -1620,6 +1656,10 @@ class GeneralSession:
             # by the session itself where it has hands, else for it
             said, prior = history_brief(self.store, self.task_id, hands)
             if said: system = f'{system}\n\n{said}'
+            # ...and with no hands to open a playbook's file, the one triage matched rides whole (the menu still names the rest)
+            if not hands and 'PLAYBOOKS - ' in system:
+                from . import playbooks as _pbk
+                if pbk := _pbk.seed_block(self.store.get_task(self.task_id)): system += '\n\nPROCEDURE FOR THIS JOB\n' + _cut(pbk, 3_000)
             if prior: user = f'{prior}\n\n{user}'
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
@@ -1948,6 +1988,7 @@ class GeneralSession:
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
         if summ:
             take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
+            take_lesson_and_check(self.store, self.task_id, summ.pop('lesson', None), summ.pop('check_back', None))
             # ...and WHICH draft this turn left - its id, never its words: what goes to the sender lives in the draft alone (2026-11-04). Once a
             # newer entry comes, the turn is history and that draft stays in it read-only (the owner, 2026-11-05: "it's there but no longer
             # clickable. it was a draft that is part of the history of the chat")

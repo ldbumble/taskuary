@@ -898,10 +898,15 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: ask your one question, then 
 # PLAYBOOKS LEARN (the owner, 2026-11-05, from Hermes' skills that patch themselves): a turn that found its way the hard way leaves the next
 # agent the way. The model says whether there is a lesson - no word triggers it; the owner's yes on the playbook's card files it
 # (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
+# ...worth keeping, never a log (the owner, 2026-11-05: "it should be things that make sense like general rules about user, or things
+# learnt not just random clicking buttons"): it lands in LEARNED.md's Hypotheses, which keeps only what the evidence holds up
 LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after a dead end, was corrected by the owner, or had to find an '
                'id, a name or a route the next agent would otherwise hunt for again, add "lesson": {"playbook": "<the slug under PLAYBOOKS it '
-               'belongs to, or null>", "text": "<one or two lines: what works, where it is, what to avoid>"} to your summary. A lesson, not a log: '
-               "no dates, no people's names, nothing secret. Leave it out when there is none.")
+               'belongs to, or null>", "text": "<one or two lines: what works, where it is, what to avoid>"} to your summary. Only what would '
+               "change how the next job like this is done - a lasting fact (a vendor's id in the books, which portal a payroll ask goes "
+               "through), a rule about how the owner wants things, a route that works where the obvious one fails. Never a step-by-step of "
+               "what you clicked or ran, nothing true only today, no dates, no people's names, nothing secret. Most turns have none: leave it "
+               "out then.")
 # CHECK BACK LATER (the owner, 2026-11-05, from OpenClaw's cron): what only time settles is checked by the same agent when it is due
 # (checkback.py), never promised and forgotten - FINISH_LINE's "nothing wakes you" has this one exception, and it is the agent's to set
 CHECK_BACK_LINE = ('CHECK BACK LATER: when the job hangs on something only time settles - a payment that should clear, a reply expected by a '

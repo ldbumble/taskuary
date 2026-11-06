@@ -2916,6 +2916,11 @@ def continue_work(task_id: int, body: ContinueBody = None):
         outcomes.record(store, 'agent.continued', 'task', task_id, ACTOR, next_move=note or '', facts={'door': 'continue-work', 'kind': 'general'})
         return {'continued': True, 'taskId': task_id, 'kind': 'general'}
     note = with_images(note, imgs).strip()
+    # ...a coding session that IDLED OUT (acpcoding.idle_out) is not over: it comes back as the same run, and the note is its next prompt
+    from . import acpcoding, waitroom
+    if note and acpcoding.idled(task_id, store):
+        out = waitroom.add(store, task_id, note, ACTOR)
+        return {'continued': True, 'taskId': task_id, 'kind': 'coding', 'resumed': True, **out}
     row, _why = _resumable(task_id)
     # CONTINUE IS THE SAME CLI (the owner, 2026-09-30: "it should start as codex if i hit continue of course"): the one that made
     # the conversation, else the one that last worked the task - never whatever the default happens to be today

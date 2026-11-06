@@ -2017,7 +2017,8 @@ def live_agent(store, tid) -> str:
     from . import general, terminal
     # ...and one that IDLED OUT is still the task's agent (general.idle_out): what comes in is its next turn, and starts it again (_pass_general)
     if tid in general.OPENING or general.session_for(tid) or general.idled(tid, store): return 'general'
-    if tid in CODING_OPENING or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
+    from . import acpcoding                    # ...and a coding session over ACP that idled out, the same (acpcoding.wake)
+    if tid in CODING_OPENING or acpcoding.idled(tid, store) or any(getattr(x, 'alive', False) and x.task_id == tid for x in list(terminal.SESSIONS.values())): return 'coding'
     return 'run' if any(x['Status'] == 'running' for x in store.list_runs(tid)) else ''
 
 

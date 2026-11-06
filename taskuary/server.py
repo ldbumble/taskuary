@@ -10913,6 +10913,13 @@ def close_terminal(sid: str):
     if not hub_term.close(sid): raise HTTPException(404, 'terminal not found')
     return {'ok': True}
 
+@app.post('/api/tasks/{task_id}/agent/cancel')
+def cancel_task_agent(task_id: int):
+    """Stop THIS TURN of a coding session over ACP (acpcoding.py): session/cancel - the conversation stays, and what is typed next carries
+    on. A pty has no such stop (its Esc is the terminal's); the session itself ends at /agent/stop."""
+    live = hub_term.session_for(task_id)
+    return {'stopped': bool(live and hub_term.is_acp(live) and live.cancel())}
+
 @app.post('/api/tasks/{task_id}/agent/stop')
 def stop_task_agent(task_id: int):
     """End only the current worker. The task and reply are separate state machines."""

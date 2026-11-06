@@ -195,7 +195,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/walk/(start|next|back|open|leave)$', "the walk's moves are the owner's presses, as /api/concierge/next was - a leave closes the row"),
     (r'POST', r'^/api/assistant/(dock(/new)?|doorways(/listens)?|ideas/[^/]+/[^/]+)$', "the assistant's dock, doorways and ideas"),
     (r'POST|PATCH', r'^/api/tasks(/purge-dropped|/\d+)?$', 'making, editing and purging tasks'),
-    (r'POST|PUT|PATCH', r'^/api/tasks/\d+/(agent/stop|assistant/(browser|cancel|messages|session|stream)|checklist(/\d+)?'
+    (r'POST|PUT|PATCH', r'^/api/tasks/\d+/(agent/(stop|cancel)|assistant/(browser|cancel|messages|session|stream)|checklist(/\d+)?'
                         r'|batch/\d+|batch-combine|code|comments|continue|continue-work|discussion|dispatch|merge|not-a-task|not-coding|pause|remind|repo'
                         r'|split|wrap|answer|read-ask|steps/\w+/start)$', 'steering a task - and a comment here is written as the owner'),
     (r'POST|DELETE', r'^/api/tasks/\d+/waitroom(/bulk|/image|/\d+)?$', 'the waiting room is what the owner tells the agent'),

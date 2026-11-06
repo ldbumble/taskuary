@@ -492,6 +492,10 @@ def isolated_runtime_boundaries():
     except OSError: pass
 
 
+def pytest_configure(config):
+    config.addinivalue_line('markers', 'acp: the test drives the ACP road itself, so it keeps clis.ADAPTERS (no_real_acp_adapters)')
+
+
 @pytest.fixture(autouse=True)
 def no_real_acp_adapters(request, monkeypatch):
     """The ACP road (agents._acp_road) launches claude and codex through npm adapters (clis.ADAPTERS): a test driving a fake `claude`

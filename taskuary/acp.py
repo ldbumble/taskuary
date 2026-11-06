@@ -19,8 +19,8 @@ Answering happens on the pump thread on purpose: the caller is blocked in `reque
 the turn to end, so anything that routed the answer back through it would deadlock on itself.
 
 Scope: every headless CLI run of the general agent, on a CLI that speaks ACP natively or through an
-adapter (claude, codex: clis.ADAPTERS). Coding sessions keep the real CLI in a real pty for now - moving
-them is step 2. See docs/acp-transport.md.
+adapter (claude, codex: clis.ADAPTERS), and a coding session on claude or codex (acpcoding.py - the pty
+stays its fallback). See docs/acp-transport.md.
 """
 import json, os, queue, subprocess, threading, time
 from loguru import logger

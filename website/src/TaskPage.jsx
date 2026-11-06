@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { canSend, cannotStart, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress,
-  Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography, useMediaQuery,
+  Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, Popover, TextField, Tooltip, Typography, useMediaQuery,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -110,6 +110,9 @@ import LandingCard from "./LandingCard.jsx";
 import CodingChat from "./CodingChat.jsx";
 import { readingOf } from "./threadReading.js";
 import AiUsed from "./AiUsed.jsx";
+import AgentChannels from "./AgentChannels.jsx";
+import TokenOutlinedIcon from "@mui/icons-material/TokenOutlined";
+import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import MoreDrafts from "./MoreDrafts.jsx";
 import { draftAnswers, otherPendingReplies } from "./pendingDrafts.js";
 import { replyRounds, roundReviews } from "./replyRounds.js";
@@ -600,6 +603,18 @@ function MovesLine({ items, tucked, sec, name }) {
         onClick={(e) => { const a = at; setAt(null); press(v.id, e, a, v.of); }}>{v.label}</MenuItem>)}</Menu></Box>;
 }
 const isDoneMove = (v) => v.id === "done" || /:done$/.test(String(v.id));
+// A QUIET CORNER BUTTON IN THE TASK'S HEADER (the owner, 2026-11-06: "AI used" and "Talk to this agent from…" must not sit at the bottom of the
+// chat): an icon with its tooltip beside Expand and the X, its content in a popover under it
+function HeadPop({ id, icon, title, children }) {
+  const [at, setAt] = useState(null);
+  return <>
+    <Tooltip title={title}><IconButton size="small" data-tq-head-pop={id} aria-label={title} aria-haspopup="dialog" aria-expanded={!!at}
+      onClick={(e) => setAt(e.currentTarget)} sx={{ color: "#41525f", flexShrink: 0 }}>{icon}</IconButton></Tooltip>
+    <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      transformOrigin={{ vertical: "top", horizontal: "right" }} slotProps={{ paper: { "data-tq-head-pop-body": id, sx: { p: 1.5, width: 380, maxWidth: "92vw", maxHeight: "60vh", overflowY: "auto" } } }}>
+      {at && children}</Popover>
+  </>;
+}
 // ...an icon's own words, there for a reader and a test, never drawn
 const HIDDEN_WORDS = { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
 const STRIP_ARROW = { appearance: "none", font: "inherit", cursor: "pointer", width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0,
@@ -2953,6 +2968,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <CheckBackChip task={t} onChanged={() => { loadDetail(t.TaskId); onChanged?.(); }} />
                   <StatusPill status={status} agent={agentName(t)} note={interruptedTask ? INTERRUPTED : ""}
                     logo={<ChannelIcon channel={rail?.channel || t.Source || "email"} sx={{ fontSize: 13 }} />} />
+                  {/* ...what AI the task used, and - a coding task in Developer mode - the chats its agent can be talked to from: quiet corner
+                      buttons, each its popover (the owner, 2026-11-06: never at the bottom of the chat) */}
+                  <HeadPop id="ai-used" title="AI used" icon={<TokenOutlinedIcon sx={{ fontSize: 16 }} />}><AiUsed taskId={t.TaskId} pop /></HeadPop>
+                  {canCode && t.Kind === "coding" && <HeadPop id="agent-channels" title="Talk to this agent from…" icon={<ForumOutlinedIcon sx={{ fontSize: 16 }} />}>
+                    <AgentChannels taskId={t.TaskId} pop /></HeadPop>}
                   {/* ON THE ASSISTANT CANVAS Expand gives the view the whole canvas - the pane keeps its size either way.
                       Next is NOT up here: it sits under the view, where the walk has always put it (CanvasItem) */}
                   {onExpand && (
@@ -3437,7 +3457,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         came={{ label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : "Came from",
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null }}
                         closedLine={closedSaid}
-                        tail={<AiUsed taskId={t.TaskId} />} onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
+                        onChanged={() => { findTerm(selected); loadDetail(selected); onChanged?.(); }} />
                       : <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
@@ -3446,8 +3466,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         opening={agentOpening}
                         came={home ? { label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from",
                           title: "Where this came from - opens it", onOpen: twoUp ? () => openSection("from") : null } : null}
-                        closedLine={closedSaid}
-                        tail={<AiUsed taskId={t.TaskId} />} />}
+                        closedLine={closedSaid} />}
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (

@@ -19,7 +19,7 @@ import WriteIcon from "@mui/icons-material/EditNoteRounded";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { chatRows, workCount } from "./codingChat.js";
-import AgentChannels, { PermissionCards } from "./AgentChannels.jsx";
+import { PermissionCards } from "./AgentChannels.jsx";
 import { teammateLine } from "./agentChannels.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
 import { Hunk } from "./DiffView.jsx";
@@ -88,7 +88,7 @@ const Turn = ({ r }) => (
     </div>
   </div>);
 
-export default function CodingChat({ task, term = null, next = null, landing = null, closedLine = "", came = null, tail = null, reading = null, onChanged }) {
+export default function CodingChat({ task, term = null, next = null, landing = null, closedLine = "", came = null, reading = null, onChanged }) {
   const tid = task.TaskId;
   const [data, setData] = useState(null), [text, setText] = useState(""), [held, setHeld] = useState([]), [err, setErr] = useState(""),
     [termPick, setTermPick] = useState(null), [sending, setSending] = useState(false);
@@ -141,8 +141,6 @@ export default function CodingChat({ task, term = null, next = null, landing = n
             <Box component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1, mb: 0.25 }}>Suggested reply</Box>{next}</Box>}
           {landing}
           {closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
-          {tail}
-          <AgentChannels taskId={tid} />
         </div>
         {termShown && <Box data-tq-chat-terminal="" sx={{ flex: "0 0 46%", minHeight: 220, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
           <TerminalPane sid={live.sid} height="100%" onExit={load} /></Box>}

@@ -238,19 +238,36 @@ def view_one(r: dict) -> dict:
 
 
 def view(store, task_id=None) -> dict:
-    "What the setup card draws: the bindings (this task's, or all), the connections it can use and the chats Taskuary already knows."
+    """What the setup card draws: the bindings (this task's, or all) and the connections it can use. The chats themselves come from the
+    picker's own read (GET /api/chats/{kind}?agent=1 - `choices`), the list the Assistant chat is picked from."""
     bs = [view_one(r) for r in store.agent_channels() if task_id is None or r.get('TaskId') == int(task_id)]
     kinds = []
     for k in KINDS:
         c = _connector(store, k)
         if not c: continue
-        known = [{'chat': s['Address'], 'name': str(s.get('Owner') or s.get('Name') or '').replace('discovered: ', '') or s['Address']}
-                 for s in store.list_sources(active_only=False) if s.get('Channel') == k and s.get('Address') and s['Address'] not in ('*',)]
-        kinds.append({'kind': k, 'label': LABEL[k], 'connector': c['ConnectorId'], 'chats': known[:40],
+        kinds.append({'kind': k, 'label': LABEL[k], 'connector': c['ConnectorId'],
                       'ownerId': default_owner_id(store, k, store.get_connector(c['ConnectorId'], with_secret=True)),
                       'needsOwnerId': k in ('telegram', 'slack')})
     return {'channels': bs, 'kinds': kinds, 'owner': store.owner().get('owner') or 'the owner',
             'repo': cwd_of(store, task_id) if task_id else ''}
+
+
+ASSISTANT_CHAT = 'your Assistant chat - it already reaches the coding agents'
+
+
+def choices(store, kind: str) -> list:
+    """The chat picker's rows for a new binding (chatpick.chats), each with `blocked`: why it cannot be bound, else ''. The same two
+    refusals `bind` makes, said before the press instead of after it: the owner's Assistant chat, and a chat already bound."""
+    from . import chatpick, remote_assistant
+    c = chatpick.connector(store, kind)
+    if not c: return []
+    own = str(remote_assistant.chat_of(c) or '') if kind in ('whatsapp', 'telegram') else ''
+    held = {r['Chat']: r for r in store.agent_channels() if r['Kind'] == kind}
+    def why(to):
+        if own and to == own: return ASSISTANT_CHAT
+        if not (b := held.get(to)): return ''
+        return f"already talks to {task_ref(b['TaskId'])}'s agent" if b.get('TaskId') else 'already talks to the coding agents'
+    return [{**o, 'blocked': why(o['to'])} for o in chatpick.chats(store, kind, c)]
 
 
 # ── in ────────────────────────────────────────────────────────────────────────────────────────────────────────────────

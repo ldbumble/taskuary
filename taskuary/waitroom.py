@@ -26,6 +26,7 @@ MAX_BATCH = 6000          # chars typed in one go; a TUI paste past this is aski
 # A NOTE THE ASSISTANT PASSED ON keeps the owner's own words and what the Assistant added, apart (general.relayed): one row, so the drip
 # never splits them across two stops
 SEP = '\x1f'
+TEAMMATE = 'teammate'           # CreatedBy of a teammate's line from a bound chat: never the owner's, never an answer
 def parts(note) -> tuple:
     "(the owner's words, what the Assistant added - '' when nothing)"
     o, _, extra = str(note or '').partition(SEP)
@@ -42,7 +43,9 @@ def batch(notes: list, after_restart: bool = False, remaining: int = 0, words: b
     comes when it stops again, so it does not go looking for it. `words=False`: Taskuary's part alone, the notes left out."""
     n = len(notes)
     # ...a message relayed from someone else (terminal.say_to_task, CreatedBy 'router') is not the owner's note: it names its own sender
-    who = 'the owner' if all((x.get('CreatedBy') or 'owner') != 'router' for x in notes) else 'Taskuary'
+    # ...and a teammate's words on a bound chat (agentchannels.py) are never "the owner's" - each one names its writer and its guard
+    by = {x.get('CreatedBy') or 'owner' for x in notes}
+    who = 'Taskuary' if 'router' in by else ('a teammate' if by == {TEAMMATE} else 'the owner and a teammate') if TEAMMATE in by else 'the owner'
     head = (f'{who[0].upper() + who[1:]} left {n} note{"s" if n > 1 else ""} for you after the last session ended. Take them in order:'
             if after_restart else
             f'While you were working, {who} queued {n} note{"s" if n > 1 else ""} for you. Take them in order, '
@@ -66,7 +69,7 @@ def to_general(store, tid, session, notes: list, after_restart: bool = False, re
     from . import general
     store.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, batch(notes, after_restart, remaining, words=False))
     for x in notes:
-        store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') != 'router' else general.BRIEF_ACTOR, general.USER_TYPE,
+        store.add_comment(tid, 'owner' if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE) else general.BRIEF_ACTOR, general.USER_TYPE,
                           parts(x.get('Note'))[0])
     threading.Thread(target=session.send_prompt, args=(batch(notes, after_restart, remaining),), kwargs={'kept': True, 'brief': True},
                      daemon=True).start()
@@ -193,6 +196,10 @@ def deliver(store, tid: int) -> dict:
     # went in mid-sentence - one garbled prompt, their words split around it. It keeps its place; the next tick looks again.
     if st in ('asking', 'parked') and term.owner_drafting(t):
         return {'delivered': 0, 'state': 'owner_typing', 'left': len(pending)}
+    # A TEAMMATE NEVER ANSWERS WHAT THE AGENT ASKED THE OWNER (agentchannels.py): their line waits for its next plain stop, and the owner's
+    # own answer - the card, the box, their reply on the channel - is what lets the question go
+    if st == 'asking' and any((x.get('CreatedBy') or '') == TEAMMATE for x in notes):
+        return {'delivered': 0, 'state': 'held_teammate', 'left': len(pending)}
     if st == 'asking':
         # An agent parked on a QUESTION is asking the OWNER, so the words they write next are the
         # ANSWER to it: bound to its open request where the worker reported one, typed in plainly

@@ -808,6 +808,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # a message seen twice is dropped on the first line - before any policy pass, before any AI
     if fresh and store.message_exists(msg.get('external_id') or ''):
         return {'status': 'duplicate', 'task_id': None, 'message_id': None}
+    # A CHAT BOUND TO AN AGENT is never the inbox's (agentchannels.py): its pollers route it first, and this catches any other road
+    from . import agentchannels
+    if fresh and agentchannels.swallows(store, msg): return {'status': 'agent_channel', 'task_id': None, 'message_id': None}
     if fresh and file_only:
         mid = store.add_message({**_fields(msg, None), 'Status': 'feed'})
         # a voice note nothing could transcribe is filed too - and the reason says so, not "a feed"

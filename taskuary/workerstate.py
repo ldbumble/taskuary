@@ -116,6 +116,11 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
             from . import batch
             batch.turn_ended(store, tid)
         except Exception as e: logger.debug(f'task {tid}: the turn end was not passed on - {e}')
+    if kind == 'turn_end' or kind in REQUESTS:    # ...and its answer, or what it waits on, to the chats bound to it (agentchannels.py)
+        try:
+            from . import agentchannels
+            agentchannels.on_event(store, tid, kind, text, source)
+        except Exception as e: logger.debug(f'task {tid}: not said on its channel - {e}')
     if kind in REQUESTS:                          # the Advisor on the event (advisor.py): an agent asked
         try:
             from . import advisor

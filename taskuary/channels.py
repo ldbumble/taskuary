@@ -1045,6 +1045,8 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
     yesterday. The router only ever matched OPEN tasks, so both of those replies were dropped on
     the floor - the row kept saying nothing had happened, forever (owner, 2026-09-02)."""
     if store.message_exists(msg['external_id']): return 0
+    from . import agentchannels
+    if agentchannels.swallows(store, msg): return 0          # a chat bound to an agent: the owner's line there was the agent's (heard)
     conv = msg.get('conversation_id')
     on = [s['task_id'] for s in store.snapshots() if conv and conv in s['conversation_ids']]
     # TWO OPEN TASKS IN ONE ROOM: the first snapshot was arbitrary, and a group's answer to a new voice note was filed on the
@@ -1381,6 +1383,13 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
             continue
         if m.get('messageType') != 'message' or not user.get('id') or not body: continue
         cid = m.get('chatId') or ''
+        # A CHAT BOUND TO AN AGENT (agentchannels.py): its members' lines go to the agent, and nobody's become work
+        from . import agentchannels
+        if cid and agentchannels.bound(store, 'teams', cid):
+            addr_ = _graph_user(tok, user['id'], users)[1]
+            agentchannels.heard(store, 'teams', cid, [user['id'], addr_], body, f'teams:{cid}:{m["id"]}', from_me=user['id'] == me,
+                                name=user.get('displayName') or '')
+            continue
         topic, kind = _chat_meta(tok, cid, chats) if cid else ('', 'chat')
         name, addr = _graph_user(tok, user['id'], users)
         name = user.get('displayName') or name
@@ -1918,6 +1927,8 @@ def _poll_jobs(store, only=None):
         # tool-only card, a Sync that pulled nothing, and no error anywhere).
         from . import remote_assistant
         phone_guide = remote_assistant.polls(store, c)      # the card carries the Assistant chat: read it regardless
+        from . import agentchannels
+        phone_guide = phone_guide or agentchannels.polls(store, c)     # ...and so does a chat bound to an agent
         if (not roles & {'trigger', 'feed'} and not phone_guide
                 and not (c['Type'] == 'github' and _gh_explicit(store, c['ConnectorId']))
                 and not (c['Type'] in CLOUD and _cloud_explicit(store, CH2SRC[c['Type']]))): continue
@@ -1968,8 +1979,13 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
             for s in mine: store.touch_source(s['SourceId'])
             store.touch_connector(c['ConnectorId'])
             return n
+        if c['Type'] == 'slack':                    # a Slack channel bound to an agent is read on its own cursor, never triaged
+            from . import agentchannels
+            try: agentchannels.poll_slack(store, full, tok)
+            except Exception as e: logger.warning(f'slack agent channels not read: {e}')
         for s in store.list_sources():
             if s['Channel'] != CH2SRC[c['Type']]: continue
+            if c['Type'] == 'slack' and agentchannels.bound(store, 'slack', s['Address']): continue
             # a source belongs to ONE connector: outlook and an IMAP mailbox are both
             # channel 'email', and without this the Graph poller tried the Gmail address.
             # (Orphans are adopted at startup, so ownership is always present now.)

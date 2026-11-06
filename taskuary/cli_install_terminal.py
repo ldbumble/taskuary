@@ -60,10 +60,15 @@ class ShellRunner:
 
 def start(store, name, verb='install', actor='owner'):
     from . import terminal
-    if verb not in ('install', 'update'): raise ValueError('Unknown installer action')
-    roads = cliinstall.plan(name) if verb == 'install' else cliinstall.update_plan(name)
-    if not roads: raise ValueError(cliinstall.why_not(name) or f'No {verb} available for {name}')
-    if verb == 'update' and not cliinstall.find(name): raise ValueError(f'{name} is not installed yet')
+    if verb not in ('install', 'update', 'connector'): raise ValueError('Unknown installer action')
+    if verb == 'connector':                                  # the card's own press: the agent connector alone (acpadapter)
+        from . import acpadapter
+        if not acpadapter.row(name): raise ValueError(f'{name} needs no agent connector')
+        if not cliinstall.npm(): raise ValueError('npm is not on this machine, so the agent connector cannot be installed - agents still work without it')
+    else:
+        roads = cliinstall.plan(name) if verb == 'install' else cliinstall.update_plan(name)
+        if not roads: raise ValueError(cliinstall.why_not(name) or f'No {verb} available for {name}')
+    if verb != 'install' and not cliinstall.find(name): raise ValueError(f'{name} is not installed yet')
     with cliinstall._LOCK:
         current = cliinstall.state()
         if current['phase'] == 'installing':
@@ -80,8 +85,9 @@ def start(store, name, verb='install', actor='owner'):
                     '-NoExit', '-Command', 'Remove-Module PSReadLine -ErrorAction SilentlyContinue']
         else: argv = ['/bin/sh', '-i']
         from .clisetup import open_task               # a second press after a dead pane is the same job, not a new task
-        tid = open_task(store, f'cli-install:{name}', f'{verb.title()} {name}') or store.create_task(
-            {'Title': f'{verb.title()} {name}', 'Kind': 'setup', 'Status': 'in_progress',
+        title = f'Install the agent connector for {name}' if verb == 'connector' else f'{verb.title()} {name}'
+        tid = open_task(store, f'cli-install:{name}', title) or store.create_task(
+            {'Title': title, 'Kind': 'setup', 'Status': 'in_progress',
              'Tags': f'cli-install:{name}', 'Summary': 'CLI installer running in an interactive terminal.'}, actor)
         try:
             term = terminal.Term(argv, str(config.home()), f'{verb} {name}', tid, None, 32, 110, store)
@@ -91,16 +97,19 @@ def start(store, name, verb='install', actor='owner'):
         term.keep_transcript = False  # vendor setup may ask the owner to paste a token
         terminal.SESSIONS[term.sid] = term
         runner = ShellRunner(term, folder, os.name == 'nt')
-        cliinstall._set('installing', name, f'{verb.title()} commands are running in the terminal below', verb=verb)
+        cliinstall._set('installing', name, ('The agent connector is installing' if verb == 'connector' else f'{verb.title()} commands are running')
+                        + ' in the terminal below', verb=verb)
         cliinstall._STATE.update(sid=term.sid, taskId=tid)
         store.audit('terminal', tid, 'cli_' + verb, actor, detail={'name': name, 'sid': term.sid})
         def work():
             try:
-                result = (cliinstall.install if verb == 'install' else cliinstall.update)(name, runner=runner)
+                result = {'install': cliinstall.install, 'update': cliinstall.update, 'connector': cliinstall.connector}[verb](name, runner=runner)
             except Exception as e:
                 cliinstall._set('failed', name, str(e), verb=verb)
                 return
-            try: runner.message(f'{name}: {result["phase"]}. ' + ('See the output above for the error.' if result['phase'] == 'failed' else result.get('detail', '')))
+            said = ('' if verb == 'connector'               # it said its own words as it went
+                    else 'See the output above for the error.' if result['phase'] == 'failed' else result.get('detail', ''))
+            try: runner.message(f'{name}: {result["phase"]}. {said}')
             except RuntimeError: pass  # closing an already-finished pane does not undo installation
         threading.Thread(target=work, daemon=True, name=f'cli-{verb}-terminal').start()
         return cliinstall.state()

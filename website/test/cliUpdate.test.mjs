@@ -30,7 +30,7 @@ test("the button is drawn only over a road that exists", () => {
 
 test("an installed CLI on the AI CLI agents page can be updated in place", () => {
   const panel = read("AgentsPanel.jsx");
-  assert.match(panel, /import \{ useCliInstall, InstallLine, UpdateLine \}/);
+  assert.match(panel, /import \{ useCliInstall, InstallLine, UpdateLine(, ConnectorLine)? \}/);
   // the hook's shape is the page's business - assert only that it takes `update` out and uses it,
   // or this breaks every time the panel gains an option it needs from the same hook
   assert.match(panel, /const \{[^}]*\bupdate\b[^}]*\} = useCliInstall\(/);

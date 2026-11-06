@@ -2404,7 +2404,9 @@ THIS_APP = ('USING OR SETTING TASKUARY ITSELF - a setting, a connection, its own
             'job like any other. When a part of Taskuary is NOT WORKING - a connection, the WhatsApp or Telegram bridge, a sync - look into '
             'it here, never as a task or an agent: CALL app.health with its name, then app.repair when that names a simple repair, and '
             'say in a sentence or two what you found or did. One chat not coming in ("the team group is not showing up") is app.health '
-            'with `chat`: its name as the owner said it - that reads whether it is switched on and where its messages went; say THAT cause.')
+            'with `chat`: its name as the owner said it - that reads whether it is switched on and where its messages went; say THAT cause. '
+            'An agent SLOW TO START its first turn on Claude Code or Codex is app.health with that CLI\'s name (claude, codex): it reads '
+            'whether its agent connector is installed, and the card that installs it.')
 
 def _screens(link: bool = True) -> str:
     """The pages the Assistant brings up, each by what it holds (words.json `does`) - with its link on the desk, by name alone on a phone."""

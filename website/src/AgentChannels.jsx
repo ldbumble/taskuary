@@ -27,7 +27,7 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
   return items.map((p) => (
     <Box key={p.id} data-tq-permission={p.id} sx={card} role="group" aria-label="The agent asks permission">
       <Head>THE AGENT ASKS</Head>
-      <Typography variant="body2" sx={{ color: INK }}>It {p.line.replace(/`([^`]+)`/g, "“$1”")}.</Typography>
+      <Typography variant="body2" sx={{ color: INK }}>It {p.line.replace(/\x60([^\x60]+)\x60/g, "“$1”")}.</Typography>
       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 0.8 }}>
         {p.options.map((o) => <Button key={o.kind} size="small" disableElevation disabled={!!busy} data-tq-permission-answer={o.kind}
           variant={o.kind === "allow_once" ? "contained" : "outlined"}

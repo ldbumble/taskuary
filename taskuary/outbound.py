@@ -217,7 +217,7 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
     return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': box, 'threaded': bool(reply_to_graph_id)}
 
 
-def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
+def send_teams(store, chat_id: str, body: str, connector_id=None, want_id: bool = False) -> dict:
     """Post into a chat. App-only posting needs ChatMessage.Send on the app registration,
     which reading does NOT include - say so plainly rather than failing with a 403 blob."""
     # the card that owns the chat, and only a person's sign-in: an app's token is refused every time (NO_SENDER)
@@ -246,7 +246,10 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
                            + (f' Graph said: "{said[:200]}"' if said else ''))
     if r.status_code >= 300:
         raise RuntimeError(f'graph chat post failed ({r.status_code}): {r.text[:300]}')
-    return {'channel': 'teams', 'chat': chat_id}
+    if not want_id: return {'channel': 'teams', 'chat': chat_id}
+    try: mid = (r.json() or {}).get('id')            # the post's own id: a bound chat reads it back as the owner's line (agentchannels)
+    except ValueError: mid = None
+    return {'channel': 'teams', 'chat': chat_id, 'id': mid}
 
 
 def _user_id(tok: str, who: str) -> str:

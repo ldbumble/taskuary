@@ -141,6 +141,10 @@ def propose(store, tid: int, how: str, why: str = '', actor: str = 'agent') -> d
     _save(store, tid, r)
     store.add_comment(tid, actor, 'agent', f"Proposes to land {s['branch']}: {HOW[how]}" + (f" - {r['proposal']['why']}" if r['proposal']['why'] else '') + '.')
     store.audit('task', tid, 'land_proposed', actor, detail={'how': how})
+    try:                                          # ...and asked on a chat bound to the task (agentchannels.py): answered there by the owner alone
+        from . import agentchannels
+        agentchannels.landing_proposed(store, tid)
+    except Exception as e: logger.debug(f'{task_ref(tid)}: the landing question was not put on its channel - {e}')
     return {'ok': True, 'says': f"The owner sees the landing question with {HOW[how]} marked - nothing lands until they answer it."}
 
 

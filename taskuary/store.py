@@ -514,6 +514,16 @@ CREATE INDEX IF NOT EXISTS idx_boardnote_cwd ON boardnote(Cwd, NoteId);
 CREATE TABLE IF NOT EXISTS peernote (PeerNoteId INTEGER PRIMARY KEY, FromTask INTEGER, ToTask INTEGER, Scope TEXT, Repo TEXT,
   Body TEXT, CreatedAt TEXT, ReadAt TEXT);
 CREATE INDEX IF NOT EXISTS idx_peernote_to ON peernote(ToTask, ReadAt);
+-- AGENT CHANNELS (agentchannels.py): one chat - WhatsApp, Telegram, Slack, Teams - bound to one coding agent (TaskId) or to the coding
+-- agents at large (TaskId NULL, the owner alone), its members named by the owner; StateJson holds the question up there and the read cursor.
+-- Each message in or out is a row of agentchannel_msg, keyed by its provider id, so a re-read never routes a line twice.
+CREATE TABLE IF NOT EXISTS agentchannel (ChannelId INTEGER PRIMARY KEY, Kind TEXT, Chat TEXT, ConnectorId INTEGER, TaskId INTEGER,
+  Repo TEXT, MembersJson TEXT, StateJson TEXT, CreatedAt TEXT, UNIQUE(Kind, Chat));
+CREATE TABLE IF NOT EXISTS agentchannel_msg (Id INTEGER PRIMARY KEY, ChannelId INTEGER, ExtId TEXT, Dir TEXT, Who TEXT, Role TEXT,
+  TaskId INTEGER, Text TEXT, At TEXT, UNIQUE(ChannelId, ExtId));
+-- ...and the owner's "always" answers to an agent's permission requests (permissions.py), per task and tool pattern
+CREATE TABLE IF NOT EXISTS permrule (RuleId INTEGER PRIMARY KEY, TaskId INTEGER, Pattern TEXT, Answer TEXT, CreatedAt TEXT,
+  UNIQUE(TaskId, Pattern));
 CREATE TABLE IF NOT EXISTS learned_history (Id INTEGER PRIMARY KEY, Key TEXT, Text TEXT, Status TEXT, Score INTEGER,
   Ev TEXT, Action TEXT, Actor TEXT, At TEXT);
 -- ...and each line's standing (learnedlines.py, phase C 2026-10-23): who reads it, watching / in_use / wrong / forgotten, the owner's
@@ -5699,6 +5709,31 @@ class SQLiteStore:
         return len(ids)
     def tasks_with_peer_notes(self) -> list:
         return [r['ToTask'] for r in self._rows('SELECT DISTINCT ToTask FROM peernote WHERE ReadAt IS NULL')]
+    # ── agent channels (agentchannels.py) and the owner's standing permission answers (permissions.py) ──
+    def agent_channels(self) -> list: return self._rows('SELECT * FROM agentchannel ORDER BY ChannelId')
+    def agent_channel(self, cid: int): return self._one('SELECT * FROM agentchannel WHERE ChannelId=?', (int(cid),))
+    def add_agent_channel(self, f: dict) -> int:
+        return self._insert('agentchannel', {**f, 'CreatedAt': _now()}, ('Kind', 'Chat', 'ConnectorId', 'TaskId', 'Repo', 'MembersJson', 'StateJson', 'CreatedAt'))
+    def set_agent_channel(self, cid: int, **f):
+        ok = [k for k in f if k in ('MembersJson', 'StateJson', 'Repo', 'TaskId')]
+        if ok: self._exec(f"UPDATE agentchannel SET {', '.join(k + '=?' for k in ok)} WHERE ChannelId=?", [f[k] for k in ok] + [int(cid)])
+    def delete_agent_channel(self, cid: int):
+        self._exec('DELETE FROM agentchannel WHERE ChannelId=?', (int(cid),))
+    def agent_channel_log(self, cid: int, ext: str, dir_: str, who: str = '', role: str = '', tid=None, text: str = '') -> bool:
+        "One line in or out; False when that provider id was already kept (a re-read, or our own post read back)."
+        with self.lock, self._undone():
+            cur = self.cx.execute('INSERT OR IGNORE INTO agentchannel_msg (ChannelId, ExtId, Dir, Who, Role, TaskId, Text, At) VALUES (?,?,?,?,?,?,?,?)',
+                                  (int(cid), str(ext), dir_, who, role, tid, text, _now()))
+            self.cx.commit(); self._writes += 1
+            return cur.rowcount > 0
+    def agent_channel_msgs(self, cid: int, n: int = 50) -> list:
+        return self._rows('SELECT * FROM agentchannel_msg WHERE ChannelId=? ORDER BY Id DESC LIMIT ?', (int(cid), int(n)))[::-1]
+    def perm_rule(self, tid: int, pattern: str):
+        r = self._one('SELECT Answer FROM permrule WHERE TaskId=? AND Pattern=?', (int(tid), str(pattern)))
+        return r['Answer'] if r else None
+    def set_perm_rule(self, tid: int, pattern: str, answer: str):
+        self._exec('INSERT OR REPLACE INTO permrule (TaskId, Pattern, Answer, CreatedAt) VALUES (?,?,?,?)', (int(tid), str(pattern), answer, _now()))
+    def perm_rules(self, tid: int) -> list: return self._rows('SELECT * FROM permrule WHERE TaskId=? ORDER BY RuleId', (int(tid),))
 
     def list_sources(self, active_only=True):
         return self._rows('SELECT * FROM source' + (' WHERE Active=1' if active_only else ''))

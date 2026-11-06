@@ -10125,10 +10125,11 @@ def doorway_forever():
     _walk_settled()                 # the phone IS the walk: it must not answer from yesterday's
     while True:
         try:
-            from . import remote_assistant
+            from . import agentchannels, remote_assistant
             types = []
             for c in store.list_connectors():
-                if c.get('Active') and c.get('Type') not in types and remote_assistant.polls(store, c):
+                if c.get('Active') and c.get('Type') not in types and (remote_assistant.polls(store, c)
+                        or c.get('Type') in ('whatsapp', 'telegram') and agentchannels.polls(store, c)):
                     types.append(c['Type'])
             if types: _poll_on_quick_clock(types, timer=False, quiet=True)     # every tick, whatever the chat clock says
         except Exception as e:

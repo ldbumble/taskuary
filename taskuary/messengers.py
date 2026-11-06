@@ -135,6 +135,11 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
                 and remote_assistant.enabled(store, 'telegram', cid, c)):
             m, heard = {**m, 'text': _tg_hear(store, c, cid, v, m.get('message_id'))}, True
             if not m['text']: continue
+        # A CHAT BOUND TO AN AGENT (agentchannels.py): a listed member's words go to the agent, anyone else's nowhere - never work
+        from . import agentchannels
+        if agentchannels.heard(store, 'telegram', cid, [str(frm.get('id') or '')], m.get('text') or m.get('caption') or '',
+                               f"telegram:{cid}:{m.get('message_id')}", name=' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x)):
+            continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
@@ -532,6 +537,8 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     # Control chats do not have to be inbound sources. Notification replies and Assistant
     # questions are different opt-ins, but both must reach the bridge's pre-decryption gate.
     bridge_want = want | ({notify_chat} if notify_chat else set()) | ({assistant_chat} if assistant_chat else set())
+    from . import agentchannels
+    bridge_want |= set(agentchannels.chats(store, 'whatsapp'))          # ...and a chat bound to an agent
     # Filtering here alone was too late: Baileys had already decrypted and downloaded media from
     # every chat. Give the same policy to its pre-decryption hook before asking for messages.
     # Sent when the list CHANGES, not on every read: the doorway reads once a second, and a /filter
@@ -591,6 +598,11 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             text, heard = _hear(store, c, jid, m), True
             if not text:
                 took.append(m.get('id')); continue
+        # A CHAT BOUND TO AN AGENT (agentchannels.py): the owner's (fromMe) and listed teammates' lines go to the agent, nobody's are work
+        if agentchannels.bound(store, 'whatsapp', jid):
+            if text: agentchannels.heard(store, 'whatsapp', jid, [m.get('sender') or jid, _wa_alias(m)], text, f"whatsapp:{jid}:{m.get('id')}",
+                                         from_me=bool(m.get('fromMe')), name=m.get('name') or '')
+            took.append(m.get('id')); continue
         # A natural message the owner types in their designated private chat goes to the SAME
         # guide conversation as the desktop bubble. Bridge-stamped Taskuary output is swallowed
         # here too, so a notification or answer can never loop back as a fresh question.

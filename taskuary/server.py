@@ -5869,7 +5869,9 @@ def answer_to_agent(tid: int, body: dict):
     # a full-permission session is the one a stranger's words must never be typed into (its reviewer is the bypass)
     if origin.of_message(store, m)[0] == 'stranger' and terminal.mode_of_task(tid) not in ('', 'auto'):
         raise HTTPException(409, "this session runs with full permissions - start it again and it will run in auto mode, then hand it the stranger's message")
-    if not terminal.say_to_task(store, tid, m, ACTOR):
+    try: handed = terminal.say_to_task(store, tid, m, ACTOR)
+    except origin.Refusal as e: raise HTTPException(409, str(e))
+    if not handed:
         raise HTTPException(422, 'no live agent session on this task - start one and it gets the thread anyway')
     return {'ok': True}
 

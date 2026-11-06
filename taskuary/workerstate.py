@@ -383,12 +383,21 @@ def _answer_held(store, tid, h, answers: dict, actor) -> dict:
             'left': 0 if done else len(h['rids']) - len(h['answers'])}
 
 
+def _stranger_held(store, tid) -> dict:
+    """An answer refused because the task turned a stranger's under a full session (terminal.stranger_now) - a hook's held ask included:
+    letting it go is the agent's next step with full tools. {} when the answer may go."""
+    from . import terminal as term
+    why = term.stranger_now(store, tid)
+    return {'delivered': False, 'state': 'held_stranger', 'why': why} if why else {}
+
+
 def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
     """ALL the answers to one ask, together (request_id -> words). Held by a hook: handed to it. A general agent: one
     message naming each question. A pane standing on Claude's form: its keys, as measured (terminal.answer_form).
     Anything else: each answer on its own road."""
     answers = {str(k): ' '.join(str(v or '').split()) for k, v in (answers or {}).items() if str(v or '').strip()}
     if not answers: raise ValueError('say something')
+    if (held := _stranger_held(store, tid)): return held
     groups = {group_of(r) for r in answers}
     for g in groups:
         h = HELD.get(g) if g else None
@@ -447,6 +456,7 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     from . import terminal as term
     text = ' '.join(str(text or '').split())
     if not text: raise ValueError('say something')
+    if (held := _stranger_held(store, tid)): return held
     # the request is looked up across every run of the task: one that belongs to a run that is no longer the
     # task's is STALE, not silently forwarded to whatever worker has the task now (PW-139)
     evs = events(store, tid)

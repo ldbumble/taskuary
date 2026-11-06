@@ -2654,6 +2654,27 @@ def asking_lines(sid: str, n: int = 4) -> list:
 
 def mode_of_task(tid) -> str: return next((t.mode for t in list(SESSIONS.values()) if t.alive and t.task_id == tid), '')
 
+# THE STRANGER GAP (2026-11-06): a task that became a stranger's AFTER its session started full - a new sender on the thread, a batch's
+# outside item - kept every relay road open into that session: an answer, a phone's tell_agent, a teammate's line, the Assistant's.
+# Each road asks this at the moment it would deliver; a yes means nothing goes in, the task says so once, and the caller refuses with it.
+STRANGER_NOW = ("This task's sender is not someone you trust any more - the running agent was given nothing; "
+                "stop it or restart it in the stranger's mode")
+
+def stranger_now(store, tid, t=None) -> str:
+    "STRANGER_NOW when the live session on `tid` (or `t`) runs full and the task now reads as a stranger's - said once on the task - else ''."
+    t = t or next((x for x in list(SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)
+    # ...a general chat (send_prompt) is no full-tools CLI: its floor is its own (general.py), judged at every turn it takes
+    if not t or not tid or getattr(t, 'mode', 'full') == 'auto' or hasattr(t, 'send_prompt'): return ''
+    from . import origin
+    try: o = origin.of_task(store, tid)[0]
+    except Exception as e: o = 'stranger'; logger.warning(f'task {tid}: could not read who wrote on it, so nothing goes in - {e}')
+    if o != 'stranger': return ''
+    try:
+        last = next((c for c in reversed(store.list_comments(tid)) if c.get('Actor') == 'router'), None)
+        if (last or {}).get('Body') != STRANGER_NOW: store.add_comment(tid, 'router', 'agent', STRANGER_NOW)
+    except Exception as e: logger.debug(f'task {tid}: the stranger line was not filed - {e}')
+    return STRANGER_NOW
+
 def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool = False) -> bool:
     """Type an inbound answer INTO the task's live session. The agent asked a question, the
     hub asked the person, the person answered - the answer belongs in front of the agent,
@@ -2662,10 +2683,13 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     Accepts a message as a DB row (BodyText/OwnText/FromName) or an ingest dict (body/own_text/from_name).
     `new`: not an answer but new work triage joined to the task (ingest._pass_coding) - said as such, to the agent and on the task.
     What the agent gets is the sender's NEW words (triage.agent_words): never the quoted chain under them, never an address or a
-    number - and a line the session never took is cleared out of its box and said as not delivered, so it waits for the owner."""
+    number - and a line the session never took is cleared out of its box and said as not delivered, so it waits for the owner.
+    Raises origin.Refusal(STRANGER_NOW) when the task turned a stranger's under a full session (stranger_now): nothing goes in."""
     from .triage import agent_words, sender_called, wrapper_of
     t = next((x for x in list(SESSIONS.values()) if x.task_id == task_id and x.alive), None)
     if not t: return False
+    from . import origin
+    if (why := stranger_now(store, task_id, t)): raise origin.Refusal(why)
     who, mid = sender_called(msg), msg.get('MessageId') or msg.get('message_id')
     wrapper = msg.get('wrapper') or (wrapper_of(store.message_verdict(mid)) if mid and hasattr(store, 'message_verdict') else ())
     body = agent_words(msg, wrapper)

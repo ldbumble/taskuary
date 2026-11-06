@@ -130,3 +130,18 @@ test("a name with '%', '#' or an accent is the file it names, cited or linked", 
     assert.equal(decodeURIComponent(outputUrl(12, name).split("/").pop()), name);
   }
 });
+
+test("the task's folder and its files named bare become code spans the chat opens; code spans and other folders stay as written", () => {
+  const B = String.fromCharCode(92), Q = String.fromCharCode(96), win = (...p) => p.join(B);
+  const dir = win("C:", "Users", "alex", ".taskuary", "scratch", "outputs", "TQ-1348", "");
+  const listed = [{ path: "Private balance audit.xlsx", name: "Private balance audit.xlsx" }];
+  const { text, files } = outputRefs(`Files are in ${dir} :\n- Private balance audit.xlsx`, 1348, listed);
+  assert.ok(text.includes(Q + dir + Q), text);
+  assert.ok(text.includes(`- ${Q}Private balance audit.xlsx${Q}`), text);
+  assert.deepEqual(files, ["Private balance audit.xlsx"]);
+  // already in a code span: left exactly as it is, never wrapped twice
+  const coded = `Files are in ${Q}${dir}${Q}.`;
+  assert.equal(outputRefs(coded, 1348, []).text, coded);
+  // another task's folder is not this task's link
+  assert.ok(!outputRefs(`see ${win("C:", "x", "scratch", "outputs", "TQ-1349", "")} now`, 1348, []).text.includes(Q));
+});

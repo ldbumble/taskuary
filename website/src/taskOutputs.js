@@ -63,6 +63,9 @@ export const plainCitations = (text) => String(text ?? "").replace(CITE, (_, att
 
 // {text, files}: the answer with every reference to THIS task's outputs taken out of the words (its name stays where it was
 // said), and the names inside the folder, in order, once each - for the chips drawn under it
+// run `f` on the words between code spans only: a path or a name already in backticks is left exactly as it is
+const outsideCode = (s, f) => s.split(/(\x60[^\x60\n]*\x60)/).map((x, i) => (i % 2 ? x : f(x))).join("");
+
 export function outputRefs(text, tid, listed) {
   const files = [], add = (rel) => { if (!files.includes(rel)) files.push(rel); };
   let out = String(text ?? "");
@@ -95,6 +98,20 @@ export function outputRefs(text, tid, listed) {
     if (!at) return all;
     if (at.tid === Number(tid)) { add(at.rel); return `${lead}\`${baseName(at.rel)}\`${tail}`; }
     return `${lead}\`${path}\`${tail}`;
+  });
+  // ...THE TASK'S FOLDER, named bare, is a code span too - the chat makes that one a link that opens it on this computer (the owner,
+  // 2026-11-06: "clickable links in the agent to local desktop for where it saves items"); and a file of its own folder named bare in
+  // the words ("- Private balance audit.xlsx") reads as that file, which the chat opens at a press. Only OUTSIDE code spans, and only
+  // names the listing has, longest first
+  const folder = new RegExp(`(?:[A-Za-z]:)?(?:[\\\\/]${STOP}*?)?[\\\\/]scratch[\\\\/]outputs[\\\\/]TQ-0*${Number(tid)}[\\\\/]?(?=$|[\\s.,;:!?)*_])`, "gim");
+  const names = [...(listed || [])].sort((a, b) => baseName(b.path).length - baseName(a.path).length);
+  out = outsideCode(out, (bit) => {
+    bit = bit.replace(folder, (path) => `\x60${path}\x60`);
+    for (const r of names) {
+      const n = baseName(r.path).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      bit = outsideCode(bit, (b2) => b2.replace(new RegExp(`(^|[^\\w./\\\\-])(${n})(?![\\w])`, "gm"), (all, lead, name) => { add(r.path); return `${lead}\x60${name}\x60`; }));
+    }
+    return bit;
   });
   // a marker on a line of its own leaves no empty line behind
   return { text: out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n").trim(), files };

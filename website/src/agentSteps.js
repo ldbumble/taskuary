@@ -248,7 +248,8 @@ export const describeCall = (name, args = {}) => {
   }
   if (kind === "helper") return { kind, summary: a.description ? `Handed part of the work to a helper: ${clip(a.description, 70)}` : "Handed part of the work to a helper" };
   if (kind === "plan") { const n = (a.todos || a.plan || []).length; return { kind, summary: n ? `Updated its plan (${n} steps)` : "Updated its plan" }; }
-  if (kind === "sync") return { kind, summary: `Checked for new mail${a.new ? ` (${a.new} new)` : ""}` };
+  // ...whatever channel the task came in on - a WhatsApp task read "Checking for new mail" (the owner, 2026-11-05: "this is not mail")
+  if (kind === "sync") return { kind, summary: a.new ? `Found ${plural(a.new, "new message")} on the thread` : "Checked the thread for new messages" };
   // TASKUARY'S OWN TOOLS (agenttools.TOOLS), by what each one is for: "Used my task (taskuary)" said nothing
   const own = OWN[key(mcp ? mcp[2] : name)];
   if (own && (!mcp || key(mcp[1]) === "taskuary")) return own(a);

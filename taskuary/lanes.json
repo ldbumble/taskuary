@@ -177,10 +177,24 @@
     },
     {
       "key": "chat_ready",
-      "word": "agent ready for you",
+      "word": "agent waiting on you",
       "role": "you",
       "mark": "👋",
-      "hint": "the agent on this chat task is done for now and its next move is yours - a draft to send, a step to approve, or an answer"
+      "hint": "the agent on this chat task answered or drafted, and its next move is yours - a draft to send, a step to approve, or an answer"
+    },
+    {
+      "key": "start_failed",
+      "word": "couldn't start",
+      "role": "bad",
+      "mark": "⚠️",
+      "hint": "a start was tried and failed - the reason is on the task, and typing to the agent tries again"
+    },
+    {
+      "key": "chat_done",
+      "word": "agent done",
+      "role": "done",
+      "mark": "✅",
+      "hint": "you answered the agent on this chat task - it is done for now, and starts again when you type to it"
     },
     {
       "key": "goal",

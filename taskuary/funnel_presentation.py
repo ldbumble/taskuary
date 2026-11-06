@@ -514,7 +514,8 @@ def state_of(i: dict) -> str:
     # ...an agent's finished task is in a task lane under Tasks until read (the owner, 2026-11-02): it says "agent finished", not "on you"
     if i.get('kind') == 'agentdone': return lanes.word('agentdone')
     # ...and a chat task's waiting move says "agent ready for you" (funnel.lane_word), as its rail row does
-    word = (lanes.word('chat_ready') if i.get('chat') and i.get('lane') in ('blocked', 'approve') else _LANE_WORDS.get(str(i.get('lane') or ''))) or _LANE_WORDS['fyi']
+    word = (lanes.word('chat_done') if i.get('chat_done') else lanes.word('chat_ready') if i.get('chat') and i.get('lane') in ('blocked', 'approve')
+            else _LANE_WORDS.get(str(i.get('lane') or ''))) or _LANE_WORDS['fyi']
     return 'wants a yes' if i.get('lane') == 'approve' and i.get('kind') == 'action' and not i.get('closeout') and not i.get('chat') else word
 
 

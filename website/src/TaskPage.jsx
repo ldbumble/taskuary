@@ -2523,7 +2523,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
   // ...and the rail's agent lane only while no newer read of this task takes it back: a rail built while the agent worked said "agent
   // working" over the Result of the agent that had finished (railStatus.agentGone) - the row beside it takes the same read
-  const status = taskStatus({ chat: isGeneral, live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
+  const status = taskStatus({ chat: isGeneral, queued: queuedRow, live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
     closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend, page: rail?.tid ? pageRead(rail.tid) : null,
     owed: pendingReview ? !String(pendingReview.FinalText || pendingReview.DraftText || "").trim() : null });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));

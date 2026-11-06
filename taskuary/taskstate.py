@@ -28,6 +28,18 @@ def _general_waiting(store, t) -> bool:
     return funnel.general_not_started(t, talked, store.list_routes(t['TaskId']) or [])
 
 
+def chat_moved_on(store, tid: int) -> bool:
+    """THE CHAT AGENT IS DONE FOR NOW (the owner, 2026-11-06: one cycle - agent working, agent waiting on you, and after you Send "agent done"
+    until you type again): the owner answered the agent's newest turn - its reply sent from here, or their own answer on the thread - and
+    nothing is pending. The rail (funnel.from_agents), the task's state and the page's chip all read this, so they cannot disagree."""
+    if store.pending_review(tid): return False
+    from .general import ASSISTANT_TYPE
+    last = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at') or ''
+    sent, own = store.sent_reply(task_id=tid), store.own_reply_on_thread(task_id=tid)
+    went = max(str((sent or {}).get('DecidedAt') or (sent or {}).get('CreatedAt') or ''), str((own or {}).get('SentAt') or ''))
+    return bool(went) and went >= str(last)
+
+
 def state(store, t: dict, session=None, queued=None) -> str:
     """This task's state key. `session` is its live session row, `queued` its dispatch-queue row."""
     live = bool(session and session.get('alive', True))
@@ -39,6 +51,9 @@ def state(store, t: dict, session=None, queued=None) -> str:
         # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
         # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
         if (session.get('state') or 'parked') == 'parked' and not session.get('request') and t.get('ReviewStatus') == 'pending': return 'approve'
+        # ...and a chat agent whose turn the owner already answered is done for now, not waiting on them (chat_moved_on)
+        from .general import handles
+        if (session.get('state') or 'parked') == 'parked' and not session.get('request') and handles(t) and chat_moved_on(store, t['TaskId']): return 'agentdone'
         return 'blocked'
     st = t.get('Status')
     if st == 'dropped': return 'dropped'

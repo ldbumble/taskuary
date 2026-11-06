@@ -83,7 +83,7 @@ test("the question card has no box of its own - the composer answers an open que
   assert.match(typed, /if \(dock \|\| !asking\) return;\s*e\.preventDefault\(\);/, "only while a question is open; otherwise the composer sends as ever");
   assert.match(typed, /onAnswer\?\.\(w\)/, "the same road the card's presses take - so the card and the waiting chip clear the same way");
   assert.match(typed, /\.catch\(\(x\) => \{ c\.setText\(w\); setAskErr\(errText\(x\)\); \}\)/, "a refused answer keeps its words");
-  assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\) \? "Message the agent - never your password" : `Answer \$\{name\}'s question…`;/);
+  assert.match(view, /String\(asking\.request_id \|\| ""\)\.startsWith\("signin:"\) \? "Message the agent - never your password" : "Answer the agent's question…";/);
   assert.doesNotMatch(read("generalWorkspace.css"), /tq-aui-asking-box/);
 });
 

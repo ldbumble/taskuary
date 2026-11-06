@@ -6028,6 +6028,7 @@ class RailWalkBody(BaseModel):
     from_key: str | None = None; key: str | None = None; press: str | None = None; how: str | None = None
     note: str | None = None; until: str | None = None; read: list[str] = []; level: str | None = None; fyi: int | None = None
     pressed: str | None = None
+    light: bool = False                 # the move's answer without the rail: the page reads it behind (NEXT TURNS BLUE AS THE MOVE SAVES)
 class ConciergeSayBody(BaseModel):
     text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
     view: dict | None = None; react: str = ''
@@ -6269,7 +6270,17 @@ def _walk_answer(out: dict, body: RailWalkBody, along: bool = True) -> Response:
     # ...the cached rail unless something moved since it was built (funnel.pile's own check: a write anywhere, a worker): forced, a walk
     # move built the whole rail a second time after the one its own writes had already cost it (2026-10-31, 0.5 s a press on a real home)
     # `along=False`: no rail rides, and the page reads it itself once the answer has drawn (AssistantView.landed)
-    out = {**out, 'pile': _pile_along(fyi=body.fyi, force=False) if along else None}
+    # NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06, revising 11-03's "Next greys until the move lands"): `light` asks
+    # for no rail but the cached one when nothing moved - Next waited ~0.5 s on a rebuild the move had just made stale
+    from . import funnel, railwalk
+    if body.light: along = along and funnel.warm(store)
+    pile = _pile_along(fyi=body.fyi, force=False) if along else None
+    # ...and no rail riding, the walk's word is whole without it: the row below too (railwalk.peek, off the rows the move held), so a second
+    # press draws its row at once and Next hides on the last one, before the rail behind lands
+    if (body.light or not pile) and isinstance(out.get('walk'), dict):
+        try: out = {**out, 'walk': {**out['walk'], **railwalk.peek(store, ACTOR)}}
+        except Exception as e: logger.debug(f'the walk peek did not ride along: {e}')
+    out = {**out, 'pile': pile}
     _refresh_after(out)
     return _encoded(out)
 
@@ -6302,14 +6313,13 @@ def walk_back(body: RailWalkBody = None):
 
 @app.post('/api/walk/open')
 def walk_open(body: RailWalkBody):
-    from . import railwalk
+    from . import funnel, railwalk
     if body.level: return _walk_answer(railwalk.section(store, body.level, ACTOR, press=body.press), body)
     if not body.key: raise HTTPException(422, 'a key or a section is required')
     # A ROW CLICKED ANSWERS WITHOUT BUILDING THE RAIL (the owner, 2026-11-04: "i clicked a watching task and there is no next/back thing
     # yet? took a long time to light up"): opening a row reads its "+N", and that write made the answer build the whole rail before it
     # went - Back and Next stand greyed until a move lands, ~0.5 s of a click on 450 rows, more on a real home. The rail it opened is
     # the one on screen; the cached one rides when nothing moved, else the page reads it after the answer has drawn
-    from . import funnel
     out = railwalk.open(store, body.key, ACTOR, press=body.press, at=body.from_key)
     return _walk_answer(out, body, along=funnel.warm(store))
 

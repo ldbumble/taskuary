@@ -338,6 +338,19 @@ export const sameRow = (a, b) => !!a && !!b && (answersTo(a, b.key) || answersTo
 // ...two keys naming one row: the same key, or one rail row (or the card on the table) answering to both
 export const sameKey = (items, a, b, card = null) => !!a && !!b
   && (a === b || [...(items || []), ...(card ? [card] : [])].some((r) => answersTo(r, a) && answersTo(r, b)));
+// WHAT A WALK PRESS DRAWS AT ONCE (rule 7): the row the walk names below the one put down (walk.below - railwalk.peek, the same line `next`
+// walks), Back's row above, or a rail row pressed. `onIt`: the row put down is the walk's own, so its word holds. A walk older than the row on
+// the table names nothing - the press then draws its row when its answer comes, and moves from the row on screen all the same (from_key)
+export const pressOnto = (walk, rail, { putDown = null, how = "next", fromKey = null, key = null, card = null } = {}) => {
+  const onIt = !!putDown && sameKey(rail, walk?.on, putDown, card);
+  const below = onIt && walk.below ? walk.below
+    : how === "back" && fromKey && walk?.on === fromKey && walk.above ? walk.above
+    : key && how === "next" && key !== card?.key && !key.startsWith("fyis:") ? key : null;
+  return { onIt, below };
+};
+// NEXT TURNS BLUE AS SOON AS THE MOVE SAVES (the owner, 2026-11-06): a light walk answer (no rail rides) carries the walk's whole word -
+// below included - and the rail on screen takes it until its own read lands, so a second press draws its row and Back stands at once
+export const withWalk = (pile, walk) => (pile && walk && "below" in walk ? { ...pile, walk } : pile);
 // ...and every key the rail rows `keys` name answer to: what a press takes off, whichever of them the page or the server holds
 export const rowKeys = (items, keys, card = null) => {
   const out = new Set(keys.filter(Boolean));

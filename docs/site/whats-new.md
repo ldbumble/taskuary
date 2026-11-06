@@ -2,6 +2,16 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.7 - 2026-11-05
+
+- A mail read in mid-turn stands after that turn, over the re-think it woke
+- A turn that ended draws as ended: its own run length, no step still spinning
+- Copy at the corner of an answer and a code block
+- No "Taskuary answered" line over a chat
+- Send and close keeps the sent reply in place and says it went
+- "Startingâ€¦" is a quiet line like "Working on thisâ€¦", with an honest clock
+- A burst from one sender reads as one; a summary keeps its breath under prose
+
 ## 0.3.11.6 - 2026-11-05
 
 - An agent's lesson goes to LEARNED.md, named for its kind of job - never a card on the playbook

@@ -157,6 +157,11 @@
 .tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #fff; border: 1px solid #dfdbd3; border-radius: 13px; }
 .tq-aui-chat .tq-aui-brief { justify-items: end; }
 .tq-aui-chat .tq-aui-arrived-head { color: #6b6559; font-weight: 600; font-size: 11.5px; }
+/* ...the next of a burst from the same sender sits close under the first, its time alone over it (GeneralWorkspace Arrived) */
+.tq-aui-chat .tq-aui-arrived-more { margin-top: -8px; }
+.tq-aui-chat .tq-aui-arrived-more .tq-aui-arrived-head { font-weight: 500; color: #8b877e; }
+/* ...and the summary keeps its breath under the agent's own words when they are shown over it (AgentSummary's first head has no top margin) */
+.tq-aui-chat .tq-aui-agent-body > div:not(.tq-aui-summary):not(.tq-aui-live-steps) + .tq-aui-summary[data-tq-summary=open] { margin-top: 12px; }
 .tq-aui-chat .tq-aui-user-head { justify-self: end; color: #6b6559; font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
 /* ...THE CHAT TAKES THE ROOM (the owner, 2026-11-05: "let's make the ui components as minimal as possible to leave space for that chat"): its box
    sits on the card's foot, and inside it the draft is the message and its Send - no Redraft bar or button (the chat redrafts it when asked),

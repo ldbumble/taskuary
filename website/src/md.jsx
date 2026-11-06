@@ -11,6 +11,7 @@ import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 import { linkRefs, looksMd, refParts } from "./mdText.js";
 import { appLink, linkRoad, openAppLink, ownPath } from "./appLinks.js";
 import { plainCitations } from "./taskOutputs.js";
+import CopyCorner from "./CopyCorner.jsx";
 import { attUrl, isPdf, PdfView, saveFile } from "./Attachments.jsx";
 export { looksMd };
 
@@ -114,10 +115,14 @@ const keepRefs = (kids) => React.Children.map(kids, (k) => typeof k !== "string"
   : refParts(k).map((p, i) => i % 2 ? <span key={i} className="ref">{p}</span> : p));
 const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</td>;
 
+// ...a code block - a command, a prompt to paste somewhere - copies at its corner (CopyCorner)
+const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null);
+  return <div className="tq-copy-host"><pre ref={box} {...rest}>{children}</pre><CopyCorner text={() => box.current?.innerText || ""} /></div>; };
+
 export const Md = ({ text, onTask = null }) => (
   <Box sx={sx}>
     <ReactMarkdown remarkPlugins={[remarkGfm]}
-      components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
+      components={{ a: onTask ? (p) => <A {...p} onTask={onTask} /> : A, img: Img, td: Td, pre: Pre, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
       {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
       {/* ...and in the chat a task it names is a link that opens it (linkRefs) */}
       {onTask ? linkRefs(plainCitations(text || "")) : plainCitations(text || "")}

@@ -53,3 +53,36 @@ def test_a_mail_that_came_in_while_the_agent_worked_is_drawn_over_the_answer_it_
     shown = general.shown_history(s, tid)
     roles = [('mail:' + m['mail'][0]['words'][:8]) if m.get('mail') else m['role'] for m in shown]
     assert roles == ['mail:Can you ', 'assistant', 'mail:One more', 'assistant'], roles
+
+
+def test_a_mail_read_in_mid_turn_stands_after_that_turn_over_the_rethink_it_woke():
+    """The owner, 2026-11-05: four messages from one sender in a minute - the turn took the first three, the fourth (a pasted plan) came in while
+    it worked. All four were drawn over the first answer (which then "ran 1s") and the re-think on the fourth stood with no input over it, as if
+    a second agent had started. Inputs that woke turn 1, turn 1, the mail that came in while it ran, turn 2. Invented people."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Growth plan for the east region', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    def wa(words, at):
+        s.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'FromName': 'Ray Colton', 'BodyText': words, 'Status': 'routed', 'SentAt': at})
+        s._exec("UPDATE message SET CreatedAt=? WHERE BodyText=?", (at, words))
+    def said(actor, kind, body, at):
+        s.add_comment(tid, actor, kind, body); s._exec("UPDATE comment SET CreatedAt=? WHERE Body=?", (at, body))
+    for i, at in enumerate(('2026-11-05 17:19:02', '2026-11-05 17:19:30', '2026-11-05 17:19:50')): wa(f'Voice note {i + 1}', at)
+    said(general.BRIEF_ACTOR, general.USER_TYPE, 'You are on this task: read the messages…', '2026-11-05 17:19:55')
+    wa('Here is the growth plan', '2026-11-05 17:20:40')                 # ...read in while the first turn reads four websites
+    said('assistant', general.ASSISTANT_TYPE, 'Looked at the four sites he named.', '2026-11-05 17:21:10')
+    said('assistant', general.ASSISTANT_TYPE, 'I read his plan.', '2026-11-05 17:21:50')    # the re-think the plan woke, no brief of its own
+    shown = general.shown_history(s, tid)
+    rows = [[x['words'] for x in m['mail']] if m.get('mail') else m['content'][0]['text'] for m in shown]
+    assert rows == [['Voice note 1', 'Voice note 2', 'Voice note 3'], 'Looked at the four sites he named.', ['Here is the growth plan'],
+                    'I read his plan.'], rows
+
+
+def test_a_mail_read_in_mid_turn_with_no_rethink_waits_at_the_foot():
+    s = MemoryStore(); tid = _task(s)
+    s._exec("UPDATE message SET CreatedAt='2026-11-05 09:00:00' WHERE TaskId=?", (tid,))
+    s.add_comment(tid, general.BRIEF_ACTOR, general.USER_TYPE, 'Brief.'); s._exec("UPDATE comment SET CreatedAt='2026-11-05 09:01:00'")
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'FromName': 'Gail Moreno', 'BodyText': 'And one more.', 'Status': 'routed', 'SentAt': '2026-11-05 09:02:00'})
+    s._exec("UPDATE message SET CreatedAt='2026-11-05 09:02:00' WHERE BodyText='And one more.'")
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Answer.'); s._exec("UPDATE comment SET CreatedAt='2026-11-05 09:04:00' WHERE Body='Answer.'")
+    shown = general.shown_history(s, tid)
+    assert [m['role'] for m in shown] == ['user', 'assistant', 'user'] and shown[-1]['mail'][0]['words'] == 'And one more.'

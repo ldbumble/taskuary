@@ -83,6 +83,7 @@ import { TerminalPane } from "./TerminalView.jsx";
 import AgentDraftNotice from "./AgentDraftNotice.jsx";
 import { NoAgentChat } from "./AgentSummary.jsx";
 import { chatReplyShown } from "./agentSummary.js";
+import { sentLine } from "./sentLine.js";
 import ThreadReading from "./ThreadReading.jsx";
 import { agentAsks, alreadyAnswered, answeredLine, askWhere, autoPair, draftKey, latestDrafts } from "./agentDraftAsk.js";
 import { LastView } from "./BrowserPane.jsx";
@@ -1143,6 +1144,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // HAND IT TO A PERSON, ASKED FOR IN WORDS (the owner, 2026-11-03: "This should be sent to <an address>" did nothing): the Assistant's light
   // carries who and a note, and the form comes up with them in it - kept while it is open, so the light going out never empties what is typed
   const [handSaid, setHandSaid] = useState(null);
+  // WHAT WAS JUST SENT, kept where it stood (the owner, 2026-11-05, Send and close on a WhatsApp reply: "nothing happens besides the box
+  // disappears"): the draft read-only, marked, and the line that says it went and the task is closing - until the task leaves the view
+  const [sentHere, setSentHere] = useState(null);
+  useEffect(() => { setSentHere(null); }, [selected]);
   useEffect(() => { setHandoff(false); setHandSaid(null); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
   useEffect(() => { if (saidHand?.to) { setHandSaid({ to: saidHand.to, note: saidHand.note || "" }); setHandoff(true); } }, [saidHand?.to, saidHand?.note]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
@@ -1320,9 +1325,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and NOTHING STILL WORKING IS PUT DOWN (the owner, 2026-11-01: "if agent screen is still open and you hit send message it should
   // not close the tasks"): with work live the press puts nothing down, and a close the server kept open picks the row back up - put
   // down at the press, it stayed off the rail with its agent still drawn on the canvas
-  const sent = async ({ closes = false } = {}) => {
+  const sent = async ({ closes = false, said = null } = {}) => {
+    if (said) setSentHere({ ...said, closing: closes });
+    // ...a beat for that line to be read before the view moves on: the close itself goes at once
+    const beat = said && closes ? new Promise((r) => setTimeout(r, SENT_BEAT)) : null;
     // ...on the walk's table that gate is the walk's close (railwalk.leave "sent"): kept open, the same row comes back
     if (closes && walkLeave) {
+      if (beat) await beat;            // ...the walk's close draws its "…" under the card at once: the line goes first
       if (!liveWork) onLeave?.();
       // ...and the walk is told it stays (`stays`), so it draws no row below at the press: the next row stood on the table until the kept
       // answer brought this one back, a beat on a quick server and seconds on a slow one
@@ -1332,7 +1341,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (closes) {
       let out = null;
       try { out = await closeAfterSend(api, selected); } catch { /* read it below */ }
+      if (beat) await beat;
       if (out?.closed) { onLeave?.(); return closedHere(); }
+      // ...kept open by the server's gate: the line says why instead of "closing"
+      if (said) setSentHere((h) => h && { ...h, closing: false, kept: (out?.kept_open || []).join("; ") });
     }
     let done = false;
     try { done = String((await api.get(`/api/tasks/${selected}`)).data?.task?.Status || "") === "done"; } catch { /* read it below */ }
@@ -2999,7 +3011,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const waits = !!(pendingReview || moreDrafts.length || proposals.length || owesEmails || handoff);
   // ...IN THE CHAT, ONLY WHAT CAN STILL BE DONE (the owner, 2026-11-05: "it's a chat nothing else"): a draft waiting on Send, an invite to answer,
   // emails owed - never a closed task's "Mark done 11m ago", a reply sent outside or a draft closed without sending; the chat says those
-  const chatCards = cardsIn && !["done", "dropped"].includes(t?.Status) && (waits || co.writeupAt === "closeout"
+  const chatCards = sentHere && cardsIn ? <SentHere {...sentHere} /> : cardsIn && !["done", "dropped"].includes(t?.Status) && (waits || co.writeupAt === "closeout"
     || chatReplyShown({ replyMessage, pendingReview, sentReview: null, unsentReview: null }) || calAsk?.invite) ? <Box ref={closeOutRef} data-tq-closeout="chat" data-tq-waits={waits ? "" : undefined}
       sx={{ minWidth: 0, "& textarea": { fontSize: "13.5px !important", lineHeight: "1.5 !important", color: INK } }}>{closeBody(true)}</Box> : null;
   return (
@@ -3312,7 +3324,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && queuedRow && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={queuedRow} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                {!codeRun && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
+                {/* ...and NONE OVER A CHAT (the owner, 2026-11-05: "don't like Taskuary answered"): the chat says who said what, its live steps and
+                    clock say it is working, the task header's chip says the state - the line over it was a label, not an action */}
+                {!codeRun && !chatPane && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : shows("agent") ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
                   flexShrink: 0,
@@ -3889,6 +3903,16 @@ const Fold = ({ title, children }) => (
 // `quiet`: a step with nothing in it - smaller and dimmer, so the step that holds the move is the one read (2026-10-25)
 // `sec`: the section it heads in the desk's three (2026-10-27) - then its line is the sections' one style (SectionHead): "2 · AGENT", one dim
 // descriptor (its own title where that is not the section's name, its description), "up to here" where the task is
+// THE REPLY THAT JUST WENT, where its draft stood (TaskPage sentHere): its words read-only and one line - where it went, and that the task is
+// closing (or why it stays open) - never a box that vanishes with nothing said
+const SENT_BEAT = 900;
+const SentHere = (p) => (
+  <Box data-tq-sent-here={p.id || ""} sx={{ mt: 0.75 }}>
+    <Typography sx={{ fontSize: 13.5, lineHeight: 1.5, color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere", pl: 1.5, borderLeft: "3px solid #dcd6ca" }}>{p.text}</Typography>
+    <Typography role="status" data-tq-sent-line="" sx={{ mt: 0.75, fontSize: 13, color: "#47654a", fontWeight: 600 }}>✓ {sentLine(p)}</Typography>
+  </Box>
+);
+
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools, quiet = false, sec = null, here = false, sub = undefined }) => (
   <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined} data-tq-quiet={quiet ? "" : undefined}
     sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },

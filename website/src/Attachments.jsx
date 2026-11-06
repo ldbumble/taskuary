@@ -68,7 +68,7 @@ export const useSave = () => {
 // A PDF IS READ IN PLACE (the owner, 2026-11-04: "it should display the pdf inline ... instead of downloading"): its bytes fetched with the
 // token as a blob, drawn by the browser's own PDF viewer in a frame - a blob of OUR fetch, so the file is the one the route confined, and
 // the viewer runs none of the PDF's script as the page. Download beside it saves the file itself.
-export const isPdf = (a) => /^application\/pdf/i.test(a?.content_type || "") || /\.pdf$/i.test(a?.name || "");
+export const isPdf = (a) => /^application\/pdf\b/i.test(a?.content_type || "") || /\.pdf$/i.test(a?.name || "");
 export function PdfView({ file, onClose, sx }) {
   const [src, setSrc] = useState(""), [err, setErr] = useState(""), [saveErr, save, saved] = useSave();
   useEffect(() => {

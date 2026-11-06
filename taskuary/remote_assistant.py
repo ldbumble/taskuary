@@ -159,32 +159,14 @@ def candidates(store, connector) -> list:
     says it: Telegram gives groups, supergroups and channels a NEGATIVE id and a person a positive
     one, which is the only thing about a Telegram chat that cannot be faked by naming it.
 
-    Returns [{'to', 'name', 'mine'}]. A bridge that will not answer yields nothing rather than
+    Returns [{'to', 'name', 'mine', 'kind'}] (chatpick.chats, the rows the owner is alone in). A bridge that will not answer yields nothing rather than
     raising: the panel still has to render, and the chat already chosen is shown whatever happens.
     """
     kind = (connector or {}).get('Type')
-    if kind == 'whatsapp':
-        from . import messengers
-        try: rows = messengers.wa_chats(connector, store)
-        except Exception as e:
-            logger.debug(f'whatsapp roster unavailable for the doorway picker: {e}')
-            return []
-        guide = chat_of(connector)
-        from . import wanames
-        return [{'to': r['jid'], 'name': wanames.label(r['jid'], r.get('name')), 'phone': r.get('phone') or '', 'mine': bool(r.get('self'))}
-                for r in rows if own_thread(store, connector, r, guide)]
-    if kind == 'telegram':
-        seen = {}
-        for src in store.list_sources(active_only=False):
-            if (src.get('Channel') or '') != 'telegram': continue
-            cid = str(src.get('Address') or '').strip()
-            if not cid or cid == '*' or cid.startswith('-') or not cid.lstrip('-').isdigit(): continue
-            # the poller writes "discovered: <the chat's title>" when it first sees one
-            name = str(src.get('Owner') or '')
-            seen[cid] = name.split(':', 1)[1].strip() if name.startswith('discovered:') else cid
-        return [{'to': cid, 'name': name, 'mine': True} for cid, name in seen.items()]
-    return []
-
+    if kind not in ('whatsapp', 'telegram'): return []
+    # the one chat list every picker reads (chatpick.py) - the Assistant takes the rows the owner is alone in
+    from . import chatpick
+    return [{k: o[k] for k in ('to', 'name', 'phone', 'mine', 'kind') if k in o} for o in chatpick.chats(store, kind, connector) if o['mine']]
 
 def doorway_state(store) -> list:
     """Every channel the assistant can be reached on, whether it is set up, and what it could use.

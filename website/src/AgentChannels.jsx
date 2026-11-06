@@ -7,6 +7,8 @@ import React, { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, MenuItem, TextField, Typography } from "@mui/material";
 import api from "./api.js";
 import { ID_HINT, channelLine, membersOf } from "./agentChannels.js";
+import ChatPicker from "./ChatPicker.jsx";
+import { chatHint, chatUrl, noChats } from "./chatPicker.js";
 import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const btn = { minHeight: 30, py: 0, px: 1.3, fontSize: 12.5, textTransform: "none" };
@@ -48,21 +50,29 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
 export function ChannelSetup({ taskId = null, onLoaded, rowOf = null }) {
   const [v, setV] = useState(null), [kind, setKind] = useState(""), [chat, setChat] = useState(""), [repo, setRepo] = useState(""),
     [ownerId, setOwnerId] = useState(""), [mates, setMates] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState(""),
-    [sure, setSure] = useState(null);
-  const one = taskId != null, list = `tq-ac-chats-${one ? taskId : "all"}`;
+    [sure, setSure] = useState(null), [chats, setChats] = useState([]), [looking, setLooking] = useState(false);
+  const one = taskId != null;
+  // the chats a binding can pick - the Assistant chat's own list (chatpick.py), each one it cannot take marked with why
+  const loadChats = async (kd) => {
+    if (!kd) { setChats([]); return; }
+    setLooking(true);
+    try { const { data } = await api.get(chatUrl(kd, { agent: true })); setChats(data?.data || []); }
+    catch (e) { setChats([]); setErr(why(e, "Could not read the chats just now")); }
+    setLooking(false);
+  };
   const load = () => api.get("/api/agent-channels", { params: one ? { task: taskId } : {} })
     .then(({ data }) => { setV(data?.data || null); onLoaded?.(data?.data || null); }).catch(() => { setV(null); onLoaded?.(null); });
   useEffect(() => { setV(null); setKind(""); setChat(""); setMates([]); setErr(""); setSure(null); load(); }, [taskId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const k = v?.kinds.find((x) => x.kind === kind);
   // the owner's own id where the channel cannot tell their lines apart (Telegram, Slack), filled from what Taskuary already knows
-  useEffect(() => { setOwnerId(k?.ownerId || ""); }, [k?.kind]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setOwnerId(k?.ownerId || ""); loadChats(k?.kind); }, [k?.kind]);   // eslint-disable-line react-hooks/exhaustive-deps
   if (!v) return null;                                                 // Developer mode off: nothing here at all
   const bind = async () => {
     setBusy(true); setErr("");
     try {
       await api.post("/api/agent-channels", { kind, chat, task: one ? taskId : null, repo: repo || v.repo || "",
         members: membersOf({ owner: v.owner, ownerId, teammates: one ? mates : [] }) });
-      setKind(""); setChat(""); setRepo(""); setMates([]); load();
+      setKind(""); setChat(""); setRepo(""); setMates([]); setChats([]); load();
     } catch (e) { setErr(why(e, "It was not bound")); }
     setBusy(false);
   };
@@ -89,9 +99,9 @@ export function ChannelSetup({ taskId = null, onLoaded, rowOf = null }) {
           <TextField select size="small" label="Channel" value={kind} onChange={(e) => { setKind(e.target.value); setChat(""); }} sx={{ minWidth: 130 }}
             inputProps={{ "data-tq-agent-channel-kind": "" }}>
             {v.kinds.map((x) => <MenuItem key={x.kind} value={x.kind}>{x.label}</MenuItem>)}</TextField>
-          {k && <TextField size="small" label={kind === "slack" ? "Channel id" : "Chat"} value={chat} onChange={(e) => setChat(e.target.value)} sx={{ flex: 1, minWidth: 180 }}
-            inputProps={{ list, "data-tq-agent-channel-chat": "" }} />}
-          {k && <datalist id={list}>{k.chats.map((x) => <option key={x.chat} value={x.chat}>{x.name}</option>)}</datalist>}
+          {k && <ChatPicker options={chats} value={chat} onChange={setChat} onLook={() => loadChats(kind)} looking={looking} minWidth={220}
+            label={kind === "slack" ? "Slack channel" : "Chat"} placeholder="pick the chat" noOptionsText={looking ? "Looking…" : noChats(kind, { agent: true })}
+            hint={chatHint(kind)} attr={{ "data-tq-agent-channel-chat": "" }} />}
         </Box>
         {k && <>
           {!v.repo && <TextField size="small" fullWidth label={one ? "Repo folder" : "Repo folder (optional) - keeps it to the agents in one repository"}

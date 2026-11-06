@@ -2,6 +2,12 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.5 - 2026-11-05
+
+- An agent can check back on its own task later, on the reminders' clock
+- The agent searches what earlier tasks settled before asking the owner
+- Playbooks are a menu the agent reads, and learn from its turns
+
 ## 0.3.11.4 - 2026-11-05
 
 - Fix built-in Windows dictation recovery and add voice selection card

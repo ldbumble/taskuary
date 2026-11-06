@@ -34,7 +34,7 @@ def test_one_row_per_brain_built_and_no_words_of_the_call():
     rows = s.brain_routes()
     assert len(rows) == 1
     r = rows[0]
-    assert (r['Job'], r['TaskId'], r['Pick'], r['Tier'], r['Rule'], r['Outcome']) == ('draft', t, f'connector:{a}', 'fixed', 'fixed', 'ok')
+    assert (r['Job'], r['TaskId'], r['Pick'], r['Tier'], r['Rule'], r['Outcome']) == ('draft', t, f'connector:{a}', 'standard', 'work', 'ok')
     flat = ' '.join(str(v) for v in r.values())
     assert 'CONFIDENTIAL' not in flat and 'SECRET' not in flat and 'Erin' not in flat
 
@@ -45,7 +45,7 @@ def test_a_failover_is_written_on_the_row_it_happened_to():
     with made: assert llm.build_llm(s, job='triage', task_id=t)('sys', 'user') == 'openai answered'
     assert s.brain_routes()[0]['Outcome'] == f'fallback:connector:{o}'
     why = brainroute.why_for_task(s, t)
-    assert why.startswith('Triage on Anthropic') and 'answered instead, as its backup.' in why
+    assert why.startswith('Triage -> light on Anthropic') and 'answered instead, as its backup.' in why
 
 
 def test_no_ai_is_written_as_refused_and_says_so():

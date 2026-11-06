@@ -814,6 +814,27 @@ def _list_models(t, cfg: dict, key: str) -> list:
 # AN OPENAI-COMPATIBLE PROXY IN FRONT OF ANOTHER MODEL (an access-code card, any proxy that routes to several models) speaks the schema loosely: it
 # may refuse json_schema with a 422 or a 500 of its own rather than a 400, hand `content` back as a list of parts, or turn the schema
 # into a forced tool call and answer in its arguments. A first run's test email failed on that as "wrong format" (2026-11-03).
+# EFFORT ON AN API CARD (the owner, 2026-11-06: "if it's api or something that only has one model use effort instead if they support
+# it"). The router spells it the way a CLI pick does - 'gpt-5@high', '@low' for the card's own model - and make_llm splits it off:
+# Anthropic takes output_config.effort, OpenAI and Azure OpenAI reasoning_effort (the Responses API reasoning.effort). A model that
+# turns it down is asked once more without it, and is not offered it again in this process. Every other provider never sees it.
+EFFORT_TAKERS = ('anthropic', 'openai', 'azure_openai')
+EFFORT_WORDS = ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')
+_NO_EFFORT = set()         # (type, endpoint, model) that refused an effort - asked plainly from then on
+_EFFORT_REFUSED = re.compile(r'reasoning_effort|reasoning\.effort|effort|output_config', re.I)
+
+
+def split_effort(model: str) -> tuple:
+    "'gpt-5@high' -> ('gpt-5', 'high'). Only a known level is split off: a Vertex id like 'claude-x@20251101' stays whole."
+    m, at, e = str(model or '').rpartition('@')
+    return (m, e) if at and e in EFFORT_WORDS else (str(model or ''), '')
+
+
+def _no_effort(key, why) -> None:
+    from loguru import logger
+    _NO_EFFORT.add(key); logger.info(f'{key[0]}: {key[2] or "this model"} takes no effort setting, asking without it - {str(why)[:200]}')
+
+
 _FORMAT_FROM = {}          # (url, model) -> the first of json_schema, json_object, prompt-only that the endpoint has not refused
 _FORMAT_WORDS = re.compile(r'response_format|json_schema|json_object|structured output|response.?schema|strict', re.I)
 
@@ -833,18 +854,29 @@ def said_text(msg: dict) -> str:
 
 
 def make_llm(t, cfg: dict, key: str):
+    m, effort = split_effort(cfg.get('model'))
+    if effort: cfg = {**cfg, 'model': m}
+    if t not in EFFORT_TAKERS: effort = ''
     if t == 'chatgpt': return _chatgpt_llm(cfg, key)
     if not key and t != 'ollama': raise RuntimeError('no API key saved - paste one under Credentials')
     if t == 'anthropic':
         import anthropic
         cli = anthropic.Anthropic(api_key=key)
         model = cfg.get('model') or PROVIDER_DEFAULT['anthropic']
+        ek = ('anthropic', '', model)
+        def ask(**kw):
+            if effort and ek not in _NO_EFFORT:
+                try: return cli.messages.create(**kw, output_config={'effort': effort})
+                except anthropic.BadRequestError as e:
+                    if not _EFFORT_REFUSED.search(str(e)): raise
+                    _no_effort(ek, e)
+            return cli.messages.create(**kw)
         def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
             # images FIRST: every provider reads a picture better when the question follows it
             content = ([{'type': 'image', 'source': {'type': 'base64', 'media_type': ct, 'data': b64}}
                         for ct, b64 in (images or [])] + [{'type': 'text', 'text': user}]) if images else user
             if web and not want:
-                got = _anthropic_web(cli, model, system, content, max_tokens)
+                got = _anthropic_web(ask, model, system, content, max_tokens)
                 if got is not None: return got
             # `want` is a schema the answer MUST fit. Anthropic has no response_format; a tool the
             # model is forced to call is the same thing - the tool's input schema is the answer's,
@@ -852,8 +884,7 @@ def make_llm(t, cfg: dict, key: str):
             forced = ({'tools': [{'name': want.get('name') or 'answer', 'description': 'Answer with these fields.',
                                   'input_schema': want.get('schema') or want}],
                        'tool_choice': {'type': 'tool', 'name': want.get('name') or 'answer'}} if want else {})
-            r = cli.messages.create(model=model, max_tokens=max_tokens, system=system,
-                                    messages=[{'role': 'user', 'content': content}], **forced)
+            r = ask(model=model, max_tokens=max_tokens, system=system, messages=[{'role': 'user', 'content': content}], **forced)
             if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
             if want:
                 call = next((b for b in r.content if b.type == 'tool_use'), None)
@@ -916,10 +947,11 @@ def make_llm(t, cfg: dict, key: str):
         headers, model = {'api-key': key}, cfg['deployment']
     else:
         raise RuntimeError(f'unknown AI connector type: {t}')
+    ek = (t, urls[0], model)
 
     def llm(system, user, max_tokens=MAX_TOKENS, images=None, want=None, web=False):
         if web and not want and t in ('openai', 'azure_openai'):
-            got = _responses_web(t, cfg, headers, model, system, user, images, max_tokens)
+            got = _responses_web(t, cfg, headers, model, system, user, images, max_tokens, effort if ek not in _NO_EFFORT else '')
             if got is not None: return got
         # three independent compat axes: newer models reject max_tokens ("use
         # max_completion_tokens"), older Azure api-versions reject max_completion_tokens,
@@ -936,11 +968,13 @@ def make_llm(t, cfg: dict, key: str):
             nonlocal last
             for url in urls:
                 for tok_param in ('max_completion_tokens', 'max_tokens'):
-                    body = {'messages': msgs, tok_param: max_tokens,
-                            **({'model': model} if model else {}), **({'response_format': fmt} if fmt else {})}
+                    body = {'messages': msgs, tok_param: max_tokens, **({'model': model} if model else {}),
+                            **({'response_format': fmt} if fmt else {}), **({'reasoning_effort': effort} if effort and ek not in _NO_EFFORT else {})}
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
+                    if r.status_code == 400 and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
+                        _no_effort(ek, r.text); r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
                         ch = (r.json().get('choices') or [{}])[0]
                         said = said_text(ch.get('message') or {})
@@ -1014,13 +1048,15 @@ ANTHROPIC_WEB = ([{'type': 'web_search_20260209', 'name': 'web_search', 'max_use
                   {'type': 'web_fetch_20250910', 'name': 'web_fetch', 'max_uses': 5}])
 
 
-def _anthropic_web(cli, model, system, content, max_tokens):
+def _anthropic_web(create, model, system, content, max_tokens):
+    "`create` is make_llm's ask (it carries the effort), or a client, whose messages.create is asked plainly."
     import anthropic
+    if hasattr(create, 'messages'): create = create.messages.create
     for tools in ANTHROPIC_WEB:
         msgs = [{'role': 'user', 'content': content}]
         try:
             for _ in range(5):          # a long search pauses the turn; it is continued, not restarted
-                r = cli.messages.create(model=model, max_tokens=max_tokens, system=system, messages=msgs, tools=tools)
+                r = create(model=model, max_tokens=max_tokens, system=system, messages=msgs, tools=tools)
                 if r.stop_reason != 'pause_turn': break
                 msgs = msgs + [{'role': 'assistant', 'content': r.content}]
         except anthropic.BadRequestError as e:
@@ -1043,12 +1079,15 @@ def _saw_anthropic(blocks):
             _saw('tool_result', getattr(b, 'tool_use_id', ''), {'result': f'{len(got)} results' if isinstance(got, list) else '', 'is_error': failed})
 
 
-def _responses_web(t, cfg, headers, model, system, user, images, max_tokens):
+def _responses_web(t, cfg, headers, model, system, user, images, max_tokens, effort=''):
     url = f"{(cfg.get('endpoint') or '').rstrip('/')}/openai/v1/responses" if t == 'azure_openai' else 'https://api.openai.com/v1/responses'
     content = [{'type': 'input_image', 'image_url': f'data:{ct};base64,{b64}'} for ct, b64 in (images or [])] + [{'type': 'input_text', 'text': user}]
     body = {'model': model, 'instructions': system, 'input': [{'role': 'user', 'content': content}],
-            'tools': [{'type': 'web_search'}], 'max_output_tokens': max_tokens}
-    try: r = post_retrying(url, headers, body, 180)
+            'tools': [{'type': 'web_search'}], 'max_output_tokens': max_tokens, **({'reasoning': {'effort': effort}} if effort else {})}
+    try:
+        r = post_retrying(url, headers, body, 180)
+        if r.status_code == 400 and body.pop('reasoning', None) and _EFFORT_REFUSED.search(r.text or ''):
+            _no_effort((t, url, model), r.text); r = post_retrying(url, headers, body, 180)
     except requests.RequestException as e: _log_web(t, e); return None
     if r.status_code != 200: _log_web(t, f'{r.status_code} {r.text[:200]}'); return None
     out = r.json()

@@ -25,11 +25,14 @@ def test_the_panel_reads_and_writes_the_mode_the_rules_and_the_cap():
     s = _store()
     with mock.patch.object(server, 'store', s):
         p = c.get('/api/ai/route_rules').json()
-        assert p['mode'] == 'fixed' and p['cap'] == '' and p['used_today'] == 0
+        assert p['mode'] == 'auto' and p['cap'] == '' and p['used_today'] == 0
         assert 'Hard drafts, general work and coding -> the strong model' in [r['sentence'] for r in p['rules']]
+        # what each level runs on, per brain, in the words Settings shows: an API card has no quick model of its own
+        assert {k: p['levels'][0][k] for k in ('brain', 'quick', 'normal', 'hard')} == \
+            {'brain': 'Anthropic API', 'quick': 'same model, low effort', 'normal': 'claude-sonnet-5', 'hard': 'claude-opus-5'}
         rules = [{**r, 'on': r['id'] != 'unsure'} for r in p['rules']]
-        p = c.post('/api/ai/route_rules', json={'mode': 'auto', 'rules': rules, 'cap': '5'}).json()
-        assert (p['mode'], p['cap']) == ('auto', 5) and not next(r for r in p['rules'] if r['id'] == 'unsure')['on']
+        p = c.post('/api/ai/route_rules', json={'mode': 'fixed', 'rules': rules, 'cap': '5'}).json()
+        assert (p['mode'], p['cap']) == ('fixed', 5) and not next(r for r in p['rules'] if r['id'] == 'unsure')['on']
         assert c.post('/api/ai/route_rules', json={'cap': 'lots'}).status_code == 422
         assert c.post('/api/ai/route_rules', json={'mode': 'sometimes'}).status_code == 422
         bad = c.post('/api/ai/route_rules', json={'rules': [{'id': 'x', 'when': {'subject': ['invoice']}, 'use': {'tier': 'strong'}}]})
@@ -80,8 +83,9 @@ def test_run_again_on_the_strong_model_is_a_press_on_a_brain_that_has_one():
 
 
 def test_no_strong_model_anywhere_offers_nothing_and_refuses_with_where_to_set_one():
-    s = MemoryStore(); cid = s.get_connector_by_type('openai')['ConnectorId']
-    s.save_connector({'ConnectorId': cid, 'Secret': 'sk-test-0123456789', 'Active': 1, 'ConfigJson': json.dumps({'model': 'gpt-5'})}, 'owner')
+    # a provider that takes no effort either (llm.EFFORT_TAKERS): nothing here can think harder
+    s = MemoryStore(); cid = s.get_connector_by_type('mistral')['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Secret': 'sk-test-0123456789', 'Active': 1, 'ConfigJson': json.dumps({'model': 'mistral-large'})}, 'owner')
     s.set_setting('assistant_ai', f'connector:{cid}', 'owner')
     tid = s.create_task({'Title': 'Research the vendor', 'Status': 'open', 'Kind': 'general'}, 'owner')
     with mock.patch.object(server, 'store', s):

@@ -16,6 +16,7 @@ def _keyed(s, typ):
 
 def test_blank_drafting_is_the_triage_brain_exactly():
     s = MemoryStore(); a = _keyed(s, 'anthropic'); s.set_setting('triage_ai', f'connector:{a}', 'owner')
+    s.set_setting('ai_route_mode', 'fixed', 'owner')                 # Auto would give a draft the card's model, not the light gear
     d, t = brainroute.choose(s, 'draft'), brainroute.choose(s, 'triage')
     assert (d.pick, d.model, d.gear, d.chain) == (t.pick, t.model, t.gear, t.chain) == (f'connector:{a}', '', 'light', [])
 
@@ -31,7 +32,8 @@ def test_once_set_the_drafts_are_written_on_it_and_triage_is_untouched():
                        'Subject': 'Thursday?', 'BodyText': 'Does Thursday at 2 work?', 'Status': 'routed'})
         responder.draft_reply(s, tid)
         llm.build_llm(s, job='triage')
-    assert built[0] == ('openai', 'gpt-5') and built[-1] == ('anthropic', None)
+    # ...and triage, a quick job in Auto, on the card's own model thinking less (the router's '@low', split off in make_llm)
+    assert built[0] == ('openai', 'gpt-5') and built[-1] == ('anthropic', '@low')
     assert [r['Job'] for r in s.brain_routes()][::-1] == ['draft', 'triage']
 
 

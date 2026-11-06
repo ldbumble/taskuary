@@ -313,6 +313,14 @@ _SUMMARY_NOW = ('"summary": "<two sentences. The first says who wants what from 
                 "('Erin Blake wants the Q3 numbers before Friday'), or on an fyi who says what ('Payworth says the "
                 "September statement is ready'); the second adds the one detail that matters - a date, an amount, "
                 'what was already done. Never the signature, the confidentiality footer or quoted earlier mail>"')
+# WHERE CODING WORK IS DONE IS NOT TRIAGE'S (the owner, 2026-11-06: "let's take repo decision out of the triage - remove it completely"):
+# the coding agent picks its repository (repochoice). The guide's paragraph that asked for one comes out of an edited TRIAGE.md where it
+# still reads as shipped; templates/triage.md no longer has it (test_repo_left_to_the_agent.py pins both).
+_REPO_CHOICE_WAS = ("**Which repository.** For a task an agent could work from a keyboard, answer `repository` with one of `known_repositories`, "
+                    "from what the request is about, with `repo_reason` saying what in the request points there. `project_context` (the sender's "
+                    "past repository choices) is supporting evidence, not proof: it helps say what a message is about, it never makes an "
+                    "informational message a task, it is never permission to write or send anything, and a tentative link stays tentative. "
+                    "When two are plausible or none fits, answer null with `needs_repo_choice` true and the owner chooses.")
 # The kind rules as shipped before 2026-09-23 and what replaced them (templates/triage.md) - kept as
 # data so the swap is exact; test_kind_dispatch.py holds the template to the "now" side.
 with open(__file__[:__file__.replace('\\', '/').rfind('/') + 1] + 'triage_kind_rules.json', encoding='utf-8') as _f:
@@ -791,6 +799,7 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
+                    'code_folders': '',             # where a coding agent may look for its checkout; blank = the usual homes (repochoice.folders)
                     'concierge_fast': 'auto',   # the Assistant's CLI in fast mode: codex yes, claude no (llm.fast_on)
                     'acp_cli': '1',                 # general agents' CLI runs over ACP, argv as the fallback (agents.acp_on, acpgate)
                     'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)
@@ -1652,6 +1661,16 @@ class SQLiteStore:
                 if _CODING_WAS in body:
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (body.replace(_CODING_WAS, _CODING_NOW), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_reading_not_coding', '1', 'migration')")
+            # ...and NO REPOSITORY IS ASKED FOR (_REPO_CHOICE_WAS): out of a TRIAGE.md the owner edited where it still reads as shipped,
+            # once. One nobody edited follows the guide below, which no longer has it - cut here, it would stop following it
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_no_repo_choice'").fetchone():
+                row = self.cx.execute("SELECT Content, UpdatedBy FROM doc WHERE Name='triage'").fetchone()
+                body = (row['Content'] or '') if row and row['UpdatedBy'] == 'owner' else ''
+                nl = '\r\n' if '\r\n' in body else '\n'
+                for was in (_REPO_CHOICE_WAS + nl + nl, _REPO_CHOICE_WAS):
+                    if body.count(was) == 1:
+                        self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (body.replace(was, ''), _now())); break
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_no_repo_choice', '1', 'migration')")
             # ...and THE STOP BEFORE A DEPLOY IS A QUESTION (_DEPLOY_WAS): a CODING.md / AGENT.md the owner edited no longer tracks
             # the template, so the two rules go in where the old text still reads as shipped, once. Everything else stays theirs.
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_before_deploy'").fetchone():

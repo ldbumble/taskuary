@@ -22,7 +22,7 @@ class BrainReachesTheSessionTests(unittest.TestCase):
     def setUp(self):
         self.c, self.s = TestClient(server.app), server.store
         self.tid = self.s.create_task({'Title': 'fix the importer', 'Kind': 'coding', 'Status': 'open',
-                                       'Tags': 'triage-repo:org/app'}, 'router')
+                                       'Tags': 'agent-repo:org/app'}, 'router')
 
     def _started(self):
         """Start a session for real up to the point a CLI would be launched, and report the call."""
@@ -65,7 +65,7 @@ class ANonStartIsNotAStartTests(unittest.TestCase):
         c, s = TestClient(server.app), server.store
         tid = s.create_task({'Title': 'no repo anywhere', 'Kind': 'coding', 'Status': 'open'}, 'router')
         with mock.patch.object(hub_term, 'start_on_task',
-                               side_effect=ValueError('I could not tell which checkout this belongs in')):
+                               side_effect=ValueError('no local path for org/app, and a search of your code folders found no checkout with that git remote')):
             out = c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'}).json()
         self.assertEqual(out['dispatch'], 'needs_repo')
         self.assertFalse(out['started'], 'a caller that reads `started` is told the truth')
@@ -77,7 +77,7 @@ class ANonStartIsNotAStartTests(unittest.TestCase):
         c, s = TestClient(server.app), server.store
         tid = s.create_task({'Title': 'go through the budget inputs', 'Kind': 'coding', 'Status': 'open'}, 'owner')
         with mock.patch.object(hub_term, 'start_on_task',
-                               side_effect=ValueError('I could not tell which checkout this belongs in')):
+                               side_effect=ValueError('no local path for org/app, and a search of your code folders found no checkout with that git remote')):
             c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'})
             c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'})
         self.assertTrue(funnel.held_for_repo(s.get_task(tid)))

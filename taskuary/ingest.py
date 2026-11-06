@@ -640,7 +640,6 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     # ...and how readily this connection's messages join a task already there: the owner's level, which the guide explains (combine.py)
     from . import combine
     if (cb := combine.for_triage(store, msg)): thread = {**thread, 'combine': cb}
-    repos = repo_candidates(store)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
     # underneath it - until it does not: a reply typed on a phone, or one whose quote we stripped,
     # arrives with the ask two messages back invisible. A chat line quotes nothing at all, so
@@ -714,9 +713,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
     from .assistant import said_about
     said = said_about(store, msg.get('conversation_id'))
     if said: thread = {**thread, 'assistant_said': said}
-    from .projects import context_for_message
     from . import capabilities
-    project = context_for_message(store, msg)
     from .triage import job_doc
     # THE WHOLE MEMORY, every time (the owner, 2026-10-27: "triage needs the entire thing to make a decision every time, so load the
     # whole thing") - not the care and people lines cut to 1500 characters. A line already in the EVIDENCE (a verdict about this sender
@@ -737,7 +734,7 @@ def judge(store, msg: dict, llm, mine=(), me=(), home=None) -> tuple[dict, dict]
                              watch=msg.get('watch_for'),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(store), workflows=_workflow_menu(store), project=project, candidates=candidates, repos=repos or None,
+                             playbooks=_playbook_menu(store), workflows=_workflow_menu(store), candidates=candidates,
                              # ...and what the owner corrected LAST time a message like this was
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
                              routing_history=_routing_history(store, msg),
@@ -1191,11 +1188,6 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                               important=intent.get('priority') == 'important')
         if (d := danger(store, {}, None, intent)): msg['_danger'] = d         # read before the route keeps it: the start below asks
         if intent['intent'] == 'reply_only': f['kind'] = 'reply'
-        # CODING STAYS CODING (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
-        # into a general agent?"). A coding job whose repository triage could not tell used to become the
-        # assistant's; now the coding agent is asked which one before it starts (_choose_then_start).
-        no_repo = (f['kind'] == 'coding' and not msg.get('no_auto')
-                   and intent.get('needs_repo_choice') and not intent.get('repository'))
         from . import playbooks as _pb
         # the verdict's own title/summary lead (PW-074); the router's subject/body cut is the fallback
         if intent.get('title'): f['title'] = intent['title']
@@ -1246,18 +1238,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # reply to them: the agent is told so (reply_job) - its thoughts are the owner's Result, the reply is built from them
             if f['kind'] == 'general' and intent.get('asks_owner') is True and intent.get('sender_class', 'person') == 'person':
                 store.tag_task(tid, REPLY_TAG, actor='triage')
-            # the repository, decided here and written down, so startup uses it instead of guessing again
-            # (PW-092); an owner's repo: tag and a GitHub item's own repository still outrank it (terminal.guess_repo)
-            if intent.get('repository'):
-                store.tag_task(tid, f"{TRIAGE_REPO_TAG}{intent['repository']}", actor='triage')
-                store.add_comment(tid, 'triage', 'agent', f"Triage picked repository {intent['repository']}: {intent.get('repo_reason') or 'named in the request'}")
-            elif intent.get('needs_repo_choice'):
-                # the tag rides even on the rerouted ones: "I could not tell" is knowledge, and without it a
-                # later hand-off to the coding agent guesses a checkout by word overlap instead of asking (PW-094)
-                store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
-                store.add_comment(tid, 'triage', 'agent',
-                                  f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - "
-                                  + ('the coding agent is asked to choose one.' if no_repo else 'pick one before an agent starts'))
+            # ...and WHERE the work is done is the coding agent's to pick when it starts (repochoice, the owner 2026-11-06): nothing here
             mid = _land(store, msg, tid, 'routed')
             if intent.get('checklist') and not goal: store.source_checklist(tid, mid, 'triage')     # its boxes came from this message
             # the same-day lines this one continues or answers that had no task yet join the task it opens:
@@ -1288,13 +1269,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 # no_auto = the channel opted out of self-dispatch (github items always do: an
                 # open repo would start an agent per drive-by PR) - the task queues as needs-you.
                 # The rest of the gate is auto_start_ok: what may start a worker on this machine, for
-                # either kind (PW-069/071). A coding job whose repository triage could not tell waits
-                # for the owner's choice - a visible hold, not a session in the wrong checkout.
-                if no_repo:
-                    # the coding agent picks the checkout, then starts there if it may (in the background: a CLI call)
-                    ok, who = False, 'the coding agent is choosing the repository first'
-                    _spawn(_choose_then_start, store, tid, msg, mid)
-                else: ok, who = auto_start_ok(store, msg, mid, f['kind'])
+                # either kind (PW-069/071). Where a coding job is done is its agent's pick once it starts (repochoice).
+                ok, who = auto_start_ok(store, msg, mid, f['kind'])
                 if ok:
                     # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
                     # a stranger's mail' has an answer
@@ -1310,7 +1286,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                     # tag rides on the task because that is what the feed row and the release both
                     # read (senders.known decided it; HOLD_TAG only records the decision).
                     if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
-                    if not no_repo: store.add_comment(tid, 'router', 'agent', held_note(who, f['kind']))
+                    store.add_comment(tid, 'router', 'agent', held_note(who, f['kind']))
                     store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
@@ -1331,10 +1307,9 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                else 'on your list - no agent works it' if f['kind'] == 'task'
                else f'{HELD} {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
                else f'{HELD} items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.' if msg.get('no_auto')
-               else 'the coding agent is choosing the repository, then starts if it may' if no_repo
                else f'{HELD} {held}' if held
                else f'{agent_word(f["kind"])} was set to start by itself')
-        head = route_head(intent['intent'], f['kind'], intent.get('repository') or '')
+        head = route_head(intent['intent'], f['kind'])
         reason = (f"triage: {head}" + (f" - {intent['why']}" if intent.get('why') else '')
                   + (f" · playbook {intent['playbook']}" if intent.get('playbook') else '')
                   + _notes_note()
@@ -2181,9 +2156,7 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     if (store.get_task(tid) or {}).get('Status') == 'dropped': return False
     if msg.get('no_auto'):
         not_started(store, tid, f'items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them'); return False
-    choose = kind == 'coding' and not v.get('repository') and v.get('needs_repo_choice')
-    if v.get('repository') and kind == 'coding': store.tag_task(tid, f"{TRIAGE_REPO_TAG}{v['repository']}", actor='triage')
-    ok, who = (True, '') if choose else auto_start_ok(store, msg, mid, kind)
+    ok, who = auto_start_ok(store, msg, mid, kind)
     if not ok:
         if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
         not_started(store, tid, who)
@@ -2196,14 +2169,10 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     if (store.get_task(tid) or {}).get('Status') in ('done', 'waiting'): store.update_task(tid, {'Status': 'open'}, 'triage')
     store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s message needs {task_kinds.worker(kind)} before it can be answered: it "
                       "works out the answer, then drafts the reply for your Send." + (f' Starting by itself: {who}' if who else ''))
-    store.audit('task', tid, 'reply_to_agent', actor, 'agent', {'message_id': mid, 'kind': kind, 'repository': v.get('repository')})
+    store.audit('task', tid, 'reply_to_agent', actor, 'agent', {'message_id': mid, 'kind': kind})
     msg['_reply_agent'] = True
-    if choose:
-        store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
-        _spawn(_choose_then_start, store, tid, msg, mid)
-    else:
-        if opening and kind != 'coding': general.OPENING.add(tid)
-        _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
+    if opening and kind != 'coding': general.OPENING.add(tid)
+    _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
     return True
 
 
@@ -2606,9 +2575,6 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen:
     return out
 
 
-TRIAGE_REPO_TAG, NEEDS_REPO_TAG = 'triage-repo:', 'needs-repo-choice'
-
-
 def _routing_history(store, msg: dict) -> list:
     """The owner's past corrections that bear on this message (routingmemory). Never fatal: a
     verdict with no history is the normal case and must not become a verdict with no brain."""
@@ -2617,31 +2583,6 @@ def _routing_history(store, msg: dict) -> list:
         return facts_for(store, msg) or None
     except Exception as e:
         logger.debug(f'routing history unavailable - {e}'); return None
-
-
-def repo_candidates(store) -> list:
-    """The repositories triage may name (PW-092): the learned project graph's repository edges, with
-    what each project is, plus the SOUL.md repo map. Only these can be chosen; anything else is dropped."""
-    from .projects import REPO_KIND
-    out = {}
-    try:
-        for link in store.project_links(kind=REPO_KIND):
-            repo, name = str(link.get('Value') or '').strip(), str(link.get('ProjectName') or '').strip()
-            # never a restatement of the name: a DISCOVERED repository's project is named after the
-            # repository itself, so `or ProjectName` described northwind/ledger as "northwind/ledger" -
-            # a routing table of bare names, against which triage can place nothing (TQ-0443). A
-            # project the owner named for the WORK still describes its repo perfectly well.
-            about = str(link.get('ProjectDescription') or '').strip() or ('' if name.lower() == repo.lower() else name)
-            if repo and not out.get(repo): out[repo] = about
-    except Exception as e: logger.debug(f'ingest: project repositories unavailable - {e}')
-    try:
-        from .terminal import repo_map
-        # the SOUL map FILLS what the graph could not say - it used to lose to a blank that had
-        # already claimed the key, so the one line saying what a repo does never reached triage
-        for repo, about in repo_map(store).items():
-            if not out.get(repo): out[repo] = about
-    except Exception as e: logger.debug(f'ingest: SOUL repo map unavailable - {e}')
-    return [{'repo': r, 'about': a} for r, a in out.items()]
 
 
 def chat_candidates(store, msg: dict) -> list:
@@ -2985,47 +2926,6 @@ def busy_words(store) -> str:
     if n >= cap: return f'{cap} agents are already running'
     return (f"{plural(n, 'agent')} plus " if n else '') + f'quick answers and subagents already fill the {cap} agent slots'
 
-def choose_repo(store, tid) -> tuple:
-    """(repository or None, why) - the CODING AGENT's own pick of the checkout for a job triage could not place
-    (the owner, 2026-09-25). One question to its light gear with the task and the repository map; a name that is
-    not on the map is no answer."""
-    from . import agents as hub_agents, terminal as term
-    from .llm import ask_json, make_cli_llm
-    repos = term.repo_map(store)
-    if not repos: return None, 'no repositories are set up'
-    brain = make_cli_llm(store, hub_agents.default_brain(store), gear='light')
-    if not brain: return None, 'no coding agent is set up'
-    t = store.get_task(tid) or {}
-    system = ('You are the coding agent choosing which repository a coding job belongs in, before you start it. Answer '
-              'JSON only: {"repository": "<exactly one owner/name from the list>" or null, "why": "<one clause>"}. '
-              'null when none of them plainly fits - the owner then chooses.')
-    user = json.dumps({'job': t.get('Title'), 'ask': str(t.get('Summary') or '')[:3000],
-                       'repositories': [{'repo': r, 'about': d} for r, d in repos.items()]})
-    j = ask_json(brain, system, user).data or {}
-    repo = str(j.get('repository') or '').strip()
-    return (repo if repo in repos else None), str(j.get('why') or '')[:200]
-
-
-def _choose_then_start(store, tid, msg: dict, mid):
-    """D3: the coding agent names the repository, the task is placed there, and the agent starts if it may."""
-    try: repo, why = choose_repo(store, tid)
-    except Exception as e: repo, why = None, f'it could not be asked ({str(e)[:120]})'
-    if not repo:
-        store.add_comment(tid, 'router', 'agent', f"The coding agent could not tell which repository either ({why or 'no clear fit'}) - "
-                                                  'pick one on the task before an agent starts.')
-        return
-    store.tag_task(tid, f'{TRIAGE_REPO_TAG}{repo}', actor='agent')
-    store.tag_task(tid, NEEDS_REPO_TAG, on=False, actor='agent')
-    store.add_comment(tid, 'router', 'agent', f'The coding agent chose repository {repo}: {why or "it fits the job"}.')
-    ok, who = auto_start_ok(store, msg, mid, 'coding')
-    if ok:
-        store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
-        _auto_code(store, tid)
-    else:
-        if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
-        store.add_comment(tid, 'router', 'agent', held_note(who, 'coding'))
-
-
 def _auto_code(store, tid):
     """Auto-dispatch puts the CLI on the task in a REAL session - the same one you see when
     you open the task. Nothing runs where you cannot watch it, interrupt it or answer it.
@@ -3131,36 +3031,6 @@ def backfill_asks(store, llm=None, actor: str = 'owner', dry_run: bool = True,
                         detail={'todos': len(ask['checklist']), 'was_chars': len(str(t.get('Summary') or ''))})
         out.append(row)
     return out
-
-
-def reroute_held_no_repo(store, actor: str = 'owner', start: bool = True) -> list:
-    """Open CODING tasks that triage could not name a repository for, moved to the agent that needs
-    none - the rule from the routing above, applied to the rows that arrived before it existed.
-
-    Those tasks are unstartable by construction: the coding agent wants a checkout, triage said it could not
-    tell which, and the row sits on the board with nobody able to pick it up. TQ-0401 - "can you add
-    Nathan to the call he wants to join" - sat there for exactly that reason (the owner, 2026-09-07:
-    "Why was this a coding agent?"). Returns the tasks it moved.
-
-    A repository somebody DID name is left alone: a triage-repo: tag, or a github item's own, means
-    the hold is a real choice waiting, not a job with no home."""
-    moved = []
-    for t in store.list_tasks(active_only=True):
-        if t.get('Kind') != 'coding': continue
-        tags = [x.strip() for x in str(t.get('Tags') or '').split(',') if x.strip()]
-        if NEEDS_REPO_TAG not in tags: continue
-        if any(x.startswith(TRIAGE_REPO_TAG) for x in tags): continue
-        tid = t['TaskId']
-        store.update_task(tid, {'Kind': 'general'}, actor)
-        store.add_comment(tid, 'router', 'agent',
-                          'Moved to the assistant, which needs no repository: triage could not name one, so this '
-                          'could never start as a coding job. It will say so if the work needs a tool it does not have.')
-        store.audit('task', tid, 'reroute_no_repo', actor, detail={'from': 'coding', 'to': 'general'})
-        moved.append(t)
-        if start:
-            try: _spawn(_auto_general, store, tid)
-            except Exception as e: logger.warning(f'reroute: {task_ref(tid)} did not start - {e}')
-    return moved
 
 
 def advisor_brief(store, msg: dict, mid: int) -> str | None:

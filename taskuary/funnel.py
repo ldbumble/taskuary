@@ -520,8 +520,9 @@ def held_clause(reason) -> str | None:
 # A START THAT ASKED "WHICH REPOSITORY?" (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?"): the
 # answer was a line on a sheet that closed at once, and the task said "nobody on it" as if nothing had been asked for
 HELD_REPO = 'held:repo'
-# ...and how a start's refusal says it: the checkout guard's own sentences (terminal.open_session), read by every door that starts one
-NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
+# ...and how a start's refusal says it: the checkout guard's own sentences (terminal.open_session), read by every door that starts one. Only a
+# repository somebody NAMED and nobody can find is asked about now - one nothing placed opens in its task's folder and the agent picks (repochoice)
+NEEDS_REPO = re.compile(r'no local path|does not exist', re.I)
 
 def held_for_repo(t) -> bool: return HELD_REPO in re.split(r'[\s,]+', str((t or {}).get('Tags') or ''))
 

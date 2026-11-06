@@ -92,12 +92,13 @@ test("the header says what triage decided, and the task's own facts when triage 
   assert.equal(general.triaged, true);
   assert.deepEqual(general.pills.map((p) => [p.label, p.value]),
     [["What it is", "task"], ["Who does it", "an agent"], ["Agent", "assistant"], ["Priority", "regular"]]);
-  const coding = headerFacts({ verdict: { intent: "task" }, task: { Kind: "coding", Tags: "triage-repo:northwind/ledger", Priority: "urgent" } });
+  const coding = headerFacts({ verdict: { intent: "task" }, task: { Kind: "coding", Tags: "agent-repo:northwind/ledger", Priority: "urgent" } });
   assert.deepEqual(coding.pills.map((p) => p.value), ["task", "a coding agent", "northwind/ledger", "urgent"]);
   assert.equal(coding.pills.at(-1).tone, "alert", "urgent wears the alert tint");
   assert.equal(coding.pills.find((p) => p.key === "repo").mono, true);
-  // the owner's own pick of checkout outranks triage's
-  assert.equal(headerFacts({ task: { Kind: "coding", Tags: "repo:northwind/portal,triage-repo:northwind/ledger" } }).pills.find((p) => p.key === "repo").value, "northwind/portal");
+  // the owner's own pick of checkout outranks the agent's - and an old verdict's repository is triage's no more (repochoice.py)
+  assert.equal(headerFacts({ task: { Kind: "coding", Tags: "repo:northwind/portal,agent-repo:northwind/ledger" } }).pills.find((p) => p.key === "repo").value, "northwind/portal");
+  assert.equal(headerFacts({ verdict: { intent: "task", repository: "northwind/ledger" }, task: { Kind: "coding" } }).pills.find((p) => p.key === "repo"), undefined);
   const reply = headerFacts({ route: { Reason: "triage: needs a reply - she asks when" }, task: { Kind: "reply" } });
   assert.deepEqual(reply.pills.slice(0, 2).map((p) => p.value), ["reply", "yours"]);
   assert.deepEqual(headerFacts({ task: { Kind: "coding", Tags: "held:repo" } }).pills.find((p) => p.key === "repo"),

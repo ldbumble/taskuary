@@ -27,15 +27,16 @@ def asked(s, title, days, kind='coding', repo='northwind/ledger', sender=ERIN, s
 
 
 class SenderHistoryTests(unittest.TestCase):
-    def test_her_last_asks_arrive_with_their_kind_and_repository_newest_first(self):
+    def test_her_last_asks_arrive_with_their_kind_newest_first_and_never_a_repository(self):
         s = MemoryStore()
         asked(s, 'Investigate ledger employee setup issues', 25)
         asked(s, 'Missing employees in the import', 13)
         last = asked(s, 'Reopen approved items for payroll', 7)
         got = context.sender_history(s, {'from_email': ERIN, 'channel': 'email', 'subject': 'Reimbursements'})
         self.assertEqual([g['title'] for g in got][:1], ['Reopen approved items for payroll'])
+        # where it was worked is the coding agent's pick (repochoice, 2026-11-06), not a signal triage weighs
         self.assertEqual(got[0], {'ref': f'TQ-{last:04d}', 'title': 'Reopen approved items for payroll', 'kind': 'coding',
-                                  'repository': 'northwind/ledger', 'status': 'done', 'when': ago(7)[:10]})
+                                  'status': 'done', 'when': ago(7)[:10]})
         self.assertEqual(len(got), 3)
 
     def test_it_reaches_further_back_than_recently_closed_but_not_for_ever(self):
@@ -71,8 +72,7 @@ class TheJudgeIsShownItTests(unittest.TestCase):
         seen = {}
         def llm(system, user, **kw):
             seen.update(sys=system, usr=json.loads(user)); return '{"intent": "task", "kind": "coding", "why": "x"}'
-        hist = [{'ref': 'TQ-0766', 'title': 'Reopen approved items for payroll', 'kind': 'coding',
-                 'repository': 'northwind/ledger', 'status': 'done', 'when': '2026-09-28'}]
+        hist = [{'ref': 'TQ-0766', 'title': 'Reopen approved items for payroll', 'kind': 'coding', 'status': 'done', 'when': '2026-09-28'}]
         triage.classify_intent({'from_email': ERIN, 'subject': 'Reimbursements', 'body': 'Can we update the facility?'},
                                llm=llm, thread={'sender_history': hist})
         self.assertEqual(seen['usr']['sender_history'], hist)

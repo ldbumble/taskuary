@@ -48,7 +48,7 @@ class TaskDispatchTests(Base):
 
     def test_a_repository_decision_is_not_a_start(self):
         out = arrive(self.s, 'coding')
-        with mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError('could not tell which checkout this belongs in - choose one')):
+        with mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError('no local path for org/app, and a search of your code folders found no checkout with that git remote')):
             r = self.c.post(f"/api/tasks/{out['task_id']}/dispatch", json={'kind': 'coding'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual((r.json()['dispatch'], r.json()['started'], r.json()['existing']), ('needs_repo', False, False))

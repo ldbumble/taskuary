@@ -255,3 +255,10 @@ test("a file command reads as what it did, in bash or PowerShell, and stays a le
   assert.equal(said("mkdir -p out && cp a.txt out && python build.py"), "Ran python build.py");
   assert.equal(said("rm -rf $d"), "Deleted a file");
 });
+
+test("the agent's pick of a checkout is one line in the chat: Working in <repo> - <why> (repochoice.py)", () => {
+  const said = (a) => describeCall("mcp__taskuary__use_repo", a).summary;
+  assert.equal(said({ path_or_name: "northwind/ledger", why: "the export lives here" }), "Working in northwind/ledger - the export lives here");
+  assert.equal(said({ path_or_name: "C:\\code\\portal", why: "the login page" }), "Working in portal - the login page");
+  assert.equal(describeCall("mcp__taskuary__find_repos", { query: "portal" }).summary, "Looked for the code on this computer for 'portal'");
+});

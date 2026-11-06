@@ -162,14 +162,17 @@ def wait_settled(store, wait: float = SETTLE_WAIT) -> bool:
     """A read that lands inside the membership worker's lag waits for it instead of failing: every
     write bumps the dirty generation, so without this each chat line and each shown item made the
     next read say "All items are not ready yet". Conflicted membership is a real refusal, not a race."""
-    status = getattr(store, 'processing_reconcile_status', None)
-    if status is None or getattr(store, 'membership_worker', None) is None: return True   # nobody to wait for: tests, bare stores
-    deadline = time.monotonic() + wait
+    status, worker = getattr(store, 'processing_reconcile_status', None), getattr(store, 'membership_worker', None)
+    if status is None or worker is None: return True   # nobody to wait for: tests, bare stores
+    # ...and woken, not waited for: asleep between ticks, it cost every build after a write ~half its 0.25 s interval (perf 2026-11-06)
+    if (st := status())['dirty_generation'] <= st['reconciled_generation'] or st.get('status') == 'conflicted': return True
+    if (kick := getattr(worker, 'kick', None)): kick()
+    deadline, tick = time.monotonic() + wait, 0.002              # a woken reconcile takes milliseconds: look again soon, then less often
     while True:
         st = status()
         if st['dirty_generation'] <= st['reconciled_generation'] or st.get('status') == 'conflicted': return True
         if time.monotonic() >= deadline: return False
-        time.sleep(SETTLE_TICK)
+        time.sleep(tick); tick = min(SETTLE_TICK, tick * 2)
 
 
 def _json(value):
@@ -541,7 +544,7 @@ class MembershipWorker:
     def __init__(self, store, *, interval=0.25, notify=None, census_every=None):
         self.store, self.interval, self.notify = store, interval, notify
         self.census_every = CENSUS_EVERY if census_every is None else census_every
-        self.stop = threading.Event()
+        self.stop, self.wake = threading.Event(), threading.Event()
         self.thread = None
         self.census_at = None       # monotonic: when the last census began
         self.due_since, self.due_gen = None, None   # since when one has been due, and the generation it saw last tick
@@ -578,14 +581,16 @@ class MembershipWorker:
                 except Exception as exc:
                     logger.warning(f'processing membership refresh failed: {exc}')
                     delay = max(self.interval, 5.0)
-                if self.stop.wait(delay):
-                    break
+                self.wake.wait(delay); self.wake.clear()
+                if self.stop.is_set(): break
         self.thread = threading.Thread(target=run, name='processing-membership', daemon=True)
         self.thread.start()
         self.store.membership_worker = self       # readers wait for a worker that exists (wait_settled)
 
+    def kick(self): self.wake.set()                      # a reader is waiting on this tick: run it now
+
     def close(self):
-        self.stop.set()
+        self.stop.set(); self.wake.set()
         self.store.membership_worker = None
         if self.thread:
             self.thread.join()  # Do not close its store or abandon a transaction during shutdown.

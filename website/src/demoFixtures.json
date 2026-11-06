@@ -1,13 +1,13 @@
 {
  "/api/version": {
-  "version": "0.3.11.10",
+  "version": "0.3.11.11",
   "started": "2026-11-05 17:30:45",
   "cli_installer_revision": 2
  },
  "/api/build": {
   "asset": "index-Cx-6AljR.js",
-  "version": "0.3.11.10",
-  "disk_version": "0.3.11.10"
+  "version": "0.3.11.11",
+  "disk_version": "0.3.11.11"
  },
  "/api/demo": {
   "demo": true,

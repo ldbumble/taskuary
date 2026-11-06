@@ -76,6 +76,8 @@ def test_the_endpoint_serves_the_log_the_mail_and_no_live_cli(home, server):
     (s,) = got['sessions']
     assert (s['sid'], s['cli'], s['source']) == ('pane-1', 'claude', 'Claude Code log')
     assert [x['k'] for x in s['steps']] == ['you', 'tool', 'tool', 'tool', 'said']
+    # ...each step's time in the server's own zone, as the mail's: a CLI log stamps UTC
+    assert s['steps'][0]['at'] == sessionrecord._local('2026-11-06T09:00:00Z')
     assert c.get('/api/tasks/999999/coding-chat').status_code == 404
 
 

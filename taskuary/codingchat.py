@@ -28,7 +28,10 @@ def _acp_path(tid: int, sid: str) -> Path:
 
 
 def record_update(tid: int, sid: str, update: dict) -> None:
-    "THE SEAM: one ACP session/update of a coding session, kept as it arrives. Never raises - a lost line costs a chat row, not the session."
+    """THE SEAM: one ACP session/update of a coding session, kept as it arrives. Never raises - a lost line costs a chat row, not the session.
+    ACP never echoes the prompt it was sent, so the prompt goes in here too, as the update a replayed session would carry:
+    {'sessionUpdate': 'user_message_chunk', 'content': {'type': 'text', 'text': prompt}} - with '_meta': {'taskuary': 'brief'} when it is
+    Taskuary's own seed or brief rather than the owner's words (the chat never draws a brief; it draws the mail that caused it)."""
     if not isinstance(update, dict) or not sid: return
     try:
         with _acp_path(tid, sid).open('a', encoding='utf-8') as f: f.write(json.dumps(update, ensure_ascii=False) + '\n')
@@ -74,16 +77,21 @@ def live_of(t) -> dict | None:
             'asking': asking, 'working': phase == 'working', 'promptPending': bool(term.prompt_pending(t))}
 
 
+# ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read
+# 3:29 PM under a mail of 10:18 AM that came in before it (the render check, 2026-11-06)
+def _local(steps: list) -> list: return [{**s, 'at': sessionrecord._local(s['at'])} if s.get('at') else s for s in steps]
+
+
 def _session(tid: int, sid: str, cli: str, ext: str, at: str, live: bool = False) -> dict:
     s = {'sid': sid, 'cli': cli or '', 'at': str(at or '').replace('T', ' ')[:19], 'live': live}
     if (ups := acp_updates(tid, sid)): return {**s, 'source': 'acp', 'updates': ups}
     saved = sessionrecord._saved_path(tid, sid)
     # a live session's log is read fresh - its saved copy, if any, is from an earlier save of the same pane
     if not live and saved.is_file():
-        try: return {**s, 'source': 'saved', 'steps': (json.loads(saved.read_text(encoding='utf-8')) or {}).get('steps') or []}
+        try: return {**s, 'source': 'saved', 'steps': _local((json.loads(saved.read_text(encoding='utf-8')) or {}).get('steps') or [])}
         except (OSError, ValueError): pass
     steps, src = sessionrecord.cli_steps(cli, ext)
-    return {**s, 'source': src or 'none', 'steps': sessionrecord.mark_briefs(tid, steps) if steps else []}
+    return {**s, 'source': src or 'none', 'steps': _local(sessionrecord.mark_briefs(tid, steps)) if steps else []}
 
 
 def sessions(store, tid: int) -> list:

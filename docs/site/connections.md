@@ -213,24 +213,24 @@ held until the ask it opens arrives.
 A tracker is the clearest case for `trigger`: an issue assigned to you is, by definition, work
 addressed to you, and triage settles most of them without an AI call at all.
 
-### GitHub: what Close out does
+### GitHub: what finishing a task does
 
-The GitHub connection has a **Close out** step: what finishing a task does on GitHub when you press
-**Close out**. These are your choices - what each repository *requires* (branch protection, required checks
+The GitHub connection has a **Finishing a task** step: what finishing a task does on GitHub when you press
+**Approve** on its card in the task's chat. These are your choices - what each repository *requires* (branch protection, required checks
 and reviews) is read from GitHub for every pull request, and the card only offers what it allows.
 
 | Setting | Choices (default first) | The token needs |
 |---|---|---|
-| Close out on a pull request | Merges it · Only closes the task | Contents: write |
+| Finishing a task from a pull request | Merges it · Only closes the task | Contents: write |
 | Merge method | Squash · Merge commit · Rebase - used when the repository allows it | (same) |
 | Red checks the repository does not require | Merge anyway, with a note · Stop and ask me | - |
 | Offer Update branch | on - when the pull request is behind and its author allows maintainer edits | Pull requests: write |
 | Offer Re-run checks | on - re-runs the failed Actions jobs | Actions: write |
-| Close out on an issue closes it | on | Issues: write |
-| Post your reply as the close-out's comment | on - even with *Reply to issue/PR authors* off | Issues / Pull requests: write |
-| Close out anyway, past the repository's own rules | **off** - admin tokens only, and only on your press | Administration |
+| Finishing a task from an issue closes it | on | Issues: write |
+| Post your reply as the closing comment | on - even with *Reply to issue/PR authors* off | Issues / Pull requests: write |
+| Finish anyway, past the repository's own rules | **off** - admin tokens only, and only on your press | Administration |
 
-A repository you follow can override the pull-request choice, the merge method and Close out anyway.
+A repository you follow can override the pull-request choice, the merge method and Finish anyway.
 **Check the token** asks GitHub, per repository, whether the token may do what these settings turn on.
 
 ### Jira, Monday.com and Linear: what goes back
@@ -246,8 +246,8 @@ following an item when it moves or changes hands.
 | Assign | One person Jira can assign it to | One person, set on the item's People column | One person in the workspace |
 | Close | The transition to a status in Jira's *done* category | The label the status column marks as done | The team's first *completed* state |
 
-**Close out on a tracker task.** When the agent on a task from one of these items finishes, Close
-out proposes **comment and move to done**, with the comment drafted from the agent's result. You can
+**Finishing a tracker task.** When the agent on a task from one of these items finishes, its chat
+proposes **comment and move to done**, with the comment drafted from the agent's result. You can
 edit the comment, then press **Approve**. Taskuary reads the item again when the card is drawn. If
 the tracker has no done state, or the workflow offers no move to it from the item's current status,
 the card says so and Approve posts the comment alone. If the item is already done, it posts only the

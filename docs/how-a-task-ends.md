@@ -103,7 +103,7 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
 
   GitHub's own refusal at the merge is still the last word. Sending the reply alone does not close the task while
   its close-out waits.
-- **What Close out does is the GitHub connection's setting** (Connections → GitHub → Close out; `ghcloseout.DEFAULTS`):
+- **What Close out does is the GitHub connection's setting** (Connections → GitHub → Finishing a task; `ghcloseout.DEFAULTS`):
   merge or only close the task, the merge method (used when the repo allows it, else the first it does), red checks
   the repo does not require, Update branch, Re-run checks, closing issues, posting the reply as the comment, and
   Close out anyway (off). A followed repository can override them. **Check the token** says per repository whether

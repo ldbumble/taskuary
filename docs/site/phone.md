@@ -98,9 +98,45 @@ says so plainly instead of going quiet.
 The reverse is true too: a walk started on the page can be picked up on the phone, because the
 walk's position belongs to the conversation rather than to the surface you started it on.
 
+## Agent channels: a chat into one coding agent
+
+With **Developer mode** on, a chat can talk straight to one running coding agent - a WhatsApp or
+Telegram chat or group, a Slack channel, or a Teams chat. Open a coding task, unfold **Talk to this
+agent from…** at the foot of its chat, pick the channel and the chat, and bind it. What you write
+there goes into the agent as if you had typed it in its box, and its answers come back to the chat.
+
+You can let teammates in, so a few people can work on one project with the same agent:
+
+- **Named people only.** You add each teammate by name and by their id on that channel (a phone
+  number on WhatsApp, a member ID on Slack, a work email on Teams). Everyone else in the chat is
+  ignored, and nothing said in a bound chat ever becomes a task in your inbox.
+- **Their words are theirs.** The agent reads "Gail Moreno (teammate)" in front of every line of
+  theirs, with a note that they are not you. The task's chat shows it the same way.
+- **You hold every approval.** Only you can approve a push, land the branch, allow a permission
+  request, or let anything be sent, posted or paid. A teammate typing "yes", "1" or the exact
+  words of your choice does nothing - the chat says only you can answer.
+- **One agent, one repo.** A bound chat talks to that one agent, kept to its project's repo. It
+  has no road to your mail, your other tasks or your files, and Taskuary passes nothing on if the
+  agent's checkout is outside that repo.
+
+When the agent wants permission for something Taskuary's own rules do not settle, it asks you:
+as buttons on the task's chat, and in the bound chat as a numbered list - reply with the number.
+"Always" answers are remembered for that task and that kind of step, but never for a push or a
+send. With no answer in ten minutes the request is refused, and both places say so.
+
+A bound chat is the one place Taskuary speaks without being asked first, because you opened it for
+that: it carries the agent's answers, what it is waiting on you for, its permission requests and
+its landing question - nothing about your other work. **Unbind** takes it away again.
+
+:::note Reading the chat
+Telegram bots in a group see only commands unless their privacy mode is off (BotFather, /setprivacy)
+or the bot is an admin. Slack needs the app in the channel with channel history allowed, and reads
+top-level messages, not thread replies. Teams posting needs your own Microsoft sign-in.
+:::
+
 ## What it will not do
 
-- It will not speak in a group chat, or in a chat you did not choose.
+- It will not speak in a group chat, or in a chat you did not choose. (An agent channel, above, speaks only for its agent.)
 - It will not send anything a human has not approved, on any channel.
 - It will not change a setting behind your back. A change you ask for comes back as a question for your yes.
 - It will not answer someone else in your chat — only the linked owner account is heard.

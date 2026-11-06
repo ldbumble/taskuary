@@ -23,6 +23,7 @@ import { ago } from "./timeWords.js";
 import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 import { useAgents } from "./ui.jsx";
+const DONE_TODAY = "done:today";      // search.DONE_TODAY
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
 // oxblood, which means "this is on you" and nothing else
@@ -182,30 +183,35 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const [q, setQ] = useState(""), [res, setRes] = useState(null), [busy, setBusy] = useState(false);
   const { devMode } = useAgents();       // "pull requests" only where there are any to find (Developer mode)
   const [only, setOnly] = useState(""), [at, setAt] = useState(0);
+  // DONE TODAY (the owner, 2026-11-06): the tasks closed today, as a filter of this box - never on the rail. Pressed, the box asks the
+  // server for `done:today` beside whatever words are typed (search.DONE_TODAY), and one opens at a press like any task hit
+  const [today, setToday] = useState(false);
+  const askOf = (s) => `${today ? `${DONE_TODAY} ` : ""}${String(s || "").trim()}`.trim();
   // ENTER OPENS WHAT WAS TYPED (the 2026-10-19 UI walk, G9): Enter straight after typing opened the LAST query's top hit - the rows
   // on screen were still the old words' - or, before any answer, did nothing. The rows count only when they answer the words in
   // the box (`settled`); an Enter before that is held for these words and spent on their answer's first row
   const typed = useRef(""), held = useRef("");
-  const settled = !!res && res.q === q.trim() && !busy;
-  useEffect(() => { if (!open) { setQ(""); setRes(null); setOnly(""); setAt(0); typed.current = held.current = ""; } }, [open]);
+  const settled = !!res && res.q === askOf(q) && !busy;
+  useEffect(() => { if (!open) { setQ(""); setRes(null); setOnly(""); setAt(0); setToday(false); typed.current = held.current = ""; } }, [open]);
   // ...and opened by the chat's link with words (appLinks #search=): they stand in the box, searched as if typed
   useEffect(() => { if (open && query) { typed.current = query; setQ(query); } }, [open, query]);
   useEffect(() => {
-    const t = q.trim();
-    if (!asks(t)) { setRes(null); setBusy(false); held.current = ""; return undefined; }
+    const t = q.trim(), k = askOf(t);
+    if (!today && !asks(t)) { setRes(null); setBusy(false); held.current = ""; return undefined; }
     let alive = true; setBusy(true);
     // ...and the people the To/Cc pickers would offer for the same words, read beside it: a directory that does not answer leaves the rest
-    const people = () => (t.length < 2 ? Promise.resolve([]) : api.get("/api/people/search", { params: { q: t } }).then(({ data }) => personHits(data?.data)).catch(() => []));
-    const h = setTimeout(() => Promise.all([api.get("/api/search", { params: { q: t } }), people()])
-      .then(([{ data }, ps]) => { if (alive) { setRes({ ...data, hits: [...(data?.hits || []), ...ps], q: t }); setAt(0); } })
-      .catch(() => { if (alive) setRes({ q: t, hits: [], failed: true }); })
+    const people = () => (today || t.length < 2 ? Promise.resolve([]) : api.get("/api/people/search", { params: { q: t } }).then(({ data }) => personHits(data?.data)).catch(() => []));
+    const h = setTimeout(() => Promise.all([api.get("/api/search", { params: { q: k } }), people()])
+      .then(([{ data }, ps]) => { if (alive) { setRes({ ...data, hits: [...(data?.hits || []), ...ps], q: k }); setAt(0); } })
+      .catch(() => { if (alive) setRes({ q: k, hits: [], failed: true }); })
       .finally(() => { if (alive) setBusy(false); }), 180);
     return () => { alive = false; clearTimeout(h); };
-  }, [q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, today]);
   const hits = res?.hits || [];
   const strip = useMemo(() => filters(hits, res), [hits, res]);
   const shown = useMemo(() => arrange(hits, only), [hits, only]);
-  const words = useMemo(() => terms(res?.q || ""), [res]);
+  const words = useMemo(() => terms(String(res?.q || "").replace(DONE_TODAY, "")), [res]);
   useEffect(() => { if (only && !strip.some((f) => f.key === only)) setOnly(""); }, [strip, only]);
   // the highlighted hit's task is read while it is highlighted, so Enter opens it whole - not an empty frame first (taskDetail.js, G8)
   const aheadTid = settled ? shown.flat[at]?.tid || 0 : 0;
@@ -238,9 +244,9 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
     else if (e.key === "ArrowUp") { e.preventDefault(); setAt((i) => (n ? (i - 1 + n) % n : 0)); }
     else if (e.key === "Enter") {
       e.preventDefault();
-      const t = typed.current.trim();
+      const t = askOf(typed.current);
       if (settled && res.q === t) pick(shown.flat[at]);
-      else if (asks(t)) held.current = t;
+      else if (today || asks(t)) held.current = t;
     }
     else if (e.key === "Tab" && strip.length > 1) {
       e.preventDefault();
@@ -264,15 +270,22 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, height: 56, borderBottom: `1px solid ${BORDER}` }}>
         <SearchIcon sx={{ fontSize: 21, color: q ? INK : FAINT }} />
         <InputBase autoFocus fullWidth value={q} onKeyDown={key}
-          onChange={(e) => { typed.current = e.target.value; if (held.current !== e.target.value.trim()) held.current = ""; setQ(e.target.value); }}
+          onChange={(e) => { typed.current = e.target.value; if (held.current !== askOf(e.target.value)) held.current = ""; setQ(e.target.value); }}
           placeholder={devMode ? "Search tasks, mail, chats, pull requests, the Advisor…" : "Search tasks, mail, chats, the Advisor…"} inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
           sx={{ fontSize: 16, color: INK, "& input::placeholder": { color: FAINT, opacity: 1 } }} />
         <Kbd>Esc</Kbd>
       </Box>
       <Box sx={{ height: 2 }}>{busy && <LinearProgress sx={{ height: 2, bgcolor: "transparent", "& .MuiLinearProgress-bar": { bgcolor: ACCENT } }} />}</Box>
-      {strip.length > 1 && (
-        <Box role="tablist" sx={{ display: "flex", gap: 0.6, px: 2, pt: 1, pb: 0.5, flexWrap: "wrap" }}>
-          {strip.map((f) => (
+      <Box role="tablist" sx={{ display: "flex", gap: 0.6, px: 2, pt: 1, pb: 0.5, flexWrap: "wrap" }}>
+          <Box component="button" type="button" aria-pressed={today} data-tq-search-today={today ? "on" : "off"}
+            onMouseDown={(e) => e.preventDefault()} onClick={() => { setToday((v) => !v); setOnly(""); setAt(0); held.current = ""; }}
+            title="The tasks you closed today"
+            sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, height: 26, px: 1.1, borderRadius: 99, cursor: "pointer",
+              fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, border: `1px solid ${today ? "#cbd4dc" : BORDER}`,
+              bgcolor: today ? "#e4e9ee" : "transparent", color: today ? "#41525f" : DIM, "&:hover": { bgcolor: today ? "#e4e9ee" : PANEL2 } }}>
+            <TaskAltIcon sx={{ fontSize: 13 }} />Done today
+          </Box>
+          {strip.length > 1 && strip.map((f) => (
             <Box key={f.key || "all"} component="button" type="button" role="tab" aria-selected={only === f.key} data-tq-search-filter={f.key || "all"}
               onMouseDown={(e) => e.preventDefault()} onClick={() => { setOnly(f.key); setAt(0); }}
               sx={{ display: "inline-flex", alignItems: "center", gap: 0.6, height: 26, px: 1.1, borderRadius: 99, cursor: "pointer",
@@ -282,8 +295,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
               {f.label}<Box component="span" sx={{ fontSize: 10.5, color: FAINT, fontWeight: 600 }}>{f.n}</Box>
             </Box>
           ))}
-        </Box>
-      )}
+      </Box>
       {/* rows that answer earlier words are drawn faint until the answer for these lands: they are not what Enter opens */}
       <Box role="listbox" data-tq-search-settled={settled ? "true" : "false"}
         sx={{ maxHeight: "min(60vh, 560px)", overflowY: "auto", py: 0.75, opacity: res && !settled ? 0.5 : 1, transition: "opacity .12s" }}>
@@ -297,7 +309,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
         )}
         {res && !hits.length && !busy && (
           <Box sx={{ px: 2.5, py: 3, textAlign: "center", fontSize: 12.5, color: DIM }}>
-            {res.failed ? "Search didn't answer - try again in a moment." : nothingMatches(res.q)}</Box>
+            {res.failed ? "Search didn't answer - try again in a moment." : today && !q.trim() ? "Nothing closed today yet."
+              : nothingMatches(String(res.q).replace(DONE_TODAY, "").trim())}</Box>
         )}
         {shown.groups.map((g) => (
           <Box key={g.group} sx={{ mb: 0.5 }}>

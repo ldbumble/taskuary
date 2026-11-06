@@ -35,3 +35,12 @@ test("lines typed mid-turn are drawn under Working on this…", () => {
 test("an action card's choice sizes to its pick and rings on keyboard focus", () => {
   assert.match(read("ActionCard.jsx"), /fieldSizing: "content", borderRadius: "4px", "&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`, outlineOffset: 1 \} \};/);
 });
+
+// A TURN THE SERVER WOKE IS READ (the scenario run, 2026-11-06): new mail and a check-back ran three turns on a live, idle session while the
+// open chat kept its first answer - nothing polls an idle pane. The task's own `task-changed` reads it once, never over this pane's own stream
+test("the open chat reads the task again when it moves, unless a turn is streaming here", () => {
+  const ws = read("GeneralWorkspace.jsx");
+  assert.match(ws, /import \{ onLive, touches \} from "\.\/live\.js";/);
+  assert.match(ws, /quietRef\.current = loaded && !busy && !streaming && !dock;/);
+  assert.match(ws, /onLive\("task-changed", \(ev\) => \{ if \(quietRef\.current && touches\(ev, task\.TaskId\)\) refresh\(\); \}\)/);
+});

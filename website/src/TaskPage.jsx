@@ -23,7 +23,7 @@ import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
-import { onPressed, onPressing, press, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
+import { onPressed, onPressing, press, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { VERBS, choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -573,17 +573,6 @@ const CARDS_IN_SUMMARY = true;    // Task 4.2: the summary draws the draft cards
 // is absent and the rest keep their order. Drawn once, where BUTTONS_AT says: "strip", the open pane's white strip (the Agent's when it is open);
 // "spine", Came from's spine. One line on a strip, its words never wrapped - what does not fit folds into its ▾
 export const BUTTONS_AT = "strip";
-export const TASK_ORDER = ["done", "reopen", "hand", "remind", "nat"];
-const TASK_PANES = ["head", "from", "agent", "close", "share"];
-const verbKey = (v) => String(v?.id || "").split(":").pop();
-// the order, pure: [fixed in TASK_ORDER's order..., "change", ...the rest as they came]
-export const taskButtons = (by, skip = () => false) => {
-  const seen = new Set(), all = TASK_PANES.flatMap((k) => (by[k] || []).map((v) => ({ v, head: k === "head" || k === "share" || !!v.quiet })))
-    .filter(({ v }) => !v.card && !skip(v) && !seen.has(v.id) && seen.add(v.id));
-  const at = (x) => TASK_ORDER.indexOf(verbKey(x.v)), fixed = all.filter((x) => at(x) >= 0).sort((a, b) => at(a) - at(b));
-  const rest = all.filter((x) => at(x) < 0), change = (by.change || []).filter((v) => !skip(v));
-  return [...fixed, ...(change.length ? [{ change }] : []), ...rest];
-};
 function TaskButtons({ skip = () => false, spine = false }) {
   const by = useSpineAll(), list = taskButtons(by, skip);
   const up = list.filter((x) => x.change || !x.v.tucked || x.v.tone === "p"), tucked = list.filter((x) => !up.includes(x)).map((x) => x.v);
@@ -602,24 +591,26 @@ export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec], home 
   return <MovesLine items={items} tucked={tucked} sec={sec} name={name} />;
 }
 function MovesLine({ items, tucked, sec, name }) {
-  const box = useRef(null), [n, setN] = useState(99), [, refit] = useState(0), [at, setAt] = useState(null);
+  // ...what folds is never Mark done nor what is lit: the others go into the ▾ from the end, wherever the lit one stands (a lit Propose a new time
+  // at the row's end was cut off at the strip's edge while the moves before it held their places)
+  const box = useRef(null), [drop, setDrop] = useState(0), [, refit] = useState(0), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
-  useLayoutEffect(() => { setN(99); }, [sig]);
-  // ...and with neither, everything may go: a ~240px Came from on a 900px desk had room for its ▾ alone, and Remind me pushed it off the end
-  const keep = 1 + items.findLastIndex((x) => x.v && (isDoneMove(x.v) || x.v.tone === "p"));
-  useLayoutEffect(() => { const b = box.current; if (b && n > keep && b.scrollWidth > b.clientWidth + 1) setN((k) => Math.max(keep, Math.min(k, items.length) - 1)); });
-  // ...and a width change measures again even when nothing was folded: setN(99) on an n already 99 drew nothing, so a pane narrowing into
-  // a half (side by side) left its last move cut off at the edge until some unrelated draw folded it seconds later
+  useLayoutEffect(() => { setDrop(0); }, [sig]);
+  const pinned = (x) => !!x.v && (isDoneMove(x.v) || x.v.tone === "p"), loose = items.filter((x) => !pinned(x));
+  const out = new Set(loose.slice(Math.max(0, loose.length - drop)));
+  useLayoutEffect(() => { const b = box.current; if (b && drop < loose.length && b.scrollWidth > b.clientWidth + 1) setDrop((k) => k + 1); });
+  // ...and a width change measures again even when nothing was folded: a pane narrowing into a half (side by side) left its last move cut off
+  // at the edge until some unrelated draw folded it seconds later
   useEffect(() => {
     const b = box.current?.parentElement;
     if (!b || typeof ResizeObserver === "undefined") return undefined;
     let w = b.clientWidth;
-    const ro = new ResizeObserver(() => { if (Math.abs(b.clientWidth - w) > 2) { w = b.clientWidth; setN(99); refit((k) => k + 1); } });
+    const ro = new ResizeObserver(() => { if (Math.abs(b.clientWidth - w) > 2) { w = b.clientWidth; setDrop(0); refit((k) => k + 1); } });
     ro.observe(b);
     return () => ro.disconnect();
   }, []);
   if (!items.length && !tucked.length) return null;
-  const shown = items.slice(0, n), rest = [...items.slice(n).flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
+  const shown = items.filter((x) => !out.has(x)), rest = [...items.filter((x) => out.has(x)).flatMap((x) => (x.change ? x.change : [x.v])), ...tucked];
   return <Box ref={box} data-tq-pane-moves={sec} role="group" aria-label={`${name} moves`} sx={{ ...MOVE_LOOK, display: "flex", gap: 0.75, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
     "& .tq-ab": { flexShrink: 0 } }}>
     {shown.map((x) => (x.change ? <ChangeMoves key="change" change={x.change} /> : stageBtn(x.v, x.v.label, !!x.head)))}

@@ -65,6 +65,13 @@ def mark_start(store, tid: int, cwd: str) -> dict | None:
     return r
 
 
+def has_checkout(store, tid: int, cwd: str = '') -> bool:
+    """CODE THINGS ONLY WHERE THERE IS CODE (the owner, 2026-11-06: "diff shows up if there is branch or checkout stuff available"): the task's
+    work started in a checkout (mark_start), or a session of it works in a folder inside a git repo - whatever kind the task is."""
+    if record(store, tid).get('start'): return True
+    return bool(cwd) and os.path.isdir(cwd) and bool(sha(cwd, 'HEAD'))
+
+
 def seen(store, tid: int) -> dict:
     """The agent's branch, as the checkout shows it now - kept, so another agent switching the shared checkout later does not lose it."""
     r = record(store, tid)

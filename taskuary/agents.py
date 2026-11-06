@@ -1144,6 +1144,13 @@ def repair_role_assignees(store) -> int:
     return fixed
 
 
+def parent_of(u: dict) -> str:
+    """The helper call an ACP tool call runs under, when its adapter says (claude-code-acp: _meta.claudeCode.parentToolUseId) - so the
+    helper's own steps nest under its row instead of interleaving with the main agent's (the owner, 2026-11-06: parallel work read wrong)."""
+    m = u.get('_meta') or {}
+    return str((m.get('claudeCode') or {}).get('parentToolUseId') or m.get('parentToolUseId') or m.get('parentToolCallId') or '')
+
+
 class ACPSteps:
     """ACP session/update as the SAME trace events the argv road emits - tool_call with its arguments, tool_result with its output,
     progress for what it said and thought - so a general agent on any CLI reads alike on the canvas (website/src/agentSteps.js).
@@ -1177,6 +1184,7 @@ class ACPSteps:
         for k in ('title', 'kind', 'name', 'status'):
             if u.get(k): c[k] = u[k]
         if (tn := ((u.get('_meta') or {}).get('claudeCode') or {}).get('toolName')): c['tool'] = tn
+        if (par := parent_of(u)): c['parent'] = par
         if u.get('locations'): c['locations'] = u['locations']
         for b in u.get('content') or []:
             if isinstance(b, dict) and b.get('type') == 'content': c['text'] = acp_mod._text_of(b.get('content'))
@@ -1209,7 +1217,7 @@ class ACPSteps:
         if c['shown']: return
         c['shown'] = True
         name, args = self._call(c)
-        self.trace('tool_call', name, {'tool_call_id': c['id'], 'args': args})
+        self.trace('tool_call', name, {'tool_call_id': c['id'], 'args': args, **({'parent': c['parent']} if c.get('parent') else {})})
         self.trace('live', self.name, f"→ {c.get('title') or name}"[:400])
 
     def _finish(self, c: dict, failed: bool = None):
@@ -1855,7 +1863,8 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         if j.get('type') == 'assistant':
             for c in (j.get('message') or {}).get('content') or []:
                 if c.get('type') == 'tool_use':
-                    trace('tool_call', c.get('name') or 'tool', {'tool_call_id': c.get('id') or 'tool', 'args': c.get('input') or {}})
+                    trace('tool_call', c.get('name') or 'tool', {'tool_call_id': c.get('id') or 'tool', 'args': c.get('input') or {},
+                                                                  **({'parent': j['parent_tool_use_id']} if j.get('parent_tool_use_id') else {})})
                 elif c.get('type') == 'text' and str(c.get('text') or '').strip():
                     trace('progress', 'text', str(c['text']).strip())
             _published(j, trace)

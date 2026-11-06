@@ -716,9 +716,9 @@ class CoreTests(unittest.TestCase):
         self.assertIn('winrm', REGISTRY)
         s = MemoryStore()
         c = s.get_connector_by_type('winrm')
-        s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': '{"host": "AZWEB01"}'}, 't')
+        s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': '{"host": "NWWEB01"}'}, 't')
         cfg = resolve_cfg(s, {'type': 'winrm', 'script': 'hostname'})
-        self.assertEqual((cfg['host'], cfg['script']), ('AZWEB01', 'hostname'))
+        self.assertEqual((cfg['host'], cfg['script']), ('NWWEB01', 'hostname'))
 
     def test_reset_connector_wipes_connection(self):
         s = MemoryStore()

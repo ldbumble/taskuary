@@ -83,8 +83,12 @@ TOOLS = {
                      _S({'how': {'type': 'string', 'enum': ['rebase', 'merge', 'pr', 'discard']}, 'why': _STR}, ('how',)),
                      ('POST', '/api/agent/propose-land')),
     'propose_reply': ('propose', "Write the reply to a person on this task - `to` names them (a name or address), else it answers the newest "
-                      "mail. It becomes a pending reply with a Send button for the owner - nothing is sent.",
-                      _S({'text': _STR, 'to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
+                      "mail. `answers`: the number of the mail it replies to, when that is an earlier one than the newest (THE MAIL ON THIS "
+                      "TASK in your brief). Who hears it is yours to decide: `only: true` sends it to that mail's sender alone (something "
+                      "sensitive), `cc` lists who else is copied instead of the thread's own, and `why_to` says in one line why it goes to "
+                      "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent.",
+                      _S({'text': _STR, 'to': _STR, 'answers': _INT, 'only': {'type': 'boolean'}, 'cc': {'type': 'array', 'items': _STR},
+                          'why_to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
     'reply_not_needed': ('own', "The reply waiting on this task is no longer needed - someone else answered, the owner already did. `why` "
                          "says it in one line. The draft stays, marked, with the owner's Send still on it - nothing is sent, deleted or "
                          "closed; a new reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
@@ -107,7 +111,8 @@ TOOLS = {
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
                 "comment), close_issue, open_pr, land, run_tool {type, connector_id, ...} (a send, post or order on one of their "
                 "systems - a post: {type: linkedin_post, text, image: a picture in your task folder}, drawn for the owner as the post with "
-                "its Post button), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
+                "its Post button; a new GitHub issue: {type: github_issue, repo: owner/name, title, body, labels?}, drawn with its "
+                "Create issue button), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
                 "jira_comment {body}, jira_move {status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` "
                 "is the one this task came from unless you name another. Always give `why`. It puts an Approve button in front of "
                 "the owner - nothing happens until they press it.",
@@ -209,7 +214,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'note_peers': return _j(doors['note_peers'](tid, str(a.get('to') or ''), str(a.get('text') or '')))
     if name == 'propose_land': return _j(doors['propose_land'](tid, str(a.get('how') or ''), str(a.get('why') or '')))
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
-    if name == 'propose_reply': return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach'))))
+    if name == 'propose_reply':
+        who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
+        return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who))
     if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''),
                                                          attached(tid, a.get('attach'))))
     if name == 'sign_form':

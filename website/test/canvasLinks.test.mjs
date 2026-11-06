@@ -28,13 +28,21 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(canvasRequestFromHash("#settings=updates&key=update").state, { section: "updates", open: "updates", knob: "update" });
   assert.equal(hashFor("settings", { section: "updates", open: "updates", knob: "update" }), "#settings=updates&key=update");
   assert.equal(hashFor("settings", { section: "updates", open: "updates" }), "#settings=updates");
-  assert.deepEqual(canvasRequestFromHash("#settings=docs").state, { section: "docs", open: null }, "Docs opens on its shelf of files");
-  assert.deepEqual(canvasRequestFromHash("#settings=playbooks"), { kind: "browse", area: "reports", state: { section: "playbooks", open: null }, n: 0 },
-    "Playbooks left Settings for the Reports page (2026-10-21) - an old link lands on their shelf");
+  // ABOUT YOU (2026-11-06): Docs, Playbooks, Memory and the identity page left Settings and Reports - every old link lands there
+  const about = (h) => { const r = canvasRequestFromHash(h); return r.area === "about" ? r.state : r; };
+  assert.deepEqual(about("#settings=docs"), { section: "docs", open: null }, "Docs opens on its shelf of files");
+  assert.deepEqual(about("#settings=about"), { section: "you", open: "you" });
+  assert.deepEqual(about("#settings=memory"), { section: "memory", open: null });
+  assert.deepEqual(about("#settings=docs&doc=learned"), { section: "memory", open: null }, "LEARNED.md reads as Memory's sentences");
+  assert.deepEqual(about("#settings=docs&doc=learned&view=changes"), { section: "docs", open: "d:learned", view: "changes" }, "its What changed list stays");
+  assert.deepEqual(about("#settings=docs&doc=soul"), { section: "docs", open: "d:soul" });
+  assert.deepEqual(about("#settings=playbooks"), { section: "playbooks", open: null });
+  assert.deepEqual(about("#report=playbooks"), { section: "playbooks", open: null }, "the Reports page's old shelf");
+  assert.deepEqual(about("#about"), { section: null, open: null });
+  assert.deepEqual(about("#about=bogus"), { section: null, open: null });
   assert.deepEqual(canvasRequestFromHash("#settings=profiles").state, { section: "profiles", open: null }, "Profiles is a section of its own");
-  assert.deepEqual(canvasRequestFromHash("#playbook=weekly-close"), { kind: "browse", area: "reports", state: { section: "playbooks", open: "pb:weekly-close" }, n: 0 });
-  assert.deepEqual(canvasRequestFromHash("#playbook=new:quickbooks").state, { section: "playbooks", open: null, newFor: "quickbooks" }, "a card's New playbook");
-  assert.deepEqual(canvasRequestFromHash("#report=playbooks").state, { section: "playbooks", open: null });
+  assert.deepEqual(about("#playbook=weekly-close"), { section: "playbooks", open: "pb:weekly-close" });
+  assert.deepEqual(about("#playbook=new:quickbooks"), { section: "playbooks", open: null, newFor: "quickbooks" }, "a card's New playbook");
   assert.deepEqual(canvasRequestFromHash("#profiles").state, { section: "profiles", open: null }, "the Profiles section, every profile a card");
 });
 

@@ -3717,14 +3717,14 @@ def task_outputs(tid: int):
 def open_task_outputs(tid: int, request: Request):
     """The task's outputs folder, opened on THIS computer (Explorer, Finder, the file manager) at the owner's press - the folder the server
     knows for the task (outputs.folder), never a path the page names. Owner only: an agent session has no business opening windows."""
-    import os, subprocess
+    import webbrowser
     from . import outputs
     _owner_only(request, "opening a folder on this computer is the owner's")
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
     d = outputs.folder(tid)
     if not d.is_dir(): raise HTTPException(404, 'this task has no files yet')
-    if os.name == 'nt': os.startfile(str(d))                                     # noqa: S606 - a folder Taskuary made, by its own path
-    else: subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(d)])
+    # ...by its file address, as Open URL opens a page: the system's own handler (Explorer, Finder, the file manager), no process of ours
+    threading.Thread(target=webbrowser.open, args=(d.resolve().as_uri(),), daemon=True).start()
     return {'ok': True}
 
 
@@ -5398,7 +5398,10 @@ def agent_memory(request: Request, task_id: int, section: str = ''):
     return {'text': text, 'says': text or 'nothing learned about the owner yet' + (f' under {learned_cut.TITLE[section]}' if section else '')}
 
 class AgentFile(BaseModel): name: str; data: str                 # data is base64: the CLI reads the file, the server never opens a path it is handed
-class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
+class AgentReplyBody(BaseModel):
+    task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
+    # ...who hears it, the agent's call (2026-11-06): the sender alone, or who else is copied, and the one line why (wrapup.agent_reply)
+    only: bool = False; cc: list[str] | None = None; why_to: str = ''
 
 def _agent_files(files):
     import base64, binascii
@@ -5413,7 +5416,8 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to, answers=body.answers)
+    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to,
+                              answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
 class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
 
@@ -5639,7 +5643,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
-             'reply': lambda tid, text, to='', files=(): agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files)), request),
+             'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
              'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),

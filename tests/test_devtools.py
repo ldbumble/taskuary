@@ -165,7 +165,7 @@ class SentryTests(unittest.TestCase):
 class PagerDutyTests(unittest.TestCase):
     def test_test_and_poll(self):
         s = MemoryStore(); c = conn(s, 'pagerduty')
-        inc = {'id': 'P1', 'incident_number': 12, 'title': 'AZWEB01 down', 'status': 'triggered',
+        inc = {'id': 'P1', 'incident_number': 12, 'title': 'NWWEB01 down', 'status': 'triggered',
                'urgency': 'high', 'created_at': '2026-08-23T03:00:00Z',
                'html_url': 'https://northwind.pagerduty.com/incidents/P1',
                'service': {'summary': 'Web tier'}, 'summary': 'host unreachable'}
@@ -179,10 +179,10 @@ class PagerDutyTests(unittest.TestCase):
 class ReportExecutorTests(unittest.TestCase):
     def test_prometheus_rows(self):
         j = {'status': 'success', 'data': {'result': [
-            {'metric': {'job': 'web', 'instance': 'azweb01'}, 'value': [1755900000, '0']}]}}
+            {'metric': {'job': 'web', 'instance': 'nwweb01'}, 'value': [1755900000, '0']}]}}
         with mock.patch('requests.get', return_value=R(j)):
             head, body = REGISTRY['prometheus']({'base_url': 'http://prom:9090', 'query': 'up == 0'})
-        self.assertEqual(head, '1 series'); self.assertIn('azweb01', body)
+        self.assertEqual(head, '1 series'); self.assertIn('nwweb01', body)
 
     def test_prometheus_needs_base_url(self):
         with self.assertRaises(RuntimeError): REGISTRY['prometheus']({'query': 'up'})

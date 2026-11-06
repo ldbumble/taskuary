@@ -148,6 +148,24 @@
       "desc": "Paste a personal access token - repos are auto-discovered, feed the Board's repo picker and the coding agent's issue loop. Per repo, choose what issues and PRs do: tasks, feed, or off.",
       "match": [
         "github"
+      ],
+      "actions": [
+        {
+          "kind": "tracker",
+          "road": "run_tool",
+          "tool": "github_issue",
+          "press": "Create issue",
+          "busy": "Creating…",
+          "done": "Created",
+          "undone": "Not created",
+          "note": "Nothing is filed on GitHub until you press Create issue.",
+          "fields": [
+            {"key": "repo", "label": "In", "type": "line", "agent": true},
+            {"key": "title", "label": "Title", "type": "line", "agent": true, "heading": true},
+            {"key": "labels", "label": "Labels", "type": "line", "agent": true},
+            {"key": "body", "label": "Issue", "type": "text", "edit": true, "agent": true}
+          ]
+        }
       ]
     },
     {

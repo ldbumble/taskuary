@@ -141,8 +141,10 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
       {area === "connections" && <ConnectorsView onNavigate={onNavigate} {...common} />}
       {area === "reports" && <ReportsView {...common} />}
       {area === "settings" && <SettingsView onNavigate={onNavigate} {...common} />}
+      {/* ...and About you - docs, playbooks, memory - the same view on its own page (the owner, 2026-11-06) */}
+      {area === "about" && <SettingsView key="about" area="about" onNavigate={onNavigate} {...common} />}
       {area === "hub" && <Suspense fallback={<CircularProgress size={20} />}><HubView onOpenTask={onOpenTask} {...common} /></Suspense>}
     </Box>
   );
 }
-export const AREA_TITLES = { new: "New", connections: "Connections", reports: "Reports", settings: "Settings", hub: "Hub" };
+export const AREA_TITLES = { new: "New", connections: "Connections", reports: "Reports", settings: "Settings", about: "About you", hub: "Hub" };

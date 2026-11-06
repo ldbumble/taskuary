@@ -333,7 +333,7 @@ Two levels, and the difference is worth holding onto:
 - A **brain** is what does the thinking — a CLI tool (Claude Code, Codex, …) or an API connector, with
   the model chosen on that connection.
 - A **profile** is instructions — a role's rules, laid on whichever brain runs it. It names no CLI
-  and no model. Install one from a skill or write one on **Settings → Docs**.
+  and no model. Install one from a skill or write one on **About you → Docs**.
 - A **playbook** is a job — when it starts, which connections it uses, the steps, what an agent
   may do alone, what to ask first, and what counts as done.
 
@@ -343,7 +343,7 @@ playbook onto the task. Approve it, and the next message like it is matched to t
 triage, and the agent is seeded from it instead of from `CODING.md`'s repository rules.
 
 Each connector card lists the playbooks that name it, and the words themselves are edited on
-**Reports → Playbooks**, where each has an on/off switch.
+**About you → Playbooks**, where each has an on/off switch.
 
 ## The task view and the Board
 

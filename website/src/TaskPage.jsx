@@ -3312,7 +3312,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && queuedRow && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={queuedRow} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                {!codeRun && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
+                {/* ...and NONE OVER A CHAT (the owner, 2026-11-05: "don't like Taskuary answered"): the chat says who said what, its live steps and
+                    clock say it is working, the task header's chip says the state - the line over it was a label, not an action */}
+                {!codeRun && !chatPane && <Box ref={agentHead} data-tq-agent-head="" data-tq-focus={focus === "agent" ? "" : undefined} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : shows("agent") ? (agentBar ? 0.8 : 1.5) : 1.1,
                   ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
                   flexShrink: 0,

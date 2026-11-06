@@ -1375,7 +1375,10 @@ def acp_launch(profile: dict) -> dict:
         return {'cmd': cmd, 'env': {}, 'mode': '', 'meta': None, 'adapter': ''}
     # the adapter's own command when it is installed (`npm i -g` puts it on PATH: ~2.3 s a start quicker, measured), else npx, pinned
     own = pathcache.which(ad['bin'])
-    cmd = list(profile.get('acp_cmd') or ([own] if own else _resolve_cmd('npx') + ['-y', ad['pkg']]))
+    # ...and no npx is a start failure, not a missing CLI: the owner's claude is there, and the argv road runs it (a machine with no
+    # Node on PATH answered every general turn "'npx' not found on PATH" and nothing else - 2026-11-06)
+    try: cmd = list(profile.get('acp_cmd') or ([own] if own else _resolve_cmd('npx') + ['-y', ad['pkg']]))
+    except FileNotFoundError as e: raise acp_mod.ACPStartError(f"{ad['pkg']} cannot launch: {e}") from e
     cli = (_resolve_cmd(name) or [name])[-1]
     env = {k: v.replace('{cli}', cli) for k, v in ad['env'].items()}
     args = list(profile.get('args') or clis_mod.preset_args(name) or [])
@@ -1403,7 +1406,9 @@ def _acp_open(name: str, launch: dict, cwd, env: dict, resume, timeout, trace):
     its mode, model and effort set. ACPStartError for anything before the session exists - nothing has run, so run_cli takes
     the argv road instead."""
     try: client = acp_mod.ACPClient(launch['cmd'][0], launch['cmd'][1:], cwd=cwd, env=env, timeout=timeout)
-    except PermissionError as e: raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
+    except PermissionError as e:
+        if launch['adapter']: raise acp_mod.ACPStartError(f"{launch['adapter']} was refused: {e}") from e   # the adapter, not the CLI
+        raise FileNotFoundError(denied_msg(name, launch['cmd'][0], e)) from e
     try:
         caps = client.connect()
         try:
@@ -1797,7 +1802,7 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=No
     brain, a CLI with no stream-json input): there is nothing to have ready."""
     profile = with_cmd(profile, store); name = profile['cmd']
     args = list(profile.get('args') or preset_args(name) or ['-p'])
-    if profile.get('keep_alive') and _acp_road(profile, store): return _warm_acp(profile, resume, extra_env, store, swap)
+    if profile.get('keep_alive') and _acp_road(profile, store) and (ok := _warm_acp(profile, resume, extra_env, store, swap)) is not None: return ok
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool
     try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name),
@@ -1807,16 +1812,17 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=No
 
 def _warm_acp(profile: dict, resume, extra_env, store, swap: bool) -> bool:
     """warm_cli for a kept conversation on the ACP road: its connection opened and its session ready before the first turn - the
-    adapter's start-up (3-5 s, measured) paid while the owner reads. A start that fails warms nothing; the turn falls back then."""
+    adapter's start-up (3-5 s, measured) paid while the owner reads. None for a start that fails: warm_cli warms the argv
+    process instead, the one the turn will fall back to."""
     from . import clipool
-    name, launch, cwd = profile['cmd'], acp_launch(profile), _long(profile.get('cwd'))
-    env = {**spawn_env(profile, extra_env), **launch['env']}
-    sig = _acp_sig(launch, cwd, env)
     try:
+        name, launch, cwd = profile['cmd'], acp_launch(profile), _long(profile.get('cwd'))
+        env = {**spawn_env(profile, extra_env), **launch['env']}
+        sig = _acp_sig(launch, cwd, env)
         return clipool.warm_with(profile['keep_alive'], sig, lambda: acp_mod.Conversation(
             _acp_open(name, launch, cwd, env, resume, profile.get('timeout'), lambda *a: None), sig), resume, swap=swap)
     except acp_mod.ACPStartError as e:
-        logger.info(f'acp: {name} not warmed - {e}'); return False
+        logger.info(f"acp: {profile['cmd']} not warmed over ACP - {e}"); return None
 
 
 def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env):

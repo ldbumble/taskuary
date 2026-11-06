@@ -10,6 +10,7 @@ not exist: not in the prompt, not callable.
 They are look-ups run in the turn, so the Assistant answers with what they say. The phone still speaks only while the owner talks there:
 nothing here sends a line on its own - no pings about tasks, agents finishing or notes between agents.
 """
+from .timewords import plural
 import contextlib, re, threading
 
 from .store import task_ref
@@ -78,7 +79,7 @@ def agents_text(store) -> str:
     rs = rows(store)
     if not rs: return 'No coding agent is running right now.'
     return '\n'.join(f"{r['ref']} {r['title'][:60]} - {r['repo'] or 'no repo'} on {r['branch'] or '?'}, {r['state']}, "
-                     f"{r['files']} file{'s' if r['files'] != 1 else ''} changed" + (f" - last: {r['last']}" if r['last'] else '') for r in rs)
+                     f"{plural(r['files'], 'file')} changed" + (f" - last: {r['last']}" if r['last'] else '') for r in rs)
 
 
 def tell(store, p: dict) -> str:

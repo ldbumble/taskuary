@@ -818,7 +818,8 @@ def _list_models(t, cfg: dict, key: str) -> list:
 # it"). The router spells it the way a CLI pick does - 'gpt-5@high', '@low' for the card's own model - and make_llm splits it off:
 # Anthropic takes output_config.effort, OpenAI and Azure OpenAI reasoning_effort (the Responses API reasoning.effort). A model that
 # turns it down is asked once more without it, and is not offered it again in this process. Every other provider never sees it.
-EFFORT_TAKERS = ('anthropic', 'openai', 'azure_openai')
+# ...and the HIPAA AI card: its gateway (LiteLLM) carries reasoning_effort on to the Gemini and Claude models behind it (2026-11-06)
+EFFORT_TAKERS = ('anthropic', 'openai', 'azure_openai', 'hipaa_ai')
 EFFORT_WORDS = ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 _NO_EFFORT = set()         # (type, endpoint, model) that refused an effort - asked plainly from then on
 _EFFORT_REFUSED = re.compile(r'reasoning_effort|reasoning\.effort|effort|output_config', re.I)
@@ -973,7 +974,8 @@ def make_llm(t, cfg: dict, key: str):
                     # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
                     # prompt - room to answer, and a quick give-up on an endpoint that is not there
                     r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
-                    if r.status_code == 400 and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
+                    # ...a proxy may turn it down with a 422 of its own (the gateway in front of another provider's model)
+                    if r.status_code in (400, 422) and body.pop('reasoning_effort', None) and _EFFORT_REFUSED.search(r.text or ''):
                         _no_effort(ek, r.text); r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
                         ch = (r.json().get('choices') or [{}])[0]

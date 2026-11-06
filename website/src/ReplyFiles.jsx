@@ -10,13 +10,14 @@
 // blocks the send; the owner can always mean "attached in my last mail".
 import React, { useRef, useState } from "react";
 import { label, hint } from "./buttons.js";
-import { Box, Button, Chip, CircularProgress, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import api from "./api.js";
 import { ALERT_INK, DIM } from "./theme.jsx";
 import { sizeText } from "./replyFiles.js";
 import { useVerbs } from "./actionRow.js";
 import { FileDialog } from "./PublishedPages.jsx";
+import { AttachChip, AttachRow } from "./promptImages.jsx";
 // a file on the reply as the viewer reads it: its preview by its kind, read back from the reply itself (server review_attachment_read)
 const EXT_PREVIEW = { csv: "text", txt: "text", md: "text", json: "text", xlsx: "sheet", xls: "sheet", docx: "document", pdf: "pdf", png: "picture",
   jpg: "picture", jpeg: "picture", gif: "picture", webp: "picture" };
@@ -65,13 +66,12 @@ export default function ReplyFiles({ reviewId, files = [], promised = false, sho
   return (
     <Box sx={{ mb: 0.75 }}>
       <FileDialog file={viewing} onClose={() => setViewing(null)} />
-      <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
-        {files.map((f) => (
-          <Chip key={f.name} size="small" icon={<AttachFileIcon sx={{ fontSize: 14 }} />}
-            label={`${f.name} · ${sizeText(f.size)}`} disabled={disabled || busy === f.name}
-            onDelete={() => drop(f.name)} onClick={() => setViewing(asViewed(reviewId, f))} title="Open it"
-            data-tq-reply-file={f.name} sx={{ maxWidth: 320, cursor: "pointer" }} />
-        ))}
+      <Box sx={{ display: "flex", flexWrap: "nowrap", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+        {/* ...the one attachment chip, in the one row: a few, then "+N more" (promptImages AttachRow, the owner 2026-11-06) */}
+        {files.length > 0 && <AttachRow sx={{ flex: "0 1 auto", pb: 0 }}>{files.map((f) => (
+          <AttachChip key={f.name} name={f.name} note={sizeText(f.size)} title={`Open ${f.name}`} onClick={() => setViewing(asViewed(reviewId, f))}
+            onRemove={disabled || busy === f.name ? null : () => drop(f.name)} data-tq-reply-file={f.name} />
+        ))}</AttachRow>}
         {mail && toRow ? null : mail ? (
           <Button size="small" onClick={() => pick.current?.click()} disabled={disabled || busy === "adding"}
             startIcon={busy === "adding" ? <CircularProgress size={11} /> : <AttachFileIcon sx={{ fontSize: 14 }} />}

@@ -8,6 +8,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 import api from "./api";
 import { bareLine } from "./mailLinks.js";
+import { AttachChip, AttachRow } from "./promptImages.jsx";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 // An <img src> carries no headers, so the token rides in the query string (see token_gate).
@@ -224,25 +225,20 @@ export const Attachments = ({ messageId, canFetch, dense, original, asFiles = nu
           <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.3 }}>
             <AttachFileIcon sx={{ fontSize: 12 }} /> Attached · {files.length}
           </Typography>
-        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
+        {/* ...the one attachment chip, in the one row: a few, then "+N more" with the whole list (promptImages AttachRow, the owner 2026-11-06) */}
+        <AttachRow sx={{ mt: 0.5 }}>
           {files.map((a) => (
-            <Box key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined} data-tq-att={a.name}
-              data-tq-unsaved={!a.link && !a.url ? "" : undefined}
+            <AttachChip key={a.id} component={hrefOf(a, original) ? "a" : "div"} href={hrefOf(a, original)} data-tq-linked-doc={a.link ? "" : undefined} data-tq-att={a.name}
+              data-tq-unsaved={!a.link && !a.url ? "" : undefined} name={a.name}
               target="_blank" rel={a.link || !a.url ? "noopener noreferrer" : "noopener"} title={titleOf(a, original)}
               aria-expanded={!a.link && a.url && isPdf(a) ? pdf?.id === a.id : undefined}
               onClick={!a.link && a.url ? (e) => { e.preventDefault(); isPdf(a) ? setPdf(pdf?.id === a.id ? null : a) : save(a); } : undefined}
-              sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
-                border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: "min(260px, 100%)", boxSizing: "border-box",
-                cursor: hrefOf(a, original) ? "pointer" : "default", opacity: hrefOf(a, original) ? 1 : 0.6,
-                "&:hover": { borderColor: hrefOf(a, original) ? "#d8cfbe" : BORDER } }}>
-              <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a" }}>{kindOf(a)}</Typography>
-              <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
-              {/* ...and a file it could not keep says so on the chip, not only on hover */}
-              <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5, whiteSpace: "nowrap" }}>
-                {a.link ? (a.note ? "not read" : "") : a.url ? kb(a.size) : original ? "in the original" : "not saved"}</Typography>
-            </Box>
+              icon={<Typography component="span" variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a", flexShrink: 0 }}>{kindOf(a)}</Typography>}
+              /* ...and a file it could not keep says so on the chip, not only on hover */
+              note={a.link ? (a.note ? "not read" : "") : a.url ? kb(a.size) : original ? "in the original" : "not saved"}
+              sx={{ opacity: hrefOf(a, original) ? 1 : 0.6, cursor: hrefOf(a, original) ? "pointer" : "default" }} />
           ))}
-        </Box>
+        </AttachRow>
         {saveErr && <Typography variant="caption" data-tq-file-error="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saveErr}</Typography>}
         {saved && <Typography variant="caption" data-tq-file-saved="" sx={{ display: "block", mt: 0.5, color: DIM }}>{saved}</Typography>}
         {pdf && files.some((a) => a.id === pdf.id) && <PdfView key={pdf.id} file={pdf} onClose={() => setPdf(null)} />}

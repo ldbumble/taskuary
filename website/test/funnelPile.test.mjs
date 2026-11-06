@@ -185,11 +185,9 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // read, so they leave the pile the moment the batch goes up and there was nothing left to ring
   assert.match(view, /const onTable = batch \? \(batch\.items \|\| \[\]\)\.filter/);
   assert.match(view, /className="tq-pile-batch"/);
-  // ...and ONE item on the table says the same word on the same border. Both wear the identical
-  // slate ring, so without it the ring on a single row had to be read rather than known (the
-  // owner, 2026-09-17: "isn't there a current word on the border around chosen task?").
-  assert.match(view, /\{isCur && <b className="tq-pile-now" data-tq-now=\{tag\}>\{tag\}<\/b>\}/);   // "on the table", or "under this page" (tableWords)
-  assert.match(read("assistantView.css"), /\.tq-pile-batch b, \.tq-pile-now \{/);
+  // ...and no word under ONE ringed row: "ON THE TABLE" was a label nobody had explained (audit, 2026-11-05) - the ring says it
+  assert.doesNotMatch(view, /tq-pile-now|on the table · /);
+  assert.match(read("assistantView.css"), /\.tq-pile-batch b \{/);
   assert.match(view, /const bands = bandsOf\(drawn\.map\(/);          // grouped by category, headings freeze
   // ...each band taking the room it has, less the extra height of the row on the table - which is
   // 24px taller than the rest and drawn inside one of those bands

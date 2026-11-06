@@ -180,8 +180,8 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
       <div className={fit.tight ? "tq-arow-verbs tight" : "tq-arow-verbs"} ref={setBox} data-tq-fold={fit.level}>
         {/* NAV, ONE PILL (the owner, 2026-10-27): the walk's Back (up the line) and Next (down it), labelled like the types - never folded */}
         {(next || back) && <div className="tq-cl tq-cl-next" role="group" aria-label={NAV} data-tq-type="nav">
-          {/* ...on a phone the pill keeps the row its words (pill-leaves-room): no label, and Back is its arrow alone, its name on it for a reader - and on a squeezed desk bar (navShort) */}
-          {!short && <span className="tq-cl-h" aria-hidden="true">{NAV}</span>}
+          {/* ...no "NAV" tag over it (audit, 2026-11-05: a label nobody had explained); on a phone and a squeezed desk bar (navShort) Back is its
+              arrow alone, its name on it for a reader */}
           <div className="tq-cl-b">
             {back && <button type="button" className={`tq-ab ${back.tone} next`} data-tq-back="" data-tq-walk-back="" data-tq-short={short ? "" : undefined}
               aria-label={back.label} title={back.title || back.label} disabled={back.disabled}
@@ -194,7 +194,7 @@ export default function ActionRow({ inline = false, advised: given = null, hold 
       {/* every part the row can draw, unseen, in the row's own classes - what fitRow adds up */}
       <div className="tq-arow-ghost" ref={ghost} aria-hidden="true">
         <div className="tq-cl">
-          {[...TYPES, ...(phone ? [] : [["nav", NAV]])].map(([t, l]) => <span key={t} className="tq-cl-h" data-tq-wl={t}>{l}</span>)}
+          {TYPES.map(([t, l]) => <span key={t} className="tq-cl-h" data-tq-wl={t}>{l}</span>)}
           <div className="tq-cl-b">
             {next && <span className={`tq-ab ${next.tone} next`} data-tq-wn="">{next.label}</span>}
             {next && <span className={`tq-ab ${next.tone} next`} data-tq-wns="" data-tq-bare={shortNext(next.label) !== next.label ? "" : undefined}>{shortNext(next.label)}</span>}

@@ -315,7 +315,7 @@ class BeforeCommit extends React.Component {
   render() { return null; }
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table", coming = false, moved = {} }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, coming = false, moved = {} }) {
   const items = pile?.items || [];
   const sendCaps = useCapabilities();       // a draft its channel cannot send wears "draft to copy", never the flag (railStatus)
   // a task read newer than this rail takes back its agent lane (railStatus.agentGone): the row draws again when one says something new
@@ -684,7 +684,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
         let wasInBatch = false;
         const positioned = shown.map((item) => {
           // ...and the ROW AFTER the bracket steps down by the height of the bracket's own label, so
-          // "on the table · 4 fyi" hangs in a gap instead of being printed across the next fyi's
+          // "4 fyi" hangs in a gap instead of being printed across the next fyi's
           // subject (the owner, 2026-09-22). One gap, once, while a batch is up: no row is reordered
           // and nothing above it moves, which is what "the row wears the ring where it sits" protects.
           const inBatch = batched(item);
@@ -737,7 +737,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
             <div className="tq-pile-stack" style={{ height: stackHeight }}>
               {bracket && (
                 <div className="tq-pile-batch" style={{ top: bracket.top, height: bracket.height }}>
-                  <b>on the table · {mem.length} fyi</b>
+                  <b>{mem.length} fyi</b>
                 </div>
               )}
               {positioned.map(({ item: i, top }) => {
@@ -844,13 +844,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       {isCur && <div className="sub">{batchNo[i.key]?.line || (latestLine(i) ? [latestLine(i), ago(i.last_at)]
                         : [why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)]).filter(Boolean).join(" · ")}</div>}
                     </div>
-                    {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
-                        bracket ("on the table · 4 fyi"); one item on the table wore the identical
-                        slate ring and said nothing, so the ring had to be read rather than known
-                        (the owner, 2026-09-17: "isn't there a current word on the border around
-                        chosen task by the assistant?"). It is a sibling of the card, not a child:
-                        the card clips its overflow so the title can ellipse. */}
-                    {isCur && <b className="tq-pile-now" data-tq-now={tag}>{tag}</b>}
+                    {/* no "ON THE TABLE" under the ringed row (audit, 2026-11-05): the ring and its highlight say it */}
                   </div>
                 );
               })}
@@ -3937,7 +3931,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           : (table.folded && !flight?.from) || (leavingTid && currentItem?.tid === leavingTid) || table.place || (opening && opening !== currentItem?.key) ? null : currentItem} coming={nextComing || busy}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { if (asUser) pull(key, asUser); else railPress(key); }}
-        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => backToTable()} moved={movedTo} /></>}
+        onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => backToTable()} moved={movedTo} /></>}
       stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

@@ -332,12 +332,12 @@ const MINI_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "poin
   "& [data-tq-tab-arrow]": { width: 26, height: 26, borderRadius: 99, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 15, lineHeight: 1,
     border: `1px solid ${here ? ACCENT : BORDER}`, bgcolor: here ? ACCENT : "#fff", color: here ? "#fff" : ACCENT },
   "& [data-tq-tab-dot]": { mt: "auto", width: 8, height: 8, borderRadius: 99, boxSizing: "border-box" },
-  "& [data-tq-tab-n]": { fontSize: 20, fontWeight: 600, color: "#c9c3b8", lineHeight: 1 },
   "&:hover": { bgcolor: "#f8f6f2" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
 // ...and each closed one a TAB, white, its words horizontal ("make the text horizontal and make them a little wider"): an arrow at the top,
 // its name, three short lines of where it stands, each clamped so the tab never scrolls ("maybe a little smaller and have more summary on
 // each one") - and like a book's SPINE (the owner, 2026-10-27), at its foot over a thin rule the one status line ("✓ Sorted: ...", "✓ Done
-// · Advisor: ...", "● Up to here" on the one the task is at - the arrow filled in the accent there) and the section's number, large and faint
+// · Advisor: ...") - the one the task is at has its arrow filled in the accent. No "● Up to here" and no large faint number: labels nobody
+// had explained (audit, 2026-11-05)
 const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "pointer", position: "absolute", top: 0, left: 0, bottom: 0, width: "100%",
   border: 0, bgcolor: "#fff", color: INK, textAlign: "left",
   display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1, px: 1.5, py: 1.75, boxSizing: "border-box", overflow: "hidden",
@@ -351,9 +351,6 @@ const SECTION_TAB = (here) => ({ appearance: "none", font: "inherit", cursor: "p
   "& [data-tq-tab-foot]": { mt: "auto", pt: 1, borderTop: `1px solid ${FOCUS_EDGE}`, width: "100%", display: "flex", flexDirection: "column", gap: 0.5, flexShrink: 0 },
   "& [data-tq-tab-status-box]": { height: "2.8em", fontSize: 11.5, lineHeight: 1.4, display: "flex", flexDirection: "column", overflow: "hidden" },
   "& [data-tq-tab-status]": { fontSize: 11.5, lineHeight: 1.4, color: "#5f7a5f", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
-  "& [data-tq-tab-status][data-tq-one]": { WebkitLineClamp: 1 },
-  "& [data-tq-tab-here]": { fontSize: 11.5, lineHeight: 1.4, color: ACCENT2, fontWeight: 600 },
-  "& [data-tq-tab-n]": { fontSize: 30, fontWeight: 300, color: "#c9c3b8", lineHeight: 1, letterSpacing: "-.02em", mt: 0.5 },
   "&:hover": { bgcolor: "#f8f6f2" }, "&:hover [data-tq-tab-arrow]": { bgcolor: ACCENT, color: "#fff", borderColor: ACCENT },
   "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } });
 // ...the TAB each drawer folds to, one design for both edges and for a live agent's Came from: the whole height of the body, 34px wide, an
@@ -472,7 +469,6 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       {icon || (sec.key === "from" ? <ChatBubbleOutlineIcon aria-hidden sx={{ fontSize: 18, color: DIM }} /> : <SendIcon aria-hidden sx={{ fontSize: 17, color: DIM }} />)}
       <Box component="span" aria-hidden data-tq-tab-dot="" sx={here ? { bgcolor: ACCENT } : foot ? { bgcolor: "#5f7a5f" } : { border: `1.5px solid ${FAINT}` }} />
-      <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
     </Box>);
   // ...and between what it is and where it stands, the folded pane's STAGE MOVES (SpineMoves) - so the tab is a div that opens on a press,
   // its moves real buttons inside it
@@ -488,10 +484,8 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
           block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
       <Box component="span" data-tq-tab-foot="">
         <Box component="span" data-tq-tab-status-box="">
-          {here && <Box component="span" data-tq-tab-here="">● Up to here</Box>}
-          {foot && <Box component="span" data-tq-tab-status="" data-tq-one={here ? "" : undefined}>{foot}</Box>}
+          {foot && <Box component="span" data-tq-tab-status="">{foot}</Box>}
         </Box>
-        <Box component="span" aria-hidden data-tq-tab-n="">{sec.n}</Box>
       </Box>
     </Box>
   );

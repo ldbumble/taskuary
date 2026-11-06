@@ -111,7 +111,6 @@
 .tq-pile-row.current .card { background: var(--tint, #e5ece2); cursor: default; }
 .tq-pile-row.current .t b { font-weight: 500; }
 .tq-pile-row.current .rail i { background: var(--band, #5f7a5f) !important; }
-.tq-pile-row.current .tq-pile-now { color: var(--band, #5f7a5f); background: var(--tint, #e5ece2); }
 /* ONE BRACKET for a batch on the table. It is drawn behind its rows and spans them where they
    already sit: no row moves, no height changes, and ten fyi read as the one thing the assistant is
    holding rather than as ten separate rings or as a single condensed line. */
@@ -120,13 +119,13 @@
 .tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border-radius: 10px; background: var(--tint, #e5ece2);
   transition: top .55s cubic-bezier(.2,.8,.2,1), height .55s cubic-bezier(.2,.8,.2,1); }
 .tq-pile-stack .tq-pile-batch b { color: var(--band, #5f7a5f); background: var(--tint, #e5ece2); }               /* the single item's pill says it in the same green */
-.tq-pile-batch b, .tq-pile-now { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
+.tq-pile-batch b { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
   font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #41525f; white-space: nowrap; }
 /* ...and both pills sit on the ring's BOTTOM edge: the band heading above is sticky and opaque
    (z-index 3), and it sliced a top-edge pill in half whenever the ring started its band, which it
    usually does - first the single item's, then the batch's (the owner, 2026-09-17: "you can't see
    the blue circle or the word current"). */
-.tq-pile-batch b, .tq-pile-now { top: auto; bottom: -7px; right: 10px; z-index: 2; pointer-events: none; }
+.tq-pile-batch b { top: auto; bottom: -7px; right: 10px; z-index: 2; pointer-events: none; }
 .tq-pile-row.inbatch { z-index: 1; }
 .tq-pile-row.inbatch .card { border-color: transparent; background: transparent; box-shadow: none; }
 .tq-pile-row.inbatch .rail i { box-shadow: 0 0 0 3px #f5f8f9; }

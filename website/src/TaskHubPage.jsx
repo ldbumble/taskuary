@@ -251,20 +251,6 @@ function StaleBuild() {
   );
 }
 
-function ServerVersion() {
-  const [v, setV] = useState(null);
-  useEffect(() => { api.get("/api/version").then(({ data }) => setV(data)).catch(() => {}); }, []);
-  if (!v) return null;
-  return (
-    <Tooltip title={`server started ${v.started} — if this version looks old, restart taskuary`}>
-      <Typography variant="caption" sx={{ color: "#a9a294", fontFamily: "Consolas, monospace", fontSize: 10.5,
-        display: { xs: "none", md: "block" } }}>
-        v{v.version}
-      </Typography>
-    </Tooltip>
-  );
-}
-
 const SWITCH_VIEWS = [
   { k: "chat", label: "Chat", icon: (on) => <TaskuaryMark size={17} sx={{ borderRadius: 1, ...(on ? { boxShadow: "0 0 0 1.5px #fff" } : {}) }} />,
     title: "The Assistant - it walks you through what is waiting, one item at a time" },
@@ -583,7 +569,7 @@ export default function TaskHubPage() {
           {/* the word gives way on a phone: with it the bar wrapped, and the bell and refresh sat alone on a second row (2026-10-06) */}
           <Typography sx={{ fontWeight: 600, fontSize: 14.5, color: INK, letterSpacing: 0.2, display: { xs: "none", sm: "block" } }}>Taskuary</Typography>
           {/* no tagline here (the cleanup, 2026-10-06): the top bar is the logo, the views and three icons */}
-          <ServerVersion />
+          {/* no version number here (audit, 2026-11-05): it is Settings → Updates' to say */}
           <DemoBadge demo={demo} />
 
           {/* ONE SWITCH, THREE VIEWS (the owner, 2026-10-15: "Chat which is the regular workflow, then Board, then Game ... make

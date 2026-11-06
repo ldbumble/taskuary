@@ -22,13 +22,11 @@ test("folded by its X or under a page, the item stays on the table and the Advis
 });
 
 // G5 (2026-10-19 UI walk): Connections opened over TQ-0003 and the rail still said "on the table", the box "Ask about this one"
-test("a page over the item: the rail's tag and the box say it is under the page, not in view", () => {
+test("a page over the item: the box says it is under the page, not in view", () => {
   const under = tableWords(tableOf({ current: "task:3", browsing: "b1" }), "TQ-0003");
-  assert.equal(under.tag, "under this page");
   assert.equal(under.box, "Ask about this page…", "the ask is about the page alone, never the task under it (2026-11-05)");
   assert.equal(under.phone, "Ask about this page…");
   const shown = tableWords(tableOf({ current: "task:3" }), "TQ-0003");
-  assert.equal(shown.tag, "on the table");
   assert.match(shown.box, /^Ask about this one/);
   // ...the open box over a task, and a phone's: "Talk to Taskuary…" (the owner, 2026-10-28), the resting pill still "Ask…"
   assert.equal(shown.phone, "Talk to Taskuary…");
@@ -36,7 +34,7 @@ test("a page over the item: the rail's tag and the box say it is under the page,
   assert.equal(under.name, "Ask Taskuary about this page");
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
   assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
-  assert.match(src, /tag=\{tableSays\.tag\}/, "the rail draws the tag tableWords chose");
+  assert.doesNotMatch(src, /tableSays\.tag|tq-pile-now/, "no \"on the table\" tag under the ringed row (audit 2026-11-05)");
   // ...and the box its words - but the one-row bar's pill, at rest and widened, its own short ones (2026-10-26)
   // ...and the pill at rest with no task on the table the short hint, the long one ran on under its send button (2026-10-26)
   // ...and the pill at rest the SAME "Ask…" whatever is on the table (the owner, 2026-10-27: "always the same size and words")

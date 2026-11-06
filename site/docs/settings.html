@@ -116,9 +116,10 @@
 the Settings page and the assistant read. A knob added to the app appears here on the next build,
 with the same name, the same group and the same help text. It cannot drift, and nobody has to
 remember to update it.</p>
-</div><p>The other Settings pages are documented where their subject is: <strong>About you</strong> and the per-channel
-identities, <strong>Mail rules</strong> (<a href="how-it-works#what-triage-actually-decides">the deterministic layer</a>),
-<strong>Activity log</strong>, and <strong>Updates</strong> (<a href="index#updating">updating</a>).</p>
+</div><p>The other Settings pages are documented where their subject is: <strong>Mail rules</strong>
+(<a href="how-it-works#what-triage-actually-decides">the deterministic layer</a>), <strong>Activity log</strong> (shown in
+Developer mode), and <strong>Updates</strong> (<a href="index#updating">updating</a>). Who you are, your documents, your
+playbooks and your memory are on a page of their own, <strong>About you</strong>, beside Settings in the sidebar.</p>
 <h2 id="how-to-read-this">How to read this<a class="anchor" href="#how-to-read-this" aria-label="Link to this section">#</a></h2>
 <p>Each setting shows what it does, and its shipped default. A few notes that apply throughout:</p>
 <ul>
@@ -524,7 +525,7 @@ sent; <code>draft</code> is the targeted default; <code>task_only</code> files a
 <p>Nothing writes into this table by itself. <strong>Not for me</strong> teaches a verdict in your memory
 (<code>LEARNED.md</code>), not a rule here, and muting a sender is <strong>Skip this sender</strong>.</p>
 <h2 id="your-memory">Your memory<a class="anchor" href="#your-memory" aria-label="Link to this section">#</a></h2>
-<p>There is one memory: <code>LEARNED.md</code>, in Settings → Docs. Every fact you tell the Assistant (&quot;remember
+<p>There is one memory: <code>LEARNED.md</code>, read as sentences on <strong>About you → Memory</strong>. Every fact you tell the Assistant (&quot;remember
 that…&quot;, &quot;I don&#39;t care about the legacy export any more&quot;) goes in at once as your own line, under
 the section it is about. A verdict you give — <strong>Not for me</strong>, <strong>Not for the agent</strong>, a
 kind or a road you corrected, an Advisor idea taken up or turned down — goes in when it teaches
@@ -534,7 +535,7 @@ sender, domain or topic ends with <code>(about: …)</code>. Triage, report rout
 and the Assistant each read the sections that help them; edit a line, or press <strong>Forget</strong>, to
 change what they read.</p>
 <h2 id="activity-log">Activity log<a class="anchor" href="#activity-log" aria-label="Link to this section">#</a></h2>
-<p>Every consequential thing Taskuary does is one row in an append-only log: a message routed or
+<p>Shown in <strong>Developer mode</strong>. Every consequential thing Taskuary does is one row in an append-only log: a message routed or
 filed and why, a verdict, a reply sent, an agent session opened or wrapped, a connector saved, a
 setting changed, a task deleted.</p>
 <p>Each row stores a hash of its own contents <strong>plus</strong> the hash of the row before it, so the rows

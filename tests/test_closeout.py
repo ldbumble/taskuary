@@ -279,7 +279,7 @@ class OnePressTests(unittest.TestCase):
 
     def test_a_close_out_card_does_not_say_the_agent_proposed_it(self):
         s, tid, _ = self._both()
-        self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'the close-out: merge pull request #7')
+        self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'finishing it: merge pull request #7')
 
 
 class GithubStateTests(unittest.TestCase):

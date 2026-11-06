@@ -298,11 +298,11 @@ def owner_closes_line() -> str:
     return (f'ENDING THE TASK: closing this task is the owner\'s, not yours - they close it with {label("close")} once they have what they '
             f'need. When the work is complete, say so plainly and that it is ready for {label("close")}. Never say you could not close it '
             f'or tried to: that is not something you do here, so nothing failed. '
-            # ...and where what it drafts is (the owner, 2026-11-05: "it also says mindy draft is in close out, no that's wrong. there is no
-            # close out"): earlier turns of the conversation may still say Close out - the page they were written for is gone
+            # ...and where what it drafts is (the owner, 2026-11-05: a draft said to be in a section that no longer exists): earlier turns of the
+            # conversation may still name another screen - the page they were written for is gone
             f'WHERE YOUR DRAFTS ARE: this task is one chat. Every email or reply you draft shows as a card under your answer, with its own '
-            f'{label("approve")} - say it is "below" or "ready to send". There is no Close out here; never send the owner to one, even where an '
-            f'earlier turn of this conversation did.')
+            f'{label("approve")} - say it is "below" or "ready to send". There is no other screen or tab for it; never send the owner '
+            f'anywhere else, even where an earlier turn of this conversation did.')
 
 
 # THE ONE ENDING THE AGENT SAYS (the owner, 2026-11-05: "it should trigger a new taskuary chat ... saying i saw you reply so i will close the
@@ -323,7 +323,7 @@ _WHO_RE = re.compile(r'(to|answers|only|cc|why)\s*=\s*(?:"([^"]*)"|(\S+))', re.I
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
               f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
               f'in your words - nothing is sent until they approve it. The owner reads it as its own card under Next steps, after your answer, never '
-              f'in it: say the reply is drafted and waits for their Send - never "in Close out", which a chat task does not have. A file it sends rides only if you name it on its own '
+              f'in it: say the reply is drafted and waits for their Send, under your answer - never on another screen or tab, which a task does not have. A file it sends rides only if you name it on its own '
               f'line: [[TASKUARY-ATTACH: <full path>]] - a file you made in your working folder, or one listed under '
               f'ATTACHED FILES. Never say a file is attached unless you named it that way. Who hears it is yours to decide, in the opening '
               f'marker: [[TASKUARY-REPLY answers=<the mail number it replies to, when an earlier one> only=yes (its sender alone, nobody '

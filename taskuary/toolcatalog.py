@@ -54,7 +54,7 @@ PURPOSE = {
                                  'picks the time, or says there is none to pick from - never a day guessed instead, or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
                                  'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
                                  'subject - is this, never a new to-do'),
-    'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull "
+    'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's finish card merges the pull "
                                  "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
                                  "task.complete (Mark done) is the close"),
     'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
@@ -413,7 +413,7 @@ def block(store=None) -> str:
 _DECIDE = {
     'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
                         "or address (\"loop Gail in and ask her\" is a reply with Gail copied, never an agent). Nothing is sent"),
-    'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges "
+    'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's finish card it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only "
                         "that. It never closes the task - that is send_close, or close, the owner's own Mark done - and never continues an "
                         "agent's session - that is agent.continue"),
@@ -464,7 +464,7 @@ _DECIDE = {
     'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
 # ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons
-_STATES = {'action': "on an agent's proposal or a task's close-out", 'closeout': "on a task's close-out with its reply", 'none': 'when nothing is drafted yet'}
+_STATES = {'action': "on an agent's proposal or a task's finish card", 'closeout': "on a task's finish card with its reply", 'none': 'when nothing is drafted yet'}
 def button_words(v: str) -> str:
     """'the "Send" button ("Approve" on an agent's proposal...)' - '' for a decision that is no button."""
     if v not in buttons.VERBS: return ''

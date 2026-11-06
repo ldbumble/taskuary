@@ -133,7 +133,7 @@ class TheEndpoints(unittest.TestCase):
             p = self.client.post('/api/meetings', json={'to': [ERIN], 'subject': 'the audit', 'start': x['start'], 'end': x['end']}).json()
         self.assertTrue(p['ok'], p)
         self.assertEqual(s.get_review(p['reviewId'])['Status'], 'pending')
-        self.assertIn('Close out', p['say'])
+        self.assertIn('waits in its chat', p['say'])
 
     def test_an_agent_may_not_book_one(self):
         from taskuary import guard

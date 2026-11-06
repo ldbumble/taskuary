@@ -107,7 +107,7 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     iss = re.search(r'github\.com/([^/]+/[^/]+)/issues/(\d+)', str(t.get('SourceRef') or ''))
     closes = f"Closes #{iss.group(2)}\n\n" if iss and iss.group(1).lower() == repo.lower() else ''
     body = (f"Opened by Taskuary for {task_ref(task_id)}.\n\n{closes}{(t.get('Summary') or '')[:1500]}\n\n"
-            '_Draft: it merges when you approve the task\'s close-out in Taskuary, or merge it here yourself._')
+            '_Draft: it merges when you approve its merge on the task in Taskuary, or merge it here yourself._')
     pr = github.open_pr(c['Secret'], repo, branch, base, f"[{task_ref(task_id)}] {t.get('Title') or 'work'}"[:120], body)
     pr['repo'], pr['checks'], pr['checked_at'] = repo, None, None
     _save_pr(store, task_id, pr, actor)
@@ -307,7 +307,7 @@ def pr_ended(store, task_id: int, at: dict) -> bool:
     what = 'merged' if cur.get('merged') else 'closed without merging'
     _save_pr(store, task_id, {**{k: v for k, v in at.items() if k != 'kind'}, 'state': 'closed', 'merged': bool(cur.get('merged'))})
     if rv: store.decide_review(rv['ReviewId'], 'no_reply', None, 'github', f'pull request #{at["number"]} was {what} on GitHub')
-    store.add_comment(task_id, 'github', 'agent', f"Pull request #{at['number']} was {what} on GitHub - its close-out is answered.")
+    store.add_comment(task_id, 'github', 'agent', f"Pull request #{at['number']} was {what} on GitHub - its merge card on the task is answered.")
     # ...said on the task with what still waits - it stays open for the owner's Mark done (proposals.closed_out)
     if not proposals.owed(store, task_id): proposals.closed_out(store, task_id, 'github', 'The pull request is closed.')
     return True

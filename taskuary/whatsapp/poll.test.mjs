@@ -51,9 +51,9 @@ test("options are distinct, cut to WhatsApp's length and capped at twelve", () =
 
 test("a real tap on an older poll is recognised - never answered - and a taken-back vote is not a tap", () => {
   const polls = createPolls(), s1 = crypto.randomBytes(32);
-  polls.remember(CHAT, "P1", s1, ["Close out", "Next"]);
-  polls.remember(CHAT, "P2", crypto.randomBytes(32), ["Close out", "Next"]);
-  const tap = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret: s1, option: "Close out" });
+  polls.remember(CHAT, "P1", s1, ["Mark done", "Next"]);
+  polls.remember(CHAT, "P2", crypto.randomBytes(32), ["Mark done", "Next"]);
+  const tap = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret: s1, option: "Mark done" });
   assert.equal(polls.vote({ pollCreationMessageKey: { id: "P1" }, vote: tap }, { creators: [CHAT], voters: [CHAT] }), "", "never fires");
   assert.equal(polls.stale({ pollCreationMessageKey: { id: "P1" }, vote: tap }, { creators: [CHAT], voters: [CHAT] }), CHAT);
   const back = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret: s1, option: "" });
@@ -63,11 +63,11 @@ test("a real tap on an older poll is recognised - never answered - and a taken-b
 
 test("a poll answers once: a re-tap or a changed vote on the spent newest poll never fires, and is recognised", () => {
   const polls = createPolls(), secret = crypto.randomBytes(32);
-  polls.remember(CHAT, "P1", secret, ["Close out", "Next"]);
+  polls.remember(CHAT, "P1", secret, ["Mark done", "Next"]);
   const who = { creators: [CHAT], voters: [CHAT] };
-  const first = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret, option: "Close out" });
+  const first = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret, option: "Mark done" });
   assert.equal(polls.spent({ pollCreationMessageKey: { id: "P1" }, vote: first }, who), "", "not spent before its first pick");
-  assert.equal(polls.vote({ pollCreationMessageKey: { id: "P1" }, vote: first }, who), "Close out");
+  assert.equal(polls.vote({ pollCreationMessageKey: { id: "P1" }, vote: first }, who), "Mark done");
   const again = encVote({ creator: CHAT, voter: CHAT, pollId: "P1", secret, option: "Next" });
   assert.equal(polls.vote({ pollCreationMessageKey: { id: "P1" }, vote: again }, who), "", "spent");
   assert.equal(polls.spent({ pollCreationMessageKey: { id: "P1" }, vote: again }, who), CHAT);

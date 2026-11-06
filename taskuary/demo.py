@@ -12,7 +12,7 @@ by one middleware over the METHOD and PATH, before any handler sees the request,
 capability added next month is refused by default rather than discovered later.
 
 What is left is everything worth showing: a rail of work arriving, led by a tour to try, triage
-verdicts with their reasons, drafts waiting in Close out, a board with agents on it, reports,
+verdicts with their reasons, drafts waiting in their chats, a board with agents on it, reports,
 the assistant's posts, the wall. All of it invented, all of it already in the database, and the
 coding sessions REPLAY a recorded transcript so the board is alive without a CLI existing.
 """
@@ -190,7 +190,7 @@ CANNED = [
     "Here is what I would do: read the thread, pull the numbers it refers to, and come back with "
     "the two lines that decide it. In the demo I answer from a script - in your own Taskuary this "
     "is your own AI doing the work.",
-    "I looked at your list. {list} Ask me to draft a reply and it lands in the task's Close out.",
+    "I looked at your list. {list} Ask me to draft a reply and it lands in the task's chat, its Send under it.",
     "That is a report, not a question - give me the schedule and I will write it every morning "
     "before you are up.",
 ]
@@ -345,7 +345,7 @@ PROMPTS = (
     ('month_end', 'Open the month-end close', 'Here: {task:Month-end close is short by 4,180}.'),
     ('reports', 'Show me the reports', 'Here: [Reports](#report=reports).'),
     ('reply', 'How does a reply get written?',
-     'Open the item and press Reply - the draft lands in its Close out, and nothing goes out until you press Send. In the demo the drafts '
+     'Open the item and press Reply - the draft lands in its chat, and nothing goes out until you press Send under it. In the demo the drafts '
      'are written ahead of time; in your own Taskuary your own AI writes them from the thread.'),
     ('schedule', 'Can you send me a report every morning?',
      'Yes - in your own Taskuary that is a report: say what it covers and when, and it is written every morning before you are up. '
@@ -556,7 +556,7 @@ ASSIST = [
     ('assistant', """Six things came in, four are handled. What is actually yours:
 
 - **{gl} - month-end short by 4,180.** An agent is on it; it found the four transfers between our own companies that the export leaves out.
-- **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted in its Close out.
+- **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted in its chat.
 - **{q3} - Sam wants the Q3 numbers.** Also drafted.
 
 The newsletter, the thank-you and the maintenance notice are filed. Nothing there needs you."""),

@@ -31,7 +31,7 @@
       "role": "you",
       "mark": "🏁",
       "section": "task", "on_you": true, "waits": true,
-      "hint": "a reply, an action or a task's close-out (approve its change, close it where it lives) waits for your yes",
+      "hint": "a reply, an action or a task's finish on GitHub or a tracker (approve its change, close it where it lives) waits for your yes",
       "loud": true
     },
     {

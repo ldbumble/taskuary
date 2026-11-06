@@ -58,10 +58,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
   }).filter((r) => r && String(r.DraftText || "").trim());
   // ...a draft this turn wrote that the owner's newer message overtook: here, quietly, never under the newest turn (agentSummary.staleOn)
   const stale = staleOn(reviews, turnId);
-  const Stale = () => stale.map((r) => <Box key={r.ReviewId} data-tq-stale-draft={r.ReviewId} sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
-    <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
-      {[draftAt(r) && `Drafted at ${fmtTime12(draftAt(r))}`, "before your last message"].filter(Boolean).join(", ")}</Typography>
-    <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
+  const Stale = () => <StaleDrafts reviews={reviews} turnId={turnId} />;
   const fate = (r) => r.Status === "sent" || r.DeliveryState === "sent" ? "sent" : r.Status === "pending" ? "" : "not sent";
   const Drafted = () => drafted.map((r) => <Box key={r.ReviewId} data-tq-drafted-then="" sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
@@ -98,6 +95,14 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     </Box>
   );
 }
+
+// A DRAFT THE OWNER'S NEWER MESSAGE OVERTOOK (general.draft_turns `stale`): under the turn that wrote it, "Drafted at 2:48 PM, before your last
+// message", read-only - never under the newest turn's Next steps
+export const StaleDrafts = ({ reviews, turnId }) => staleOn(reviews, turnId).map((r) => <Box key={r.ReviewId} data-tq-stale-draft={r.ReviewId}
+  sx={{ mt: 1, px: 1.5, py: 1, borderLeft: "3px solid #dcd6ca", color: DIM, fontSize: 13, lineHeight: 1.5 }}>
+  <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
+    {[draftAt(r) && `Drafted at ${fmtTime12(draftAt(r))}`, "before your last message"].filter(Boolean).join(", ")}</Typography>
+  <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
 
 // A TO-DO NO AGENT HAS TOUCHED (the owner, 2026-11-06): under what came in - which says the ask and the To do already - the cards the chat would
 // hold (`cards`: a draft and its Send, an email owed), the drafter's why over them, and the one box. The box is Send to agent's road (the

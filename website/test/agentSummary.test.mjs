@@ -79,7 +79,7 @@ test("Next steps: an Approve still pending is never Nothing left to do here", ()
 
 test("the chat draws the summary, and the turn's working is one line with its steps folded under it", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /import AgentSummary, \{ OneBox \} from "\.\/AgentSummary\.jsx";/);
+  assert.match(view, /import AgentSummary, \{ OneBox, StaleDrafts \} from "\.\/AgentSummary\.jsx";/);
   assert.match(view, /foldedSummaries\(/);
   assert.match(view, /data-tq-working=""/);
   assert.match(view, /Working on this…/);

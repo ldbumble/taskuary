@@ -62,3 +62,6 @@ const pendingReply = (r) => r?.Status === "pending" && r.Kind !== "action" && r.
 // ...the newest turn's Next steps hold the drafts only while one of them is fresh
 export const freshNext = (reviews) => { const ps = (reviews || []).filter(pendingReply); return !ps.length || ps.some((r) => !staleDraft(r)); };
 export const staleOn = (reviews, turnId) => (reviews || []).filter((r) => pendingReply(r) && staleDraft(r) && turnId != null && String(draftTurn(r)) === String(turnId));
+// ...the payload's `drafts` (general.draft_turns: {review, turn, at, stale, before}) read onto the reviews they name
+export const withTurns = (reviews, drafts) => (drafts?.length ? (reviews || []).map((r) => { const d = drafts.find((x) => x?.review === r?.ReviewId);
+  return d ? { ...r, turn: d.turn, stale: !!d.stale, drafted_at: d.at, before: d.before } : r; }) : reviews || []);

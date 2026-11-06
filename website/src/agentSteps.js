@@ -371,8 +371,14 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
       const args = e.detail?.args || e.detail || {};
       const id = e.detail?.tool_call_id || `${e.name}-${steps.length}`;
       const d = describeCall(e.name, args);
-      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running" };
-      byId.set(id, step); steps.push(step);
+      const step = { id, ...d, raw: rawOf(e.name || "tool", args), output: String(e.detail?.output || ""), status: "running",
+        ...(d.kind === "helper" && args.description ? { task: clip(args.description, 70) } : {}) };
+      // A HELPER'S OWN CALLS GO UNDER ITS ROW (the owner, 2026-11-06: "it's spinning but not the last thing ... shouldn't it be in order? unless
+      // it's in parallel"): a call naming the helper call it runs under (`parent`: stream-json's parent_tool_use_id, ACP's parentToolUseId)
+      // is that helper's step, never one of the main agent's interleaved with it
+      const host = e.detail?.parent && byId.get(e.detail.parent);
+      byId.set(id, step);
+      if (host) (host.kids ||= []).push(step); else steps.push(step);
     } else if (e.type === "tool_result") {
       const step = byId.get(e.detail?.tool_call_id || e.name);
       if (!step) continue;
@@ -403,11 +409,20 @@ export function stepsOf(trace, { answer = "", keepStart = true } = {}) {
   // A failed call the same step later did without error is `recovered` - a quiet word; red stays for a failure nothing made good
   steps.forEach((s, i) => { if (s.status === "error" && "raw" in s
     && steps.slice(i + 1).some((x) => "raw" in x && x.kind === s.kind && x.summary === s.summary && x.status === "done")) s.status = "recovered"; });
+  // ...and a call STILL AT WORK while a later one already finished runs ALONGSIDE them - in parallel, said so; steps stay in the order they began
+  steps.forEach((s, i) => { if (s.status === "running" && "raw" in s && steps.slice(i + 1).some((x) => "raw" in x && x.status !== "running")) s.alongside = true; });
   const said = flat(forScreen(answer));
   const inAnswer = (t) => { const ps = String(t || "").split(/\n\s*\n/).map(flat).filter(Boolean); return ps.length > 0 && ps.every((p) => said.includes(p)); };
   const kept = said ? steps.filter((s) => s.kind !== "said" || !inAnswer(s.summary)) : steps;
-  return group(kept).map(({ raw, output, live, q, host, file, pattern, count, asked, retry, ...s }) => s);
+  return group(kept).map(tidy);
 }
+const tidy = ({ raw, output, live, q, host, file, pattern, count, asked, retry, kids, task, ...s }) => {
+  if (s.kind !== "helper" || !(kids?.length || task)) return s;
+  // ...a helper reads by its own work: at it, "Handing part of the work to a helper: …"; done, "Helper: … (done, 4 steps)" - its steps under it
+  const ks = kids?.length ? group(kids).map(tidy) : [], n = ks.filter(isWork).length;
+  const summary = s.status === "running" ? s.summary : `Helper: ${task || "part of the work"} (${s.status === "error" ? "failed" : "done"}${n ? `, ${plural(n, "step")}` : ""})`;
+  return { ...s, summary, ...(ks.length ? { kids: ks } : {}) };
+};
 
 // ── consecutive calls of one kind read as one line ───────────────────────────────────────────────
 const listOf = (xs, n = 3) => { const u = [...new Set(xs.filter(Boolean))]; return u.length > n ? `${u.slice(0, n).join(", ")} and ${u.length - n} more` : u.join(", "); };
@@ -434,9 +449,9 @@ function group(steps) {
   const out = [];
   for (let i = 0; i < steps.length;) {
     const s = steps[i];
-    if (!("raw" in s)) { out.push(s); i += 1; continue; }
+    if (!("raw" in s) || s.kids?.length) { out.push(s); i += 1; continue; }
     let j = i + 1;
-    while (j < steps.length && "raw" in steps[j] && steps[j].kind === s.kind
+    while (j < steps.length && "raw" in steps[j] && !steps[j].kids?.length && steps[j].kind === s.kind
            && (["read", "search", "web", "page", "edit"].includes(s.kind) || steps[j].summary === s.summary
                || (s.kind === "mail" && s.q !== undefined && steps[j].q !== undefined))) j += 1;
     const run = steps.slice(i, j);

@@ -383,10 +383,15 @@ def _answer_held(store, tid, h, answers: dict, actor) -> dict:
             'left': 0 if done else len(h['rids']) - len(h['answers'])}
 
 
-def _stranger_held(store, tid) -> dict:
+def _stranger_held(store, tid, rids=()) -> dict:
     """An answer refused because the task turned a stranger's under a full session (terminal.stranger_now) - a hook's held ask included:
-    letting it go is the agent's next step with full tools. {} when the answer may go."""
+    letting it go is the agent's next step with full tools. {} when the answer may go.
+    A PERMIT is no relay: Allow/Deny is the owner's own ruling on the one tool call its card shows and puts no words in the session,
+    so answers to permits only always go - held, a stranger's pane sat on its permit with no way left to refuse it."""
     from . import terminal as term
+    if rids:
+        kinds = {e['RequestId']: e['Kind'] for e in events(store, tid) if e['Kind'] in REQUESTS}
+        if all(kinds.get(r) == 'approval_needed' for r in rids): return {}
     why = term.stranger_now(store, tid)
     return {'delivered': False, 'state': 'held_stranger', 'why': why} if why else {}
 
@@ -397,7 +402,7 @@ def answer_group(store, tid: int, answers: dict, actor: str = 'owner') -> dict:
     Anything else: each answer on its own road."""
     answers = {str(k): ' '.join(str(v or '').split()) for k, v in (answers or {}).items() if str(v or '').strip()}
     if not answers: raise ValueError('say something')
-    if (held := _stranger_held(store, tid)): return held
+    if (held := _stranger_held(store, tid, list(answers))): return held
     groups = {group_of(r) for r in answers}
     for g in groups:
         h = HELD.get(g) if g else None
@@ -456,7 +461,7 @@ def answer(store, tid: int, request_id: str, text: str, actor: str = 'owner', ow
     from . import terminal as term
     text = ' '.join(str(text or '').split())
     if not text: raise ValueError('say something')
-    if (held := _stranger_held(store, tid)): return held
+    if (held := _stranger_held(store, tid, [request_id])): return held
     # the request is looked up across every run of the task: one that belongs to a run that is no longer the
     # task's is STALE, not silently forwarded to whatever worker has the task now (PW-139)
     evs = events(store, tid)

@@ -74,8 +74,10 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   await page.waitForSelector("[data-tq-run-form] textarea", { visible: true, timeout: 15000 });
   await click(page, "Send to agent", "[data-tq-run-form]");
   await inTask(page, /Payworth is cheapest/);
-  await visible(page, "Stop and save"); await click(page, "Stop and save");
-  // ...stopped, its chat stands with the box under it: no Result block, no "The whole conversation", no Continue to press first
+  // ...a chat task has no Stop and save any more (the owner, 2026-11-05: "the stop you can get rid of it"): the answered agent rests,
+  // its chat stands with the box under it - no Result block, no "The whole conversation", no Continue to press first
+  assert.ok(!(await page.$$eval("[data-tq-task-page] button", (bs) => bs.filter((b) => b.offsetParent).map((b) => b.getAttribute("aria-label") || b.textContent.trim()))).includes("Stop and save"),
+    "no Stop and save on a chat task");
   const stopped = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room=chat] .tq-aui-input", { visible: true, timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector("[data-tq-task-page] .tq-aui-input")?.disabled, { timeout: 30000 });
   assert.equal(await page.$("[data-tq-result-summary], [data-tq-full-result], [data-tq-continue-card]"), null, "the chat is the whole Agent section");

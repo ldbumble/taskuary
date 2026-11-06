@@ -5612,7 +5612,7 @@ def task_land_revert(tid: int, body: RevertBody, request: Request):
 class LandBody(BaseModel): how: str
 
 @app.post('/api/tasks/{tid}/landing')
-def task_land(tid: int, body: LandBody, request: Request):
+def task_landing_answer(tid: int, body: LandBody, request: Request):
     "The owner's answer to the landing question: rebase and fast-forward, a merge commit, a pull request, or discard (landing.land)."
     from . import landing
     _owner_only(request, "how a branch lands is the owner's answer")

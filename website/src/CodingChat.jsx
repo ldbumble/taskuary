@@ -19,6 +19,8 @@ import WriteIcon from "@mui/icons-material/EditNoteRounded";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { chatRows, workCount } from "./codingChat.js";
+import AgentChannels, { PermissionCards } from "./AgentChannels.jsx";
+import { teammateLine } from "./agentChannels.js";
 import { AgentSteps } from "./AgentStepRows.jsx";
 import { Hunk } from "./DiffView.jsx";
 import { Md } from "./md.jsx";
@@ -49,11 +51,13 @@ const MailRow = ({ mail }) => <div className="tq-aui-message tq-aui-brief">{mail
       {[`${CHANNEL[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, x.at ? when(x.at) : ""].filter(Boolean).join(" · ")}</>}</span>
     <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{x.words}</span></div>; })}</div>;
 
-const YouRow = ({ text, at, held }) => (
-  <div className={`tq-aui-message tq-aui-user`} data-tq-held={held ? "" : undefined}>
-    <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{at ? ` · ${when(at)}` : ""}</div>
-    <div className="tq-aui-user-bubble" dir="auto">{text}</div>
-  </div>);
+// ...a teammate's line from a bound chat (agentchannels.py) is theirs, named and marked, never "You"
+const YouRow = ({ text, at, held }) => { const mate = teammateLine(text); return (
+  <div className={`tq-aui-message tq-aui-user`} data-tq-held={held ? "" : undefined} data-tq-teammate={mate ? mate.who : undefined}>
+    <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />
+      {mate ? `${mate.who} (teammate) · ${mate.via}` : "You"}{at ? ` · ${when(at)}` : ""}</div>
+    <div className="tq-aui-user-bubble" dir="auto">{mate ? mate.text : text}</div>
+  </div>); };
 
 // AN EDIT IS A ROW THAT OPENS ON ITS DIFF: "Edited budget.py (+12 −3)", the code with its line numbers under it
 const EditRow = ({ p }) => (
@@ -129,6 +133,8 @@ export default function CodingChat({ task, term = null, next = null, landing = n
             {live ? "The agent is starting - its turns show here as it works." : "No session has run on this task yet - write below to start one."}</div>}
           {rows.map((r) => r.kind === "mail" ? <MailRow key={r.id} mail={r.mail} /> : r.kind === "you" ? <YouRow key={r.id} text={r.text} at={r.at} /> : <Turn key={r.id} r={r} />)}
           {held.map((l) => <YouRow key={l.id} text={l.text} held />)}
+          {/* WHAT THE AGENT WAITS ON THE OWNER'S PRESS FOR (permissions.py): one card each, answered here or by the owner on a bound chat */}
+          <PermissionCards taskId={tid} items={data?.permissions || []} onAnswered={load} />
           {live?.working && !rows.at(-1)?.running && <div className="tq-aui-thinking" role="status"><i /><i /><i /><span>{live.cli || "The agent"} is working…</span></div>}
           {/* THE DRAFTED REPLY, with its Send (Close out's own cards, TaskPage closeBody) - then the branch's landing, then how it closed */}
           {next && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
@@ -136,6 +142,7 @@ export default function CodingChat({ task, term = null, next = null, landing = n
           {landing}
           {closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
           {tail}
+          <AgentChannels taskId={tid} />
         </div>
         {termShown && <Box data-tq-chat-terminal="" sx={{ flex: "0 0 46%", minHeight: 220, borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
           <TerminalPane sid={live.sid} height="100%" onExit={load} /></Box>}

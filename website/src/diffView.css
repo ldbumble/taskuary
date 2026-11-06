@@ -22,8 +22,9 @@
 .tq-dv-reverting .tq-dv-lines { opacity: .55; }
 .tq-dv-lines { border-collapse: collapse; width: 100%; font: 11.5px/1.5 'Cascadia Mono', Consolas, monospace; color: #3d3a33; }
 .tq-dv-lines td { padding: 0 6px; vertical-align: top; }
-.tq-dv-n { width: 1%; min-width: 30px; text-align: right; color: #a9a294; user-select: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tq-dv-op { width: 1%; padding: 0 2px !important; user-select: none; color: #8b877e; }
+/* ...a fixed gutter: inside a chat's body every child is min-width 0 (generalWorkspace.css), and the numbers ran into each other */
+.tq-dv-lines td.tq-dv-n { width: 34px; min-width: 34px !important; text-align: right; color: #a9a294; user-select: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tq-dv-lines td.tq-dv-op { width: 14px; min-width: 14px !important; padding: 0 2px !important; user-select: none; color: #8b877e; }
 .tq-dv-code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-dv-add { background: #dfeade; } .tq-dv-add .tq-dv-op { color: #47654a; }
 .tq-dv-del { background: #f0e2e4; } .tq-dv-del .tq-dv-op { color: #6b2733; }

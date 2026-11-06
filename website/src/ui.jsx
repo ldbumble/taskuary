@@ -731,7 +731,7 @@ let agentsLast = null;
 const agentsOf = (data) => ({
   agentsRead: true, codingReady: data.coding_ready ?? !!(data.brain_list || []).length,
   // ...and Developer mode (agents.developer_mode): off, every job is a general agent's and no coding door is drawn (the owner, 2026-11-02)
-  devMode: data.developer_mode ?? true,
+  devMode: data.developer_mode ?? false,      // ...and off until the server says so: no coding UI flashes while settings load (audit 2026-11-05)
   agents: (data.data || []).map((a) => a.Name),
   models: data.models || {},
   // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -

@@ -9,7 +9,7 @@ test("with Developer mode off the New sheet is a general agent's alone: no live 
   const s = src("NewSheet.jsx");
   assert.match(s, /how = devMode \? howPick : "general"/);
   assert.match(s, /\{devMode && <Box>\s*<Label>Who works it<\/Label>/);
-  assert.match(src("ui.jsx"), /devMode: data\.developer_mode \?\? true/);
+  assert.match(src("ui.jsx"), /devMode: data\.developer_mode \?\? false/, "off until the server says so - no coding UI while settings load (audit 2026-11-05)");
 });
 
 test("an Approve on a held step keeps the agent's pane: the Advisor's pick re-keys the page only with no agent on it", () => {

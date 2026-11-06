@@ -9,9 +9,10 @@ import { nothingMatches } from "./searchHits.js";
 import { placeName } from "./words.js";
 import { focusPlace, openAppLink, ownerHref } from "./appLinks.js";
 import {
-  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
   DialogTitle, IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
 } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import { SOUNDS, playSound } from "./handraise.js";
@@ -1490,7 +1491,7 @@ const HelpDialog = ({ help, onClose }) => (
         <DialogContent>
           <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, lineHeight: 1.6 }}>{help.body}</Typography>
         </DialogContent>
-        <DialogActions><Button variant="contained" onClick={onClose}>Got it</Button></DialogActions>
+        <ButtonBar><Button variant="contained" onClick={onClose}>Got it</Button></ButtonBar>
       </>
     )}
   </Dialog>

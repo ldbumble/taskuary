@@ -5,9 +5,10 @@
 import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent,
   DialogTitle, MenuItem, Select, Switch, TextField, Tooltip, Typography,
 } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import WallView from "./WallView.jsx";
 import GridViewIcon from "@mui/icons-material/GridView";
@@ -222,7 +223,7 @@ const NoteDialog = ({ open, task, onClose }) => {
           </Typography>
         )}
       </DialogContent>
-      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+      <ButtonBar><Button onClick={onClose}>Close</Button></ButtonBar>
     </Dialog>
   );
 };

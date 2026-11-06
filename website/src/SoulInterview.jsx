@@ -3,9 +3,10 @@
 // and a developer get four different interviews rather than the same repository-shaped form.
 import React, { useEffect, useState } from "react";
 import {
-  Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle,
   LinearProgress, TextField, Typography,
 } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
@@ -96,14 +97,14 @@ export default function SoulInterview({ open, onClose, onWritten }) {
           </>
         )}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={!!busy}>Cancel</Button>
-        {question && <Button onClick={() => advance(true)} disabled={!!busy}>Skip</Button>}
+      <ButtonBar>
         <Button variant="contained" disableElevation disabled={!!busy || !question || !answer.trim()}
           onClick={() => advance()} startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>
           {busy === "write" ? "Writing…" : busy === "question" ? "Thinking…" : number >= total ? "Write SOUL.md" : "Next question"}
         </Button>
-      </DialogActions>
+        {question && <Button onClick={() => advance(true)} disabled={!!busy}>Skip</Button>}
+        <Button onClick={onClose} disabled={!!busy}>Cancel</Button>
+      </ButtonBar>
     </Dialog>
   );
 }

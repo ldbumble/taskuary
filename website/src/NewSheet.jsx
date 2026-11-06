@@ -14,9 +14,10 @@ import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton,
   TextField, Typography,
 } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
-import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
+import { ACCENT, ACCENT2, BORDER, DIM, FAINT, INK, PANEL, ROLES, mono } from "./theme.jsx";
 import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark, usePeopleSearch } from "./ui.jsx";
 import { withFound } from "./peopleSearch.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -596,15 +597,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {ok && <Alert severity="success" sx={{ py: 0.25, fontSize: 12.5 }}>{ok}</Alert>}
       </DialogContent>
 
-      <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
-        borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
-        <Button size="small" onClick={close} sx={{ color: DIM }}>Cancel</Button>
+      <ButtonBar>
         {/* ...a playbook's Set up with AI opens the build in the chat: a door, out of the Assistant's view (the owner, 2026-11-02) */}
         {!REPEATS.includes(kind) && kind !== "meeting" && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
           {...(kind === "playbook" ? { "data-tq-view-skip": "" } : {})}
-          startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
-          sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>}
-      </Box>
+          startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>{busy ? "Working…" : verb}</Button>}
+        <Button size="small" onClick={close}>Cancel</Button>
+      </ButtonBar>
     </Shell>
   );
 }

@@ -23,6 +23,7 @@ import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
+import { ROW_LOOK } from "./ButtonBar.jsx";
 import { foldRow, onPressed, onPressing, press, sectionsOf, taskButtons, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
@@ -612,12 +613,7 @@ const isDoneMove = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // THE TASK ROW'S ONE BUTTON: one height, padding, font and radius for every move, outlined; the lit one (the Advisor's pick) alone filled
 const rowBtn = (v, word = v.label) => <button key={v.id} type="button" className={`tq-ab row${v.tone === "p" ? " p" : ""}`} disabled={v.disabled} data-tq-verb={v.id}
   title={(v.disabled && v.why) || v.title || word} onClick={(e) => press(v.id, e, e.currentTarget, v.of)}>{word}</button>;
-export const ROW_BTN = { height: 28, minHeight: 28, px: 1.5, fontSize: 12, fontWeight: 600, lineHeight: 1, borderRadius: 99, border: "1px solid #b9c3cc",
-  bgcolor: "#fff", color: INK, boxSizing: "border-box", display: "inline-flex", alignItems: "center", flexShrink: 0, whiteSpace: "nowrap" };
-const EVEN_ROW = { display: "flex", alignItems: "center", gap: 1, flexWrap: "nowrap", minWidth: 0, overflow: "hidden",
-  "& .tq-ab.row": ROW_BTN, "& .tq-ab.row:hover:not(:disabled)": { bgcolor: "#f1f4f7", borderColor: ACCENT },
-  "& .tq-ab.row.p": { bgcolor: ACCENT, borderColor: ACCENT, color: "#fff" }, "& .tq-ab.row.p:hover:not(:disabled)": { bgcolor: "#46586a", borderColor: "#46586a" },
-  "& .tq-row-sep": { width: "1px", height: 18, bgcolor: "#d8d1c5", flexShrink: 0 } };
+const EVEN_ROW = { ...ROW_LOOK, display: "flex", alignItems: "center", gap: 1, flexWrap: "nowrap", minWidth: 0, overflow: "hidden" };
 // A QUIET CORNER BUTTON IN THE TASK'S HEADER (the owner, 2026-11-06: "AI used" and "Talk to this agent from…" must not sit at the bottom of the
 // chat): an icon with its tooltip beside Expand and the X, its content in a popover under it
 function HeadPop({ id, icon, title, children }) {

@@ -14,6 +14,7 @@ import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle,
   IconButton, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
@@ -255,12 +256,10 @@ const NewEntry = ({ open, onClose, onDone, topics }) => {
         </Box>
         {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5 }}>{err}</Alert>}
       </DialogContent>
-      <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
-        borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
-        <Button size="small" onClick={onClose} sx={{ color: DIM }}>Cancel</Button>
-        <Button size="small" variant="contained" disableElevation data-tq-send="" disabled={busy || !title.trim() || title.length > 140 || body.length > 700} onClick={save}
-          sx={{ background: GRADIENT }}>Post it</Button>
-      </Box>
+      <ButtonBar>
+        <Button size="small" variant="contained" disableElevation data-tq-send="" disabled={busy || !title.trim() || title.length > 140 || body.length > 700} onClick={save}>Post it</Button>
+        <Button size="small" onClick={onClose}>Cancel</Button>
+      </ButtonBar>
     </Dialog>
   );
 };

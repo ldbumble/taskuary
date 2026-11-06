@@ -16,7 +16,8 @@
 // a way went; `summary` - a function opening the task's Email a summary dialog (EmailSomeone), else `summaryWhy` says why there is none;
 // `noResult` - why the result itself cannot go yet (a task with no Result: only its summary can).
 import React, { useState } from "react";
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Menu, MenuItem, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle, Menu, MenuItem, Typography } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import api from "./api";
 import { useVerbs } from "./actionRow.js";
 import { label } from "./buttons.js";
@@ -88,12 +89,12 @@ export function useShareParts(owner, result, on = true, { onShared, summary = nu
           </Box>
           {err && <Typography variant="body2" role="alert" sx={{ color: "#a33b3b" }}>{err}</Typography>}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setMailOpen(false)} disabled={busy === "email"}>Cancel</Button>
+        <ButtonBar>
           <Button variant="contained" disableElevation onClick={() => go("email", { to })} disabled={busy === "email" || !to.length}>
             {busy === "email" ? <CircularProgress size={15} /> : rows[0]?.word}
           </Button>
-        </DialogActions>
+          <Button onClick={() => setMailOpen(false)} disabled={busy === "email"}>Cancel</Button>
+        </ButtonBar>
       </Dialog>
     </>
   ) };

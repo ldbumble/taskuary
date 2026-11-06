@@ -2,7 +2,8 @@
 // routed to it: a task's general work runs on the assistant (2026-11-04). Everything it lays out (roles.py) already had its
 // own page; nobody who is not technical ever found them all, so the role is offered here, where the workers live, until it is taken.
 import React, { useCallback, useEffect, useState } from "react";
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
+import { Box, Button, Dialog, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
+import { ButtonBar } from "./ButtonBar.jsx";
 import api from "./api";
 import { FAINT, INK } from "./theme.jsx";
 
@@ -59,10 +60,10 @@ export default function RoleStart({ onApplied }) {
           )}
           {err && <Typography sx={{ fontSize: 12, color: "#8a3324", mt: 1 }}>{err}</Typography>}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(null)} disabled={busy}>Cancel</Button>
+        <ButtonBar>
           <Button variant="contained" onClick={apply} disabled={busy}>{busy ? "Setting up…" : "Set up"}</Button>
-        </DialogActions>
+          <Button onClick={() => setOpen(null)} disabled={busy}>Cancel</Button>
+        </ButtonBar>
       </Dialog>
     </Box>
   );

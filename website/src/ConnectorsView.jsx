@@ -1492,6 +1492,7 @@ export const ConnCard = ({ c }) => {
             lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>Connected</Box>
         )}
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
+        {c.remove && <CardRemove {...c.remove} />}
       </Box>
       <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.5, pt: 1, minHeight: "3em", boxSizing: "content-box",
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
@@ -1817,7 +1818,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   }
 
   /* ── landing: searchable grouped catalog ── */
-  const chanCard = (c) => connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId }));
+  // ...a card with anything saved on it carries its Remove on its face (CardRemove); a blank catalogue card has nothing to remove
+  const removable = (c) => !!(c.Active || c.HasSecret || c.LastSyncAt || c.LastError || sources.some((s) => s.ConnectorId === c.ConnectorId));
+  const chanCard = (c) => ({ ...connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId })),
+    remove: removable(c) ? { conn: c, channel: META[c.Type]?.channel || "", reload: load } : null });
   // three shapes of card, said once instead of inline in five groups
   const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
     + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built under Reports)`;
@@ -1827,7 +1831,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : "not set up")
         + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
-      go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
+      go: () => setOpen({ kind: "connector", id: c.ConnectorId }), remove: removable(c) ? { conn: c, channel: "data", reload: load } : null };
   }));
   const channelCards = (keys) => keys.flatMap((t) => allOf(t).map(chanCard));
   const specialCards = (type, title, rtype, haystack, desc = (c) => dataDesc(c, rtype)) => allOf(type).map((c) => ({
@@ -2138,21 +2142,25 @@ function CardPlaybooks({ type }) {
 // away"): the question says what stays, what goes and what stops working with it (#238); on yes the card is gone - an added one off the
 // list, the last of its kind wiped back to the catalogue's blank card (recentlydeleted.remove_connection) - and the page is back on the
 // list, where "Removed <it> - Undo" stands for the Undo line's minutes. Before 2026-11-05 it removed on the press, without asking.
-function RemoveConnection({ conn, reload, onBack, channel = "" }) {
-  const [asking, setAsking] = useState(false);
-  // what leans on it, beside the button and in the question: read before the press (#238)
-  const [uses, setUses] = useState(null);
+// ...the question and the press, shared by the detail page and the card's face (CardRemove): `read` - what leans on it, read now (#238)
+function useRemove(conn, channel, reload, after, read = true) {
+  const [asking, setAsking] = useState(false), [uses, setUses] = useState(null);
   useEffect(() => {
+    if (!read) return undefined;
     let live = true;
     api.get(`/api/connectors/${conn.ConnectorId}/uses`).then(({ data }) => { if (live) setUses(data.data); }).catch(() => {});
     return () => { live = false; };
-  }, [conn.ConnectorId]);
-  const line = usedBy(uses), words = removeWords(conn, channel, uses);
+  }, [conn.ConnectorId, read]);
   // a refusal is said in the question (ConfirmDelete), which stays open on it
   const remove = async () => {
     await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/reset`), "connection", conn.Name || conn.Type);
-    onBack?.(); await reload();
+    after?.(); await reload?.();
   };
+  return { asking, setAsking, uses, words: removeWords(conn, channel, uses), remove };
+}
+function RemoveConnection({ conn, reload, onBack, channel = "" }) {
+  const { asking, setAsking, uses, words, remove } = useRemove(conn, channel, reload, onBack);
+  const line = usedBy(uses);
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, maxWidth: 720 }}>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
@@ -2165,6 +2173,20 @@ function RemoveConnection({ conn, reload, onBack, channel = "" }) {
         onConfirm={remove} onClose={() => setAsking(false)} />
     </Box>
   );
+}
+
+// REMOVE ON THE CARD'S FACE (the owner, 2026-11-05: "Remove = one press + one confirm" - never stepping into the card to find it): the
+// same question as the detail page's, and the card is gone; its Undo stands on the list (UndoLine). The card's own press never fires.
+function CardRemove({ conn, channel = "", reload }) {
+  const [open, setOpen] = useState(false);
+  const { asking, setAsking, words, remove } = useRemove(conn, channel, reload, null, open);
+  const stop = (e) => e.stopPropagation();
+  return <Box component="span" onClick={stop} onKeyDown={stop} sx={{ display: "inline-flex", flexShrink: 0 }}>
+    <IconButton size="small" data-tq-card-remove="" aria-label={`Remove ${conn.Name || conn.Type}`} title="Remove - asks once; Undo puts it back"
+      onClick={() => { setOpen(true); setAsking(true); }} sx={{ p: 0.25, color: FAINT, "&:hover": { color: "#6b2733" } }}>
+      <DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
+    <ConfirmDelete open={asking} title={words.title} consequence={words.text} confirmLabel="Remove" undoable onConfirm={remove} onClose={() => setAsking(false)} />
+  </Box>;
 }
 
 /* ── Apple Messages: the two macOS permissions, as a walkthrough instead of a paragraph ──

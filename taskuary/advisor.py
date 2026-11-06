@@ -1354,10 +1354,7 @@ def _out(store, key, item, verbs, r, rev, d, fix, check=False) -> dict:
     verb, line, by, ev = d['verb'], d['line'], d['by'], d['evidence']
     lbl = _label(verbs, verb, item) if verb else ''
     out = {'key': key, **({'fix': fix} if fix else {}), 'state': r['state'], 'verb': verb, 'label': lbl, 'line': line, 'by': by, 'revision': rev, 'pill': lbl, 'evidence': ev,
-           'ask': True, 'needs_ai': True, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {}),
-           # ...and the section the facts put its settling in (rulebook.SEC - a reply that went is Close out's): the page opens there while
-           # Mark done is the lit move
-           **({'section': r['section']} if r.get('section') and verb == 'close' else {})}
+           'ask': True, 'needs_ai': True, 'kind': d['kind'], **({'checked': d['checked']} if d.get('checked') else {})}
     # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed act with
     # no draft on the table) - read live, so a fix already made carries no stale link
     if verb == 'fix':
@@ -1379,7 +1376,7 @@ def _out(store, key, item, verbs, r, rev, d, fix, check=False) -> dict:
 # a lit Try again greyed for want of an AI (nothing lit at all), "the draft promises Friday" beside a dark Send, a late line on a drafted
 # task lighting Reply over the draft's own Send, and the survivor of a duplicate pair folded into its own twin. Each refusal is logged.
 AGENT_VERBS = frozenset({'continue', 'regular_agent', 'run_another', 'strong_again'})
-SENDS = frozenset({'approve', 'send_close'})      # the draft's two sends: Send, and Close out's Send and close
+SENDS = frozenset({'approve', 'send_close'})      # the draft's two sends under it in the chat: Send, and Send and close
 AGENT_CHECK = True       # the suite turns this off (tests/conftest.py): a bare store has no brain, and its agents' buttons are not the subject
 
 

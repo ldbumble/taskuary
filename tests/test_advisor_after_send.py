@@ -51,7 +51,7 @@ class AfterSendTests(_Rail):
         self.assertRegex(p, r"\): agent_done - .*; the fact: Your reply went .*; nothing since\.")
         advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=lambda sy, u, **kw: '{"verb": "close", "line": "", "evidence": []}')
         with mock.patch.object(advisor, 'notice'): d = advisor.decide(s, f'task:{t}')
-        self.assertEqual((d['verb'], d['by'], d['section']), ('close', 'model', 'close'), 'Mark done opens Close out, where the reply went')
+        self.assertEqual((d['verb'], d['by'], d.get('section')), ('close', 'model', None), 'Mark done lit - the page opens on its chat, no section named')
         # ...and a word from her after it is the evidence that something is owed again - the model reads which
         s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Re: August close', 'FromEmail': 'erin@northwind.example',
                        'FromName': 'Erin Blake', 'SentAt': _at(0), 'BodyText': 'And September?', 'Status': 'routed', 'TaskId': t})

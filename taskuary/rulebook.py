@@ -19,10 +19,6 @@ CHASE_DAYS = 3           # a wait past 3 working days is NAMED late (waiting_lat
 # a failure is the fact whatever is lit: its sentence stands on the strip where the model's own line is empty (advisor._out)
 FAILED = frozenset({'failed', 'failed_cause', 'report_failed'})
 EV = '_evidence'         # a fact's own ids (usual.py), carried beside the line's facts and handed on as the decision's evidence
-# ...and WHERE ITS MOVE IS, of the task's three sections (stages.json `section`): a reply that already went is Close out's to settle, so the
-# page opens there with the Advisor's line beside it (the owner, 2026-10-29: the owner answered in Teams, and the page opened on Came from
-# with "Mark done is next" under the Agent nobody started). Carried as a fact beside the line's, handed on as the decision's `section`
-SEC = '_section'
 
 
 def _dt(s):
@@ -260,7 +256,7 @@ def state(store, item: dict, verbs: list) -> tuple:
         went = max(str((sent or {}).get('DecidedAt') or '')[:19], str(own or '').replace('T', ' ')[:19])
         work = str(last_word(store, tid) or '')[:19] if tid else ''
         if not tid or not (went or work): return 'agent_done', {'what': '', 'when': ''}
-        if went > work: return 'agent_done', {'what': 'Your reply went', 'when': finished_quiet(store, tid, went), SEC: 'close'}
+        if went > work: return 'agent_done', {'what': 'Your reply went', 'when': finished_quiet(store, tid, went)}
         return 'agent_done', {'what': 'Finished', 'when': finished_quiet(store, tid, work)}
     # an agent stopped, saved, or paused when Taskuary stopped - its card, or the task's own row in an agent's stopped lane: its work is kept
     if kind == 'agent' or (tid and lane in ('stopped', 'saved')):
@@ -309,7 +305,7 @@ def state(store, item: dict, verbs: list) -> tuple:
         # THE OWNER ALREADY ANSWERED (trust audit A3, 2026-10-28): their own reply went after the sender's newest message, so nobody is
         # waiting - Mark done, as the model's prompt says ("someone is waiting only when they wrote again after it"); Reply lit there
         # offered to say twice what was said
-        if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went), SEC: 'close'}
+        if (went := answered(store, it, ins[-1])): return 'answered', {'when': when(went)}
         from . import usual
         if (late := usual.late_reply(store, ins[-1])):
             return 'asked_late', {'who': late['who'], 'usual': late['usual'], 'age': late['age'], EV: late['evidence']}
@@ -414,15 +410,15 @@ def slipped(store, item: dict, t: dict) -> tuple:
 
 
 def facts(store, item: dict, verbs: list) -> dict:
-    """{state, line, evidence?, section?} - where the item stands and the checkable fact said for it ('' when a fact it needs is not known),
-    with the ids it rests on and the section of the task page it is about. Read by the Advisor's prompt; nothing here lights a button.
+    """{state, line, evidence?} - where the item stands and the checkable fact said for it ('' when a fact it needs is not known),
+    with the ids it rests on. Read by the Advisor's prompt; nothing here lights a button.
     Never raises: facts that cannot be read are the plain 'own'."""
     try: st, f = state(store, item, verbs)
     except Exception as e:
         logger.warning(f"rulebook: no facts read for {(item or {}).get('key')} - {e}"); st, f = 'own', {}
-    ev, sec = f.pop(EV, None) or [], f.pop(SEC, None)
+    ev = f.pop(EV, None) or []
     line = _cut(_say(st, **f), 64)
-    return {'state': st, 'line': line, **({'evidence': ev} if ev and line else {}), **({'section': sec} if sec else {})}
+    return {'state': st, 'line': line, **({'evidence': ev} if ev and line else {})}
 
 
 def chase_thread(store, item: dict) -> dict | None:

@@ -173,7 +173,7 @@ def test_the_owners_reply_after_their_newest_mail_is_the_answered_fact(s):
     t, m, it = _asked(s, 'Badge access', d=3)
     s._exec("UPDATE review SET DeliveryState='sent', DecidedAt=? WHERE ReviewId=?", (at(d=2), Factory(s).review(t, m, status='approved', final='Done.')))
     d = rulebook.facts(s, it, _verbs('reply', 'close'))
-    assert (d['state'], d['line'], d['section']) == ('answered', 'Your reply went 2 days ago; nothing since.', 'close')
+    assert (d['state'], d['line'], d.get('section')) == ('answered', 'Your reply went 2 days ago; nothing since.', None)
     # ...they wrote again after it: an ask again
     Factory(s).message(task_id=t, subject='RE: Badge access', body='and the second door?', from_name=ERIN[0], from_email=ERIN[1], sent_at=at(d=1), conversation_id='email:Badge access')
     assert rulebook.facts(s, it, _verbs('reply', 'close'))['state'] == 'asked'

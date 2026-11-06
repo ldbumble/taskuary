@@ -136,7 +136,8 @@ def strong_of(store, pick: str, cfg=None) -> str:
 
 # ONE MODEL, STILL THREE STEPS (the owner, 2026-11-06: "if it's api or something that only has one model use effort instead if they
 # support it"). A brain with no model of its own for a tier runs its one model at this effort - the 'model@effort' pick every CLI road
-# already spells in its own flag (climodels.effort_args). An AI card takes no effort setting (workflows.brain), so it keeps its answer.
+# already spells in its own flag (climodels.effort_args), and make_llm sends to the API cards whose provider takes one
+# (llm.EFFORT_TAKERS). Any other brain keeps its answer.
 LIFT = {'light': 'low', 'strong': 'high'}
 EFFORTS = ('minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 
@@ -149,15 +150,20 @@ def _cli(store, pick: str, cfg=None) -> str:
 
 
 def lift(store, pick: str, tier: str, model: str = '', cfg=None) -> str:
-    """'<model>@<effort>' - `model` (else the brain's own) at the effort `tier` runs at - for a CLI brain with no model of its own for
-    that tier whose CLI takes an effort flag; '' otherwise. A light gear the CLI already ships (llm.LIGHT_DEFAULT: claude's haiku,
-    codex's low effort) is its own answer, and an effort already at or past the step is no step."""
-    if tier not in LIFT or not str(pick or '').startswith('cli:') or _own(store, pick, f'{tier}_model', cfg): return ''
-    from . import climodels
-    from .llm import LIGHT_DEFAULT
-    cli = _cli(store, pick, cfg)
-    if not climodels.effort_args(cli, 'x') or (tier == 'light' and LIGHT_DEFAULT.get(cli)): return ''
-    m, e = climodels.split_pick(model or _own(store, pick, 'model', cfg))
+    """'<model>@<effort>' - `model` (else the brain's own) at the effort `tier` runs at - for a brain with no model of its own for that
+    tier that takes an effort: a CLI with an effort flag, or an AI card whose provider takes one (an AI card has no quick model box, so
+    its quick work is always its one model, thinking less). '' otherwise. A quick gear a CLI already ships (llm.LIGHT_DEFAULT: claude's
+    haiku, codex's low effort) is its own answer, and an effort already at or past the step is no step."""
+    p = str(pick or '')
+    if tier not in LIFT or not p.startswith(('cli:', 'connector:')) or _own(store, p, f'{tier}_model', cfg): return ''
+    from . import climodels, llm
+    if p.startswith('cli:'):
+        cli = _cli(store, p, cfg)
+        if not climodels.effort_args(cli, 'x') or (tier == 'light' and llm.LIGHT_DEFAULT.get(cli)): return ''
+    else:
+        c = store.get_connector(int(p[10:])) if p[10:].isdigit() else None
+        if (c or {}).get('Type') not in llm.EFFORT_TAKERS: return ''
+    m, e = climodels.split_pick(model or _own(store, p, 'model', cfg))
     want = LIFT[tier]
     if e in EFFORTS and (EFFORTS.index(e) <= EFFORTS.index(want) if tier == 'light' else EFFORTS.index(e) >= EFFORTS.index(want)): return ''
     return f'{m}@{want}'
@@ -336,13 +342,13 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         if r:
             tier, rule, said = r['use']['tier'], r['id'], ''
             if tier == 'strong':
-                # the brain's own strong gear, or its one model at high effort; else the first backup with a strong model, then one
-                # that can think harder - and for coding only ever a CLI's. A brain picked explicitly is kept: with neither it does
-                # the work at standard
+                # a strong model first - the brain's own, else the first backup's, as before - then the brain's one model at high
+                # effort, else a backup's; for coding only ever a CLI's. A brain picked explicitly is kept: with neither it does the
+                # work at standard
                 ok = lambda p: bool(strong_of(store, p)) and hands(p)
                 up = lambda p: bool(lift(store, p, 'strong', model if p == pick else '')) and hands(p)
-                to = (pick if ok(pick) or up(pick) else '' if want_pick is not None else
-                      next((c for c in chain if c and ok(c)), '') or next((c for c in chain if c and up(c)), ''))
+                to = (pick if ok(pick) or (want_pick is not None and up(pick)) else '' if want_pick is not None else
+                      next((c for c in chain if c and ok(c)), '') or (pick if up(pick) else next((c for c in chain if c and up(c)), '')))
                 if not to: tier, said = 'standard', f"; {'it has no' if want_pick is not None else 'no brain here has a'} strong model, so standard"
                 elif to != pick: said, chain, pick, model = f'; {_said(store, pick)} has no strong model', [pick, *chain], to, ''
             if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
@@ -500,7 +506,7 @@ def levels(store, cfg=None) -> list:
             quick = spell(light) or (f'{SAME}, {dflt[7:]} effort' if dflt.startswith('effort:') else '') or \
                     (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME)
             normal = spell(own) or 'its default model'
-        else: quick, normal = SAME, _card_model(store, p)
+        else: quick, normal = (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME), _card_model(store, p)
         hard = spell(strong_of(store, p, cfg)) or (f'{SAME}, {LIFT["strong"]} effort' if lift(store, p, 'strong', cfg=cfg) else SAME)
         out.append({'pick': p, 'brain': _said(store, p), 'quick': quick, 'normal': normal, 'hard': hard})
     return out

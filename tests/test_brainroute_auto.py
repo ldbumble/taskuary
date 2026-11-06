@@ -79,9 +79,13 @@ def test_an_explicit_pick_or_model_always_wins(s):
     s.set_setting('ai_route_mode', 'auto', 'owner'); tid = _task(s, 'hard')
     r = brainroute.choose(s, 'draft', task=tid, want_pick=s.o, want_model='gpt-5-mini')
     assert (r.pick, r.model, r.tier, r.rule) == (s.o, 'gpt-5-mini', 'fixed', 'you chose it')
-    # a picked brain still gets the tier - on that brain, never another: with no strong model it does hard work at standard
+    # a picked brain still gets the tier - on that brain, never another: with no strong model it thinks harder on its own one,
+    # and one that cannot do hard work at standard
     r = brainroute.choose(s, 'draft', task=tid, want_pick=s.o)
-    assert (r.pick, r.tier) == (s.o, 'standard') and 'it has no strong model' in r.why
+    assert (r.pick, r.tier, r.model) == (s.o, 'strong', 'gpt-5@high')
+    m = _card(s, 'mistral', model='mistral-large')
+    r = brainroute.choose(s, 'draft', task=tid, want_pick=m)
+    assert (r.pick, r.tier) == (m, 'standard') and 'it has no strong model' in r.why
     assert brainroute.choose(s, 'draft', task=tid, want_pick=s.a).tier == 'strong'
 
 
@@ -92,7 +96,8 @@ def test_hard_work_moves_to_the_first_backup_with_a_strong_model(s):
 
 
 def test_no_strong_model_anywhere_stays_standard_and_says_so(s):
-    s.set_setting('ai_route_mode', 'auto', 'owner'); s.set_setting('triage_ai', s.o, 'owner')
+    m = _card(s, 'mistral', model='mistral-large')                     # ...and no effort to raise: mistral takes none here
+    s.set_setting('ai_route_mode', 'auto', 'owner'); s.set_setting('triage_ai', m, 'owner'); s.o = m
     r = brainroute.choose(s, 'draft', task=_task(s, 'hard'))
     assert (r.pick, r.tier, r.gear) == (s.o, 'standard', 'main') and 'no brain here has a strong model, so standard' in r.why
 
@@ -180,9 +185,10 @@ def test_the_effort_reaches_the_cli_in_its_own_flag(s):
 
 
 def test_a_brain_without_an_effort_setting_keeps_today_s_answer(s):
-    s.set_setting('triage_ai', s.o, 'owner')                                         # an API card with one model
+    s.set_setting('triage_ai', _card(s, 'groq', model='llama-3.3-70b-versatile'), 'owner')    # an API card whose provider takes none
     r = brainroute.choose(s, 'draft', task=_task(s, 'hard'))
     assert (r.tier, r.model) == ('standard', '') and 'no brain here has a strong model' in r.why
+    assert brainroute.choose(s, 'triage').model == ''
     with _cli(s, 'gemini', model='gemini-2.5-pro'):                                  # a CLI whose effort flag we cannot spell
         assert brainroute.choose(s, 'draft', task=_task(s, 'hard')).tier == 'standard'
     with _cli(s, model='sonnet@max'):                                                # already past high: no step to take
@@ -206,7 +212,12 @@ def test_settings_says_what_each_level_runs_on_in_plain_words(s):
         assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'normal', 'hard')} == \
             {'quick': 'same model, low effort', 'normal': 'its default model', 'hard': 'same model, high effort'}
     s.set_setting('triage_ai', s.a, 'owner')
-    assert brainroute.levels(s)[0]['hard'] == 'claude-opus-5' and brainroute.levels(s)[0]['quick'] == 'same model'
+    assert brainroute.levels(s)[0]['hard'] == 'claude-opus-5' and brainroute.levels(s)[0]['quick'] == 'same model, low effort'
+    s.set_setting('triage_ai', s.o, 'owner')                                          # one model on an API card: effort both ways
+    assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'normal', 'hard')} == \
+        {'quick': 'same model, low effort', 'normal': 'gpt-5', 'hard': 'same model, high effort'}
+    s.set_setting('triage_ai', _card(s, 'groq'), 'owner')
+    assert {k: brainroute.levels(s)[0][k] for k in ('quick', 'hard')} == {'quick': 'same model', 'hard': 'same model'}
     words = ' '.join(' '.join(str(v) for v in l.values()) for l in brainroute.panel(s)['levels'])
     assert not any(w in words.lower() for w in ('tier', 'gear'))
 
@@ -218,3 +229,78 @@ def test_the_panel_tells_a_person_how_auto_picks():
     assert 'quick: ${l.quick} · normal: ${l.normal} · hard: ${l.hard}' in src
     said = [m for m in __import__('re').findall(r'"([^"]*)"', src) if ' ' in m]
     assert not [m for m in said if __import__('re').search(r'\b(tier|gear)s?\b', m, __import__('re').I)], said
+
+
+# ── effort on an API card: sent where the provider takes it, dropped once where the model does not (mocked HTTP, no live calls) ──
+class _R:
+    def __init__(self, code, data=None, text=''): self.status_code, self._d, self.text = code, data, text or json.dumps(data or {})
+    def json(self): return self._d
+
+
+OK = {'choices': [{'message': {'content': 'ok'}, 'finish_reason': 'stop'}]}
+
+
+@pytest.fixture
+def fresh():
+    llm._NO_EFFORT.clear(); yield; llm._NO_EFFORT.clear()
+
+
+def test_openai_and_azure_get_reasoning_effort_and_the_bare_model(fresh):
+    sent = []
+    with mock.patch.object(llm.requests, 'post', lambda url, headers, json, timeout: sent.append(json) or _R(200, OK)):
+        assert llm.make_llm('openai', {'model': 'gpt-5@high'}, 'sk-test')('sys', 'user') == 'ok'
+        llm.make_llm('azure_openai', {'endpoint': 'https://res.example', 'deployment': 'gpt5', 'model': '@low'}, 'k')('sys', 'user')
+        llm.make_llm('openai', {'model': 'gpt-5'}, 'sk-test')('sys', 'user')
+    assert (sent[0]['model'], sent[0]['reasoning_effort']) == ('gpt-5', 'high')
+    assert sent[1]['model'] == 'gpt5' and sent[1]['reasoning_effort'] == 'low'
+    assert 'reasoning_effort' not in sent[2]                                         # no effort asked, none sent
+
+
+def test_a_model_that_refuses_the_effort_is_asked_once_more_without_it_and_not_again(fresh):
+    sent = []
+    no = _R(400, text='{"error": {"message": "Unsupported parameter: \'reasoning_effort\' is not supported with this model."}}')
+    def post(url, headers, json, timeout):
+        sent.append(dict(json)); return no if 'reasoning_effort' in json else _R(200, OK)
+    with mock.patch.object(llm.requests, 'post', post):
+        brain = llm.make_llm('openai', {'model': 'gpt-4o-mini@high'}, 'sk-test')
+        assert brain('sys', 'user') == 'ok' and brain('sys', 'again') == 'ok'
+    assert ['reasoning_effort' in b for b in sent] == [True, False, False]
+
+
+def test_another_400_is_not_read_as_a_refused_effort(fresh):
+    with mock.patch.object(llm.requests, 'post', lambda url, headers, json, timeout: _R(400, text='{"error": "bad key"}')):
+        with pytest.raises(RuntimeError, match='openai error 400'): llm.make_llm('openai', {'model': 'gpt-5@high'}, 'sk-test')('sys', 'u')
+    assert not llm._NO_EFFORT
+
+
+def test_anthropic_gets_output_config_effort_and_drops_it_when_refused(fresh):
+    import anthropic, httpx2
+    seen = []
+    def create(**kw):
+        seen.append(kw)
+        if kw.get('output_config') and kw['model'] == 'claude-old':
+            raise anthropic.BadRequestError('output_config.effort: this model does not support effort', body=None,
+                                            response=httpx2.Response(400, request=httpx2.Request('POST', 'https://api.anthropic.example')))
+        return mock.Mock(stop_reason='end_turn', content=[mock.Mock(type='text', text='ok')])
+    client = mock.Mock(); client.messages.create = create
+    with mock.patch.object(anthropic, 'Anthropic', lambda api_key: client):
+        assert llm.make_llm('anthropic', {'model': 'claude-sonnet-5@high'}, 'sk-test')('sys', 'user') == 'ok'
+        assert llm.make_llm('anthropic', {'model': 'claude-old@low'}, 'sk-test')('sys', 'user') == 'ok'
+    assert (seen[0]['model'], seen[0]['output_config']) == ('claude-sonnet-5', {'effort': 'high'})
+    assert seen[1]['output_config'] == {'effort': 'low'} and 'output_config' not in seen[2] and seen[2]['model'] == 'claude-old'
+
+
+def test_a_provider_without_effort_never_sees_it_and_a_dated_id_stays_whole(fresh):
+    sent = []
+    with mock.patch.object(llm.requests, 'post', lambda url, headers, json, timeout: sent.append(json) or _R(200, OK)):
+        llm.make_llm('groq', {'model': 'llama-3.3-70b-versatile@high'}, 'k')('sys', 'user')
+    assert sent[0]['model'] == 'llama-3.3-70b-versatile' and 'reasoning_effort' not in sent[0]
+    assert llm.split_effort('claude-x@20251101') == ('claude-x@20251101', '') and llm.split_effort('@low') == ('', 'low')
+
+
+def test_the_router_s_effort_reaches_the_api_call(s, fresh):
+    s.set_setting('triage_ai', s.o, 'owner'); tid = _task(s, 'hard'); sent = []
+    with mock.patch.object(llm.requests, 'post', lambda url, headers, json, timeout: sent.append(json) or _R(200, OK)):
+        llm.build_llm(s, job='draft', task_id=tid)('sys', 'user')
+    assert (sent[0]['model'], sent[0]['reasoning_effort']) == ('gpt-5', 'high')
+    assert 'gpt-5, high effort' in s.brain_routes(tid, limit=1)[0]['Why']

@@ -43,7 +43,7 @@ def _ask(s, job='triage', task_id=None):
 def test_junk_twice_is_answered_by_the_strong_brain_once_and_logged(s):
     make, calls = _brains('not json at all')
     with mock.patch.object(llm, 'make_llm', make): a = _ask(s)
-    assert a.data['title'] == 'Q3 numbers' and calls == ['claude-sonnet-5', 'claude-sonnet-5', 'claude-opus-5']
+    assert a.data['title'] == 'Q3 numbers' and calls == ['claude-sonnet-5@low', 'claude-sonnet-5@low', 'claude-opus-5']
     first, up = s.brain_routes()[::-1]
     assert (first['Outcome'], up['EscalatedFrom'], up['Tier'], up['Rule']) == ('escalated', first['Id'], 'strong', 'unsure')
     assert 'came back unreadable' in up['Why'] and "Anthropic API's strong model" in up['Why']
@@ -56,7 +56,7 @@ def test_an_unsure_answer_steps_up_and_a_sure_one_does_not(s):
     assert a.data['title'] == 'Q3 numbers' and calls[-1] == 'claude-opus-5' and 'came back unsure' in s.brain_routes()[0]['Why']
     make, calls = _brains(json.dumps({**json.loads(GOOD), 'title': 'Sure numbers'}))
     with mock.patch.object(llm, 'make_llm', make): a = _ask(s)
-    assert a.data['title'] == 'Sure numbers' and calls == ['claude-sonnet-5']
+    assert a.data['title'] == 'Sure numbers' and calls == ['claude-sonnet-5@low']
 
 
 def test_once_per_item_per_job(s):

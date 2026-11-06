@@ -32,7 +32,8 @@ def test_once_set_the_drafts_are_written_on_it_and_triage_is_untouched():
                        'Subject': 'Thursday?', 'BodyText': 'Does Thursday at 2 work?', 'Status': 'routed'})
         responder.draft_reply(s, tid)
         llm.build_llm(s, job='triage')
-    assert built[0] == ('openai', 'gpt-5') and built[-1] == ('anthropic', None)
+    # ...and triage, a quick job in Auto, on the card's own model thinking less (the router's '@low', split off in make_llm)
+    assert built[0] == ('openai', 'gpt-5') and built[-1] == ('anthropic', '@low')
     assert [r['Job'] for r in s.brain_routes()][::-1] == ['draft', 'triage']
 
 

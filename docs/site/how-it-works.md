@@ -151,8 +151,10 @@ as over budget, never cut in half. The opening screen says how many lines went i
 and are still in use.
 `SOUL.md` always outranks `LEARNED.md`, and one setting switches the whole loop off.
 
-**Correcting it where you read it.** Settings → Docs → `LEARNED.md` has three views: the text you
-edit, **What changed** and **Visualize**. Visualize draws the five subjects, each saying who reads
+**Correcting it where you read it.** **About you → Memory** reads `LEARNED.md` as plain sentences, one per
+line, each with Keep, Wrong and Forget and a faint note of when it was learned and from what. The file itself
+(open it from a search, or its **What changed** link) has three views: the text you edit, **What changed** and
+**Visualize**. Visualize draws the five subjects, each saying who reads
 it, with your people under the person each line is about and a link to that person's page where
 the ledger keeps one; then Watching and Proposed. On a learned line, here and on its newest row in
 What changed, three words correct it: **Keep** makes it yours, in its words, and nothing rewrites
@@ -195,7 +197,7 @@ row kinds and verdicts - is on [The Advisor](advisor).
 
 ## The documents that govern it
 
-Taskuary's behaviour is plain Markdown under **Settings → Docs**. These are not configuration files
+Taskuary's behaviour is plain Markdown under **About you → Docs**. These are not configuration files
 around the edges — they are what the models are actually told.
 
 ![The eight operator documents and who reads them: TRIAGE, STYLE and JOB can be generated from three months of your mail; SOUL, CODING and COUNSEL you write; LEARNED and DIGEST write themselves](img/operator-docs.svg "Three are read out of your mailbox, three you write, two write themselves.")
@@ -234,5 +236,5 @@ leaving anything you wrote outside that block alone.
 - **Review** — the outbound queue.
 - **Reports** — connected data on a schedule; see [Reports and the Advisor](reports).
 - **Hub** — what agents have learned, by topic, so knowledge survives past one job.
-- **Docs** — the documents above.
+- **About you** — who you are, the documents above, your playbooks, and what Taskuary has learned about you (Memory).
 - **Settings** — everything else; see the [Settings reference](settings).

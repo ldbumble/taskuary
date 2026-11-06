@@ -5398,7 +5398,10 @@ def agent_memory(request: Request, task_id: int, section: str = ''):
     return {'text': text, 'says': text or 'nothing learned about the owner yet' + (f' under {learned_cut.TITLE[section]}' if section else '')}
 
 class AgentFile(BaseModel): name: str; data: str                 # data is base64: the CLI reads the file, the server never opens a path it is handed
-class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
+class AgentReplyBody(BaseModel):
+    task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False; to: str = ''; answers: int | None = None
+    # ...who hears it, the agent's call (2026-11-06): the sender alone, or who else is copied, and the one line why (wrapup.agent_reply)
+    only: bool = False; cc: list[str] | None = None; why_to: str = ''
 
 def _agent_files(files):
     import base64, binascii
@@ -5413,7 +5416,8 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to, answers=body.answers)
+    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to,
+                              answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
 class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
 
@@ -5507,6 +5511,74 @@ def agent_ask_stronger(body: AgentAskStrongerBody, request: Request):
     try: return askstronger.ask(store, body.task_id, body.question, body.context)
     except ValueError as e: raise HTTPException(422, str(e))
 
+class AgentNoteBody(BaseModel): task_id: int; to: str; text: str
+
+@app.post('/api/agent/note-peers')
+def agent_note_peers(body: AgentNoteBody, request: Request):
+    """The note_peers tool from the session working the task: words for another agent - a task, every agent in this checkout, or all of
+    them - at its next turn, framed as a peer's (peers.py). It carries no authority of the owner's; nothing leaves the machine."""
+    from . import peers
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: return peers.send(store, body.task_id, body.to, body.text)
+    except PermissionError as e: raise HTTPException(403, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+
+class AgentLandBody(BaseModel): task_id: int; how: str; why: str = ''
+
+@app.post('/api/agent/propose-land')
+def agent_propose_land(body: AgentLandBody, request: Request):
+    "The propose_land tool: the agent's pick for how its branch lands, marked on the owner's landing question (landing.py). Lands nothing."
+    from . import landing
+    _own_task_only(request, body.task_id)
+    if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
+    try: return landing.propose(store, body.task_id, body.how, body.why)
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.get('/api/tasks/{tid}/landing')
+def task_landing(tid: int, full: bool = False):
+    """A coding task's work against where it started - the diff stat (and with `full` the diff) and the landing question. Developer
+    mode only: with it off there is no coding UI to ask it in."""
+    from . import landing
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if not hub_agents.developer_mode(store): return {'data': None}
+    return {'data': landing.state(store, tid, full=full)}
+
+@app.get('/api/tasks/{tid}/coding-chat')
+def task_coding_chat(tid: int):
+    """A coding task as the one chat (codingchat.py): every session's steps - the CLI's own log, or its ACP updates - the mail that came
+    in, and the live CLI, for the page to draw in the general chat's own rows (codingChat.js)."""
+    from . import codingchat
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    return {'data': codingchat.chat(store, tid)}
+
+class RevertBody(BaseModel): parts: list[dict]
+
+@app.post('/api/tasks/{tid}/landing/revert')
+def task_land_revert(tid: int, body: RevertBody, request: Request):
+    "The parts of the diff the owner turned down in review, taken back out of the task's branch in one commit (landing.revert)."
+    from . import landing
+    _owner_only(request, "what is taken out of a branch before it lands is the owner's review")
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if not hub_agents.developer_mode(store): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
+    try: return landing.revert(store, tid, body.parts, ACTOR)
+    except landing.Refused as e: raise HTTPException(409, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+
+class LandBody(BaseModel): how: str
+
+@app.post('/api/tasks/{tid}/landing')
+def task_land(tid: int, body: LandBody, request: Request):
+    "The owner's answer to the landing question: rebase and fast-forward, a merge commit, a pull request, or discard (landing.land)."
+    from . import landing
+    _owner_only(request, "how a branch lands is the owner's answer")
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if not hub_agents.developer_mode(store): raise HTTPException(409, 'Developer mode is off (Settings, Developer mode)')
+    try: return landing.land(store, tid, body.how, ACTOR)
+    except landing.Refused as e: raise HTTPException(409, str(e))
+    except ValueError as e: raise HTTPException(422, str(e))
+    except RuntimeError as e: raise HTTPException(422, str(e))
+
 class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''
@@ -5592,10 +5664,12 @@ async def mcp_rpc(request: Request, task: int = 0):
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
-             'reply': lambda tid, text, to='', files=(): agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files)), request),
+             'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
              'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
-             'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request)}
+             'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
+             'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),
+             'propose_land': lambda tid, how, why: agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]
         if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger') and not (

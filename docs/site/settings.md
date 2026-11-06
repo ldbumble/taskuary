@@ -8,9 +8,10 @@ with the same name, the same group and the same help text. It cannot drift, and 
 remember to update it.
 :::
 
-The other Settings pages are documented where their subject is: **About you** and the per-channel
-identities, **Mail rules** ([the deterministic layer](how-it-works#what-triage-actually-decides)),
-**Activity log**, and **Updates** ([updating](index#updating)).
+The other Settings pages are documented where their subject is: **Mail rules**
+([the deterministic layer](how-it-works#what-triage-actually-decides)), **Activity log** (shown in
+Developer mode), and **Updates** ([updating](index#updating)). Who you are, your documents, your
+playbooks and your memory are on a page of their own, **About you**, beside Settings in the sidebar.
 
 ## How to read this
 
@@ -49,7 +50,7 @@ Nothing writes into this table by itself. **Not for me** teaches a verdict in yo
 
 ## Your memory
 
-There is one memory: `LEARNED.md`, in Settings → Docs. Every fact you tell the Assistant ("remember
+There is one memory: `LEARNED.md`, read as sentences on **About you → Memory**. Every fact you tell the Assistant ("remember
 that…", "I don't care about the legacy export any more") goes in at once as your own line, under
 the section it is about. A verdict you give — **Not for me**, **Not for the agent**, a
 kind or a road you corrected, an Advisor idea taken up or turned down — goes in when it teaches
@@ -61,7 +62,7 @@ change what they read.
 
 ## Activity log
 
-Every consequential thing Taskuary does is one row in an append-only log: a message routed or
+Shown in **Developer mode**. Every consequential thing Taskuary does is one row in an append-only log: a message routed or
 filed and why, a verdict, a reply sent, an agent session opened or wrapped, a connector saved, a
 setting changed, a task deleted.
 

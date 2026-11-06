@@ -234,7 +234,7 @@ brief carries the same facts, one line each, with the person's day named.
 ## A page per person
 
 Facts about other people go to a page per person, derived from the ledger at reflection and kept
-under **Settings → Docs → People** by address: how fast they answer, whether a chase is needed, who
+under **About you → Docs → People** by address: how fast they answer, whether a chase is needed, who
 on copy moves them, what they deliver late - each line with the evidence ids it rests on, and the
 counted numbers underneath. The lines are the model's reading; the numbers are the ledger's. Your
 own lines above the block are yours and survive every recompile. The page is read wherever the hub's

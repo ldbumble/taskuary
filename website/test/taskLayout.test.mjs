@@ -324,14 +324,16 @@ test("Close out knows the owner answered outside Taskuary, and says so", () => {
 });
 
 // WHERE THE CHAT IS HOME (phase 4, Task 4.1): a general or reply task shows Came from and the agent, opens on the agent, and Mark done,
-// Close with a note, Attach and Share ride the agent's strip; a coding task, a plain task and a live terminal keep their three sections
+// Close with a note, Attach and Share ride the agent's strip; a plain task and a live terminal on one keep their three sections - a coding task
+// is the one chat too (2026-11-06)
 test("a task whose home is the chat shows Came from and the agent, and opens on the chat", () => {
   assert.equal(chatHome({ kind: "general" }), true);
   assert.equal(chatHome({ kind: "reply" }), true);
-  assert.equal(chatHome({ kind: "coding" }), false);
+  assert.equal(chatHome({ kind: "coding" }), true, "a coding task is the same one chat (2026-11-06)");
+  assert.equal(chatHome({ kind: "coding", terminal: true }), true, "...its live terminal a toggle inside it, never a column");
   assert.equal(chatHome({ kind: "task" }), false);
   assert.equal(chatHome({ kind: "task", chatted: true }), true, "a closed task, or one a chat was had on, opens on the chat (2026-11-06)");
-  assert.equal(chatHome({ kind: "coding", chatted: true }), false);
+  assert.equal(chatHome({ kind: "coding", chatted: true }), true);
   assert.equal(chatHome({ kind: "general", terminal: true }), false);
   // ...nor a kind not known yet: a coding task never draws two sections before its detail lands
   assert.equal(chatHome({}), false);

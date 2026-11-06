@@ -3312,7 +3312,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => () => navEnd(false), []);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
   // Settings and Connections have their own ← back to your tasks: the bar's Back and Next stand greyed under them (actionRow.navOff)
-  const ownBack = navOn === "settings" || navOn === "connections";
+  const ownBack = navOn === "settings" || navOn === "about" || navOn === "connections";   // ...and About you, Settings' own split (2026-11-06)
   useEffect(() => { navOff(ownBack ? "Back to your tasks with ← at the top" : ""); }, [ownBack]);
   useEffect(() => () => navOff(""), []);
   // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the

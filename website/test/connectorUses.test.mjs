@@ -43,6 +43,10 @@ test("the line sits on the card beside Remove, and Remove asks once", () => {
   assert.equal((cr.match(/<ConfirmDelete|window\.confirm|<Dialog/g) || []).length, 1, "one question on the face too");
   assert.match(cr, /onClick=\{stop\} onKeyDown=\{stop\}/);
   assert.match(cv, /\{c\.remove && <CardRemove \{\.\.\.c\.remove\} \/>\}/);
+  // ...on EVERY connection card (2026-11-06): the channel, data and special cards - SQL Server, remote Windows, Agent Desktop - alike
+  const builders = cv.slice(cv.indexOf("const chanCard = (c) =>"), cv.indexOf("const planned = types.filter"));
+  assert.equal((builders.match(/remove: (?:removable\(c\) \? \{ conn: c)/g) || []).length, 3, "chanCard, dataCards and specialCards each carry Remove");
+  assert.match(builders, /remove: removable\(c\) \? \{ conn: c, channel: type === "mssql" \|\| type === "winrm" \? "data" : "", reload: load \} : null,/);
 });
 
 test("the question names the card, what stays, what goes and what stops with it", () => {

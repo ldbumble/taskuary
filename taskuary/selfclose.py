@@ -317,13 +317,17 @@ OWNER_ANSWERED_LINE = ('THE OWNER ANSWERED THIS THEMSELVES: the newest message o
 # ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between
 # the markers become the task's pending reply as written (wrapup.agent_reply) and stay in the chat too.
 REPLY_OPEN, REPLY_CLOSE = '[[TASKUARY-REPLY]]', '[[/TASKUARY-REPLY]]'
-_REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?REPLY\s*\]\]', re.I | re.S)
+# ...its opening may say who hears it (2026-11-06): [[TASKUARY-REPLY answers=12 only=yes cc="a@x.example, b@y.example" why="..."]] (reply_who)
+_REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY(?:\s+(?P<who>[^\]]*?))?\s*\]\](?P<said>.*?)\[\[\s*/\s*TASKUARY[-_ ]?REPLY\s*\]\]', re.I | re.S)
+_WHO_RE = re.compile(r'(to|answers|only|cc|why)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '
               f'text between {REPLY_OPEN} and {REPLY_CLOSE}. It becomes the reply waiting on the owner\'s approval, '
               f'in your words - nothing is sent until they approve it. The owner reads it as its own card under Next steps, after your answer, never '
               f'in it: say the reply is drafted and waits for their Send - never "in Close out", which a chat task does not have. A file it sends rides only if you name it on its own '
               f'line: [[TASKUARY-ATTACH: <full path>]] - a file you made in your working folder, or one listed under '
-              f'ATTACHED FILES. Never say a file is attached unless you named it that way.')
+              f'ATTACHED FILES. Never say a file is attached unless you named it that way. Who hears it is yours to decide, in the opening '
+              f'marker: [[TASKUARY-REPLY answers=<the mail number it replies to, when an earlier one> only=yes (its sender alone, nobody '
+              f'copied) cc="<who else is copied, instead of the thread>" why="<one line: why it goes to whom it goes>"]] - each optional.')
 
 
 # ...and EVERY TURN ENDS WITH WHERE THE OWNER STANDS (Task 3.4, 2026-11-04): the general agent's one goal is to get the owner to done, so
@@ -402,13 +406,26 @@ def reply_marker(text: str) -> tuple:
     """(reply with the markers taken out, the marked reply text) - or (text, None) when it wrote none."""
     m = _REPLY_RE.search(text or '')
     if not m: return text, None
-    said, rest = m.group(1).strip(), text[:m.start()] + text[m.end():]
+    said, rest = m.group('said').strip(), text[:m.start()] + text[m.end():]
     # ...said once: an agent that wrote the answer out and then marked the same words had both left on screen (2026-10-15)
     flat = lambda s: ' '.join(s.split())
     if said and flat(said) in flat(rest): return rest.strip(), said
     # ...and a paragraph of its own where it stood: glued to the words before it ("Drafted.Hi Ray - ..."), the letter was no paragraph
     # without_draft could find, and the chat drew it in the answer AND as its card (the scenario run, 2026-11-06)
     return '\n\n'.join(x for x in (text[:m.start()].rstrip(), said, text[m.end():].lstrip()) if x).strip(), said or None
+
+
+def reply_who(text: str) -> dict:
+    """Who the marked reply goes to, as its opening marker says - {to, answers, only, cc, why}, each only when given (wrapup.agent_reply's
+    own names: answers an int, only a bool, cc a list, why as why_to)."""
+    m = _REPLY_RE.search(text or '')
+    if not m: return {}
+    a = {k.lower(): (x or y).strip() for k, x, y in _WHO_RE.findall(m.group('who') or '')}
+    out = {**({'to': a['to']} if a.get('to') else {}), **({'why_to': a['why']} if a.get('why') else {})}
+    if str(a.get('answers') or '').lstrip('#').isdigit(): out['answers'] = int(a['answers'].lstrip('#'))
+    if str(a.get('only') or '').lower() in ('yes', 'true', '1'): out['only'] = True
+    if a.get('cc'): out['cc'] = [c.strip() for c in re.split(r'[,;]', a['cc']) if c.strip()]
+    return out
 
 
 # ...and said in ONE place: the draft is Close out's to show (the owner, 2026-11-02: "in agent we should just say 'agent drafted a message'").

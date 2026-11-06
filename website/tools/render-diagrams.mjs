@@ -14,7 +14,8 @@ const EDGE = process.env.BROWSER_EXE || "C:/Program Files (x86)/Microsoft/Edge/A
 const DIAGRAMS = {
   "docs/how-a-task-ends.md": ["docs/site/img/how-a-task-ends.svg"],
   "docs/assistant-words.md": ["docs/site/img/assistant-buttons.svg", "docs/site/img/assistant-questions.svg", "docs/site/img/assistant-task-tools.svg"],
-  "docs/phone-choices.md": ["docs/site/img/phone-choices.svg"],
+  // docs/phone-choices.md's flowchart is drawn by hand now (2026-11-06), in the palette of operator-docs.svg: mermaid's was 2473px wide
+  // and unreadable at the page's width - edit the svg beside the block
   "docs/work-rail.md": ["docs/site/img/rail-on.svg", "docs/site/img/rail-off.svg"],
   "docs/agent-lifecycle.md": ["docs/site/img/agent-start.svg", "docs/site/img/agent-run.svg", "docs/site/img/agent-end.svg"],
   "docs/tasks-and-board.md": ["docs/site/img/task-state.svg"],

@@ -898,6 +898,27 @@ WORK_LINE = ("WHILE A QUESTION WAITS, KEEP WORKING: ask your one question, then 
 # PLAYBOOKS LEARN (the owner, 2026-11-05, from Hermes' skills that patch themselves): a turn that found its way the hard way leaves the next
 # agent the way. The model says whether there is a lesson - no word triggers it; the owner's yes on the playbook's card files it
 # (playbooks.take_lesson), and one with no playbook to go in lands in LEARNED.md, the one road every learned fact takes
+# WHAT IS LEARNED REACHES THE AGENT (the owner, 2026-11-05: "what learned.md goes to the general agent?" - none did; only `taskuary
+# --memory` on its own say): the trusted lines of LEARNED.md nearest this task, a small block - lean, the rest one command away. The
+# hypotheses still under test stay out (learn.injectable), as they do for triage
+LEARNED_CHARS = 1_500
+def learned_block(store, about: str, budget: int = LEARNED_CHARS) -> str:
+    from . import learn, textsim
+    try: doc = learn.injectable(store.doc(learn.DOC) or '')
+    except Exception as e: logger.debug(f'learned block: {e}'); return ''
+    lines = [l.strip() for l in doc.splitlines() if l.strip()[:1] in '-*' and len(l.strip()) > 2]
+    if not lines: return ''
+    try: got = textsim.rank(store, about, [(str(i), l) for i, l in enumerate(lines)], least=0.0)
+    except Exception: got = None
+    order = [lines[int(k)] for k, _ in got] if got else lines
+    out, used = [], 0
+    for l in order:
+        if out and used + len(l) > budget: break
+        out.append(l); used += len(l) + 1
+    return ('WHAT TASKUARY HAS LEARNED ABOUT THE OWNER - the lines nearest this task (`taskuary --memory` prints all of it):\n'
+            + '\n'.join(out))
+
+
 # ...worth keeping, never a log (the owner, 2026-11-05: "it should be things that make sense like general rules about user, or things
 # learnt not just random clicking buttons"): it lands in LEARNED.md's Hypotheses, which keeps only what the evidence holds up
 LESSON_LINE = ('A LESSON FOR NEXT TIME: when this turn found its way only after a dead end, was corrected by the owner, or had to find an '
@@ -1017,8 +1038,10 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     outsider = _origin.of_task(store, tid)[0] == 'stranger'
     from .workstreams import of_task as _ws_of           # ...JOB.md as this task's workstream reads it (2026-11-01)
     owner_bg = '' if outsider else _brief.background(store, workstream=_ws_of(store, tid) or None)
+    task_ = store.get_task(tid) or {}
+    known = '' if outsider else learned_block(store, f"{task_.get('Title') or ''}\n{task_.get('Summary') or ''}")
     system = (
-        (f'{owner_bg}\n\n' if owner_bg else '') +
+        (f'{owner_bg}\n\n' if owner_bg else '') + (f'{known}\n\n' if known else '') +
         "You are the Taskuary general-work assistant. Help complete research, planning, writing, "
         "marketing, operational, and other non-coding work. The task and source material below are "
         "authoritative. Be direct and useful. Never claim you searched the web, opened a system, sent "

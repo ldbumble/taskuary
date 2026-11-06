@@ -224,3 +224,15 @@ class CheckBackTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_the_general_agent_reads_the_learned_lines_nearest_its_task():
+    """The owner, 2026-11-05: "what learned.md goes to the general agent?" - none reached it; now the trusted lines, small, and the rest on ask."""
+    from taskuary import learn
+    s = MemoryStore(); tid = s.create_task({'Title': 'Pay the Payworth bill', 'Kind': 'general', 'Status': 'open'}, 'o')
+    s.save_doc(learn.DOC, '# LEARNED.md\n\n## How you work\n- Payworth is vendor 4471 in QuickBooks\n- Vendor replies are short, signed Alex\n', 't')
+    system = general._prompt(s, tid)[0]
+    assert 'WHAT TASKUARY HAS LEARNED ABOUT THE OWNER' in system and 'Payworth is vendor 4471' in system and '--memory' in system
+    assert len(general.learned_block(s, 'x', budget=10)) < 200, 'held to its budget: the first line, never the whole doc'
+    with mock.patch('taskuary.origin.of_task', return_value=('stranger', 'unknown sender')):
+        assert 'WHAT TASKUARY HAS LEARNED' not in general._prompt(s, tid)[0], "a stranger's task is never told who the owner is"

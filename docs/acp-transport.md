@@ -107,9 +107,20 @@ API key. Node: the claude adapter declares `node >= 22`; it ran on the machine's
 | resume | `session/resume` (no replay) and `session/load` | `session/resume` and `session/load` |
 | other | fork, list, close, delete; `_meta.claudeCode.options` takes Agent SDK options | fork, list, close, delete; `CODEX_CONFIG` takes session config |
 
-Model and effort are set with `session/set_config_option`, found by **category**, so either spelling works. A model
-the agent does not list is said on the run ("offers no model 'x' over ACP — it runs on opus") and never sent to fail
-the session. A native CLI keeps its `--model` flag.
+Model and effort are set with `session/set_config_option`, found by **category**, so either spelling works. Our model
+id is matched to the agent's own spelling quietly (`agents.offered_model`): the same id, else it without a date or `[1m]`
+suffix, else Claude's family alias (`claude-opus-5-5` → `opus`), else the offered id that begins ours or that ours
+begins (Codex). An effort goes to the nearest one offered (`offered_effort`). Either is a debug line, never a step in the
+owner's chat; only a model the agent has nothing near is said, in plain words ("claude-opus-5-5 is not available on this
+claude sign-in, so this ran on sonnet"), and it is never sent to fail the session. A native CLI keeps its `--model` flag.
+
+**What a turn used.** Both adapters answer `session/prompt` with the turn's own `usage` — `inputTokens` (the cache left
+out, as Anthropic counts), `cachedReadTokens`, `cachedWriteTokens`, `outputTokens` — and name its model in
+`_meta.quota.model_usage`; codex-acp's `usage` is null when Codex reported none. Their `usage_update` notifications are
+the context window's fill, not a count. `aiusage.acp_turn` reads the answer (`ACPClient.last_turn`) and, when it carries
+no count, the CLI's own log by the session id (the CLI's own id) from the turn's start (`sessionrecord.cli_usage`). A
+general turn notes it into the call's meter, so it lands on its route row as the argv road's does; a coding session's
+turns are added onto its session's row (`aiusage.coding_turn`).
 
 Resume prefers `session/resume`, which continues the conversation without replaying it. `session/load` replays the
 whole thread as `session/update`s first, so its updates are muted; traced, they read as this turn's work. The ids are

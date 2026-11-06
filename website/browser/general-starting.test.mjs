@@ -7,7 +7,7 @@ import { startHarness } from "./harness.mjs";
    about 300px tall with nothing in it but a spinner at its foot, for as long as the CLI took to come up (the owner, 2026-10-21).
    Until its first answer the pane is as high as what it shows - "Starting Taskuary on Codex…" (the agent goes by Taskuary, never its profile - 2026-10-28) - and the room comes with
    the answer. The fixture is the session the server started: /api/terminals lists it live, /assistant has it busy and silent. */
-test("a general agent that has said nothing yet is one line, not a tall empty pane", { timeout: 180000 }, async (t) => {
+test("a general agent that has said nothing yet is one line in its chat, the box at its foot", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
 
@@ -26,7 +26,9 @@ test("a general agent that has said nothing yet is one line, not a tall empty pa
   });
   assert.ok(made.taskId, `task not created: ${JSON.stringify(made)}`);
 
-  const ses = { sid: "g1", taskId: made.taskId, alive: true, busy: true, mode: "chat", cli: "taskuary", agent: "researcher",
+  // mode "assistant" is what a general session is (general.GeneralSession.mode): "chat" was no real mode, and since every task became Came
+  // from and its one chat (2026-11-06) any other live mode is a coding terminal and opens CodingChat (taskLayout.liveTerminal)
+  const ses = { sid: "g1", taskId: made.taskId, alive: true, busy: true, mode: "assistant", cli: "taskuary", agent: "researcher",
                 provider: "Codex", trace: [], trace_revision: 0 };
   let answered = false;
   page.off("request", page.fixtureRequestGuard);
@@ -43,13 +45,18 @@ test("a general agent that has said nothing yet is one line, not a tall empty pa
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
   await page.waitForSelector("[data-tq-starting-line]", { timeout: 20000 });
-  const quiet = await page.evaluate(() => ({ line: document.querySelector("[data-tq-starting-line]").innerText,
-    pane: document.querySelector("[data-tq-starting]").getBoundingClientRect().height,
-    welcome: !!document.querySelector(".tq-aui-welcome") }));
+  const quiet = await page.evaluate(() => {
+    const pane = document.querySelector("[data-tq-starting]").getBoundingClientRect(), box = document.querySelector("[data-tq-starting] [data-tq-one-box]");
+    return { line: document.querySelector("[data-tq-starting-line]").innerText, welcome: !!document.querySelector(".tq-aui-welcome"),
+             foot: box ? pane.bottom - box.getBoundingClientRect().bottom : null, onScreen: !!box && box.getBoundingClientRect().bottom <= innerHeight };
+  });
   assert.match(quiet.line, /Starting Taskuary on Codex…/);
   assert.equal(quiet.welcome, false, "no welcome copy over an agent already started");
-  // the line, the composer and the pane's own padding - nothing reserved for an answer that has not come
-  assert.ok(quiet.pane < 200, `the starting pane should be as high as its line, got ${quiet.pane}px`);
+  // ...A GENERAL TASK IS A CHAT TASK, whose box stays at the pane's foot from the first second (the owner, 2026-11-05, aaef3db35: "where is
+  // the prompt box"; TaskPage data-tq-agent-room="chat"): the starting pane is no longer one line high, the empty room is the chat's, the
+  // one line is the only thing in it. This passed on a fixture mode ("chat") no session has, which made the task a terminal's, not a chat's
+  assert.ok(quiet.onScreen, "the box is on screen under the starting line");
+  assert.ok(quiet.foot != null && quiet.foot < 40, `the box sits at the chat's foot, ${quiet.foot}px above it`);
 
   // ...and the answer gets the room
   answered = true;

@@ -1838,6 +1838,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     key: `s${c.ConnectorId}`, title: c.Name || title, channel: type,
     desc: desc(c), haystack,
     go: () => setOpen({ kind: "connector", id: c.ConnectorId }),
+    // ...and these carry it too (the owner, 2026-11-06): SQL Server, remote Windows, Agent Desktop and Reason Network had Remove only on
+    // their own page - the same channel the page's own Remove says (MssqlDetail, WinrmDetail: data)
+    remove: removable(c) ? { conn: c, channel: type === "mssql" || type === "winrm" ? "data" : "", reload: load } : null,
   }));
   const planned = types.filter((t) => t.status === "planned").map((t) => t.type);
   // `rest` catches whatever the server starts advertising that this file has not been taught

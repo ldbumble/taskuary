@@ -17,6 +17,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
+import { onLive, touches } from "./live.js";
 import { AttachChip, AttachRow, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
@@ -1055,6 +1056,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   useEffect(() => { if (loaded && reread) refresh(); }, [reread]);  // eslint-disable-line react-hooks/exhaustive-deps
   // ...and when the page learns a start is under way: the session it opens is read now, not a poll later
   useEffect(() => { if (loaded && opening && !dock) refresh(); }, [opening]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and when the task itself moves (`task-changed`: a mail joined, a turn began - workerstate.record): a turn the SERVER woke on a live,
+  // idle session - new mail, a check-back - was never read, as nothing polls an idle pane, and the open chat sat on its first answer while
+  // three more turns ran under it (the scenario run, 2026-11-06). Read once then; a turn found at work is the poll's from there. Never over
+  // a turn this pane streams itself, whose own copy is the one on screen
+  const quietRef = useRef(false); quietRef.current = loaded && !busy && !streaming && !dock;
+  useEffect(() => onLive("task-changed", (ev) => { if (quietRef.current && touches(ev, task.TaskId)) refresh(); }), [task.TaskId, refresh]);
   const pasted = (e) => {
     const files = [...(e.clipboardData?.files || [])];
     if (files.length) { e.preventDefault(); upload(files); }

@@ -37,7 +37,6 @@ import api from "./api";
 import { useSaveNote } from "./SaveNote.jsx";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, Empty, useAgents } from "./ui.jsx";
-import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 import MemoryLines from "./MemoryLines.jsx";
 import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
@@ -1072,12 +1071,12 @@ const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap besid
 // `browse` (the assistant canvas, CanvasBrowse.jsx): the pages are the sections, Configuration's groups its cards, and one
 // group (or one page) opens with its own controls - drawn through the canvas's frame instead of this tab's rail.
 // `area` "about": the same view as ABOUT YOU (the owner, 2026-11-06: "general things you care about, how you do your job, personality,
-// goals") - You, Docs, Playbooks and Memory on one page of their own; Settings keeps the knobs, Profiles, Mail rules and Updates
+// goals") - You, Docs and Memory on one page of their own; Settings keeps the knobs, Profiles, Mail rules and Updates. Playbooks are
+// how you work, not who you are: they live on Reports (the owner, the same day; PlaybookShelf.jsx)
 export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null, area = "settings" }) {
   const about = area === "about";
   const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent section (capabilities.js)
   const { devMode } = useAgents();                            // the Activity log is a developer's (the owner, 2026-11-06)
-  const pbs = usePlaybooks(about && !!browse);
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
@@ -1207,10 +1206,10 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     // a page or a group this install does not have (an old link) opens the list, and says why - never a crash or a blank card
     // PROFILES AND PLAYBOOKS ARE SECTIONS OF THEIR OWN up here, beside Docs - not shelves inside it (the owner, 2026-10-07: "separate
     // docs and profiles ... it should have separate section on the top level settings thing"). They open in the Docs page's editor.
-    // ...and ABOUT YOU is its own page now (the owner, 2026-11-06): You, Docs, Playbooks, Memory - Settings keeps the rest, the Activity
+    // ...and ABOUT YOU is its own page now (the owner, 2026-11-06): You, Docs, Memory - Settings keeps the rest, the Activity
     // log only in Developer mode
     const SHELF = { docs: ["g:documents", "g:how"], profiles: ["g:profiles"] };
-    const mine = about ? ["you", "docs", "playbooks", "memory"] : ["config", "profiles", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
+    const mine = about ? ["you", "docs", "memory"] : ["config", "profiles", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
     const section = mine.includes(browseState.section) ? browseState.section : null;
     const page = SHELF[section] ? "docs" : section === "you" ? "about" : section;
     const gone = section === "config" && browseState.open && !GROUPS.includes(browseState.open);
@@ -1233,8 +1232,6 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       if (e.head && e.key !== "g:how") return [];
       return [{ key: e.key, shelf, title: e.label, sub: String(what[e.key] || "").split(/(?<=\.)\s/)[0], sel: e.sel }];
     }).filter((c) => (SHELF[section] || []).includes(c.shelf));
-    const pbSlug = section === "playbooks" ? pbOpen(browseState.open) : null, pbBook = pbs.books.find((b) => b.slug === pbSlug);
-    const pbBack = () => { pbs.load(); onBrowseState?.({ ...browseState, open: null }); };
     // ...a hit keeps the knob it found: it opened its group at the top, the setting itself somewhere below (the 2026-10-19 UI walk)
     // ...a phone knob opens Phone & chats, where its group is drawn now
     const cards = needle ? hits.map(([k, m]) => (m.group === PHONE_GROUP ? { key: PHONE_PAGE, title: m.label || k, sub: `${PAGES[PHONE_PAGE].title} · ${m.desc || ""}`, section: PHONE_PAGE, knob: k }
@@ -1242,21 +1239,15 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       // ...a group the schema puts nothing in is not a card: "Other" said "its own panel" over an empty page once strays stopped drawing
       : section === "config" ? GROUPS.filter((g) => g !== PHONE_GROUP && knobsIn(g) && (g !== "Coding agent" || canCode)).map((g) => ({ key: g, title: g, sub: `${knobsIn(g)} settings` }))
       : SHELF[section] ? docCards.filter((c) => c.key !== "d:learned")
-      : section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
-          onOpen={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> })),
-          // ...and under them, Recently deleted - with nothing on the shelf the shelf's own empty line still leads
-          ...(pbs.deleted.length ? [
-            ...(pbs.books.length ? [] : [{ key: "pb-none", node: <Typography sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{pbs.err || PB_EMPTY}</Typography> }]),
-            { key: "pb-deleted", node: <PlaybooksDeleted items={pbs.deleted} onRestore={pbs.restore} /> }] : [])]
       : section === "memory" ? [{ key: "memory", node: <MemoryLines /> }]
       : section ? [{ key: section, title: PAGES[page].title, sub: PAGES[page].desc }] : [];
     const open = gone || !section ? null : browseState.open;
-    const label = (k) => (k === "you" ? "You" : k === "profiles" ? "Profiles" : k === "playbooks" ? "Playbooks" : k === "memory" ? "Memory" : PAGES[k].title);
+    const label = (k) => (k === "you" ? "You" : k === "profiles" ? "Profiles" : k === "memory" ? "Memory" : PAGES[k].title);
     const where = about ? "About you" : "Settings";
     return browse({
-      title: where, wide: about && (section === "playbooks" || section === "memory"),
+      title: where, wide: about && section === "memory",
       summary: about ? "how you sound, how you do your job, and what Taskuary has learned · pick a section" : "how Taskuary works for you · pick a section",
-      sections: mine.map((k) => ({ key: k, label: label(k), ...(k === "playbooks" ? { n: pbs.books.length } : {}) })),
+      sections: mine.map((k) => ({ key: k, label: label(k) })),
       section: needle ? "" : section,
       // You is one page: its chip opens it, with no card to press first - and so is Phone & chats
       onSection: (key) => { setQ(""); onBrowseState?.({ section: key, open: key === "you" || key === PHONE_PAGE ? key : null }); },
@@ -1280,22 +1271,15 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
         : SHELF[section] && !open ? <>
           {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
           {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
-          <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></>
-        // ...the playbooks' one road to a new one (New's Playbook tab arrives with `newPb`, a connector card's link with `newFor`)
-        : section === "playbooks" && open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
-          <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load}
-            onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
-          {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null}</>,
-      detail: pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={pbBack} />
-        : open && section !== "playbooks" && section !== "memory" ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
+          <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null}</>,
+      detail: open && section !== "memory" ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: browseState.knob || "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
-      onBack: () => (section === "you" || section === PHONE_PAGE ? onBrowseState?.({ section: null, open: null }) : pbSlug != null ? pbBack() : onBrowseState?.({ ...browseState, open: null })),
-      openLabel: !open ? "" : pbSlug != null ? (pbSlug === "new" ? "a new playbook being written (About you - Playbooks)" : `the playbook "${pbBook?.title || pbSlug}" (About you - Playbooks), its words open`)
-        : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - ${section === "docs" ? "Docs" : "Profiles"})`
+      onBack: () => (section === "you" || section === PHONE_PAGE ? onBrowseState?.({ section: null, open: null }) : onBrowseState?.({ ...browseState, open: null })),
+      openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || (open === "d:learned" ? "LEARNED.md" : "Docs")}" (${where} - ${section === "docs" ? "Docs" : "Profiles"})`
         : section === "you" ? "who you are - your name, your identity on each channel, what the agents are told (About you)"
         : section === PHONE_PAGE ? `Phone & chats (Settings) - your Assistant chat on WhatsApp or Telegram${devMode ? ", and the chats bound to coding agents" : ""}`
         : `the settings group "${section === "config" ? open : PAGES[section]?.title}" (Settings)`,
-      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : null,
+      empty: null,
       note: gone ? `“${browseState.open}” is not a settings group any more - here are the ones there are.` : "",
     });
   }

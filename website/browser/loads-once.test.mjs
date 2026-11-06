@@ -34,8 +34,9 @@ test("a start reads the first-run state, the build and today's meetings once eac
   await sleep(1500);
   assert.ok(!g.since(conns).includes("/api/mssql/drivers"), `Connections asked for the ODBC drivers: ${g.since(conns)}`);
 
-  // ...the documents live on About you now (the owner, 2026-11-06: Docs, Playbooks and Memory on one page; LEARNED.md is its Memory)
-  await page.evaluate(() => document.querySelector('[data-tq-nav="about"]').click());
+  // ...the documents live on About you now (the owner, 2026-11-06: You, Docs and Memory on one page; LEARNED.md is its Memory)
+  // ...opened from the avatar in the top bar's corner, not a sidebar line (the owner, 2026-11-06)
+  await page.evaluate(() => document.querySelector("[data-tq-profile]").click());
   await page.waitForSelector('[data-tq-browse="about"] [data-tq-browse-chip]');
   const at = g.n;
   await page.evaluate(() => [...document.querySelectorAll('[data-tq-browse="about"] [data-tq-browse-chip]')].find((c) => c.innerText.trim() === "Docs").click());

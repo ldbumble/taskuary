@@ -26,7 +26,6 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 import TuneIcon from "@mui/icons-material/Tune";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import { SIDE_NAV } from "./sideNav.js";
 import { localDay, tsMs, tzNow } from "./ui.jsx";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
@@ -71,7 +70,7 @@ export const filterLabel = (cat, pick, cats = CATEGORIES, labels = CHANNEL_LABEL
 };
 
 // the sidebar buttons' marks, one per SIDE_NAV key
-const NAV_ICONS = { new: AddIcon, reports: BarChartIcon, connections: PowerOutlinedIcon, hub: TravelExploreIcon, about: PersonOutlineIcon, settings: TuneIcon };
+const NAV_ICONS = { new: AddIcon, reports: BarChartIcon, connections: PowerOutlinedIcon, hub: TravelExploreIcon, settings: TuneIcon };
 
 function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChange }) {
   const [el, setEl] = useState(null);

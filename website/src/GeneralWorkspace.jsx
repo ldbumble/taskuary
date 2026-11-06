@@ -36,6 +36,7 @@ import { placeShown } from "./shownPages.js";
 import { outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
 import ActionCard from "./ActionCard.jsx";
+import CopyCorner from "./CopyCorner.jsx";
 import { SessionPane } from "./TerminalView.jsx";
 import ThreadReading from "./ThreadReading.jsx";
 import { heldOn, isTurn, needsOwner, TURN_BACK, waitsOnPage } from "./browserSplit.js";
@@ -346,8 +347,13 @@ const AssistantMessage = () => {
   // ...nor a picture its post card already carries (the owner saw the chart twice: shown by the turn, and on the post)
   const postPics = new Set(posts.map((p) => String(p.post?.image || "").split(/[\\/]/).pop()).filter(Boolean));
   const rest = chat ? shownRest.filter((p) => !madeNames.has(p.name) && !postPics.has(String(p.name || "").split(/[\\/]/).pop())) : shownRest;
+  const running = useAuiState((s) => live(s.message));
+  // ...and it copies at its corner (the owner, 2026-11-05): what the turn says - its words, else its summary's parts
+  const said = custom?.summary && !answerShown(custom.summary, words)
+    ? [custom.summary.about, custom.summary.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : words;
   return (
-    <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
+    <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}`}>
+      {chat && !!said && !running && <CopyCorner text={said} label="Copy this answer" />}
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
       <div className="tq-aui-agent-body">
         {/* ...where the chat is home, a turn that ended in its summary IS that summary: the agent's own prose above it said the same at

@@ -174,7 +174,7 @@ def full_on_stranger(store, tid: int, t) -> bool:
 def deliver(store, tid: int) -> dict:
     """Hand this task's waiting notes over IF the agent has stopped. {'delivered': n, 'state': ...}
     - 'held' states are the ones where nothing moved: working, asking, closed, full, owner_typing."""
-    from . import terminal as term
+    from . import terminal as term, peers
     from .ingest import has_room
     pending = store.waiting_notes(tid)
     if not pending: return {'delivered': 0, 'state': state(store, tid)[0]}
@@ -216,7 +216,8 @@ def deliver(store, tid: int) -> dict:
     if st == 'parked':
         from . import general
         if isinstance(t, general.GeneralSession): to_general(store, tid, t, notes, remaining=left); how = 'typed into'
-        else: how = term.tell(t, batch(notes, remaining=left))
+        # ...with what other agents said since its last turn in front, framed as theirs (peers.py) - one turn, not two
+        else: how = term.tell(t, ' '.join(x for x in (peers.take(store, tid), batch(notes, remaining=left)) if x))
         store.deliver_waiting([x['WId'] for x in notes], 'typed')
         store.add_comment(tid, 'router', 'agent', f'{len(notes)} waiting-room note(s) {how} the live session once the agent stopped.'
                           + (f' {left} still waiting for its next stop.' if left else ''))
@@ -265,6 +266,9 @@ def tick(store) -> int:
     for tid in store.tasks_with_waiting():
         try: n += deliver(store, tid)['delivered']
         except Exception as e: logger.warning(f'waiting room: {task_ref(tid)}: {e}')
+    from . import peers                        # ...and the notes agents left each other, on the same clock (peers.py)
+    try: n += peers.tick(store)
+    except Exception as e: logger.warning(f'peer notes tick failed: {e}')
     return n
 
 

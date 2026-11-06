@@ -98,7 +98,7 @@ DENIED = (
     # ...and the doors the 2026-09-02 audit found standing open: releasing the held task of the very
     # sender the hold exists for, landing work, running an executor or a query with a card's
     # credentials, and rewriting the documents that govern the agent
-    (r'POST', r'^/api/tasks/\d+/(release|land|ci)$', 'releasing a held task or landing its work is the owner\'s decision'),
+    (r'POST', r'^/api/tasks/\d+/(release|land|landing|ci)$', 'releasing a held task or landing its work is the owner\'s decision'),
     (r'POST', r'^/api/tasks/\d+/dispatch/retry$', 'retrying a queued start is the owner\'s decision'),
     (r'POST', r'^/api/tasks/\d+/offer$', 'accepting what triage offered an agent could do is the owner\'s press'),
     (r'DELETE', r'^/api/tasks/\d+/dispatch$', 'cancelling a queued start is the owner\'s decision'),
@@ -133,6 +133,8 @@ AGENT_WRITES = (
      "`taskuary --reply/--done/--draft/--item/--tick/--waiting-on/--reply-not-needed/--check-back` on the session's OWN task (owns_task); nothing leaves"),
     (r'POST', r'^/api/agent/propose$', "an act only the owner's press runs (proposals.queue), filed on the session's OWN task; nothing runs"),
     (r'POST', r'^/api/agent/ask-stronger$', "the session's own question to a stronger model (askstronger), on its OWN task - an answer in words, nothing moves"),
+    (r'POST', r'^/api/agent/note-peers$', "a note to another agent (peers.py), from the session's OWN task - framed as a peer's, it approves nothing"),
+    (r'POST', r'^/api/agent/propose-land$', "how the session's OWN branch should land, marked on the owner's question (landing.propose) - it lands nothing"),
     (r'POST', r'^/api/agent/sign-form$', "`taskuary --sign-form`: a PDF on the session's OWN task filled and signed into its folder (handsign) - nothing leaves"),
     (r'POST', r'^/api/mcp$', "Taskuary's own tools for the session (agenttools): each one is a door on this list or a read, on its OWN task"),
     (r'POST', r'^/api/board/notes$', 'the wall agents leave lines for each other on'),

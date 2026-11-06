@@ -1910,6 +1910,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if cwd:
         said = bb.wall_text(store, cwd, for_tid=tid)     # another task's stranger notes never; this task's own, yes
         if said: parts.append(said)
+    # ...and the notes other agents sent THIS task since its last turn (peers.py), framed as a peer's - a new session is its next turn
+    from . import peers
+    if not stranger and (heard := peers.take(store, tid)): parts.append(heard)
     # the owner's own words stay in the prompt (the reviewer should read them as the owner's); text a caller built from a message does not
     if instruction and instruction.strip():
         if stranger and not instruction_theirs: parts.append(f'FROM THE OWNER: {instruction.strip()}')
@@ -2431,6 +2434,10 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
             start_on_task(store, tid, agent, None, instruction, actor, cwd, _chain=remaining, brain=nxt, instruction_theirs=instruction_theirs)
         term.failover = replace
     store.clear_dispatch(tid)          # started (by whatever road): it is no longer waiting
+    # ...and where its work starts from, for the close-out's diff and its landing question (landing.py) - the first session's, kept
+    from . import landing
+    try: landing.mark_start(store, tid, term.cwd)
+    except Exception as e: logger.debug(f'task {tid}: no landing start noted - {e}')
     if repo and why != 'tagged on the task':
         store.add_comment(tid, actor, 'human', f'Session opened in {repo} - {why}.')
     store.add_comment(tid, actor, 'human' if actor == 'owner' else 'agent',

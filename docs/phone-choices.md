@@ -11,12 +11,14 @@ A number, or a tap in the poll, is the desktop's button. It runs in code on the 
 (`concierge.propose_direct`, `run_proposal`, `surface`). The model never reads it. Only words the owner
 types go to the model.
 
+The picture on the docs site (`docs/site/img/phone-choices.svg`) is drawn by hand from this flowchart - change both together.
+
 ```mermaid
 flowchart LR
   P{"What did the owner send?"}
   P -->|a number or a poll tap| A{"Which choice?"}
   P -->|their own words| M["The model reads them - same tools as the desktop"]
-  A -->|Next| N["The desktop's Next - the next item, no summary reprinted"]
+  A -->|Next, or an FYI's Got it| N["The desktop's Next - the next item, no summary reprinted"]
   A -->|an action word| D{"Does its card ask a question?"}
   D -->|no| R["Runs now - the receipt, then the next item if the table was settled"]
   D -->|Not for me| H["How far? - once / from now on / a rule in Settings / Cancel"]

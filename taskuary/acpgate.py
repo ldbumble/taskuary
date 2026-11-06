@@ -14,7 +14,11 @@ the agent ASKS (clis.ADAPTERS sets the mode that makes it ask) and the answer is
     Post...) - by each tool's own grammar, never by words in a mail.
   - Everything else - reads, edits in its folder, searches, a page fetched - is allowed, as the bypass allowed it.
 
-The answers are automatic for now; buttons for the owner are step 3. Every one is said in the run trace (`permission`) and logged.
+THE OWNER'S BUTTONS (step 3, permissions.py). With Developer mode on, what these rules HOLD is put to the owner as it happens: Allow once
+/ Reject in the task chat and on a chat bound to the task (agentchannels.py), the agent waiting on the answer. The rules above still
+answer first - an allowed or refused call never reaches the owner. Allowed is that one call (allow_once, always); refused is said to the
+agent; no answer in time files the old Approve card (shellgate.check) and refuses, so the step can still run on the owner's later press.
+Every answer is said in the run trace (`permission`) and logged.
 """
 import re
 from loguru import logger
@@ -95,9 +99,34 @@ def decide(tc: dict, ctx: dict) -> tuple:
     if store is None or not str(tid or '').isdigit():
         return REFUSED, '; '.join(dict.fromkeys(a['what'] for a in shellgate.acts(t['command'], cwd))) + ' - it waits for the owner'
     shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
+    # ...put to the owner as buttons (answerer): the Approve card is filed only if they do not answer, so nothing waits twice
+    if ctx.get('owner_asks') and not shellgate.trusted(store, cwd, todo := shellgate.acts(t['command'], cwd)):
+        return HELD, '; '.join(dict.fromkeys(a['what'] for a in todo)) + ' - it waits for your answer'
     said = shellgate.check(store, int(tid), str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False)
     if not said: return ALLOWED, 'a repo the owner trusts to act on its own'
     return HELD, said['hookSpecificOutput']['permissionDecisionReason']
+
+
+def owner_asks(ctx: dict) -> bool:
+    "A held call goes to the owner's buttons: a task to show it on, and Developer mode on (with it off the Approve card stays the road)."
+    from . import agents
+    return ctx.get('store') is not None and str(ctx.get('task_id') or '').isdigit() and agents.developer_mode(ctx['store'])
+
+
+def put_to_owner(ctx: dict, params: dict, why: str) -> tuple:
+    "(answer, why) once the owner has answered a held call (permissions.ask) - or not: then the Approve card, and a refusal."
+    from . import permissions, shellgate
+    store, tid, late = ctx['store'], int(ctx['task_id']), []
+    req = {**permissions.from_acp(params), 'sid': str(ctx.get('sid') or (params or {}).get('sessionId') or '')}
+    got = permissions.ask(store, tid, req, timed_out=lambda: late.append(1))
+    if got.startswith('allow'): return ALLOWED, 'the owner allowed it'
+    if not late: return REFUSED, 'the owner said no'
+    tc = (params or {}).get('toolCall') or {}
+    raw = tc.get('rawInput') if isinstance(tc.get('rawInput'), dict) else {}
+    t, cwd = tool_of(tc), str(raw.get('cwd') or ctx.get('cwd') or '')
+    shell = 'PowerShell' if re.search(r'powershell|pwsh', t['name'] + t['command'], re.I) else 'Bash'
+    said = shellgate.check(store, tid, str(ctx.get('sid') or ''), t['command'], shell=shell, cwd=cwd, ask=False) if t['command'] else {}
+    return HELD, (said.get('hookSpecificOutput') or {}).get('permissionDecisionReason') or why
 
 
 def answerer(ctx: dict, trace=None, held: dict = None):
@@ -106,7 +135,9 @@ def answerer(ctx: dict, trace=None, held: dict = None):
     refused": a held one reads "held for the owner" (shellgate.HELD), not "failed"."""
     def permit(params):
         tc = params.get('toolCall') or {}
-        answer, why = decide(tc, ctx)
+        asks = owner_asks(ctx)
+        answer, why = decide(tc, {**ctx, 'owner_asks': asks})
+        if answer == HELD and asks: answer, why = put_to_owner(ctx, params, why)
         out = acp.pick(params.get('options'), answer == ALLOWED)
         iid = str(tc.get('toolCallId') or '')
         if answer != ALLOWED and held is not None: held[iid] = why if answer == HELD else f'Taskuary refused it: {why}'

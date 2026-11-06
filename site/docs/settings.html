@@ -363,6 +363,16 @@ agent</strong> group is not shown and every job goes to a general agent - see
 <p>The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.</p>
 <p>Past the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board&#39;s floor view is drawn to this number, so raising it widens the room instead of crowding it.</p>
 <p>Raise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this.</p>
+<h3 id="chat-detail-for-coding-work">Chat detail for coding work<a class="anchor" href="#chat-detail-for-coding-work" aria-label="Link to this section">#</a></h3>
+<p><code>chat_detail_coding</code> · type: detail · default: <code>everything</code></p>
+<p>How much of a coding agent&#39;s work its task chat shows: Summary, Steps, or Everything - every tool call with its output and diff.</p>
+<p>Every task&#39;s agent talks in the same chat. This is where a task working in a code checkout starts. Summary shows what the agent said and made, and the cards waiting on you, with its steps behind one line. Steps shows one line a step, folded under each turn. Everything shows every tool call, its command, output and diff a press away.</p>
+<p>Each chat can say its own from the corner of its task header (Chat detail); that choice is kept for that task on this computer.</p>
+<h3 id="chat-detail-for-other-work">Chat detail for other work<a class="anchor" href="#chat-detail-for-other-work" aria-label="Link to this section">#</a></h3>
+<p><code>chat_detail_other</code> · type: detail · default: <code>summary</code></p>
+<p>How much of a general agent&#39;s work its task chat shows: Summary, Steps, or Everything.</p>
+<p>The same three stops as coding work, for every task that is not working in a code checkout - research, a reply, a report. Summary is where they start: the agent&#39;s words and results, and its cards, with its steps behind one line.</p>
+<p>Each chat can say its own from the corner of its task header (Chat detail).</p>
 <h3 id="folders-agents-may-look-in-for-code">Folders agents may look in for code<a class="anchor" href="#folders-agents-may-look-in-for-code" aria-label="Link to this section">#</a></h3>
 <p><code>code_folders</code> · type: lines · default: blank</p>
 <p>One folder a line. A coding agent picks its checkout under these, or one Taskuary already knows.</p>

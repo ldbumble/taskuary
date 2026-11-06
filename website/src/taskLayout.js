@@ -98,7 +98,9 @@ export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent
 // own moves (Mark done, Close with a note, Attach, Share) ride the agent's strip. Read off the kind, not the workspace mode: a reply task no
 // agent ran is "empty" there (taskWorkspace), and its chat is still home. A coding task, a plain one and a live terminal keep all three
 // ...and a kind not yet known is not home: a coding task drew two sections for a moment before its detail landed
-export const chatHome = ({ kind, terminal = false } = {}) => !terminal && !!kind && (isGeneralKind(kind) || kind === "reply");
+// ...AND ANY TASK AN AGENT TALKED ON, OR CLOSED (the owner, 2026-11-06: a done task opened from Search in the old three columns - "it should open
+// to agent tab now that came from is gone"): `chatted` - a chat on it, or it is closed - makes it home too, save a coding task's terminal
+export const chatHome = ({ kind, terminal = false, chatted = false } = {}) => !terminal && !!kind && (isGeneralKind(kind) || kind === "reply" || (chatted && kind !== "coding"));
 // ...a live CODING terminal, that is: a general agent's own chat is a session too (mode "assistant"), and its task stays home
 export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
 export const taskSections = (home) => (home ? SECTIONS.filter((s) => s.key !== "close") : SECTIONS);

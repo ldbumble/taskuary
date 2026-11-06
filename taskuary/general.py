@@ -383,6 +383,9 @@ def shown_history(store, tid: int) -> list:
     # ...EVERY RUN, in order: a chat task is one conversation (the owner, 2026-11-05: "the chat not showing prior runs as there is only one run per
     # task") - an earlier run is not folded away as "the earlier agent's conversation"; the next turn still continues the current run (history)
     rows = chat_rows(store, tid); msgs = _as_messages(rows)
+    # ...AND A TASK FROM BEFORE THE CHAT (the owner, 2026-11-06: a done task opened in the old three columns) has no chat rows: what its agent
+    # filed - its report, else its transcript's last words - is its one answer, so the chat draws it in the same look
+    if not rows: rows = _record_turn(store, tid); msgs = [dict(m) for m in rows]
     # ...the FIRST brief too, with what started the task (the owner, 2026-11-05: "the inputs on right ... email came in from x and was sent to agent")
     mail = store._rows(JOINED, (tid,))
     # `at`: when it was sent, in this server's zone like every stamp here (store.norm_stamp) - the page reads it through the zone setting.
@@ -437,6 +440,17 @@ def shown_history(store, tid: int) -> list:
         if m['id'] in summ: m['summary'] = summ[m['id']]
         if (got := snaps.get(_cid(m['id']))): m['drafts_then'] = got
     return msgs
+def _record_turn(store, tid: int) -> list:
+    "The stored record of an agent run on a task with no chat rows, as one answer - [] when there is none."
+    from .wrapup import is_report, report_body
+    rep = next((c for c in reversed(store.list_comments(tid) or []) if is_report(c.get('Body'))), None)
+    tr = None if rep else store.last_transcript(tid)
+    body = report_body(rep['Body']) if rep else str((tr or {}).get('Text') or '').strip()[-1500:]
+    if not body: return []
+    at = (rep or tr).get('CreatedAt')
+    return [{'id': f"record-{tid}", 'role': 'assistant', 'content': [{'type': 'text', 'text': body}], 'createdAt': at, 'CreatedAt': at}]
+
+
 def _cid(mid):
     try: return int(str(mid).removeprefix('comment-'))
     except ValueError: return None

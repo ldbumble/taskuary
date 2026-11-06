@@ -707,3 +707,19 @@ class OneGoalTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_a_task_from_before_the_chat_draws_its_stored_report_as_one_answer():
+    """The owner, 2026-11-06: an older done task opened in the old three columns. With no chat rows, its agent's filed report is its one
+    answer, the mail that started it drawn over it - the same chat look as any other."""
+    from taskuary import general
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Badge for the new starter', 'Kind': 'task', 'Status': 'done'}, 'owner')
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Badge', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                   'BodyText': 'Can you order a badge for Monday?', 'ExternalId': 'old-1', 'SentAt': '2026-10-01 09:00:00', 'Status': 'filed'})
+    assert general.shown_history(s, tid)[-1]['role'] == 'user', 'no record: the mail alone'
+    s.add_comment(tid, 'agent', 'agent', 'AGENT REPORT\nOrdered the badge; it arrives Friday.')
+    ms = general.shown_history(s, tid)
+    assert ms[-1]['role'] == 'assistant' and 'Ordered the badge' in ms[-1]['content'][0]['text']
+    assert ms[0].get('brief') and ms[0]['mail'][0]['who'] == 'Erin Blake', 'the mail that started it is drawn over the answer'

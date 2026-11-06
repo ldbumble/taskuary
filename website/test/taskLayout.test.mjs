@@ -330,6 +330,8 @@ test("a task whose home is the chat shows Came from and the agent, and opens on 
   assert.equal(chatHome({ kind: "reply" }), true);
   assert.equal(chatHome({ kind: "coding" }), false);
   assert.equal(chatHome({ kind: "task" }), false);
+  assert.equal(chatHome({ kind: "task", chatted: true }), true, "a closed task, or one a chat was had on, opens on the chat (2026-11-06)");
+  assert.equal(chatHome({ kind: "coding", chatted: true }), false);
   assert.equal(chatHome({ kind: "general", terminal: true }), false);
   // ...nor a kind not known yet: a coding task never draws two sections before its detail lands
   assert.equal(chatHome({}), false);
@@ -349,7 +351,8 @@ test("a task whose home is the chat shows Came from and the agent, and opens on 
   const src = taskSource();
   assert.match(src, /function useTaskMoves\(sec, home = false\)/);
   assert.match(src, /close = home \? sec === "agent" : sec === "close"/);
-  assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: liveTerminal\(term\) \}\), secs = taskSections\(home\)/);
+  assert.match(src, /const home = chatHome\(\{ kind: t\?\.Kind, terminal: liveTerminal\(term\), chatted: hasGeneralHistory \|\| \["done", "dropped"\]\.includes\(t\?\.Status\) \}\), secs = taskSections\(home\)/);
+  assert.match(src, /const workspaceMode = home && !wrapping \? "general" : agentWorkspaceMode/, "a chat task is always the chat");
   // ...and Close out's slot is gone there (Task 4.2): its cards live in the agent's summary - on a desk; a phone's stacked page keeps its card
   assert.match(src, /const cardsIn = CARDS_IN_SUMMARY && home && threeUp, slots = cardsIn \? secs : SECTIONS/);
   assert.match(src, /const CARDS_IN_SUMMARY = true;/);

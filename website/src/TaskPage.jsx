@@ -23,7 +23,7 @@ import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { steady } from "./steadyAnchor.js";
 import { useFoldBar } from "./foldBar.js";
 import { SlotPicker } from "./CalendarPick.jsx";
-import { onPressed, onPressing, press, useSpineVerbs, useVerbs } from "./actionRow.js";
+import { onPressed, onPressing, press, useSpineAll, useSpineVerbs, useVerbs } from "./actionRow.js";
 import { notePress, pagePress } from "./pressLog.js";
 import { VERBS, choice, hint as btnHint, hintOfRow, label as btn, labelOfRow, liveVerb } from "./buttons.js";   // theme.jsx owns `label`
 import { PRIORITIES, level } from "./priority.js";
@@ -99,7 +99,6 @@ import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import AdvisorNote from "./AdvisorNote.jsx";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { CLOSED, REOPEN_MARKED, takeReopen } from "./reopenFromSearch.js";
 import { CLOSE_BY_HAND, SECTIONS, advisorAt, cameFrom, chatHome, homeSection, liveTerminal, taskSections, closeHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, closeOut, closeStatus, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, outsideLine, sameWords, sectionHere, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
@@ -281,7 +280,7 @@ export const STACK_BELOW = 760;
 export const DESK_W = 601, DESK_STACK_BELOW = 440, OPEN_MIN = 180;
 export const useStackBelow = (table = true) => (useMediaQuery(`(min-width:${DESK_W}px)`) && table ? DESK_STACK_BELOW : STACK_BELOW);
 const TODO_SHOWN = 6;   // open to-dos shown before "Show N more"
-const REOPEN_ROW_MS = 2500;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
+const REOPEN_ROW_MS = 2500, REOPEN_MAX_MS = 15000;     // the longest the row says "Reopening…" past the server's yes, waiting on the re-read to draw from
 // ...the main view the whole width, as a live agent's is (the owner, 2026-10-26: "no main view should fill the screen. why waste space?" -
 // a 900px column had been tried), scrolling on its own
 const MAIN = { width: "100%", flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overflowAnchor: "none" };
@@ -448,7 +447,7 @@ const fitTabLines = (tab) => {
   if (cut >= 0) ls.slice(cut).forEach((l) => l.setAttribute("data-tq-unfit", ""));
 };
 // ONE CLOSED SECTION, AS ITS TAB (SECTION_TAB): the arrow points the way it opens, and a press opens it - the others close
-export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen, home = false }) {
+export function SectionTab({ sec, lines = [], foot = "", here = false, before = false, mini = false, icon = null, onOpen, home = false, task = false }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
     const tab = ref.current;
@@ -480,13 +479,13 @@ export function SectionTab({ sec, lines = [], foot = "", here = false, before = 
       <Box component="span" aria-hidden data-tq-tab-arrow="">{before ? "›" : "‹"}</Box>
       <Box component="span" data-tq-tab-name="">{sec.name}</Box>
       {lines.map((l, i) => <Box component="span" key={i} data-tq-tab-line="">{l}</Box>)}
-      <SpineMoves sec={sec.key} name={sec.name} home={home} />
+      {!task ? <SpineMoves sec={sec.key} name={sec.name} home={home} /> : BUTTONS_AT === "spine" && sec.key === "from" ? <TaskButtons spine /> : null}
       {/* ...its foot ONE HEIGHT in every tab (the owner, 2026-10-27: "the 1 line and 2 line are not on the same line"): the rule, a status
           block of two lines - there whether it says anything or not - then the number, so rules and numbers line up across the tabs */}
+      {/* ...and NO STATUS LINE AT ITS FOOT (the owner, 2026-11-06): "✓ Sorted: …", "Ran …", "On your calendar", "Done" said what the pane and
+          the header already say. The rule and the block stay, so tabs still line up; `foot` is the slim tab's dot and hover only */}
       <Box component="span" data-tq-tab-foot="">
-        <Box component="span" data-tq-tab-status-box="">
-          {foot && <Box component="span" data-tq-tab-status="">{foot}</Box>}
-        </Box>
+        <Box component="span" data-tq-tab-status-box="" />
       </Box>
     </Box>
   );
@@ -568,6 +567,31 @@ const foldArrows = (keys, k) => { const i = keys.indexOf(k), last = keys.length 
   return [...(i > 0 ? [["left", i === last ? "›" : "‹", keys[i - 1]]] : []), ...(i >= 0 && i < last ? [["right", i ? "›" : "‹", keys[i + 1]]] : [])]; };
 const TASK_KEYS = ["from", "agent", "close"];
 const CARDS_IN_SUMMARY = true;    // Task 4.2: the summary draws the draft cards, and a chat-home task drops Close out's slot
+// ONE ROW OF TASK BUTTONS (the owner, 2026-11-06: "same place but can be on spine or on top if the agent spine is open but it should be one code
+// easy to change"): every move the task has, gathered off every pane (actionRow.splitRow), in ONE fixed order - Mark done, Hand it to a person,
+// Remind me, Not for me, Change ▾ - then the rest where they apply (Send and close, Reply, Close with a note, Share…); a move that does not apply
+// is absent and the rest keep their order. Drawn once, where BUTTONS_AT says: "strip", the open pane's white strip (the Agent's when it is open);
+// "spine", Came from's spine. One line on a strip, its words never wrapped - what does not fit folds into its ▾
+export const BUTTONS_AT = "strip";
+export const TASK_ORDER = ["done", "reopen", "hand", "remind", "nat"];
+const TASK_PANES = ["head", "from", "agent", "close", "share"];
+const verbKey = (v) => String(v?.id || "").split(":").pop();
+// the order, pure: [fixed in TASK_ORDER's order..., "change", ...the rest as they came]
+export const taskButtons = (by, skip = () => false) => {
+  const seen = new Set(), all = TASK_PANES.flatMap((k) => (by[k] || []).map((v) => ({ v, head: k === "head" || k === "share" || !!v.quiet })))
+    .filter(({ v }) => !v.card && !skip(v) && !seen.has(v.id) && seen.add(v.id));
+  const at = (x) => TASK_ORDER.indexOf(verbKey(x.v)), fixed = all.filter((x) => at(x) >= 0).sort((a, b) => at(a) - at(b));
+  const rest = all.filter((x) => at(x) < 0), change = (by.change || []).filter((v) => !skip(v));
+  return [...fixed, ...(change.length ? [{ change }] : []), ...rest];
+};
+function TaskButtons({ skip = () => false, spine = false }) {
+  const by = useSpineAll(), list = taskButtons(by, skip);
+  const up = list.filter((x) => x.change || !x.v.tucked || x.v.tone === "p"), tucked = list.filter((x) => !up.includes(x)).map((x) => x.v);
+  const items = up.map((x) => (x.change ? { key: "change", change: x.change } : { key: x.v.id, v: x.v, head: x.head }));
+  if (spine) return items.length ? <Box data-tq-spine-moves="task" role="group" aria-label="Task moves" sx={SPINE_MOVES} onClick={(e) => e.stopPropagation()}>
+    {items.map((x) => (x.change ? <ChangeMoves key="change" change={x.change} /> : stageBtn(x.v, x.v.spine || x.v.label, !!x.head)))}</Box> : null;
+  return <MovesLine items={items} tucked={tucked} sec="task" name="Task" />;
+}
 // ...one line: what does not fit folds into its ▾ from the end - never Mark done nor what is lit
 export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec], home = false }) {
   const all = useSpineVerbs(sec).filter((v) => !v.card && !skip(v)), { done, task, change } = useTaskMoves(sec, home);
@@ -575,6 +599,9 @@ export function PaneMoves({ sec, skip = () => false, name = SEC_NAME[sec], home 
   const up = all.filter((v) => !v.tucked || v.tone === "p"), tucked = all.filter((v) => !up.includes(v));
   const own = (vs) => vs.filter((v) => !skip(v)).map((v) => ({ key: v.id, v, head: true }));
   const items = [...own(done), ...up.map((v) => ({ key: v.id, v, head: !!v.quiet })), ...own(task), ...(change.length ? [{ key: "change", change }] : [])];
+  return <MovesLine items={items} tucked={tucked} sec={sec} name={name} />;
+}
+function MovesLine({ items, tucked, sec, name }) {
   const box = useRef(null), [n, setN] = useState(99), [, refit] = useState(0), [at, setAt] = useState(null);
   const sig = items.map((x) => `${x.key}:${x.v?.label || ""}:${x.v?.tone || ""}`).join("|");
   useLayoutEffect(() => { setN(99); }, [sig]);
@@ -615,7 +642,7 @@ const PairGlyph = ({ two }) => <svg width="14" height="12" viewBox="0 0 14 12" a
 // ...`name` and `keys` for an item's own three sections (ItemSections: Came from | Report | Close out)
 // ...`pair`: the side-by-side toggle ({ on, with, flip }; none where two halves would not be readable or an agent is live). Paired, the arrow
 // toward the other open half is gone and the outer one slides the pair along, keeping this pane
-export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS, pair = null, home = false }) {
+export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, onStop, name = SEC_NAME[sec], keys = TASK_KEYS, pair = null, home = false, task = null }) {
   const liveMoves = useSpineVerbs("live"), { done } = useTaskMoves(sec, home);
   const arrows = foldArrows(keys, sec).map(([side, mark, to]) => ({ side, mark, to: fold(to) })).filter((a) => !pair?.on || a.to !== pair.with);
   const arrow = (a) => <Box key={a.side} component="button" type="button" data-tq-strip-fold={a.side} aria-label={`Fold ${name} back`}
@@ -630,7 +657,7 @@ export function PaneStrip({ sec, live = false, skip, onFold, fold = (to) => to, 
       {arrows.filter((a) => a.side === "left").map(arrow)}
       {!live && <Typography data-tq-strip-name="" sx={{ ...SECTION_NAME, flexShrink: 0 }}>{name}</Typography>}
       <Box sx={{ flex: 1, minWidth: 0, display: "flex", justifyContent: live ? "flex-end" : "flex-start" }}>
-        {live ? <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+        {task && (!live || home) ? (task.on ? <TaskButtons skip={skip} /> : null) : live ? <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
             {/* ...and where the chat is home, Mark done beside Stop (the owner's ruling, phase 4): Close out is no tab of its own to carry it
                 there - a press stops and saves first, as it did from Close out */}
             {home && done.length > 0 && <Box data-tq-live-done="" sx={{ ...MOVE_LOOK, display: "flex", gap: 0.5, "& .tq-ab": { minHeight: 24, py: 0.1, fontSize: 12 } }}>
@@ -990,22 +1017,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const id = selected;
     if (!id || reopening === id) return;
     setErr(""); setReopening(id);
+    // ...and "Reopening…" never outlives its press: whatever the answer, or none, the button is the button again (the owner, 2026-11-06)
+    const done = () => setReopening((r) => (r === id ? null : r)), cap = setTimeout(done, REOPEN_MAX_MS);
     try { await runOperation(api, "task.reopen", id); }
-    catch (e) { setReopening(null); if (!stale(id)) setErr(opError(e, "The task did not reopen - press Reopen task again.")); return; }
+    catch (e) { clearTimeout(cap); done(); if (!stale(id)) setErr(opError(e, "The task did not reopen - press Reopen task again.")); return; }
     if (!stale(id)) setDetail((d) => (d?.task?.TaskId === id ? reopenedDetail(d) : d));
     loadTasks(); onChanged?.();
     // ...AND THE ROW DRAWS ONCE (the owner, 2026-10-27: "I reopened a task and there were no buttons on the bottom, then it reloaded the
     // buttons"): the page opens at the answer, but the row's verbs drawn off that local guess (Mark done, Close with a note) were swapped
     // a beat later for the re-read's (Reply). The row keeps "Reopening…" until the re-read is in - at most REOPEN_ROW_MS - and then
     // draws the open task's verbs in one step
-    await Promise.race([loadDetail(id), new Promise((r) => setTimeout(r, REOPEN_ROW_MS))]).catch(() => {});
-    setReopening((r) => (r === id ? null : r));
+    try { await Promise.race([loadDetail(id), new Promise((r) => setTimeout(r, REOPEN_ROW_MS))]); } catch { /* the re-read is the poll's */ }
+    finally { clearTimeout(cap); done(); }
   };
-  // ...AND A CLOSED TASK OPENED FROM SEARCH IS REOPENED BY THAT OPEN (the owner, 2026-11-02): Search marked it (reopenFromSearch.js), the
-  // mark is taken once as its detail lands, and the press is Reopen task's own - a failure leaves it closed, the button and why on it
-  const landed = detail?.task?.TaskId === selected ? detail.task : null, [marked, setMarked] = useState(0);
-  useEffect(() => { const f = () => setMarked((n) => n + 1); window.addEventListener(REOPEN_MARKED, f); return () => window.removeEventListener(REOPEN_MARKED, f); }, []);
-  useEffect(() => { if (landed && takeReopen(selected) && CLOSED.includes(landed.Status)) reopen(); }, [landed?.TaskId, marked]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // ...AND A CLOSED TASK OPENED FROM SEARCH IS ONLY OPENED (the owner, 2026-11-06): Search's open ran Reopen task by itself (2026-11-02), and a task
+  // the owner had only opened stood under a greyed "Reopening…" while that press was out - the open is the chat now, and typing to it reopens it
   const queueNote = async () => {
     if (!waitText.trim() || !selected) return;
     try {
@@ -1700,10 +1726,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // a record to show: the step draws the story INTO it (its sentence first, its timeline behind the record's More), never beside it
   const hasRecord = !!(report || detail?.transcript || (isGeneral && generalStarted)
     || (detail?.artifacts || []).some((a) => (isPublished(a) && !isGeneral) || a.kind === "agent_result"));
-  const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
   // WHERE THE CHAT IS HOME (taskLayout.chatHome): a general or reply task is Came from | Agent and opens on the agent - a general agent's
-  // own live chat ("assistant" mode) is still home; a coding terminal is not
-  const home = chatHome({ kind: t?.Kind, terminal: liveTerminal(term) }), secs = taskSections(home);
+  // own live chat ("assistant" mode) is still home; a coding terminal is not. ...and any task a chat was had on, or closed (`chatted`)
+  const home = chatHome({ kind: t?.Kind, terminal: liveTerminal(term), chatted: hasGeneralHistory || ["done", "dropped"].includes(t?.Status) }), secs = taskSections(home);
+  // ...AND THERE IT IS ALWAYS THE CHAT (the owner, 2026-11-06): no AI connected, a start waiting its turn or one that failed, nothing started yet -
+  // the one box under the conversation, never the old Send to agent form with its own pickers and button
+  const workspaceMode = home && !wrapping ? "general" : agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
   // ...AND THERE THE AGENT SECTION IS ONE CHAT (the owner, 2026-11-04: "i want this to be a chat? where is the prompt box"): the reading, each
   // turn, the owner's words, each new mail, and the box under them - always, Continue's own road. The Result's summary, "The whole
   // conversation", the record under it and the Continue press are not drawn: the chat is all of them (GeneralWorkspace `chat`)
@@ -1837,7 +1865,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     : Math.max(OPEN_MIN, bodyW - slots.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1)));
   // ...and on the canvas the open one wears its white strip (PaneStrip): the body under it, its own name head given to the strip
   const stripOn = (k) => inRow && isOpen(k);
-  const stripH = (k) => (sessionView && k === "agent" ? STRIP_LIVE_H : STRIP_H);
+  // ...a chat task's strip is never the slim live one: it carries the task's buttons (TaskButtons), live or not
+  const liveStrip = (k) => sessionView && k === "agent" && !home;
+  const stripH = (k) => (liveStrip(k) ? STRIP_LIVE_H : STRIP_H);
+  // ...and THE TASK'S BUTTONS ARE DRAWN ONCE (TaskButtons, BUTTONS_AT): on the Agent's strip when it is open, else the open pane's
+  const buttonsHere = (k) => BUTTONS_AT === "strip" && k === (isOpen("agent") ? "agent" : slots.find((x) => isOpen(x.key))?.key);
   const stripSkip = { from: () => false, agent: (v) => (runFormOpen && OPENS_FORM.has(v.id)) || (v.id === "continue" && failedFix)
     || (cardsIn && v.id === "reply" && (replyEmpty || !!pendingReview)),
     close: (v) => v.id === "reply" && (replyEmpty || !!pendingReview) };
@@ -1848,9 +1880,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(stripOn(k) ? { "& > [role=region]": { top: `${stripH(k)}px` }, "& > [role=region] [data-tq-section-head]": { display: "none" } } : {}),
         // ...a live agent's body keeps its place under the strip while it is folded too: it stays laid out (SECTION's keep), and a body
         // that grew by the strip's height while away refit the terminal and sent the pty a resize
-        ...(inRow && sessionView && k === "agent" && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
+        ...(inRow && liveStrip(k) && section !== k ? { "& > [role=region]": { top: `${STRIP_LIVE_H}px` } } : {}) }}>
         {!isOpen(k) && tabFor(k)}
-        {stripOn(k) && <PaneStrip sec={k} home={home} keys={slotKeys} live={sessionView && k === "agent"} skip={stripSkip[k]}
+        {stripOn(k) && <PaneStrip sec={k} home={home} keys={slotKeys} live={liveStrip(k)} skip={(v) => stripSkip.agent(v) || stripSkip.close(v)}
+          task={{ on: buttonsHere(k) }}
           fold={paired ? (to) => to : foldTo(k)} onFold={openSection}
           /* ...never on a chat task (the owner, 2026-11-05: "we don't need the stop agent button ... it does nothing"): its Stop and save filed the
              last answer as the report, drafted a reply the agent had already drafted and closed a session that closes itself when idle - a turn
@@ -1939,7 +1972,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...a closed section's tab, in place of the section: the arrow points the way it opens
   const tabFor = (key) => {
     const sec = slots.find((s) => s.key === key);
-    return <SectionTab sec={sec} home={home} {...(tabLines()[key] || {})} here={hereSec === key} mini={closedW(key) === MINI_W}
+    return <SectionTab sec={sec} home={home} task {...(tabLines()[key] || {})} here={hereSec === key} mini={closedW(key) === MINI_W}
       before={slots.findIndex((s) => s.key === key) < slots.findIndex((s) => s.key === section)} onOpen={() => openSection(key)} />;
   };
   // CAME FROM'S PARTS, drawn once and arranged by the layout: a phone's stacked page (and a live agent's left drawer there) keeps them as
@@ -2329,7 +2362,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...never on its own for a chat task no agent has started (the owner, 2026-11-05: "when no agent starts you should just show what the incoming
   // message was on top right like all other input prompts. then prompt box on bottom will trigger or start the agent. No need for the box") - the
   // chat's own box starts it; a press of Send to agent (a coding one too) still opens this
-  const runFormOpen = restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted) && !(home && isGeneral));
+  const runFormOpen = !home && (restartOpen || (!term?.alive && !liveRun && !report && !detail?.transcript && (!isGeneral || !generalStarted)));
   const failedFix = failedRun && isGeneral && !resultOpen && !sessionView && !runFix && canContinue;
   // ...and Continue picks the agent's conversation back up, so the Result unfolds to it (it rests on its summary otherwise) - once it is
   // SENT (continued), not at the press that opens the box: unfolding there swapped the summary for the full record under the new box, the
@@ -2528,8 +2561,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     closed: ["done", "dropped"].includes(t?.Status), cantSend: !!pendingReview && cantSend, page: rail?.tid ? pageRead(rail.tid) : null,
     owed: pendingReview ? !String(pendingReview.FinalText || pendingReview.DraftText || "").trim() : null });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
-  const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
-  const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
+  // ...NO SEND TO AGENT WHERE THE CHAT IS HOME (the owner, 2026-11-06): its one box starts the agent - no AI, waiting its turn or failed alike
+  const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession && !home;
+  const startHere = !home && !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
   const ranBefore = !!(report || detail?.transcript);
   // held on where the code is: before any run that is a start waiting, after one it is the agent asking to move the work (wrapup.asks_to_move)
   const heldWhy = ranBefore ? "The agent found the work is not in this code - choose where it is and it starts there"
@@ -2569,9 +2603,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         // STOP AND SAVE LEADS A LIVE SESSION'S ROW (owner-approved, 2026-10-20) - working, or idle after its turn, or asking: it stands
         // where Answer it stood. A reply waiting on the owner's approval leads instead (its Send, under the draft), and this one stays
         // in the agent's group beside Review changes
-        ...(!pendingReview ? [stopSave] : []),
+        ...(!pendingReview && !chatPane ? [stopSave] : []),
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
-        ...(pendingReview ? [stopSave] : []),
+        ...(pendingReview && !chatPane ? [stopSave] : []),
         ...(notDone && !chatPane ? [runAnother] : []),
       ] : continueHere ? [
         // ...not a second Connect an AI on the canvas (the owner, 2026-10-26: "why would we need connect an ai? if you don't get through ai
@@ -2624,7 +2658,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ];
   // ...and where the task lays its panes, their STAGE MOVES leave the bar for them (actionRow.splitRow): the verbs say which pane is open
   // and whether an agent is live, whose bar is Stop and save alone
-  const laid = threeUp && active && !!t ? { open: section, live: !!term?.alive || chatKept, ...(cardsIn ? { home: true } : {}) } : null;
+  // ...a chat task's strip is never a live agent's: its moves are the task's own row (TaskButtons), working or not
+  const laid = threeUp && active && !!t ? { open: section, live: (!!term?.alive || chatKept) && !home, ...(cardsIn ? { home: true } : {}) } : null;
   useVerbs("task", laid ? rowVerbs.map((v) => ({ ...v, laid })) : rowVerbs, inRow && !!t, detail?.ref || "");
   // A PRESS OPENS THE SECTION IT BELONGS TO (the owner, 2026-10-27: "when you hit a button on the bottom that relates to a group, the correct
   // section opens"): the reply's, the draft's and the close's presses Close out, the agent's the Agent - never a closed section for the
@@ -3321,8 +3356,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     the sentence and the row that held it both go. */}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
                 {/* ...the task's own read too: the table opens a task with no list row, and the row lags the task's read (2026-11-04) */}
-                {!liveSession && queuedRow && <Box sx={{ mb: 1 }}>
-                  <QueuedStart taskId={t.TaskId} queued={queuedRow} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
+                {!liveSession && queuedRow && <Box sx={{ mb: chatPane ? 0.5 : 1 }}>
+                  <QueuedStart taskId={t.TaskId} queued={queuedRow} line={chatPane} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 {/* ...and NONE OVER A CHAT (the owner, 2026-11-05: "don't like Taskuary answered"): the chat says who said what, its live steps and
                     clock say it is working, the task header's chip says the state - the line over it was a label, not an action */}
@@ -3582,6 +3617,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} noAiSaid={!notDone || (failedRun && runFix?.href === place("ai").href)} noTools={!liveSession} noComposer={isGeneral && continueHere && !chatPane} chat={home}
                         opening={agentOpening}
+                        came={home ? { label: cameFrom(sourceMessage) ? `From ${cameFrom(sourceMessage)}` : sources.length ? cameFromLabel(sources) : fromWorkflow ? `Routine · ${fromWorkflow.title}` : "Came from",
+                          title: "Where this came from - opens it", onOpen: threeUp ? () => openSection("from") : null } : null}
+                        closedLine={t.Status === "done" ? `✓ ${btn(closedNote ? "close_note" : "close")}${t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}${closedNote ? ` - ${closedNote}` : ""}`
+                          : t.Status === "dropped" ? "Dropped - nobody works it any more" : ""}
                         approve={askAt === "chat" && noticeOn ? <AgentDraftNotice asks={agentDrafts} at="chat" agent={agentName(t)} onOpen={openDraft} /> : null} />
                     </React.Suspense>
                   </Box>

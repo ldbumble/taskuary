@@ -221,7 +221,8 @@ test("run another agent is on the bar, live sessions and general tasks included"
 
 test("its agent step opens on a general task and beside a live session", () => {
   // ...and on a general task nobody has started, the same box (it had pickers and a button of its own that started at once)
-  assert.match(tasks, /const runFormOpen = restartOpen \|\| \(!term\?\.alive && !liveRun && !report && !detail\?\.transcript && \(!isGeneral \|\| !generalStarted\) && !\(home && isGeneral\)\);/);
+  assert.match(tasks, /const runFormOpen = !home && \(restartOpen \|\| \(!term\?\.alive && !liveRun && !report && !detail\?\.transcript && \(!isGeneral \|\| !generalStarted\)\)\);/,
+    "a chat task never opens the old Send to agent form (the owner, 2026-11-06)");
   assert.match(tasks, /\{runFormOpen\s+&& /);
   assert.doesNotMatch(tasks, /\{isGeneral && !generalStarted && \(/);
 });
@@ -243,7 +244,7 @@ test("starting the new one pauses a live session first - its handover kept, no r
 });
 
 test("an unstarted general task's Send to agent is the row's lead, not a button inside the card", () => {
-  assert.match(tasks, /const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;/);
+  assert.match(tasks, /const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession && !home;/);
   assert.match(tasks, /sendGeneral \? \[\{ id: "send-general", group: "agent", lead: !pendingReview/);
   // ...and the press OPENS THE AGENT BOX (the owner, 2026-10-23): what to do, typed or a voice note, before it starts
   assert.match(tasks, /id: "send-general"[^\n]*\n\s+disabled: !!startingAgent \|\| !!noAiWhy, why: noAiWhy, run: openBox,/);

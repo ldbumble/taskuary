@@ -68,7 +68,9 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
         t = _task(d['taskId'])
         self.assertEqual(t['Kind'], 'task')
         self.assertFalse(general.handles(t))
-        self.assertEqual(c.get(f"/api/tasks/{d['taskId']}/assistant").status_code, 422)
+        # ...its chat may be READ (the owner, 2026-11-06: one box everywhere) - empty, and reading it makes nothing a conversation
+        self.assertEqual(c.get(f"/api/tasks/{d['taskId']}/assistant").json()['messages'][-1]['role'], 'user')
+        self.assertEqual(_task(d['taskId'])['Kind'], 'task')
 
     def test_send_it_to_a_coding_agent_still_makes_a_coding_task(self):
         mid = _msg('export is broken', 'the nightly export dropped a facility')
@@ -237,3 +239,16 @@ class ItClosesAndSaysSo(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TypingIsTheStart(unittest.TestCase):
+    def test_what_is_typed_in_a_reply_tasks_box_makes_it_the_general_agents_and_a_coding_task_stays(self):
+        """ONE PROMPT BOX (the owner, 2026-11-06): no Send to agent form - the box's words start the general agent, as the dispatch did."""
+        from taskuary import server
+        tid = c.post('/api/tasks', json={'Title': 'confirm the cutover', 'Kind': 'reply'}).json()['taskId']
+        server._chat_kind(tid)
+        self.assertEqual(_task(tid)['Kind'], 'general')
+        code = c.post('/api/tasks', json={'Title': 'fix the import', 'Kind': 'coding'}).json()['taskId']
+        server._chat_kind(code)
+        self.assertEqual(_task(code)['Kind'], 'coding')
+        self.assertEqual(c.get(f'/api/tasks/{code}/assistant').status_code, 422)

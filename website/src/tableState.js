@@ -17,8 +17,7 @@ export function tableOf({ current = null, cardKey = null, foldedKey = null, brow
 // ...and the next ask is about THE PAGE ALONE (the owner, 2026-11-05): it no longer carries the task beneath, so the box names only the page
 export function tableWords(table, ref = "") {
   const has = !!table?.key, under = has && !!table.place;
-  return { tag: under ? "under this page" : "on the table",
-    box: !has ? "Ask Taskuary anything — a name or a subject pulls it in…"
+  return { box: !has ? "Ask Taskuary anything — a name or a subject pulls it in…"
       : under ? "Ask about this page…" : "Ask about this one, tell me what to do with it, or name something else…",
     phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : "Talk to Taskuary…",
     // ...and the one-row bar's pill, whose words ("Ask…") name no task: its name for a reader and the walk says which

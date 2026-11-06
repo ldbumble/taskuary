@@ -50,6 +50,6 @@ test("the sync line fits: one count and the whole time at rest, no counts and wh
   assert.match(feed, /terse: !\(syncing \|\| bgSync\)/);
   const { syncFace } = await import("../src/syncTiming.js");
   const at = new Date(2026, 8, 29, 22, 26);
-  assert.equal(syncFace({ checked: true, started: true, lastAt: at, terse: true }), "started 10:26 PM");
+  assert.equal(syncFace({ checked: true, started: true, lastAt: at, terse: true }), "");   // "started 10:26 PM" said nothing (audit 2026-11-05)
   assert.equal(syncFace({ checked: true, lastAt: at, terse: true }), "checked 10:26 PM");
 });

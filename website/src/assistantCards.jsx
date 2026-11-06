@@ -932,7 +932,7 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone, table = null 
             {card.source_id != null && <div className="tq-card-actions"><Button size="small" component="a" href={`#report=${card.source_id}`} sx={faint}>Edit this report ↗</Button></div>}
           </ItemPart> },
         { key: "report", n: 2, name: "Report", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "#746e64" }} />,
-          lines: [card.title], foot: card.bad ? "" : "✓ Landed",
+          lines: [card.title],
           body: <ItemPart data-tq-report-body="">
             {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
             {card.brief_today && <TodayMeetingsStrip />}
@@ -1006,7 +1006,7 @@ export function DashboardCard({ card, onOpenTask, onDone, table = null }) {
             {edit}
           </ItemPart> },
         { key: "report", n: 2, name: "Dashboard", icon: <InsertChartOutlinedIcon aria-hidden sx={{ fontSize: 18, color: "#746e64" }} />,
-          lines: [card.title], foot: "✓ Landed",
+          lines: [card.title],
           // ...its white cards straight on the section's warm ground, as on the Dashboards page: no card around the cards
           body: <div data-tq-dash-body="">{drawn}{share}</div> },
         // ...an Agent tab of its own, where its box is (the owner, 2026-11-05: "chat box is only on the agent tab ... report or dashboard as well")
@@ -1146,7 +1146,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone, tab
     <ItemSections kind="idea" itemKey={card.key} label={look ? `Advisor · ${ideaWord(card.idea_kind)}` : "Advisor"} height={table} about="from" lays ask={ask} title={card.title}
       aside={<><SourceMark item={card} size={13} />{card.when && ago(card.when)}{card.workstream && <WorkstreamLabel slug={card.workstream} sx={{ ml: 0.75 }} />}</>}
       sections={[
-        { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`], foot: "✓ Raised by the Advisor",
+        { key: "from", n: 1, name: STEPS[0].name, lines: [card.title, `${chip[0].toUpperCase()}${chip.slice(1)}`],
           body: <><ItemPart data-tq-idea-from="">
             <div className="tq-card-lead">{card.title}{suggest && !habits && <> {suggest}</>}</div>
             {/* ...what it is based on, the mail itself one press away, whenever there is one - with or without the Advisor's reason; the

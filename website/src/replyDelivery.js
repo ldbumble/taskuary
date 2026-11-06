@@ -32,6 +32,8 @@ export const deliveryCc = (review) => {
 // A chat has members, not recipients: name the room so "TO Sarah" does not read as a DM when it
 // is a channel everyone can see.
 const ROOMS = ["whatsapp", "teams", "slack", "telegram", "discord", "imessage"];
+// ...and with no room named, the app by its own name - "Erin Blake in teams" read as a typo (the scenario run, 2026-11-06)
+const APP = { teams: "Teams", slack: "Slack", telegram: "Telegram", discord: "Discord", imessage: "iMessage" };
 export const replyContext = (review) => {
   const channel = String(review?.Channel || "").toLowerCase();
   if (!ROOMS.includes(channel)) return deliveryTo(review);
@@ -39,5 +41,5 @@ export const replyContext = (review) => {
   // and a one-to-one chat is named after them, so it is no room to name ("Ray Colton in Ray Colton", the stress run 2026-11-05)
   const who = review?.FromName || deliveryTo(review), room = review?.SourceName;
   if (room && room === review?.FromName) return who;
-  return `${who} in ${room || (channel === "whatsapp" ? "the chat" : channel)}`;
+  return `${who} in ${room || (channel === "whatsapp" ? "the chat" : APP[channel])}`;
 };

@@ -62,7 +62,8 @@ test("a chat reply names the room it lands in; an email says only who it goes to
   assert.equal(replyContext({ ...erin, Channel: "email" }), "Erin Blake <erin@northwind.example>");
   assert.equal(replyContext({ ...erin }), "Erin Blake <erin@northwind.example>");
   assert.equal(replyContext({ FromName: "Erin Blake", Channel: "Slack", SourceName: "#ops" }), "Erin Blake in #ops");
-  assert.equal(replyContext({ FromName: "Erin Blake", Channel: "teams" }), "Erin Blake in teams");
+  assert.equal(replyContext({ FromName: "Erin Blake", Channel: "teams" }), "Erin Blake in Teams");
+  assert.equal(replyContext({ FromName: "Omar Keller", Channel: "telegram" }), "Omar Keller in Telegram");
   assert.equal(replyContext({ FromName: "Erin Blake", Channel: "whatsapp" }), "Erin Blake in the chat");
   // a chat's address is no name, and a one-to-one chat named after the person is no room (the stress run, 2026-11-05)
   assert.equal(replyContext({ FromName: "Ray Colton", FromEmail: "15550000332@s.whatsapp.net", Channel: "whatsapp", SourceName: "Ray Colton" }), "Ray Colton");

@@ -70,5 +70,5 @@ test("the editor lays its sources out as a report does, and every dashboard - th
   assert.match(rv, /section === "dashboards" \? dashboardSources/);
   assert.match(rv, /\.\.\.sectionRows\.map\(\(x\) => \(\{ key: String\(x\.SourceId\), node: row\(x\) \}\)\)/);
   // the dataset picker lists what the server serves (dashboards.DATASETS: test_dashboards holds the other half)
-  assert.deepEqual(Object.keys(words.dashboard.datasets).sort(), ["agent_runs", "flow", "mail", "replies", "tasks"]);
+  assert.deepEqual(Object.keys(words.dashboard.datasets).sort(), ["agent_runs", "ai_usage", "flow", "mail", "replies", "tasks"]);
 });

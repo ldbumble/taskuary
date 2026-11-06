@@ -29,7 +29,7 @@ test("a page over the item: the box says it is under the page, not in view", () 
   const shown = tableWords(tableOf({ current: "task:3" }), "TQ-0003");
   assert.match(shown.box, /^Ask about this one/);
   // ...the open box over a task, and a phone's: "Talk to Taskuary…" (the owner, 2026-10-28), the resting pill still "Ask…"
-  assert.equal(shown.phone, "Talk to Taskuary…");
+  assert.equal(shown.phone, "Ask the Assistant…", "the pill is the Assistant (the owner, 2026-11-06)");
   assert.equal(shown.name, "Tell Taskuary what to do with TQ-0003", "the pill names the task its words do not");
   assert.equal(under.name, "Ask Taskuary about this page");
   assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");

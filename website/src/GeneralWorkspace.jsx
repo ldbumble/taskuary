@@ -28,7 +28,7 @@ import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
 import { agentName, workOf, doingNow, turnStart, elapsedText, turnStamp, turnBegan } from "./agentWork.js";
-import { instructionsHint } from "./kinds.js";
+import { AGENT_TURN, MESSAGE, instructionsHint } from "./kinds.js";
 import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
@@ -333,14 +333,7 @@ const AtWork = ({ since, began, ...props }) => {
 const Nothing = () => null;
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
-// ...and WHILE IT RUNS, its clock from the turn's own start (the owner, 2026-11-05: "it should show right when it starts the counter on top, then
-// it stops when response is generated"): one second's tick, only in a turn at work, gone with it (agentWork.turnStamp)
-const Ticking = ({ since }) => {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const said = turnStamp({ running: true, start: since, now });
-  return said ? <span data-tq-working-for="">{` · ${said}`}</span> : null;
-};
+// ...and WHILE IT RUNS, ONE CLOCK (the owner, 2026-11-06): "Working on this… 3s" under it - the head's own "working 0:03" was a second one
 const RanFor = () => {
   const at = useAuiState((s) => s.message.createdAt), id = useAuiState((s) => s.message.id);
   const before = useAuiState((s) => { const ms = s.thread.messages, i = ms.findIndex((m) => m.id === id); return i > 0 ? turnBegan(ms.slice(0, i).map((m) => m.createdAt)) : null; });
@@ -352,7 +345,7 @@ const RanFor = () => {
   if (!t || Number.isNaN(+t)) return null;
   const ran = running ? "" : turnStamp({ start: before, end: t });
   return <span data-tq-ran="" style={{ textTransform: "none", letterSpacing: 0, fontWeight: 500, marginLeft: 8 }}>
-    · {when(t)}{ran ? ` · ${ran}` : ""}{running && start && <Ticking since={start} />}</span>;
+    · {when(t)}{ran ? ` · ${ran}` : ""}</span>;
 };
 const AssistantMessage = () => {
   const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);
@@ -783,7 +776,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w }, { timeout: 0 })
       .catch((x) => setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))));
   };
-  const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : `Answer ${name}'s question…`;
+  const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -873,7 +866,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
                 className="tq-aui-input"
                 onKeyDown={holdLine}
                 /* ...by the name the pane shows (kinds.json `shown`): an analyst's box said "the assistant" (the email walk, 2026-10-29) */
-                placeholder={askWords || (dock ? "Tell Taskuary what to do next…" : `Message ${name}…`)}
+                placeholder={askWords || (dock ? "Tell Taskuary what to do next…" : MESSAGE)}
               />
               {/* the one mic, dictating into the box - every other composer had it and this one did not (the owner,
                   2026-09-29: "where is mic to ask it question?") */}
@@ -1148,7 +1141,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // the task's checklist where the page has not handed it in: the row carries it (store.list_tasks selects t.*)
   const steps = checklist || (() => { try { const a = JSON.parse(task?.Checklist || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } })();
   const thread = (
-    <ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
+    <ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={dock ? name : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={dock ? null : { reviews, checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
     <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>

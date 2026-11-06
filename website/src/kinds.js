@@ -19,7 +19,10 @@ export const agentWord = (kind) => KIND[kind === "coding" ? "coding" : "general"
 // session may name its tool (`cli`); a chat session's `cli` is Taskuary's own. The profile is told on hover only (instructionsHint).
 export const AGENT_SHOWN = kinds.shown;
 // THE ONE PROMPT WORDING (audit, 2026-11-05): every box that talks to the agent says this; only a sign-in hand-over adds its own warning
-export const MESSAGE = `Message ${AGENT_SHOWN}…`;
+// ...WHO IS TALKING (the owner, 2026-11-06: "assistant should be more general bringing you around places and agent is more specific to this but
+// does more hard work"): in a task the one who works it is the Agent - its turns and its box; the corner pill is the Assistant
+export const AGENT_TURN = "Agent", ASSISTANT = "Assistant";
+export const MESSAGE = "Message the agent…", ASK_ASSISTANT = "Ask the Assistant…";
 export const shownAgent = (run) => {
   const tool = ["chat", "assistant"].includes(String(run?.mode || "")) ? "" : String(run?.cli || "").trim();
   return tool && tool.toLowerCase() !== AGENT_SHOWN.toLowerCase() ? tool : AGENT_SHOWN;

@@ -625,7 +625,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
-  onEnded, approve = null, chat = false, reading = null, came = null, noAi = null, closedLine = "", tail = null }) {
+  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", tail = null }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -847,14 +847,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </Box>
           )}
           </ThreadPrimitive.If>
-          {/* ...a chat no turn has summed up yet: what Close out held, under the thread (Task 4.2) */}
+          {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
           {!dock && nextAt?.next && !summed && !working && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
-          {/* THE AGENT'S DRAFT IS SAID WHERE ITS QUESTIONS ARE ASKED (the owner, 2026-11-02): the task page's notice of it (AgentDraftNotice),
-              whose press opens Close out at it - working or not, since the agent saves it mid-turn */}
-          {!dock && approve}
           {/* ...AND HOW IT CLOSED, the stream's last line (the owner, 2026-11-06): a closed task is the same chat, its close said in it */}
           {!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
           {/* ...and under it all, folded, what AI the task used (AiUsed.jsx; the owner, 2026-11-06: "hidden you can open and see it") */}
@@ -915,7 +912,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, approve = null, mails = [], reviews = [],
+  onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
   checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", tail = null }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
@@ -1175,7 +1172,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}
+        asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}

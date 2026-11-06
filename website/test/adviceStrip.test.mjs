@@ -136,22 +136,12 @@ test("an important line lands in the task's Advisor section, and every other str
     assert.equal(taskNote(d(state, line)), null, state);
   assert.equal(taskNote(d("draft_ready", "")), null, "a silent decision says nothing anywhere");
   assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
-  // ...ONE section of its own ("one is more a guide and one is more doing work", the owner 2026-10-26), only with a line - IN THE MAIN VIEW,
-  // never a drawer, so no tab needs to say it holds a note (the Advisor audit's judge, 2026-10-26) - on the canvas and the Tasks tab alike
+  // ...NO SECTION ON THE TASK ANY MORE (the owner, 2026-11-05: "remove the advisor line from the chat ... the agent is the advisor"): every task
+  // is its chat now (2026-11-06), so the line lights a button and is said on the draft it is about and on the Agent's tab - never a block
   const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
-  assert.match(page, /const heard = canvas \? note : taskNote\(taskAdvice\);\n  const warn = notDone && !saidOld\(heard\) \? heard : null;/);
-  assert.equal((page.match(/<AdvisorNote /g) || []).length, 1, "one place for the Advisor's words");
-  assert.match(page, /const advisorNote = warn && !liveSession && !home \? <AdvisorNote note=\{warn\}/);
-  // ...placed by the layout: on a phone in the body's own scroller, before the columns; on the desk in the Agent section, under its work
-  // (the three sections, the owner's mockup 2026-10-27) - never a drawer
-  const steps = page.indexOf("<Box ref={stepsBox}"), at = page.indexOf("{!threeUp && advisorNote}"), cols = page.indexOf("<Box ref={columnsBox} data-tq-columns");
-  assert.ok(steps > 0 && steps < at && at < cols, "in the body's own scroller, before the columns");
-  const agent = page.indexOf('{slot("agent",'), inAgent = page.indexOf('{threeUp && advisorNote && adviceIn === "agent" && <Box'), close = page.indexOf('slot("close",');
-  assert.ok(agent > 0 && agent < inAgent && inAgent < close, "in the Agent section, before Close out");
-  // ...or in Close out, when the move it is the reason for is there (advice `section`, 2026-10-29: a reply the owner sent in Teams)
-  // ...its body (closeBody), which Close out's section draws - or the agent's summary, where the chat is home (Task 4.2)
-  const body = page.slice(page.indexOf("const closeBody = (inChat)"), page.indexOf("const chatCards ="));
-  assert.ok(body.includes('{threeUp && advisorNote && adviceIn === "close" && <Box') && page.indexOf("{closeBody(false)}") > close, "in Close out when its move is Close out's");
+  assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
+  assert.doesNotMatch(page, /<AdvisorNote |advisorNote|adviceIn/, "no Advisor block on the task page");
+  assert.match(page, /why=\{warn\?\.line \|\| ""\}/, "said on the draft whose button it lit");
   assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
   assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
   assert.match(sec, /<TaskuaryMark size=\{12\} \/><Typography[^>]*>Advisor<\/Typography>/);
@@ -166,10 +156,7 @@ test("an important line lands in the task's Advisor section, and every other str
 
 test("a critique carries its fix: Continue with this / Redraft with this, pressed with the Advisor's line as its note", () => {
   // the owner, 2026-10-28: "just judging without action is not worth much" (advisor.fix_of)
-  const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
+  const sec = read("AdvisorNote.jsx");
   assert.match(sec, /export const fixOf = \(note\) => \(note\?\.advice\?\.fix\?\.verb && note\.advice\.fix\.note \? note\.advice\.fix : null\);/);
   assert.match(sec, /\{fix && <button[^>]*data-tq-advisor-fix=\{fix\.verb\}[^>]*onClick=\{runFix\}/);
-  assert.match(page, /<AdvisorNote note=\{warn\} onFix=\{advisorFix\}/);
-  assert.match(page, /fix\.verb === "continue"\) \{ await api\.post\(`\/api\/tasks\/\$\{id\}\/continue-work`, \{ note: fix\.note \}\)/);
-  assert.match(page, /fix\.verb === "redraft" && pendingReview\?\.ReviewId\) \{ setOpenStage\("reply"\); await draftBehind\(api, pendingReview\.ReviewId, fix\.note\)/);
 });

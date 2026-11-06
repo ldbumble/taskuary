@@ -12,6 +12,6 @@ test("a reply that went says where, and that the task is closing or why it stays
   assert.equal(sentLine({ channel: "teams", closing: false, kept: "an agent is still working" }), "Sent on Teams. The task stays open: an agent is still working");
   assert.equal(sentLine({ channel: "", to: "Ray Colton", closing: false }), "Sent to Ray Colton");
   const page = read("TaskPage.jsx");
-  assert.match(page, /const chatCards = sentHere && cardsIn \? <SentHere \{\.\.\.sentHere\} \/> :/);
+  assert.match(page, /const chatCards = sentHere \? <SentHere \{\.\.\.sentHere\} \/> :/);
   assert.match(read("ReviewDecision.jsx"), /said: verb === "approve" \? \{ text: value, channel: r\.Channel \|\| "", to: replyContext\(r\), id: r\.ReviewId \} : null/);
 });

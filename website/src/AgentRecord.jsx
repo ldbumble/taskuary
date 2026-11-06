@@ -105,7 +105,7 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
         <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setMore(!more)}>More · {parts.join(", ")} {more ? "▾" : "▸"}</Button>
         {more && <Box sx={{ display: "flex", flexDirection: "column", gap: 1.3, mt: 1 }}>
           {message && <Box>
-            <Typography sx={head}>Its last message{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · the reply it drafted, also in Close out</Box>}</Typography>
+            <Typography sx={head}>Its last message{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · the reply it drafted, a card in the chat with its Send</Box>}</Typography>
             <Box sx={{ fontSize: 13, color: INK }}><Md text={message} /></Box>
           </Box>}
           {s.files?.length > 0 && <Box>

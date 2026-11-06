@@ -1,9 +1,9 @@
-// THE TASK PAGE'S LAYOUT (the redesign, owner-approved 2026-10-21): two always-open columns - what it came FROM on the left, the
-// WORK or the reply on the right - in place of the Task / Agent work / Close out accordion. Pure, so node --test reads it.
+// THE TASK PAGE'S LAYOUT: what it came FROM, and the one chat where the agent works and every draft, Send and close is (the owner,
+// 2026-11-06: "there should no longer be close out code anywhere"). Pure, so node --test reads it.
 import { channelName } from "./taskSources.js";
 import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
-import { drawerLit, mainView, sectionOf as sectionOfStage, stageOf } from "./stages.js";
+import { drawerLit, mainView, sectionOf, stageOf } from "./stages.js";
 import { waitingEmails } from "./taskLifecycle.js";
 import { isGeneralKind } from "./autostart.js";
 
@@ -14,43 +14,29 @@ import { isGeneralKind } from "./autostart.js";
 // (`failed`, its reason and Try again), keeps the whole width too, From folded over it. Two columns - From | Reply - only where no
 // agent ran or none was ever started: a plain mail or chat task with its draft, a held task.
 // ...UNTIL 2026-10-25 (the owner: "keep agent working and everything the same with full agent screen ... but keep the 2 columns for when
-// agent is not working"): only a LIVE session takes the whole width now. A finished, failed or closed agent is back in two columns - Came
-// from on the left, its Result and Close out on the right - and the shade says which section to read (focusOf).
+// agent is not working"): only a LIVE session takes the whole width now.
 export const layoutOf = ({ sessionView = false }) => (sessionView ? "full" : "columns");
 
-// THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): with no agent live the card's body is shaded and one section is white -
-// the agent's part once it has a Result (or its run failed, Try again being the move); Close out where the reply is the move; and where the
-// open half is the agent's box (a to-do, a goal) the task's own LIST instead (the owner's answer, 2026-10-25): a goal's Steps, a to-do's
-// checklist (`list`), else the block that carries the ask's source ("source"). A task waiting on a person has nothing white ("none").
-// ...BUT THE FOCUS FOLLOWS THE NEXT MOVE (the owner, 2026-10-27: "why is the white part the agent result if the focus is on ready to send"):
-// a draft or emails waiting for Send (`owed`) make Close out the white section even under a finished agent - its Result is shaded above.
-// A finished agent with nothing drafted keeps the focus on its Result.
+// THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"), which makes the stage: the agent's part once it has a Result (or its run
+// failed); the reply where it is the move ("reply"); a goal's Steps or a to-do's checklist (`list`), else the block that carries the ask
+// ("source"). A task waiting on a person has nothing white ("none"). A draft or emails waiting for Send (`owed`) are the move even under a
+// finished agent (the owner, 2026-10-27).
 export const focusOf = ({ live = false, result = false, failed = false, pane = "", waiting = false, list = false, owed = false } = {}) =>
   live ? null : waiting ? "none" : owed ? "reply" : result || failed ? "agent" : pane === "agent" ? (list ? "list" : "source") : "reply";
 
-// THE MAIN VIEW (the owner, 2026-10-26: "if task view is where the task opens to it should only open on that, and then right side arrow
-// should pull out the agent/close out screens. If up to agent or close out open those with coming from in left side draw"): the focus
-// says where the task is up to. A live agent, its Result or its failure, or Close out -> "work", Came from the left drawer; a to-do, a
-// goal's steps, an ask nothing has worked yet, a wait on a person -> "task", Agent and Close out the right drawer. `stacked`: a phone's
-// narrow body keeps its one stacked page (null).
-// ...and a reply with NOTHING DRAFTED yet opens on the task, its right tab lit (the owner, 2026-10-26: "you can open on task but highlight
-// the side bar so people know to go there"); `drafted` is anything of Close out's own - a draft, emails owed, a close, a write-up
-// ...ALL OF IT NOW READ FROM THE ONE STAGE MODEL (stages.json, the owner 2026-10-26: "we should define this well"): the focus and what
-// is drafted make the stage, and the stage names its main view and whether the drawer's tab is lit. `closed`: a closed task is `done`,
-// which opens on how it closed
+// THE MAIN VIEW, read from the one stage model (stages.json, the owner 2026-10-26: "we should define this well"): the focus and what is
+// drafted (`drafted`: a draft, emails owed, a close, a write-up) make the stage, and the stage names its main view and whether the other
+// part's tab is lit. `stacked`: a phone's narrow body keeps its one stacked page (null). `closed`: a closed task is `done`
 export const mainOf = ({ sessionView = false, stacked = false, focus = null, drafted = false, closed = false } = {}) =>
   mainView({ stage: stageOf({ focus, drafted, closed }), sessionView, stacked });
 // ...WHICH DRAWER HOLDS WHAT IS NEXT, so its tab is lit: the right one where the task is the page but the move is the reply (nothing
 // drafted yet) or an agent (an ask nothing has worked: "source"). A to-do's or a goal's list is itself the move; Came from is context only.
 export const nextInDrawer = ({ main = null, focus = null } = {}) => drawerLit({ main, stage: stageOf({ focus }) });
 
-// WHICH HALF OF THE WORK COLUMN IS OPEN. The page's focus (taskLifecycle.focusStage) still decides between the agent and the
-// reply; where it named the task itself - now the always-open From column - the work column opens on what the task is for: the
-// reply for a reply with somebody to answer, else the agent (its plan, its start, its record).
-// ...and an agent's RESULT stays the open half while nothing is in the reply's: Stop and save opens Close out (`stage` reply) so a
-// reply being drafted shows where it will land, but on a task nobody sent there is no reply, and Close out was an empty card under
-// a Result folded to two lines (the owner, 2026-10-22: "since it gets crunched down you can not really see the agent report").
-// `replyHas`: the reply half has something of its own - a draft, emails, a close, a failed write-up. `picked`: opened by hand.
+// WHAT THE TASK IS UP TO, the agent or the reply - the focus the stage is read from. The page's focus (taskLifecycle.focusStage) decides
+// between them; where it named the task itself, what the task is for: the reply for a reply with somebody to answer, else the agent.
+// An agent's RESULT stays the move while nothing waits on a Send (the owner, 2026-10-22). `replyHas`: a draft, emails, a close, a failed
+// write-up. `picked`: opened by hand.
 export const workPane = ({ stage, kind, hasSender, codeRun = false, result = false, replyHas = false, picked = false }) => {
   if (stage === "reply" && result && !hasSender && !replyHas && !picked) return "agent";
   if (stage === "agent" || stage === "reply") return stage;
@@ -58,25 +44,14 @@ export const workPane = ({ stage, kind, hasSender, codeRun = false, result = fal
   return hasSender && !["coding", "general"].includes(kind) ? "reply" : "agent";
 };
 
-// CLOSE OUT UNDER A RESULT, ON A TASK NOBODY SENT: "Nobody sent this one... Work it, or write what you found" and a "reply · not
-// available" pill are advice for an open task with nothing done yet - under an agent's Result they read as an empty reply section.
-// There Close out says what closes it, and the write-up's progress is a line under the Result it is writing up. A reply being drafted
-// (somebody is owed one) and a write-up that failed (its Try again) stay in Close out, where the draft will stand.
-// ...and A WRITE-UP UNDER WAY IS ONE LINE IN THE AGENT PANE, reply owed or not (the owner, 2026-10-29: Stop drew two spinners - the box's
-// own and its bar - in Close out, away from the agent it was writing up). Only a failure, with its Try again, stands in Close out.
-//   advice - the "Nobody sent this one" line; chip - the reply pill; writeupAt - "closeout", "result" or null
-export const closeOut = ({ hasSender = false, result = false, writeup = null } = {}) => {
-  const bare = result && !hasSender;
-  return { advice: !bare, chip: !bare, writeupAt: !writeup ? null : writeup.state === "failed" ? "closeout" : "result" };
-};
-export const CLOSE_BY_HAND = "Mark done closes it, or close it with a note.";
+// A WRITE-UP UNDER WAY IS ONE LINE under the Result it writes up (the owner, 2026-10-29); one that FAILED is a card in the chat, with its
+// Try again, where its draft would have stood: "chat", "result" or null
+export const writeupAt = (writeup) => (!writeup ? null : writeup.state === "failed" ? "chat" : "result");
 
-// WHAT CLOSE OUT HOLDS OF ITS OWN, which makes it where the task is up to: `waits` - a reply draft, a proposal or a drafted email waiting
-// for Send (the next move, Close out white); `has` - that, or a reply that went, a close, a write-up that failed there, an answer given
-// outside. An email the checklist owes with NOTHING DRAFTED for it is a line on Close out's list, not a draft (the owner, 2026-11-02: a
-// chat asked them to email somebody, and the task opened on a Close out holding only "<address> to draft" - "it should show the task,
-// not close out, as there is no close-out draft created"); the server's stage reads the same (stages.facts `drafted`)
-export const closeHolds = ({ pending = false, sent = false, proposals = 0, checklist = [], reviews = [], ended = false, outside = 0, closed = false, writeup = false } = {}) => {
+// WHAT WAITS ON THE OWNER'S SEND, which makes the stage: `waits` - a reply draft, a proposal or a drafted email waiting for Send (the next
+// move); `has` - that, or a reply that went, a close, a write-up that failed, an answer given outside. An email the checklist owes with
+// NOTHING DRAFTED for it is not a draft (the owner, 2026-11-02); the server's stage reads the same (stages.facts `drafted`)
+export const replyHolds = ({ pending = false, sent = false, proposals = 0, checklist = [], reviews = [], ended = false, outside = 0, closed = false, writeup = false } = {}) => {
   const waits = !!(pending || proposals || waitingEmails(checklist, reviews));
   return { has: waits || !!(sent || ended || outside || closed || writeup), waits };
 };
@@ -89,29 +64,19 @@ export const fromLine = ({ sender = null, count = 0, workflow = null, made = "" 
   return made || "";
 };
 
-// THREE SECTIONS IN A ROW, IN THE ORDER THE WORK FLOWS (the owner, 2026-10-27, from a mockup: "input -> agent/advisor -> close ... 3 sections
-// from left to right showing the flow; on the outside it shows the status of each category and opens up to the one it's up to"): one is
-// open and fills the width, the other two are closed tabs that say where each stands in a line or two. `here`: the section the task is up
-// to (stages.sectionOf). Pure, so node --test reads it.
-export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent", n: 2, name: "Agent" }, { key: "close", n: 3, name: "Close out" }];
-// ...BUT TWO WHERE THE CHAT IS HOME (phase 4): a general or reply task is Came from and the agent's chat, opening on the chat, and Close out's
-// own moves (Mark done, Close with a note, Attach, Share) ride the agent's strip. Read off the kind, not the workspace mode: a reply task no
-// agent ran is "empty" there (taskWorkspace), and its chat is still home. A coding task, a plain one and a live terminal keep all three
-// ...and a kind not yet known is not home: a coding task drew two sections for a moment before its detail landed
-// ...AND ANY TASK AN AGENT TALKED ON, OR CLOSED (the owner, 2026-11-06: a done task opened from Search in the old three columns - "it should open
-// to agent tab now that came from is gone"): `chatted` - a chat on it, or it is closed - makes it home too, save a coding task's terminal
-// ...AND A CODING TASK, ITS TERMINAL LIVE OR NOT (the owner, 2026-11-06: "combine the close out action in the coding cli as well. basically making
-// general and coding agent more similar"): its chat is the session, the drafted reply and the landing in one stream (CodingChat.jsx), the
-// terminal a toggle inside it - no Close out column
-// ...and a PLAIN TASK too (the owner, 2026-11-06, on a to-do still showing Close out: "i thought we removed this from everywhere?"): every kind
-// is Came from + the one chat; there is no Close out column anywhere
-export const chatHome = ({ kind, terminal = false } = {}) => !!kind && (kind === "coding" || !terminal);
-// ...a live CODING terminal, that is: a general agent's own chat is a session too (mode "assistant"), and its task stays home
+// TWO SECTIONS, IN THE ORDER THE WORK FLOWS: what came in, and the one chat (the owner, 2026-11-06, on a to-do still showing Close out: "i
+// thought we removed this from everywhere? ... there should no longer be close out code anywhere"). Every kind - general, reply, coding, a
+// plain to-do - is Came from and its chat; a draft's Send, the emails owed, the landing, the hand-off and the close are cards in the chat,
+// and the task's buttons ride its strip. One is open and fills the width, the other a closed tab that says where it stands.
+export const SECTIONS = [{ key: "from", n: 1, name: "Came from" }, { key: "agent", n: 2, name: "Agent" }];
+// ...a live CODING terminal: a general agent's own chat is a session too (mode "assistant"); a coding CLI's is a toggle in its chat (CodingChat)
 export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant";
-export const taskSections = (home) => (home ? SECTIONS.filter((s) => s.key !== "close") : SECTIONS);
-// ...a plain to-do opens where triage put it - on what came in (the owner, 2026-11-05: "if the triage says it is just a todo ... it should
-// open on the came from section only"); every other kind opens on its chat
-export const homeSection = (home, here, kind) => (home && kind !== "task" ? "agent" : here);
+// ...A PLAIN TO-DO NO AGENT HAS TOUCHED IS ONE SECTION (the owner, 2026-11-06: the "Agent - not started" column beside a to-do): what came in,
+// the box under it - typing there starts the agent, and its chat then joins as the second section. `started`: any agent ever on it
+export const soloTodo = ({ kind, started = false } = {}) => kind === "task" && !started;
+// ...and it opens where triage put it - on what came in (the owner, 2026-11-05: "if the triage says it is just a todo ... it should open on
+// the came from section only") or, once an agent has a Result or a draft on it, where its stage is; every other kind opens on its chat
+export const homeSection = (kind, stage) => (kind === "task" ? sectionOf(stage) : "agent");
 // ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four
 // short lines, each clamped so a tab never scrolls. Words quoted are somebody's own; each line only where there is something to say.
 // ...and read like a book's SPINE (the owner, 2026-10-27): its `lines` at the top under the name, its `foot` - the one status line - at the
@@ -148,29 +113,6 @@ export const reportLine = (body) => {
 export const agentStatus = ({ profile = "", word = "not started", said = "", made = "", advisor = "" } = {}) => ({
   lines: [[profile, word].filter(Boolean).join(" · "), said, made ? `Made: ${made}` : ""].filter(Boolean),
   foot: [word === "finished" ? "✓ Done" : "", advisor ? `Advisor: ${advisor} is next` : ""].filter(Boolean).join(" · ") });
-// ...Close out: who it answers and where, the draft's first words, and whether it went - "Drafted · waiting for Send", "Sent", "Nothing owed"
-// ...and what is in it: the draft's first words, or what was sent and when, the emails owed, the close and its note
-// ...and at its foot the Advisor's next move when that move is Close out's (advisorAt): "Mark done is next" stood under an Agent nobody started
-// ...and AN EMAIL THE TASK OWES LEADS, ITS OWN TO FIRST (`owes`, taskLifecycle.owedEmails - the owner, 2026-11-02): a chat asked for an email
-// to somebody else and the tab said only "Reply to <the chat's sender>"; each owed email says where it goes and where it stands, and
-// the count of drafted ones is not said again under them
-// ...AND A BRANCH WAITING TO LAND IS OWED TOO (`landing`, LandingCard): "Nothing owed" stood folded over the landing question it hid (the conductor
-// run, 2026-11-06) - the tab says the question waits, and "Nothing owed" is said only where nothing at all does
-export const closeStatus = ({ closed = false, note = "", to = "", where = "", draft = "", waiting = false, emails = 0, sent = false, sentWhen = "", owed = false, advisor = "", owes = [], landing = false } = {}) => ({
-  lines: [...(closed ? [] : owes.map((o) => `Email to ${o.to || o.name} · ${o.state}`)), to ? `Reply to ${to}${where ? ` in ${where}` : ""}` : "", q(draft),
-    closed ? ["Closed", note].filter(Boolean).join(" · ") : waiting ? "Drafted · waiting for Send" : sent ? (sentWhen ? `Sent ${sentWhen}` : "Sent") : owed ? "Not drafted yet" : emails || owes.length || landing ? "" : "Nothing owed",
-    !closed && landing ? "Branch waiting to land · how should it land?" : "",
-    emails && !owes.length ? `${plural(emails, "email")} waiting for Send` : ""].filter(Boolean),
-  foot: advisor ? `Advisor: ${advisor} is next` : "" });
-
-// THE SECTION THE TASK OPENS ON, AND WHERE THE ADVISOR'S LINE STANDS (the owner, 2026-10-29: answered in Teams, the page opened on Came from
-// with "Mark done is next" under an Agent nobody started): the Advisor's decision names the section its move is in (rulebook.SEC, the
-// decision's `section`) and that is where the task is up to - save over a live agent or a closed task, whose page is theirs. With no
-// section named, the stage's (stages.sectionOf), and the line stays the Agent's, under its work.
-const OWN_PAGE = new Set(["agent_working", "done", "closed_by_agent"]);
-export const sectionHere = ({ stage, advised = "" } = {}) =>
-  advised && SECTIONS.some((s) => s.key === advised) && !OWN_PAGE.has(stage) ? advised : sectionOfStage(stage);
-export const advisorAt = (advised = "") => (advised === "close" ? "close" : "agent");
 
 // ANSWERED OUTSIDE TASKUARY: the newest message on the task is the owner's own, typed in Teams, the mail client or a chat
 // (channels.ingest_own_message: a `context` row, Direction out) - not a reply sent from here coming back (taskLifecycle.sentElsewhere
@@ -182,9 +124,6 @@ export const answeredOutside = ({ messages = [], outside = [], pending = false }
   const newest = [...messages].sort((a, b) => ts(b) - ts(a))[0];
   return newest && outside.some((m) => m.MessageId === newest.MessageId) ? newest : null;
 };
-// ...said plainly in Close out: who was answered, where and when, and that what is left is closing it
-export const outsideLine = ({ who = "", where = "", when = "" } = {}) =>
-  `You answered ${who || "them"} yourself${where ? ` in ${where}` : ""}${when ? `, ${when}` : ""} - outside Taskuary. Nothing has come in since, so the task can be closed: Mark done.`;
 
 // THE ASK IS THE MESSAGE'S OWN WORDS when triage left no summary of its own (the task-view cleanup, owner-approved 2026-10-25): said
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.

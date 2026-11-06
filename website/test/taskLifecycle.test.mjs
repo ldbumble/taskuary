@@ -92,7 +92,7 @@ test("the task page opens exactly one stage and lets you open the others by hand
   assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| restStage\);/);
   assert.match(source, /setOpenStage\(null\)/);
   assert.match(source, /onToggle: shows\(name\) \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
-  for (const name of ["agent", "reply"]) {
+  for (const name of ["agent"]) {
     assert.ok(source.includes(`{...stageProps("${name}")}`), `stage ${name} must fold and open by hand`);
     assert.ok(source.includes(`shows("${name}") &&`), `stage ${name} body must be gated`);
   }
@@ -102,9 +102,9 @@ test("the task page opens exactly one stage and lets you open the others by hand
   assert.match(source, /\{\(!fromDrawer \|\| fromSide\) && slot\("from",\s*<Box data-tq-from="" data-tq-task-section=""/);
   // ...neither half on a task waiting on a person (the owner, 2026-10-25): both fold to a line
   assert.match(source, /const paneRest = waitFor && !openStage \? "" : workPane\(\{ stage, kind: t\?\.Kind, hasSender: !!replyMessage, codeRun, result: resultShown, replyHas, picked: !!openStage \}\);/);
-  // ...and on the desk the open section draws its half: the Agent its own, Close out the reply (the three sections, 2026-10-27)
-  // ...and a phone's stacked page opens on the half holding the row's lit move (2026-10-28: Reply lit over an open Send to agent form)
-  assert.match(source, /const pane = section === "agent" \? "agent" : section === "close" \? "reply" : \(stacked && !openStage && paneOfMove\(litMove\)\) \|\| paneRest;/);
+  // ...and the chat is always drawn - open or behind its tab, the reply's cards in it: there is no other half (2026-11-06)
+  assert.match(source, /const pane = "agent", shows = \(p\) => p === pane;/);
+  assert.doesNotMatch(source, /stageProps\("reply"\)/);
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {

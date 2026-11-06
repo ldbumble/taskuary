@@ -184,7 +184,7 @@ test("a task nobody sent offers no reply to write", () => {
   // ...and a batch owes nobody ONE reply: its items are answered on their own lines (batch.py)
   assert.match(tasks, /const replyMessage = !detail\?\.batch && hasCorrespondent\(sourceMessage\) \? sourceMessage : null;/);
   assert.match(tasks, /api\.post\(`\/api\/messages\/\$\{replyMessage\.MessageId\}\/reply`/);
-  assert.match(tasks, /Nobody sent this one, so there is nobody to answer/);
+  assert.doesNotMatch(tasks, /Nobody sent this one/, "no advice line about a reply that is not owed - the chat offers none");
 });
 
 // REVERSED by the owner, 2026-10-22 ("buttons do the talking. I hate free text"): the line said why a draft cannot be sent; now the

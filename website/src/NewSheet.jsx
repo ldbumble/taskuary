@@ -519,7 +519,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {kind === "meeting" && (
           // ...its own form, its own Find times: the pick is the press, so the footer keeps only Cancel
           <NewMeeting renderTo={(p) => <EmailRecipients {...p} />} options={mailTargets} initial={initialKind === "meeting" ? initialMeeting || { about: initialText } : {}}
-            onPicked={(d) => { setOk(`${d.ref} — the invite is drafted in Close out, waiting for your ${btn("approve")}. Nothing went out.`); onDone?.(); onOpenTask?.(d.taskId); }} />
+            onPicked={(d) => { setOk(`${d.ref} — the invite is drafted in its chat, waiting for your ${btn("approve")}. Nothing went out.`); onDone?.(); onOpenTask?.(d.taskId); }} />
         )}
 
         {!REPEATS.includes(kind) && kind !== "meeting" && <Box>

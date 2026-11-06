@@ -40,8 +40,8 @@ test("the next-run box takes the mic and pictures like Continue, and both starts
   assert.match(view, /instruction: withImages\(run\.instruction\.trim\(\), runPics\.paths\)/);
 });
 
-test("both reply buttons spin and say Drafting while the AI writes the draft", () => {
+test("the reply button spins and says Drafting while the AI writes the draft", () => {
   const view = taskSource();
-  assert.equal((view.match(/\{openingReply \? "Drafting…" : replyPrimary\}/g) || []).length, 2);
-  assert.match(view, /startIcon=\{openingReply \? <CircularProgress size=\{11\} \/>/);
+  assert.equal((view.match(/\{openingReply \? "Drafting…" : replyPrimary\}/g) || []).length, 1);
+  assert.match(view, /startIcon=\{openingReply \? <CircularProgress size=\{12\} \/>/);
 });

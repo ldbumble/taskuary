@@ -66,13 +66,13 @@ test("Show all draws compact bubbles: the name inside once per run, the time on 
 // THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.
 // full chat should be in task (condensed and full). in close out chats condensed version?")
 // ...its heading in Close out's section, its body the closeBody that section draws - or, where the chat is home, the agent's summary (Task 4.2)
-const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3"'), page.indexOf("THE TASKS TAB'S BAR, AT THE FOOT")) + page.slice(page.indexOf("const closeBody = (inChat)"), page.indexOf("const chatCards ="));
+const cards = page.slice(page.indexOf("const chatBody = () =>"), page.indexOf("const chatCards ="));
 // ...Came from's facts and conversations, drawn once and placed by the layout (fromFacts, fromConvs - the three sections, 2026-10-27)
 const cameFrom = page.slice(page.indexOf("const fromFacts = () =>"), page.indexOf("const fromSorted = () =>"));
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
   assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{THREAD_MAX\} \/>/);
   assert.match(cameFrom, /<ConversationRows rows=\{fromRows\(g, 3, showAll\)\} open=\{shownMsg\} onOpen=\{\(f\) => setOpenMsg\(f\(shownMsg\)\)\} narrow/);
-  assert.match(cameFrom, /\{!threeUp && fromExpands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles - on a phone; the desk's conversation has its own Show all");
+  assert.match(cameFrom, /\{!twoUp && fromExpands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles - on a phone; the desk's conversation has its own Show all");
   assert.match(cameFrom, /showAll \? "Show less" : `Show all \$\{sourceCount\}`/, "and a way back");
 });
 
@@ -84,20 +84,17 @@ test("the '··· N more' line in Came from opens the whole conversation, the sa
   assert.match(rows, /"&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`, outlineOffset: 1 \} \}\}>\s*· · · \{r\.gap\} more - \{r\.names\}<\/Box>/);
   assert.match(cameFrom, /onExpand=\{\(\) => setShowAll\(true\)\}/);
   assert.match(cameFrom, /onClick=\{\(\) => setShowAll\(\(v\) => !v\)\}/, "Show all at the top is the same switch");
-  assert.doesNotMatch(closeOut, /onExpand=/, "Close out's gap stays a count - the whole conversation is in From");
+  assert.doesNotMatch(cards, /onExpand=/, "the chat's cards draw no conversation - the whole of it is in From");
 });
 
 // ...AND CLOSE OUT NAMES THE ONE MESSAGE IT ANSWERS (the task-view cleanup, owner-approved 2026-10-25 - it supersedes the 2026-10-16
 // condensed rows here, and with them "one component, two places"): "Answering <who>: <their words>", the line opening the whole
 // conversation in From. The four rows over the draft were the messages From shows beside it, a second time.
-test("Close out says what the draft answers in one line, and the line opens the whole conversation in From", () => {
-  assert.doesNotMatch(closeOut, /<ChatThread/, "never the full bubbles twice");
+test("the chat's cards never draw the conversation again - no bubbles, no rows, no Answering line: Came from and the chat have it", () => {
+  assert.doesNotMatch(cards, /<ChatThread/, "never the full bubbles twice");
   assert.doesNotMatch(page, /mailThread|data-tq-mail-thread/);
-  assert.doesNotMatch(closeOut, /<ConversationRows /, "no condensed rows in Close out");
-  assert.match(closeOut, /\{closeGroup && answering && !inChat && <Box component="button" type="button" data-tq-answering="" onClick=\{seeWholeConversation\}/);
-  assert.match(closeOut, /Answering <Box component="span"[^>]*>\{answering\.who\}<\/Box>/);
-  // ...and in the three sections it opens Came from with its message history out (2026-10-27)
-  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setCameInFull\(true\); setFromOpen\(true\); setHistOpen\(true\); if \(fromDrawer\) setFromSide\(true\); if \(threeUp\) openSection\("from"\); setSeekCameFrom\(true\); \};/);
+  assert.doesNotMatch(cards, /<ConversationRows /, "no condensed rows in the cards");
+  assert.doesNotMatch(page, /data-tq-answering|seeWholeConversation/);
   assert.match(page, /<Box ref=\{cameFromRef\}/);
   assert.equal(page.match(/<ConversationRows /g).length, 2, "one component, in From: a phone's conversations, and the desk's one flow");
 });
@@ -113,10 +110,10 @@ test("a promise task's reply source is its own sent mail, named by whom it was m
   assert.match(page, /fromLineOf\(\{ sender: ownSource,/, "From still reads the task's own sender");
 });
 
-test("an email task's Close out answers the thread's message; what this round sent outside Taskuary shows, in any conversation", () => {
+test("an email task's draft answers the thread's message; what this round sent outside Taskuary shows, in any conversation", () => {
   assert.match(page, /sources\.find\(\(g\) => g\.msgs\.some\(\(m\) => m\.MessageId === closeSrc\?\.MessageId\)\)/);
-  // ...its own conversation too: Close out draws one "Answering" line of it, no rows, so nothing is said twice (closeoutRounds.js, 2026-11-01)
+  // ...its own conversation too - the current round's (replyRounds.js, 2026-11-01)
   assert.match(page, /const sentOutside = round\.sent\.filter\(\(s\) => s\.msg\)\.map\(\(s\) => s\.msg\);/);
   assert.match(page, /const sentApart = newestFirst\(sentOutside\);/);
-  assert.match(closeOut, /\{sentApart\.map\(\(m\) => \(/);
+  assert.match(cards, /\{sentApart\.map\(\(m\) => \(/);
 });

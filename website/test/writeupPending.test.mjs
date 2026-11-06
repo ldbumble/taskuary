@@ -56,19 +56,19 @@ test("the steps say done, now and to come; the reply step only where somebody is
   assert.equal(writeupHead({ state: "pending" }, false), "Writing up the session…");
 });
 
-test("Stop and save puts the agent down and keeps the Agent pane open while it writes; Close out once it has", () => {
+test("Stop and save puts the agent down and keeps the Agent pane open while it writes; its draft is a card in the chat once it has", () => {
   const page = read("TaskPage.jsx");
   assert.match(page, /setErr\(""\); setWritingUpAt\(\{ id, n, sid \}\); setTerm\(null\);\n    try \{\n      const \{ data \} = await api\.post\(`\/api\/tasks\/\$\{id\}\/wrap`, \{ close: false, background: true \}\);/);
   assert.match(page, /setWritingUpAt\(null\); findTerm\(id\);/);                                  // a press that fails gives the session back
   assert.match(page, /const restStage = sessionView \|\| writingUp \? "agent" : \(pressedHere \|\| writeup \? "reply" :/); assert.match(page, /\(openStage \|\| restStage\)/);
-  assert.match(page, /sec: writingUp \? "agent" : homeSection\(home, sectionHere\(/);                                // the Agent section, while it writes
+  assert.match(page, /sec: solo \? "from" : writingUp \? "agent" : homeSection\(/);                                // the Agent section, while it writes
   assert.doesNotMatch(page, /setSeekCloseOut/);
-  // ...a failure's Try again is Close out's (taskLayout.closeOut)
-  assert.match(page, /\{coOn && co\.writeupAt === "closeout" && <WriteupBlock view=\{writeup\}/);
-  assert.match(page, /\{\(coOn \|\| lendsReply\) && !writeup && \(\(pendingReview \|\|/);                 // ...and the draft in its place, same card
+  // ...a failure's Try again is a card in the chat (taskLayout.writeupAt)
+  assert.match(page, /\{upFailed && <WriteupBlock view=\{writeup\}/);
+  assert.match(page, /\{!writeup && \(\(pendingReview \|\|/);                 // ...and the draft in its place, same card
   assert.match(page, /if \(pressedHere\?\.sid && live\.sid === pressedHere\.sid\) return;/);       // the closing pty is not adopted back
-  assert.match(page, /<Box ref=\{closeOutRef\} data-tq-closeout=""/);
-  // Mark done on a live agent stays the background close: the page walks on, no pending Close out
+  assert.match(page, /<Box ref=\{cardsRef\} data-tq-chat-cards=""/);
+  // Mark done on a live agent stays the background close: the page walks on, nothing pending
   assert.match(page, /if \(canWrap && await writeUpThenClose\(api, id\)\) \{\n      if \(stale\(id\)\) return;\n      setTerm\(null\);\n      return closedHere\("done"\);/);
   const mod = read("closeAgent.jsx");
   assert.match(mod, /data-tq-writeup=\{view\.state\} data-tq-writeup-stage=\{view\.stage \|\| ""\} role="status"/);

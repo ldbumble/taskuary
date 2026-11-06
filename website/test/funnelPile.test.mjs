@@ -250,7 +250,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
-  assert.match(read("TaskPage.jsx"), /<TerminalPane sid=\{term\.sid\}/);   // a stopped agent's own screen: its task view on the canvas
+  assert.match(read("CodingChat.jsx"), /<TerminalPane sid=\{live\.sid\}/);   // an agent's own screen: a toggle in its task's chat on the canvas
   assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width
   assert.doesNotMatch(view, /<Drawer/);                    // no reader drawer: reading happens in the card
   const css = read("assistantView.css");

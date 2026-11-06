@@ -2545,7 +2545,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         body: <RoleStep conn={conn} reload={reload} only={["report", "tool"]} /> },
     ]),
     ...(conn.Type === "github" ? [{ label: "Agent permissions", done: creds, body: <GithubPerms conn={conn} reload={reload} /> },
-      { label: "Close out — what finishing a task does on GitHub", done: creds, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
+      { label: "Finishing a task - what it does on GitHub", done: creds, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 1, flexWrap: "wrap" }}>
         <Switch data-tq-card-on="" checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => setActive(e.target.checked)} />
@@ -3311,7 +3311,7 @@ const GITHUB_PERMS = [
   ["agents_push", "Agents may push / deploy",
    "On: agents push and deploy as the work needs. Off (default): commits stay local for your review - you push - and only a task whose ask explicitly says to push may. Force-pushes and archived repositories stay forbidden either way."],
   ["reply_comments", "Reply to issue/PR authors",
-   "On: questions from GitHub get a drafted reply, finished work drafts a close-out note, and approving one posts it as a PUBLIC comment on the issue/PR. Off (default): GitHub items never get reply drafts - questions file with their triage reason, finished work just closes with its report, and nothing is ever posted to a public thread on your behalf."],
+   "On: questions from GitHub get a drafted reply, finished work drafts a closing note, and approving one posts it as a PUBLIC comment on the issue/PR. Off (default): GitHub items never get reply drafts - questions file with their triage reason, finished work just closes with its report, and nothing is ever posted to a public thread on your behalf."],
 ];
 
 const GithubPerms = ({ conn, reload }) => {
@@ -3350,7 +3350,7 @@ const GithubPerms = ({ conn, reload }) => {
    The connection holds the defaults; a repository can override them. The keys and defaults are ghcloseout.DEFAULTS. */
 const CLOSEOUT_DEFAULTS = { pr: "merge", method: "squash", red: "merge", anyway: false, update: true, rerun: true, issue: true, comment: true };
 const CLOSEOUT_PICKS = [
-  ["pr", "Close out on a pull request", [["merge", "Merges it"], ["task", "Only closes the task - you merge on GitHub"]]],
+  ["pr", "Finishing a task from a pull request", [["merge", "Merges it"], ["task", "Only closes the task - you merge on GitHub"]]],
   ["method", "Merge method", [["squash", "Squash"], ["merge", "Merge commit"], ["rebase", "Rebase"]],
     "Used when the repository allows it; otherwise the first method it does."],
   ["red", "Red checks the repository does not require", [["merge", "Merge anyway, with a note"], ["ask", "Stop and ask me"]]],
@@ -3358,9 +3358,9 @@ const CLOSEOUT_PICKS = [
 const CLOSEOUT_SWITCHES = [
   ["update", "Offer Update branch", "When a pull request is behind a repository that requires it up to date, and its author allows maintainer edits."],
   ["rerun", "Offer Re-run checks", "When checks failed - re-runs the failed Actions jobs on the pull request."],
-  ["issue", "Close out on an issue closes it", "Your reply is its closing comment."],
-  ["comment", "Post your reply as the close-out's comment", "On the pull request or issue, with the merge or close - even with Reply to issue/PR authors off."],
-  ["anyway", "Close out anyway, past the repository's own rules", "Off by default. Only for a repository where the token is an admin, and only on your press - the card says it is bypassing."],
+  ["issue", "Finishing a task from an issue closes it", "Your reply is its closing comment."],
+  ["comment", "Post your reply as the closing comment", "On the pull request or issue, with the merge or close - even with Reply to issue/PR authors off."],
+  ["anyway", "Finish anyway, past the repository's own rules", "Off by default. Only for a repository where the token is an admin, and only on your press - the card says it is bypassing."],
 ];
 
 const GithubCloseout = ({ conn, mine, reload }) => {

@@ -5,12 +5,8 @@ import { fileURLToPath } from "node:url";
 import { replySource, sentElsewhere, unsentReplyReview, replyPhase } from "../src/taskLifecycle.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
-// Close out, from its heading to the Run traces fold under it
-const closeOut = () => {
-  const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3"');
-  // ...and the body it draws, closeBody - Close out's section's or, where the chat is home, the agent's summary's (Task 4.2)
-  return page.slice(at, page.indexOf("<Fold title={`Run traces", at)) + page.slice(page.indexOf("const closeBody = (inChat)"), page.indexOf("const chatCards ="));
-};
+// the chat's cards (TaskPage chatBody): the draft, what went out, the envelope
+const closeOut = () => { const page = read("TaskPage.jsx"); return page.slice(page.indexOf("const chatBody = () =>"), page.indexOf("const chatCards =")); };
 
 // The card drew the NEWEST AGENT REPORT, and the poll that saw the agent's own merge filed a second one whose "last
 // message" was our sentence - the agent's account was there, then gone (2026-10-12). Then it was a second telling of the run
@@ -24,9 +20,9 @@ test("an ended session has no card of its own - the step's record is it, with th
 });
 
 // Close out of a merged pull request was a bare "To <sender>" over nothing.
-test("Close out says what ended it and what already went out, before any envelope", () => {
+test("the chat's cards say what ended it and what already went out, before any envelope", () => {
   const c = closeOut();
-  assert.match(c, /\|\| ended \|\| sentOutside\.length\) \?/, "an ended or answered task still opens its Close out");
+  assert.match(c, /\|\| ended \|\| sentOutside\.length\) \?/, "an ended or answered task still draws its cards");
   assert.ok(c.indexOf("{ended && (") < c.indexOf("THE ENVELOPE"), "the ending leads");
   assert.ok(c.indexOf("{sentApart.map(") < c.indexOf("THE ENVELOPE"), "then what was sent elsewhere, newest first");
   assert.match(c, /\(replyMessage \|\| sentReview\) && \(!ended \|\| sentReview \|\| unsentReview\) &&/, "no envelope over nothing");

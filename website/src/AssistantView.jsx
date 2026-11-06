@@ -645,7 +645,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // ...the rows it drew last time, so reaching clear in front of the owner plays its burst once (AllDone) - null until the pile has loaded,
   // so a reload onto a clear rail stays quiet
   const lastN = useRef(null), burst = !!pile && burstsNow(lastN.current, drawn.length);
-  useEffect(() => { if (pile) lastN.current = drawn.length; });
+  useEffect(() => { if (pile) lastN.current = drawn.length; }, [pile, drawn.length]);
 
   return (
     <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey} data-tq-left={left}

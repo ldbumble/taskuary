@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { describeCall, pageOf, present, stepLabel, stepsOf } from "../src/agentSteps.js";
-import { clockText, turnStamp } from "../src/agentWork.js";
+import { clockText, turnBegan, turnStamp } from "../src/agentWork.js";
 
 const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 const doing = (name, args) => stepLabel({ ...describeCall(name, args), status: "running" });
@@ -63,4 +63,14 @@ test("a running turn shows its steps open, the newest six, its clock ticking onc
   assert.match(ws, /\{running && start && <Ticking since=\{start\} \/>\}/);
   assert.match(ws, /since: session\.turn_started \* 1000/, "the turn's own start, from the server");
   assert.match(read("AgentStepRows.jsx"), /<CircularProgress size=\{10\}/);
+});
+
+// A BURST (the owner, 2026-11-05): a mail read in while turn 1 ran is drawn after it, stamped when it came in - the re-think under it began when
+// turn 1 answered, the newest of everything above it, never at that mail's earlier stamp
+test("a turn's run is counted from the newest thing above it, not the row just above", () => {
+  const t = (hm) => new Date(`2026-11-05T17:${hm}`);
+  assert.equal(+turnBegan([t("19:55"), t("21:10"), t("20:40")]), +t("21:10"));
+  assert.equal(turnStamp({ start: turnBegan([t("19:55"), t("21:10"), t("20:40")]), end: t("21:50") }), "ran 40s");
+  assert.equal(turnBegan([null, undefined]), null);
+  assert.match(read("GeneralWorkspace.jsx"), /turnBegan\(ms\.slice\(0, i\)\.map\(\(m\) => m\.createdAt\)\)/);
 });

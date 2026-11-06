@@ -843,6 +843,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # which AI does each job (brainroute): auto = triage's judgement picks the model (the owner, 2026-11-06), fixed =
                     # the cards exactly as before; rules '' = the shipped ones
                     'ai_route_mode': 'auto', 'ai_route_rules': '', 'ai_route_strong_cap': '',
+                    # ...and an AI per level for the agents' work ({quick|normal|hard: {pick, model}}) - blank = each card's own AI
+                    'ai_route_brain_by_level': '',
                     # the agent's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
                     'agent_context_file': '1',

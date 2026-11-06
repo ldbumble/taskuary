@@ -78,7 +78,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { handToItem } from "./ItemSections.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, putDownLanded, bandsOf, canAdvance as canWalkOn, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, furtherIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, refreshCurrentPresentation, refreshPilePresentation, rowMeta, settledHistory, sinceOpener, walkOf } from "./funnelPile.js";
-import { FYI_PAGE, ageHover, fyiCap, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameKey, sameRow, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, ageHover, fyiCap, answersTo, awayFromClear, coveredByReload, fyiHasRoom, fyiTail, heldSince, latestLine, pileRows, rowKeys, sameRow, sentChips } from "./funnelPile.js";
 import { railStatus, rowWhy } from "./railStatus.js";
 import { UndoLine } from "./Removed.jsx";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -101,7 +101,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import { onFirstRun, readFirstRun } from "./firstRunState.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, levelOf, placed, pulledRow } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, levelOf, placed, pressOnto, pulledRow, withWalk } from "./funnelPile.js";
 import { STAYS, dropHeld, ghostsOf, keepHeld, movedEntry } from "./movedFyi.js";
 import { isImportant, level as priorityOf } from "./priority.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -1454,8 +1454,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // EVERY WALK MOVE IS ONE POST TO /api/walk/* (railwalk, 2026-10-30): a row opened by key, the row below, the row above, the top, a close -
     // never the stream, which words a turn around a move instead of making it
     const walkRoute = { next: body.key ? "open" : "next", back: "back", start: "start", leave: "leave", section: "open" }[body.mode];
+    // ...the LIGHT answer (the owner, 2026-11-06: Next turns blue as soon as the move saves): the move and the walk's word, never the rail
+    // rebuilt for it - that rail is read behind the answer (landed), and the press after it is free at once
     if (walkRoute) return (await api.post(`/api/walk/${walkRoute}`, { key: body.key || null, from_key: body.from_key || null, press: body.press || null,
-      read: body.read || [], fyi: fyiWant.current, ...(body.level ? { level: body.level } : {}), ...(body.how ? { how: body.how, note: body.note || null, until: body.until || null, pressed: body.pressed || null } : {}) })).data;
+      read: body.read || [], fyi: fyiWant.current, light: true, ...(body.level ? { level: body.level } : {}), ...(body.how ? { how: body.how, note: body.note || null, until: body.until || null, pressed: body.pressed || null } : {}) })).data;
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : "/api/concierge/say";
@@ -2050,8 +2052,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (fresh) holdPile(fresh); else loadPile(true);
       });
     }
-    // ...no rail rides along: read it, with the walk beside it
-    else loadPile(true);
+    // ...no rail rides along (a light answer, 2026-11-06): the rail on screen takes the walk's word from it - the same object in the ref and
+    // the state, so a read the press took off stays off (readGone.after) - and the rail is read behind it, never waited on
+    else { const p = withWalk(pileRef.current, data.walk); if (p !== pileRef.current) { pileRef.current = p; setPile(p); } loadPile(true); }
   }, [holdPile, loadPile, putOnTable, say]);
 
   // a line of the assistant's own that needs no turn
@@ -2099,14 +2102,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // done waited a whole round trip (400-600 ms against ~100 before)
     // ...the walk's row and the one put down are ONE ROW by key or alias (sameKey): a report that re-ran on the table has a new key
     const walkNow = walkOf(pileRef.current), railNow = pileRef.current?.items || [];
-    const onIt = !!putDown && sameKey(railNow, walkNow?.on, putDown, currentRef.current);
-    const below = onIt && walkNow.below ? walkNow.below
-      // ...AND BACK THE SAME WAY, the row above (walk.above) at its press (the owner, 2026-11-02: "the Back button takes way too long, not like
-      // the Next button"): it waited the whole round trip, the server's rail build with it, before the table moved
-      : how === "back" && fromKey && walkNow?.on === fromKey && walkNow.above ? walkNow.above
-      // ...AND A RAIL ROW PRESSED IS DRAWN AT ITS PRESS the same way, its task read since the pointer came down (taskDetail.js): the move's
-      // answer waited on the server's whole rail build, and a big task's row put nothing on the table for seconds (the owner, 2026-11-01)
-      : key && how === "next" && key !== currentRef.current?.key && !key.startsWith("fyis:") ? key : null;
+    // ...AND BACK THE SAME WAY, the row above (walk.above) at its press (the owner, 2026-11-02: "the Back button takes way too long, not like
+    // the Next button"), AND A RAIL ROW PRESSED, its task read since the pointer came down (taskDetail.js, 2026-11-01) - pressOnto
+    const { onIt, below } = pressOnto(walkNow, railNow, { putDown, how, fromKey, key, card: currentRef.current });
     // ...AN FYI BATCH TOO, from its rows (railwalk.as_item's shape): it stood as dots for the whole round trip, Next from the last task into
     // FYI slow where task to task was not (the owner, 2026-11-03: "next between task going into fyi still takes a while")
     const fyis = below?.startsWith("fyis:") ? below.slice(5).split(",").map((k) => railNow.find((r) => answersTo(r, k) && !r.settling)) : null;

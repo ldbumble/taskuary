@@ -379,6 +379,7 @@ def owner_answered_last(store, tid: int) -> bool:
 def shown_history(store, tid: int) -> list:
     """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
     each answer with the `summary` filed after it."""
+    from . import ownwork
     from .triage import own_words
     # ...EVERY RUN, in order: a chat task is one conversation (the owner, 2026-11-05: "the chat not showing prior runs as there is only one run per
     # task") - an earlier run is not folded away as "the earlier agent's conversation"; the next turn still continues the current run (history)
@@ -428,8 +429,13 @@ def shown_history(store, tid: int) -> list:
         else: msgs.insert(at, item)
     # INPUT FIRST (the owner, 2026-11-05: "input should always be first?"): a run that opens on an answer - a conversation picked back up -
     # opens on the mail that started the task, drawn above that answer as its trigger
-    if msgs and not msgs[0].get('brief') and msgs[0].get('role') == 'assistant':
-        got = [x for x in mail if str(x['JoinedAt']) <= str(rows[0].get('CreatedAt'))]
+    # ...AND ONE THAT OPENS ON THE OWNER'S OWN LINE (2026-11-06): a reply or a to-do no agent had touched starts on what the owner typed under
+    # the mail, not on a brief - and the mail above it left the chat the moment that line was filed (no brief took it, and `loose` only takes
+    # mail joined after the first row). It is the input that line answers, so it stands over it - what came in, never the timeline's own row
+    # for a task the owner started (ownwork.ensure: their own ask, signed You, which their line says again)
+    if msgs and not msgs[0].get('brief'):
+        got = [x for x in mail if str(x['JoinedAt']) <= str(rows[0].get('CreatedAt'))
+               and (msgs[0].get('role') == 'assistant' or (x.get('Channel') or '') != ownwork.CHANNEL)]
         if got: msgs.insert(0, {'id': f'came-in-{tid}', 'role': 'user', 'content': [{'type': 'text', 'text': ''}], 'brief': True,
                                 'createdAt': got[-1].get('CreatedAt'), 'mail': shown(got)})
     # ...and each answer with the summary filed after it (SUMMARY_TYPE): the turn's three parts, drawn under it
@@ -1335,6 +1341,11 @@ class GeneralSession:
         if connector_id is None and not pick:
             # the task's ROLE is not a candidate here - it names the instructions, never the brain
             if any(o['pick'] == saved.get('Pick') for o in provider_options(store)) and not _failed(store, saved['Pick']): pick = saved['Pick']
+        # ...and a first start nobody steered opens on the AI the owner set for this task's level in AI routing (brainroute.by_level)
+        if connector_id is None and not pick and model is None and not is_dock(store.get_task(task_id)):
+            from . import brainroute
+            lp = brainroute.level_pick(store, 'general', task_id) if brainroute.by_level(store) else None
+            if lp: pick, model = lp[0], lp[1] or None
         if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)

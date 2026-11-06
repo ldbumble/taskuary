@@ -437,28 +437,17 @@ def _lesson_card(store, tid: int, slug: str):
 
 
 def take_lesson(store, tid: int, lesson, agent: str = 'assistant'):
-    """The turn's lesson to its playbook's proposal (a new card, or the one waiting), else to LEARNED.md. Returns what was done: {'reviewId'},
-    {'learned': True}, or None for no lesson (empty, or carrying a secret - redact.scrub: what is learned is kept for good)."""
+    """The turn's lesson, to LEARNED.md - the one memory (the owner, 2026-11-05: "i thought we were using same memory learned.md"): named
+    for the kind of job when it has a playbook, so the agent reads it there next time that job comes. Playbooks stay the owner's own pages;
+    LEARNED.md's caps and consolidation keep it small. {'learned': True}, or None for no lesson (empty, or carrying a secret - redact.scrub)."""
     from .redact import scrub
-    from . import proposals
+    from . import learn
     l = lesson if isinstance(lesson, dict) else {}
     text = ' '.join(str(l.get('text') or '').split())[:LESSON_CHARS]
     if not text or scrub(text) != text: return None
     slug = slugify(l['playbook']) if str(l.get('playbook') or '').strip() else ''
-    page = read(slug) if slug and slug not in off() and store.get_setting('playbooks_enabled', '1') == '1' else None
-    if page is None:
-        from . import learn
-        learn.learn_from(store, f"agent_lesson on TQ-{tid}: what the agent found the hard way doing this kind of work - {text}")
-        return {'learned': True}
-    if text.lower() in {x.lower() for x in lessons_of(page)}: return None          # the page has it already
-    rv, p = _lesson_card(store, tid, slug)
-    if rv:
-        if text.lower() in {x.lower() for x in p['lessons']}: return {'reviewId': rv['ReviewId']}
-        ls = [*p['lessons'], text][-LESSONS_MAX:]
-        p = {**p, 'lessons': ls, 'text': with_lessons(page, ls), 'why': '; '.join(ls)[:300]}
-        store._exec('UPDATE review SET DraftText=? WHERE ReviewId=?', (json.dumps(p), rv['ReviewId']))
-        return {'reviewId': rv['ReviewId']}
-    made = proposals.queue(store, tid, {'action': 'amend_playbook', 'slug': slug, 'lessons': [text], 'text': with_lessons(page, [text]),
-                                        'why': text}, agent)
-    if made: logger.info(f'playbooks: {agent} proposed a lesson for "{slug}" on task {tid} (rv{made["reviewId"]})')
-    return made
+    page = read(slug) if slug else None
+    job = f'doing "{(parse(page).get("title") or slug)}" work' if page is not None else 'doing this kind of work'
+    learn.learn_from(store, f"agent_lesson on TQ-{tid}: what the agent found the hard way {job} - {text}")
+    logger.info(f'playbooks: {agent} learned a lesson on task {tid}{f" for {slug}" if page is not None else ""}')
+    return {'learned': True}

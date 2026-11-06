@@ -7,6 +7,8 @@
 // into the running CLI (the waiting room types it in - terminal.type_into), or picks the session back up when none runs (/continue-work).
 // The live terminal is a "Terminal" toggle on the chat, inside it, never a second column: it opens by itself only when the CLI's screen asks
 // what nothing typed here can answer (a chooser, a permission prompt, a sign-in), and the owner can open it to watch.
+// OVER ACP (acpcoding.py) the box is a prompt (sent when the turn ends, if one runs), Stop ends the turn (session/cancel), a permission is a
+// card here, and the Terminal is its commands' live output - offered only once there is some, never a blank pane.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TerminalIcon from "@mui/icons-material/TerminalRounded";
@@ -15,6 +17,10 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import WriteIcon from "@mui/icons-material/EditNoteRounded";
+import CloseIcon from "@mui/icons-material/Close";
+import DoneIcon from "@mui/icons-material/CheckBoxRounded";
+import NowIcon from "@mui/icons-material/IndeterminateCheckBoxRounded";
+import TodoIcon from "@mui/icons-material/CheckBoxOutlineBlankRounded";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { stillHeld } from "./heldLines.js";
@@ -68,6 +74,12 @@ const EditRow = ({ p }) => (
       : <div className="tq-dv-empty">Its log keeps no diff for this one.</div>}</div>
   </details>);
 
+// ITS PLAN, A CHECKLIST: done ticked, the one it is on marked, the rest open
+const PLAN_ICON = { done: DoneIcon, now: NowIcon, todo: TodoIcon };
+const PlanRow = ({ p }) => (
+  <ul className="tq-cc-plan" data-tq-plan="" aria-label="The agent's plan">{p.items.map((x, i) => { const Icon = PLAN_ICON[x.state] || TodoIcon;
+    return <li key={i} data-tq-plan-item={x.state}><Icon aria-hidden sx={{ fontSize: 15 }} /><span>{x.text}</span></li>; })}</ul>);
+
 // its work: open while it runs, the newest LIVE_SHOWN steps; once it has answered, one "N steps" line that opens
 const Work = ({ steps, running }) => {
   if (running) { const cut = Math.max(0, steps.length - LIVE_SHOWN);
@@ -84,6 +96,7 @@ const Turn = ({ r }) => (
     <div className="tq-aui-agent-body">
       {r.parts.map((p, i) => p.type === "said" ? <Md key={p.id} text={p.text} />
         : p.type === "edit" ? <EditRow key={p.id} p={p} />
+        : p.type === "plan" ? <PlanRow key={p.id} p={p} />
         : <Work key={p.id} steps={p.steps} running={r.running && i === r.parts.length - 1} />)}
       {r.running && <div className="tq-aui-thinking" role="status"><i /><i /><i /><span>Working on this…</span></div>}
     </div>
@@ -107,7 +120,10 @@ export default function CodingChat({ task, term = null, next = null, landing = n
   // words however spelled back, and only a line logged SINCE the hold, so a "yes" said earlier never takes a new "yes" away
   const yours = useMemo(() => rows.filter((r) => r.kind === "you").length, [rows]);
   useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, rows.filter((r) => r.kind === "you").map((r) => ({ role: "user", content: [{ type: "text", text: r.text }] }))) : h)); }, [rows]);
-  const termShown = !!live && (termPick ?? !!live.asking);
+  // ...a session over ACP has a terminal only once a command printed something (codingchat.live_of `terminal`)
+  const hasTerm = !!live && live.terminal !== false, acp = live?.transport === "acp";
+  const termShown = hasTerm && (termPick ?? !!live.asking);
+  const stop = () => api.post(`/api/tasks/${tid}/agent/cancel`).then(() => setTimeout(load, 600)).catch((x) => setErr(x?.response?.data?.detail || x?.message || "It did not stop"));
   const vp = useRef(null), stuck = useRef(true);
   useEffect(() => { const v = vp.current; if (v && stuck.current) v.scrollTop = v.scrollHeight; }, [rows.length, held.length, !!next, !!landing]);   // eslint-disable-line react-hooks/exhaustive-deps
   const closed = ["done", "dropped"].includes(String(task.Status || ""));
@@ -158,11 +174,14 @@ export default function CodingChat({ task, term = null, next = null, landing = n
             chips={came ? <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
               sx={{ cursor: came.onOpen ? "pointer" : "default" }} /> : null}
             /* THE TERMINAL, A TOGGLE ON THE CHAT: only while a CLI runs */
-            extra={live && <button type="button" className="tq-cc-term" data-tq-terminal-toggle="" aria-pressed={termShown ? "true" : "false"}
+            extra={<>{acp && live.working && <button type="button" className="tq-aui-cancel" data-tq-stop-turn="" aria-label="Stop response"
+              title="Stops this turn - the session stays, and what you type next carries on" onClick={stop}><CloseIcon fontSize="small" /></button>}
+              {hasTerm && <button type="button" className="tq-cc-term" data-tq-terminal-toggle="" aria-pressed={termShown ? "true" : "false"}
               title={termShown ? "Hide the agent's terminal" : "Watch the agent's terminal - and answer what only it can"} onClick={() => setTermPick(!termShown)}>
-              <TerminalIcon sx={{ fontSize: 15 }} /><span>Terminal</span></button>} />
+              <TerminalIcon sx={{ fontSize: 15 }} /><span>Terminal</span></button>}</>} />
           {err && <div className="tq-aui-asking-err" role="alert" style={{ padding: "4px 4px 0" }}>{err}</div>}
-          <div className="tq-aui-hint">{live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}</div>
+          <div className="tq-aui-hint">{acp ? (live.working ? "Enter sends it when this turn ends · Shift+Enter adds a line" : "Enter sends it to the agent · Shift+Enter adds a line")
+            : live ? "Enter types it into the running agent · Shift+Enter adds a line" : "Enter picks the session back up with what you wrote · Shift+Enter adds a line"}</div>
         </div>
       </div>
     </Box>

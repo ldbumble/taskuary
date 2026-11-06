@@ -314,6 +314,7 @@ class ACPCoding:
                 except Exception as e: logger.debug(f'acp coding: a done callback raised - {e}')
         stop, said, ok = None, '', False
         self.in_turn = True
+        since, t0 = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), time.monotonic()
         try: stop, said = self.client.prompt(text); ok = True
         except acp_mod.ACPAgentError as e:
             logger.warning(f'acp coding {self.sid}: the turn failed - {e}')
@@ -323,8 +324,17 @@ class ACPCoding:
             try: self.steps.flush(stop if ok else 'error')
             except Exception as e: logger.debug(f'acp coding: steps not flushed - {e}')
         self.stop_reason, self.turns = stop, self.turns + 1
+        if ok: self._used(since, int((time.monotonic() - t0) * 1000))
         if not self.client.alive(): return self._gone()
         self._idle(said)
+
+    def _used(self, since: str, ms: int):
+        "What the turn used - the adapter's count, else the CLI's own log - added onto this session's route row (aiusage.coding_turn)."
+        from . import aiusage
+        if not (self.store and self.task_id): return
+        try: use = aiusage.acp_turn(self.cli, self.client.last_turn, self.client.session_id, since)
+        except Exception as e: logger.debug(f'acp coding {self.sid}: what the turn used was not read - {e}'); return
+        aiusage.coding_turn(self.store, self.task_id, self.sid, self.cli, self.started, ms, use)
 
     def _idle(self, said: str = '', turn: bool = True):
         "A turn ended: the agent waits on the owner, the Board hears it, and what waited in the waiting room goes in now."

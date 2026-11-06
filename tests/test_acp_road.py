@@ -186,8 +186,9 @@ def test_the_switch_is_a_setting_on_the_page_and_on_by_default():
 # ── gears, resume, a kept connection ──────────────────────────────────────────────────────────────────────────────────────
 def test_the_run_s_model_and_effort_are_set_as_session_options_and_a_missing_one_is_said():
     """The adapters list their models and efforts as config options (claude: opus, sonnet...; codex: gpt-6.1-sol...) - set there, not
-    as a --model flag the adapter has no use for. One the agent does not list is said on the run, never sent to fail the session."""
-    for pick, said, note in (('sonnet@low', 'model=sonnet effort=low', None), ('gpt-9@low', 'model=opus effort=low', "no model 'gpt-9'")):
+    as a --model flag the adapter has no use for. One the agent has nothing near is said in plain words, never sent to fail the session."""
+    for pick, said, note in (('sonnet@low', 'model=sonnet effort=low', None),
+                             ('gpt-9@low', 'model=opus effort=low', 'gpt-9 is not available on this claude sign-in, so this ran on opus')):
         ev, c = [], acp.ACPClient(FAKE[0], FAKE[1:], timeout=30)
         try:
             c.connect(); c.new_session(HERE)

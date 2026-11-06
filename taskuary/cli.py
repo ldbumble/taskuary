@@ -105,12 +105,12 @@ def _open_keyed(url):
 # moment a session unsets its own. An owner's session already has full permissions, so this buys nothing there and stays
 # as it was. A stranger's session runs only the agent commands that go over HTTP with its own task-bound token, where the
 # server's STRANGER scope decides.
-AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'reply_not_needed', 'board', 'learned', 'upvote', 'downvote', 'comment',
+AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'tick', 'untick', 'done', 'note', 'waiting_on', 'reply_not_needed', 'withdraw_draft', 'board', 'learned', 'upvote', 'downvote', 'comment',
               'search', 'message', 'memory',        # ...and the owner's mail history and memory, which a stranger's task never reads
               'sign_form',                          # ...and the owner's signature, which never goes on a stranger's form
               'check_back',                         # ...and a wake of its own later, which a stranger's words never schedule
               'use_repo')                           # ...and which of the owner's checkouts it works in (repochoice)
-STRANGER_ACTS = AGENT_ACTS[:12]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
+STRANGER_ACTS = AGENT_ACTS[:13]                     # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
             "session never borrows it. Restart the session from its task.")
@@ -338,6 +338,8 @@ def main():
     ap.add_argument('--reply-not-needed', metavar='WHY', help='the reply waiting on this task is no longer needed (someone else answered, '
                                                              'the owner already did) - say why in one line. The draft stays, marked, with '
                                                              "the owner's Send still on it; nothing is sent, deleted or closed.")
+    ap.add_argument('--withdraw-draft', metavar='WHY', help='the reply draft waiting on this task no longer answers the newest message - '
+                                                           'take it off the table, why in one line. It is kept under Not sent; nothing is sent.')
     ap.add_argument('--follow-up', action='store_true',
                     help='with --reply: the owner asked you for ANOTHER message after your reply already went - it is saved as a '
                          'follow-up to it. Without this, a second reply to a message already answered (nothing new from them) is refused.')
@@ -478,6 +480,18 @@ def main():
         r, out = got
         print("marked not needed - the draft stays for the owner, Send still sends it." if out.get('ok')
               else f"not marked: {out.get('why') or out.get('detail') or r.text[:200]}")
+        return
+    if args.withdraw_draft:
+        import os, sys
+        try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, OSError): pass
+        tid = os.environ.get('TASKUARY_TASK')
+        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no draft to withdraw'); return
+        got = _post('/api/agent/withdraw-draft', {'task_id': int(tid), 'why': args.withdraw_draft, 'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
+        if not got: return
+        r, out = got
+        print("withdrawn - the draft is kept under Not sent; nothing was sent." if out.get('ok')
+              else f"not withdrawn: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
     if args.check_back:
         import os, sys

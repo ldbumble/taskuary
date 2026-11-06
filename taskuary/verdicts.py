@@ -391,6 +391,22 @@ def not_needed(store, tid: int, why: str, by: str) -> dict:
     return {'ok': True, 'review_id': rv['ReviewId']}
 
 
+# ...AND ONE THAT NO LONGER ANSWERS IS WITHDRAWN (the owner, 2026-11-06: corrected, the agent left its earlier draft standing under the newest
+# turn as if it answered the correction): the agent takes it off the table itself, with why. Closed unsent like a superseded draft - its words
+# kept under Close out's "Not sent", Bring it back still sends it - never deleted
+def withdraw(store, tid: int, why: str, by: str) -> dict:
+    "Withdraw the task's pending reply draft, for `why`. {'ok': False, 'why': ...} when there is none or no reason was given."
+    from .wrapup import WITHDRAWN
+    why = ' '.join(str(why or '').split())
+    if not why: return {'ok': False, 'why': 'say in one line why the draft no longer answers - what the newest message changed'}
+    rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
+    if not rv: return {'ok': False, 'why': 'no draft is waiting on this task, so there is nothing to withdraw'}
+    if not store.decide_review(rv['ReviewId'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
+        return {'ok': False, 'why': 'that draft is being sent or already went - it cannot be withdrawn'}
+    store.add_comment(tid, by, 'agent', f"Withdrew the drafted reply: {why.rstrip('.')}. It is kept under Not sent - Bring it back still sends it.")
+    return {'ok': True, 'review_id': rv['ReviewId']}
+
+
 def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
     """Reconcile task/agent state after its reviewed reply really left the machine."""
     task_id = rv.get('TaskId')

@@ -247,6 +247,28 @@ def supersede(store, rv, actor='agent'):
     "An earlier session's draft closed unsent, its words kept - a newer session's reply is the task's now."
     store.decide_review(rv['ReviewId'], 'closed_unsent', None, actor, note=SUPERSEDED)
 
+# A TURN'S DRAFT IS THAT TURN'S (the owner, 2026-11-06: "it's just resending the original response that was already sent"): a chat turn that
+# filed a draft keeps it (store.snap_draft). A later turn's new letter is a NEW draft - the earlier one closed as superseded, its words kept
+# under its own turn and under Close out's "Not sent" - so there is one reply pending per person, and it is the newest turn's
+REPLACED = "superseded - a later turn's reply took its place"
+WITHDRAWN = 'withdrawn - '
+def left_by(store, rid):
+    "{CommentId, CreatedAt} of the chat turn that last left review `rid` as it stands (store.snap_draft) - None when no filed turn did."
+    return store._one('SELECT CommentId, CreatedAt, Text FROM draft_snapshot WHERE ReviewId=? ORDER BY Id DESC LIMIT 1', (rid,))
+def an_earlier_turns(store, rv) -> bool:
+    "Is this pending draft one a filed chat turn left - so a new letter now is a later turn's, and takes its place as a new draft?"
+    s = left_by(store, rv['ReviewId']) if rv else None
+    return bool(s) and s.get('Text') == rv.get('DraftText')
+
+def sent_replies(store, task_id: int, n: int = 6) -> list:
+    "The replies that went out on this task, newest last: [{review, at, to, text}]."
+    from .continuity import sent_to
+    rows = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind NOT IN ('action','slot') AND (DeliveryState='sent' OR "
+                       "(DeliveryState IS NULL AND Status IN ('approved','edited','sent'))) AND COALESCE(NULLIF(FinalText,''), DraftText, '')<>'' "
+                       "ORDER BY DecidedAt, ReviewId", (task_id,))
+    return [{'review': r['ReviewId'], 'at': r.get('DecidedAt') or r.get('CreatedAt'), 'to': sent_to(store, r),
+             'text': str(r.get('FinalText') or r.get('DraftText') or '')} for r in rows[-n:]]
+
 def _sid_now(store, task_id):
     from . import workerstate as ws
     try: return ws.current_sid(store, task_id)
@@ -424,6 +446,9 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
     # ...and a reply pending to SOMEONE ELSE is theirs: rewriting it into this letter took the one to them off the table (2026-11-02)
     if live and live.get('MessageId') and _person(store, live['MessageId']) != _person(store, mid): live = None
     if sid and live and stale_draft(store, live, sid): supersede(store, live, agent); live = None
+    # ...and one an EARLIER TURN left is that turn's answer: a different letter now is this turn's own draft, the old one superseded
+    if live and an_earlier_turns(store, live) and _words(live.get('DraftText')) != _words(text):
+        store.decide_review(live['ReviewId'], 'closed_unsent', None, agent, note=REPLACED); live = None
     why = f'{agent} wrote this reply in its session - approve to send'
     if sent:
         from .continuity import clock

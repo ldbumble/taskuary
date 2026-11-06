@@ -32,7 +32,7 @@ class Fixable(RuntimeError):
 def fix_of(e) -> dict | None: return getattr(e, 'fix', None) or auth_fix(e)
 # A REFUSED SIGN-IN is fixed by signing in again, never by sending again: an SMTP 535 or a Graph 401/403 left the Advisor
 # advising Send, with no button to the mailbox (error sweep, 2026-10-18)
-_AUTH = re.compile(r'\((401|403)\)|535|authentication (unsuccessful|failed)|invalid_grant|AADSTS\d+|token (has )?expired', re.I)
+_AUTH = re.compile(r'\((401|403)\)|\b535\b|authentication (unsuccessful|failed)|invalid_grant|AADSTS\d+|token (has )?expired', re.I)
 def auth_fix(e) -> dict | None:
     return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(str(e)) else None
 MAIL = ('Connect a mailbox', words.href('mail'))          # the places, by their one link (words.json)

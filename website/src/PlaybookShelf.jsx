@@ -1,7 +1,8 @@
-// PLAYBOOKS LIVE ON ABOUT YOU, beside your docs and what was learned (the owner, 2026-11-06: one page for "how you do your job"; they
-// were on the Reports page from 2026-10-21, and Settings before that). A playbook is how this company does one kind of job - triage matches arriving mail to its `when`
+// PLAYBOOKS LIVE ON THE REPORTS PAGE, beside reports and workflows (the owner, 2026-10-21: "Reports / Workflows / Playbooks"; Settings
+// is for regular configuration). A playbook is how this company does one kind of job - triage matches arriving mail to its `when`
 // line - so it sits with the other things that do work, not with the knobs. The list is the playbooks on disk, each with its own
 // on/off switch (off = kept, never matched); one opens in the playbook editor (DocsView, which owns the words and Delete).
+// ...About you held them for a few hours on 2026-11-06, and gave them back (the owner: "it's more about how you work, not about you").
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, Switch, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -15,8 +16,7 @@ import { takePlaybookAsk } from "./playbookOpen.js";
 
 export { PB_OPEN, pbOpen } from "./playbookOpen.js";
 
-// `on`: read them - false where a page holds the hook but not the shelf (Settings beside About you, SettingsView)
-export function usePlaybooks(on = true) {
+export function usePlaybooks() {
   const [books, setBooks] = useState(null);              // null until read (collectionsStartNull): "none yet" is not "not read"
   const [deleted, setDeleted] = useState(null);          // Recently deleted: kept 30 days, Restore puts one back as it was
   const [err, setErr] = useState("");
@@ -24,7 +24,7 @@ export function usePlaybooks(on = true) {
     try { const { data } = await api.get("/api/playbooks"); setBooks(data.data || []); setDeleted(data.deleted || []); setErr(""); }
     catch (e) { setErr(e?.response?.data?.detail || "The playbooks could not be read."); }
   }, []);
-  useEffect(() => { if (on) load(); }, [load, on]);
+  useEffect(() => { load(); }, [load]);
   // ...switched off is kept for later and never matched by triage (PUT /api/playbooks/<slug>/enabled)
   const setOn = useCallback(async (slug, on) => {
     setBooks((bs) => (bs || []).map((b) => (b.slug === slug ? { ...b, enabled: on } : b)));

@@ -10,7 +10,8 @@ const src = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta
 // 2026-10-15: "replace it with the filter being a little larger"), then the counts line.
 test("the sidebar's buttons are New, Reports, Connections, Hub, Settings, in that order", async () => {
   const { SIDE_NAV } = await import("../src/sideNav.js");
-  assert.deepEqual(SIDE_NAV.map((n) => n.key), ["new", "reports", "connections", "hub", "about", "settings"]);
+  assert.deepEqual(SIDE_NAV.map((n) => n.key), ["new", "reports", "connections", "hub", "settings"]);
+  assert.ok(!SIDE_NAV.some((n) => n.key === "about"), "About you is the avatar in the top bar's corner (2026-11-06)");
   for (const n of SIDE_NAV) assert.ok(n.label && n.hint, n.key);
 });
 

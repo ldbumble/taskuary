@@ -2387,7 +2387,7 @@ def pages_block(store) -> str:
             # list had (2026-10-26)
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; a new dashboard #report=new-dashboard; the Reports page and its list of reports #report=reports; the '
-            'workflows #report=workflows; the dashboards #report=dashboards\n'
+            'workflows #report=workflows; the dashboards #report=dashboards; the playbooks #report=playbooks\n'
             # ...and NEW ITSELF, blank (canvasLinks #new-task): "I want to start something new" had no address, and a job with no words yet
             # is not task.create_from_text's to write (2026-11-02)
             '- New, the card that starts something, empty on one of its tabs: #new-task&kind=<agent|send|note|meeting|goal|report|dashboard|'

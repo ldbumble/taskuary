@@ -9,6 +9,7 @@ import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
 import { ABOUT_SECTIONS, secId } from "./settingsMap.js";
+import { PROFILE_CHANGED } from "./profileAvatar.js";
 
 const [S_YOU, S_CHANNEL, S_TOLD] = ABOUT_SECTIONS;   // the rail's sub-entries scroll to these three
 
@@ -20,14 +21,16 @@ export default function AboutYou() {
   const [p, setP] = useState(null);
   const [err, setErr] = useState("");
   const [preview, setPreview] = useState(null);       // {svg, style, seed} not yet kept
+  // ...and the top bar's corner draws the same face: a new name or avatar redraws it (ProfileButton)
+  const changed = () => window.dispatchEvent(new Event(PROFILE_CHANGED));
   const load = useCallback(async () => {
     try { setP((await api.get("/api/whoami")).data); setErr(""); }
     catch (e) { setErr(e?.response?.data?.detail || "could not load your profile"); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  const save = async (fields) => { try { setP((await api.patch("/api/whoami", fields)).data); } catch (e) { setErr(e?.response?.data?.detail || "save failed"); } };
+  const save = async (fields) => { try { setP((await api.patch("/api/whoami", fields)).data); changed(); } catch (e) { setErr(e?.response?.data?.detail || "save failed"); } };
   const saveOwner = async (name, email) => {
-    try { await api.put("/api/owner", { name: name || p.facts.owner_name || "the owner", email }); load(); }
+    try { await api.put("/api/owner", { name: name || p.facts.owner_name || "the owner", email }); load(); changed(); }
     catch (e) { setErr(e?.response?.data?.detail || "save failed"); }
   };
   const shuffle = async (style) => {

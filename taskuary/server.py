@@ -11455,10 +11455,10 @@ def set_combine_level(kind: str, body: CombineBody):
 
 @app.get('/api/assistant/doorways')
 def assistant_doorways():
-    """Where the assistant can be reached, per channel - for Settings -> Assistant on your phone."""
+    """Where the assistant can be reached, per channel - for Settings -> Phone & chats - and the walk handed to one right now, if any."""
     from . import remote_assistant
     return {'data': remote_assistant.doorway_state(store),
-            'standing': store.get_setting('phone_assistant') == '1'}
+            'standing': store.get_setting('phone_assistant') == '1', 'handoff': remote_assistant.handoff(store)}
 
 class DoorwayBody(BaseModel):
     channel: str

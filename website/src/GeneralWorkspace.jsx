@@ -265,13 +265,17 @@ const WorkSteps = ({ data }) => {
   const at = React.useContext(WorkCtx), now = useAuiState((s) => live(s.message)), ended = useAuiState((s) => !!s.message.metadata?.custom?.summary);
   const key = foldKey(useAuiState((s) => s.message.id)), [open, setOpen] = useState(() => OPEN_FOLDS.has(key));
   useEffect(() => { setOpen(OPEN_FOLDS.has(key)); }, [key]);
-  if (!at || (!now && !ended)) return <AgentSteps data={data} />;
+  // ...AND A TURN THAT ENDED HAS NOTHING STILL AT WORK (the owner, 2026-11-05: a step kept its spinner under the answer): a call that never got
+  // its result before the answer was filed is drawn done, never circling
+  if (!now && (data?.steps || []).some((s) => s.status === "running")) data = { ...data, steps: data.steps.map((s) => (s.status === "running" ? { ...s, status: "done" } : s)) };
+  const chat = React.useContext(ChatCtx), keepOut = !chat;
+  // ...and in a chat a step is never "failed" (below) - a turn that ended with no summary too: its "failed" stood under a plain answer
+  if (!at || (!now && !ended)) return <AgentSteps data={chat ? { ...data, steps: (data?.steps || []).map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) } : data} />;
   // a failure is never folded away: it is its own line under the fold (a retried one that worked is "recovered", and folds with the rest)
   // ...where the chat is home and the turn ENDED in its summary, a step that failed on the way is part of the way, folded with the rest (the
   // owner, 2026-11-05: "what are all those failures?") - only a turn that failed keeps its failures out
   // ...IN A CHAT A STEP IS NEVER "FAILED" (the owner, 2026-11-05: "it's just a internal thought failure, for the user the task is getting done.
   // failure means nothing"): working or ended, every step rides the one fold as a plain step - a TURN that failed says so in its own words
-  const chat = React.useContext(ChatCtx), keepOut = !chat;
   const all = data?.steps || [], bad = keepOut ? all.filter((s) => s.kind === "error" || s.status === "error") : [], n = all.filter(isWork).length;
   const toggle = (e) => { const o = e.currentTarget.open; if (o) OPEN_FOLDS.add(key); else OPEN_FOLDS.delete(key); setOpen(o); };
   const calm = chat ? all.map((s) => (s.status === "error" || s.status === "recovered" ? { ...s, status: "done" } : s)) : all;
@@ -653,11 +657,16 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   shown.current = messages;
   const applied = useRef(revision);
   useEffect(() => {
-    if (applied.current === revision) return;
-    applied.current = revision;
-    // this pane's own stream is the live truth while it runs; its `done` files the server's copy
-    if (runtime.thread.getState().isRunning) return;
-    runtime.thread.reset(initial(shown.current));
+    if (applied.current === revision) return undefined;
+    // this pane's own stream is the live truth while it runs; its `done` files the server's copy - taken the moment the run ends: kept, the
+    // turn this pane streamed wore the runtime's own stamp, made as it began, and read "ran 0s" over an answer that took minutes (the owner,
+    // 2026-11-05)
+    if (!runtime.thread.getState().isRunning) { applied.current = revision; runtime.thread.reset(initial(shown.current)); return undefined; }
+    const off = runtime.thread.subscribe(() => {
+      if (runtime.thread.getState().isRunning || applied.current === revision) return;
+      applied.current = revision; off(); runtime.thread.reset(initial(shown.current));
+    });
+    return off;
   }, [revision, runtime]);
   const prompted = useRef(null);
   useEffect(() => {
@@ -940,7 +949,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
   const clearAttachments = useCallback((path) => setAttachments((old) => path ? old.filter((a) => a.path !== path) : []), []);
-  const sent = useCallback((payload) => accept(payload), [accept]);
+  const sent = useCallback((payload) => { accept(payload); setRevision((k) => k + 1); }, [accept]);
   /* THE SESSION IS KNOWN AT THE START OF THE TURN, not its end. The stream's first event carries it
      (server.assistant_stream puts `start` before the prompt is sent), and nothing read it: the pane
      learned its session only from `done`, so a browser that opened ten seconds into a first turn was

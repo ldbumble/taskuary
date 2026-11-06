@@ -6,10 +6,10 @@
   <rect width="1640" height="820" rx="14" fill="#f6f4f1"/>
   <path d="M68 110 L180 52 L292 110 L180 168 Z" fill="#eef1f3" stroke="#55697a" stroke-width="1.3"/>
   <text x="180" y="106.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">What did the</text>
-  <text x="180" y="123.4" text-anchor="middle" font-size="12.5" fill="#6e685f">owner send?</text>
+  <text x="180" y="123.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">owner send?</text>
   <path d="M94 400 L180 344 L266 400 L180 456 Z" fill="#eef1f3" stroke="#55697a" stroke-width="1.3"/>
   <text x="180" y="396.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Which</text>
-  <text x="180" y="413.4" text-anchor="middle" font-size="12.5" fill="#6e685f">choice?</text>
+  <text x="180" y="413.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">choice?</text>
   <rect x="70" y="688" width="300" height="64" rx="8" fill="#fffdfb" stroke="#6f8a6e" stroke-width="1.3"/>
   <text x="220" y="716.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The model reads them</text>
   <text x="220" y="733.4" text-anchor="middle" font-size="12.5" fill="#6e685f">with the same tools as the desktop</text>
@@ -19,84 +19,84 @@
   <path d="M68 110 C26 110 26 720 68 720" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
   <rect x="40" y="549" width="109" height="17" rx="4" fill="#f6f4f1"/>
   <text x="44" y="562" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">their own words</text>
-  <path d="M266 400 L450 400" fill="none" stroke="#8f877b" stroke-width="1.3"/>
-  <path d="M450 60 L450 765" fill="none" stroke="#8f877b" stroke-width="1.3"/>
-  <path d="M450 60 L698 60" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="598" y="39" width="96" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="690" y="52" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Next · Got it</text>
-  <path d="M450 190 L728.0 190" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="622" y="169" width="102" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="720" y="182" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">an action word</text>
-  <path d="M450 450 L698 450" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="592" y="429" width="102" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="690" y="442" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Walk a section</text>
-  <path d="M450 565 L698 565" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="658" y="544" width="36" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="690" y="557" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Undo</text>
-  <path d="M450 665 L698 665" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="433" y="644" width="261" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="690" y="657" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Connections · Reports · Hub · Settings</text>
-  <path d="M450 765 L698 765" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="658" y="744" width="36" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="690" y="757" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">More</text>
-  <rect x="700" y="31" width="330" height="58" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
-  <text x="865" y="56.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The desktop's Next</text>
-  <text x="865" y="73.4" text-anchor="middle" font-size="12.5" fill="#6e685f">the next item, no summary reprinted</text>
-  <path d="M730.0 190 L865.0 136 L1000.0 190 L865.0 244 Z" fill="#eef1f3" stroke="#55697a" stroke-width="1.3"/>
-  <text x="865" y="186.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Does its card</text>
-  <text x="865" y="203.4" text-anchor="middle" font-size="12.5" fill="#6e685f">ask a question?</text>
-  <rect x="700" y="282" width="330" height="76" rx="8" fill="#fffdfb" stroke="#6f8a6e" stroke-width="1.3"/>
-  <text x="865" y="307.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Runs now</text>
-  <text x="865" y="324.9" text-anchor="middle" font-size="12.5" fill="#6e685f">the receipt, then the next item</text>
-  <text x="865" y="341.9" text-anchor="middle" font-size="12.5" fill="#6e685f">if the table was settled</text>
-  <rect x="700" y="412" width="330" height="76" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
-  <text x="865" y="437.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Its first row</text>
-  <text x="865" y="454.9" text-anchor="middle" font-size="12.5" fill="#6e685f">Next and every act stay in the section</text>
-  <text x="865" y="471.9" text-anchor="middle" font-size="12.5" fill="#6e685f">until it is empty, then it says so</text>
-  <rect x="700" y="539" width="330" height="52" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
-  <text x="865" y="569.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The receipt's undo, run once</text>
-  <rect x="700" y="627" width="330" height="76" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
-  <text x="865" y="652.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">A list, then a section or one entry</text>
-  <text x="865" y="669.9" text-anchor="middle" font-size="12.5" fill="#6e685f">with Back - ten at a time, and More</text>
-  <text x="865" y="686.9" text-anchor="middle" font-size="12.5" fill="#6e685f">when it would not fit a poll</text>
-  <rect x="700" y="736" width="330" height="58" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
-  <text x="865" y="761.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The rest of the message</text>
-  <text x="865" y="778.4" text-anchor="middle" font-size="12.5" fill="#6e685f">then the same choices</text>
-  <path d="M865.0 244 L865.0 280" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="871" y="253" width="23" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="875" y="266" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">no</text>
-  <path d="M1000.0 190 L1060 190" fill="none" stroke="#8f877b" stroke-width="1.3"/>
-  <path d="M1060 60 L1060 262" fill="none" stroke="#8f877b" stroke-width="1.3"/>
-  <path d="M1060 60 L1238 60" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="1158" y="39" width="76" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="1230" y="52" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Not for me</text>
-  <path d="M1060 160 L1238 160" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="1138" y="139" width="96" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="1230" y="152" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Send to agent</text>
-  <path d="M1060 262 L1238 262" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="1066" y="241" width="168" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="1230" y="254" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">coding, checkout unclear</text>
-  <rect x="1240" y="31" width="360" height="58" rx="8" fill="#fffdfb" stroke="#a09787" stroke-width="1.3"/>
-  <text x="1420" y="56.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">How far?</text>
-  <text x="1420" y="73.4" text-anchor="middle" font-size="12.5" fill="#6e685f">once · from now on · a rule in Settings · Cancel</text>
-  <rect x="1240" y="124" width="360" height="72" rx="8" fill="#fffdfb" stroke="#a09787" stroke-width="1.3"/>
-  <text x="1420" y="147.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">What should it do?</text>
-  <text x="1420" y="164.9" text-anchor="middle" font-size="12.5" fill="#6e685f">your words or a voice note</text>
-  <text x="1420" y="181.9" text-anchor="middle" font-size="12.5" fill="#6e685f">Send to agent as it is · Cancel</text>
-  <rect x="1240" y="233" width="360" height="58" rx="8" fill="#fffdfb" stroke="#a09787" stroke-width="1.3"/>
-  <text x="1420" y="258.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Which repository?</text>
-  <text x="1420" y="275.4" text-anchor="middle" font-size="12.5" fill="#6e685f">the best guess first · Cancel</text>
+  <path d="M266 400 L440 400" fill="none" stroke="#8f877b" stroke-width="1.3"/>
+  <path d="M440 60 L440 765" fill="none" stroke="#8f877b" stroke-width="1.3"/>
+  <path d="M440 60 L718 60" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="618" y="39" width="96" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="710" y="52" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Next · Got it</text>
+  <path d="M440 190 L748.0 190" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="642" y="169" width="102" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="740" y="182" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">an action word</text>
+  <path d="M440 450 L718 450" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="612" y="429" width="102" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="710" y="442" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Walk a section</text>
+  <path d="M440 565 L718 565" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="678" y="544" width="36" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="710" y="557" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Undo</text>
+  <path d="M440 665 L718 665" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="453" y="644" width="261" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="710" y="657" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Connections · Reports · Hub · Settings</text>
+  <path d="M440 765 L718 765" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="678" y="744" width="36" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="710" y="757" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">More</text>
+  <rect x="720" y="31" width="330" height="58" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="885" y="56.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The desktop's Next</text>
+  <text x="885" y="73.4" text-anchor="middle" font-size="12.5" fill="#6e685f">the next item, no summary reprinted</text>
+  <path d="M750.0 190 L885.0 136 L1020.0 190 L885.0 244 Z" fill="#eef1f3" stroke="#55697a" stroke-width="1.3"/>
+  <text x="885" y="186.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Does its card</text>
+  <text x="885" y="203.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">ask a question?</text>
+  <rect x="720" y="282" width="330" height="76" rx="8" fill="#fffdfb" stroke="#6f8a6e" stroke-width="1.3"/>
+  <text x="885" y="307.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Runs now</text>
+  <text x="885" y="324.9" text-anchor="middle" font-size="12.5" fill="#6e685f">the receipt, then the next item</text>
+  <text x="885" y="341.9" text-anchor="middle" font-size="12.5" fill="#6e685f">if the table was settled</text>
+  <rect x="720" y="412" width="330" height="76" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="885" y="437.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Its first row</text>
+  <text x="885" y="454.9" text-anchor="middle" font-size="12.5" fill="#6e685f">Next and every act stay in the section</text>
+  <text x="885" y="471.9" text-anchor="middle" font-size="12.5" fill="#6e685f">until it is empty, then it says so</text>
+  <rect x="720" y="539" width="330" height="52" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="885" y="569.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The receipt's undo, run once</text>
+  <rect x="720" y="627" width="330" height="76" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="885" y="652.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">A list, then a section or one entry</text>
+  <text x="885" y="669.9" text-anchor="middle" font-size="12.5" fill="#6e685f">with Back - ten at a time, and More</text>
+  <text x="885" y="686.9" text-anchor="middle" font-size="12.5" fill="#6e685f">when it would not fit a poll</text>
+  <rect x="720" y="736" width="330" height="58" rx="8" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
+  <text x="885" y="761.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">The rest of the message</text>
+  <text x="885" y="778.4" text-anchor="middle" font-size="12.5" fill="#6e685f">then the same choices</text>
+  <path d="M885.0 244 L885.0 280" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="891" y="253" width="23" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="895" y="266" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">no</text>
+  <path d="M1020.0 190 L1080 190" fill="none" stroke="#8f877b" stroke-width="1.3"/>
+  <path d="M1080 60 L1080 262" fill="none" stroke="#8f877b" stroke-width="1.3"/>
+  <path d="M1080 60 L1258 60" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="1178" y="39" width="76" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="1250" y="52" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Not for me</text>
+  <path d="M1080 160 L1258 160" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="1158" y="139" width="96" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="1250" y="152" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">Send to agent</text>
+  <path d="M1080 262 L1258 262" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="1086" y="241" width="168" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="1250" y="254" text-anchor="end" font-size="12.5" font-style="italic" fill="#6e685f">coding, checkout unclear</text>
+  <rect x="1260" y="31" width="340" height="58" rx="8" fill="#fffdfb" stroke="#a09787" stroke-width="1.3"/>
+  <text x="1430" y="56.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">How far?</text>
+  <text x="1430" y="73.4" text-anchor="middle" font-size="12.5" fill="#6e685f">once · from now on · a rule in Settings · Cancel</text>
+  <rect x="1260" y="124" width="340" height="72" rx="8" fill="#fffdfb" stroke="#a09787" stroke-width="1.3"/>
+  <text x="1430" y="147.9" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">What should it do?</text>
+  <text x="1430" y="164.9" text-anchor="middle" font-size="12.5" fill="#6e685f">your words or a voice note</text>
+  <text x="1430" y="181.9" text-anchor="middle" font-size="12.5" fill="#6e685f">Send to agent as it is · Cancel</text>
+  <rect x="1260" y="233" width="340" height="58" rx="8" fill="#fffdfb" stroke="#a09787" stroke-width="1.3"/>
+  <text x="1430" y="258.4" text-anchor="middle" font-size="14" font-weight="700" fill="#262521">Which repository?</text>
+  <text x="1430" y="275.4" text-anchor="middle" font-size="12.5" fill="#6e685f">the best guess first · Cancel</text>
   <path d="M1600 60 L1620 60" fill="none" stroke="#8f877b" stroke-width="1.3"/>
   <path d="M1600 160 L1620 160" fill="none" stroke="#8f877b" stroke-width="1.3"/>
   <path d="M1600 262 L1620 262" fill="none" stroke="#8f877b" stroke-width="1.3"/>
   <path d="M1620 60 L1620 320" fill="none" stroke="#8f877b" stroke-width="1.3"/>
-  <path d="M1620 320 L1032 320" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
-  <rect x="1356" y="299" width="129" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="1420" y="312" text-anchor="middle" font-size="12.5" font-style="italic" fill="#6e685f">the answer runs it</text>
-  <path d="M865.0 358 L865.0 410" fill="none" stroke="#8f877b" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-  <rect x="871" y="371" width="175" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="875" y="384" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">a section is being walked</text>
-  <path d="M1030 338 C1120 338 1120 565 1032 565" fill="none" stroke="#8f877b" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
-  <rect x="1092" y="462" width="188" height="17" rx="4" fill="#f6f4f1"/>
-  <text x="1096" y="474" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">the receipt offered an undo</text>
+  <path d="M1620 320 L1052 320" fill="none" stroke="#8f877b" stroke-width="1.3" marker-end="url(#arrow)"/>
+  <rect x="1366" y="299" width="129" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="1430" y="312" text-anchor="middle" font-size="12.5" font-style="italic" fill="#6e685f">the answer runs it</text>
+  <path d="M885.0 358 L885.0 410" fill="none" stroke="#8f877b" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <rect x="891" y="371" width="175" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="895" y="384" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">a section is being walked</text>
+  <path d="M1050 338 C1140 338 1140 565 1052 565" fill="none" stroke="#8f877b" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <rect x="1112" y="462" width="188" height="17" rx="4" fill="#f6f4f1"/>
+  <text x="1116" y="474" text-anchor="start" font-size="12.5" font-style="italic" fill="#6e685f">the receipt offered an undo</text>
 </svg>

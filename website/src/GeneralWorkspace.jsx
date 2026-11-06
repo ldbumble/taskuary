@@ -133,17 +133,17 @@ const Thinking = ({ provider }) => (
 // Four facts, said once, above the trail. Nothing here is new information - the trace and the task
 // already carried all of it (agentWork.js).
 const AgentBand = ({ name, provider, work, since, starting = "" }) => {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now()), [shown] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const doing = doingNow(work);
   // STARTED, NOTHING SAID YET: one line - "Starting the researcher on Codex…" - and its clock, never a tall empty pane with a spinner at
   // its foot while the CLI comes up (the owner, 2026-10-21: "it stayed like that for a while")
+  // ...the same quiet line as "Working on this…", no box around it (the owner, 2026-11-05: no boxes), and its clock from no earlier than this
+  // line came up: a turn carried on by new mail has no input of its own yet, and it counted from the one before - "62m 16s" at its start
   if (starting && !work.steps.length) return (
-    <div className="tq-aui-band" role="status" aria-live="polite" data-tq-starting-line="">
-      <div className="tq-aui-band-head">
-        <span className="tq-aui-band-dot" /><span>{starting}</span>
-        <em>{since ? elapsedText(now - since) : ""}</em>
-      </div>
+    <div className="tq-aui-working" role="status" aria-live="polite" data-tq-starting-line="">
+      <span className="tq-aui-band-dot" /><span>{starting}</span>
+      <em>{elapsedText(now - Math.max(since || 0, shown))}</em>
     </div>
   );
   // ...and then ONE QUIET LINE (the closeout-in-chat spec, 2026-11-04): "Working on this…" and its clock. The band said who, what now, which

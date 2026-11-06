@@ -1004,7 +1004,9 @@
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) > .tq-compose-field { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "tools words send";
   min-height: 44px; padding: 3px 6px 3px 4px; border-radius: 22px; }
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-model-pick,
-.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-compose-emoji { display: none !important; }
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-compose-emoji,
+.tq-chat-unit > .tq-compose-box:not([data-tq-open]) .tq-compose-own { display: none !important; }
+.tq-compose-own { display: inline-flex; align-items: center; }
 .tq-chat-unit > .tq-compose-box:not([data-tq-open]) textarea { height: 30px !important; min-height: 30px; padding: 0 4px; line-height: 30px; }
 /* ...and its slot is ONE line, open or not: open, the card rises out of it over the canvas, so nothing under or beside it moves */
 .tq-chat-unit > .tq-compose-box { height: 44px; }

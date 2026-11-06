@@ -52,15 +52,14 @@ test("the turn's stamp: working m:ss while it runs, ran once it answered, nothin
   assert.equal(clockText(3_725_000), "1:02:05");
 });
 
-test("a running turn shows its steps open, the newest six, its clock ticking once a second and gone with it", () => {
+test("a running turn shows its steps open, the newest six, and ONE clock - its working line's, never a second on its head", () => {
   const ws = read("GeneralWorkspace.jsx");
   assert.match(ws, /const LIVE_SHOWN = 6;/);
   assert.match(ws, /data-tq-live-steps=""/);
   assert.match(ws, /plural\(cut, "earlier step"\)/);
   assert.match(ws, /<summary>\{n \? plural\(n, "step"\) : "Along the way"\}<\/summary>/, "an ended turn folds to N steps");
-  const tick = ws.slice(ws.indexOf("const Ticking"), ws.indexOf("const RanFor"));
-  assert.match(tick, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\); return \(\) => clearInterval\(t\);/);
-  assert.match(ws, /\{running && start && <Ticking since=\{start\} \/>\}/);
+  assert.doesNotMatch(ws, /<Ticking|data-tq-working-for/, "the head's \"working 0:03\" is gone (the owner, 2026-11-06)");
+  assert.match(ws, /<span>Working on this…<\/span>\s*<em>\{since \? elapsedText\(now - since\)/);
   assert.match(ws, /since: session\.turn_started \* 1000/, "the turn's own start, from the server");
   assert.match(read("AgentStepRows.jsx"), /<CircularProgress size=\{10\}/);
 });

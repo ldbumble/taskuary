@@ -2,6 +2,7 @@
 // over it, and whether the Advisor may speak for it. The strip, the rail ring, the box's words and the Advisor each worked it out on
 // their own, so a folded task kept its Advisor strip and its dark button acting on what nobody could see (re-audit item 4).
 import { foldsAs } from "./funnelPile.js";
+import { ASK_ASSISTANT } from "./kinds.js";
 
 // ...SETUP IS QUIET ONLY WHILE IT IS IN VIEW: a task opened over it by its link or by Search (`over`, AssistantView's setupCard) is the
 // item in front of the owner, and it drew its row with nothing lit and no line while the same task in the walk had both (the memory
@@ -19,7 +20,8 @@ export function tableWords(table, ref = "") {
   const has = !!table?.key, under = has && !!table.place;
   return { box: !has ? "Ask Taskuary anything — a name or a subject pulls it in…"
       : under ? "Ask about this page…" : "Ask about this one, tell me what to do with it, or name something else…",
-    phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : "Talk to Taskuary…",
+    // ...the corner pill is the Assistant (the owner, 2026-11-06): it brings you around; the task's own agent has the task's box
+    phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : ASK_ASSISTANT,
     // ...and the one-row bar's pill, whose words ("Ask…") name no task: its name for a reader and the walk says which
     // one the chat will talk about, with no visible change (the dead-end walk's RING, 2026-10-27)
     name: !has ? "Ask Taskuary anything" : under ? "Ask Taskuary about this page" : `Tell Taskuary what to do with ${ref || "this one"}` };

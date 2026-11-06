@@ -224,6 +224,78 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
     return _landed(store, tid, how, said_, actor, sha(cwd, base))
 
 
+# ── REVIEW BEFORE IT LANDS: a part turned down is taken back out (the owner, 2026-11-06: "i do like you can review the code diffs") ──
+# Safe only where it touches nothing anyone else is using: the task's own branch checked out, no agent at work in the checkout (its own
+# included - it would be editing the very file), nothing uncommitted in the files it reverts, and each part exactly as the owner saw it
+# (its text matched against the diff now). Then `git apply -R` of those hunks alone, checked first, and ONE commit on the branch saying
+# so - a revert the owner can read in the log, and undo with git like any commit. Anything else changes nothing and says why.
+def _raw(cwd, *args) -> bytes:
+    "git's stdout as BYTES: a patch is applied as git wrote it - a text read loses a CRLF file's \\r and a last line's trailing spaces."
+    from . import spawn
+    p = spawn.run(['git', '-C', cwd, *args], capture_output=True, timeout=60)
+    if p.returncode: raise Refused(f"git {args[0]} failed: {(p.stderr or b'').decode('utf-8', 'replace')[:200]}")
+    return p.stdout or b''
+
+
+def hunks_of(diff: bytes) -> tuple:
+    "(header, [hunk, ...]) of ONE file's diff, as bytes: the lines before the first @@, then each @@ and the lines under it."
+    lines = diff.split(b'\n')
+    if lines and lines[-1] == b'': lines.pop()
+    at = [i for i, l in enumerate(lines) if l.startswith(b'@@')]
+    if not at: return lines, []
+    return lines[:at[0]], [lines[a:b] for a, b in zip(at, at[1:] + [len(lines)])]
+
+
+_norm = lambda s: str(s).replace('\r\n', '\n').replace('\r', '').rstrip('\n')
+
+
+def revert(store, tid: int, picks: list, actor: str = 'owner') -> dict:
+    """Take the parts the owner turned down back out of the task's branch: picks [{path, index, text}] - the hunk's index in that file's diff
+    since the task started, and its text as the viewer showed it. Nothing changes unless every part still reads as shown."""
+    import tempfile
+    from . import peers
+    from .blackboard import norm
+    s = state(store, tid)
+    if not s: raise ValueError('no session of this task started in a git checkout - there is nothing to review')
+    if s.get('landed'): raise Refused('it has already landed - nothing changed')
+    if not picks: raise ValueError('no part was marked to revert')
+    cwd, br, start = s['cwd'], s['branch'], record(store, tid).get('start')
+    if (head := head_branch(cwd)) != br: raise Refused(f'reverting a part needs {br} checked out in {cwd}; it is on {head or "a detached HEAD"} - nothing changed')
+    if any(norm(t.cwd) == norm(cwd) for t in peers._cli_sessions()):
+        raise Refused('an agent is working in this checkout - stop it or let it finish first; nothing changed')
+    by = {}
+    for p in picks: by.setdefault(str(p.get('path') or ''), []).append(p)
+    if (d := [f for f in dirty(cwd) if f in by]): raise Refused(f"{', '.join(d[:5])} {'has' if len(d) == 1 else 'have'} uncommitted changes - nothing changed")
+    patch = b''
+    for path, ps in by.items():
+        head_, hs = hunks_of(_raw(cwd, 'diff', start, br, '--', path))
+        if not hs: raise Refused(f'{path} has no change to revert any more - nothing changed')
+        for p in ps:
+            i = int(p.get('index', -1))
+            if not 0 <= i < len(hs) or _norm(b'\n'.join(hs[i]).decode('utf-8', 'replace')) != _norm(p.get('text') or ''):
+                raise Refused(f'{path} changed since you looked at it - open the diff again; nothing changed')
+        patch += b'\n'.join(head_ + [l for i in sorted({int(p['index']) for p in ps}) for l in hs[i]]) + b'\n'
+    with tempfile.NamedTemporaryFile('wb', suffix='.patch', delete=False) as f: f.write(patch)
+    try:
+        rc, out, err = _run(cwd, 'apply', '-R', '--check', '--whitespace=nowarn', f.name)
+        if rc: raise Refused(f'those parts no longer take back cleanly: {(err or out)[:200]} - nothing changed')
+        rc, out, err = _run(cwd, 'apply', '-R', '--whitespace=nowarn', f.name)
+        if rc: raise Refused(f'git refused the revert: {(err or out)[:200]} - nothing changed')
+        n = len(picks)
+        msg = f"Revert {n} part{'s' if n != 1 else ''} turned down in review ({task_ref(tid)})"
+        rc, out, err = _run(cwd, 'commit', '-q', '-m', msg, '--', *by)
+        if rc:
+            _run(cwd, 'apply', '--whitespace=nowarn', f.name)          # put the tree back as it was: the revert is all or nothing
+            raise Refused(f'the revert could not be committed: {(err or out)[:200]} - nothing changed')
+    finally:
+        try: os.unlink(f.name)
+        except OSError: pass
+    said_ = f"Reverted {n} part{'s' if n != 1 else ''} of {', '.join(by)} on {br} ({sha(cwd, br)[:7]})."
+    store.add_comment(tid, actor, 'human', said_)
+    store.audit('task', tid, 'land_review_revert', actor, detail={'files': list(by)[:30], 'parts': n})
+    return {'ok': True, 'says': said_, 'state': state(store, tid)}
+
+
 def _landed(store, tid, how, said_, actor, at_sha='', **extra) -> dict:
     r = record(store, tid)
     r['landed'] = {'how': how, 'at': time.strftime('%Y-%m-%d %H:%M:%S'), 'sha': at_sha, **extra}

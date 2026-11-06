@@ -45,7 +45,7 @@ def test_claude_log_reads_thinking_tools_plan_and_files(home):
     steps, source = sessionrecord.cli_steps('claude', 'c1')
     assert source == 'Claude Code log'
     assert [s['k'] for s in steps] == ['you', 'thought', 'tool', 'plan', 'tool', 'said']
-    assert steps[2] == {'k': 'tool', 'name': 'Grep', 'text': 'cursor in ledger/', 'at': None}
+    assert steps[2] == {'k': 'tool', 'name': 'Grep', 'text': 'cursor in ledger/', 'at': None, 'args': {'pattern': 'cursor', 'path': 'ledger/'}}
     summary = sessionrecord.summarise(steps)
     assert summary['files'] == ['ledger/importer.py'] and [i['status'] for i in summary['plan']] == ['completed', 'in_progress']
     assert summary['counts'] == {'thought': 1, 'tool': 2, 'said': 1, 'you': 1}

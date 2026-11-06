@@ -1344,10 +1344,11 @@ def seed_ai_usage(store) -> int:
         if tid in have: continue
         try: born = datetime.strptime(str(t['Born'] or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
         except ValueError: born = datetime.now()
+        from .kinds import AGENT
         k = tid * 7919
         calls = [('triage', 'light', 2600 + k % 2400, 140 + k % 160, 1800 + k % 2600, 0)]
         if tid % 3: calls.append(('draft', 'standard', 5200 + k % 5000, 380 + k % 420, 6500 + k % 7000, 4))
-        if t['Kind'] in ('coding', 'general') or tid % 4 == 0:
+        if t['Kind'] in AGENT or tid % 4 == 0:
             hard = tid % 5 == 0
             job = 'coding' if t['Kind'] == 'coding' else 'general'
             calls.append((job, 'strong' if hard else 'standard', 60000 + k % 340000, 4000 + k % 22000, (6 + k % 40) * 60000, 9))
@@ -1356,8 +1357,8 @@ def seed_ai_usage(store) -> int:
             at = (born + timedelta(minutes=after)).strftime('%Y-%m-%d %H:%M:%S')
             store.add_brain_route({'At': at, 'Job': job, 'TaskId': tid, 'Pick': 'cli:claude', 'Model': '', 'Tier': tier, 'Rule': 'demo',
                                    'Why': 'Written for the demo - no AI ran', 'Outcome': 'ok', 'Ran': AI_MODELS[tier], 'TokensIn': i,
-                                   'Cached': int(i * 0.6) if job in ('general', 'coding') else 0, 'TokensOut': o, 'Ms': ms, 'Calls': 1,
-                                   'Sid': f'demo-run-{tid}' if job in ('general', 'coding') else None})
+                                   'Cached': int(i * 0.6) if job in AGENT else 0, 'TokensOut': o, 'Ms': ms, 'Calls': 1,
+                                   'Sid': f'demo-run-{tid}' if job in AGENT else None})
             n += 1
     return n
 

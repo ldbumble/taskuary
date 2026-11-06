@@ -1,6 +1,7 @@
 // WHICH AI DOES EACH JOB (the router, 2026-10-25 - the mode line, the rules as sentences, the cap line and Recent routes, all
-// owner-approved). Fixed is the cards, exactly as before, and a fresh install's answer. Auto lets the rules below pick the quick,
-// standard or strong model by the job and how hard triage judged the work; each card stays its job's standard model. A rule is
+// owner-approved). Auto is the default (the owner, 2026-11-06): the rules below pick the quick, standard or strong model by the job
+// and how hard triage judged the work, each card stays its job's standard model, and a brain with one model thinks less or harder
+// instead where it can. Fixed is the cards, exactly as before. A rule is
 // built from dropdowns over the values the router knows, never a typed condition, and its sentence is made from what it does.
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
@@ -10,6 +11,10 @@ import { BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 const JOB = { triage: "triage", draft: "drafts", summary: "summaries", advisor: "the Advisor", memory: "memory", rank: "ranking",
   general: "general work", coding: "coding", judge: "judgements" };
 const USE = { light: "the quick model", standard: "the card's own model", strong: "the strong model" };
+// triage's three judgements, in the words a person uses for them
+const LEVEL = { quick: "Quick", standard: "Normal", hard: "Hard" };
+export const SAYS = "Triage judges each task quick, normal or hard and picks the model for it: quick work runs on a smaller model, "
+  + "hard work on a stronger one. An AI with only one model thinks less or harder instead, where it can.";
 const sel = { fontSize: 12.5, bgcolor: "#fff", minWidth: 150 };
 const err = (e, d) => e?.response?.data?.detail || e?.message || d;
 
@@ -47,9 +52,19 @@ export function RouteRules() {
         </Select>
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-        {auto ? "Each card below is its job's standard model; these rules say when the quick or the strong model runs instead. A brain whose strong model box is blank never steps up, and an AI you pick for something always wins."
-          : "Every job runs exactly as its card says. Auto picks a quick, standard or strong model by the job and how hard triage judged the work."}
+        {auto ? `${SAYS} An AI you pick for something always wins.`
+          : "Every job runs exactly as its card says. Auto lets triage judge each task quick, normal or hard and pick the model for it."}
       </Typography>
+      {auto && !!(p.levels || []).length && (
+        <Box sx={{ mt: 1 }} data-tq-route-levels="">
+          {p.levels.map((l) => (
+            <Typography key={l.pick} sx={{ fontSize: 12.5, color: DIM }} data-tq-route-level={l.pick}>
+              <Box component="span" sx={{ color: INK, fontWeight: 600 }}>{l.brain}</Box>
+              {` · quick: ${l.quick} · normal: ${l.normal} · hard: ${l.hard}`}
+            </Typography>
+          ))}
+        </Box>
+      )}
       {say && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }}>{say}</Alert>}
       {p.warning && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }} data-tq-route-warning="">{p.warning}</Alert>}
       {/* the DATA rules hold in either mode (a constraint, not a tier), so Fixed shows them too */}
@@ -81,7 +96,7 @@ export function RouteRules() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mt: 1 }} data-tq-route-add="">
             <Select size="small" value={add.difficulty} onChange={(e) => setAdd({ ...add, difficulty: e.target.value })} sx={{ ...sel, minWidth: 110 }}>
               <MenuItem value="any" sx={{ fontSize: 12.5 }}>Any</MenuItem>
-              {(p.difficulties || []).map((d) => <MenuItem key={d} value={d} sx={{ fontSize: 12.5 }}>{d[0].toUpperCase() + d.slice(1)}</MenuItem>)}
+              {(p.difficulties || []).map((d) => <MenuItem key={d} value={d} sx={{ fontSize: 12.5 }}>{LEVEL[d] || d}</MenuItem>)}
             </Select>
             <Select size="small" value={add.job} onChange={(e) => setAdd({ ...add, job: e.target.value })} sx={sel}>
               {Object.entries(JOB).map(([k, v]) => <MenuItem key={k} value={k} sx={{ fontSize: 12.5 }}>{v}</MenuItem>)}

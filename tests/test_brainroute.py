@@ -88,7 +88,8 @@ def test_fixed_mode_is_todays_answer_for_every_job(real, home):
     s, cfg, _ = _home(conns, tests, settings, connector, by)
     with mock.patch.object(config, 'load', lambda: cfg):
         clic.sync(cfg, s)
-        assert brainroute.mode(s) == 'fixed'
+        assert brainroute.mode(s) == 'auto'                     # the default since 2026-11-06; Fixed is the owner's choice
+        s.set_setting('ai_route_mode', 'fixed', 'owner')
         for job in brainroute.JOBS:
             r = brainroute.choose(s, job)
             assert (r.pick, r.model) == _today(s, job), (home, job)
@@ -146,7 +147,7 @@ def test_the_backups_ride_the_route_for_one_message_jobs():
 
 
 def test_build_llm_asks_the_router_and_builds_what_it_says(monkeypatch):
-    s = MemoryStore()
+    s = MemoryStore(); s.set_setting('ai_route_mode', 'fixed', 'owner')          # the cards, as before the router
     seen = {}
     monkeypatch.setattr(llm, '_build_llm', lambda store, pick, model, *a, **kw: seen.update(pick=pick, model=model, gear=a[-3]) or (lambda *x, **k: 'ok'))
     monkeypatch.setattr(llm, 'effective_pick', lambda store, pick=None: str(pick if pick is not None else store.get_setting('triage_ai') or '') or 'cli:claude')

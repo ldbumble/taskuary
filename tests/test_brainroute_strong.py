@@ -42,6 +42,7 @@ def test_an_api_card_s_strong_gear_is_swapped_in_for_the_call():
     cid = s.get_connector_by_type('anthropic')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Secret': 'sk-test-0123456789', 'Active': 1,
                       'ConfigJson': json.dumps({'model': 'claude-sonnet-5', 'strong_model': 'claude-opus-5'})}, 'owner')
+    s.set_setting('ai_route_mode', 'fixed', 'owner')                 # a caller's own gear, as the cards run it (Auto picks the gear)
     seen = []
     with mock.patch.object(llm, 'make_llm', lambda t, conf, key: seen.append(conf['model']) or (lambda *a, **k: 'ok')):
         llm.build_llm(s, pick=f'connector:{cid}', job='draft')

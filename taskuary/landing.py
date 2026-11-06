@@ -11,6 +11,7 @@ working tree (merge-tree + commit-tree + a compare-and-swap of the branch ref), 
 
 The agent may PROPOSE how (propose_land); the same question shows with its pick marked, and only the owner's answer lands anything.
 """
+from .timewords import plural
 import json, os, re, time
 from loguru import logger
 
@@ -116,9 +117,9 @@ def state(store, tid: int, full: bool = False) -> dict | None:
 def said(s: dict) -> str:
     "One line: what changed and what is asked."
     if not s: return ''
-    n = f"{s['changed']} file{'s' if s['changed'] != 1 else ''} changed, +{s['plus']} -{s['minus']}"
+    n = f"{plural(s['changed'], 'file')} changed, +{s['plus']} -{s['minus']}"
     if s.get('landed'): return f"{s['branch']} landed ({HOW.get(s['landed'].get('how'), s['landed'].get('how'))}) - {n}."
-    if s['ask']: return f"{s['branch']} is {s['ahead']} commit{'s' if s['ahead'] != 1 else ''} ahead of {s['base']}: {n}. How should it land?"
+    if s['ask']: return f"{s['branch']} is {plural(s['ahead'], 'commit')} ahead of {s['base']}: {n}. How should it land?"
     if s['own']: return f"{s['branch']} has nothing {s['base']} does not already have."
     return f"The agent worked on {s['base']} itself - {n} since it started; there is no branch of its own to land."
 
@@ -224,7 +225,7 @@ def land(store, tid: int, how: str, actor: str = 'owner') -> dict:
             if rc: raise Refused(f'could not leave {br}: {(err or out)[:200]} - nothing was discarded')
         rc, out, err = _run(cwd, 'branch', '-D', br)
         if rc: raise Refused(f'{br} could not be deleted: {(err or out)[:200]}')
-        said_ = f"Discarded {br} - its {s['ahead']} commit{'s' if s['ahead'] != 1 else ''} are gone from {base}'s checkout."
+        said_ = f"Discarded {br} - its {plural(s['ahead'], 'commit')} are gone from {base}'s checkout."
     return _landed(store, tid, how, said_, actor, sha(cwd, base))
 
 
@@ -286,7 +287,7 @@ def revert(store, tid: int, picks: list, actor: str = 'owner') -> dict:
         rc, out, err = _run(cwd, 'apply', '-R', '--whitespace=nowarn', f.name)
         if rc: raise Refused(f'git refused the revert: {(err or out)[:200]} - nothing changed')
         n = len(picks)
-        msg = f"Revert {n} part{'s' if n != 1 else ''} turned down in review ({task_ref(tid)})"
+        msg = f"Revert {plural(n, 'part')} turned down in review ({task_ref(tid)})"
         rc, out, err = _run(cwd, 'commit', '-q', '-m', msg, '--', *by)
         if rc:
             _run(cwd, 'apply', '--whitespace=nowarn', f.name)          # put the tree back as it was: the revert is all or nothing
@@ -294,7 +295,7 @@ def revert(store, tid: int, picks: list, actor: str = 'owner') -> dict:
     finally:
         try: os.unlink(f.name)
         except OSError: pass
-    said_ = f"Reverted {n} part{'s' if n != 1 else ''} of {', '.join(by)} on {br} ({sha(cwd, br)[:7]})."
+    said_ = f"Reverted {plural(n, 'part')} of {', '.join(by)} on {br} ({sha(cwd, br)[:7]})."
     store.add_comment(tid, actor, 'human', said_)
     store.audit('task', tid, 'land_review_revert', actor, detail={'files': list(by)[:30], 'parts': n})
     return {'ok': True, 'says': said_, 'state': state(store, tid)}

@@ -14,7 +14,7 @@ Nothing here executes. On the desk a CALL brings up the button that does it, lit
 (concierge.routes, the owner 2026-10-19) - the press is the confirmation; on a phone it is a yes-or-no (PW-123/124).
 """
 import json, re
-from . import buttons, operations, roles
+from . import buttons, devphone, operations, roles
 L = buttons.label        # a button is named by its one label (buttons.json) - never retyped in a tool's sentence
 
 # the roles a role.apply call may name, from roles.ROLES - a list in prose here would drift from what applies
@@ -711,11 +711,13 @@ NOW = {'app.repair': ('run the simple repair app.health named for a part of Task
                        'companies or task titles; `happened`: what went wrong (a bug) or what would help (a feature), the same way. It is '
                        'scrubbed and comes up under your answer for them to read, edit and submit on GitHub themselves - nothing is filed from here')}
 NOW_NEEDS = {'app.repair': (('name',), ('how',)), 'issue.draft': (('kind',), ('trying', 'happened'))}     # each tuple: one of these
-def runs_now(kind: str) -> bool: return kind in READS or kind in NOW
+# ...and the coding agents' tools, on the owner's phone in Developer mode alone (devphone.py): with it off they are no tool at all
+def runs_now(kind: str) -> bool: return kind in READS or kind in NOW or devphone.runs(kind)
 
 
 def valid(kind: str, params: dict) -> str:
     """'' when this CALL is one the registry actually runs, otherwise why not."""
+    if devphone.runs(kind): return devphone.valid(kind, params)
     if kind in NOW:
         miss = [' or '.join(ns) for ns in NOW_NEEDS[kind] if not any(str((params or {}).get(n) or '').strip() for n in ns)]
         if kind == 'issue.draft' and not miss and str(params.get('kind')).strip().lower() not in ('bug', 'feature'): miss = ['kind: bug or feature']

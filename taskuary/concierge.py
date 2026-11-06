@@ -2343,7 +2343,8 @@ def _system(store, llm=None) -> str:
     # ...and which Taskuary this is: "what version am I on?" had no answer but What's new's top section, which a checkout runs ahead of
     # or behind (2026-11-02); the bug report already says it (bugreport.py)
     from . import __version__
-    return f"{_counsel(store)}\n\n{who}{where}{pages}THIS IS TASKUARY {__version__}.\n\n{contract.format(owner=_owner(store))}"
+    from . import devphone          # ...and on the phone in Developer mode, the coding agents' tools - nowhere else
+    return f"{_counsel(store)}\n\n{who}{where}{pages}{devphone.block()}THIS IS TASKUARY {__version__}.\n\n{contract.format(owner=_owner(store))}"
 
 
 def pages_block(store) -> str:
@@ -3163,6 +3164,8 @@ def read_op(store, kind: str, params: dict) -> str:
     the table - asking about another task must not hijack the walk (the owner, 2026-09-07). The answer
     goes back to the model, which then speaks with it."""
     p = params or {}
+    from . import devphone
+    if devphone.runs(kind): return devphone.read(store, kind, p)         # the coding agents, from the phone in Developer mode
     if kind in ('app.health', 'app.repair'): return _trouble(store, kind, p)
     if kind == 'issue.draft': return _issue(store, p)
     if kind == 'task.read':

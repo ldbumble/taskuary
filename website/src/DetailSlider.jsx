@@ -35,11 +35,11 @@ export const SAYS = {
 
 export default function DetailSlider({ value, onChange, label = "How much of the agent's work the chat shows", says = true, width = 260 }) {
   const i = Math.max(0, LEVELS.indexOf(value));
-  return <Box data-tq-detail-slider={value} sx={{ px: 1.5, maxWidth: width }}>
+  return <Box data-tq-detail-slider={value} sx={{ px: 3.5, maxWidth: width }}>
     <Slider size="small" min={0} max={LEVELS.length - 1} step={1} marks={MARKS} value={i} aria-label={label}
       getAriaValueText={(v) => LABELS[LEVELS[v]]} onChange={(_, v) => onChange(LEVELS[v])}
       sx={{ mt: 0.5, mb: 2.5, "& .MuiSlider-markLabel": { fontSize: 11, color: FAINT }, "& .MuiSlider-markLabelActive": { color: INK } }} />
-    {says && <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, mx: -1.5 }}>{SAYS[LEVELS[i]]}</Typography>}
+    {says && <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.45, mx: -3.5 }}>{SAYS[LEVELS[i]]}</Typography>}
   </Box>;
 }
 

@@ -126,7 +126,8 @@ test("the detail level: Everything for coding work, Summary for other work, Sett
 test("the levels draw: Summary folds every step behind one quiet line, Steps folds each group, Everything opens every call", () => {
   const tw = gw.slice(gw.indexOf("const TurnWork = "), gw.indexOf("// ...and with none of its steps on screen yet"));
   assert.match(tw, /if \(level === "summary"\) \{/);
-  assert.match(tw, /<Fold k=\{`\$\{key\}:all`\} quiet label=\{stepsWord\(hidden\)\}>/);
+  assert.match(tw, /<Fold k=\{`\$\{key\}:all`\} quiet label=\{stepsWord\(rest\)\}>/);
+  assert.match(tw, /\{said\.map\(\(p\) => <Md key=\{p\.id\} text=\{p\.text\} \/>\)\}/, "its words stay at Summary");
   assert.match(tw, /lvl === "everything" \? <AgentSteps key=\{p\.id\} data=\{\{ steps: p\.steps \}\} \/>/);
   assert.match(tw, /: <Fold key=\{p\.id\} k=\{`\$\{key\}:\$\{p\.id\}`\} label=\{stepsWord\(\[p\]\)\}>/);
   assert.match(gw, /const level = chat && !dock \? detailFor\(\{ source, settings: defaults, own \}\) : "steps";/);
@@ -170,7 +171,7 @@ test("regression: the mail that came in stays above the owner's first typed line
   const rows = chatRows({ sessions: [{ sid: "s", at: "2026-11-06 09:00:00", steps: [{ k: "you", text: "Look at this one first.", at: "2026-11-06 09:05:00" }, ...LOG.slice(1).map((s) => ({ ...s, at: "2026-11-06 09:06:00" }))] }],
     mails: [{ who: "Ray Colton", words: "Any news on the tax line?", channel: "email", at: "2026-11-06 09:02:00" }] });
   assert.deepEqual(rows.map((r) => r.kind), ["mail", "you", "turn"]);
-  assert.match(gw, /return coding \? byTime\(\[\.\.\.general, \.\.\.rowMessages\(cc\.rows\)\]\) : general;/);
+  assert.match(gw, /return coding \? byTime\(\[\.\.\.general, \.\.\.turns\]\) : general;/);
 });
 
 test("regression: no 'Working on this…' after the turn ends or while it waits on the owner", () => {

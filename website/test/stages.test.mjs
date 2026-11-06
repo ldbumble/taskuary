@@ -15,7 +15,7 @@ test("every stage names its parts, and every move is a button by its one name", 
     // the Advisor stands over the work where the work is the page, in the right drawer where the task is
     if (s.advisor) assert.equal(s.advisor, s.main === "work" ? "main" : "drawer", k);
     assert.ok(s.verbs.length && s.verbs.every((v) => v in VERBS), `${k}: verbs`);
-    // ...and the section of the three it opens on (2026-10-27), where its first move is
+    // ...and the section of the two it opens on - Came from or the chat (2026-11-06: no Close out), where its first move is
     assert.ok(SECTION_KEYS.includes(s.section), `${k}: section`);
     assert.equal(sectionOf(k), s.section);
     // a lit tab is the right drawer's: only where the task is the page
@@ -29,7 +29,7 @@ test("the rules go in their order - the first fact that holds wins", () => {
   assert.equal(stageFrom({}), "to_start");
   assert.equal(stageFrom({ live: true, closed: true }), "agent_working", "a done task continued is work in progress again");
   assert.equal(stageFrom({ closed: true, drafted: true, result: true }), "done");
-  assert.equal(stageFrom({ drafted: true, result: true }), "close_out", "a draft under a Result: Close out is the move");
+  assert.equal(stageFrom({ drafted: true, result: true }), "to_send", "a draft under a Result: its Send is the move");
   assert.equal(stageFrom({ owed: true, list: true }), "to_reply");
 });
 
@@ -47,7 +47,7 @@ test("the page's stage keeps every open task's main view and lit tab", () => {
   assert.equal(stageOf({ focus: null }), "agent_working");
   assert.equal(stageOf({ focus: "none" }), "waiting");
   assert.equal(stageOf({ focus: "agent" }), "agent_result");
-  assert.equal(stageOf({ focus: "reply", drafted: true }), "close_out");
+  assert.equal(stageOf({ focus: "reply", drafted: true }), "to_send");
   assert.equal(stageOf({ focus: "reply" }), "to_reply");
   assert.equal(stageOf({ focus: "list" }), "todo");
   assert.equal(stageOf({ focus: "source" }), "to_start");
@@ -70,7 +70,7 @@ test("a task its agent closed opens on the Agent section", () => {
   assert.equal(stage, "closed_by_agent");
   assert.equal(sectionOf(stage), "agent");
   assert.equal(STAGE[stage].advisor, null);
-  assert.equal(stageOf({ focus: "reply", closed: true }), "done", "closed by the owner: Close out, how it closed");
+  assert.equal(stageOf({ focus: "reply", closed: true }), "done", "closed by the owner: the chat, how it closed");
   assert.equal(stageOf({ focus: "reply", agentClosed: true }), "to_reply", "an open task is never closed by its agent");
 });
 

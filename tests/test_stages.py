@@ -27,7 +27,7 @@ class TheStages(unittest.TestCase):
             if p['advisor']: self.assertEqual(p['advisor'], 'main' if p['main'] == 'work' else 'drawer', k)
             if p['lit']: self.assertEqual(p['main'], 'task', f'{k}: only the right drawer is lit')
             self.assertTrue(p['verbs'] and all(v in buttons.VERBS for v in p['verbs']), k)
-        self.assertEqual(set(stages.KEYS), {'to_start', 'to_reply', 'todo', 'agent_working', 'agent_result', 'close_out', 'waiting', 'closed_by_agent', 'done'})
+        self.assertEqual(set(stages.KEYS), {'to_start', 'to_reply', 'todo', 'agent_working', 'agent_result', 'to_send', 'waiting', 'closed_by_agent', 'done'})
 
     def test_the_page_reads_the_same_file(self):
         js = (Path(stages.__file__).parents[1] / 'website' / 'src' / 'stages.js').read_text(encoding='utf-8')
@@ -38,7 +38,7 @@ class TheStages(unittest.TestCase):
         self.assertEqual(stages.of({'live': True, 'closed': True}), 'agent_working')
         self.assertEqual(stages.of({'waiting': True, 'drafted': True}), 'waiting')
         self.assertEqual(stages.of({'closed': True, 'drafted': True}), 'done')
-        self.assertEqual(stages.of({'drafted': True, 'result': True}), 'close_out')
+        self.assertEqual(stages.of({'drafted': True, 'result': True}), 'to_send')
         self.assertEqual(stages.of({'result': True, 'owed': True}), 'agent_result')
         self.assertEqual(stages.of({'owed': True, 'list': True}), 'to_reply')
         self.assertEqual(stages.of({'list': True}), 'todo')
@@ -51,7 +51,7 @@ class ATaskReadFromItsRows(unittest.TestCase):
         s = MemoryStore(); t = task(s); m = mail(s, t)
         self.assertEqual(stages.of_task(s, s.get_task(t)), 'to_reply')
         s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Thursday works.', 'Status': 'pending'})
-        self.assertEqual(stages.of_task(s, s.get_task(t)), 'close_out', 'its pending review read from the store')
+        self.assertEqual(stages.of_task(s, s.get_task(t)), 'to_send', 'its pending review read from the store')
         s.update_task(t, {'Status': 'done'}, 'owner')
         self.assertEqual(stages.of_task(s, s.get_task(t)), 'done')
 

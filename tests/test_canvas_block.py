@@ -49,10 +49,10 @@ class TheCanvasBlock(unittest.TestCase):
         self.assertIn('close "Mark done"', b)
         self.assertIn('next "Next"', b)
 
-    def test_a_drafted_reply_is_close_out_with_its_first_line_and_send_first(self):
+    def test_a_drafted_reply_is_to_send_with_its_first_line_and_send_first(self):
         it = item(self.s, 'review:2')
         b = concierge.canvas_block(self.s, it, self.dock)
-        self.assertIn('stage: close_out (close out)', b)
+        self.assertIn('stage: to_send (to send)', b)
         self.assertIn('draft waiting for Send: "', b)
         buttons = next(l for l in b.splitlines() if l.startswith('  buttons: '))
         self.assertTrue(buttons.startswith('  buttons: approve '), buttons)

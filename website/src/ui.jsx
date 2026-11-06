@@ -61,7 +61,7 @@ import { readContacts } from "./contacts.js";
 import { personLine, runSearch, withFound } from "./peopleSearch.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
-import { AGENT_SHOWN, shownAgent } from "./kinds.js";
+import { AGENT_SHOWN, MESSAGE, shownAgent } from "./kinds.js";
 // a waiting note the Assistant passed on keeps the owner's words and its own version apart (waitroom.SEP): the owner's are what is shown
 export const ownWords = (note) => String(note || "").split("\x1f")[0].trim();
 
@@ -1073,7 +1073,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
       {agentKind && <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={coding ? `What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`
-            : "What should the agent do with this?"}
+            : MESSAGE}
           sx={{ bgcolor: "#fff" }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>

@@ -12,12 +12,12 @@ const box = read("RunForm.jsx");
 const runForm = box.slice(box.indexOf("export function RunForm"), box.indexOf("export function AgentAsk"));
 const ask = box.slice(box.indexOf("export function AgentAsk"));
 
-test("the box has the words, the mic and the paperclip, and asks what about it is the issue", () => {
+test("the box has the words, the mic and the paperclip, and says the one prompt wording", () => {
   assert.match(runForm, /<TextField [^>]*value=\{value\}/);
   assert.match(runForm, /<AttachImage pics=\{pics\}/);
   assert.match(runForm, /<MicButton [^>]*onText=\{add\}/);
   assert.match(runForm, /const add = \(x\) => onValue\(\(cur\) => \(cur \? `\$\{cur\} \$\{x\}` : x\)\)/, "a voice note lands after what is typed");
-  assert.match(box, /export const ASK_WHAT = "What should it do\? What about it is the issue\?/);
+  assert.match(box, /export const ASK_WHAT = MESSAGE;/);
 });
 
 test("an item's box starts nothing by itself: its Start hands the words, the pictures and the agent chosen to the caller", () => {
@@ -43,8 +43,7 @@ test("the canvas's Send to agent - a chip, the Advisor's pick - opens the box wh
   // a task on the table opens ITS box, in its agent step; anything else gets the box under its card
   assert.match(v, /if \(item\?\.tid && showsTask\(item, cardFor\(item\)\)\) \{ window\.dispatchEvent\(new CustomEvent\("tq-agent-ask"/);
   assert.match(v, /<AgentAsk inline coding=\{agentOn\.coding\}(?:[^\n]*\n){1,7}?\s+onClose=\{\(\) => setAgentOn\(null\)\} onStart=\{\(o\) => startOnItem\(agentOn\.item, o\)\} \/>/);
-  assert.match(v, /placeholder=\{agentOn\.item\.kind === "report" \? ASK_REPORT : agentOn\.item\.kind === "meeting" \? ASK_MEETING : undefined\}/,
-    "a report is asked which part should change, a meeting what to get ready");
+  assert.doesNotMatch(v, /ASK_REPORT|ASK_MEETING/, "one prompt wording on every door - a report and a meeting too (audit 2026-11-05)");
   // ...and while it is open the box is the page the pop-up Assistant reads (pageView.js): its words box and its Send to agent (2026-11-02)
   assert.match(v, /view=\{\{ item: \{ kind: agentOn\.item\.kind \|\| "item", id: agentOn\.item\.key/);
   const box = read("RunForm.jsx");

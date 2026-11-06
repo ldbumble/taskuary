@@ -210,7 +210,7 @@ its own ideas: one report's open idea never silences another's.
 
 Four things shape it:
 
-- `COUNSEL.md` in Settings → Docs — how it speaks, and how readily it takes a position.
+- `COUNSEL.md` in About you → Docs — how it speaks, and how readily it takes a position.
 - The **Advisor** report — what it watches, its schedule, its model.
 - **Settings → Advisor** — thresholds such as how long a reply or task must be quiet.
 - **The outcome ledger** — what came of what Taskuary did: a reply that got more rounds, a close

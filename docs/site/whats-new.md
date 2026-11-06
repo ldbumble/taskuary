@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.9 - 2026-11-06
+
+- A reply block glued to the agent's words is its own paragraph, shown once
+- A chat reply's To line names the app: "in Teams", not "in teams"
+- The open chat reads a turn the server woke: new mail, a check-back
+- A check-back's turn opens on what it checks; the server's start keeps the clock
+- A report made a task: its row keeps its ref, never "Moâ€¦"
+
 ## 0.3.11.8 - 2026-11-05
 
 - One message everywhere: Taskuary is your AI work partner - your work, in the right order

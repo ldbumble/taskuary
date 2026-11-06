@@ -171,6 +171,7 @@ OWNER_ONLY = (
     (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (presses.py)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
     (r'PUT', r'^/api/tasks/\d+/workstream$', "which of the owner's workstreams a task belongs to is the owner's word - it teaches where its people belong"),
+    (r'DELETE', r'^/api/tasks/\d+/check-back$', "cancelling the agent's check-back is the owner's press - the agent sets its own"),
     (r'POST', r'^/api/tasks/\d+/desktop$', "marking a task 'needs desktop' hands its agent the owner's desktop - never its own agent's press"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
     (r'POST', r'^/api/tasks/\d+/assistant/seen$', "the owner's open task keeps its agent's process warm - a session never keeps itself alive (clipool.touch)"),

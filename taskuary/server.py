@@ -5456,6 +5456,14 @@ def agent_check_back(body: AgentCheckBackBody, request: Request):
     try: return checkback.set_check(store, body.task_id, body.when, body.what, body.agent)
     except ValueError as e: raise HTTPException(422, str(e))
 
+@app.delete('/api/tasks/{tid}/check-back')
+def cancel_check_back(tid: int, request: Request):
+    "The × on a task's check-back chip: the owner's, never a session's - the agent sets its own and sets another when it wants one."
+    from . import checkback
+    _owner_only(request, "cancelling a check-back is the owner's")
+    try: return checkback.cancel(store, tid, 'owner')
+    except ValueError as e: raise HTTPException(404, str(e))
+
 class AgentProposeBody(BaseModel):
     model_config = {'extra': 'allow'}
     task_id: int; action: str; why: str = ''

@@ -45,6 +45,16 @@ def set_check(store, tid: int, when, what, actor: str = 'agent') -> dict:
     return {'ok': True, 'at': at, 'when': remind.when(at), 'what': w}
 
 
+def cancel(store, tid: int, actor: str = 'owner') -> dict:
+    "The owner's × on the task's check-back chip: nothing wakes the agent then. Said once on the task; a task with none is left alone."
+    t = store.get_task(int(tid))
+    if not t: raise ValueError('no such task')
+    if not t.get('CheckBackAt'): return {'ok': True, 'cancelled': False}
+    store.update_task(int(tid), {'CheckBackAt': '', 'CheckBackWhat': ''}, actor)
+    store.audit('task', int(tid), 'check_back_cancelled', actor, detail={'at': t['CheckBackAt'], 'what': t.get('CheckBackWhat') or ''})
+    return {'ok': True, 'cancelled': True}
+
+
 def due(store, now: datetime = None, spawn=None) -> int:
     """Each check-back come due, handed to its task's agent once - run with the reminders (remind.tick). With every agent slot full it waits for
     the next tick rather than being dropped. `spawn` runs the hand-off (a thread by default: the clock never waits on a model)."""

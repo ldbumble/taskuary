@@ -42,7 +42,8 @@ export function PermissionCards({ taskId, items = [], onAnswered }) {
 }
 
 // ── Talk to this agent from… ──────────────────────────────────────────────────────────────────────────────────────────
-export default function AgentChannels({ taskId }) {
+// `pop`: drawn in the task header's popover (TaskPage HeadPop) - the content alone, no fold of its own
+export default function AgentChannels({ taskId, pop = false }) {
   const [v, setV] = useState(null), [kind, setKind] = useState(""), [chat, setChat] = useState(""), [repo, setRepo] = useState(""),
     [ownerId, setOwnerId] = useState(""), [mates, setMates] = useState([]), [busy, setBusy] = useState(false), [err, setErr] = useState(""),
     [sure, setSure] = useState(null);
@@ -66,10 +67,8 @@ export default function AgentChannels({ taskId }) {
     try { await api.delete(`/api/agent-channels/${c.id}`); load(); } catch (e) { setErr(why(e, "It is still bound")); }
   };
   const mate = (i, f) => (e) => setMates((m) => m.map((x, j) => (j === i ? { ...x, [f]: e.target.value } : x)));
-  return (
-    <details className="tq-aui-working-fold" data-tq-agent-channels="" open={!!v.channels.length || undefined}>
-      <summary>Talk to this agent from…</summary>
-      <Box sx={{ ...card, mt: 1 }}>
+  const inner = (
+      <Box sx={{ ...card, mt: pop ? 0 : 1 }}>
         {v.channels.map((c) => (
           <Box key={c.id} data-tq-agent-channel={c.id} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
             <Typography variant="body2" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap title={channelLine(c)}>{channelLine(c)}
@@ -106,6 +105,7 @@ export default function AgentChannels({ taskId }) {
           </>}
         </>}
         {err && <Typography variant="body2" role="alert" sx={{ mt: 0.75, color: "#7a2f3c" }}>{err}</Typography>}
-      </Box>
-    </details>);
+      </Box>);
+  return pop ? <Box data-tq-agent-channels="pop">{inner}</Box>
+    : <details className="tq-aui-working-fold" data-tq-agent-channels="" open={!!v.channels.length || undefined}><summary>Talk to this agent from…</summary>{inner}</details>;
 }

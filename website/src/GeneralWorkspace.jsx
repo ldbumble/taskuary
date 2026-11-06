@@ -625,7 +625,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
-  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", tail = null }) {
+  onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "" }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -854,8 +854,6 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
           {/* ...AND HOW IT CLOSED, the stream's last line (the owner, 2026-11-06): a closed task is the same chat, its close said in it */}
           {!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">{closedLine}</div>}
-          {/* ...and under it all, folded, what AI the task used (AiUsed.jsx; the owner, 2026-11-06: "hidden you can open and see it") */}
-          {!dock && tail}
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
             {/* NO AI: one small line over the box, its Connect an AI beside it (the owner, 2026-11-06) - the box stays the box */}
@@ -913,7 +911,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
 export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat, noAiSaid = false, noTools = false, noComposer = false, liveSid = "", reread = 0, mails = [], reviews = [],
-  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "", tail = null }) {
+  checklist = null, opening = false, next = null, chat = false, came = null, closedLine = "" }) {
   const [data, setData] = useState(null);
   const [connectorId, setConnectorId] = useState("");
   const [model, setModel] = useState("");
@@ -1178,7 +1176,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
-        came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} tail={chat && !dock ? tail : null}
+        came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""}
         noAi={chat && !dock && !data?.providers?.length && !noAiSaid && !data?.demo
           ? <div className="tq-aui-noai" data-tq-no-ai="">No AI is connected yet - what you type waits for one. <ConnectAi size="small" variant="text" /></div> : null} />
     </OutputsCtx.Provider>

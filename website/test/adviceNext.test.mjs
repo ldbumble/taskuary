@@ -80,13 +80,6 @@ test("the Advisor draws no button of its own; a move the row lacks joins the row
   assert.match(strip, /const lacks = !!\(advice\?\.verb && advice\.verb !== "next" && onPropose\) && !advisedAny\(theirs, advice\);/);
   // ...a refused press is said on the chat's error line (onErr) - there is no strip to say it on
   assert.match(strip, /catch \(err\) \{ onErr\?\.\(proposeFailed\(err\)\); \}/);
-  // ...and every line in the task's Advisor section keeps its Why? (AdvisorNote, the owner 2026-10-26)
-  const note = fs.readFileSync(new URL("../src/AdvisorNote.jsx", import.meta.url), "utf8");
-  assert.match(note, /<button type="button" className="tq-next-why" aria-haspopup="dialog"[\s\S]{0,120}>Why\?<\/button>/);
-  // ...reading the decision the row lit (its `rests`), never the older rows (the Advisor audit's judge, 2026-10-26)
-  assert.match(note, /const a = note\.advice \|\| \{\}, rests = a\.rests \|\| \[\];/);
-  assert.doesNotMatch(note, /\/api\/advice\/notes/);
-  assert.match(note, /<Popover open=\{!!at\}/);
 });
 
 test("the clock menu offers the Advisor's notes for the item on the table", () => {

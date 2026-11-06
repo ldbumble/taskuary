@@ -138,25 +138,12 @@ test("an important line lands in the task's Advisor section, and every other str
   assert.equal(taskNote({ none: "no_ai", for: "task:7" }), null, "no AI is no line at all");
   // ...NO SECTION ON THE TASK ANY MORE (the owner, 2026-11-05: "remove the advisor line from the chat ... the agent is the advisor"): every task
   // is its chat now (2026-11-06), so the line lights a button and is said on the draft it is about and on the Agent's tab - never a block
-  const page = read("TaskPage.jsx"), sec = read("AdvisorNote.jsx");
+  const page = read("TaskPage.jsx");
   assert.match(page, /const warn = notDone \? \(canvas \? note : taskNote\(taskAdvice\)\) : null;/);
   assert.doesNotMatch(page, /<AdvisorNote |advisorNote|adviceIn/, "no Advisor block on the task page");
   assert.match(page, /why=\{warn\?\.line \|\| ""\}/, "said on the draft whose button it lit");
   assert.doesNotMatch(page, /1 note/, "nothing hides behind a tab, so the tab says nothing of it");
-  assert.match(sec, /aria-label="Advisor" data-tq-advisor=""/);
-  assert.match(sec, /<TaskuaryMark size=\{12\} \/><Typography[^>]*>Advisor<\/Typography>/);
-  // ...one compact line that WRAPS - on a phone "this is 5h" was cut off by an ellipsis (the judge, 2026-10-26)
-  assert.match(sec, /flexWrap: "wrap"/);
-  assert.doesNotMatch(sec, /textOverflow|whiteSpace: "nowrap"/);
-  assert.match(sec, /\{note\.draft && onDraft && <button[^>]*data-tq-advisor-draft=""/);
-  assert.match(sec, />Why\?<\/button>/);
+  assert.ok(!fs.existsSync(new URL("../src/AdvisorNote.jsx", import.meta.url)), "the section it drew is gone with its last user");
   assert.doesNotMatch(page, /data-tq-task-advice/);
   assert.match(read("CanvasItem.jsx"), /onLeave=\{onLeave\} onStay=\{onStay\} note=\{note\} litMove=\{phone \? pick\?\.verb \|\| pick\?\.id \|\| "" : ""\} \/>/);
-});
-
-test("a critique carries its fix: Continue with this / Redraft with this, pressed with the Advisor's line as its note", () => {
-  // the owner, 2026-10-28: "just judging without action is not worth much" (advisor.fix_of)
-  const sec = read("AdvisorNote.jsx");
-  assert.match(sec, /export const fixOf = \(note\) => \(note\?\.advice\?\.fix\?\.verb && note\.advice\.fix\.note \? note\.advice\.fix : null\);/);
-  assert.match(sec, /\{fix && <button[^>]*data-tq-advisor-fix=\{fix\.verb\}[^>]*onClick=\{runFix\}/);
 });

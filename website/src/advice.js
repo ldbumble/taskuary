@@ -1,6 +1,6 @@
 // The Advisor's line on the item on the table (spec 2026-10-12, build step 3): the pure piece, so it can be tested without a
 // browser. The rest is wiring in AssistantView.jsx: it lights a button on the row (ActionRow), and the few lines that warn are drawn
-// in the task's own Advisor section (taskNote, AdvisorNote) - no line stands over the row any more (2026-10-26).
+// on the draft whose button it lit (taskNote) - no line stands over the row any more (2026-10-26), and no Advisor section in the task (2026-11-05).
 
 /* Which key to re-read advice for when an `advice` live event lands: the event carries the target's legacy key
    (task:N / msg:N) while the table holds the rail's key (processing:... in a real install) - a card's aliases bridge

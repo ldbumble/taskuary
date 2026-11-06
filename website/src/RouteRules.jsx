@@ -4,7 +4,7 @@
 // instead where it can. Fixed is the cards, exactly as before. A rule is
 // built from dropdowns over the values the router knows, never a typed condition, and its sentence is made from what it does.
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Box, Button, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Autocomplete, Box, Button, MenuItem, Select, Switch, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, card, mono } from "./theme.jsx";
 
@@ -17,6 +17,56 @@ export const SAYS = "Triage judges each task quick, normal or hard and picks the
   + "hard work on a stronger one. An AI with only one model thinks less or harder instead, where it can.";
 const sel = { fontSize: 12.5, bgcolor: "#fff", minWidth: 150 };
 const err = (e, d) => e?.response?.data?.detail || e?.message || d;
+// AN AI PER LEVEL (the owner, 2026-11-06: "not by default but you can adjust in settings"): for the agents' work only - general work,
+// quick work, and coding on a CLI. Blank is the card's AI; set, that level runs on the AI named here when it can take the call.
+const LEVELS = [["quick", "Quick"], ["normal", "Normal"], ["hard", "Hard"]];
+export const CARDS = "the card's AI";
+
+function LevelModel({ value, models, disabled, onSave }) {
+  const [v, setV] = useState(value || "");
+  useEffect(() => setV(value || ""), [value]);
+  const commit = (next) => (next || "") !== (value || "") && onSave(next || "");
+  return (
+    <Autocomplete freeSolo forcePopupIcon openOnFocus size="small" options={models || []} value={v} disabled={disabled}
+      onInputChange={(_e, next) => setV(next)} onChange={(_e, next) => { setV(next || ""); commit(next); }} onBlur={() => commit(v)}
+      sx={{ minWidth: 170 }} renderInput={(p) => <TextField {...p} placeholder="its own model" sx={{ bgcolor: "#fff" }}
+        inputProps={{ ...p.inputProps, style: { fontSize: 12.5 } }} />} />
+  );
+}
+
+function ByLevel({ p, save }) {
+  const by = p.by_level || {}, brains = p.brains || [];
+  const put = (lvl, patch) => {
+    const next = { ...by, [lvl]: { pick: "", model: "", ...by[lvl], ...patch } };
+    save({ by_level: Object.fromEntries(Object.entries(next).filter(([, x]) => x.pick)) });
+  };
+  return (
+    <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }} data-tq-knob="ai_route_brain_by_level" data-tq-route-by-level="">
+      <Typography sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Which AI for each level</Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
+        For agents' work: general work, quick work, and coding on a CLI. Triage, drafting and the Assistant keep their cards.
+        An AI that can't take the work (not connected, resting on its limit, not marked for sensitive data) leaves it on the card.
+      </Typography>
+      {LEVELS.map(([lvl, word]) => {
+        const cur = by[lvl] || {}, b = brains.find((x) => x.pick === cur.pick);
+        return (
+          <Box key={lvl} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.75 }} data-tq-route-by-level-row={lvl}>
+            <Typography sx={{ fontSize: 12.5, color: DIM, width: 56 }}>{word}</Typography>
+            <Select size="small" displayEmpty value={cur.pick || ""} onChange={(e) => put(lvl, { pick: e.target.value, model: "" })}
+              sx={{ ...sel, minWidth: 220 }} inputProps={{ "aria-label": `${word} work runs on` }}>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>{CARDS}</MenuItem>
+              {brains.map((x) => (
+                <MenuItem key={x.pick} value={x.pick} sx={{ fontSize: 12.5 }}>{x.label}{x.cli ? "" : " - not for coding"}</MenuItem>
+              ))}
+              {cur.pick && !b && <MenuItem value={cur.pick} sx={{ fontSize: 12.5 }}>{cur.pick} (not connected)</MenuItem>}
+            </Select>
+            <LevelModel value={cur.model} models={b?.models} disabled={!cur.pick} onSave={(model) => put(lvl, { model })} />
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
 
 export function RouteRules() {
   const [p, setP] = useState(null);
@@ -65,6 +115,7 @@ export function RouteRules() {
           ))}
         </Box>
       )}
+      {auto && <ByLevel p={p} save={save} />}
       {say && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }}>{say}</Alert>}
       {p.warning && <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }} data-tq-route-warning="">{p.warning}</Alert>}
       {/* the DATA rules hold in either mode (a constraint, not a tier), so Fixed shows them too */}

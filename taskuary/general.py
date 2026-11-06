@@ -1341,6 +1341,11 @@ class GeneralSession:
         if connector_id is None and not pick:
             # the task's ROLE is not a candidate here - it names the instructions, never the brain
             if any(o['pick'] == saved.get('Pick') for o in provider_options(store)) and not _failed(store, saved['Pick']): pick = saved['Pick']
+        # ...and a first start nobody steered opens on the AI the owner set for this task's level in AI routing (brainroute.by_level)
+        if connector_id is None and not pick and model is None and not is_dock(store.get_task(task_id)):
+            from . import brainroute
+            lp = brainroute.level_pick(store, 'general', task_id) if brainroute.by_level(store) else None
+            if lp: pick, model = lp[0], lp[1] or None
         if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)

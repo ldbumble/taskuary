@@ -45,6 +45,7 @@ class Route(NamedTuple):
     rule: str; why: str            # 'fixed' | 'you chose it' | a rule id; one sentence built from the inputs, never by a model
     difficulty: str = ''; data_class: str = ''
     escalate: str = ''             # the tier a retry would go up to, '' when none
+    level: str = ''                # 'quick'|'normal'|'hard' when the owner's AI for that level runs it (by_level), else ''
 
 
 KEEP_DAYS = 30           # how long a route's reason is kept (retention.tick trims the rest)
@@ -310,6 +311,67 @@ def _first(store, f: dict, use: str):
     return next((r for r in rules(store) if r['on'] and use in r['use'] and matches(r, f)), None)
 
 
+# ── an AI per level (the owner, 2026-11-06: Auto choosing between their AIs by triage's difficulty - "not by default but you can
+# adjust in settings"). Off until set: each level is the card's AI. Set, quick, normal or hard work runs on the AI named for it,
+# when that AI can take the call - otherwise on the card, and the reason says why. Only the agents' work: triage, drafting and the
+# Assistant each have a card of their own that already IS the owner's choice of AI for that job, and coding takes only a CLI.
+LEVEL_KEY = 'ai_route_brain_by_level'
+LEVEL_OF = {'light': 'quick', 'standard': 'normal', 'strong': 'hard'}
+LEVEL_JOBS = ('general', 'quick_work', 'coding')
+
+
+def by_level(store) -> dict:
+    "{level: {pick, model}} for each level the owner set an AI for - blank (the default) is none."
+    import json
+    try: d = json.loads(str(store.get_setting(LEVEL_KEY) or '').strip() or '{}')
+    except ValueError: d = {}
+    return {l: {'pick': str(v.get('pick') or '').strip(), 'model': str(v.get('model') or '').strip()}
+            for l, v in (d if isinstance(d, dict) else {}).items()
+            if l in LEVEL_OF.values() and isinstance(v, dict) and str(v.get('pick') or '').strip()}
+
+
+def save_by_level(store, d: dict, actor: str = 'owner') -> dict:
+    "The owner's choice, checked: a level is quick, normal or hard, its AI a `cli:` or `connector:` pick; a blank pick is the card's."
+    import json
+    clean = {}
+    for l, v in (d or {}).items():
+        if l not in LEVEL_OF.values(): raise ValueError('a level is quick, normal or hard')
+        p = str((v or {}).get('pick') or '').strip()
+        if not p: continue
+        if not p.startswith(('cli:', 'connector:')): raise ValueError("a level's AI is a connected CLI or AI card")
+        clean[l] = {'pick': p, 'model': str(v.get('model') or '').strip()}
+    store.set_setting(LEVEL_KEY, json.dumps(clean) if clean else '', actor)
+    return by_level(store)
+
+
+def _not_ready(store, p: str) -> str:
+    "Why a pick could not start a call here - '' when it can: connected (a CLI installed, its last test not failed; a card on, with a key)."
+    from . import agents, general
+    if not any(o['pick'] == p for o in general.provider_options(store)): return 'is not connected'
+    if p.startswith('cli:'):
+        if not agents.runs_here(dict(agents.connection_brains(store)).get(p[4:])): return 'is not installed here'
+        if agents.cli_tests(store).get(p[4:]) is False: return 'failed its last test'
+    return ''
+
+
+def _level(store, job: str, tier: str, want_pick, want_model, hands, only) -> tuple:
+    """((pick, model), '') when the owner's AI for this tier's level takes this call; (None, '; why not') when one is set and cannot;
+    (None, '') when none is set or the caller named another AI or model - an explicit pick always wins."""
+    s = by_level(store).get(LEVEL_OF.get(tier)) if job in LEVEL_JOBS else None
+    if not s or (want_pick is not None and want_pick != s['pick']): return None, ''
+    to, m = s['pick'], s['model']
+    # ...a general session started on the level's AI carries that AI's own model back each turn (general._selected): still the level's
+    if want_model and want_model != m:
+        from . import general
+        if job != 'general' or want_model != general._selected(store, pick=to)[2]: return None, ''
+    cold = cooldowns(store)
+    no = (_not_ready(store, to) or ('has no shell, and this work needs a CLI' if not hands(to) else '')
+          or (f"is limited until {cold[to].strftime('%H:%M')}" if to in cold else '') or ('has spent its budget' if spent(store, to) else '')
+          or ('is not marked to read sensitive data' if only and not may_read_sensitive(store, to) else ''))
+    if no: return None, f"; {LEVEL_OF[tier]} work is set to {_said(store, to)} in AI routing, but it {no}, so its card"
+    return (to, m), ''
+
+
 def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=None) -> Route:
     """The brain for one call of `job`. An explicit pick or model (`want_*`: the owner's picker, a saved session, a
     report's own brain, a workflow's model) always wins. `task` is the task dict or id the call is about, if any.
@@ -339,9 +401,21 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
         if ok: pick, chain = ok[0], ok[1:]
     if not pick: why = f"{held or agents.NO_AI}, so {JOB_WORDS[job]} waits"
     else: why = f"{JOB_WORDS[job]} on {_said(store, pick)}{f', {model}' if model else ''}, {'as picked for it' if chosen else 'as its card says'}{held}"
-    if pick and mode(store) == 'auto' and not want_model and not (job == 'general' and is_dock(task)):
+    lvl = ''
+    if pick and mode(store) == 'auto' and not (job == 'general' and is_dock(task)):
         r = _first(store, f, 'tier')
-        if r:
+        lv, miss = _level(store, job, r['use']['tier'], want_pick, want_model, hands, only) if r else (None, '')
+        hard = f" judged {f['difficulty']}" if r and 'difficulty' in r['when'] else ''
+        if lv:
+            # THE OWNER'S AI FOR THIS LEVEL: the tier is the rules', the AI the owner's - the card's AI next behind it, then its backups
+            (to, m), tier, rule, said = lv, r['use']['tier'], r['id'], ''
+            if to != pick: chain, pick = [pick, *chain], to
+            lvl = LEVEL_OF[tier]
+            if tier == 'strong' and not cap_left(store): tier, said = 'standard', f"; today's {cap(store)} strong calls are spent, so standard"
+            elif tier == 'strong' and not m and not strong_of(store, pick) and not lift(store, pick, 'strong'): tier, said = 'standard', '; it has no strong model, so standard'
+            g, model = GEAR_OF[tier], m or (lift(store, pick, tier) if tier in LIFT else '')
+            why = f"{JOB_WORDS[job]}{hard}: {lvl} work -> {_said(store, pick)}{f', {spell(model)}' if model else ''} as set in AI routing (rule {rule}){said}{held}"
+        elif r and not want_model:
             tier, rule, said = r['use']['tier'], r['id'], ''
             if tier == 'strong':
                 # a strong model first - the brain's own, else the first backup's, as before - then the brain's one model at high
@@ -357,8 +431,8 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
             # the card's model IS the standard tier; strong runs the brain's strong gear and light its quick one - or, on a brain with
             # one model, that model at high or low effort
             g, model = GEAR_OF[tier], (model if tier == 'standard' else lift(store, pick, tier, model))
-            hard = f" judged {f['difficulty']}" if 'difficulty' in r['when'] else ''
             why = f"{JOB_WORDS[job]}{hard} -> {tier} on {_said(store, pick)}{f', {spell(model)}' if model else ''} (rule {rule}){said}{held}"
+        why += miss
     # a brain resting on its usage limit hands the call to the first backup that is not (Auto mode; the cards stand in Fixed)
     if pick and mode(store) == 'auto' and pick in (cold := cooldowns(store)):
         to = next((c for c in chain if c and c not in cold and hands(c)), '')
@@ -371,7 +445,13 @@ def choose(store, job: str, task=None, want_pick=None, want_model=None, gear=Non
     if pick and mode(store) == 'auto' and tier != 'strong' and job in ESCALATES and _first(store, f, 'escalate'): up = 'strong'
     if browser and str(pick).startswith('cli:'): chain = [c for c in chain if hands(c)]      # its failover too: no brain without a shell
     return Route(job, tier, pick, model, g, [c for c in chain if c and c != pick], rule, why[0].upper() + why[1:],
-                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up)
+                 (j or {}).get('difficulty', ''), (j or {}).get('data_class', ''), up, lvl)
+
+
+def level_pick(store, job: str, task) -> tuple | None:
+    "(pick, model) of the owner's AI for this task's level when it would run `job` now (choose), else None - what a new session opens on."
+    r = choose(store, job, task)
+    return (r.pick, r.model) if r.level else None
 
 
 def for_session(store, task, brain: str = None) -> tuple:
@@ -380,6 +460,8 @@ def for_session(store, task, brain: str = None) -> tuple:
     if mode(store) != 'auto': return brain, None
     r = choose(store, 'coding', task, want_pick=f'cli:{brain}' if brain else None)
     log(store, r, (task or {}).get('TaskId') if isinstance(task, dict) else task)
+    # ...and on the CLI the owner set for this level in AI routing (by_level): its model, else its strong gear on hard work
+    if r.level and r.pick.startswith('cli:'): return r.pick[4:], r.model or (strong_of(store, r.pick) if r.gear == 'strong' else '') or None
     if r.gear != 'strong' or not r.pick.startswith('cli:'): return brain, None
     return r.pick[4:], strong_of(store, r.pick) or r.model or None
 
@@ -534,25 +616,45 @@ def _card_model(store, pick: str) -> str:
             or (llm.OPENAI_COMPATIBLE.get(t) or ('', ''))[1] or 'its default model')
 
 
+def _words(store, p: str, cfg) -> dict:
+    "{quick, normal, hard} - what each level runs on brain `p`, a model name or 'same model, low/high effort'."
+    from .llm import LIGHT_DEFAULT
+    if p.startswith('cli:'):
+        own, dflt = _own(store, p, 'model', cfg), LIGHT_DEFAULT.get(_cli(store, p, cfg), '')
+        light = _own(store, p, 'light_model', cfg) or ('' if dflt.startswith('effort:') else dflt)
+        quick = spell(light) or (f'{SAME}, {dflt[7:]} effort' if dflt.startswith('effort:') else '') or \
+                (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME)
+        normal = spell(own) or 'its default model'
+    else: quick, normal = (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME), _card_model(store, p)
+    hard = spell(strong_of(store, p, cfg)) or (f'{SAME}, {LIFT["strong"]} effort' if lift(store, p, 'strong', cfg=cfg) else SAME)
+    return {'quick': quick, 'normal': normal, 'hard': hard}
+
+
 def levels(store, cfg=None) -> list:
     """What quick, normal and hard work runs on, per brain doing a job here - [{pick, brain, quick, normal, hard}], each a model name
-    or 'same model, low/high effort', in the words Settings shows. Read off the same gears `choose` and llm.make_cli_llm run."""
+    or 'same model, low/high effort', in the words Settings shows. Read off the same gears `choose` and llm.make_cli_llm run. A level
+    the owner gave an AI of its own (by_level) says that AI for the agents' work on it: all of it on a brain that only runs agents."""
     from . import config
-    from .llm import LIGHT_DEFAULT
     cfg = config.load() if cfg is None else cfg
-    picks = list(dict.fromkeys(p for p in (_fixed(store, j)[0] for j in ('triage', 'draft', 'general', 'coding')) if p and p != 'demo'))
+    by = {j: _fixed(store, j)[0] for j in ('triage', 'draft', 'general', 'coding')}
+    picks = list(dict.fromkeys(p for p in by.values() if p and p != 'demo'))
+    reads, sets = {by['triage'], by['draft']}, by_level(store)
     out = []
     for p in picks:
-        if p.startswith('cli:'):
-            own, dflt = _own(store, p, 'model', cfg), LIGHT_DEFAULT.get(_cli(store, p, cfg), '')
-            light = _own(store, p, 'light_model', cfg) or ('' if dflt.startswith('effort:') else dflt)
-            quick = spell(light) or (f'{SAME}, {dflt[7:]} effort' if dflt.startswith('effort:') else '') or \
-                    (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME)
-            normal = spell(own) or 'its default model'
-        else: quick, normal = (f'{SAME}, {LIFT["light"]} effort' if lift(store, p, 'light', cfg=cfg) else SAME), _card_model(store, p)
-        hard = spell(strong_of(store, p, cfg)) or (f'{SAME}, {LIFT["strong"]} effort' if lift(store, p, 'strong', cfg=cfg) else SAME)
-        out.append({'pick': p, 'brain': _said(store, p), 'quick': quick, 'normal': normal, 'hard': hard})
+        w = _words(store, p, cfg)
+        for l, v in sets.items():
+            if not p.startswith('cli:') and by['general'] != p: continue      # an API card runs no coding, so only its general work moves
+            to = f"{_said(store, v['pick'])}, {spell(v['model']) or _words(store, v['pick'], cfg)[l]}"
+            w[l] = to if p not in reads else f'{w[l]}; agents: {to}'
+        out.append({'pick': p, 'brain': _said(store, p), **w})
     return out
+
+
+def brains(store) -> list:
+    "The AIs a level may be given - the same list the cards and the general agent's picker offer (general.brain_options)."
+    from . import general
+    return [{'pick': o['pick'], 'label': o.get('label') or _said(store, o['pick']), 'cli': o['pick'].startswith('cli:'),
+             'models': list(o.get('models') or ([o['model']] if o.get('model') else []))} for o in general.brain_options(store)]
 
 
 def panel(store) -> dict:
@@ -560,16 +662,19 @@ def panel(store) -> dict:
     n = cap(store)
     try: lv = levels(store)
     except Exception as e: lv = []; logger.debug(f'brainroute: could not read what each level runs on - {e}')
+    try: bs = brains(store)
+    except Exception as e: bs = []; logger.debug(f'brainroute: could not list the AIs a level may run on - {e}')
     return {'mode': mode(store), 'rules': [{**r, 'sentence': sentence(r)} for r in rules(store)], 'cap': '' if n is None else n,
             'used_today': strong_today(store), 'jobs': list(JOBS), 'tiers': list(TIERS), 'difficulties': ['quick', 'standard', 'hard'],
-            'warning': coverage_warning(store), 'levels': lv}
+            'warning': coverage_warning(store), 'levels': lv, 'by_level': by_level(store), 'brains': bs}
 
 
-def set_panel(store, mode_: str = None, rs: list = None, cap_: str = None, actor: str = 'owner') -> dict:
+def set_panel(store, mode_: str = None, rs: list = None, cap_: str = None, actor: str = 'owner', by_level_: dict = None) -> dict:
     if mode_ is not None:
         if mode_ not in ('fixed', 'auto'): raise ValueError('the mode is fixed or auto')
         store.set_setting('ai_route_mode', mode_, actor)
     if rs is not None: save_rules(store, rs, actor)
+    if by_level_ is not None: save_by_level(store, by_level_, actor)
     if cap_ is not None:
         c = str(cap_).strip()
         if c and not c.isdigit(): raise ValueError('the cap is a whole number of strong calls a day, or blank for none')

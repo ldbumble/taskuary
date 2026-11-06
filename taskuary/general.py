@@ -1543,7 +1543,7 @@ class GeneralSession:
         # The others find theirs already taken and end quietly: the turn that took them answers for them.
         mine = object() if as_owner and not brief and not kept else None
         if mine is not None:
-            with self._wlock: self._waiting.append((mine, text))
+            with self._wlock: self._waiting.append((mine, text, list(attachments or [])))
         if not self._take(WAIT_TURN, cancel):
             if mine is not None:
                 with self._wlock: self._waiting = [w for w in self._waiting if w[0] is not mine]
@@ -1559,7 +1559,8 @@ class GeneralSession:
         if mine is not None:
             with self._wlock:
                 if not any(w[0] is mine for w in self._waiting): self._lock.release(); return ''     # an earlier turn took it with its own
-                lines, self._waiting = [w[1] for w in self._waiting], []
+                # ...each line with the files sent with it (the owner, 2026-11-06): the turn that took a line carried only its own
+                lines, attachments, self._waiting = [w[1] for w in self._waiting], list(dict.fromkeys(p for w in self._waiting for p in w[2])), []
             text = '\n\n'.join(lines)
         if len(lines) > 1:
             together = (f"THE OWNER SENT {len(lines)} MESSAGES while you worked - the last {len(lines)} USER turns. Read them together: a later "

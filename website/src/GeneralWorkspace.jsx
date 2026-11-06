@@ -19,7 +19,7 @@ import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { AttachChip, AttachRow, IMAGE_TYPES, INLINE_CHIPS, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
-import { heldLine, stillHeld } from "./heldLines.js";
+import { heldLine, notShown, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { isWork, stepsOf } from "./agentSteps.js";
@@ -622,7 +622,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
   );
 }
 
-function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
+function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onAttachBack,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
   onEnded, approve = null, chat = false, reading = null, came = null, noAi = null, closedLine = "", tail = null }) {
@@ -643,6 +643,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
         model: selected.model || null,
         attachments: attachmentsRef.current.map((a) => a.path),
       };
+      // THE FILES LEAVE THE BOX WITH THE SEND (the owner, 2026-11-06: two pictures sent, their chips still in the box): let go at the server's
+      // first word back - the send accepted - never at the turn's end, minutes on; a send refused keeps them. Only these: one added meanwhile stays
+      const sentFiles = attachmentsRef.current.map((a) => a.path);
+      let gone = !sentFiles.length;
+      const took = () => { if (!gone) { gone = true; onClearAttachments(sentFiles); } };
       const events = [];
       // ..."Started Claude Code (on this computer)" only on the conversation's first turn: it opened every follow-up the owner typed
       // (the desktop stress test, 2026-11-03)
@@ -655,6 +660,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       // task, it is still answering the last question, no AI is connected - so they are shown.
       try {
       for await (const event of streamAssistant(task.TaskId, body, abortSignal)) {
+        if (event.type !== "error") took();
         if (event.type === "start") {
           onStarted?.(event.session);
           events.push(event);
@@ -671,7 +677,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           yield { content: content(`⚠ ${event.error || "The agent stopped without an answer."}`) };
           return;
         } else if (event.type === "done") {
-          onClearAttachments(); onSent(event.payload);
+          onSent(event.payload);
           yield { content: content(event.reply) };
         }
       }
@@ -766,24 +772,36 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     if (!w || answering.current) return;
     answering.current = true; setAskErr(""); c.setText("");
     // ...drawn at once at the foot as the owner's (the owner, 2026-11-05: "send it messages and it did not appear right away")
+    // ...and drawn ONCE: where the answer goes into this thread (answerAsk's own-session road) the thread draws it, and notShown keeps the held copy away
     const id = `held-${Date.now()}`, after = (messages || []).filter((m) => m?.role === "user").length;
-    setHeld((h) => [...h, { id, text: w, after }]);
-    Promise.resolve(onAnswer?.(w)).catch((x) => { c.setText(w); setAskErr(errText(x)); }).finally(() => { answering.current = false; });
+    setHeld((h) => [...h, { id, text: w, after, drawn: mineDrawn.length }]);
+    Promise.resolve(onAnswer?.(w)).catch((x) => { setHeld((h) => h.filter((l) => l.id !== id)); c.setText(w); setAskErr(errText(x)); })
+      .finally(() => { answering.current = false; });
   };
   /* TALK WHILE IT WORKS (the owner's stress run, 2026-11-05): Enter while the turn runs put a newline in the box and the line never left -
      under a placeholder that says "Add something for it to pick up". The line is held: drawn at once as the owner's, and sent to the same
      session, which takes it as its next turn (send_prompt waits its turn). The thread's own copy replaces it once the server has it. */
   const [held, setHeld] = useState([]);
   useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, messages) : h)); }, [messages]);
+  // the owner's lines the thread on screen draws - its own appends too, which the server's copy has not caught up with (heldLines.notShown)
+  const [mineDrawn, setMineDrawn] = useState([]);
+  useEffect(() => {
+    const read = () => { const ms = runtime.thread.getState().messages.filter((m) => m.role === "user");
+      setMineDrawn((was) => (was.length === ms.length && was.every((m, i) => m === ms[i]) ? was : ms)); };
+    read(); return runtime.thread.subscribe(read);
+  }, [runtime]);
   const holdLine = (e) => {
     if (dock || asking) return;
     const c = runtime.thread.composer, w = heldLine(e, c.getState().text, runtime.thread.getState().isRunning);
     if (!w) return;
     e.preventDefault(); c.setText("");
     const id = `held-${Date.now()}-${Math.random()}`, after = (messages || []).filter((m) => m?.role === "user").length;
-    setHeld((h) => [...h, { id, text: w, after }]);
-    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w }, { timeout: 0 })
-      .catch((x) => setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))));
+    // ...WITH THE BOX'S FILES: a line held mid-turn went without them, and they sat on in the box (the owner, 2026-11-06) - put back if it did not go
+    const files = [...attachmentsRef.current];
+    if (files.length) onClearAttachments(files.map((a) => a.path));
+    setHeld((h) => [...h, { id, text: w, after, drawn: mineDrawn.length }]);
+    api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path) }, { timeout: 0 })
+      .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
@@ -813,7 +831,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           <ThreadPrimitive.If running={false}>{serverBusy && atWork}</ThreadPrimitive.If>
           {/* ...and the lines typed while it works come UNDER its "Working on this…": over it, they stood between the turn's name and its
               clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
-          {held.map((l) => <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
+          {notShown(held, mineDrawn).map((l) => <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
             <div className="tq-aui-role">you</div><div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
             {l.err && <div className="tq-aui-hint" role="alert">{l.err}</div>}</div>)}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -996,7 +1014,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     } catch (e) { setError(errText(e)); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
-  const clearAttachments = useCallback((path) => setAttachments((old) => path ? old.filter((a) => a.path !== path) : []), []);
+  // one path (a chip's x), or the paths a send took - never the whole box, so a file added since stays
+  const clearAttachments = useCallback((paths) => setAttachments((old) => (paths == null ? [] : old.filter((a) => ![paths].flat().includes(a.path)))), []);
+  const attachBack = useCallback((files) => setAttachments((old) => [...files.filter((f) => !old.some((a) => a.path === f.path)), ...old]), []);
   const sent = useCallback((payload) => { accept(payload); setRevision((k) => k + 1); }, [accept]);
   /* THE SESSION IS KNOWN AT THE START OF THE TURN, not its end. The stream's first event carries it
      (server.assistant_stream puts `start` before the prompt is sent), and nothing read it: the pane
@@ -1172,7 +1192,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
           // ...a file its turn draws, or a post's own picture, is not one more row at the foot of a chat
           .filter((r) => !(chat && (shownMessages.some((m) => m.id === r.after) || (data?.cards || []).some((p) => p.post?.image === r.path))))]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
-        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments}
+        attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onEnded={failed} onClearAttachments={clearAttachments} onAttachBack={attachBack}
         onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer} approve={approve}

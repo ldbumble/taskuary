@@ -18,6 +18,7 @@ import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import WriteIcon from "@mui/icons-material/EditNoteRounded";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
+import { stillHeld } from "./heldLines.js";
 import { chatRows, workCount } from "./codingChat.js";
 import AgentChannels, { PermissionCards } from "./AgentChannels.jsx";
 import { teammateLine } from "./agentChannels.js";
@@ -102,8 +103,10 @@ export default function CodingChat({ task, term = null, next = null, landing = n
   useEffect(() => { if (!live) return undefined; const t = setInterval(load, 2500); return () => clearInterval(t); }, [!!live, load]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onLive("task-changed", (ev) => { if (touches(ev, tid)) load(); }), [tid, load]);
   const rows = useMemo(() => chatRows(data || {}), [data]);
-  // a line typed here stays drawn as the owner's until the CLI's own log has it
-  useEffect(() => { setHeld((h) => h.filter((l) => !rows.some((r) => r.kind === "you" && r.text.trim() === l.text.trim()))); }, [rows]);
+  // a line typed here stays drawn as the owner's until the CLI's own log has it - matched as the general chat matches (heldLines.stillHeld): its
+  // words however spelled back, and only a line logged SINCE the hold, so a "yes" said earlier never takes a new "yes" away
+  const yours = useMemo(() => rows.filter((r) => r.kind === "you").length, [rows]);
+  useEffect(() => { setHeld((h) => (h.length ? stillHeld(h, rows.filter((r) => r.kind === "you").map((r) => ({ role: "user", content: [{ type: "text", text: r.text }] }))) : h)); }, [rows]);
   const termShown = !!live && (termPick ?? !!live.asking);
   const vp = useRef(null), stuck = useRef(true);
   useEffect(() => { const v = vp.current; if (v && stuck.current) v.scrollTop = v.scrollHeight; }, [rows.length, held.length, !!next, !!landing]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,7 +117,7 @@ export default function CodingChat({ task, term = null, next = null, landing = n
     if (!w || sending) return;
     setText(""); setErr(""); setSending(true);
     const id = `held-${Date.now()}`;
-    setHeld((h) => [...h, { id, text: w }]);
+    setHeld((h) => [...h, { id, text: w, after: yours }]);
     try {
       // ...into the running CLI as its next line, or the session picked back up with these words leading
       if (live) await api.post(`/api/tasks/${task.TaskId}/waitroom`, { text: w });

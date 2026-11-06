@@ -18,7 +18,7 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
-import { AttachChip, AttachRow, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
+import { AttachChip, AttachRow, IMAGE_TYPES, INLINE_CHIPS, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, stillHeld } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
@@ -169,15 +169,24 @@ const AgentNameCtx = React.createContext("Taskuary");
 const OutputsCtx = React.createContext(null);
 // ...and a file NAMED in the words - `Report.csv` - opens over the chat at a press (FileDialog): the names are marked once drawn
 const nameOf = (s) => String(s || "").trim().replace(/^.*[\\/]/, "");
+export const isOutputsFolder = (s, tid) => new RegExp(`outputs[\\\\/]TQ-0*${Number(tid)}[\\\\/]?$`, "i").test(String(s || "").trim());
 const AssistantText = ({ text }) => {
   const at = React.useContext(OutputsCtx), shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
   const box = React.useRef(null), [viewing, setViewing] = useState(null);
   const listed = at?.listed || [];
   const fileNamed = (el) => { const n = nameOf(el?.textContent); return n ? listed.find((f) => f.name === n || nameOf(f.path) === n) : null; };
   useEffect(() => {
-    box.current?.querySelectorAll("code").forEach((c) => { if (fileNamed(c)) c.setAttribute("data-tq-file-link", ""); else c.removeAttribute("data-tq-file-link"); });
+    box.current?.querySelectorAll("code").forEach((c) => {
+      if (fileNamed(c)) c.setAttribute("data-tq-file-link", ""); else c.removeAttribute("data-tq-file-link");
+      // ...and THIS TASK'S OUTPUTS FOLDER, named as a path, opens on this computer at a press (the owner, 2026-11-06: "can this be a link so
+      // i can open it on my machine?") - the server opens the folder it knows, never a path the page sends
+      if (at?.tid && isOutputsFolder(c.textContent, at.tid)) c.setAttribute("data-tq-folder-link", ""); else c.removeAttribute("data-tq-folder-link");
+    });
   });
-  const open = (e) => { const c = e.target.closest?.("code[data-tq-file-link]"), f = c && fileNamed(c); if (f) { e.preventDefault(); setViewing(f); } };
+  const open = (e) => {
+    const d = e.target.closest?.("code[data-tq-folder-link]");
+    if (d) { e.preventDefault(); api.post(`/api/task-outputs/${at.tid}/open`).catch(() => {}); return; }
+    const c = e.target.closest?.("code[data-tq-file-link]"), f = c && fileNamed(c); if (f) { e.preventDefault(); setViewing(f); } };
   // an answer that was only its summary block is filed as the summary's "did" (general._file): said once, under What I did
   const did = useAuiState((s) => String(s.message.metadata?.custom?.summary?.did || "").trim());
   const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
@@ -865,13 +874,15 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <ComposerPrimitive.Root className="tq-aui-composer" onSubmit={answerTyped}>
               {/* ...its files inside it, the one attachment look in one line (promptImages AttachChip; the owner, 2026-11-05) */}
               {/* ...and WHERE IT CAME FROM rides the box as a chip (the owner, 2026-11-06: one prompt box everywhere) - a press opens it */}
-              {(!!attachmentsRef.current.length || !!came) && <AttachRow className="tq-aui-attachments" sx={{ flex: "0 0 100%", pt: 0.25, px: 0.5 }}>
-                {came && <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
-                  sx={{ cursor: came.onOpen ? "pointer" : "default" }} />}
-                {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</AttachRow>}
               <IconButton size="small" onClick={onAttach} title="Attach a file - or paste or drop one here" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
               </IconButton>
+              {/* ...ONE THIN LINE: the chips sit at the box's left, the words after them (the owner, 2026-11-06: "keep the prompt box thin...
+                  put the from you in the left side of the prompt box and text won't go there") */}
+              {(!!attachmentsRef.current.length || !!came) && <AttachRow className="tq-aui-attachments" sx={INLINE_CHIPS}>
+                {came && <AttachChip data-tq-came-chip="" name={came.label} title={came.title || came.label} icon={came.icon || false} onClick={came.onOpen}
+                  sx={{ cursor: came.onOpen ? "pointer" : "default" }} />}
+                {attachmentsRef.current.map((a) => <AttachChip key={a.path} data-tq-file-chip={a.name} name={a.name} onRemove={() => onClearAttachments(a.path)} />)}</AttachRow>}
               <ComposerPrimitive.Input
                 className="tq-aui-input"
                 onKeyDown={holdLine}

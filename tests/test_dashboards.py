@@ -411,3 +411,92 @@ def test_paused_it_stays_paused_and_deleted_it_stays_deleted(tmp_path):
     assert [r['Active'] for r in _glances(db)] == [0]                    # a restart never switches it back on
     s = SQLiteStore(str(db)); s.delete_source(row['SourceId']); s.close()
     assert _glances(db) == [] and _glances(db) == []                     # ...and deleted, it does not come back
+
+
+# ── a tile is one sentence (the owner, 2026-11-06: "maybe we should just use text to say what it shows") ─────────────────────
+TILE = {'kind': 'stat', 'title': 'Open tasks', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'}
+
+
+def test_a_good_sentence_comes_back_as_one_checked_tile_carrying_its_words():
+    llm = _model(json.dumps({'component': {**TILE, 'colour': 'red'}}))
+    out = compose.compose_tile(_store(), SPEC, ' How many tasks are open right now, lower is better ', llm)
+    assert out == {'component': {**TILE, 'said': 'How many tasks are open right now, lower is better'}}, 'a key no preset reads is dropped'
+    (ask,) = llm.seen
+    src = ask['sources'][0]
+    assert ask['sentence'].startswith('How many') and src['key'] == 'tasks' and 'state' in src['columns'] and src['holds']
+    assert 'current' not in ask
+
+
+def test_an_invalid_answer_is_asked_again_once_with_the_reason_and_the_fix_is_kept():
+    llm = _model(json.dumps({'component': {**TILE, 'where': {'colour': 'open'}}}), json.dumps({'component': TILE}))
+    out = compose.compose_tile(MemoryStore(), SPEC, 'open tasks', llm, current=SPEC['components'][0])
+    assert out['component']['where'] == {'state': 'open'} and out['component']['said'] == 'open tasks'
+    first, again = llm.seen
+    assert first['current']['title'] == 'Open tasks' and 'colour' in again['it_was_refused_because'] and again['your_last_answer']
+
+
+def test_an_answer_refused_twice_is_said_in_plain_words_and_nothing_more_is_asked():
+    llm = _model(json.dumps({'component': {'kind': 'donut', 'source': 'tasks'}}), 'not json at all', 'never asked')
+    out = compose.compose_tile(MemoryStore(), SPEC, 'a donut of tasks', llm)
+    assert out['error'].startswith('That could not be drawn:') and 'component' not in out and len(llm.seen) == 2
+
+
+def test_a_sentence_no_source_holds_is_answered_with_the_models_own_words():
+    out = compose.compose_tile(MemoryStore(), SPEC, 'revenue by region', _model(json.dumps({'cannot': 'None of the sources has revenue.'})))
+    assert out == {'error': 'None of the sources has revenue.'}
+    assert compose.compose_tile(MemoryStore(), SPEC, 'anything', None)['fix']['label']                 # no AI: says so, with its fix
+    assert 'Say what' in compose.compose_tile(MemoryStore(), SPEC, '  ', _model())['error']
+
+
+def test_the_tile_check_binds_only_to_columns_a_source_has():
+    seen = dashboards.seen_columns(SPEC)                          # no rows yet: what the tasks dataset returns
+    assert dashboards.check_tile(SPEC, TILE, seen) == (TILE, '')
+    c, why = dashboards.check_tile(SPEC, {**TILE, 'kind': 'bar', 'x': 'region'}, seen)
+    assert c is None and 'no column region' in why and 'state' in why
+    assert dashboards.check_tile(SPEC, {**TILE, 'w': 7}, seen)[0] is None and dashboards.check_tile(SPEC, 'a tile', seen)[0] is None
+    rows = dashboards.seen_columns(SPEC, {'sources': {'tasks': {'rows': [{'state': 'open', 'kind': 'reply'}, {'state': 'closed', 'kind': 'reply'}]}}})
+    assert rows['tasks'] == {'columns': ['state', 'kind'], 'values': {'state': ['open', 'closed'], 'kind': ['reply']}}
+
+
+def test_the_endpoint_turns_a_sentence_into_a_tile_against_the_sources_it_was_sent(monkeypatch):
+    from unittest import mock
+    from fastapi.testclient import TestClient
+    from taskuary import server, llm as llm_mod
+    llm = _model(json.dumps({'component': TILE}))
+    monkeypatch.setattr(llm_mod, 'build_llm', lambda store, job=None, **kw: llm if job == 'report' else None)
+    with mock.patch.object(server, 'store', _store()):
+        got = TestClient(server.app).post('/api/dashboards/tile', json={'config': SPEC, 'said': 'open tasks now'}).json()
+    assert got == {'component': {**TILE, 'said': 'open tasks now'}}
+    assert set(llm.seen[0]['sources'][0]['values']['state']) == {'open', 'closed'}, 'the sources were read: the model sees their values'
+
+
+def test_the_composer_mends_a_tile_it_got_wrong_through_the_same_sentence_road():
+    bad = {'kind': 'bar', 'title': 'By region', 'said': 'Tasks by region', 'source': 'tasks', 'x': 'region'}
+    llm = _model(json.dumps({'config': {**SPEC, 'components': [SPEC['components'][0], bad]}}),
+                 json.dumps({'component': {'kind': 'bar', 'title': 'By kind', 'source': 'tasks', 'x': 'kind'}}))
+    out = compose.compose_dashboard(MemoryStore(), 'my open work', llm)
+    assert [c['title'] for c in out['config']['components']] == ['Open tasks', 'By kind']
+    assert out['config']['components'][1]['said'] == 'Tasks by region' and llm.seen[1]['sentence'] == 'Tasks by region'
+    assert all(c['said'] for c in out['config']['components']), 'a tile the model wrote no sentence for is described'
+
+
+def test_the_describer_says_a_tile_plainly_from_its_config_alone():
+    d = lambda c: dashboards.describe(c, SPEC)
+    assert d(TILE) == 'The count of tasks where state is open right now, lower is better'
+    assert d({'kind': 'stacked', 'source': 'tasks', 'x': 'arrived', 'series': 'kind', 'agg': 'sum', 'y': 'hours'}) == \
+        'The total hours of tasks per arrived, split by kind, stacked'
+    assert d({'kind': 'progress', 'source': 'tasks', 'range': 7, 'target': 15}) == 'The count of tasks in the last 7 days, toward a target of 15'
+    assert d({'kind': 'list', 'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'sort': '-arrived', 'limit': 6}) == \
+        'A list of tasks, each reading its title with its waiting under it, sorted by arrived, highest first, at most 6'
+    assert d({'kind': 'bar', 'source': 'gone', 'x': 'kind', 'limit': 8}) == 'The count of gone per kind, top 8'
+    assert dashboards.describe({'kind': 'stat', 'source': 'ai', 'agg': 'median', 'y': 'tokens'}, dashboards.GLANCE) == 'The median tokens of AI used'
+
+
+def test_every_saved_tile_has_a_sentence_and_the_built_in_ones_keep_their_hand_written_words():
+    assert all(c['said'] for c in dashboards.GLANCE['components'])
+    old = {**dashboards.GLANCE, 'components': [{k: v for k, v in c.items() if k != 'said'} | ({'source': 'ai_used'} if c['source'] == 'ai' else {})
+                                              for c in dashboards.GLANCE['components']] + [{'kind': 'stat', 'title': 'Mine', 'source': 'mail'}]}
+    got = dashboards.with_said(old)['components']
+    assert [c['said'] for c in got[:-1]] == [c['said'] for c in dashboards.GLANCE['components']]
+    assert got[-1]['said'] == 'The count of what came in'
+    assert dashboards.with_said(dashboards.GLANCE) is dashboards.GLANCE and dashboards.with_said({'type': 'report'}) == {'type': 'report'}

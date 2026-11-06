@@ -3713,6 +3713,21 @@ def task_outputs(tid: int):
     return {'data': outputs.listing(tid), 'folder': f'scratch/outputs/{task_ref(tid)}'}
 
 
+@app.post('/api/task-outputs/{tid}/open')
+def open_task_outputs(tid: int, request: Request):
+    """The task's outputs folder, opened on THIS computer (Explorer, Finder, the file manager) at the owner's press - the folder the server
+    knows for the task (outputs.folder), never a path the page names. Owner only: an agent session has no business opening windows."""
+    import os, subprocess
+    from . import outputs
+    _owner_only(request, "opening a folder on this computer is the owner's")
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    d = outputs.folder(tid)
+    if not d.is_dir(): raise HTTPException(404, 'this task has no files yet')
+    if os.name == 'nt': os.startfile(str(d))                                     # noqa: S606 - a folder Taskuary made, by its own path
+    else: subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(d)])
+    return {'ok': True}
+
+
 @app.api_route('/api/task-outputs/{tid}/{rel:path}', methods=['GET', 'HEAD'])
 def task_output(tid: int, rel: str, download: bool = False, preview: bool = False, sheet: str = ''):
     """One file from THIS task's outputs folder - a name inside it, never a path out of it (outputs.resolve). `preview` gives a
@@ -8140,6 +8155,26 @@ def dashboard_compose(body: dict):
         store.audit('report', 0, 'compose_dashboard', ACTOR, detail={'ask': ((body or {}).get('ask') or '')[:300], 'confidence': out.get('confidence')})
     return out
 
+@app.post('/api/dashboards/tile')
+def dashboard_tile(body: dict):
+    """ONE SENTENCE, ONE TILE (the owner, 2026-11-06): {config: the dashboard as it stands, said: the sentence, current: the tile it
+    rewrites} -> {component} or {error} in plain words for under the sentence. Nothing is saved - the page draws it and Save keeps it.
+    The rows it binds against are the sources' own, read here; the demo reads only Taskuary's own tables."""
+    from .compose import compose_tile
+    from . import dashboards, demo
+    b = body or {}
+    spec = b.get('config') if isinstance(b.get('config'), dict) else {}
+    srcs = [s for s in spec.get('sources') or [] if isinstance(s, dict)]
+    read = [s for s in srcs if s.get('type') == 'taskuary_data'] if demo.enabled() else srcs
+    try: data = dashboards.peek(store, {'sources': read}) if read else None
+    except Exception as e:
+        logger.info(f'dashboard tile: its sources could not be read - {e}'); data = None
+    try:
+        from .llm import build_llm
+        llm = build_llm(store, job='report')
+    except Exception: llm = None
+    return compose_tile(store, spec, b.get('said') or '', llm, b.get('current') if isinstance(b.get('current'), dict) else None, data)
+
 @app.post('/api/dashboards/preview')
 def dashboard_preview(body: dict):
     """Run a spec's sources for real, without saving it: the rows the page draws, and what would draw empty."""
@@ -8164,7 +8199,7 @@ def dashboard_template(key: str):
     t = dashboards.template(key)
     if not t: raise HTTPException(404, 'no such dashboard template')
     data = dashboards.collect(store, t['config'])
-    return {**t, 'data': data, 'problems': dashboards.problems(t['config'], data)}
+    return {**t, 'config': dashboards.with_said(t['config']), 'data': data, 'problems': dashboards.problems(t['config'], data)}
 
 @app.get('/api/dashboards/{sid}')
 def dashboard_get(sid: int):
@@ -8174,7 +8209,8 @@ def dashboard_get(sid: int):
     cfg = dashboards.cfg_of(src)
     if not src or not dashboards.is_dashboard(cfg): raise HTTPException(404, 'dashboard not found')
     data = dashboards.last(store, sid)
-    return {'source_id': sid, 'active': bool(src.get('Active')), 'config': cfg, 'data': data,
+    # ...every tile with its sentence: one saved before tiles were sentences is described from its config, and kept on the next Save
+    return {'source_id': sid, 'active': bool(src.get('Active')), 'config': dashboards.with_said(cfg), 'data': data,
             'problems': dashboards.problems(cfg, data) if data else []}
 
 

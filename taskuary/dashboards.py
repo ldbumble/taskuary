@@ -10,7 +10,7 @@ the page slices them - the date range and the segment filter re-slice every comp
 The rules the presets follow (docs/notes/dashboards.md): one screen, the number first, one palette in both themes,
 one axis, thin marks, recessive chrome, filters in one row above everything they scope, a table behind every chart.
 """
-import json
+import json, re, time
 from datetime import datetime, timedelta
 from loguru import logger
 
@@ -153,13 +153,16 @@ DATASETS = {'tasks': (_tasks, 'task_id, ref, title, kind, status, state (open|cl
 # ...and what the AI used (the owner, 2026-11-06: "dashboard of the taskuary thing included in current one the token usage and per
 # model"): tokens per model per day, by job, an agent run's tokens and time, and how many calls were quick, normal or hard
 AI_TILES = [
-    {'kind': 'stacked', 'title': 'AI tokens by model, per day', 'source': 'ai', 'x': 'day', 'series': 'model', 'agg': 'sum', 'y': 'tokens', 'w': 2},
-    {'kind': 'bar', 'title': 'AI tokens by job', 'source': 'ai', 'x': 'what', 'agg': 'sum', 'y': 'tokens', 'limit': 8, 'w': 2},
-    {'kind': 'stat', 'title': 'Tokens per agent run', 'source': 'ai', 'agg': 'median', 'y': 'tokens', 'where': {'kind': 'agent run'}, 'good': 'none'},
-    {'kind': 'stat', 'title': 'Minutes per agent run', 'source': 'ai', 'agg': 'median', 'y': 'minutes', 'unit': 'min',
+    {'kind': 'stacked', 'title': 'AI tokens by model, per day', 'said': 'Tokens per model per day, stacked', 'source': 'ai', 'x': 'day',
+     'series': 'model', 'agg': 'sum', 'y': 'tokens', 'w': 2},
+    {'kind': 'bar', 'title': 'AI tokens by job', 'said': 'Tokens by what the AI was doing, top 8 jobs', 'source': 'ai', 'x': 'what', 'agg': 'sum',
+     'y': 'tokens', 'limit': 8, 'w': 2},
+    {'kind': 'stat', 'title': 'Tokens per agent run', 'said': 'The median tokens one agent run uses', 'source': 'ai', 'agg': 'median', 'y': 'tokens',
      'where': {'kind': 'agent run'}, 'good': 'none'},
-    {'kind': 'bar', 'title': 'AI calls: quick, normal or hard', 'source': 'ai', 'x': 'tier', 'agg': 'sum', 'y': 'calls',
-     'order': ['quick', 'normal', 'hard'], 'w': 2}]
+    {'kind': 'stat', 'title': 'Minutes per agent run', 'said': 'The median minutes one agent run takes', 'source': 'ai', 'agg': 'median', 'y': 'minutes',
+     'unit': 'min', 'where': {'kind': 'agent run'}, 'good': 'none'},
+    {'kind': 'bar', 'title': 'AI calls: quick, normal or hard', 'said': 'How many AI calls were quick, normal or hard, in that order', 'source': 'ai',
+     'x': 'tier', 'agg': 'sum', 'y': 'calls', 'order': ['quick', 'normal', 'hard'], 'w': 2}]
 AI_SOURCE_KEY = 'ai'
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
@@ -170,28 +173,141 @@ GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:
           'filters': {'range': 7, 'segment': 'channel'},
           'components': [
               # the numbers first: what came in, what it became, what is still open, and how fast the owner answers
-              {'kind': 'stat', 'title': 'Came in', 'source': 'mail', 'agg': 'count'},
-              {'kind': 'stat', 'title': 'New tasks', 'source': 'tasks', 'agg': 'count'},
-              {'kind': 'stat', 'title': 'Open now', 'source': 'tasks', 'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'},
-              {'kind': 'stat', 'title': 'Median reply time', 'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'},
+              {'kind': 'stat', 'title': 'Came in', 'said': 'How many messages came in', 'source': 'mail', 'agg': 'count'},
+              {'kind': 'stat', 'title': 'New tasks', 'said': 'How many new tasks arrived', 'source': 'tasks', 'agg': 'count'},
+              {'kind': 'stat', 'title': 'Open now', 'said': 'How many tasks are open right now, lower is better', 'source': 'tasks',
+               'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'},
+              {'kind': 'stat', 'title': 'Median reply time', 'said': 'The median hours from an ask to my reply, lower is better',
+               'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'},
               # ...the week's close against its target and an agent's time, beside the funnel (four bars: a tile's height, so the row is even)
-              {'kind': 'progress', 'title': 'Closed this week', 'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
-              {'kind': 'stat', 'title': 'Agent time per session', 'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
-              {'kind': 'bar', 'title': 'How far it got', 'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
+              {'kind': 'progress', 'title': 'Closed this week', 'said': 'Tasks closed in the last 7 days, toward a target of 15',
+               'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
+              {'kind': 'stat', 'title': 'Agent time per session', 'said': 'The median minutes an agent session takes',
+               'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
+              {'kind': 'bar', 'title': 'How far it got', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
+               'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
               # ...then the days: what came in, and what the agents did with theirs
-              {'kind': 'stacked', 'title': 'What came in, by channel', 'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
-              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
+              {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
+               'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
+              {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
+               'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
               # ...the rankings
-              {'kind': 'bar', 'title': 'Open work by kind', 'source': 'tasks', 'x': 'kind', 'where': {'state': 'open'}, 'range': False, 'w': 2},
-              {'kind': 'bar', 'title': 'Who writes most', 'source': 'mail', 'x': 'sender', 'limit': 8, 'w': 2},
+              {'kind': 'bar', 'title': 'Open work by kind', 'said': 'Open tasks right now, by kind', 'source': 'tasks', 'x': 'kind',
+               'where': {'state': 'open'}, 'range': False, 'w': 2},
+              {'kind': 'bar', 'title': 'Who writes most', 'said': 'Who sends the most messages, top 8', 'source': 'mail', 'x': 'sender', 'limit': 8, 'w': 2},
               # ...and the detail: the asks that have waited longest on the owner, each opening its task
-              {'kind': 'list', 'title': 'Waiting longest on you', 'source': 'tasks', 'label': 'title', 'meta': 'waiting',
-               'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4},
+              {'kind': 'list', 'title': 'Waiting longest on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
+               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4},
               *AI_TILES]}
 TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
                         'explain': 'What came in and from where, how far it got, what is still open, how fast you answer and what your '
                                    'agents did - from this app\'s own records, so there is nothing to connect.'}}
 
+
+# ── A TILE IS ONE SENTENCE (the owner, 2026-11-06, of the field grid that set a component up: "it's not generalized ... maybe we
+# should just use text to say what it shows"). The owner writes what a tile shows; the AI binds it to the sources' real columns once
+# (compose.compose_tile) and the sentence stays on the tile as its `said`. A tile saved before then gets one written from its config.
+TILE_KEYS = ('kind', 'title', 'said', 'source', 'agg', 'y', 'where', 'range', 'good', 'unit', 'target', 'x', 'series', 'limit', 'order', 'share',
+             'label', 'meta', 'sort', 'columns', 'w')
+_AGG_SAID = {'sum': 'the total', 'avg': 'the average', 'median': 'the median', 'min': 'the lowest', 'max': 'the highest'}
+def _col(k): return str(k or '').replace('_', ' ').strip()
+
+
+def describe(c: dict, spec: dict = None) -> str:
+    """A plain sentence for a tile from its config alone - what a person would have written for it. No AI: deterministic."""
+    srcs = {s.get('key'): s for s in (spec or {}).get('sources') or [] if isinstance(s, dict)}
+    src, k, agg = _col((srcs.get(c.get('source')) or {}).get('label') or c.get('source')) or 'rows', c.get('kind'), c.get('agg') or 'count'
+    src = src[:1].lower() + src[1:] if src[1:2].islower() else src           # "Tasks" reads tasks mid-sentence, "AI used" stays
+    what = f'the count of {src}' if agg == 'count' else f"{_AGG_SAID.get(agg, agg)} {_col(c.get('y'))} of {src}"
+    head = (f"{what} per {_col(c.get('x'))}" if k in ('line', 'area', 'bar') else
+            f"{what} per {_col(c.get('x'))}, split by {_col(c.get('series'))}" if k == 'stacked' else
+            f'a table of {src}' + (f": {', '.join(map(_col, c['columns']))}" if c.get('columns') else '') if k == 'table' else
+            f"a list of {src}, each reading its {_col(c.get('label'))}" + (f" with its {_col(c['meta'])} under it" if c.get('meta') else '') if k == 'list'
+            else what)
+    if (w := c.get('where')) and isinstance(w, dict): head += ' where ' + ' and '.join(f'{_col(a)} is {b}' for a, b in w.items())
+    r = c.get('range')
+    if r is False: head += ' right now'
+    elif isinstance(r, int) and not isinstance(r, bool): head += f' in the last {r} days'
+    more, lim, srt = [], c.get('limit'), str(c.get('sort') or '')
+    if k in ('line', 'area'): more.append('as a line' if k == 'line' else 'as an area')
+    if k == 'stacked': more.append('stacked')
+    if c.get('order'): more.append('in the order ' + ', '.join(map(str, c['order'])))
+    if c.get('share'): more.append('each as a share of the first')
+    if srt: more.append(f"sorted by {_col(srt.lstrip('-'))}" + (', highest first' if srt.startswith('-') else ''))
+    if lim: more.append(f'top {lim}' if k == 'bar' else f'at most {lim}')
+    if k == 'progress' and c.get('target') is not None: more.append(f"toward a target of {c['target']}")
+    if c.get('good') in ('up', 'down'): more.append('higher is better' if c['good'] == 'up' else 'lower is better')
+    t = ', '.join([head, *more])
+    return t[:1].upper() + t[1:]
+
+
+# the built-in tiles keep the sentences written for them by hand, matched by what they are (a saved copy's AI source may be renamed)
+def _bare(c): return json.dumps({k: v for k, v in c.items() if k not in ('said', 'source')}, sort_keys=True)
+_GLANCE_SAID = {_bare(c): c['said'] for c in GLANCE['components']}
+
+
+def with_said(spec: dict) -> dict:
+    """The spec with every tile carrying its sentence: the one it has, the built-in one's, or one described from its config."""
+    if not is_dashboard(spec) or all(not isinstance(c, dict) or c.get('said') for c in spec.get('components') or []): return spec
+    return {**spec, 'components': [{**c, 'said': _GLANCE_SAID.get(_bare(c)) or describe(c, spec)} if isinstance(c, dict) and not c.get('said') else c
+                                   for c in spec.get('components') or []]}
+
+
+def _dataset_columns(name) -> list:
+    """The columns a Taskuary dataset returns, read from what DATASETS says of it - for a source that has no rows yet."""
+    return [w.strip() for w in re.sub(r'\([^)]*\)', '', DATASETS[name][1]).split(',') if w.strip()] if name in DATASETS else []
+
+
+def seen_columns(spec: dict, data: dict = None) -> dict:
+    """{source key: {'columns': [...], 'values': {column: [values]}}} - what a sentence may be bound to: each source's real columns
+    (the rows it returned, else what its Taskuary dataset returns), and the values a short column takes, so a "where" matches them."""
+    out, got = {}, (data or {}).get('sources') or {}
+    for i, s in enumerate(spec.get('sources') or [], 1):
+        if not isinstance(s, dict): continue
+        rows = (got.get(k := _key(s, i)) or {}).get('rows') or []
+        cols = list(dict.fromkeys(c for r in rows[:200] for c in r)) or (_dataset_columns(s.get('dataset')) if s.get('type') == 'taskuary_data' else [])
+        vals = {}
+        for c in cols:
+            vs = list(dict.fromkeys(str(r[c]) for r in rows if r.get(c) not in (None, '')))
+            if vs: vals[c] = vs if len(vs) <= 12 else [*vs[:3], '...']
+        out[k] = {'columns': cols, 'values': vals}
+    return out
+
+
+def check_tile(spec: dict, c, seen: dict = None) -> tuple:
+    """(the tile, '') or (None, why): one component held to the spec's own check (validate) and, where a source's columns are known,
+    bound only to columns it has. Keys no preset reads are dropped."""
+    if not isinstance(c, dict): return None, 'the answer was not a tile'
+    c = {k: v for k, v in c.items() if k in TILE_KEYS}
+    ok, why = validate({'title': 'tile', 'sources': spec.get('sources') or [], 'components': [c]})
+    if not ok: return None, why
+    name = c.get('title') or c['kind']
+    for k in ('target', 'limit'):
+        if c.get(k) is not None and (isinstance(c[k], bool) or not isinstance(c[k], (int, float))): return None, f'{name}: "{k}" is a number'
+    if c.get('w') is not None and c['w'] not in (1, 2, 3, 4): return None, f'{name}: "w" is 1 to 4 columns'
+    if c.get('columns') is not None and not isinstance(c['columns'], list): return None, f'{name}: "columns" is a list'
+    cols = set(((seen or {}).get(c['source']) or {}).get('columns') or [])
+    if cols:
+        want = [c[k] for k in COLUMN_KEYS if isinstance(c.get(k), str) and c.get(k)] + list(c.get('columns') or []) + list((c.get('where') or {}).keys())
+        if c.get('sort'): want.append(str(c['sort']).lstrip('-'))
+        if miss := sorted({w for w in want if w not in cols}):
+            label = next((s.get('label') for s in spec.get('sources') or [] if isinstance(s, dict) and s.get('key') == c['source']), None) or c['source']
+            return None, f"{name}: {label} has no column {', '.join(miss)} - it has {', '.join(sorted(cols))}"
+    return c, ''
+
+
+# a sentence read again and again reads the same rows: a source is run once per few minutes, not once per sentence
+_PEEKED, PEEK_FOR = {}, 300
+
+
+def peek(store, spec: dict) -> dict:
+    """The rows a sentence is bound against (collect), kept a few minutes per set of sources."""
+    sig, now = (id(store), json.dumps(spec.get('sources') or [], sort_keys=True, default=str)), time.monotonic()
+    if (hit := _PEEKED.get(sig)) and now - hit[0] < PEEK_FOR: return hit[1]
+    data = collect(store, {'sources': spec.get('sources') or []})
+    for k in [k for k, (t, _) in _PEEKED.items() if now - t >= PEEK_FOR] + list(_PEEKED)[:max(0, len(_PEEKED) - 7)]: _PEEKED.pop(k, None)
+    _PEEKED[sig] = (now, data)
+    return data
 
 def templates() -> list: return [{'key': k, 'title': t['title'], 'explain': t['explain']} for k, t in TEMPLATES.items()]
 def template(key) -> dict | None: return json.loads(json.dumps(TEMPLATES[key])) if key in TEMPLATES else None      # a copy: never the shared spec

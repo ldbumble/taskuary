@@ -14,7 +14,7 @@ import { dayLabel, fmtTime12 } from "./dates.js";
 const dayWord = (at) => { const d = dayLabel(at); return d && d !== "Today" ? `${d} ` : ""; };
 import { MicButton } from "./ui.jsx";
 import { MESSAGE } from "./kinds.js";
-import { AttachImage, AttachRow, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
+import { AttachImage, AttachRow, INLINE_CHIPS, fileChips, fileState, usePromptImages, withImages } from "./promptImages.jsx";
 import { ALERT_INK, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 // ...a chatbot's answer, split into sections to read (the owner, 2026-11-05): a short bold heading over each, no rules, no boxes but the email's
@@ -154,8 +154,8 @@ export function PromptBox({ text, setText, pics, busy = false, onSend, placehold
     <Box component="form" className="tq-aui-composer" data-tq-prompt-box="" onSubmit={(e) => { e.preventDefault(); onSend(); }} {...pics.drop}
       sx={{ flexShrink: 0, minWidth: 0 }}>
       {/* ...what goes with the words, in one line inside the box: the item it came from first, then the files (AttachRow) */}
-      {!!(chips || pics.imgs.length || pics.busy || pics.err) && <AttachRow sx={{ flex: "0 0 100%", pt: 0.25, px: 0.5 }}>{chips}{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>}
-      <AttachImage pics={pics} size={18} sx={{ width: 30, height: 30, mb: "2px" }} />
+      <AttachImage pics={pics} size={18} sx={{ width: 30, height: 30 }} />
+      {!!(chips || pics.imgs.length || pics.busy || pics.err) && <AttachRow sx={INLINE_CHIPS}>{chips}{fileChips(pics, cannot)}{fileState(pics)}</AttachRow>}
       <Box component="textarea" className="tq-aui-input" ref={inputRef} {...boxAttrs} rows={1} value={text} disabled={busy} onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }} placeholder={placeholder} aria-label={label} />
       <MicButton size={18} sx={{ color: "#6b5f45", p: 0.5 }} onText={(t) => setText((w) => (w.trim() ? `${w.trimEnd()} ${t}` : t))} />

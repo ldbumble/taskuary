@@ -2,6 +2,29 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.10 - 2026-11-06
+
+- AI routing: Auto by default, effort for one-model brains, plain words in Settings
+- One clock on a running turn; the task's agent says Agent, the corner pill is the Assistant
+- AI routing: API cards with one model think less or harder too
+- A routing rule's sentence never repeats its job
+- One status cycle for a chat task: working, waiting on you, agent done
+- Check-backs: the owner can cancel one, and a chip says when it wakes
+- A nothing-new turn is one line: the agent judges it, the chat draws only the line
+- The day's opener names an Advisor idea by its own words
+- Attachments: one chip everywhere, a few in the row and then +N more
+- The rail plays a short confetti burst when the walk reaches All done
+- The rail's clear-burst count updates only when the count changes
+- The task's title bar shows its check-back chip beside the status
+- Items open on one box with their Came-from chip; an FYI handful gets the single one's box
+- Opening a closed task from Search only opens it; Reopeningâ€¦ never outlives its press
+- Every non-coding task is one chat with one box; the task's buttons are one row in one place
+- HIPAA AI card takes the effort setting
+- AI used: every call keeps its model, tokens and time; a dashboard and a task endpoint read them
+- The general agent can ask a stronger model itself when it is stuck
+- TaskButtons: the order lives in actionRow.taskButtons, and the row folds around Mark done and the lit move
+- The task shows what AI it used, behind one quiet "AI used" line
+
 ## 0.3.11.9 - 2026-11-06
 
 - A reply block glued to the agent's words is its own paragraph, shown once

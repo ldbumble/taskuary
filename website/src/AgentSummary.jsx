@@ -65,7 +65,7 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
   if (folded) return did || drafted.length ? (<>
     {did && <Box component="details" data-tq-summary="folded" className="tq-aui-summary" sx={{ mt: 0.75 }}>
       {/* ...one line: what it did, cut where the line ends - the whole of it a press away */}
-      <Box component="summary" sx={{ ...HEAD, mt: 0, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", "&:hover": { color: INK } }}>
+      <Box component="summary" title={did} sx={{ ...HEAD, mt: 0, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", "&:hover": { color: INK } }}>
         What I did<Box component="span" sx={{ fontWeight: 400, color: DIM, ml: 0.75 }}>{did.split("\n")[0]}</Box></Box>
       <Box sx={{ ...LINE, color: DIM }}><Md text={did} /></Box>
     </Box>}

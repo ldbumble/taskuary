@@ -184,6 +184,7 @@ def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input
     from taskuary import clipool
     s, tid, repo = world
     monkeypatch.setenv('FAKE_ACP_RESUME', '1')
+    later = waitroom.later; monkeypatch.setattr(waitroom, 'later', lambda *a, **k: None)  # a turn's end ticks the clock; its sweep raced ours on slow CI
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
     assert acpcoding.idle_sweep() == [] and t.alive                                                    # not idle long enough
     monkeypatch.setattr(clipool, 'IDLE_SECONDS', 0.1); time.sleep(0.2)
@@ -197,7 +198,7 @@ def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input
     chat = codingchat.chat(s, tid)
     assert chat['live'] and chat['live']['sid'] == sid and not chat['live']['working']                  # the same chat, at rest
     assert any(x['sid'] == sid and x['source'] == 'acp' for x in chat['sessions'])
-    monkeypatch.setattr(clipool, 'IDLE_SECONDS', 30 * 60)
+    monkeypatch.setattr(clipool, 'IDLE_SECONDS', 30 * 60); monkeypatch.setattr(waitroom, 'later', later)
     waitroom.add(s, tid, 'now round the tax', 'owner')
     q = terminal.session_for(tid)
     assert q is not t and q.sid == sid and isinstance(q, acpcoding.ACPCoding) and not acpcoding.idled(tid, s)

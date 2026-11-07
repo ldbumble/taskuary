@@ -2,6 +2,66 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.12 - 2026-11-07
+
+- A plain to-do is the one chat too: no Close out section; it still opens on what came in (WIP, bundles not rebuilt)
+- The stage model has two sections, Came from and the chat: close_out is to_send, and the Advisor names no Close out section
+- An FYI handful says "6 messages", and the dock's files ride its box's own line
+- A line the owner sends is in the chat once, and its files leave the box with the send
+- A follow-up line their reply ended is marked done once, not on every rail build
+- Triage names no repository: it says a job is coding and nothing about where
+- The coding agent picks its checkout: use_repo and find_repos
+- No repository chosen is no hold on the page: the agent picks, the owner can still change it
+- A rail build waiting on the membership worker wakes it instead of waiting out its tick
+- Every task is Came from and its one chat: the Close out column, its tab, its pairing and its notice are gone
+- The settle wait looks again in milliseconds once it has woken the worker
+- Items lay no hidden Close out section: what registers their row's verbs is ItemSections' 'moves'
+- What the Assistant, the agents, the phone and the demo say: the chat, never Close out
+- AI used and 'Talk to this agent fromâ€¦' are quiet buttons in the task's top-right corner, each a popover
+- Docs: a task is Came from and its one chat - no Close out section, stage or step names
+- One prompt box everywhere: every box that talks to an agent is the same component
+- Next turns blue as soon as the move saves: the walk asks for the light answer and reads the rail behind it
+- AI routing: an optional AI per level for the agents' work
+- The mail a task came in on stays in its chat after the owner's first line
+- Coding sessions over ACP: a task's claude or codex opens as one ACP connection in its checkout, the pty its fallback
+- Coding chat over ACP: the plan is a checklist, Stop ends the turn, the Terminal shows once a command printed
+- ACP coding: a file it touches is named from the checkout's long name
+- A stranger's task never runs over ACP, on either road, whatever a caller hands the gate
+- Docs: ACP step 2 - coding sessions on claude and codex, the registry they share, the stranger floor, the live check
+- Regenerate the assistant tools docs page after the Close out wording change
+- Install the agent connector beside Claude Code and Codex, and run only the pinned one
+- Task button row: four sections, one button size, the lit one alone filled
+- Hold every relay road when a task turns a stranger's under a full session
+- Setup's bottom bar takes the step's width, centred under its cards
+- Assistant's own icons back in the chat head on the home screen
+- One chat picker for the Assistant chat and the agent channels
+- Every dialog's actions are the task row's one ButtonBar: no band, left, one button tall
+- Playbooks back on the Reports page; About you keeps You, Docs and Memory
+- About you is the avatar in the top bar's corner, not a sidebar line
+- ACP coding: steer a running turn, idle out quietly, pin the plan
+- Setup: the job and what you work on are one step, About your work
+- Tell the agent when a task is the owner's own ask, and offer it no reply tools
+- Read a coding task's whole work so far as one diff
+- Write a brain's route row on its first call, not when it is built
+- Name the connector's press on a CLI card: Install connector, Update connector
+- Docs: the connector's presses are Install connector and Update connector
+- A failing membership tick waits out its backoff; a reader's kick no longer cuts it short (CI)
+- Remove AdvisorNote.jsx: nothing draws the task's Advisor section any more
+- Coding chat: no Terminal button, rows in arrival order, no spinner after the turn ends
+- Add a quiet Changes button to the coding task's header
+- Route a general session by tier unless the owner picked its model
+- Count each ACP turn's tokens; match model ids to the agent's spelling
+- Latest message wins: each turn answers the newest message, and a draft belongs to its turn
+- A task works in a checkout whatever its kind; a helper's calls name the call they run under
+- A helper's steps nest under its row; a call still running beside finished ones says it runs in parallel
+- One chat for every task's agent: coding and general share one component, one mapper, three detail levels
+- A stale draft stays under the turn that wrote it, read off the chat payload's drafts
+- The one chat keeps the agent's words at Summary and reads no general conversation on a coding task
+- An owner-opened own-ask session still hears it is the owner's to end
+- The owner's Allow or Deny on a permit goes through on a stranger's task
+- Latest-wins facts ride in the turn, so a CLI chat keeps one process
+- A resumed chat turn carries latest-wins only when a draft waits or a reply went
+
 ## 0.3.11.11 - 2026-11-06
 
 - A plain to-do is the one chat too: no Close out section; it still opens on what came in (WIP, bundles not rebuilt)

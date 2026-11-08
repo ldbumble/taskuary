@@ -255,7 +255,7 @@ const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => {
 export const checkBackDue = (w) => (/^TASKUARY: the check-back you set on this task is due - ([\s\S]*?)\. Check it now/.exec(String(w || "").trim()) || [])[1] || "";
 const UserMessage = () => {
   const brief = useAuiState((s) => !!s.message.metadata?.custom?.brief), mail = useAuiState((s) => s.message.metadata?.custom?.mail), chat = React.useContext(ChatCtx);
-  const at = useAuiState((s) => s.message.createdAt);
+  const at = useAuiState((s) => s.message.createdAt), line = useAuiState((s) => s.message.id);
   // ...a brief with no mail but a SHORT line of its own is a trigger of Taskuary's ("Signed in to the site") - on the right, with the time;
   // a long one is Taskuary's instructions to the agent, never drawn - nor one carrying only the owner's own reply: a short brief over it drew
   // Taskuary's own "THE THREAD CHANGED: …" as a trigger on the right (the scenario run, 2026-11-06)
@@ -281,7 +281,7 @@ const UserMessage = () => {
     <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{mate.who} (teammate) · {mate.via}{stamp ? ` · ${stamp}` : ""}</div>
     <div className="tq-aui-user-bubble" dir="auto">{mate.text}</div></MessagePrimitive.Root>;
   if (chat) return (
-    <MessagePrimitive.Root className={`tq-aui-message tq-aui-user${prev !== null ? " tq-aui-user-more" : ""}`}>
+    <MessagePrimitive.Root className={`tq-aui-message tq-aui-user${prev !== null ? " tq-aui-user-more" : ""}`} data-tq-chat-line={line}>
       {prev === null ? <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{stamp ? ` · ${stamp}` : ""}</div>
         : stamp && stamp !== prev ? <div className="tq-aui-user-head">{stamp}</div> : null}
       <div className="tq-aui-user-bubble" dir="auto"><MessagePrimitive.Parts /></div>
@@ -424,7 +424,7 @@ const AssistantMessage = () => {
   const said = custom?.summary && !answered
     ? [custom.summary.about, custom.summary.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : words;
   return (
-    <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}`}>
+    <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}`} data-tq-chat-line={id}>
       {chat && !!said && !running && <CopyCorner text={said} label="Copy this answer" />}
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
       <div className="tq-aui-agent-body">

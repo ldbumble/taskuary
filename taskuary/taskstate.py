@@ -32,7 +32,7 @@ def chat_moved_on(store, tid: int) -> bool:
     """THE CHAT AGENT IS DONE FOR NOW (the owner, 2026-11-06: one cycle - agent working, agent waiting on you, and after you Send "agent done"
     until you type again): the owner answered the agent's newest turn - its reply sent from here, or their own answer on the thread - and
     nothing is pending. The rail (funnel.from_agents), the task's state and the page's chip all read this, so they cannot disagree."""
-    if store.pending_review(tid): return False
+    if store.waiting_on_owner(tid): return False
     from .general import ASSISTANT_TYPE
     last = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at') or ''
     sent, own = store.sent_reply(task_id=tid), store.own_reply_on_thread(task_id=tid)
@@ -52,6 +52,7 @@ def _chat_resting(store, t: dict) -> str | None:
     from .general import ASSISTANT_TYPE, handles, is_dock
     if not handles(t) or is_dock(t) or t.get('Status') not in ('open', 'in_progress'): return None
     if open_question(store, t['TaskId']): return 'blocked'
+    if store.waiting_on_owner(t['TaskId']): return 'approve'          # an email it set up waits for your Send, never "agent done"
     spoke = store._one('SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? LIMIT 1', (t['TaskId'], ASSISTANT_TYPE))
     return 'agentdone' if spoke else None
 
@@ -67,7 +68,8 @@ def state(store, t: dict, session=None, queued=None) -> str:
         # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
         # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
         parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
-        if parked and t.get('ReviewStatus') == 'pending': return 'approve'
+        if parked and (t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(t['TaskId'])): return 'approve'
+
         # ...and a CHAT agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
         from .general import handles
         if parked and handles(t): return 'agentdone'

@@ -5572,6 +5572,12 @@ class SQLiteStore:
         else:         q += " AND rv.Kind<>'slot'"             # a task's emails (slots.py) are never its reply
         if live_only: q += f' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING}'
         return self._one(q + ' ORDER BY rv.ReviewId DESC LIMIT 1', (task_id, kind) if kind else (task_id,))
+    def waiting_on_owner(self, task_id):
+        """The newest thing on the task waiting for the owner's press - a reply draft, one of its emails (slots.py) or a proposal - by
+        the queue's visibility rule. pending_review leaves the emails out (they are never the reply), so "is anything waiting on you"
+        asked of it read an agent's unsent email as nothing: the task said "agent done" and went to Reports (the product audit, 2026-11-08)."""
+        return self._one(f"SELECT rv.* {_REVIEW_FROM} WHERE rv.TaskId=? AND rv.Status='pending' AND {_NOT_ORPHAN} AND {_VISIBLE_PENDING} "
+                         "ORDER BY rv.ReviewId DESC LIMIT 1", (task_id,))
     def sent_reply(self, message_id=None, task_id=None):
         """The newest reply that actually passed the send gate for this message/task.
 

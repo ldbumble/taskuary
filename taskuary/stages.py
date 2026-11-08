@@ -54,7 +54,8 @@ def state_of(store, t: dict, session=None) -> str:
     session ({alive, waiting}), when the caller has the live ones."""
     from . import taskstate
     tid = int(t['TaskId'])
-    rv, rn = store.pending_review(tid), (store.list_runs(tid) or [{}])[0]
+    rv, rn = store.waiting_on_owner(tid), (store.list_runs(tid) or [{}])[0]
+
     row = {**t, 'ReviewStatus': t.get('ReviewStatus') or ('pending' if rv else None), 'RunStatus': t.get('RunStatus') or rn.get('Status')}
     return taskstate.state(store, row, session, store.get_dispatch(tid))
 

@@ -311,6 +311,34 @@ def stranger_denied(method: str, path: str, query, tid: int, owner_of) -> str:
     return '' if any(p.match(path) for p in _STRANGER_WRITES) else STRANGER_WHY
 
 
+# ── A SESSION READS ITS OWN TASK (M7 + F46, 2026-11-08) ─────────────────────────────────────────────────────────────────
+# Every GET was 'read' to the shared agent token, so any session could read every other task, its mail and comments, and the live
+# screen of every terminal pane - the owner's own shells, which hold whatever was pasted there, included. A task's own parts - the
+# task and its routes, its messages, attachments, artifacts and output files, and its agents' terminal screens - now answer only the
+# session whose task proof (owns_task) names that task - a session started on a task always sends it (cli, agenttools); one started on
+# none (a pane the owner opened) sends none and keeps its reads, but no pane's screen. The pane list is refused: it names every session.
+# NOT a wall against a session that drops its proof - same OS user, it can read config.toml (module docstring); the wall for a
+# stranger's words is the stranger token (stranger_denied), which H1-H3 now hand to forwards, outsiders, alerts and teammate chats.
+# The Assistant's guide chat
+# (general.is_dock) reads across the work, as it is for. Searches the session is told of (AGENT_READS) and the feed are unchanged.
+_OWN_READS = ((re.compile(r'^/api/tasks/(\d+)(/.*)?$'), 'task'), (re.compile(r'^/api/task-outputs/(\d+)(/.*)?$'), 'task'),
+              (re.compile(r'^/api/messages/(\d+)(/.*)?$'), 'message'), (re.compile(r'^/api/attachments/(\d+)$'), 'attachment'),
+              (re.compile(r'^/api/task-artifacts/(\d+)$'), 'artifact'), (re.compile(r'^/api/terminals/([^/]+)/screen$'), 'terminal'))
+AGENT_SCOPE_WHY = "a session reads its own task - its messages, files and agents' screens - never another task's or your own panes"
+
+def agent_read_denied(server: dict, headers, method: str, path: str, owner_of, dock=None) -> str:
+    "'' when an agent-scope session may make this read, else why not. `owner_of(kind, id)`: the task a message, file or pane is on."
+    if (method or '').upper() not in READS or (str(dock or '').isdigit() and owns_task(server, headers, int(dock))): return ''
+    if path in ('/api/terminals', '/api/terminals/'): return AGENT_SCOPE_WHY
+    # a session started on no task (a pane the owner opened) carries no proof and keeps its reads - but never a pane's screen
+    bound = bool(headers.get(TASK_HDR))
+    for p, kind in _OWN_READS:
+        if (m := p.match(path or '')) and (bound or kind == 'terminal'):
+            tid = int(m[1]) if kind == 'task' else owner_of(kind, m[1])
+            return '' if tid and owns_task(server, headers, tid) else AGENT_SCOPE_WHY
+    return ''
+
+
 def token_matches(got, *want) -> bool:
     """True if `got` is one of the secrets in `want`. Compared as BYTES, which is the only form
     hmac.compare_digest takes for arbitrary input: handed str it refuses anything non-ASCII, and a

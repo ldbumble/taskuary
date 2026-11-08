@@ -151,7 +151,7 @@ class OverTheWireTests(unittest.TestCase):
     def test_a_session_cannot_open_or_kill_a_live_pty(self):
         self.assertEqual(c.post('/api/terminals', json={'cwd': '.'}, headers=AGENT).status_code, 403)
         self.assertEqual(c.delete('/api/terminals/nope', headers=AGENT).status_code, 403)
-        self.assertEqual(c.get('/api/terminals', headers=AGENT).status_code, 200)
+        self.assertEqual(c.get('/api/terminals', headers=AGENT).status_code, 403)          # the pane list names every session (M7)
 
     def test_a_session_does_not_see_oauth_secrets_on_the_connector_list(self):
         import json

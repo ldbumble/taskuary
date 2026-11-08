@@ -256,3 +256,21 @@ def test_a_live_conversation_restarts_when_its_environment_s_keys_change(monkeyp
     clipool.run('k', ['claude'], 'hi', None, env={'A': '2', guard.TASK_ENV: 'q'}, resume='s')     # same keys: kept
     clipool.run('k', ['claude'], 'hi', None, env={'A': '1'}, resume='s')                          # a key gone: a new process
     assert len(made) == 2 and made[0] != made[1]
+
+
+# ── M7 + F46: a task-bound agent session reads its own task, and never another pane's screen ───────────────────────
+def test_an_agent_session_reads_its_own_task_and_not_its_neighbours():
+    from types import SimpleNamespace
+    t, mid = _task(frm='erin@northwind.example'); u, mid2 = _task(frm='gail@northwind.example')
+    for p in (f'/api/tasks/{t}', f'/api/messages/{mid}'): assert c.get(p, headers=AGENT(t)).status_code == 200, p
+    for p in (f'/api/tasks/{u}', f'/api/tasks/{u}/history', f'/api/messages/{mid2}', '/api/terminals'):
+        assert c.get(p, headers=AGENT(t)).status_code == 403, p
+    was = dict(terminal.SESSIONS)
+    try:
+        terminal.SESSIONS.update({'mine': SimpleNamespace(task_id=t, agent='claude'), 'theirs': SimpleNamespace(task_id=u, agent='claude'),
+                                  'shell': SimpleNamespace(task_id=t, agent='')})
+        assert guard.agent_read_denied(SRV(), AGENT(t), 'GET', '/api/terminals/mine/screen', server._stranger_file_task) == ''
+        for sid, h in (('theirs', AGENT(t)), ('shell', AGENT(t)), ('mine', AGENT())):
+            assert guard.agent_read_denied(SRV(), h, 'GET', f'/api/terminals/{sid}/screen', server._stranger_file_task), sid
+    finally: terminal.SESSIONS.clear(); terminal.SESSIONS.update(was)
+    assert c.get(f'/api/tasks/{u}').status_code == 200                                     # the owner reads everything, as before

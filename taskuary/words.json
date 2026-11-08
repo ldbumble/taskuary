@@ -33,7 +33,7 @@
     "audit":             {"name": "Settings → Activity log", "href": "#settings=audit",
                           "does": "the tamper-evident record of everything the app did, and the check of it"},
     "updates":           {"name": "Settings → Updates", "href": "#settings=updates&key=update",
-                          "does": "Taskuary's own version - which build runs, whether a new version (the latest release) is out, and the one button that installs it and reopens the app. Updating, upgrading or reinstalling Taskuary itself is that button"},
+                          "does": "Check for updates to Taskuary's own version - which build runs, whether a new version (the latest release) is out, and the one button that installs it and reopens the app. Updating, upgrading or reinstalling Taskuary itself is that button"},
     "profiles":          {"name": "Settings → Profiles", "href": "#profiles",
                           "does": "the agent profiles - each worker's standing instructions - and Start from a role, which sets the app up for a job role in one go: its worker, playbooks and where the mail goes"},
     "workflows":         {"name": "Reports → Routines", "href": "#report=workflows"},

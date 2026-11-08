@@ -38,7 +38,8 @@ test("Everything else is a useful catalog rather than an empty bucket", () => {
   assert.ok(all.length >= 10);
   // stripe was the example here until it was built (2026-11-01); shopify until it was (2026-11-08)
   assert.ok(all.some((c) => c.type === "shopify" && !c.planned));
-  assert.ok(plannedFor("Everything else").some((c) => c.type === "docusign"));
+  // ...and docusign until it was (2026-11-08): it signs in by OAuth now (oauth.py)
+  assert.ok(all.some((c) => c.type === "docusign" && !c.planned));
 });
 
 test("catalog identifiers are unique and every card has searchable copy", () => {

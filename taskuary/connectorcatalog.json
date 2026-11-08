@@ -1770,18 +1770,18 @@
       "type": "mailgun",
       "title": "Mailgun",
       "group": "Email",
-      "planned": true,
-      "desc": "Inbound routes and delivery events",
+      "planned": false,
+      "desc": "Mail your Mailgun route stores lands on your work rail through triage - Taskuary polls Mailgun's stored messages, so no public address is needed.",
       "match": [
         "mailgun"
       ]
     },
     {
       "type": "sendgrid",
-      "title": "SendGrid",
+      "title": "SendGrid Inbound Parse",
       "group": "Email",
-      "planned": true,
-      "desc": "Inbound parse and delivery events",
+      "planned": false,
+      "desc": "Mail SendGrid Inbound Parse receives lands on your work rail through triage. SendGrid pushes it, so it needs a public address that reaches this computer - your own tunnel.",
       "match": [
         "sendgrid"
       ]
@@ -1834,8 +1834,8 @@
       "type": "zoom_chat",
       "title": "Zoom Team Chat",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Channels and direct messages",
+      "planned": false,
+      "desc": "Zoom Team Chat direct messages, and channel messages that @mention you, land on your work rail through triage. People in your Zoom account are colleagues; an outside contact is a stranger.",
       "match": [
         "zoom team chat",
         "zoom",
@@ -1847,8 +1847,8 @@
       "type": "webex",
       "title": "Webex",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Webex spaces and messages",
+      "planned": false,
+      "desc": "Webex direct messages, and space messages that @mention you, land on your work rail through triage. People in your Webex organization are colleagues; anyone else is a stranger.",
       "match": [
         "webex"
       ]
@@ -2028,6 +2028,16 @@
         "docs": "https://docs.pagerduty.com/ai-automation/advance/pagerduty-mcp-server",
         "header": "Authorization: Token token={token}"
       }
+    },
+    {
+      "type": "basecamp_todos",
+      "title": "Basecamp to-dos",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Basecamp to-dos assigned to you, and Pings and @mentions in your Hey! menu, land on your work rail through triage. Your team is known; a client is a stranger.",
+      "match": [
+        "basecamp"
+      ]
     },
     {
       "type": "basecamp",
@@ -2431,8 +2441,8 @@
       "type": "salesforce",
       "title": "Salesforce",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "CRM records, cases and opportunities",
+      "planned": false,
+      "desc": "Salesforce cases and tasks assigned to you land on your work rail through triage, and agents read any record - GET /services/data/v62.0/query?q=SELECT Id, Name FROM Account.",
       "match": [
         "salesforce"
       ]
@@ -2441,8 +2451,8 @@
       "type": "hubspot",
       "title": "HubSpot",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "CRM contacts, deals and tickets",
+      "planned": false,
+      "desc": "HubSpot tickets and tasks assigned to you land on your work rail through triage, and agents read any CRM record - GET /crm/v3/objects/contacts, /crm/v3/objects/deals/<id>.",
       "match": [
         "hubspot"
       ]
@@ -2907,8 +2917,8 @@
       "type": "box",
       "title": "Box",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Enterprise files and metadata",
+      "planned": false,
+      "desc": "Your Box files for the agents and reports, read with your own sign-in - GET /search?query=budget, /folders/0/items, /files/<id>. Reads only.",
       "match": [
         "box"
       ]
@@ -3009,8 +3019,8 @@
       "type": "docusign",
       "title": "DocuSign",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Envelopes, signatures and status changes",
+      "planned": false,
+      "desc": "DocuSign envelopes waiting on your signature land on your work rail through triage, and agents read an envelope's status - GET /envelopes/<id>, /envelopes/<id>/recipients.",
       "match": [
         "docusign"
       ]
@@ -3019,8 +3029,8 @@
       "type": "zoom",
       "title": "Zoom",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Meetings, recordings and transcripts",
+      "planned": false,
+      "desc": "Your Zoom meetings and cloud recordings for the agents and reports - GET /users/me/meetings, /users/me/recordings?from=2026-11-01. Reads only.",
       "match": [
         "zoom"
       ]
@@ -3452,8 +3462,8 @@
       "type": "threads",
       "title": "Threads",
       "group": "Social",
-      "planned": true,
-      "desc": "Meta's Threads API - posting to your own profile.",
+      "planned": false,
+      "desc": "Replies to your Threads posts and posts that mention you land on your work rail through triage - always as a stranger's words: Threads has no colleagues.",
       "match": [
         "threads",
         "meta threads"
@@ -3496,8 +3506,8 @@
       "type": "substack",
       "title": "Substack",
       "group": "Social",
-      "planned": true,
-      "desc": "Your publication’s subscriber numbers and new posts, as a report.",
+      "planned": false,
+      "desc": "Your publication's posts, read from its public feed, for the agents and reports. Substack has no API: replies and comments reach you as Substack's own emails, through your mail card.",
       "match": [
         "substack"
       ]
@@ -3699,8 +3709,8 @@
       "type": "line",
       "title": "LINE",
       "group": "Messaging",
-      "planned": true,
-      "desc": "LINE Messaging API - the default channel for work in Japan, Taiwan and Thailand.",
+      "planned": false,
+      "desc": "Messages to your LINE Official Account land on your work rail through triage - as a stranger's words. LINE pushes them, so it needs a public address that reaches this computer - your own tunnel.",
       "match": [
         "line",
         "line messaging"

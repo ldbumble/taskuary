@@ -4,9 +4,10 @@ Basecamp, Box, DocuSign, HubSpot, Salesforce, Threads, Webex, Zoom, and whatever
 BRING YOUR OWN APP, as Microsoft is (the owner, 2026-11-05): there is no shared Taskuary app at any vendor. The owner registers one in
 the vendor's developer console, pastes its Client ID and Secret on the card (each saves itself), and adds the card's redirect URL there.
 
-THE REDIRECT IS LOOPBACK - http://localhost:<port>/api/oauth/callback, Taskuary's own server on this computer, so nothing needs a public
-address. A vendor that refuses an http address (Meta's Threads) takes the card's `redirect_base`: an https address the owner already
-points at this computer (their own tunnel), and the same path under it. Either way the code comes back to this machine only.
+THE REDIRECT IS LOOPBACK - http://127.0.0.1:<port>/api/oauth/callback, Taskuary's own server on this computer, so nothing needs a public
+address (the address, not "localhost": Zoom takes only that). A vendor that refuses an http address (Meta's Threads) takes the card's
+`redirect_base`: an https address the owner already points at this computer (their own tunnel), and the same path under it. Either way
+the code comes back to this machine only.
 
 WHAT PROVES A RETURN is the one-time `state` start() issued (15 minutes, answered once) and, where the vendor takes it, the PKCE verifier
 that never left this process. The tokens - access, refresh, expiry - are the card's Secret, one JSON sealed like every secret (vault.py);
@@ -15,8 +16,8 @@ is a POST under /api/connectors, refused to an agent (guard.DENIED) and to the d
 
 A VENDOR'S ROW is its `oauth` block in apireads.json (the same row that says how its API is read): `authorize`, `token`, `scopes`, `pkce`,
 `client` ("basic" when the secret rides as HTTP Basic), `params` / `token_params` the vendor wants beside the standard ones, `keep`
-(token-response keys the card keeps: Salesforce's instance_url), `hosts` (a typed host such as a Salesforce My Domain must end in one),
-and for Threads `long_lived` / `renew`: Meta swaps the short token for a 60-day one and renews it by GET, not with a refresh token.
+(token-response keys the card keeps, and under which name: Salesforce's instance_url is its API host), `defaults` / `hosts` (a host
+the card may change - a Salesforce My Domain - and the names it must end in), and for Threads `long_lived` / `renew`: Meta swaps the short token for a 60-day one and renews it by GET, not with a refresh token.
 """
 import base64, hashlib, json, re, secrets, threading, time
 from urllib.parse import urlencode
@@ -59,7 +60,7 @@ def redirect_uri(server: dict, conf: dict | None = None) -> str:
     "What the vendor's app must list, exactly: loopback, or the owner's own https address in front of this computer."
     base = str((conf or {}).get('redirect_base') or '').strip().rstrip('/')
     if base and not re.fullmatch(r'https://[A-Za-z0-9.-]+(:\d+)?', base): raise OAuthError('the redirect address must be https://your.host, nothing after it')
-    return (base or f"http://localhost:{(server or {}).get('port') or 7787}") + PATH
+    return (base or f"http://127.0.0.1:{(server or {}).get('port') or 7787}") + PATH
 
 
 def bundle(c) -> dict:
@@ -128,7 +129,7 @@ def _keep(store, c, sp, j: dict, old: dict | None = None) -> str:
     b = {'access_token': j['access_token'], 'refresh_token': j.get('refresh_token') or (old or {}).get('refresh_token') or '',
          'expires_at': time.time() + n if n else 0}
     store.save_connector({'ConnectorId': c['ConnectorId'], 'Secret': json.dumps(b)}, 'owner')
-    if keep := {k: j[k] for k in sp.get('keep', ()) if j.get(k)}: store.merge_connector_config(c['ConnectorId'], keep)
+    if keep := {to: j[k] for k, to in sp.get('keep', {}).items() if j.get(k)}: store.merge_connector_config(c['ConnectorId'], keep)
     return b['access_token']
 
 

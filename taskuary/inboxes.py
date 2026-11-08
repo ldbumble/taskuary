@@ -14,6 +14,11 @@ the owner's Trust everyone from ... press. Membership lookups are cached per pro
 The same road carries the people who write from OUTSIDE (Zulip, Signal, Twilio texts, Discourse, Reddit, YouTube) and the business
 systems where something waits on you (Calendly bookings, ShipStation and Shopify orders, Square and PayPal disputes) - see below.
 
+And the ones that sign in by OAuth (oauth.py - their Secret is the tokens Sign in left, spent through oauth.access): Webex and Zoom Team
+Chat (direct messages, @mentions), Threads (replies, mentions - always strangers), HubSpot and Salesforce (tickets, cases and tasks
+assigned to you), DocuSign (envelopes waiting on your signature), Basecamp (assigned to-dos, Pings, @mentions). Mailgun's stored mail is
+polled; LINE and SendGrid Inbound Parse only push (pushin.py), and their items are the queue the webhook filled.
+
 Read-only: nothing is posted back to any of these (trackers.py writes Jira, Monday and Linear only).
 """
 import json, re
@@ -30,7 +35,9 @@ NAMES = {'zendesk': 'Zendesk', 'freshdesk': 'Freshdesk', 'intercom': 'Intercom',
          'shortcut': 'Shortcut', 'wrike': 'Wrike', 'smartsheet': 'Smartsheet', 'airtable': 'Airtable',
          'github_projects': 'GitHub Projects', 'bitbucket': 'Bitbucket', 'ms_planner': 'Microsoft Planner',
          'zulip': 'Zulip', 'signal': 'Signal', 'twilio': 'Twilio', 'discourse': 'Discourse', 'reddit': 'Reddit', 'youtube': 'YouTube',
-         'calendly': 'Calendly', 'shipstation': 'ShipStation', 'shopify': 'Shopify', 'square': 'Square', 'paypal': 'PayPal'}
+         'calendly': 'Calendly', 'shipstation': 'ShipStation', 'shopify': 'Shopify', 'square': 'Square', 'paypal': 'PayPal',
+         'webex': 'Webex', 'zoom_chat': 'Zoom Team Chat', 'threads': 'Threads', 'hubspot': 'HubSpot', 'salesforce': 'Salesforce',
+         'docusign': 'DocuSign', 'basecamp_todos': 'Basecamp to-dos', 'mailgun': 'Mailgun', 'line': 'LINE', 'sendgrid': 'SendGrid Inbound Parse'}
 _MEMO = {}       # (type, scope, who) -> membership, read once per process
 
 
@@ -880,6 +887,373 @@ def items_paypal(store, c, since) -> list:
                  f"PayPal dispute - {str(d.get('dispute_life_cycle_stage') or '').lower()} · needs your action", f"Status: {d.get('status')}", 'PayPal',
                  None, None, None, d.get('update_time'), f"https://www.paypal.com/resolutioncenter/{d['dispute_id']}", 'PayPal')
             for d in _pp(c, '/v1/customer/disputes', dispute_state='REQUIRED_ACTION', page_size=CAP).get('items') or []]
+
+
+# ── THE ONES THAT SIGN IN BY OAUTH (oauth.py): the card's Secret is its tokens, spent through oauth.access - renewed, never pasted ──
+SIGN_IN = 'press Sign in on the card again'
+def _bear(store, c, **h):
+    from . import oauth
+    return {'Authorization': f'Bearer {oauth.access(store, c)}', 'Accept': 'application/json', **h}
+def _api(store, c, base, path, method='get', h=None, **kw): return _req(c, method, f'{base}{path}', SIGN_IN, headers=_bear(store, c, **(h or {})), **kw)
+def _since_ms(since) -> int: return int(since.timestamp() * 1000)
+
+
+# ── Webex (direct messages, and @mentions in spaces) ─────────────────────────────────────
+WX = 'https://webexapis.com/v1'
+def _wx(store, c, path, **params): return _api(store, c, WX, path, params=params)
+def _wx_person(store, c, pid) -> dict:
+    k = ('webex', 'person', pid)
+    if k not in _MEMO: _MEMO[k] = _wx(store, c, f'/people/{quote(str(pid))}') or {}
+    return _MEMO[k]
+
+
+def test_webex(store, c) -> str:
+    _need(c, 'sign-in', 'press Sign in with Webex on the card')
+    me = _wx(store, c, '/people/me')
+    _keep(store, c, me_id=me['id'], org_id=me.get('orgId') or '', me_name=me.get('displayName') or '')
+    _seed_source(store, c, 'Webex')
+    return f"signed in as {me.get('displayName')} - direct messages and the space messages that mention you flow in on the next sync"
+
+
+def items_webex(store, c, since) -> list:
+    me, org, out = _me(c), _cfg(c).get('org_id'), []
+    for rm in _wx(store, c, '/rooms', sortBy='lastactivity', max=CAP).get('items') or []:
+        if _when(rm.get('lastActivity')) < _new(since): break                       # newest first: the rest are older still
+        dm = rm.get('type') == 'direct'
+        for m in _wx(store, c, '/messages', roomId=rm['id'], max=10, **({} if dm else {'mentionedPeople': 'me'})).get('items') or []:
+            if m.get('personId') == me: continue
+            p = _wx_person(store, c, m['personId'])
+            out.append(item(m['id'], rm.get('title') if not dm else f"Webex message from {p.get('displayName') or m.get('personEmail')}",
+                            'Webex direct message' if dm else f"Webex - you were mentioned in {rm.get('title')}", m.get('text') or _text(m.get('html')),
+                            p.get('displayName'), m.get('personEmail'), m['personId'],
+                            _member(('webex', org, m['personId']), lambda: (p.get('orgId') == org) if org and p else None),
+                            m.get('created'), None, 'Webex', conv=rm['id']))
+    return out[:CAP]
+
+
+# ── Zoom Team Chat (direct messages, and @mentions in channels) ──────────────────────────
+ZM = 'https://api.zoom.us/v2'
+def _zm(store, c, path, ok404=False, **params): return _req(c, 'get', f'{ZM}{path}', SIGN_IN, ok404=ok404, params=params, headers=_bear(store, c))
+
+
+def test_zoom_chat(store, c) -> str:
+    _need(c, 'sign-in', 'press Sign in with Zoom Team Chat on the card')
+    me = _zm(store, c, '/users/me')
+    name = me.get('display_name') or ' '.join(x for x in (me.get('first_name'), me.get('last_name')) if x)
+    _keep(store, c, me_id=me['id'], me_email=me.get('email') or '', account_id=me.get('account_id') or '', me_name=name)
+    _seed_source(store, c, 'Zoom Team Chat')
+    return f"signed in as {name} - direct messages and the channel messages that mention you flow in on the next sync"
+
+
+def items_zoom_chat(store, c, since) -> list:
+    cfg, out = _cfg(c), []
+    me, mail = _me(c), str(cfg.get('me_email') or '').lower()
+    for se in (_zm(store, c, '/chat/users/me/sessions', page_size=CAP).get('sessions') or [])[:CAP]:
+        dm = bool(se.get('peer_contact_email'))
+        to = {'to_contact': se['peer_contact_email']} if dm else {'to_channel': se.get('channel_id')}
+        if not (to.get('to_contact') or to.get('to_channel')): continue
+        for m in _zm(store, c, '/chat/users/me/messages', page_size=10, **{'from': _utc(since)}, **to).get('messages') or []:
+            who = str(m.get('sender') or '').lower()
+            if who in (mail, me) or m.get('sender_member_id') == me: continue
+            if not dm and not any(a.get('at_contact') in (me, mail) or a.get('at_type') == 2 for a in m.get('at_items') or []): continue
+            out.append(item(m['id'], f"Zoom chat from {m.get('sender_display_name') or who}" if dm else se.get('name') or 'Zoom channel',
+                            'Zoom Team Chat direct message' if dm else f"Zoom Team Chat - you were mentioned in {se.get('name') or 'a channel'}",
+                            m.get('message'), m.get('sender_display_name') or who, who if '@' in who else None, who,
+                            # one of the owner's own Zoom account answers /users/<email>; an outside contact is a 404 there
+                            _member(('zoom_chat', cfg.get('account_id'), who), lambda: _zm(store, c, f'/users/{quote(who)}', ok404=True) is not None),
+                            m.get('date_time') or m.get('timestamp'), None, 'Zoom Team Chat', conv=to.get('to_contact') or to.get('to_channel')))
+    return out[:CAP]
+
+
+# ── Threads (replies to your posts, and posts that mention you) ──────────────────────────
+TH, TH_FIELDS = 'https://graph.threads.net/v1.0', 'id,text,username,timestamp,permalink'
+def _th(store, c, path, **params): return _api(store, c, TH, path, params=params)
+
+
+def test_threads(store, c) -> str:
+    _need(c, 'sign-in', 'press Sign in with Threads on the card')
+    me = _th(store, c, '/me', fields='id,username')
+    _keep(store, c, me_id=me['id'], me_name=me.get('username') or '')
+    _seed_source(store, c, f"@{me.get('username')}")
+    return f"signed in as @{me.get('username')} - replies to your posts and posts that mention you flow in on the next sync"
+
+
+def items_threads(store, c, since) -> list:
+    me, mine = _me(c), _cfg(c).get('me_name')
+    got = [(p, 'mention', p['id']) for p in _th(store, c, f'/{me}/mentions', fields=TH_FIELDS, since=int(since.timestamp())).get('data') or []]
+    for post in _th(store, c, f'/{me}/threads', fields='id,timestamp', limit=10).get('data') or []:
+        got += [(r, 'reply', post['id']) for r in _th(store, c, f"/{post['id']}/replies", fields=TH_FIELDS).get('data') or []]
+    # Threads has no colleagues: every reply and mention is a stranger's, however often they write
+    return [item(p['id'], f"@{p.get('username') or 'someone'} {'mentioned you' if how == 'mention' else 'replied'} on Threads",
+                 f'Threads {how}', p.get('text'), p.get('username'), None, p.get('username'), False, p.get('timestamp'), p.get('permalink'),
+                 'Threads', conv=post) for p, how, post in got if p.get('username') != mine][:CAP]
+
+
+# ── HubSpot (tickets and tasks assigned to you) ──────────────────────────────────────────
+HS = 'https://api.hubapi.com'
+def _hs(store, c, path, method='get', **kw): return _api(store, c, HS, path, method, **kw)
+
+
+def test_hubspot(store, c) -> str:
+    from . import oauth
+    _need(c, 'sign-in', 'press Sign in with HubSpot on the card')
+    t = _hs(store, c, f'/oauth/v1/access-tokens/{quote(oauth.access(store, c))}')
+    own = next((o for o in _hs(store, c, '/crm/v3/owners', params={'email': t.get('user'), 'limit': 1}).get('results') or []), None)
+    if not own: raise RuntimeError(f"{t.get('user')} is not a HubSpot owner in this account, so nothing can be assigned to it")
+    _keep(store, c, me_id=str(own['id']), hub_id=str(t.get('hub_id') or ''), me_name=t.get('user') or '')
+    _seed_source(store, c, t.get('hub_domain') or 'HubSpot')
+    return f"signed in as {t.get('user')} - tickets and open tasks assigned to you flow in on the next sync"
+
+
+def _hs_find(store, c, kind, props, since, *more) -> list:
+    f = [{'propertyName': 'hubspot_owner_id', 'operator': 'EQ', 'value': _me(c)},
+         {'propertyName': 'hs_lastmodifieddate', 'operator': 'GT', 'value': str(_since_ms(since))}, *more]
+    return _hs(store, c, f'/crm/v3/objects/{kind}/search', 'post', json={'filterGroups': [{'filters': f}], 'properties': props, 'limit': CAP,
+               'sorts': [{'propertyName': 'hs_lastmodifieddate', 'direction': 'DESCENDING'}]}).get('results') or []
+
+
+def items_hubspot(store, c, since) -> list:
+    hub = _cfg(c).get('hub_id')
+    link = lambda kind, i: f'https://app.hubspot.com/contacts/{hub}/record/{kind}/{i}'
+    tix = [item(t['id'], (p := t.get('properties') or {}).get('subject') or f"Ticket {t['id']}",
+                f"HubSpot ticket - priority {p.get('hs_ticket_priority') or 'none'} · assigned to you", p.get('content'),
+                None, None, None, None, p.get('hs_lastmodifieddate'), link('0-5', t['id']), 'HubSpot')     # a ticket is a customer's words
+           for t in _hs_find(store, c, 'tickets', ['subject', 'content', 'hs_ticket_priority', 'hs_lastmodifieddate'], since)]
+    tasks = [item(t['id'], (p := t.get('properties') or {}).get('hs_task_subject') or f"Task {t['id']}",
+                  f"HubSpot task - {str(p.get('hs_task_status') or '').lower().replace('_', ' ')} · priority {p.get('hs_task_priority') or 'none'}"
+                  + (f" · due {str(p['hs_timestamp'])[:10]}" if p.get('hs_timestamp') else ''), _text(p.get('hs_task_body')),
+                  None, None, p.get('hs_created_by_user_id'), True if p.get('hs_created_by_user_id') else None,   # a task is made by a user of the account
+                  p.get('hs_lastmodifieddate'), link('0-27', t['id']), 'HubSpot')
+             for t in _hs_find(store, c, 'tasks', ['hs_task_subject', 'hs_task_body', 'hs_task_status', 'hs_task_priority', 'hs_timestamp',
+                                                   'hs_lastmodifieddate', 'hs_created_by_user_id'], since,
+                               {'propertyName': 'hs_task_status', 'operator': 'NEQ', 'value': 'COMPLETED'})]
+    return (tix + tasks)[:CAP]
+
+
+# ── Salesforce (cases and tasks assigned to you) ─────────────────────────────────────────
+SF_V = 'v62.0'
+def _sf_base(c) -> str:
+    h = str(_cfg(c).get('host') or '').rstrip('/')
+    if not re.fullmatch(r'https://[a-z0-9.-]+\.(salesforce|force)\.com', h, re.I):
+        raise RuntimeError('Salesforce has not named your instance yet - press Sign in on the card')
+    return h
+def _sf(store, c, path, **params): return _api(store, c, _sf_base(c), path, params=params)
+def _sf_id(v) -> str:
+    if not re.fullmatch(r'[A-Za-z0-9]{15,18}', str(v or '')): raise RuntimeError('who you are on Salesforce is not known yet - run Test on the card once')
+    return str(v)
+
+
+def test_salesforce(store, c) -> str:
+    _need(c, 'sign-in', 'press Sign in with Salesforce on the card')
+    me = _sf(store, c, '/services/oauth2/userinfo')
+    _keep(store, c, me_id=_sf_id(me.get('user_id')), org_id=me.get('organization_id') or '', me_name=me.get('name') or '')
+    _seed_source(store, c, _host(_sf_base(c)))
+    return f"signed in as {me.get('name')} - open cases and tasks assigned to you flow in on the next sync"
+
+
+def items_salesforce(store, c, since) -> list:
+    base, me, at = _sf_base(c), _sf_id(_me(c)), _utc(since)
+    q = lambda soql: _sf(store, c, f'/services/data/{SF_V}/query', q=soql).get('records') or []
+    who = 'CreatedById, CreatedBy.Name, CreatedBy.Email, CreatedBy.UserType'
+    std = lambda r: (r.get('CreatedBy') or {}).get('UserType') == 'Standard' if (r.get('CreatedBy') or {}).get('UserType') else None
+    out = []
+    for r in q(f"SELECT Id, CaseNumber, Subject, Description, Status, Priority, LastModifiedDate, ContactId, Contact.Name, Contact.Email, {who} "
+               f"FROM Case WHERE OwnerId = '{me}' AND IsClosed = false AND LastModifiedDate > {at} ORDER BY LastModifiedDate DESC LIMIT {CAP}"):
+        k, b = r.get('Contact') or {}, r.get('CreatedBy') or {}
+        # a case with a contact is the customer's words; one a colleague opened is theirs
+        out.append(item(r['Id'], f"Case {r.get('CaseNumber')}: {r.get('Subject') or ''}".strip(),
+                        f"Salesforce case - {r.get('Status')} · priority {r.get('Priority')}",
+                        r.get('Description'), k.get('Name') or b.get('Name'), k.get('Email') or b.get('Email'), r.get('ContactId') or r.get('CreatedById'),
+                        False if r.get('ContactId') else std(r), r.get('LastModifiedDate'), f"{base}/{r['Id']}", _host(base)))
+    for r in q(f"SELECT Id, Subject, Description, Status, Priority, ActivityDate, LastModifiedDate, {who} "
+               f"FROM Task WHERE OwnerId = '{me}' AND IsClosed = false AND LastModifiedDate > {at} ORDER BY LastModifiedDate DESC LIMIT {CAP}"):
+        b = r.get('CreatedBy') or {}
+        out.append(item(r['Id'], r.get('Subject') or 'Salesforce task', f"Salesforce task - {r.get('Status')} · priority {r.get('Priority')}"
+                        + (f" · due {r['ActivityDate']}" if r.get('ActivityDate') else ''), r.get('Description'), b.get('Name'), b.get('Email'),
+                        r.get('CreatedById'), std(r), r.get('LastModifiedDate'), f"{base}/{r['Id']}", _host(base)))
+    return out[:CAP]
+
+
+# ── DocuSign (envelopes waiting on your signature) ───────────────────────────────────────
+def _ds_auth(c) -> str: return 'account-d.docusign.com' if str(_cfg(c).get('auth_host') or '').startswith('account-d') else 'account.docusign.com'
+def _ds_base(c) -> str:
+    h = str(_cfg(c).get('host') or '')
+    if not re.fullmatch(r'https://[a-z0-9.-]+\.docusign\.(net|com)/restapi/v2\.1/accounts/[0-9a-f-]+', h, re.I):
+        raise RuntimeError('which DocuSign account to read is not known yet - run Test on the card once')
+    return h
+
+
+def test_docusign(store, c) -> str:
+    _need(c, 'sign-in', 'press Sign in with DocuSign on the card')
+    me = _api(store, c, f'https://{_ds_auth(c)}', '/oauth/userinfo')
+    a = next((a for a in me.get('accounts') or [] if a.get('is_default')), (me.get('accounts') or [None])[0])
+    if not a: raise RuntimeError('DocuSign signed you in, but names no account')
+    _keep(store, c, host=f"{str(a['base_uri']).rstrip('/')}/restapi/v2.1/accounts/{a['account_id']}", account_id=a['account_id'],
+          me_name=me.get('name') or '', me_email=me.get('email') or '')
+    _ds_base(again := store.get_connector(c['ConnectorId'], with_secret=True))
+    _seed_source(store, again, a.get('account_name') or 'DocuSign')
+    return f"signed in as {me.get('name')} on {a.get('account_name')} - envelopes waiting on your signature flow in on the next sync"
+
+
+def items_docusign(store, c, since) -> list:
+    cfg, base = _cfg(c), _ds_base(c)
+    app = 'https://appdemo.docusign.com' if _ds_auth(c).startswith('account-d') else 'https://app.docusign.com'
+    j = _api(store, c, base, '/envelopes', params={'folder_ids': 'awaiting_my_signature', 'from_date': _utc(since - timedelta(days=30)), 'count': CAP})
+    return [item(e['envelopeId'], e.get('emailSubject') or 'An envelope to sign',
+                 f"DocuSign envelope - waiting on your signature · sent {str(e.get('sentDateTime') or '')[:10]}", e.get('emailBlurb'),
+                 (s := e.get('sender') or {}).get('userName'), s.get('email'), s.get('userId') or s.get('email'),
+                 (s.get('accountId') == cfg.get('account_id')) if s.get('accountId') else None,     # your own DocuSign account is your company
+                 e.get('statusChangedDateTime') or e.get('sentDateTime'), f"{app}/documents/details/{e['envelopeId']}", 'DocuSign')
+            for e in j.get('envelopes') or []]
+
+
+# ── Basecamp (to-dos assigned to you; Pings and @mentions in your Hey! menu) ──────────────
+BC_UA = {'User-Agent': 'Taskuary (https://github.com/ldbumble/taskuary)'}       # Basecamp refuses a call that does not say who makes it
+def _bc_base(c) -> str:
+    h = str(_cfg(c).get('host') or '').rstrip('/')
+    if not re.fullmatch(r'https://[0-9]+\.basecampapi\.com/[0-9]+', h):
+        raise RuntimeError('which Basecamp account to read is not known yet - run Test on the card once')
+    return h
+def _bc(store, c, path, **params): return _api(store, c, _bc_base(c), path, h=BC_UA, params=params)
+def _bc_member(p) -> bool | None:
+    "Basecamp's own word: a client (or an outsider) is a stranger; a User of the account who is no client is the team."
+    if not p: return None
+    return not p.get('client') and p.get('personable_type') in ('User', None)
+
+
+def test_basecamp_todos(store, c) -> str:
+    _need(c, 'sign-in', 'press Sign in with Basecamp on the card')
+    who = _api(store, c, 'https://launchpad.37signals.com', '/authorization.json', h=BC_UA)
+    a = next((a for a in who.get('accounts') or [] if a.get('product') in ('bc3', 'bc4')), None)
+    if not a: raise RuntimeError('this Basecamp sign-in has no Basecamp account on it')
+    _keep(store, c, host=a['href'], account_name=a.get('name') or '')
+    me = _bc(store, again := store.get_connector(c['ConnectorId'], with_secret=True), '/my/profile.json')
+    _keep(store, c, me_id=str(me['id']), me_name=me.get('name') or '')
+    _seed_source(store, again, a.get('name') or 'Basecamp')
+    return f"signed in as {me.get('name')} on {a.get('name')} - to-dos assigned to you, Pings and @mentions flow in on the next sync"
+
+
+def items_basecamp_todos(store, c, since) -> list:
+    base, out = _bc_base(c), []
+    j = _bc(store, c, '/my/assignments.json')
+    for t in [*(j.get('priorities') or []), *(j.get('non_priorities') or [])][:CAP]:
+        if t.get('completed'): continue
+        b = t.get('bucket') or {}
+        d = _bc(store, c, f"/buckets/{int(b['id'])}/todos/{int(t['id'])}.json") if b.get('id') else {}      # its creator, and when it changed
+        p = d.get('creator') or {}
+        out.append(item(t['id'], t.get('content') or 'A to-do', f"Basecamp to-do in {b.get('name') or 'a project'} · assigned to you"
+                        + (f" · due {t['due_on']}" if t.get('due_on') else ''), _text(d.get('description')), p.get('name'), p.get('email_address'),
+                        p.get('id'), _bc_member(p), d.get('updated_at'), t.get('app_url'), b.get('name') or 'Basecamp'))
+    for r in _bc(store, c, '/my/readings.json').get('unreads') or []:
+        if r.get('section') not in ('pings', 'mentions'): continue
+        p = r.get('creator') or {}
+        if str(p.get('id')) == str(_cfg(c).get('me_id')): continue
+        out.append(item(f"r{r['id']}", r.get('title') or 'Basecamp', f"Basecamp {'Ping' if r['section'] == 'pings' else 'mention'}"
+                        + (f" in {r['bucket_name']}" if r.get('bucket_name') else ''), r.get('content_excerpt'), p.get('name'), p.get('email_address'),
+                        p.get('id'), _bc_member(p), r.get('unread_at') or r.get('created_at'), r.get('app_url'), r.get('bucket_name') or 'Basecamp',
+                        conv=r.get('readable_sgid') if r['section'] == 'pings' else None))
+    return out[:CAP]
+
+
+# ── Mailgun (stored mail, polled - no public address) ────────────────────────────────────
+def _mg_base(c) -> str:
+    h = str(_cfg(c).get('host') or 'https://api.mailgun.net').rstrip('/')
+    if h not in ('https://api.mailgun.net', 'https://api.eu.mailgun.net'):
+        raise RuntimeError('the Mailgun address is https://api.mailgun.net, or https://api.eu.mailgun.net for an EU account')
+    return h
+def _mg_domain(c) -> str:
+    d = str(_cfg(c).get('domain') or '').strip().lower()
+    if not re.fullmatch(r'[a-z0-9.-]+\.[a-z]{2,}', d): raise RuntimeError('no receiving domain set - the domain your Mailgun route stores mail for')
+    return d
+def _mg(c, path, **params):
+    return _req(c, 'get', f'{_mg_base(c)}{path}', 'check the private API key (app.mailgun.com, the API Security page of your account menu)',
+                params=params, auth=('api', c.get('Secret') or ''))
+
+
+def test_mailgun(store, c) -> str:
+    _need(c, 'private API key', 'app.mailgun.com, in the API Security page of your account menu')
+    d = _mg_domain(c)
+    _mg(c, f'/v3/{d}/events', event='stored', limit=1)
+    _seed_source(store, c, d)
+    return f"connected to {d} - mail a route stores (its action store()) flows in on the next sync"
+
+
+def items_mailgun(store, c, since) -> list:
+    d, out = _mg_domain(c), []
+    for e in _mg(c, f'/v3/{d}/events', event='stored', begin=int(since.timestamp()), ascending='yes', limit=CAP).get('items') or []:
+        k = (e.get('storage') or {}).get('key')
+        if not k or not re.fullmatch(r'[A-Za-z0-9=_-]+', k): continue
+        m = _mg(c, f'/v3/domains/{d}/messages/{k}')
+        h = (e.get('message') or {}).get('headers') or {}
+        name, mail = _parse_from(m.get('from') or h.get('from'))
+        out.append(item(h.get('message-id') or k, m.get('subject') or h.get('subject') or '(no subject)', f"Mail to {m.get('recipient') or d} (Mailgun)",
+                        m.get('stripped-text') or m.get('body-plain') or _text(m.get('body-html')), name, mail, mail, None,
+                        _epoch(e.get('timestamp')), 'https://app.mailgun.com/', d))
+    return out
+
+
+def _epoch(v):
+    "Mailgun's event time: seconds as its events say, or nanoseconds as its reference shows - unix seconds either way."
+    try: t = float(v)
+    except (TypeError, ValueError): return None
+    return int(t / 1e9 if t > 1e14 else t / 1e3 if t > 1e11 else t)
+
+
+def _parse_from(v):
+    from email.utils import parseaddr
+    n, a = parseaddr(str(v or ''))
+    return (n or a or None), (a.lower() or None)
+
+
+# ── the ones that only PUSH (pushin.py): LINE, SendGrid Inbound Parse - the queue the webhook filled, drained once ──
+def _hook(c) -> str:
+    return f"point it at https://<your public address>/api/inbound/{c['Type']}/{c['ConnectorId']}" + ('/<the key the card shows>' if c['Type'] == 'sendgrid' else '')
+LN = 'https://api.line.me'
+def _ln(c, path): return _req(c, 'get', f'{LN}{path}', 'check the channel access token (the LINE Developers Console, your channel\'s Messaging API tab)',
+                              headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+
+
+def test_line(store, c) -> str:
+    _need(c, 'channel access token', "the LINE Developers Console, on your channel's Messaging API tab")
+    if not _cfg(c).get('channel_secret'): raise RuntimeError("no channel secret saved - the Basic settings tab of your channel; without it no push can be checked")
+    b = _ln(c, '/v2/bot/info')
+    _keep(store, c, me_id=b.get('userId') or '', me_name=b.get('displayName') or '')
+    _seed_source(store, c, b.get('displayName') or 'LINE')
+    return f"connected as {b.get('displayName')} ({b.get('basicId')}) - set the channel's Webhook URL ({_hook(c)}) and turn Use webhook on"
+
+
+def items_line(store, c, since) -> list:
+    from . import pushin
+    out = []
+    for e in pushin.drain(store, c):
+        s, m = e.get('source') or {}, e.get('message') or {}
+        uid = s.get('userId')
+        k = ('line', 'name', uid)
+        if uid and k not in _MEMO:
+            try: _MEMO[k] = (_ln(c, f'/v2/bot/profile/{quote(uid)}') or {}).get('displayName')
+            except Exception as x: _MEMO[k] = None; logger.debug(f'line: profile unread ({x})')
+        who = _MEMO.get(k) or 'someone on LINE'
+        out.append(item(m.get('id') or e.get('webhookEventId'), f"LINE message from {who}", f"LINE {s.get('type') or 'user'} message",
+                        m.get('text') if m.get('type') == 'text' else f"(a {m.get('type') or 'message'} - open LINE to see it)", who, None, uid,
+                        False, e.get('timestamp'), None, 'LINE', conv=s.get('groupId') or s.get('roomId') or uid, drained=True))   # a customer: a stranger
+    return out
+
+
+def test_sendgrid(store, c) -> str:
+    _need(c, 'API key', 'app.sendgrid.com, in the API Keys page under Settings')
+    _req(c, 'get', 'https://api.sendgrid.com/v3/scopes', 'check the API key', headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+    _seed_source(store, c, 'SendGrid Inbound Parse')
+    return f"the key works - add an Inbound Parse host and {_hook(c)}"
+
+
+def items_sendgrid(store, c, since) -> list:
+    from . import pushin
+    out = []
+    for m in pushin.drain(store, c):
+        name, mail = _parse_from(m.get('from'))
+        out.append(item(m.get('message_id') or f"{mail}:{m.get('at')}", m.get('subject') or '(no subject)', f"Mail to {m.get('to')} (SendGrid Inbound Parse)",
+                        m.get('text') or _text(m.get('html')), name, mail, mail, None, int(m['at']) if m.get('at') else None, None, 'SendGrid', drained=True))
+    return out
 
 
 TYPES = tuple(NAMES)

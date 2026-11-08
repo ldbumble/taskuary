@@ -406,7 +406,12 @@ async def fyi_screen(request: Request, call_next):
 
 # the redirects back from a provider's sign-in: no header can ride on one, so each proves itself with the one-time state it was issued
 OAUTH_RETURNS = ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback', '/api/google/files/callback',
-                 '/api/google/calendar/callback', '/api/ms/callback')
+                 '/api/google/calendar/callback', '/api/ms/callback', '/api/oauth/callback')
+# ...and a vendor's push (pushin.py): LINE, SendGrid Inbound Parse. It arrives through the owner's own tunnel under ITS name, from no page
+# of ours, with no token: its signature (or the card's secret path) is its proof, and it answers nothing but "taken". The generic OAuth
+# return rides the same tunnel when a vendor refuses an http redirect (oauth.redirect_uri). Every other path keeps the Host check, so a
+# tunnel pointed at this port reaches these doors and not the page that carries the owner token.
+def _outside_door(path: str) -> bool: return path == '/api/oauth/callback' or path.startswith('/api/inbound/')
 
 @app.middleware('http')
 async def token_gate(request: Request, call_next):
@@ -424,7 +429,7 @@ async def token_gate(request: Request, call_next):
             try: demo.refused(store, request.url.path, why)
             except Exception as e: logger.debug(f'demo: refusal of {request.url.path} not kept - {e}')
             return JSONResponse({'detail': why, 'demo': True}, status_code=403)
-    elif not guard.host_ok(request.headers.get('host'), cfg['server']):
+    elif not guard.host_ok(request.headers.get('host'), cfg['server']) and not _outside_door(request.url.path):
         # EVERY path, not just /api: the page itself carries the owner token, so a name we do not
         # answer to must not be able to load it either (guard.host_ok on DNS rebinding)
         logger.warning(f'refused Host {request.headers.get("host")!r} - not a name this server answers to')
@@ -434,7 +439,7 @@ async def token_gate(request: Request, call_next):
     # ...and a request some OTHER page told the browser to make is not the owner asking, whatever
     # token the browser had lying around. The Intuit callback is the one cross-site arrival by
     # design - a redirect from their site, proving itself with the one-time state it was issued.
-    elif (request.url.path.startswith('/api') and request.url.path not in OAUTH_RETURNS
+    elif (request.url.path.startswith('/api') and request.url.path not in OAUTH_RETURNS and not _outside_door(request.url.path)
           and not guard.origin_ok(request.headers)):
         logger.warning(f'refused {request.method} {request.url.path} from origin {request.headers.get("origin")!r}')
         return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
@@ -449,7 +454,7 @@ async def token_gate(request: Request, call_next):
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
         file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/'))
         if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
-                and request.url.path not in OAUTH_RETURNS:
+                and request.url.path not in OAUTH_RETURNS and not _outside_door(request.url.path):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
             # was open across a token change answered every click with whichever screen's generic
             # "that did not work" fallback happened to be nearest (2026-09-10 audit).
@@ -8778,6 +8783,58 @@ def linkedin_callback(code: str = None, state: str = '', error: str = None,
     return page(f'{me.get("name") or "Your LinkedIn account"} is connected'
                 + (f' - the token lasts {left} more days' if left else '')
                 + '. Press Test on the card to verify it.')
+
+# ── THE ONE OAUTH ROAD (oauth.py): Basecamp, Box, DocuSign, HubSpot, Salesforce, Threads, Webex, Zoom ──
+def _oauth_card(cid: int):
+    from . import oauth
+    c = store.get_connector(cid)
+    if not c or not oauth.spec(c['Type']): raise HTTPException(404, 'not a card that signs in with OAuth')
+    return c
+
+@app.get('/api/connectors/{cid}/oauth/status')
+def oauth_status(cid: int):
+    from . import oauth
+    _oauth_card(cid)
+    return oauth.status(store, cid, cfg['server'])
+
+@app.post('/api/connectors/{cid}/oauth/start')
+def oauth_start(request: Request, cid: int):
+    """The vendor's consent page for the card. A POST under /api/connectors: an agent is refused it (guard.DENIED), the demo too."""
+    from . import oauth
+    _owner_only(request, "signing in to a vendor is the owner's own account - only the owner presses Sign in")
+    _oauth_card(cid)
+    try: return {'url': oauth.start(store, cid, cfg['server'])}
+    except oauth.OAuthError as e: raise HTTPException(409, str(e))
+
+@app.get('/api/oauth/callback', response_class=HTMLResponse)
+def oauth_callback(request: Request, code: str = None, state: str = '', error: str = None, error_description: str = None):
+    """The vendor's return, outside the token gate like every OAuth return: it answers only a state oauth.start issued, once, within 15
+    minutes, from this machine (a tunnel's own connector runs here too). The tab is told whether it worked - never a token."""
+    from . import oauth
+    if not _is_loopback(request.client.host if request.client else ''):
+        return _oauth_tab(False, 'This sign-in only finishes on the computer Taskuary runs on.')
+    ok, msg = oauth.finish(store, code or '', state, error or '', error_description or '')
+    return _oauth_tab(ok, msg, head='Signed in' if ok else 'Not signed in')
+
+# ── A VENDOR'S PUSH (pushin.py): LINE's webhook, SendGrid's Inbound Parse - checked, queued, filed by the next sync ──
+@app.post('/api/inbound/{kind}/{cid}')
+@app.post('/api/inbound/{kind}/{cid}/{key}')
+async def inbound_push(request: Request, kind: str, cid: int, key: str = ''):
+    from . import pushin
+    body, ct = await request.body(), request.headers.get('content-type') or ''
+    form = {k: v for k, v in (await request.form()).items() if isinstance(v, str)} if 'form' in ct else None
+    try: n = await run_in_threadpool(pushin.take, store, kind, cid, key, dict(request.headers), body, form)
+    except pushin.Refused as e: raise HTTPException(403, str(e))
+    return {'taken': n}
+
+@app.get('/api/connectors/{cid}/inbound')
+def inbound_address(request: Request, cid: int):
+    """The path a vendor pushes to - the owner's alone: SendGrid's carries the card's secret."""
+    from . import pushin
+    _owner_only(request, "where a vendor pushes mail in is the owner's to see")
+    c = store.get_connector(cid, with_secret=True)
+    if not c or c['Type'] not in pushin.KINDS: raise HTTPException(404, 'not a card a vendor pushes to')
+    return {'path': pushin.path(store, c)}
 
 @app.get('/api/connectors/{cid}/zoho/customers')
 def zoho_customers(cid: int):

@@ -6,7 +6,8 @@ SonarQube, Elasticsearch, Splunk, Dynatrace, Kubernetes), Google Drive and OneDr
 2026-11-08: "hurry finish it all") the ones whose key is not the whole story: a token swapped first (Docker Hub, Schwab, Workday, Dataverse,
 SAP, ADP, PointClickCare), a key signed into each call (NetSuite's OAuth 1.0a, Google Cloud's service account, Epic and Cerner's SMART
 backend-services JWT), credentials that ride in the body (Plaid), and the vendors whose reads are POSTs (UptimeRobot, Plaid, SuiteQL,
-Cloud Logging, Browserbase / Oxylabs / Bright Data fetches).
+Cloud Logging, Browserbase / Oxylabs / Bright Data fetches). And the cards that sign in by OAuth (auth "oauth": Box, Zoom, HubSpot, Salesforce,
+DocuSign...; the row's `oauth` block is oauth.py's), read with the tokens their own Sign in left.
 
 THE TABLE IS apireads.json, read by this module and by the Connections page (one row: the base or the card's address, how the key rides,
 the cheap read its Test makes, the vendor's page it was read off). A new vendor is a row. Each card's report / agent type is `<type>_read`:
@@ -77,6 +78,11 @@ def _token(store, t: str, cfg: dict, key: str) -> str:
     if s['auth'] == 'graph':
         from .outbound import _graph_token
         return _graph_token(store, 'outlook')
+    if s['auth'] == 'oauth':
+        from . import oauth
+        from .reports import _connector
+        if not (c := _connector(store, t, cfg.get('connector_id'), with_secret=True)): raise RuntimeError(f"there is no {s['title']} card")
+        return oauth.access(store, c)
     return key
 
 
@@ -179,11 +185,11 @@ def request_parts(t: str, cfg: dict, key: str, store=None) -> tuple:
     "(url base, headers, params) for one card - how its key rides, read off the table."
     s = table()[t]; a = auth_of(s, cfg)
     h, q = dict(s.get('headers') or {}), {}
-    if a in ('google', 'graph'): h['Authorization'] = f'Bearer {_token(store, t, cfg, key)}'
+    if a in ('google', 'graph', 'oauth'): h['Authorization'] = f'Bearer {_token(store, t, cfg, key)}'
     elif not key and not s.get('keyless'): raise RuntimeError(f"no {s['title']} key saved - paste it on the {s['title']} card")
     elif a == 'query': q[s['param']] = key
     elif a == 'basic':
-        h['Authorization'] = 'Basic ' + base64.b64encode((s.get('basic') or '{user}:{key}').format(user=cfg.get('user') or '', key=key).encode()).decode()
+        h['Authorization'] = 'Basic ' + base64.b64encode((s.get('basic') or '{user}:{key}').format(user=cfg.get('user') or s.get('user') or '', key=key).encode()).decode()
     elif a in ('jwt_swap', 'gcp_sa', 'smart', 'refresh', 'client_credentials'): h['Authorization'] = f'Bearer {_swap(t, s, cfg, key)}'
     elif a in ('oauth1', 'form', 'plaid'): pass                    # signed per call / riding in the body: send() puts it there
     elif key: h[s.get('header') or 'Authorization'] = (s.get('format') or 'Bearer {key}').format(key=key)
@@ -213,7 +219,15 @@ def call(t: str, cfg: dict, key: str, path: str, params: dict | None = None, bod
         why = ' - the key was refused' if r.status_code in (401, 403) else ''
         raise RuntimeError(f"{s['title']} answered {r.status_code}{why}: {r.text[:200]}")
     try: return r.json()
-    except ValueError: return r.text
+    except ValueError: return feed(r.text) if '<rss' in r.text[:500] or '<feed' in r.text[:500] else r.text
+
+
+def feed(xml: str) -> list:
+    "An RSS/Atom page as its posts - title, link, date - rather than markup (Substack has no API, only its feed)."
+    tag = lambda b, n: (m.group(1).strip() if (m := re.search(rf'<{n}[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{n}>', b, re.S)) else '')
+    link = lambda b: tag(b, 'link') or (m.group(1) if (m := re.search(r'<link[^>]*href="([^"]+)"', b)) else '')
+    return [{'title': tag(b, 'title'), 'link': link(b), 'date': tag(b, 'pubDate') or tag(b, 'updated'), 'summary': tag(b, 'description')[:500]}
+            for b in re.findall(r'<(?:item|entry)[\s>].*?</(?:item|entry)>', xml, re.S)][:50]
 
 
 def get(t: str, cfg: dict, key: str, path: str, params: dict | None = None, store=None): return call(t, cfg, key, path, params, None, store)
@@ -238,6 +252,6 @@ def test(store, c) -> str:
     "The card's Test: its cheap read."
     from .reports import _card
     t = c['Type']
-    cfg = _card(store, t, 'api_key', c['ConnectorId'])
+    cfg = {**_card(store, t, 'api_key', c['ConnectorId']), 'connector_id': c['ConnectorId']}
     head, _ = runner(t)({**cfg, 'store': store})
     return f'{head} - the key works ({table()[t]["probe"]})'

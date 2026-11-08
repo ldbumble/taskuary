@@ -66,6 +66,8 @@ DENIED = (
     (r'POST', r'^/api/messages/\d+/reply$', 'opening a reply is the first half of sending one'),
     (r'POST', r'^/api/tasks/\d+/clarify$', 'opening a clarification is the first half of sending one'),
     (r'POST|PUT|PATCH|DELETE', r'^/api/(connectors|sources)', 'credentials and where mail goes'),
+    # a vendor's push (pushin.py) proves itself by its signature; a session that posted one would be writing its own next prompt
+    (r'POST', r'^/api/inbound/', "a vendor's push is the vendor's - an agent never puts a message in the inbox"),
     (r'GET', r'^/api/send-targets$', 'the address book of everywhere this install can send'),
     (r'POST|DELETE', r'^/api/shares(/\d+)?$', 'sharing a result puts it in front of someone else - a draft, a link, an upload (sharing.py)'),
     # a sign-in is typed by the server and only on the owner's say-so: no session mints a fill page, reads which sites are kept, removes
@@ -504,7 +506,12 @@ WRITE_ONLY_CONFIG = {'linkedin': ('client_secret', 'refresh_token'), 'reddit': (
                      'gmail': ('google_client_secret', 'google_refresh_token'),
                      'google_sheets': ('google_client_secret',), 'google_chat': ('google_client_secret',),
                      # a keyed read with a second secret beside its key (apireads.json `write_only`): Schwab's app secret, NetSuite's consumer secret, Plaid's access token
-                     **__import__('taskuary.apireads', fromlist=['write_only']).write_only()}
+                     **__import__('taskuary.apireads', fromlist=['write_only']).write_only(),
+                     # the cards that sign in by OAuth (oauth.py) keep their app's secret here; LINE its channel secret, which checks
+                     # every push; SendGrid the key in its push address - the owner reads that through its own door, never the card
+                     **dict.fromkeys(('box', 'zoom', 'zoom_chat', 'webex', 'threads', 'hubspot', 'salesforce', 'docusign', 'basecamp_todos'),
+                                     ('client_secret',)),
+                     'line': ('channel_secret',), 'sendgrid': ('inbound_key',)}
 
 
 def masked_config(row: dict) -> dict:

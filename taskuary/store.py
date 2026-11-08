@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 from . import vault
 from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: seeded and triggering like the rest
+from .apireads import types as _read_types                     # a vendor's REST API read (apireads.json): each row a card
 from .kinds import SHOWN, shown as shown_agent   # the name a chip says for whoever works a task: Taskuary, never the profile
 
 # WHO HELD THE STORE, AND FOR HOW LONG (2026-10-23): three freezes in a day left a log where unrelated requests all finished in
@@ -983,7 +984,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # needs two credentials (key_id, secret_key) and ships market DATA only, no orders
                  'finnhub': 'report,tool', 'polygon': 'report,tool', 'tiingo': 'report,tool',
                  'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool', 'dynamodb': 'report,tool',
-                 **{t: 'report,tool' for t in __import__('taskuary.apireads', fromlist=['types']).types()},      # apireads.json: reads, as reports and agent tools
+                 **{t: 'report,tool' for t in _read_types()},      # apireads.json: reads, as reports and agent tools
                  'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
@@ -1017,6 +1018,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'sentry': 'trigger', 'pagerduty': 'trigger',
                  # helpdesks and the newer trackers (inboxes.py): what is assigned to you is work
                  **dict.fromkeys(INBOXES, 'trigger'),
+                 # ...and the ones that are both (HubSpot, Salesforce, DocuSign, Webex...): work comes in, and agents read the same API
+                 **{t: 'trigger,report,tool' for t in INBOXES if t in _read_types()},
                  # speech to text: no role - the funnel and the prompt box ask the first active one
                  'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',
                  'assemblyai': '', 'speechmatics': '', 'gladia': '', 'azure_speech': '', 'amazon_transcribe': '',

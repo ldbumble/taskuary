@@ -532,6 +532,40 @@ of Browserbase, Oxylabs and Bright Data. Each card lists those paths, and a body
 Each card says what your organization's admin has to give you; for an EMR or HR system that is
 usually an approved app and a read-only role, set up on their side.
 
+## Cards that sign in with your own app
+
+Basecamp to-dos, Box, DocuSign, HubSpot, Salesforce, Threads, Webex, Zoom and Zoom Team Chat sign in
+by OAuth, through an app **you** register at the vendor — Taskuary has no shared app anywhere. The
+card names the vendor's developer console and shows the redirect URL to add there, which points back
+at Taskuary on this computer (`http://127.0.0.1:<port>/api/oauth/callback`), so no public address
+is needed. Paste the app's Client ID and Client Secret (each saves itself) and press **Sign in**: the
+consent screen opens in a new tab, and the tokens come back here, sealed like every secret, and renew
+themselves. Only you can press Sign in — an agent is refused it.
+
+Threads accepts only an https redirect. Give your own tunnel's address under **redirect address** on
+the card and the redirect URL follows it.
+
+What comes in: Webex and Zoom Team Chat direct messages and the messages that @mention you; replies to
+your Threads posts and posts that mention you (always as a stranger's words); HubSpot tickets and tasks,
+and Salesforce cases and tasks, assigned to you; DocuSign envelopes waiting on your signature; Basecamp
+to-dos assigned to you, and Pings and @mentions. People the vendor itself calls your colleagues are
+known; a customer, a client or an outside contact is a stranger. Agents and reports read with the same
+sign-in — Box files, Zoom meetings and recordings, HubSpot and Salesforce records, an envelope's status —
+and only ever read.
+
+## Mail and messages a vendor pushes
+
+**Mailgun** keeps the mail a route stores, and Taskuary polls it: give the private API key and the
+receiving domain, and no public address is needed. **LINE** (its Messaging API only pushes) and
+**SendGrid Inbound Parse** post each message to Taskuary, so they need a public https address that
+reaches this computer — a tunnel of your own, such as cloudflared or ngrok, pointed at Taskuary's
+port. The card shows the path to put after that address. Each push proves itself before anything is
+kept: LINE's signature with your channel secret, SendGrid's secret path (and its signature, when you
+add the security policy's key). Only those paths answer under the tunnel's name — never the app.
+
+**Substack** has no API. Replies and comments reach you as Substack's own emails, through your mail
+card; give the card your publication's address and agents and reports read your posts from its feed.
+
 ## A system with no card
 
 Search the catalogue first. When nothing matches, **Request** under the empty grid drafts a feature

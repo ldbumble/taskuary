@@ -1076,6 +1076,13 @@ def _apikey_card(typ):
     return lambda store, connector_id=None: _card(store, typ, 'api_key', connector_id)
 
 
+def _read_card(t):
+    """A vendor read's card (apireads.json): its key as `api_key` - and, for a card that signs in by OAuth, the store and the card it
+    renews its tokens through (apireads._token)."""
+    if apireads.table()[t]['auth'] != 'oauth': return _apikey_card(t)
+    return lambda store, connector_id=None: {**_card(store, t, 'api_key', connector_id), 'store': store, 'connector_id': connector_id}
+
+
 def linkedin_connection(store, connector_id=None) -> dict:
     """The access token IS the card's secret, and it arrives as `token` because that is the name
     linkedin._headers reads. Without this the card holds a token nobody can spend: resolve_cfg
@@ -1178,7 +1185,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                     ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb', 'mongodb', 'redis', 'neo4j')},
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'dynamodb': lambda store, connector_id=None: _card(store, 'dynamodb', 'secret_access_key', connector_id),
-                 **{f'{t}_read': _apikey_card(t) for t in apireads.types()
+                 **{f'{t}_read': _read_card(t) for t in apireads.types()
                     if t not in apireads.BORROWED},
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

@@ -3467,6 +3467,20 @@ function CloudObjects({ conn, meta, objects, reload }) {
 
 /* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
    secret + live Test; the connection only - reports are built under Reports. ── */
+/* WHERE A VENDOR PUSHES (pushin.py: LINE, SendGrid Inbound Parse): the path to put after the owner's own public address. Read through
+   the owner's door (/inbound) - SendGrid's carries the card's key - and shown once the card is saved, never typed. */
+function PushAddress({ conn }) {
+  const [path, setPath] = useState("");
+  useEffect(() => { api.get(`/api/connectors/${conn.ConnectorId}/inbound`).then((r) => setPath(r.data.path)).catch(() => setPath("")); }, [conn.ConnectorId]);
+  if (!path) return null;
+  return (
+    <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.6, p: 1.25, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
+      Point the vendor at your own public https address followed by <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{path}</Box>
+      {" "}- a tunnel of yours (cloudflared, ngrok) to the Taskuary port on this computer. Only that path answers there.
+    </Typography>
+  );
+}
+
 /* A card whose credential is minted by signing in at the provider (QuickBooks): the box says
    what the provider's app must carry (the redirect URI), whether we are connected and to which
    company, and one button that opens the sign-in. The token comes back server-side. */
@@ -3529,7 +3543,8 @@ function OAuthConnect({ conn, meta, reload }) {
     try {
       if (meta.connect.widget === "token") return await pasteToken();
       if (meta.connect.widget === "teller") return await teller();
-      const { data } = await api.get(meta.connect.start(conn.ConnectorId)); setUrl(data.url); window.open(data.url, "_blank", "noopener"); setBusy(true);
+      // ...a POST where the server asks for one (oauth.py's start: only the owner's press, guard.DENIED to an agent)
+      const { data } = await (meta.connect.post ? api.post : api.get)(meta.connect.start(conn.ConnectorId)); setUrl(data.url); window.open(data.url, "_blank", "noopener"); setBusy(true);
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "could not start the sign-in"); }
   };
   return (
@@ -3682,6 +3697,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             </Box>
           )}
           {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} />}
+          {meta.push && <PushAddress conn={conn} />}
           {/* a field's 4th entry says where to get what it asks for, under the box */}
           {/* ...and a write-only one (an app's client secret, guard.WRITE_ONLY_CONFIG) is masked: once saved the server never sends it
               back, so the box is empty and says it is saved - typed, it replaces the stored one */}

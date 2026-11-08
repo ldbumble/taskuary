@@ -25,7 +25,16 @@ DOC = {'digitalocean': {'account': {'email': 'alex@northwind.example', 'status':
        'kubernetes': {'major': '1', 'minor': '34', 'gitVersion': 'v1.34.0'},
        'google_drive': {'user': {'displayName': 'Alex Doyle', 'emailAddress': 'alex@northwind.example'}},
        'onedrive': {'id': 'd1', 'driveType': 'business', 'owner': {'user': {'displayName': 'Alex Doyle'}}},
-       'office365_files': {'value': [{'id': 'f1', 'name': 'Q3 plan.xlsx'}]}}
+       'office365_files': {'value': [{'id': 'f1', 'name': 'Q3 plan.xlsx'}]},
+       # the cards that sign in by OAuth (oauth.py) and the ones that bring work in (inboxes.py, tested there): their probe's answer
+       'box': {'type': 'user', 'id': '11', 'name': 'Alex Doyle', 'login': 'alex@northwind.example'},
+       'zoom': {'id': 'z1', 'email': 'alex@northwind.example', 'account_id': 'a1'},
+       'zoom_chat': {'id': 'z1', 'email': 'alex@northwind.example', 'account_id': 'a1'},
+       'webex': {'id': 'p1', 'orgId': 'o1', 'displayName': 'Alex Doyle'}, 'threads': {'id': 't1', 'username': 'alexdoyle'},
+       'hubspot': {'results': [{'id': '77', 'email': 'alex@northwind.example'}]}, 'salesforce': {'user_id': '005000000000001AAA'},
+       'docusign': {'folders': [{'folderId': 'f1', 'name': 'Inbox'}]}, 'basecamp_todos': {'id': 10, 'name': 'Alex Doyle'},
+       'mailgun': {'items': [{'name': 'mg.northwind.example'}]}, 'sendgrid': {'scopes': ['mail.send']},
+       'line': {'userId': 'U1', 'basicId': '@northwind', 'displayName': 'Northwind'}, 'substack': []}
 
 
 def resp(j, code=200):
@@ -52,9 +61,11 @@ class EveryRowIsAWorkingCard(unittest.TestCase):
 
     def test_each_cards_test_makes_its_probe_with_the_key_where_the_vendor_wants_it(self):
         s = MemoryStore()
+        from taskuary import inboxes
         for t, r in ((t, apireads.table()[t]) for t in DOC):
+            if t in inboxes.TYPES: continue                 # a card that brings work in tests through its source (tests/test_oauth_sources.py)
             cid = card(s, t, host='https://ci.northwind.example', user='alex')
-            with mock.patch.object(apireads.requests, 'get', return_value=resp(DOC[t])) as g, \
+            with mock.patch.object(apireads.requests, 'get', return_value=resp(DOC[t])) as g, mock.patch('taskuary.oauth.access', return_value='oa-tok'), \
                     mock.patch('taskuary.sheets._token', return_value='g-tok'), mock.patch('taskuary.sheets.google_sheets_connection', return_value={}), \
                     mock.patch('taskuary.outbound._graph_token', return_value='ms-tok'):
                 out = channels.test_connector(s, cid)
@@ -64,7 +75,8 @@ class EveryRowIsAWorkingCard(unittest.TestCase):
             self.assertFalse(kw['allow_redirects'])
             h, q = kw['headers'], kw['params']
             want = {'query': lambda: q[r['param']] == 'key-1', 'basic': lambda: h['Authorization'].startswith('Basic '),
-                    'google': lambda: h['Authorization'] == 'Bearer g-tok', 'graph': lambda: h['Authorization'] == 'Bearer ms-tok'}.get(r['auth'])
+                    'google': lambda: h['Authorization'] == 'Bearer g-tok', 'graph': lambda: h['Authorization'] == 'Bearer ms-tok',
+                    'oauth': lambda: h['Authorization'] == 'Bearer oa-tok'}.get(r['auth'])
             self.assertTrue(want() if want else h[r.get('header') or 'Authorization'] == (r.get('format') or 'Bearer {key}').format(key='key-1'), (t, h, q))
 
     def test_the_documented_shapes_the_owner_relies_on(self):
@@ -76,6 +88,14 @@ class EveryRowIsAWorkingCard(unittest.TestCase):
         self.assertEqual((g.call_args.args[0], g.call_args.kwargs['headers']['Authorization']), ('https://es.northwind.example:9243/', 'ApiKey ZW5j'))
         with mock.patch.object(apireads.requests, 'get', return_value=resp([{'title': 'x'}])):
             self.assertEqual(apireads.runner('benzinga')({'api_key': 'b', 'path': '/news?tickers=AAPL'})[0], 'Benzinga: 1 items')
+        # Substack has no API: its public feed, read as posts rather than markup
+        rss = mock.Mock(status_code=200, text='<?xml version="1.0"?><rss><channel><title>Notes</title><item><title><![CDATA[On ledgers]]></title>'
+                                              '<link>https://northwind.substack.com/p/on-ledgers</link><pubDate>Mon, 02 Nov 2026 10:00:00 GMT</pubDate></item></channel></rss>')
+        rss.json.side_effect = ValueError
+        with mock.patch.object(apireads.requests, 'get', return_value=rss) as g:
+            head, body = apireads.runner('substack')({'host': 'northwind.substack.com'})
+        self.assertEqual((g.call_args.args[0], head), ('https://northwind.substack.com/feed', 'Substack: 1 items'))
+        self.assertEqual(json.loads(body)[0]['link'], 'https://northwind.substack.com/p/on-ledgers')
 
 
 class OnlyReads(unittest.TestCase):

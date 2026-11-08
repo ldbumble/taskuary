@@ -10,7 +10,8 @@ from pathlib import Path
 from . import buttons
 
 CAT = json.loads(Path(__file__).with_name('viewspec.json').read_text(encoding='utf-8'))
-CAPS, TYPES = CAT['caps'], CAT['types']
+CAPS, EVERY = CAT['caps'], CAT['every']
+TYPES = {t: {**spec, **EVERY} for t, spec in CAT['types'].items()}     # every type also takes a title and a description
 MARK = 'TASKUARY-VIEW '                  # the tool's answer carries the spec after this, so the chat draws it from the trace (chatStream.viewOf)
 ROW_VERBS = sorted(v for v, b in buttons.VERBS.items() if b.get('row'))      # lit where it stands on the task page: a verb with no row has no button
 ROW_OF = {r: v for v in ROW_VERBS for r in buttons.VERBS[v]['row'] if r not in ROW_VERBS}    # its row id (done) names it too
@@ -61,28 +62,48 @@ def _rows(v, at, cols):
 
 
 def _tile(o, at):
-    o = _obj(o, at, ('label', 'value'), ('note',))
-    return {'label': _text(o['label'], CAPS['short'], f'{at}.label'), 'value': _cell(o['value'], f'{at}.value'),
-            **({'note': _text(o['note'], CAPS['short'], f'{at}.note')} if o.get('note') else {})}
+    o = _obj(o, at, ('label', 'value'), ('note', 'trend', 'format'))
+    out = {'label': _text(o['label'], CAPS['short'], f'{at}.label'), 'value': _cell(o['value'], f'{at}.value')}
+    if o.get('note'): out['note'] = _text(o['note'], CAPS['short'], f'{at}.note')
+    if o.get('format') is not None: out['format'] = _prop(FORMAT, o['format'], f'{at}.format', {})
+    if o.get('trend') is not None:      # its direction colours it; the words say by how much and against what ("+$340 vs Collect")
+        t = _obj(o['trend'], f'{at}.trend', ('dir',), ('text',))
+        out['trend'] = {'dir': _prop(DIR, t['dir'], f'{at}.trend.dir', {}), **({'text': _text(t['text'], CAPS['short'], f'{at}.trend.text')} if t.get('text') else {})}
+    return out
+
+
+# a table's column is its name, or {label, format} when its numbers are money, plain counts or percents
+FORMAT, DIR = CAT['types']['chart']['format'], 'up|down|neutral'
+def _col(c, at):
+    if not isinstance(c, dict): return _text(c, CAPS['short'], at)
+    o = _obj(c, at, ('label',), ('format',))
+    return {'label': _text(o['label'], CAPS['short'], f'{at}.label'), **({'format': _prop(FORMAT, o['format'], f'{at}.format', {})} if o.get('format') else {})}
+def labels(cols): return [c['label'] if isinstance(c, dict) else c for c in cols or []]
 
 
 def _prop(kind, v, at, props):
     if '|' in kind:
-        if v not in kind.split('|'): raise ValueError(f'{at} must be one of {kind.replace("|", ", ")}')
+        ws = kind.split('|')
+        if all(w.isdigit() for w in ws):        # a count, as a grid's columns: a number, or its digits
+            if isinstance(v, bool) or str(v) not in ws: raise ValueError(f'{at} must be one of {kind.replace("|", ", ")}')
+            return int(v)
+        if v not in ws: raise ValueError(f'{at} must be one of {kind.replace("|", ", ")}')
         return v
     if kind == 'str': return _text(v, CAPS['short'], at)
     if kind == 'md': return _text(v, CAPS['long'], at)
     # ...a table's columns and a row of tiles are as wide as a screen holds, never a list's length
     wide = CAPS['columns'] if at.endswith('.columns') or kind == 'tiles' else None
     if kind == 'strs': return [_text(x, CAPS['short'], f'{at}[{i}]') for i, x in enumerate(_list(v, at, wide))]
-    if kind == 'rows': return _rows(v, at, props.get('columns') or [])
+    if kind == 'cols': return [_col(x, f'{at}[{i}]') for i, x in enumerate(_list(v, at, CAPS['columns']))]
+    if kind == 'rows': return _rows(v, at, labels(props.get('columns')))
     if kind == 'tiles': return [_tile(x, f'{at}[{i}]') for i, x in enumerate(_list(v, at, wide))]
     if kind == 'checks':
         os = [_obj(x, f'{at}[{i}]', ('text',), ('done',)) for i, x in enumerate(_list(v, at))]
         return [{'text': _text(o['text'], CAPS['short'], f'{at}[{i}].text'), 'done': o.get('done') is True} for i, o in enumerate(os)]
     if kind == 'points':
-        os = [_obj(x, f'{at}[{i}]', ('label', 'value')) for i, x in enumerate(_list(v, at))]
-        return [{'label': _text(o['label'], CAPS['short'], f'{at}[{i}].label'), 'value': _num(o['value'], f'{at}[{i}].value')} for i, o in enumerate(os)]
+        os = [_obj(x, f'{at}[{i}]', ('label', 'value'), ('highlight',)) for i, x in enumerate(_list(v, at))]
+        return [{'label': _text(o['label'], CAPS['short'], f'{at}[{i}].label'), 'value': _num(o['value'], f'{at}[{i}].value'),
+                 **({'highlight': True} if o.get('highlight') is True else {})} for i, o in enumerate(os)]
     if kind == 'verb':
         v = ROW_OF.get(v, v) if isinstance(v, str) else v
         if v not in ROW_VERBS: raise ValueError(f'{at}: {v!r} is no button on the task page - one of {", ".join(ROW_VERBS)}')

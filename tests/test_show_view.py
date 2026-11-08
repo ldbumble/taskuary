@@ -66,6 +66,49 @@ class TheCheck(unittest.TestCase):
         self.assertEqual(json.loads(spec), viewspec.check(SPEC))
 
 
+class TheNewBlocks(unittest.TestCase):
+    "grid, badge and note; a title and a description on every block; a tile's trend and format, a column's format, a highlighted point"
+    NEW = {'root': 'g', 'elements': {
+        'g': {'type': 'grid', 'props': {'cols': 2, 'title': 'Plans', 'description': 'For 40 people'}, 'children': ['k', 'c', 't', 'b', 'n']},
+        'k': {'type': 'stats', 'props': {'items': [{'label': 'Top tier', 'value': 540, 'format': 'currency', 'trend': {'dir': 'up', 'text': '+$340 vs Basic'}}]}},
+        'c': {'type': 'chart', 'props': {'kind': 'bar', 'format': 'currency', 'description': 'Per month',
+                                         'points': [{'label': 'Payworth Basic', 'value': 200, 'highlight': True}, {'label': 'Payworth Pro', 'value': 540}]}},
+        't': {'type': 'table', 'props': {'title': 'Costs', 'columns': ['Plan', {'label': 'Per month', 'format': 'currency'}],
+                                         'rows': [{'Plan': 'Payworth Basic', 'Per month': 200}, ['Payworth Pro', 540]]}},
+        'b': {'type': 'badge', 'props': {'text': 'Cheapest', 'variant': 'success'}},
+        'n': {'type': 'note', 'props': {'tone': 'warning', 'title': 'Before you switch', 'text': 'Two reports are still open.'}}}}
+
+    def test_they_pass_and_come_back_as_they_went_in(self):
+        v = viewspec.check(self.NEW)
+        self.assertEqual(v['elements']['g']['props'], {'cols': 2, 'title': 'Plans', 'description': 'For 40 people'})
+        self.assertEqual(v['elements']['k']['props']['items'][0]['trend'], {'dir': 'up', 'text': '+$340 vs Basic'})
+        self.assertEqual(v['elements']['c']['props']['points'][0], {'label': 'Payworth Basic', 'value': 200, 'highlight': True})
+        self.assertNotIn('highlight', v['elements']['c']['props']['points'][1])
+        self.assertEqual(v['elements']['t']['props']['columns'][1], {'label': 'Per month', 'format': 'currency'})
+        self.assertEqual(v['elements']['t']['props']['rows'], [['Payworth Basic', 200], ['Payworth Pro', 540]])     # a row by its column labels
+        self.assertEqual(viewspec.check(v), v)                       # the page checks the server's answer again: it must still pass
+        self.assertEqual(viewspec.check(one('grid', {'cols': '3'}))['elements']['a']['props']['cols'], 3)
+
+    def test_an_old_spec_is_still_good(self):
+        self.assertEqual(viewspec.check(SPEC)['elements']['t']['props']['columns'], ['vendor', 'amount'])
+
+    def test_what_is_wrong_with_them_is_said(self):
+        bad = lambda spec, says: self.assertRaisesRegex(ValueError, says, viewspec.check, spec)
+        bad(one('grid', {'cols': 5}), 'cols must be one of 1, 2, 3, 4')
+        bad(one('grid', {'cols': True}), 'cols must be one of')
+        bad(one('badge', {'text': 'x', 'variant': 'danger'}), 'variant must be one of default, secondary')
+        bad(one('badge', {}), 'props needs text')
+        bad(one('note', {'tone': 'error', 'text': 'x'}), 'tone must be one of info, success, warning')
+        bad(one('note', {'text': 'x' * (viewspec.CAPS['long'] + 1)}), 'keep it to 2000')
+        bad(one('text', {'text': 'x', 'title': 'y' * (viewspec.CAPS['short'] + 1)}), r'title is 201 characters')
+        bad(one('stats', {'items': [{'label': 'a', 'value': 1, 'trend': {'dir': 'sideways'}}]}), r'trend\.dir must be one of up, down, neutral')
+        bad(one('stats', {'items': [{'label': 'a', 'value': 1, 'trend': {'text': '+1'}}]}), 'trend needs dir')
+        bad(one('stats', {'items': [{'label': 'a', 'value': 1, 'format': 'euro'}]}), 'format must be one of currency, number, percent')
+        bad(one('table', {'columns': [{'label': 'a', 'format': 'money'}], 'rows': [[1]]}), r'columns\[0\]\.format must be one of')
+        bad(one('table', {'columns': [{'name': 'a'}], 'rows': [[1]]}), r'columns\[0\] has name')
+        bad(one('chart', {'points': [{'label': 'x', 'value': 1, 'color': 'red'}]}), 'has color')
+
+
 class TheTool(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
@@ -101,3 +144,10 @@ if __name__ == '__main__': unittest.main()
 def test_the_tool_says_not_to_repeat_the_view_in_words():
     from taskuary import agenttools
     assert 'never the same table or list again in text' in agenttools.TOOLS['show'][1]
+
+
+def test_the_tools_one_example_is_a_good_spec_with_a_grid_tiles_a_chart_a_table_and_a_checklist():
+    d = agenttools.TOOLS['show'][1]
+    v = viewspec.check(json.loads(d[d.index('Example: ') + len('Example: '):]))
+    assert sorted({e['type'] for e in v['elements'].values()}) == ['chart', 'checklist', 'grid', 'stats', 'table']
+    assert len(v['elements']['kpi']['props']['items']) == 3

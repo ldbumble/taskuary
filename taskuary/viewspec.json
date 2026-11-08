@@ -1,14 +1,18 @@
 {
-  "_": "THE SHOW TOOL'S CATALOG (agenttools `show`, viewspec.py; website/src/viewSpec.js reads the same file). The only element types an agent may draw in its chat, each prop's kind ('!' = required, 'a|b' = one of those words), and the caps. A button names a buttons.json verb that has a row id (it lights that button) or an app link (#...) it opens - it never presses anything.",
+  "_": "THE SHOW TOOL'S CATALOG (agenttools `show`, viewspec.py; website/src/viewSpec.js reads the same file). The only element types an agent may draw in its chat, each prop's kind ('!' = required, 'a|b' = one of those words), and the caps. `every` is the props every type also takes. A button names a buttons.json verb that has a row id (it lights that button) or an app link (#...) it opens - it never presses anything.",
   "caps": { "elements": 40, "children": 20, "chars": 5000, "items": 50, "columns": 12, "short": 200, "long": 2000 },
+  "every": { "title": "str", "description": "str" },
   "types": {
-    "table": { "columns": "strs!", "rows": "rows!" },
+    "table": { "columns": "cols!", "rows": "rows!" },
     "stats": { "items": "tiles!" },
-    "chart": { "kind": "bar|line", "title": "str", "points": "points!" },
+    "chart": { "kind": "bar|line", "format": "currency|number|percent", "points": "points!" },
     "list": { "items": "strs!" },
     "checklist": { "items": "checks!" },
     "steps": { "items": "strs!" },
     "text": { "text": "md!" },
+    "grid": { "cols": "1|2|3|4" },
+    "badge": { "text": "str!", "variant": "default|secondary|outline|success|warning" },
+    "note": { "tone": "info|success|warning", "text": "md!" },
     "button": { "label": "str!", "verb": "verb", "open": "link" }
   }
 }

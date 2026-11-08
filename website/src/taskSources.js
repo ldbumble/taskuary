@@ -4,11 +4,14 @@ import { assignedAgent } from "./agentIdentity.js";
 import { routeIntent, routeWhy } from "./triageVerdict.js";
 import { plural } from "./timeWords.js";
 import { level } from "./priority.js";
+import { CATALOGUE } from "./connectorCatalog.js";
 
 const CHANNEL_NAMES = { email: "Email", whatsapp: "WhatsApp", telegram: "Telegram", slack: "Slack", teams: "Teams", github: "GitHub",
   monday: "Monday", jira: "Jira", linear: "Linear", imessage: "iMessage", discord: "Discord", report: "Report", assistant: "Assistant",
   google_chat: "Google Chat", sms: "SMS", calendar: "Calendar" };
-export const channelName = (ch) => CHANNEL_NAMES[ch] || (ch ? ch[0].toUpperCase() + ch.slice(1).replace(/_/g, " ") : "Message");
+// ...a source card's own title past those (Zendesk, Help Scout, Zoom Team Chat): "Helpscout" and "Zoom chat" named no card the owner has
+export const channelName = (ch) => CHANNEL_NAMES[ch] || CATALOGUE.find((c) => c.type === ch)?.title
+  || (ch ? ch[0].toUpperCase() + ch.slice(1).replace(/_/g, " ") : "Message");
 const CHATS = new Set(["whatsapp", "teams", "slack", "telegram", "imessage", "discord", "mattermost", "rocketchat", "matrix", "google_chat", "sms"]);
 export const isChat = (ch) => CHATS.has(ch);
 

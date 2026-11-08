@@ -1784,7 +1784,11 @@
       "desc": "Mail your Mailgun route stores lands on your work rail through triage - Taskuary polls Mailgun's stored messages, so no public address is needed.",
       "match": [
         "mailgun"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "an email reply, from your own mailbox"
+      }
     },
     {
       "type": "sendgrid",
@@ -1794,7 +1798,11 @@
       "desc": "Mail SendGrid Inbound Parse receives lands on your work rail through triage. SendGrid pushes it, so it needs a public address that reaches this computer - your own tunnel.",
       "match": [
         "sendgrid"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "an email reply, from your own mailbox"
+      }
     },
     {
       "type": "google_chat",
@@ -1838,7 +1846,11 @@
       "desc": "Your Signal messages land on your work rail through triage, read by signal-cli's REST API running beside Taskuary.",
       "match": [
         "signal"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a Signal message back, in the same chat or group"
+      }
     },
     {
       "type": "zoom_chat",
@@ -1851,7 +1863,11 @@
         "zoom",
         "team",
         "zoom chat"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a reply in the channel's thread, or in the direct chat (the app needs chat_message:write)"
+      }
     },
     {
       "type": "webex",
@@ -1861,7 +1877,11 @@
       "desc": "Webex direct messages, and space messages that @mention you, land on your work rail through triage. People in your Webex organization are colleagues; anyone else is a stranger.",
       "match": [
         "webex"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a reply in the space thread, or in the direct chat (the sign-in needs messages write - sign in again once)"
+      }
     },
     {
       "type": "rocketchat",
@@ -1883,7 +1903,11 @@
       "desc": "Bitbucket pull requests ASKING YOUR REVIEW and issues ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "bitbucket"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the pull request or issue"
+      }
     },
     {
       "type": "jenkins",
@@ -2047,7 +2071,11 @@
       "desc": "Basecamp to-dos assigned to you, and Pings and @mentions in your Hey! menu, land on your work rail through triage. Your team is known; a client is a stranger.",
       "match": [
         "basecamp"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the to-do, or a line in the Ping"
+      }
     },
     {
       "type": "basecamp",
@@ -2084,7 +2112,11 @@
       "desc": "Smartsheet rows whose contact column NAMES YOU land on your work rail through triage.",
       "match": [
         "smartsheet"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the row"
+      }
     },
     {
       "type": "smartsheet_mcp",
@@ -2109,7 +2141,11 @@
       "desc": "Rows in the Airtable view you choose land on your work rail through triage as they change.",
       "match": [
         "airtable"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the record (the token needs data.recordComments:write)"
+      }
     },
     {
       "type": "airtable_mcp",
@@ -2133,7 +2169,11 @@
       "desc": "Active Wrike tasks ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "wrike"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the task"
+      }
     },
     {
       "type": "wrike_mcp",
@@ -2158,7 +2198,11 @@
       "desc": "Shortcut stories YOU OWN land on your work rail through triage.",
       "match": [
         "shortcut"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the story"
+      }
     },
     {
       "type": "github_projects",
@@ -2170,7 +2214,11 @@
         "github projects",
         "github",
         "projects"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a comment on the issue or pull request - public on a public repository"
+      }
     },
     {
       "type": "notion_mcp",
@@ -2455,7 +2503,12 @@
       "desc": "Salesforce cases and tasks assigned to you land on your work rail through triage, and agents read any record - GET /services/data/v62.0/query?q=SELECT Id, Name FROM Account.",
       "match": [
         "salesforce"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a comment on the case - the contact sees it in your portal - or a post on the task's feed",
+        "note": "Keep case comments private - only your users see them"
+      }
     },
     {
       "type": "hubspot",
@@ -2465,7 +2518,11 @@
       "desc": "HubSpot tickets and tasks assigned to you land on your work rail through triage, and agents read any CRM record - GET /crm/v3/objects/contacts, /crm/v3/objects/deals/<id>.",
       "match": [
         "hubspot"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a note on the ticket (sign in again once, for the write scope)"
+      }
     },
     {
       "type": "servicenow",
@@ -2475,7 +2532,12 @@
       "desc": "ServiceNow incidents (or any task table) ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "servicenow"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "an additional comment on the record - the caller sees it",
+        "note": "Post it as a work note instead - only the IT staff see it"
+      }
     },
     {
       "type": "dynamics365",
@@ -3295,7 +3357,11 @@
       "desc": "Texts to your Twilio number land on your work rail through triage.",
       "match": [
         "twilio"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a text back from your Twilio number"
+      }
     },
     {
       "type": "docusign",
@@ -3349,7 +3415,12 @@
       "desc": "Open Intercom conversations ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "intercom"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a reply in the conversation, as you",
+        "note": "Post it as a note instead - only your teammates see it"
+      }
     },
     {
       "type": "intercom_mcp",
@@ -3373,7 +3444,12 @@
       "desc": "Zendesk tickets ASSIGNED TO YOU, and new unassigned ones in your groups, land on your work rail through triage - a customer's words wait for your press.",
       "match": [
         "zendesk"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a public comment on the ticket - the requester gets it by email",
+        "note": "Post it as an internal note instead - only your team sees it"
+      }
     },
     {
       "type": "freshdesk",
@@ -3383,7 +3459,12 @@
       "desc": "Freshdesk tickets ASSIGNED TO YOU, and new ones in your groups, land on your work rail through triage.",
       "match": [
         "freshdesk"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a reply on the ticket - the requester gets it by email",
+        "note": "Post it as a private note instead - only your agents see it"
+      }
     },
     {
       "type": "front",
@@ -3394,7 +3475,12 @@
       "match": [
         "front",
         "frontapp"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a reply in the conversation, sent by its own inbox",
+        "note": "Post it as a comment instead - only your teammates see it"
+      }
     },
     {
       "type": "helpscout",
@@ -3405,7 +3491,12 @@
       "match": [
         "help scout",
         "helpscout"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a reply to the customer in the conversation",
+        "note": "Post it as a note instead - only your team sees it"
+      }
     },
     {
       "type": "gorgias",
@@ -3415,7 +3506,12 @@
       "desc": "Open Gorgias tickets ASSIGNED TO YOU land on your work rail through triage - a shopper's words wait for your press.",
       "match": [
         "gorgias"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "an email reply on the ticket, from the address the customer wrote to",
+        "note": "Post it as an internal note instead - only your team sees it"
+      }
     },
     {
       "type": "helpscout_mcp",
@@ -3654,7 +3750,11 @@
       "match": [
         "ringcentral",
         "ring central"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a text back from your RingCentral number (the app needs the SMS permission)"
+      }
     },
     {
       "type": "aircall",
@@ -3664,7 +3764,11 @@
       "desc": "Missed calls and voicemails on your Aircall lines land on your work rail through triage, with the transcript where Aircall has one.",
       "match": [
         "aircall"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a text back from the line they called (an SMS-enabled Aircall number)"
+      }
     },
     {
       "type": "dialpad",
@@ -3674,7 +3778,11 @@
       "desc": "Missed calls and voicemails to you on Dialpad land on your work rail through triage, with Dialpad's transcript.",
       "match": [
         "dialpad"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a text back from your Dialpad number"
+      }
     },
     {
       "type": "typeform",
@@ -4193,7 +4301,11 @@
       "match": [
         "threads",
         "meta threads"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a public reply on Threads (sign in again once, for the publish and reply scopes)"
+      }
     },
     {
       "type": "reddit",
@@ -4204,7 +4316,11 @@
       "match": [
         "reddit",
         "subreddit"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a public comment reply, or a reply to the message"
+      }
     },
     {
       "type": "youtube",
@@ -4226,7 +4342,11 @@
       "match": [
         "discourse",
         "forum"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a reply post in the topic - public on a public forum"
+      }
     },
     {
       "type": "substack",
@@ -4247,7 +4367,11 @@
       "match": [
         "instagram",
         "insta"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a public reply under the comment"
+      }
     },
     {
       "type": "facebook_pages",
@@ -4259,7 +4383,11 @@
         "facebook page",
         "facebook",
         "messenger"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a public reply under the comment, or a Messenger reply within 24 hours of their message"
+      }
     },
     {
       "type": "tiktok",
@@ -4292,7 +4420,11 @@
       "match": [
         "wordpress",
         "wp-admin"
-      ]
+      ],
+      "replies": {
+        "on": false,
+        "says": "a public reply under the comment - the comment itself stays held until you approve it"
+      }
     },
     {
       "type": "ghost",
@@ -4568,7 +4700,11 @@
       "desc": "Zulip messages that MENTION YOU and your direct messages land on your work rail through triage.",
       "match": [
         "zulip"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a message in the same topic, or a direct message back"
+      }
     },
     {
       "type": "line",
@@ -4579,7 +4715,11 @@
       "match": [
         "line",
         "line messaging"
-      ]
+      ],
+      "replies": {
+        "on": true,
+        "says": "a LINE message back (a push message - it counts against your plan)"
+      }
     },
     {
       "type": "brightdata",

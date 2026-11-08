@@ -87,3 +87,7 @@ export const presetBody = (type) => { const p = PRESETS[type];
   return { Type: p.preset.type, Name: p.title, ConfigJson: JSON.stringify({ ...p.preset.config, preset: type }) }; };
 /** The presets still to offer: none already made into a card. */
 export const presetsLeft = (types, connectors) => types.filter((t) => PRESETS[t] && !(connectors || []).some((c) => cfgOf(c).preset === t));
+// A SOURCE THAT ANSWERS ON ITS OWN THREAD (inboxes.REPLY): what a reply becomes there, and where its card's Replies switch starts - on for a
+// helpdesk or a chat, off for a public post (the owner, 2026-11-08). The card's own `replies` / `reply_note` once the owner moved them.
+export const repliesOf = (type) => CATALOGUE.find((c) => c.type === type)?.replies || null;
+export const repliesOn = (type, cfg = {}) => (cfg.replies == null ? !!repliesOf(type)?.on : [true, 1, "1", "true", "on"].includes(cfg.replies));

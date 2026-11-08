@@ -10,8 +10,8 @@ WHO WROTE IT (H2): a customer, a caller, a form respondent, a candidate is a str
 unless the vendor's own data says the author is one of the workspace (a Front teammate, a Help Scout user). A system's own notice
 (a candidate assigned to you) carries no author and waits for the owner's Trust everyone from ... press.
 
-Read-only, like inboxes.py: nothing is answered, approved or paid from here. Every call goes through inboxes._req, so the tests'
-fake HTTP sees all of it.
+Nothing is approved or paid from here. The one write is a REPLY on the owner's Send (inboxes.reply): an answer in a Front, Help Scout or
+Gorgias conversation, a text back from a RingCentral, Aircall or Dialpad line - through inboxes._post, so the tests' fake HTTP sees it all.
 """
 import re
 from datetime import timedelta
@@ -159,11 +159,11 @@ def items_google_forms(store, c, since) -> list:
 
 # ── Help Scout (conversations assigned to you) ───────────────────────────────────────────────
 HS, HS_HINT = 'https://api.helpscout.net/v2', 'check the app id and secret (your profile, then My Apps - Create My App)'
-def _hs(c, path, **params):
+def _hs_tok(c) -> str:
     cid = str(_cfg(c).get('app_id') or '').strip()
     if not cid: raise RuntimeError('no app id set - Help Scout: your profile, then My Apps')
-    tok = _mint(c, cid, f'{HS}/oauth2/token', HS_HINT, data={'grant_type': 'client_credentials', 'client_id': cid, 'client_secret': c.get('Secret') or ''})
-    return _req(c, 'get', f'{HS}{path}', HS_HINT, params=params, headers=_bearer(tok))
+    return _mint(c, cid, f'{HS}/oauth2/token', HS_HINT, data={'grant_type': 'client_credentials', 'client_id': cid, 'client_secret': c.get('Secret') or ''})
+def _hs(c, path, **params): return _req(c, 'get', f'{HS}{path}', HS_HINT, params=params, headers=_bearer(_hs_tok(c)))
 
 
 def test_helpscout(store, c) -> str:
@@ -189,13 +189,14 @@ def items_helpscout(store, c, since) -> list:
 
 # ── RingCentral (voicemails, texts and missed calls to your extension) ──────────────────────
 RC, RC_HINT = 'https://platform.ringcentral.com', 'check the app\'s client id and secret and the JWT credential (developers.ringcentral.com, then Credentials)'
-def _rc(c, path, raw=False, **params):
+def _rc_tok(c) -> str:
     cfg = _cfg(c)
     cid, sec = str(cfg.get('client_id') or '').strip(), str(cfg.get('client_secret') or '').strip()
     if not cid: raise RuntimeError('no client id set - your app on developers.ringcentral.com, JWT auth flow')
-    tok = _mint(c, cid, f'{RC}/restapi/oauth/token', RC_HINT, auth=(cid, sec),
-                data={'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'assertion': c.get('Secret') or ''})
-    return _req(c, 'get', path if path.startswith('http') else f'{RC}/restapi/v1.0{path}', RC_HINT, params=params, headers=_bearer(tok))
+    return _mint(c, cid, f'{RC}/restapi/oauth/token', RC_HINT, auth=(cid, sec),
+                 data={'grant_type': 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'assertion': c.get('Secret') or ''})
+def _rc(c, path, raw=False, **params):
+    return _req(c, 'get', path if path.startswith('http') else f'{RC}/restapi/v1.0{path}', RC_HINT, params=params, headers=_bearer(_rc_tok(c)))
 
 
 def test_ringcentral(store, c) -> str:
@@ -412,8 +413,69 @@ def items_lever(store, c, since) -> list:
     return out
 
 
+# ── REPLYING BACK (inboxes.reply): the owner's Send, in the conversation - or a text back from the line they called ──────────────
+def reply_front(store, c, ref, text):
+    note = _note(c)
+    j = _post(c, 'post', f"{FR}/conversations/{quote(ref['id'], safe='')}/{'comments' if note else 'messages'}", headers=_bearer(c.get('Secret') or ''),
+              json={'author_id': _me(c), 'body': _html(text)})
+    return _sent(c, ref.get('who') or 'the conversation', j.get('id'), note=note)
+
+
+def reply_helpscout(store, c, ref, text):
+    n, note = _num(ref['id'], 'conversation'), _note(c)
+    cust = str(ref.get('uid') or '').removeprefix('c:')
+    if not note and not cust.isdigit():        # a reply names its customer: the item's author, else the one the conversation names
+        cust = str((_hs(c, f'/conversations/{n}').get('primaryCustomer') or {}).get('id') or '')
+    body = {'text': _html(text), 'user': int(_num(_me(c), 'user')), **({} if note else {'customer': {'id': int(_num(cust, 'customer'))}})}
+    _post(c, 'post', f"{HS}/conversations/{n}/{'notes' if note else 'reply'}", headers=_bearer(_hs_tok(c)), json=body)
+    return _sent(c, ref.get('who') or f'conversation {n}', note=note)
+
+
+def reply_gorgias(store, c, ref, text):
+    n, me, note = _num(ref['id'], 'ticket'), str(_cfg(c).get('email') or ''), _note(c)
+    if note: body = {'channel': 'internal-note', 'via': 'api', 'from_agent': True, 'body_text': text, 'sender': {'email': me}}
+    else:
+        t = _gg(c, f'/tickets/{n}')
+        if t.get('channel') != 'email': raise RuntimeError(f"a Gorgias {t.get('channel') or 'chat'} ticket is answered in Gorgias - only an email ticket replies from here")
+        cust = (t.get('customer') or {}).get('email')
+        # ...from the address the customer wrote to: the helpdesk's own, on their newest message
+        ours = next((((m.get('source') or {}).get('to') or [{}])[0].get('address') for m in reversed(t.get('messages') or []) if not m.get('from_agent')), None)
+        if not (cust and ours): raise RuntimeError('this Gorgias ticket names no customer address or support address to answer between')
+        body = {'channel': 'email', 'via': 'api', 'from_agent': True, 'body_text': text, 'sender': {'email': me}, 'receiver': {'email': cust},
+                'subject': f"Re: {t.get('subject') or ''}".strip(), 'source': {'type': 'email', 'from': {'address': ours}, 'to': [{'address': cust}]}}
+    j = _post(c, 'post', f'{_gg_base(c)}/api/tickets/{n}/messages', auth=(me, c.get('Secret') or ''), json=body)
+    return _sent(c, f'ticket {n}', j.get('id'), note=note)
+
+
+def reply_ringcentral(store, c, ref, text):
+    to = _tel(ref)
+    mine = next((r['phoneNumber'] for r in _rc(c, '/account/~/extension/~/phone-number', perPage=100).get('records') or []
+                 if 'SmsSender' in (r.get('features') or [])), None)
+    if not mine: raise RuntimeError('no number on your RingCentral extension may send texts (none has the SmsSender feature)')
+    j = _post(c, 'post', f'{RC}/restapi/v1.0/account/~/extension/~/sms', headers=_bearer(_rc_tok(c)),
+              json={'from': {'phoneNumber': mine}, 'to': [{'phoneNumber': to}], 'text': text})
+    return _sent(c, to, j.get('id'))
+
+
+def reply_aircall(store, c, ref, text):
+    to, v = _tel(ref), _ac(c, f"/calls/{_num(ref['id'], 'call')}").get('call') or {}
+    line = (v.get('number') or {}).get('id')
+    if not line: raise RuntimeError('Aircall does not say which of your lines took this call')
+    j = _post(c, 'post', f'{AC}/numbers/{int(line)}/messages/native/send', json={'to': to, 'body': text},
+              auth=(str(_cfg(c).get('api_id') or ''), c.get('Secret') or ''))
+    return _sent(c, to, j.get('id'))
+
+
+def reply_dialpad(store, c, ref, text):
+    to = _tel(ref)
+    j = _post(c, 'post', f'{DP}/sms', headers=_bearer(c.get('Secret') or ''),
+              json={'target_id': int(_num(_me(c), 'user')), 'target_type': 'user', 'to_numbers': [to], 'text': text})
+    return _sent(c, to, j.get('id'))
+
+
 TYPES = tuple(NAMES)
 TESTS = {t: globals()[f'test_{t}'] for t in TYPES}
 ITEMS = {t: globals()[f'items_{t}'] for t in TYPES}
+REPLY = {t: globals()[f'reply_{t}'] for t in TYPES if f'reply_{t}' in globals()}
 # ...the road's own helpers, imported last: inboxes.py imports this module at its end, and either may be imported first
-from .inboxes import item, _req, _need, _site, _host, _keep, _me, _utc, _text, _cfg, _seed_source, CAP  # noqa: E402
+from .inboxes import item, _req, _need, _site, _host, _keep, _me, _utc, _text, _cfg, _seed_source, CAP, _post, _sent, _note, _html, _num, _tel  # noqa: E402

@@ -21,9 +21,11 @@ Chat (direct messages, @mentions), Threads (replies, mentions - always strangers
 assigned to you), DocuSign (envelopes waiting on your signature), Basecamp (assigned to-dos, Pings, @mentions). Mailgun's stored mail is
 polled; LINE and SendGrid Inbound Parse only push (pushin.py), and their items are the queue the webhook filled.
 
-Read-only: nothing is posted back to any of these (trackers.py writes Jira, Monday and Linear only).
+REPLYING BACK (the owner, 2026-11-08: "do replying back new source as well we will need that"): a reply drafted on a task one of these
+filed goes back where it came from on the owner's Send, never without it - verdicts.decide -> outbound.reply_to_message -> `reply` at the
+end of this file. Nothing else is ever written: no status, no assignment, no close (trackers.py writes Jira, Monday and Linear).
 """
-import json, re
+import html, json, re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 import requests
@@ -1405,11 +1407,314 @@ def items_wordpress(store, c, since) -> list:
             for k in _kapi(c, '/comments', status='hold', context='edit', per_page=CAP, orderby='date', after=_utc(since)) or []]
 
 
+# ═══ REPLYING BACK: the owner's Send, on the vendor's own thread ═════════════════════════════════════════════════════════════
+# One `reply_<type>(store, c, ref, text)` per source whose API can answer, `ref` the message's own item (ref_of: its ExternalId and
+# ConversationId as the poll wrote them), the answer a receipt {channel, to, id}. The catalogue's `replies` block says what a reply
+# becomes there and whether the card's Replies switch starts on - OFF for a public post (Reddit, Instagram, a forum): a public reply is a
+# press the owner opts into. Every write goes through _post: a refused key is "not signed in" - Not sent, with Reconnect - and a 5xx keeps
+# its response, so the delivery road calls it unknown (outbound.delivery_uncertain) and never sends twice.
+# NO REPLY, AND WHY: YouTube reads on an API key, which can never post (a comment needs a Google sign-in with youtube.force-ssl); X's card
+# holds an app bearer token, and X takes a post only from a user's own sign-in (OAuth 1.0a or 2.0 with tweet.write - the Free tier posts,
+# reading mentions needs Basic); Planner tasks have no comments in Graph; a booking, an order, a dispute, an envelope, a form response
+# and a candidate are nobody's message to answer (Calendly, ShipStation, Shopify, Square, PayPal, DocuSign, WooCommerce, BigCommerce,
+# the forms, Lever).
+def ref_of(msg) -> dict:
+    "The item a message is, as its poll named it: `zendesk:123@<rev>` -> id 123; its conversation, its author's id on the vendor."
+    t = str(msg.get('Channel') or '')
+    bare = lambda v: re.sub(r'@[0-9a-f]{12}$', '', str(v or '')).removeprefix(f'{t}:')
+    try: meta = json.loads(msg.get('MailMetaJson') or '{}') or {}
+    except ValueError: meta = {}
+    head = re.match(r'\[([^\]\n]+)\]', str(msg.get('BodyText') or ''))
+    return dict(id=bare(msg.get('ExternalId')), conv=bare(msg.get('ConversationId')), uid=str(meta.get('author') or '').removeprefix(f'{t}:') or None,
+                email=msg.get('FromEmail'), who=msg.get('FromName'), link=str(msg.get('SourceLink') or ''), subject=msg.get('Subject') or '',
+                at=msg.get('SentAt'), head=head.group(1) if head else '')
+
+
+def _post(c, method, url, **kw) -> dict:
+    from .outbound import Fixable
+    who = NAMES[c['Type']]
+    r = requests.request(method, url, timeout=30, allow_redirects=False, **kw)
+    if r.status_code in (401, 403):
+        raise Fixable(f'{who} refused the reply ({r.status_code}) - not signed in with a key that may write there: {r.text[:160]}',
+                      f'Reconnect {who}', f"#connector={c['Type']}")
+    if r.status_code >= 300: raise requests.HTTPError(f'{who} refused the reply ({r.status_code}): {r.text[:200]}', response=r)
+    try: return r.json() if r.text.strip() else {}
+    except ValueError: return {}
+
+
+def _sent(c, to, id=None, **kw) -> dict: return {'channel': c['Type'], 'to': [str(to)], **({'id': str(id)} if id else {}), **kw}
+def _note(c) -> bool: return bool(_cfg(c).get('reply_note'))
+def _html(text) -> str: return html.escape(str(text)).replace('\n', '<br>')
+def _num(v, what) -> str:
+    if not re.fullmatch(r'\d+', str(v or '')): raise RuntimeError(f'this message carries no {what} to answer on')
+    return str(v)
+def _tel(ref) -> str:
+    n = str(ref.get('uid') or '').removeprefix('tel:')
+    if not re.fullmatch(r'\+?\d{5,16}', n): raise RuntimeError('this call or text carries no number to text back - the caller withheld it')
+    return n
+
+
+def reply_zendesk(store, c, ref, text):
+    j = _post(c, 'put', f"{_zd_base(c)}/api/v2/tickets/{_num(ref['id'], 'ticket')}.json", auth=(f"{_cfg(c).get('email') or ''}/token", c.get('Secret') or ''),
+              json={'ticket': {'comment': {'body': text, 'public': not _note(c)}}})
+    return _sent(c, f"ticket #{ref['id']}", (j.get('audit') or {}).get('id'), note=_note(c))
+
+
+def reply_freshdesk(store, c, ref, text):
+    n = _num(ref['id'], 'ticket')
+    j = _post(c, 'post', f"{_fd_base(c)}/api/v2/tickets/{n}/{'notes' if _note(c) else 'reply'}", auth=(c.get('Secret') or '', 'X'),
+              json={'body': _html(text), **({'private': True} if _note(c) else {})})
+    return _sent(c, f'ticket #{n}', j.get('id'), note=_note(c))
+
+
+def reply_intercom(store, c, ref, text):
+    h = {'Authorization': f"Bearer {c.get('Secret') or ''}", 'Intercom-Version': '2.11', 'Accept': 'application/json'}
+    j = _post(c, 'post', f"{IC}/conversations/{quote(ref['id'], safe='')}/reply", headers=h,
+              json={'message_type': 'note' if _note(c) else 'comment', 'type': 'admin', 'admin_id': _me(c), 'body': _html(text)})
+    return _sent(c, ref.get('who') or 'the conversation', j.get('id'), note=_note(c))
+
+
+def reply_servicenow(store, c, ref, text):
+    table, _, sid = ref['id'].partition(':')
+    if not (re.fullmatch(r'[a-z][a-z0-9_]*', table) and re.fullmatch(r'[0-9a-f]{32}', sid)):
+        raise RuntimeError('this message names no ServiceNow record to answer on')
+    j = _post(c, 'patch', f'{_sn_base(c)}/api/now/table/{table}/{sid}', auth=(_cfg(c).get('username') or '', c.get('Secret') or ''),
+              headers={'Accept': 'application/json'}, json={'work_notes' if _note(c) else 'comments': text})
+    return _sent(c, (j.get('result') or {}).get('number') or ref['subject'].split(' ')[0] or table, note=_note(c))
+
+
+def reply_shortcut(store, c, ref, text):
+    j = _post(c, 'post', f"{SC}/stories/{_num(ref['id'], 'story')}/comments", json={'text': text}, headers={'Shortcut-Token': c.get('Secret') or ''})
+    return _sent(c, f"sc-{ref['id']}", j.get('id'))
+
+
+def reply_wrike(store, c, ref, text):
+    host = str(_cfg(c).get('host') or 'www.wrike.com').strip().split('//')[-1].strip('/')
+    if not re.fullmatch(r'[A-Z0-9]+', ref['id']): raise RuntimeError('this message names no Wrike task to answer on')
+    j = _post(c, 'post', f"https://{host}/api/v4/tasks/{ref['id']}/comments", data={'text': _html(text)},
+              headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+    return _sent(c, ref['subject'] or 'the task', ((j.get('data') or [{}])[0]).get('id'))
+
+
+def reply_smartsheet(store, c, ref, text):
+    sid, _, rid = ref['id'].partition(':')
+    j = _post(c, 'post', f"{SS}/sheets/{_num(sid, 'sheet')}/rows/{_num(rid, 'row')}/discussions", json={'comment': {'text': text}},
+              headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+    return _sent(c, ref['subject'] or 'the row', (j.get('result') or {}).get('id'))
+
+
+def reply_airtable(store, c, ref, text):
+    base, table, _ = _at_where(c)
+    if not re.fullmatch(r'rec\w+', ref['id']): raise RuntimeError('this message names no Airtable record to answer on')
+    j = _post(c, 'post', f"{AT}/{base}/{quote(table, safe='')}/{ref['id']}/comments", json={'text': text},
+              headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+    return _sent(c, ref['subject'] or 'the record', j.get('id'))
+
+
+def reply_github_projects(store, c, ref, text):
+    def q(query, **v):
+        j = _post(c, 'post', 'https://api.github.com/graphql', json={'query': query, 'variables': v},
+                  headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+        if j.get('errors'): raise RuntimeError(f"GitHub did not take the comment: {(j['errors'][0] or {}).get('message') or j['errors']}")
+        return j['data']
+    x = ((q('query($i: ID!) { node(id: $i) { ... on ProjectV2Item { content { __typename ... on Issue { id url } ... on PullRequest { id url } } } } }',
+            i=ref['id']).get('node') or {}).get('content') or {})
+    if not x.get('id'): raise RuntimeError('a draft item lives only on the board - it has no thread to comment on; answer it on GitHub')
+    j = q('mutation($s: ID!, $b: String!) { addComment(input: {subjectId: $s, body: $b}) { commentEdge { node { url } } } }', s=x['id'], b=text)
+    return _sent(c, x.get('url') or ref['subject'], url=(((j.get('addComment') or {}).get('commentEdge') or {}).get('node') or {}).get('url'))
+
+
+def reply_bitbucket(store, c, ref, text):
+    m = re.fullmatch(r'([\w.-]+):([pi])(\d+)', ref['id'])
+    if not m: raise RuntimeError('this message names no Bitbucket pull request or issue to answer on')
+    slug, kind, n = m.groups()
+    j = _post(c, 'post', f"{BB}/repositories/{_bb_ws(c)}/{slug}/{'pullrequests' if kind == 'p' else 'issues'}/{n}/comments",
+              json={'content': {'raw': text}}, auth=(_cfg(c).get('username') or '', c.get('Secret') or ''))
+    return _sent(c, f"{slug}{'!' if kind == 'p' else '#'}{n}", j.get('id'))
+
+
+def reply_zulip(store, c, ref, text):
+    k, _, rest = ref['conv'].partition(':')
+    if k == 'dm': to = {'type': 'direct', 'to': json.dumps([int(_num(rest, 'sender'))])}
+    else: to = {'type': 'stream', 'to': _num(k, 'channel'), 'topic': rest}
+    j = _post(c, 'post', f'{_zu_base(c)}/api/v1/messages', data={**to, 'content': text}, auth=(_cfg(c).get('email') or '', c.get('Secret') or ''))
+    return _sent(c, ref.get('who') if k == 'dm' else ref['subject'] or rest, j.get('id'))
+
+
+def reply_signal(store, c, ref, text):
+    import base64
+    k, _, who = ref['conv'].partition(':')
+    if not who: raise RuntimeError('this Signal message names no chat to answer in')
+    # signal-cli-rest-api names a group "group." + base64 of the id the envelope carried
+    to = f"group.{base64.b64encode(who.encode()).decode()}" if k == 'g' else who
+    j = _post(c, 'post', f'{_sg_base(c)}/v2/send', json={'message': text, 'number': _sg_number(c), 'recipients': [to]})
+    return _sent(c, ref.get('who') or who, j.get('timestamp'))
+
+
+def reply_twilio(store, c, ref, text):
+    sid, n, to = str(_cfg(c).get('account_sid') or '').strip(), str(_cfg(c).get('number') or '').strip(), ref['conv'].removeprefix('from:')
+    if not re.fullmatch(r'AC[0-9a-fA-F]{32}', sid): raise RuntimeError('no Account SID set - it starts AC, on the Twilio console home')
+    j = _post(c, 'post', f'https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json', data={'From': n, 'To': to, 'Body': text},
+              auth=(sid, c.get('Secret') or ''))
+    return _sent(c, to, j.get('sid'))
+
+
+def reply_discourse(store, c, ref, text):
+    m = re.search(r'/t/[^/]+/(\d+)/(\d+)', ref['link'])
+    if not m: raise RuntimeError('this message names no Discourse post to answer')
+    j = _post(c, 'post', f'{_dc_base(c)}/posts.json', json={'topic_id': int(m[1]), 'raw': text, 'reply_to_post_number': int(m[2])},
+              headers={'Api-Key': c.get('Secret') or '', 'Api-Username': _cfg(c).get('username') or '', 'Accept': 'application/json'})
+    return _sent(c, ref['subject'] or f'topic {m[1]}', j.get('id'))
+
+
+def reply_reddit(store, c, ref, text):
+    if not re.fullmatch(r't[14]_\w+', ref['id']): raise RuntimeError('this message names no Reddit comment or message to answer')
+    j = _post(c, 'post', 'https://oauth.reddit.com/api/comment', data={'thing_id': ref['id'], 'text': text, 'api_type': 'json'},
+              headers={'Authorization': f'Bearer {_rd_token(c)}', 'User-Agent': RD_UA})
+    # Reddit answers 200 with its refusal inside (RATELIMIT, THREAD_LOCKED): nothing was posted
+    if errs := (j.get('json') or {}).get('errors'): raise RuntimeError(f'Reddit did not take the reply: {errs[0]}')
+    things = ((j.get('json') or {}).get('data') or {}).get('things') or [{}]
+    return _sent(c, ref.get('who') or 'the thread', (things[0].get('data') or {}).get('name'))
+
+
+def reply_webex(store, c, ref, text):
+    space = 'direct' not in ref['head']
+    j = _post(c, 'post', f'{WX}/messages', json={'roomId': ref['conv'], 'markdown': text, **({'parentId': ref['id']} if space else {})}, headers=_bear(store, c))
+    return _sent(c, ref['subject'] if space else ref.get('who') or 'the chat', j.get('id'), threaded=space)
+
+
+def reply_zoom_chat(store, c, ref, text):
+    dm = '@' in ref['conv']
+    j = _post(c, 'post', f'{ZM}/chat/users/me/messages', headers=_bear(store, c),
+              json={'message': text, **({'to_contact': ref['conv']} if dm else {'to_channel': ref['conv'], 'reply_main_message_id': ref['id']})})
+    return _sent(c, ref.get('who') if dm else ref['subject'], j.get('id'), threaded=not dm)
+
+
+def reply_threads(store, c, ref, text):
+    me = _me(c)
+    box = _post(c, 'post', f'{TH}/{me}/threads', params={'media_type': 'TEXT', 'text': text, 'reply_to_id': ref['id']}, headers=_bear(store, c))
+    if not box.get('id'): raise RuntimeError('Threads made no reply to publish')
+    j = _post(c, 'post', f'{TH}/{me}/threads_publish', params={'creation_id': box['id']}, headers=_bear(store, c))
+    return _sent(c, f"@{ref.get('who') or 'them'}", j.get('id'))
+
+
+def reply_hubspot(store, c, ref, text):
+    if '/record/0-5/' not in ref['link']: raise RuntimeError('a HubSpot task takes no note - answer it in HubSpot; a ticket takes your note')
+    j = _post(c, 'post', f'{HS}/crm/v3/objects/notes', headers=_bear(store, c), json={
+        'properties': {'hs_note_body': _html(text), 'hs_timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')},
+        'associations': [{'to': {'id': _num(ref['id'], 'ticket')}, 'types': [{'associationCategory': 'HUBSPOT_DEFINED', 'associationTypeId': 228}]}]})
+    return _sent(c, ref['subject'] or f"ticket {ref['id']}", j.get('id'))
+
+
+def reply_salesforce(store, c, ref, text):
+    i = str(ref['id'])
+    if not re.fullmatch(r'[A-Za-z0-9]{15,18}', i): raise RuntimeError('this message names no Salesforce record to answer on')
+    case = i.startswith('500')                    # a Case's id prefix; a Task's is 00T, and takes a Chatter post instead
+    j = _post(c, 'post', f"{_sf_base(c)}/services/data/{SF_V}/sobjects/{'CaseComment' if case else 'FeedItem'}", headers=_bear(store, c),
+              json={'ParentId': i, 'CommentBody': text, 'IsPublished': not _note(c)} if case else {'ParentId': i, 'Body': text})
+    if j.get('success') is False: raise RuntimeError(f"Salesforce did not take the comment: {j.get('errors')}")
+    return _sent(c, ref['subject'], j.get('id'), note=_note(c) if case else True)
+
+
+def reply_basecamp_todos(store, c, ref, text):
+    m = re.search(r'/buckets/(\d+)/(\w+)/(\d+)', ref['link'])
+    if not m: raise RuntimeError('this message names no Basecamp to-do, Ping or message to answer on')
+    b, kind, i = m.groups()
+    path = f'/buckets/{b}/chats/{i}/lines.json' if kind == 'chats' else f'/buckets/{b}/recordings/{i}/comments.json'
+    j = _post(c, 'post', f'{_bc_base(c)}{path}', json={'content': _html(text)}, headers=_bear(store, c, **BC_UA))
+    return _sent(c, ref['subject'], j.get('id'), url=j.get('app_url'))
+
+
+def _by_mail(store, c, ref, text):
+    "Mail that came in through a relay goes back from the owner's own mailbox - the relay only receives."
+    from . import outbound
+    if not ref.get('email'): raise RuntimeError('this mail carries no sender address to answer')
+    out = outbound.send_out(store, 'email', [ref['email']], outbound.re_subject(ref['subject']), text)
+    return {**(out if isinstance(out, dict) else {}), 'channel': c['Type'], 'to': [ref['email']], 'by': 'email'}
+reply_mailgun = reply_sendgrid = _by_mail
+
+
+def reply_line(store, c, ref, text):
+    if not ref['conv']: raise RuntimeError('this LINE message names no chat to answer in')
+    _post(c, 'post', f'{LN}/v2/bot/message/push', json={'to': ref['conv'], 'messages': [{'type': 'text', 'text': text[:5000]}]},
+          headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+    return _sent(c, ref.get('who') or 'the chat')
+
+
+def _kpost(store, c, path, **kw) -> dict:
+    "A write on a keyed-read card: its key rides as apireads says - but on this road, never that one (apireads only ever reads)."
+    from . import apireads
+    base, h, q, _ = apireads.request_parts(c['Type'], _cfg(c), c.get('Secret') or '', store)
+    return _post(c, 'post', base + path, headers={'Accept': 'application/json', **h}, params={**q, **kw.pop('params', {})}, **kw)
+
+
+def reply_instagram(store, c, ref, text):
+    j = _kpost(store, c, f"/{_num(ref['id'], 'comment')}/replies", params={'message': text})
+    return _sent(c, ref.get('who') or 'the comment', j.get('id'))
+
+
+def reply_facebook_pages(store, c, ref, text):
+    if ref['conv'] == ref['id']:                                   # a comment: its conversation is itself
+        if not re.fullmatch(r'[\d_]+', ref['id']): raise RuntimeError('this message names no Facebook comment to answer')
+        j = _kpost(store, c, f"/{ref['id']}/comments", data={'message': text})
+        return _sent(c, ref.get('who') or 'the comment', j.get('id'))
+    # Messenger lets a Page answer within 24 hours of the person's last message; after that only a tagged notice may go
+    try: old = datetime.now() - datetime.strptime(str(ref['at'])[:19], '%Y-%m-%d %H:%M:%S') > timedelta(hours=24)
+    except ValueError: old = False
+    if old: raise RuntimeError("Messenger lets a Page answer only within 24 hours of the person's last message - answer this one in Meta Business Suite")
+    j = _kpost(store, c, f"/{_num(_cfg(c).get('page_id'), 'Page')}/messages",
+               json={'recipient': {'id': _num(str(ref.get('uid') or '').removeprefix('fb:'), 'sender')}, 'messaging_type': 'RESPONSE', 'message': {'text': text}})
+    return _sent(c, ref.get('who') or 'them', j.get('message_id'))
+
+
+def reply_wordpress(store, c, ref, text):
+    k = _kapi(c, f"/comments/{_num(ref['id'], 'comment')}", context='edit')
+    j = _kpost(store, c, '/comments', json={'post': k.get('post'), 'parent': int(ref['id']), 'content': text})
+    return _sent(c, ref.get('who') or 'the comment', j.get('id'), url=j.get('link'))
+
+
+def replies_on(c) -> bool:
+    "The card's Replies switch: as the owner set it, else where the catalogue starts it - on for a helpdesk or a chat, off for a public post."
+    v = _cfg(c).get('replies')
+    if v is None:
+        from . import connectorcatalog
+        return bool(((connectorcatalog.by_type(c['Type']) or {}).get('replies') or {}).get('on'))
+    return v in (True, 1, '1', 'true', 'on')
+
+
+def replies_ok(store, t) -> bool:
+    "May a reply leave on this channel: a connected card of it has Replies on - or none is connected, which the send's Reconnect says."
+    live = [c for c in store.connectors_by_type(t) if c.get('Active')]
+    return not live or any(replies_on(c) for c in live)
+
+
+def _card_of(store, msg):
+    "The card the message came in through (its source row), else the first connected one of its kind."
+    from .outbound import _source_connector_id
+    t, i = msg.get('Channel'), _source_connector_id(store, msg.get('Channel'), msg.get('SourceName'))
+    c = store.get_connector(i, with_secret=True) if i else None
+    return c if c and c.get('Active') else next((store.get_connector(x['ConnectorId'], with_secret=True)
+                                                for x in store.connectors_by_type(t) if x.get('Active')), None)
+
+
+def reply(store, msg, text) -> dict:
+    "The approved answer to `msg`, on the card it came in through - called only by outbound.reply_to_message, behind the owner's Send."
+    from .outbound import Fixable
+    t = msg.get('Channel'); name = NAMES[t]
+    c = _card_of(store, msg)
+    if not (c and (c.get('Secret') or t == 'signal')):                # signal-cli runs beside Taskuary on no key
+        raise Fixable(f'{name} is not connected - connect its card again, then Send', f'Reconnect {name}', f'#connector={t}')
+    if not replies_on(c):
+        raise Fixable(f"replies are off on the {name} card - its Replies switch lets Taskuary answer there", f'Open the {name} card', f'#connector={t}')
+    return REPLY[t](store, c, ref_of(msg), text)
+
+
 TESTS = {t: globals()[f'test_{t}'] for t in NAMES}
 ITEMS = {t: globals()[f'items_{t}'] for t in NAMES}
 # ...and the shared inboxes, phones, forms, hiring and money that wait on you (waiting.py): the same road, one module of their own
 from . import waiting
-NAMES |= waiting.NAMES; TESTS |= waiting.TESTS; ITEMS |= waiting.ITEMS
+REPLY = {t: globals()[f'reply_{t}'] for t in NAMES if f'reply_{t}' in globals()}
+NAMES |= waiting.NAMES; TESTS |= waiting.TESTS; ITEMS |= waiting.ITEMS; REPLY |= waiting.REPLY
 TYPES = tuple(NAMES)
 
 def test(store, c) -> str: return TESTS[c['Type']](store, c)

@@ -465,7 +465,8 @@ class OneRoadTests(unittest.TestCase):
         from taskuary import apireads, channels, outbound, search, store
         for t in inboxes.TYPES:
             self.assertIn(t, channels.PER_CONNECTOR); self.assertEqual(channels.CH2SRC[t], t)
-            self.assertIn(t, senders.TRACKERS); self.assertIn(t, outbound.NEVER); self.assertIn(t, search.TICKET)
+            self.assertIn(t, senders.TRACKERS); self.assertIn(t, search.TICKET)
+            self.assertEqual(t in outbound.NEVER, t not in inboxes.REPLY, t)   # read-only, unless it answers on its own thread (test_replyback)
             self.assertEqual(store.DEFAULT_ROLES[t], 'trigger,report,tool' if t in apireads.types() else 'trigger')    # a keyed read too: test_read_sources
         self.assertEqual({c['Type'] for c in MemoryStore().list_connectors()} & set(inboxes.TYPES), set(inboxes.TYPES))
 

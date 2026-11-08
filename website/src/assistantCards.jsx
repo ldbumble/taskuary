@@ -66,6 +66,8 @@ import { PaneMoves } from "./TaskPage.jsx";   // an FYI's Came from carries its 
 import { TYPE_LABELS, reportSchedule } from "./reportWords.js";
 import { SECTIONS as STEPS } from "./taskLayout.js";   // a task's sections, by name (ItemSections)
 import { WorkstreamLabel } from "./Workstream.jsx";   // the idea's workstream, a small label (the owner, 2026-11-01)
+import { channelName } from "./taskSources.js";
+import { repliesOf } from "./connectorCatalog.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -626,7 +628,11 @@ export function CardShell({ card, kicker, title, lead, sub, children, err }) {
 // how the reply leaves: "emails" said of a WhatsApp answer told the owner it would go somewhere it would not
 const SENDS_ON = { whatsapp: "on WhatsApp", teams: "in Teams", slack: "in Slack", telegram: "on Telegram", sms: "by text",
   github: "on GitHub", discord: "on Discord", google_chat: "in Google Chat" };
-export const sendsBy = (channel, who) => { const on = SENDS_ON[String(channel || "").toLowerCase()]; return on ? `answers ${who} ${on}` : `emails ${who}`; };
+// ...and a source that answers on its own thread (a Zendesk ticket, a Zulip topic) says its own name: "emails" was never true of those
+export const sendsBy = (channel, who) => {
+  const ch = String(channel || "").toLowerCase(), on = SENDS_ON[ch] || (ch && ch !== "email" && repliesOf(ch) ? `on ${channelName(ch)}` : "");
+  return on ? `answers ${who} ${on}` : `emails ${who}`;
+};
 
 // a reply drafted, or an action proposed - the owner's yes is the only thing that moves it
 export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {

@@ -37,7 +37,7 @@ import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
 import { WAITING_META, waitingIn } from "./waitingMeta.js";
-import { CATALOGUE, PRESETS, matchCards, onceEach, oneOf, plannedFor, presetBody, presetOf, presetsLeft } from "./connectorCatalog.js";
+import { CATALOGUE, PRESETS, matchCards, onceEach, oneOf, plannedFor, presetBody, presetOf, presetsLeft, repliesOf, repliesOn } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -2982,6 +2982,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       { label: "More roles — reports, agents", done: creds,
         body: <RoleStep conn={conn} reload={reload} only={["report", "tool"]} /> },
     ]),
+    ...(repliesOf(conn.Type) ? [{ label: "Replies - your answers go back here", done: creds, body: <RepliesSwitch conn={conn} reload={reload} /> }] : []),
     ...(conn.Type === "github" ? [{ label: "Agent permissions", done: creds, body: <GithubPerms conn={conn} reload={reload} /> },
       { label: "Finishing a task - what it does on GitHub", done: creds, body: <GithubCloseout conn={conn} mine={mine} reload={reload} /> }] : []),
     { label: "Enable", done: !!conn.Active, body: (
@@ -3791,6 +3792,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
               <Tick st={draft.st} />
             </Typography>
           </Box>
+          {repliesOf(conn.Type) && <RepliesSwitch conn={conn} reload={reload} />}
           {meta.search && <KbSearch conn={conn} />}
           <TestLine test={test} mt={0} />
           {!test && (fresh ? <Typography variant="body2" data-tq-saved-test="" sx={{ color: DIM }}>Saved - press Test to check it.</Typography>
@@ -3828,6 +3830,31 @@ const GITHUB_PERMS = [
   ["reply_comments", "Reply to issue/PR authors",
    "On: questions from GitHub get a drafted reply, finished work drafts a closing note, and approving one posts it as a PUBLIC comment on the issue/PR. Off (default): GitHub items never get reply drafts - questions file with their triage reason, finished work just closes with its report, and nothing is ever posted to a public thread on your behalf."],
 ];
+
+// REPLIES ON THIS CARD (the owner, 2026-11-08: "do replying back new source as well"): a reply you Send on a task this card filed goes
+// back on the item's own thread - what it becomes is the catalogue's `replies.says`. The switch starts where the catalogue says: on for a
+// helpdesk or a chat, off for a public post. Nothing is ever sent without your Send; this only decides whether Send is offered.
+const RepliesSwitch = ({ conn, reload }) => {
+  const saveConn = useSaveConnector(reload);
+  const cfg = JSON.parse(conn.ConfigJson || "{}"), r = repliesOf(conn.Type), on = repliesOn(conn.Type, cfg);
+  const save = (patch) => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, ...patch }) });
+  const row = (checked, onChange, label, desc, disabled) => (
+    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
+      <Switch checked={checked} disabled={disabled} onChange={onChange} sx={{ mt: -0.5 }} />
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{label}</Typography>
+        <Typography variant="body2" sx={{ color: DIM }}>{desc}</Typography>
+      </Box>
+    </Box>
+  );
+  return (
+    <Box sx={{ mt: 1, maxWidth: 620 }}>
+      {row(on, () => save({ replies: !on }), "Replies",
+        `On: a reply you Send on a task from here goes back as ${r.says}. Off: nothing is sent back from here - you answer it there yourself.`)}
+      {r.note && row(!!cfg.reply_note, () => save({ reply_note: !cfg.reply_note }), r.note, "Off: the reply goes to the person who wrote.", !on)}
+    </Box>
+  );
+};
 
 const GithubPerms = ({ conn, reload }) => {
   const saveConn = useSaveConnector(reload);

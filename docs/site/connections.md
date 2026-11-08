@@ -275,7 +275,34 @@ Each card's Test finds you in that system, so only what points at you comes in. 
 a form respondent or a candidate is a stranger's words: nothing starts on them by itself until you
 trust the source. A Front or Help Scout message written by one of your own teammates is a colleague's.
 Google Forms needs no key of its own - it reads with the Google Sheets card's sign-in, minted with the
-forms scopes. Nothing is answered, approved or changed in any of them.
+forms scopes. Nothing is approved or changed in any of them; the one thing that goes back is a reply you
+Send (below).
+
+## Replies go back where the work came from
+
+A reply drafted on a task that a helpdesk, a chat, a phone line or a social account filed goes back on
+that item's own thread when you press Send - never before. Each of those cards has a **Replies** switch:
+
+| Card | What your reply becomes | Replies start |
+|---|---|---|
+| Zendesk, Freshdesk, Intercom, ServiceNow, Front, Help Scout, Gorgias | A reply on the ticket or conversation - or, with the card's note switch, an internal note | On |
+| Shortcut, Wrike, Smartsheet, Airtable, Bitbucket, Basecamp | A comment on the story, task, row, record, pull request or to-do | On |
+| HubSpot, Salesforce | A note on the ticket; a comment on the case (or a post on the task's feed) | On |
+| Zulip, Webex, Zoom Team Chat, Signal, LINE | A message in the same topic, thread or chat | On |
+| Twilio, RingCentral, Aircall, Dialpad | A text back from your number | On |
+| Mailgun, SendGrid Inbound Parse | An email reply, from your own mailbox | On |
+| GitHub Projects, Discourse, Reddit, Threads, Instagram, Facebook Pages, WordPress | A public comment or reply (a Page message within Messenger's 24 hours) | Off |
+
+A public reply is something you turn on, card by card. With Replies off, Send is not offered and the
+card says why, with the way to the switch. A card that is not connected, or a key that may not write,
+comes back as **Not sent** with Reconnect; a vendor that failed mid-answer is **delivery unknown**, and
+nothing is sent twice. Some sign-ins need one more scope to write - Webex, Threads and HubSpot ask for it
+now, so sign those cards in again once.
+
+No reply goes back to YouTube (its card reads on an API key, and posting needs a Google sign-in), X (its
+card holds an app token, and X takes a post only from your own sign-in), Microsoft Planner (Graph keeps no
+task comments), or the cards whose items nobody wrote to you: bookings, orders, disputes, envelopes, form
+responses and candidates.
 
 ## Data and report sources
 

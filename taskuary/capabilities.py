@@ -71,9 +71,10 @@ def can_send_draft(store, rid) -> bool:
 
 
 def channels() -> tuple:
-    """Every channel a reply could be asked of: the ones with a sender and the ones read here but answered there."""
+    """Every channel a reply could be asked of: the ones with a sender, the ones read here but answered there, and the sources that
+    answer on their own thread behind their card's Replies switch (inboxes.REPLY)."""
     from . import outbound
-    return tuple(dict.fromkeys((*outbound.SENDABLE, *outbound.NO_SENDER)))
+    return tuple(dict.fromkeys((*outbound.SENDABLE, *outbound.NO_SENDER, *outbound.INBOX_REPLY)))
 
 
 def capabilities(store) -> dict:

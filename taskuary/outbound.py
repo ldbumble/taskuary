@@ -15,7 +15,7 @@ from loguru import logger
 
 from .timewords import plural
 from . import redact, words
-from .inboxes import TYPES as INBOXES
+from .inboxes import TYPES as INBOXES, REPLY as INBOX_REPLY, NAMES as INBOX_NAMES
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
@@ -307,7 +307,12 @@ SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'disc
 # without them here a prep task closing drafted a reply, signed it in the owner's name, and put
 # it on the task addressed to no one at all.
 NEVER = {'report', 'own', 'assistant', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab',
-         'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure', *INBOXES}
+         'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure', *(set(INBOXES) - set(INBOX_REPLY))}
+# THE SOURCES THAT ANSWER ON THEIR OWN THREAD (inboxes.REPLY - a ticket's comment, a chat's message, a text back): each card's own Replies
+# switch decides, never Settings → Replies - one card, one switch, the way GitHub's 'Reply to issue/PR authors' sits on its card
+def _inbox_off(store, ch) -> bool:
+    from .inboxes import replies_ok
+    return ch in INBOX_REPLY and not replies_ok(store, ch)
 # READ HERE, ANSWERED THERE: a channel Taskuary reads but has no sender for. Slack sat in SENDABLE and the default reply
 # switch, so its Send was offered, approved - and every one ended "slack messages are read-only here" (2026-09-29 audit).
 # The draft is still written (the words are worth having); the button says where to send them.
@@ -412,6 +417,7 @@ def can_reply(store, channel) -> bool:
     ch = (channel or '').lower()
     if not ch or ch in NEVER or no_sender(store, ch): return False
     if ch in SENDABLE and ch not in reply_channels(store): return False
+    if _inbox_off(store, ch): return False
     if ch == 'github': return store.github_replies_ok()
     if ch == 'email' and send_probe(store, ch): return False
     return True
@@ -425,6 +431,7 @@ def send_block(store, channel) -> str:
     if not ch: return 'this message has no channel to reply on'
     if ch in NEVER: return f'{ch} items cannot be replied to from here'
     if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
+    if _inbox_off(store, ch): return f"replies are off for {INBOX_NAMES[ch]} (the Replies switch on its card)"
     if ch in SENDABLE and ch not in reply_channels(store):
         return f"replies are off for {ch} ({words.name('replies')})"
     if no_sender(store, ch): return no_sender(store, ch)     # switched on, and still no road out of here
@@ -479,6 +486,7 @@ def block_fix(store, channel) -> dict | None:
     ch = (channel or '').lower()
     if not ch or ch in NEVER: return None
     if ch == 'github': return None if store.github_replies_ok() else {'label': 'Open the GitHub card', 'href': '#connector=github'}
+    if _inbox_off(store, ch): return {'label': f'Open the {INBOX_NAMES[ch]} card', 'href': f'#connector={ch}'}
     if ch in SENDABLE and ch not in reply_channels(store): return dict(zip(('label', 'href'), REPLIES))
     if ch == 'email' and send_probe(store, ch):
         return {'label': 'Sign in again', 'href': '#connector=outlook'} if 'Mail.Send' in send_probe(store, ch) else dict(zip(('label', 'href'), MAIL))
@@ -1035,6 +1043,9 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         from .github import comment_issue
         url = comment_issue(c['Secret'], repo, int(num), body)
         return {'channel': 'github', 'to': [f'{repo}#{num}'], 'url': url}
+    if ch in INBOX_REPLY:
+        from . import inboxes
+        return inboxes.reply(store, msg, body)                          # on the item's own thread, through the card it came in on
     raise RuntimeError(f"nothing to answer on: {ch or 'unknown'} messages are read-only here")
 
 

@@ -35,3 +35,14 @@ def test_once_the_email_is_sent_the_chat_agent_is_done_for_now():
     s._exec("UPDATE review SET Status='approved', DeliveryState='sent' WHERE ReviewId=?", (rid,))
     assert s.waiting_on_owner(tid) is None
     assert taskstate.state(s, s.get_task(tid), session={'alive': True, 'waiting': True, 'state': 'parked'}) == 'agentdone'
+
+
+def test_a_finished_run_with_a_post_waiting_is_that_press_not_agent_done():
+    # the owner's render check, 2026-11-08: a LinkedIn post waiting for Post read "agent done" and "the agent finished - read what it found"
+    from taskuary import workerstate as ws
+    s = MemoryStore(); tid = s.create_task({'Title': 'LinkedIn post: expense tool rollout', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    ws.record(s, tid, 'g1', 'finished', text='The post is ready for your Post.', source='api')
+    s.add_review({'TaskId': tid, 'Kind': 'action', 'Status': 'pending', 'Reason': 'the agent proposes to post on LinkedIn',
+                  'DraftText': json.dumps({'action': 'run_tool', 'type': 'linkedin_post', 'text': 'Northwind rolled out Spendly.'})})
+    s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'superseded', 'DraftText': 'old'})        # the newest row is not the waiting one
+    assert taskstate.state(s, s.get_task(tid)) == 'approve'

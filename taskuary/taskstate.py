@@ -87,7 +87,7 @@ def state(store, t: dict, session=None, queued=None) -> str:
     # ...and HOW ITS LAST RUN ENDED, in the run's own word (workerstate.ended) - the reading the rail takes too: a run that failed
     # or was stopped read "on you", and one that finished read "waiting to start", while the worker said what happened (G7)
     end = None if left else workerstate.ended(store, t['TaskId'])
-    if end == 'finished': return 'agentdone'
+    if end == 'finished': return 'approve' if store.waiting_on_owner(t['TaskId']) else 'agentdone'     # a post or an act left for your press
     if end: left = 'stopped'
     if not left and str(t.get('Assignee') or '').startswith('agent:') and store.last_transcript(t['TaskId']): left = 'stopped'
     if left: return left

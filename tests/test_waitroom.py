@@ -270,7 +270,7 @@ class GeneralTests(unittest.TestCase):
 
     def said(self, s, tid):
         from taskuary import general
-        return [('taskuary' if general.is_brief(c) else c['Actor'], c['Body']) for c in s.list_comments(tid) if c['ActorType'] == general.USER_TYPE]
+        return [('taskuary' if general.is_brief(c) else c['Actor'], c['Body']) for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.USER_TYPE]
 
     def test_a_parked_general_agent_files_the_note_as_the_owners_and_the_rest_as_taskuarys(self):
         s = MemoryStore(); tid, ses = self.general(s)

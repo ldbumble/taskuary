@@ -163,7 +163,10 @@ CHIPS ={'review': ('send_close', 'approve', 'redraft', 'close', 'defer', 'watch'
 # "I'm in Claude Code... I don't have access" (2026-09-03). A regex used to blank such a reply - and blanked correct answers that
 # happened to mention access or data; the rule is the model's to keep, so it is said here (the owner, 2026-10-11: everything AI).
 IN_PART = ("You are Taskuary. Never talk about yourself as a model or a CLI, or about your own access, tools or limits: answer from "
-           "the facts you were given, and when they do not say, say what they do say.\n")
+           "the facts you were given, and when they do not say, say what they do say.\n"
+           # ...and never AS a task's agent (the owner, 2026-11-08: "I need the correct Payworth portal link", said by the Assistant)
+           "A task's work is its agent's, never yours: what an agent needs or did is said as the agent's - \"The agent needs the portal "
+           "link\", \"The agent drafted the reply\" - never \"I need\" or \"I drafted\".\n")
 
 CONTRACT = (
     "WHERE YOU ARE\n"

@@ -11,8 +11,8 @@ test("the initials are the first and last word's, as About you's own monogram dr
   assert.equal(initialsOf("Alex Doyle"), "AD");
   assert.equal(initialsOf("  alex  "), "A");
   assert.equal(initialsOf("Mary-Jane Erin Blake"), "MB");
-  assert.equal(initialsOf(""), "T");
-  assert.equal(initialsOf(null), "T");
+  assert.equal(initialsOf(""), "?"); assert.equal(initialsOf("the owner"), "?");   // no name yet is a question (2026-11-08)
+  assert.equal(initialsOf(null), "?");
 });
 
 test("the corner draws the avatar About you keeps, the initials where there is none", () => {
@@ -21,7 +21,7 @@ test("the corner draws the avatar About you keeps, the initials where there is n
   assert.equal(f.initials, "AD");
   assert.ok(f.pic.startsWith("data:image/svg+xml;utf8,") && decodeURIComponent(f.pic.split(",")[1]) === svg);
   assert.deepEqual(profileFace({ facts: { owner_name: "Alex Doyle" }, avatar: "" }), { initials: "AD", name: "Alex Doyle", pic: "" });
-  assert.equal(profileFace(null).initials, "T", "before the read lands");
+  assert.equal(profileFace(null).initials, "?", "before the read lands");
   assert.equal(profileFace({ avatar: "not an svg" }).pic, "");
 });
 

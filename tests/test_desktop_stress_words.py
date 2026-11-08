@@ -56,3 +56,9 @@ def test_the_agent_speaks_to_the_owner_never_of_them():
     # the product audit, 2026-11-08: "Alex has what they need on this one" in the owner's own chat
     from taskuary import selfclose
     assert 'You are talking TO the owner in their own chat: say "you" and "your", never their name' in selfclose.SUMMARY_LINE
+
+
+def test_the_assistant_reports_what_the_agent_needs_never_as_the_agent():
+    # the product audit, 2026-11-08: the Assistant said "I need the correct Payworth portal link" for a task's agent
+    from taskuary import concierge
+    assert '"The agent needs the portal link"' in concierge.IN_PART and 'never "I need"' in concierge.IN_PART

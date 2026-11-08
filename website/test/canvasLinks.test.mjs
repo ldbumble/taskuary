@@ -114,3 +114,12 @@ test("every address the agents' link line teaches opens in place", () => {
   assert.equal(canvasRequestFromHash("#connector=quickbooks").state.connector, "quickbooks");
   assert.equal(canvasRequestFromHash("#connector=quickbooks&step=1").state.step, true);
 });
+
+// A #task LINK OPENS ITS TASK OVER SETUP (the owner, 2026-11-08): read before setup said it was open, it landed under the setup canvas
+test("a link to one task is told apart, and setup's first read opens it over setup", async () => {
+  const { opensTask } = await import("../src/canvasLinks.js");
+  assert.equal(opensTask("#task=1"), true); assert.equal(opensTask("#task=12&x=1"), true);
+  for (const h of ["", "#new-task", "#settings=audit", "#msg=4"]) assert.equal(opensTask(h), false, h);
+  const src = fs.readFileSync(path.join(import.meta.dirname, "../src/AssistantView.jsx"), "utf8");
+  assert.match(src, /setFirstRun\(true\); if \(opensTask\(window\.location\.hash\)\) setOverSetup\(true\);/);
+});

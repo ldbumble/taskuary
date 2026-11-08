@@ -88,7 +88,7 @@ import { lightOf, litAfter, litOn, litPick, litPull } from "./assistantLight.js"
 import * as pageView from "./pageView.js";
 import DigestText from "./DigestText.jsx";
 import { canGoBack, firstAppLink, linkName, onStep, openAppLink, recordPlace } from "./appLinks.js";
-import { BOARD, hashFor } from "./canvasLinks.js";
+import { BOARD, hashFor, opensTask } from "./canvasLinks.js";
 import { canSend, cannotStart, useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
 import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
@@ -1846,7 +1846,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...and the first read answers both: the open and the rail's todo were two GETs of the same answer at every start (the overnight
     // setup walk, 2026-10-26)
     // ...and the read is setup's one shared read (firstRunState.js): every answer setup's canvas and rail take moves the todo too
-    readFirstRun().then((data) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
+    // ...and a #task link opens its task over setup (the owner, 2026-11-08): read before setup said it was open, it landed under the canvas,
+    // the agent's question on it out of reach
+    readFirstRun().then((data) => { if (!(data?.step && data.dismissed === false)) return; setFirstRun(true); if (opensTask(window.location.hash)) setOverSetup(true); }).catch(() => {});
     const offRead = onFirstRun((data) => setSetupTodo(data?.todo || ""));
     const todo = () => readFirstRun().catch(() => {});
     window.addEventListener("tq-first-run", show); window.addEventListener("tq-setup-changed", todo);

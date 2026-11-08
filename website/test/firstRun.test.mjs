@@ -97,7 +97,7 @@ test("Set up Taskuary opens the two cards, open on both steps, and only a fresh 
   const view = read("AssistantView.jsx");
   assert.match(view, /if \(!DEMO\) \{ setFirstRun\(true\); return; \}/);   // typed or pressed, the one setup mode (2026-10-16)
   assert.match(view, /firstrun: <FirstRun revisit onChanged=\{actions\.reload\} onWalk=\{\(\) => actions\.start\(null\)\} \/>/);
-  assert.match(view, /data\?\.step && data\.dismissed === false\) setFirstRun\(true\)/, "setup stays the canvas until it is finished; a finished install opens on its day");
+  assert.match(view, /if \(!\(data\?\.step && data\.dismissed === false\)\) return; setFirstRun\(true\)/, "setup stays the canvas until it is finished; a finished install opens on its day");
   assert.match(read("FirstRun.jsx"), /const shelf = \(k, cards, more, group = null\) => q === k &&/);   // one step on the canvas; Back and Next move between them
   assert.match(view, /c\?\.kind === "firstrun" \? "firstrun"/, "a card from before still routes to FirstRun, not an empty message");
 });
@@ -129,4 +129,13 @@ test("setup's bar is as wide as setup's page, centred under its cards", () => {
   const w = Number(/data-tq-firstrun=\{st\.step\} sx=\{\{[^}]*maxWidth: (\d+)/.exec(read("FirstRun.jsx"))?.[1]);
   assert.ok(w > 0, "the step's column has a width");
   assert.ok(read("assistantView.css").includes(`.tq-dock.tq-setup-dock { width: min(${w}px, 100%); margin-inline: auto; }`));
+});
+
+// SET UP LATER (the owner, 2026-11-08): one quiet link on the setup canvas puts setup away on the existing dismiss - an owner with no mailbox
+// could never leave it (Finish refuses them)
+test("the setup canvas has one quiet Set up later, on the existing dismiss", () => {
+  const fr = read("FirstRun.jsx");
+  assert.equal((fr.match(/data-tq-setup-later/g) || []).length, 1);
+  assert.match(fr, /api\.post\("\/api\/setup\/dismiss", \{ dismissed: true \}\)/);
+  assert.match(fr, /onFinish && q !== "done" && <Typography component="button"[^>]*data-tq-setup-later=""/);
 });

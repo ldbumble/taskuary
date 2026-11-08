@@ -27,6 +27,9 @@ export function routeOfHash(hash) {
   return ["send", "alert"].includes(line) && to ? { line, to, ...(["always", "never"].includes(how) ? { how } : {}) } : null;
 }
 
+// a link to one task - opened over setup, never under it (AssistantView's first read of setup)
+export const opensTask = (hash) => canvasRequestFromHash(hash)?.kind === "task";
+
 export function canvasRequestFromHash(hash, n = 0) {
   const h = String(hash || "");
   let m;

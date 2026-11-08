@@ -216,6 +216,12 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
     catch (e) { if (e?.response?.status === 409) { setErr(errText(e)); return; } /* else the canvas still moves on; the flag is set next time */ }
     window.dispatchEvent(new Event("tq-setup-changed")); go?.();
   };
+  // ...and SET UP LATER (the owner, 2026-11-08): an owner who only wants agents, no mailbox, puts setup away - Finish refuses them, the
+  // existing dismiss does not. Setup stays a press away (the top bar's Setup)
+  const later = async () => {
+    try { await api.post("/api/setup/dismiss", { dismissed: true }); } catch (e) { setErr(errText(e)); return; }
+    window.dispatchEvent(new Event("tq-setup-changed")); onFinish?.();
+  };
   const reopened = revisit || !!st?.dismissed;
   const firstPass = useRef(false);            // About your work just saved the first time: Developer mode, then Setup complete
   useEffect(() => { if (view === "done") firstPass.current = false; }, [view]);
@@ -651,6 +657,9 @@ ${fix.detail || ""}`, screen: "Setup",
       {q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")}
         aiError={aiErr} onChangeAi={() => go("ai")} /></Box>}
       {q === "other" && <CanvasBrowse area="connections" state={browseSt} onState={setBrowseSt} live onOpenCard={() => {}} />}
+      {onFinish && q !== "done" && <Typography component="button" type="button" data-tq-setup-later="" onClick={later}
+        sx={{ alignSelf: "center", border: 0, bgcolor: "transparent", p: 0, font: "inherit", fontSize: 12.5, color: FAINT, cursor: "pointer",
+          "&:hover": { textDecoration: "underline", color: DIM } }}>Set up later</Typography>}
     </Box>
   );
 }

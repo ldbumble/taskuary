@@ -166,7 +166,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // its body and scrolls inside; only a card too short to read a drawer in grows, to DRAWER_FLOOR and never past the cap
         // ...and that floor is now the card's from the start, with WORDS_FLOOR, and its height is held (useHeldHeight): a drawer, Reply or a
         // stage never moves its foot (the owner, 2026-10-27)
-        ...(!pin ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [data-tq-agent-room='chat'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe))": {
+        // ...but NEVER ON A PHONE now (the owner, 2026-11-08): every kind is one chat, and its box is pinned to the foot of what is visible - a
+        // reply task or the home's to-do shrunk to its words left the box mid-screen, or under the fold to scroll for
+        ...(!pin && !phone ? { "&:not(:has(.xterm, [data-tq-agent-room='live'], [data-tq-agent-room='chat'], [class*='tq-aui']:not([data-tq-agent-room='rest'] *), canvas, iframe))": {
           height: held ? `${held}px` : "auto", maxHeight: wordsCap(h), minHeight: wordsFloor(typeof h === "number" ? `${wordsCap(h)}px` : wordsCap(h)) },
           // ...and A TASK IN ITS THREE SECTIONS TAKES THE CANVAS (the owner, 2026-10-27: "it starts at the top and takes up most of it, down to a
           // small gap above the dock's buttons"): one height from the start, the cap, through every press - a short section is white under its words

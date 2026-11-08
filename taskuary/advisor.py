@@ -896,12 +896,11 @@ def chat_agent(store, tid) -> bool:
     from . import general
     return general.handles(store.get_task(int(tid))) and agent_ran(store, tid)
 def agent_light(store, tid: int, item: dict, verbs: list) -> str | None:
-    from . import outbound
     if _at_work(store, 'task', tid): return None
     # ...and a failed run's way past it (offered's lead: the place that fixes it, or Try again) - a fact on the row, no one's opinion
     if verbs and verbs[0]['verb'] in ('fix', 'continue') and not pressable(store, item, verbs[0]['verb'], verbs): return verbs[0]['verb']
     if (w := store.waiting_on_owner(tid)) and (w.get('FinalText') or w.get('DraftText')):
-        if outbound.review_connect(store, w): return None
+        if unconnected(store, {'tid': tid}): return None
         return next((v for v in ('send_close', 'approve') if not pressable(store, item, v, verbs)), None)
     return 'close' if summary_line(store, tid) == NOTHING_LEFT and not pressable(store, item, 'close', verbs) else None
 
@@ -1427,6 +1426,13 @@ def pressable(store, item: dict, verb: str, verbs: list) -> str:
     return _agent_ready(store, item) if verb in AGENT_VERBS else ''
 
 
+def unconnected(store, item: dict) -> bool:
+    "Whether the card waiting on the item says Connect <X> instead of its Send."
+    from . import outbound
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.waiting_on_owner(int(item['tid'])) if item.get('tid') else None)
+    return bool(r) and r.get('Status') == 'pending' and bool(outbound.review_connect(store, r))
+
+
 def checked(store, item: dict, verbs: list, d: dict) -> dict:
     """`d` ({verb, line, by, evidence, kind, state}) as the owner may be shown it: the model's verb, or nothing lit where it is a button the
     owner could not press or one that contradicts its own reason (`checked` says why). A CHECK on what the model proposes - it never swaps
@@ -1435,6 +1441,8 @@ def checked(store, item: dict, verbs: list, d: dict) -> dict:
     if (no := pressable(store, item, verb, verbs)): why = f'{verb}: {no}'
     # ...nothing sends on a reason that says the draft is not ready to send (the Advisor audit's judge, 2026-10-26)
     elif kind in GAPS and verb in SENDS: why = 'a caution about the draft over its Send'
+    # ...nor over a card whose channel is not connected: its card's move is Connect (outbound.review_connect, the owner 2026-11-08)
+    elif verb in SENDS and unconnected(store, item): why = 'its channel is not connected'
     # ...and the one that stays of a duplicate pair is never folded into its own twin: following it would drop the ask
     elif kind == 'same_ask' and verb in ('remove', 'split') and _survives(store, item): why = 'the survivor of a duplicate pair is never folded'
     # ...and a coding agent asking to go further is the owner's call in its pane, never closed under it (the owner, 2026-11-02)

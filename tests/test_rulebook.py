@@ -12,6 +12,14 @@ from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 from tests import advisor_cases as C
 
+
+@pytest.fixture(autouse=True)
+def _mailbox_connected(monkeypatch):
+    """These drafts go by email in a world with no mailbox card: as if one were connected, so the Send is what is judged (a card that says
+    Connect email lights nothing - advisor.unconnected, tests/test_agent_lights.py)."""
+    from taskuary import advisor as _adv
+    monkeypatch.setattr(_adv, 'unconnected', lambda store, item: False)
+
 ERIN, RAY = ('Erin Blake', 'erin@northwind.example'), ('Ray Colton', 'ray@northwind.example')
 def at(d=0, h=0): return (datetime.now() - timedelta(days=d, hours=h)).strftime('%Y-%m-%d %H:%M:%S')
 

@@ -31,9 +31,7 @@ import { teammateLine } from "./agentChannels.js";
 import { Hunk } from "./DiffView.jsx";
 import { withImages } from "./promptImages.jsx";
 import WriteIcon from "@mui/icons-material/EditNoteRounded";
-import DoneIcon from "@mui/icons-material/CheckBoxRounded";
-import NowIcon from "@mui/icons-material/IndeterminateCheckBoxRounded";
-import TodoIcon from "@mui/icons-material/CheckBoxOutlineBlankRounded";
+import ViewSpec, { PlanRow } from "./ViewSpec.jsx";
 import { wantsAsk, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
@@ -320,11 +318,6 @@ const EditRow = ({ p }) => (
     <div className="tq-cc-diff">{p.hunks.length ? p.hunks.map((h, i) => <Hunk key={i} h={h} path={p.file} />)
       : <div className="tq-dv-empty">Its log keeps no diff for this one.</div>}</div>
   </details>);
-// ITS PLAN, A CHECKLIST: done ticked, the one it is on marked, the rest open
-const PLAN_ICON = { done: DoneIcon, now: NowIcon, todo: TodoIcon };
-const PlanRow = ({ p }) => (
-  <ul className="tq-cc-plan" data-tq-plan="" aria-label="The agent's plan">{p.items.map((x, i) => { const Icon = PLAN_ICON[x.state] || TodoIcon;
-    return <li key={i} data-tq-plan-item={x.state}><Icon aria-hidden sx={{ fontSize: 15 }} /><span>{x.text}</span></li>; })}</ul>);
 // ...a fold the owner opened stays open across the live turn's new ids (OPEN_FOLDS)
 const Fold = ({ k, label, quiet = false, children }) => {
   const [open, setOpen] = useState(() => OPEN_FOLDS.has(k));
@@ -356,6 +349,7 @@ const TurnWork = ({ data }) => {
   const last = parts.length - 1;
   const draw = (p, i, lvl) => p.type === "said" ? <Md key={p.id} text={p.text} /> : p.type === "edit" ? <EditRow key={p.id} p={p} />
     : p.type === "plan" ? <PlanRow key={p.id} p={p} />
+    : p.type === "view" ? <ViewSpec key={p.id} spec={p.spec} raw={p.raw} />
     : lvl === "everything" ? <AgentSteps key={p.id} data={{ steps: p.steps }} />
     // IN THE ORDER IT HAPPENED (the owner, 2026-11-06: "never write above what was written already"): a group with a call still running stays
     // open with its spinner, and what the agent says after it draws below it
@@ -364,9 +358,10 @@ const TurnWork = ({ data }) => {
   // SUMMARY: the agent's words, in order; every step, edit and plan behind one quiet "n steps" line over them that opens on them all. A turn its
   // summary sums up folds whole - its summary says the words
   if (level === "summary") {
-    const said = ended ? [] : parts.filter((p) => p.type === "said"), rest = ended ? parts : parts.filter((p) => p.type !== "said");
+    // ...and a view the agent showed is what it chose to put in front of the owner: never folded away
+    const out = (p) => p.type === "view" || (!ended && p.type === "said"), said = parts.filter(out), rest = parts.filter((p) => !out(p));
     return <>{rest.some((p) => p.type !== "said") && <Fold k={`${key}:all`} quiet label={stepsWord(rest)}>{rest.map((p, i) => draw(p, i, "everything"))}</Fold>}
-      {said.map((p) => <Md key={p.id} text={p.text} />)}</>;
+      {said.map((p, i) => draw(p, i, "everything"))}</>;
   }
   return <>{parts.map((p, i) => draw(p, i, level))}</>;
 };

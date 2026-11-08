@@ -59,6 +59,15 @@ TOOLS = {
                    "Anything that would send, post, pay or order never runs here - it waits for the owner's press and you are told so.",
                    {'type': 'object', 'properties': {'type': _STR, 'connector_id': _INT}, 'required': ['type'],
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
+    # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
+    'show': ('read', "Show the owner a small view in this chat when a table, chart or checklist would be clearer than text - plain text is "
+             "fine otherwise, and this is never required. `elements` maps an id to {type, props, children?}; `root` is the id drawn first, "
+             "each element's children under it. Types: table {columns, rows}, stats {items: [{label, value, note?}]}, chart {kind: bar|line, "
+             "title?, points: [{label, value}]}, list {items}, checklist {items: [{text, done}]}, steps {items}, text {text: markdown}, button "
+             "{label, verb: a task-page button to light for the owner (close, defer, reply, continue...) | open: an app page link like #settings}. A "
+             "button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix.",
+             _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': {'type': 'object'}}}, ('root', 'elements')),
+             ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",
              _S({'item': _STR, 'done': {'type': 'boolean'}}, ('item',)), ('POST', '/api/agent/tick')),
     # ...and a wake of its own later on this task (checkback.py, the owner 2026-11-05) - for what only time settles
@@ -222,6 +231,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'run_system':
         r = doors['tool_run']({**a, 'task_id': tid})
         return _out(_j(json.loads(r.body) if hasattr(r, 'body') else r), fence_it=True)     # a 202 (queued) comes back as a response
+    if name == 'show':
+        from . import viewspec
+        return viewspec.shown(a)
     if name == 'tick': return _j(doors['tick'](tid, str(a['item']), a.get('done', True) is not False))
     if name == 'check_back': return _j(doors['check_back'](tid, str(a.get('when') or ''), str(a.get('what') or '')))
     if name == 'ask_stronger':

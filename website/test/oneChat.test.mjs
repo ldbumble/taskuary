@@ -127,7 +127,10 @@ test("the levels draw: Summary folds every step behind one quiet line, Steps fol
   const tw = gw.slice(gw.indexOf("const TurnWork = "), gw.indexOf("// ...and with none of its steps on screen yet"));
   assert.match(tw, /if \(level === "summary"\) \{/);
   assert.match(tw, /<Fold k=\{`\$\{key\}:all`\} quiet label=\{stepsWord\(rest\)\}>/);
-  assert.match(tw, /\{said\.map\(\(p\) => <Md key=\{p\.id\} text=\{p\.text\} \/>\)\}/, "its words stay at Summary");
+  // ...its words stay at Summary, and so does a view it showed (ViewSpec.jsx): never folded away
+  assert.match(tw, /const out = \(p\) => p\.type === "view" \|\| \(!ended && p\.type === "said"\)/);
+  assert.match(tw, /\{said\.map\(\(p, i\) => draw\(p, i, "everything"\)\)\}/, "its words stay at Summary");
+  assert.match(tw, /p\.type === "view" \? <ViewSpec key=\{p\.id\} spec=\{p\.spec\} raw=\{p\.raw\} \/>/);
   assert.match(tw, /lvl === "everything" \? <AgentSteps key=\{p\.id\} data=\{\{ steps: p\.steps \}\} \/>/);
   assert.match(tw, /: <Fold key=\{p\.id\} k=\{`\$\{key\}:\$\{p\.id\}`\} label=\{stepsWord\(\[p\]\)\}>/);
   assert.match(gw, /const level = chat && !dock \? detailFor\(\{ source, settings: defaults, own \}\) : "steps";/);
@@ -232,7 +235,8 @@ test("regression: the plan is one checklist, the newest of its turn", () => {
     call("p2", "update_plan", { plan: [{ step: "Read the ledger", status: "completed" }, { step: "Fix the tax line", status: "in_progress" }] }), done("p2")]);
   assert.equal(parts.filter((p) => p.type === "plan").length, 1);
   assert.deepEqual(parts[0].items, [{ text: "Read the ledger", state: "done" }, { text: "Fix the tax line", state: "now" }]);
-  assert.match(gw, /<ul className="tq-cc-plan" data-tq-plan="" aria-label="The agent's plan">/);
+  assert.match(read("ViewSpec.jsx"), /<ul className="tq-cc-plan" data-tq-plan="" aria-label=\{label\}>/);
+  assert.match(read("ViewSpec.jsx"), /PlanRow = \(\{ p, label = "The agent's plan" \}\)/);
 });
 
 test("regression: permission cards stand in the stream while the agent works", () => {

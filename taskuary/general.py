@@ -65,6 +65,21 @@ def wait_line(store, tid: int, text: str, files=None) -> int:
     from . import handraise
     handraise.moved(tid)
     return wid
+# ...AND A RESTART NEVER SENDS THEM (the owner, 2026-11-07: "it should show the old messages pending in the prompt box instead of sending
+# automatically"): lines no turn took when the process went away go back into the owner's box, theirs to send, change or clear
+BOX_TYPE = 'assistant_box'
+def to_box(store, tid: int) -> int:
+    "This task's kept lines back into the owner's box: how many."
+    rows = [r for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
+    for r in rows: store._exec('UPDATE comment SET ActorType=? WHERE CommentId=?', (BOX_TYPE, r['CommentId']))
+    return len(rows)
+def box_text(store, tid: int) -> str:
+    "What the owner's box holds again after a restart - '' when nothing."
+    return '\n\n'.join(t for r in store.list_comments(tid) if r.get('ActorType') == BOX_TYPE and (t := _line_of(r['Body'])['text']))
+def box_sent(store, tid: int):
+    "The owner sent from the box: what it held again is theirs now, kept or cleared - never offered twice."
+    for r in store.list_comments(tid):
+        if r.get('ActorType') == BOX_TYPE: store.drop_comment(r['CommentId'])
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body'])} for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
@@ -2439,6 +2454,7 @@ def say_line(store, tid: int, text: str, attachments=None, connector_id=None, mo
     that session ends under it (a turn failed, it idled out, a wrap-up closed it), handed once to a fresh one, which takes the kept line: a
     held line came back "reload the page and ask again" where the first line's road had started again quietly. -> (session, reply);
     `started(session)` hears each session it is given to."""
+    box_sent(store, tid)
     for again in (False, True):
         ses = start_session(store, tid, connector_id, model, actor, pick)
         if started: started(ses)

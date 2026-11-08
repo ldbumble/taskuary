@@ -4808,7 +4808,8 @@ def handoff(task_id: int, body: HandoffBody):
             sent = outbound.send_out(store, body.channel, body.to, subject, text)
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
-    store.add_comment(task_id, ACTOR, 'human', f'Handed off to {body.to} by {body.channel}:\n{text}')
+    from .general import HANDED_OFF
+    store.add_comment(task_id, ACTOR, 'human', f'{HANDED_OFF}{body.to} by {body.channel}:\n{text}')
     # FORWARD ONLY (the owner, 2026-10-18): handing it on used to close the task too, and nobody then saw whether the person
     # took it. Like Send, it does one thing: the task stays open and waits on them (the rail's "waiting on them"), and Mark
     # done is the owner's own step once it is finished. A task already closed stays closed.

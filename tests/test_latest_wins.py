@@ -137,3 +137,12 @@ def test_the_cli_and_tools_offer_withdraw():
     from taskuary import agenttools, cli, floor
     assert 'withdraw_draft' in cli.STRANGER_ACTS and '--withdraw-draft' in floor.TASKUARY_OK
     assert 'withdraw_draft' in agenttools.TOOLS and 'withdraw_draft' not in agenttools.REPLY_TOOLS     # an own ask's emails are taken back too
+
+
+def test_a_hand_off_is_in_the_turns_context():
+    # the owner, 2026-11-08: Hand it to a person was a comment only, and the agent's next turn never heard it
+    s = MemoryStore(); tid = s.create_task({'Title': 'Payworth renewal', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    assert general.latest_block(s, tid) == ''
+    s.add_comment(tid, 'owner', 'human', f'{general.HANDED_OFF}gail@northwind.example by email:\nGail - can you take the renewal?')
+    got = general.latest_block(s, tid, resumed=True)
+    assert 'THE OWNER HANDED THIS TO A PERSON' in got and 'Handed off to gail@northwind.example by email - "Gail - can you take the renewal?"' in got

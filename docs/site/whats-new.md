@@ -2,6 +2,10 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.14 - 2026-11-08
+
+- Video tools for the agents: Descript, InVideo, Vidova, OpusClip, video-use, Kling and Runway video
+
 ## 0.3.11.13 - 2026-11-07
 
 - Taskuary's own reports are never a new workstream

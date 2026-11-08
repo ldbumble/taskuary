@@ -40,6 +40,22 @@ def chat_moved_on(store, tid: int) -> bool:
     return bool(went) and went >= str(last)
 
 
+def open_question(store, tid: int) -> dict | None:
+    """THE AGENT'S OPEN QUESTION, AS SAVED WITH THE TASK (the owner, 2026-11-07: an idled-out agent's question vanished from the chip, the rail
+    and the Assistant though nobody answered it): its run's own recorded ask, open until the owner speaks - whether its process is alive or
+    not. None when none is open."""
+    return next((r for r in reversed(workerstate.status(store, tid)['requests']) if workerstate.own_question(r)), None)
+
+
+def _chat_resting(store, t: dict) -> str | None:
+    "An open chat task with no live agent: 'blocked' while its question is open, 'agentdone' once it has answered, else None."
+    from .general import ASSISTANT_TYPE, handles, is_dock
+    if not handles(t) or is_dock(t) or t.get('Status') not in ('open', 'in_progress'): return None
+    if open_question(store, t['TaskId']): return 'blocked'
+    spoke = store._one('SELECT 1 AS x FROM comment WHERE TaskId=? AND ActorType=? LIMIT 1', (t['TaskId'], ASSISTANT_TYPE))
+    return 'agentdone' if spoke else None
+
+
 def state(store, t: dict, session=None, queued=None) -> str:
     """This task's state key. `session` is its live session row, `queued` its dispatch-queue row."""
     live = bool(session and session.get('alive', True))
@@ -50,10 +66,11 @@ def state(store, t: dict, session=None, queued=None) -> str:
         if not session.get('waiting'): return 'working'
         # ...but an agent PARKED - it answered, asked nothing - over a reply it drafted is the reply waiting, as the rail says: the Board
         # put it under "agent waiting on you" with "ready to send" on the same card, and the header said so until a reload (email walk 2026-10-29)
-        if (session.get('state') or 'parked') == 'parked' and not session.get('request') and t.get('ReviewStatus') == 'pending': return 'approve'
-        # ...and a chat agent whose turn the owner already answered is done for now, not waiting on them (chat_moved_on)
+        parked = (session.get('state') or 'parked') == 'parked' and not session.get('request')
+        if parked and t.get('ReviewStatus') == 'pending': return 'approve'
+        # ...and a CHAT agent whose turn asked nothing is done for now, never waiting on you (the owner, 2026-11-07) - as it reads once idled out
         from .general import handles
-        if (session.get('state') or 'parked') == 'parked' and not session.get('request') and handles(t) and chat_moved_on(store, t['TaskId']): return 'agentdone'
+        if parked and handles(t): return 'agentdone'
         return 'blocked'
     st = t.get('Status')
     if st == 'dropped': return 'dropped'
@@ -72,6 +89,9 @@ def state(store, t: dict, session=None, queued=None) -> str:
     if end: left = 'stopped'
     if not left and str(t.get('Assignee') or '').startswith('agent:') and store.last_transcript(t['TaskId']): left = 'stopped'
     if left: return left
+    # A CHAT AGENT NOT RUNNING - idled out, or the server restarted - reads as it did live (the owner, 2026-11-07): its open question still
+    # waits on you, and a turn that asked nothing is done for now. Read off the task's saved record, never the in-memory IDLED
+    if (chat := _chat_resting(store, t)): return chat
     if str(t.get('Assignee') or '').startswith('agent:') or _general_waiting(store, t): return 'queued'
     if st == 'waiting': return 'theirs'
     return 'yours'

@@ -38,7 +38,9 @@ class StateTests(unittest.TestCase):
         self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending'), parked), 'approve')
         self.assertEqual(taskstate.column('approve'), 'agentdone')
         self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending'), asking), 'blocked')      # a question still outranks it
-        self.assertEqual(taskstate.state(s, row(s, t), parked), 'blocked')                                # nothing drafted: it waits on you
+        # ...and a chat turn that drafted nothing and asked nothing is done for now, never waiting on you (the owner, 2026-11-07)
+        self.assertEqual(taskstate.state(s, row(s, t), parked), 'agentdone')
+        self.assertEqual(taskstate.state(s, row(s, task(s)), parked), 'blocked')                         # a coding agent parked still waits on you
 
     def test_a_done_task_continued_is_live_work_but_a_stale_terminal_is_not(self):
         s = MemoryStore(); t = task(s); s.update_task(t, {'Status': 'done'}, 'owner')

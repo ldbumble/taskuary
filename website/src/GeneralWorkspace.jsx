@@ -1245,7 +1245,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // through the worker's answer road (workerstate.answer), and the card's state clears with the `answered` it records
   const answerAsk = async (text) => {
     const req = asking;
-    if (session?.sid && String(req.sid) === String(session.sid)) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
+    // ...and a chat agent's question kept after its process idled out (`resting`): the answer is its next turn, which starts it again
+    if (req.resting || (session?.sid && String(req.sid) === String(session.sid))) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
     await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
     setAnswered(req.request_id); onAnswered?.();
   };

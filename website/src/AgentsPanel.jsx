@@ -43,7 +43,7 @@ export const CliConnectionsPage = ({ onBack }) => {
   }, []);
   useEffect(() => { load(); }, [load]);
   // ...and the optional tools the agents drive (agent-browser, agent-desktop): a line only when one is behind npm's latest (clis.tools)
-  const [behind, setBehind] = useState([]);
+  const [behind, setBehind] = useState(null);
   useEffect(() => { api.get("/api/cli/detect").then(({ data }) => setBehind((data.tools || []).map(toolUpdateLine).filter(Boolean))).catch(() => {}); }, []);
   // a connector installing beside a Set it up (acpadapter.start) is read again until it lands - its line says it meanwhile
   useEffect(() => {
@@ -135,7 +135,7 @@ export const CliConnectionsPage = ({ onBack }) => {
         {tests[cli.name] && !tests[cli.name].busy && <Alert severity={tests[cli.name].ok ? "success" : "error"} sx={{ mt: 1 }}>{tests[cli.name].ok ? tests[cli.name].result || "Connection works" : tests[cli.name].error}</Alert>}
       </Box>)}
     </Box>
-    {behind.map((l) => <Typography key={l} variant="caption" data-tool-update="" sx={{ color: DIM, display: "block", mt: 1.5 }}>{l}</Typography>)}
+    {(behind || []).map((l) => <Typography key={l} variant="caption" data-tool-update="" sx={{ color: DIM, display: "block", mt: 1.5 }}>{l}</Typography>)}
     {[note, setupNote].filter(Boolean).map((message, i) => <Alert key={i} severity={message.bad ? "error" : "success"} sx={{ mt: 2 }}>{message.text}</Alert>)}
     {installPane && <Box ref={installerRef} sx={{ mt: 2, ...card, p: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>

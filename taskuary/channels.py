@@ -535,7 +535,7 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             from . import files
             detail = files.test_smb(store, c) if c['Type'] == 'smb_file' else files.test_sftp(store, c)
         elif c['Type'] in ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper',
-                           'assemblyai', 'speechmatics', 'gladia', 'azure_speech'):
+                           'assemblyai', 'speechmatics', 'gladia', 'azure_speech', 'amazon_transcribe'):
             from . import voice
             detail = voice.test(store, store.get_connector(cid, with_secret=True))   # a second of silence through the real endpoint
         elif c['Type'] in ('openai_image', 'azure_openai_image', 'xai_image', 'image_server',

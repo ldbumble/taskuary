@@ -23,12 +23,13 @@ from . import words
 # four more (the owner, 2026-11-08: "all the ones that say coming soon just add them now"), each a file in and its text out over the
 # vendor's own REST call with a key - AssemblyAI, Speechmatics and Gladia upload, submit and poll; Azure's fast transcription answers at once
 POLLED = ('assemblyai', 'speechmatics', 'gladia', 'azure_speech')
-VOICE_TYPES = ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper', *POLLED)
+VOICE_TYPES = ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper', *POLLED, 'amazon_transcribe')
 NEEDS_KEY = {'gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', *POLLED}
 LABELS = {'groq_stt': 'Groq (Whisper)', 'openai_stt': 'OpenAI transcription', 'deepgram': 'Deepgram',
           'elevenlabs_stt': 'ElevenLabs Scribe', 'stt_server': 'Any Whisper server (OpenAI-compatible)',
           'local_whisper': 'Local Whisper (on this machine)', 'gemini_stt': 'Google Gemini transcription',
-          'assemblyai': 'AssemblyAI', 'speechmatics': 'Speechmatics', 'gladia': 'Gladia', 'azure_speech': 'Azure AI Speech'}
+          'assemblyai': 'AssemblyAI', 'speechmatics': 'Speechmatics', 'gladia': 'Gladia', 'azure_speech': 'Azure AI Speech',
+          'amazon_transcribe': 'Amazon Transcribe'}
 # (base url, default model) for the OpenAI-compatible three
 COMPAT = {'groq_stt': ('https://api.groq.com/openai/v1', 'whisper-large-v3-turbo'),
           'openai_stt': ('https://api.openai.com/v1', 'gpt-4o-mini-transcribe'),
@@ -102,6 +103,7 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
     elif t == 'deepgram': text, model = _deepgram(cfg, key, data, mime, terms)
     elif t == 'elevenlabs_stt': text, model = _elevenlabs(cfg, key, data, mime, name, terms)
     elif t == 'local_whisper': text, model = _local(cfg, data, name, terms)
+    elif t == 'amazon_transcribe': text, model = _transcribe_aws(cfg, key, data, mime, name)
     elif t in POLLED:
         if not key: raise RuntimeError(f'{LABELS[t]}: no API key saved')
         text, model = {'assemblyai': _assemblyai, 'speechmatics': _speechmatics, 'gladia': _gladia, 'azure_speech': _azure}[t](cfg, key, data, mime, name, terms)
@@ -227,6 +229,37 @@ def _azure(cfg, key, data, mime, name, terms=()):
                           headers={'Ocp-Apim-Subscription-Key': key}, files={'audio': (name, data, mime), 'definition': (None, json.dumps(d))},
                           timeout=300), 'Azure AI Speech')
     return ' '.join(p.get('text') or '' for p in (j.get('combinedPhrases') or [])[:1]), 'fast transcription'
+
+
+def _transcribe_aws(cfg, key, data, mime, name):
+    """docs.aws.amazon.com/transcribe/latest/dg/batch-med-transcription.html: Transcribe reads audio from S3 only, so the clip goes to the
+    owner's own bucket (named on the card), a job runs on it, its transcript JSON lands beside it - and both are deleted once read.
+    The keys are the card's (blank: boto3's own chain); its IAM user needs s3:PutObject/GetObject/DeleteObject on the bucket and
+    transcribe:StartTranscriptionJob/GetTranscriptionJob - nothing else. boto3 is the aws extra."""
+    from . import aws
+    b = str(cfg.get('bucket') or '').strip().removeprefix('s3://').strip('/')
+    if not b: raise RuntimeError('Amazon Transcribe: the card needs the S3 bucket it may put the audio in')
+    c = {**cfg, 'secret_access_key': key or cfg.get('secret_access_key')}
+    s3, tr = aws.client(c, 's3'), aws.client(c, 'transcribe')
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    ext = ext if ext in ('mp3', 'mp4', 'wav', 'flac', 'ogg', 'amr', 'webm', 'm4a') else ext_for(mime)       # the formats Transcribe takes
+    job, pre = f'taskuary-{uuid.uuid4().hex}', (cfg.get('prefix') or 'taskuary-transcribe').strip('/')
+    k, out = f'{pre}/{job}.{ext}', f'{pre}/{job}.json'
+    s3.put_object(Bucket=b, Key=k, Body=data, ContentType=mime)
+    try:
+        tr.start_transcription_job(TranscriptionJobName=job, Media={'MediaFileUri': f's3://{b}/{k}'}, MediaFormat=ext, OutputBucketName=b, OutputKey=out,
+                                   **({'LanguageCode': cfg['language']} if cfg.get('language') else {'IdentifyLanguage': True}))
+        def done(j):
+            st = (j.get('TranscriptionJob') or {}).get('TranscriptionJobStatus')
+            if st == 'FAILED': raise RuntimeError(f"Amazon Transcribe: {j['TranscriptionJob'].get('FailureReason') or 'the job failed'}")
+            return '' if st == 'COMPLETED' else None
+        _until(lambda: tr.get_transcription_job(TranscriptionJobName=job), done, 'Amazon Transcribe')
+        j = json.loads(s3.get_object(Bucket=b, Key=out)['Body'].read())
+        return ' '.join(x.get('transcript') or '' for x in (j.get('results') or {}).get('transcripts') or []), 'batch'
+    finally:
+        for x in (k, out):
+            try: s3.delete_object(Bucket=b, Key=x)
+            except Exception as e: logger.info(f'voice: s3://{b}/{x} was not deleted: {e}')
 
 
 _LOCAL = {}

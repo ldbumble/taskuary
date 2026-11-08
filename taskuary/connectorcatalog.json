@@ -1638,8 +1638,8 @@
       "type": "amazon_transcribe",
       "title": "Amazon Transcribe",
       "group": "AI — voice",
-      "planned": true,
-      "desc": "AWS speech-to-text for recorded audio",
+      "planned": false,
+      "desc": "Voice notes and the mic transcribed on your own AWS account - the clip goes to your S3 bucket, a job reads it, and both are deleted once read.",
       "match": [
         "amazon transcribe",
         "amazon",

@@ -47,9 +47,13 @@ const railStatus_ = (item, cantSend = false, page = null) => {
   if (!item?.lane) return null;
   if (owedNoDraft(item)) return said(OWED, { ...rowMeta(item), ...KIND_META[OWED] }, false);
   const copy = cantSend && !item.not_sent && item.lane === "approve" && item.kind === "review";
-  const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : KIND_META[item.kind] ? item.kind : item.lane;
+  // ...a FINISHED run's row (processing_unread: lane yours, `finished`) is the agent's finish, as its line says: the pill read "on you"
+  // under "the assistant finished - read what it found" (the product audit, 2026-11-08) - as the server's state_of says it
+  const done = item.finished && item.lane === "yours" && !KIND_META[item.kind];
+  const key = copy ? UNSENDABLE : item.not_sent ? "not_sent" : done ? "agentdone" : KIND_META[item.kind] ? item.kind : item.lane;
   const spins = item.lane === "working" && !item.settling;
-  return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : rowMeta(item), spins);
+  return said(key, copy ? { ...rowMeta(item), ...KIND_META[UNSENDABLE] } : done ? { ...rowMeta(item), ...KIND_META.agentdone } : rowMeta(item), spins);
+
 };
 // ...and the line under the row on the table: the rail's `why` ("An agent is working on this ...") goes with the lane it explains
 export const rowWhy = (item, page = null) => (agentGone(item, page) ? taskStateMeta(page.state)?.hint || "" : item?.why || "");

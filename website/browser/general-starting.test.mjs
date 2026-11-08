@@ -5,7 +5,7 @@ import { startHarness } from "./harness.mjs";
 
 /* A GENERAL AGENT STARTING IS ONE LINE. Started from the Assistant, the task card opened under "researcher is working" on a pane
    about 300px tall with nothing in it but a spinner at its foot, for as long as the CLI took to come up (the owner, 2026-10-21).
-   Until its first answer the pane is as high as what it shows - "Starting Taskuary on Codex…" (the agent goes by Taskuary, never its profile - 2026-10-28) - and the room comes with
+   Until its first answer the pane is as high as what it shows - "Starting Agent on Codex…" (the agent goes by Agent, never its profile - F32, 2026-11-08) - and the room comes with
    the answer. The fixture is the session the server started: /api/terminals lists it live, /assistant has it busy and silent. */
 test("a general agent that has said nothing yet is one line in its chat, the box at its foot", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
@@ -50,7 +50,7 @@ test("a general agent that has said nothing yet is one line in its chat, the box
     return { line: document.querySelector("[data-tq-starting-line]").innerText, welcome: !!document.querySelector(".tq-aui-welcome"),
              foot: box ? pane.bottom - box.getBoundingClientRect().bottom : null, onScreen: !!box && box.getBoundingClientRect().bottom <= innerHeight };
   });
-  assert.match(quiet.line, /Starting Taskuary on Codex…/);
+  assert.match(quiet.line, /Starting Agent on Codex…/);
   assert.equal(quiet.welcome, false, "no welcome copy over an agent already started");
   // ...A GENERAL TASK IS A CHAT TASK, whose box stays at the pane's foot from the first second (the owner, 2026-11-05, aaef3db35: "where is
   // the prompt box"; TaskPage data-tq-agent-room="chat"): the starting pane is no longer one line high, the empty room is the chat's, the

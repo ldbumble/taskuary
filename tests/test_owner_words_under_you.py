@@ -17,7 +17,7 @@ OWNER, RELAY = 'Go with option B, three years.', 'Option B: book the 3-year Phis
 
 def said(s, tid):
     "the chat's user rows, as the pane reads them: (Taskuary or the owner, the words)"
-    return [('taskuary' if general.is_brief(c) else c['Actor'], c['Body']) for c in s.list_comments(tid) if c['ActorType'] == general.USER_TYPE]
+    return [('taskuary' if general.is_brief(c) else c['Actor'], c['Body']) for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.USER_TYPE]   # a brief is machinery (F43)
 
 
 class Chat:

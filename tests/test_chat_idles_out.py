@@ -173,7 +173,7 @@ class IdleOut(unittest.TestCase):
         self.assertEqual(ses.sid, self.sid)
         self.assertEqual(self.built[-1]['resume'], 'cli-conv-1')
         self.assertIn('Riverside', self.brain.calls[-1])
-        self.assertTrue(any(general.is_brief(c) and 'Riverside' in c['Body'] for c in s.list_comments(tid)))
+        self.assertTrue(any(general.is_brief(c) and 'Riverside' in c['Body'] for c in s.list_comments(tid, internal=True)))
 
     def test_a_closed_task_is_not_idled_but_over(self):
         general.idle_sweep(self.later())

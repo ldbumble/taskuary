@@ -232,6 +232,7 @@ async def _lifespan(_app):
     try:                           # ...and the built-in dashboard's AI-use tiles, once (2026-11-06)
         from . import dashboards
         if (n := dashboards.migrate_ai_tiles(store)): logger.info(f'AI-use tiles added to {n} dashboard(s)')
+        if (n := dashboards.migrate_ai_tiles_up(store)): logger.info(f'AI-use tiles moved up in {n} dashboard(s)')   # ...and up top (2026-11-07)
     except Exception as e: logger.warning(f'AI-use tiles not added: {e}')
     learn.note_verdicts(store)     # an older install's notes table, written into LEARNED.md once and dropped (memorylines.migrate)
     _fold_habits()                 # one habit card each, folded into the one habits row (habits.py, 2026-11-01)

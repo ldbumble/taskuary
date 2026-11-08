@@ -14,7 +14,7 @@ test("the search box carries a Done today filter that asks the server for done:t
   assert.match(s, /if \(!today && !asks\(t\)\)/, "nothing typed still lists today's closed tasks");
   assert.match(s, /\}, \[q, today\]\);/);
   assert.match(s, /setToday\(false\); typed\.current = held\.current = "";/, "closing the box puts the filter down");
-  assert.match(s, /else if \(h\.type === "task"\) onOpenTask\?\.\(h\.tid, h\);/, "a hit opens its task");
+  assert.match(s, /else if \(h\.type === "task"\) \{ onOpenTask\?\.\(h\.tid, h\);/, "a hit opens its task");
   const py = fs.readFileSync(new URL("../../taskuary/search.py", import.meta.url), "utf8");
   assert.match(py, /DONE_TODAY, N_DONE = 'done:today', 40/);
 });

@@ -57,3 +57,12 @@ test("a press drawn as the owner's line never counts as the held line arriving",
   assert.deepEqual(stillHeld(held, [said("hi"), { ...press, press: undefined, metadata: { custom: { press: true } } }]), held);
   assert.deepEqual(stillHeld(held, [said("hi"), said("copy Erin")]), []);
 });
+
+// A HELD LINE IS THE OWNER'S LINE (the product audit, 2026-11-08): it had no "You · time" head, and the turn's PDF stood under it
+test("a held line wears the owner's own head and stands last, under the turn's files and cards", async () => {
+  const { readFileSync } = await import("node:fs");
+  const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
+  const held = ws.indexOf('data-tq-held=""'), shut = ws.lastIndexOf("</ThreadPrimitive.If>", held);
+  assert.ok(held > ws.indexOf("<PublishedPages pages={published} deliver />") && shut > 0, "after the turn's own cards");
+  assert.match(ws.slice(held, held + 600), /<div className="tq-aui-user-head"><PersonOutlineIcon[^>]*\/>You\{l\.at \? ` · \$\{when\(l\.at\)\}` : ""\}<\/div>/);
+});

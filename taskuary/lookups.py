@@ -182,9 +182,18 @@ def agents_now(store, p: dict) -> str:
             for r in store.running_runs() if str(r['TaskId']) not in on]
     return NL.join(out) if out else 'No agent is working on anything right now.'
 
+def _holds(store, tid, pad='    ') -> str:
+    "What a task holds for the owner, a line each (concierge.owed_items - the reads its own page draws)."
+    from .concierge import owed_items
+    return ''.join(f"{NL}{pad}· {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in owed_items(store, int(tid))[:6]) if tid else ''
+
 def approvals_list(store, p: dict) -> str:
     rows = store.list_reviews(status='pending')
     if not rows: return 'Nothing is waiting for your approval.'
+    # ...each task's by what it holds - "a slot to them" was an agent's email to Gail, said as nothing the owner could act on
+    tids = list(dict.fromkeys(r['TaskId'] for r in rows if r.get('TaskId')))[:30]
+    if tids: return NL.join([f"{_title(store, t)}:{_holds(store, t, '  ')}" for t in tids]
+                            + [f"message {r.get('MessageId')} - a draft, since {_day(r.get('CreatedAt'))}" for r in rows if not r.get('TaskId')][:10])
     def what(r):
         if r.get('Kind') == 'action':
             try: return 'the agent proposes to ' + str(json.loads(r.get('DraftText') or '{}').get('action') or 'act')
@@ -212,7 +221,7 @@ def pipe_list(store, p: dict) -> str:
         def row(i):
             back, sh = back_in(i.get('back_at') or i.get('defer_until')) if sec == 'later' else '', i.get('shows') or shows(i)
             return (f"  {task_ref(i['tid']) + ' ' if i.get('tid') else ''}{sh['who']} - {_cut(i.get('title'), 100)}"
-                    f" [{sh['state']}{', back ' + back if back else ''}]")
+                    f" [{sh['state']}{', back ' + back if back else ''}]" + _holds(store, i.get('tid')))
         out += [row(i) for i in xs[:15]]
         if len(xs) > 15: out.append(f'  ...and {len(xs) - 15} more')
     return NL.join(out)

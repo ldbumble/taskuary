@@ -15,6 +15,7 @@ from loguru import logger
 
 from .timewords import plural
 from . import redact, words
+from .inboxes import TYPES as INBOXES
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
@@ -306,7 +307,7 @@ SENDABLE = ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'disc
 # without them here a prep task closing drafted a reply, signed it in the owner's name, and put
 # it on the task addressed to no one at all.
 NEVER = {'report', 'own', 'assistant', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab',
-         'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure'}
+         'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', 'aws', 'azure', *INBOXES}
 # READ HERE, ANSWERED THERE: a channel Taskuary reads but has no sender for. Slack sat in SENDABLE and the default reply
 # switch, so its Send was offered, approved - and every one ended "slack messages are read-only here" (2026-09-29 audit).
 # The draft is still written (the words are worth having); the button says where to send them.

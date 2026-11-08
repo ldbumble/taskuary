@@ -6,6 +6,7 @@ import contextlib, contextvars, copy, hashlib, json, os, re, sqlite3, sys, threa
 from datetime import datetime, timedelta
 from loguru import logger
 from . import vault
+from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: seeded and triggering like the rest
 from .kinds import SHOWN, shown as shown_agent   # the name a chip says for whoever works a task: Taskuary, never the profile
 
 # WHO HELD THE STORE, AND FOR HOW LONG (2026-10-23): three freezes in a day left a log where unrelated requests all finished in
@@ -1013,6 +1014,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'mattermost': 'trigger,tool', 'rocketchat': 'trigger,tool',
                  'matrix': 'trigger,tool', 'google_chat': 'trigger,tool',
                  'sentry': 'trigger', 'pagerduty': 'trigger',
+                 # helpdesks and the newer trackers (inboxes.py): what is assigned to you is work
+                 **dict.fromkeys(INBOXES, 'trigger'),
                  # speech to text: no role - the funnel and the prompt box ask the first active one
                  'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',
                  'assemblyai': '', 'speechmatics': '', 'gladia': '', 'azure_speech': '',
@@ -1535,7 +1538,7 @@ class SQLiteStore:
                          ('trello', 'Trello'), ('notion', 'Notion'), ('discord', 'Discord'),
                          ('mattermost', 'Mattermost'), ('rocketchat', 'Rocket.Chat'),
                          ('matrix', 'Matrix'), ('google_chat', 'Google Chat'),
-                         ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'),
+                         ('sentry', 'Sentry'), ('pagerduty', 'PagerDuty'), *INBOX_NAMES.items(),
                          ('prometheus', 'Prometheus'), ('datadog', 'Datadog'),
                          ('intacct', 'Sage Intacct'), ('quickbooks', 'QuickBooks Online'), ('amazon_sp', 'Amazon (Seller Central & Business)'), ('stripe', 'Stripe'), ('teller', 'Bank & card feed (Teller)'),
                          ('simplefin', 'Bank & card feed (SimpleFIN)'),

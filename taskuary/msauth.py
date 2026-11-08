@@ -53,6 +53,7 @@ LEGACY_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Rea
 # organisation's people (/users?$search); People.Read adds the ones this account writes with.
 TEAMS_CHAT = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send'
 TEAMS_SCOPES = f"{TEAMS_CHAT} {' '.join(PEOPLE_SCOPES['teams'])}"
+PLANNER = 'offline_access User.Read Tasks.Read'      # a Planner card reading through the Outlook sign-in (inboxes.py)
 # ALLOW SAVING FILES (the owner, 2026-10-23): a card that opts in signs in again asking for Files.ReadWrite as well - its own OneDrive,
 # where Share puts a result (sharing.onedrive). Off by default: the scopes above are never widened unless the card says so.
 FILES_SCOPE = 'Files.ReadWrite'
@@ -224,6 +225,9 @@ def refresh(cfg: dict, refresh_token: str) -> dict:
         if cfg.get('_for') == 'teams' and _needs_admin(_err(r)):
             raise RuntimeError(f"the Outlook sign-in for {cfg.get('account') or 'this account'} was not given Teams access - "
                                'press Sign in with Microsoft on the Teams card')
+        if cfg.get('_for') == 'ms_planner' and _needs_admin(_err(r)):     # ...and never Planner access: the Outlook sign-in has NOT lapsed
+            raise RuntimeError(f"the Microsoft sign-in for {cfg.get('account') or 'this account'} was not given Planner access - IT adds "
+                               "Tasks.Read to your company's Microsoft app, then Sign in with Microsoft again on the Outlook card")
         raise RuntimeError(f'{LAPSED} - sign in again on the {card_of(cfg)} card ({_friendly(_err(r))})')
     if r.status_code != 200: raise RuntimeError(f'Microsoft did not answer the sign-in check ({r.status_code}) - trying again next time')
     return _tokens(r.json())

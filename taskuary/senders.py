@@ -22,6 +22,7 @@ import json, re
 from loguru import logger
 
 from .projects import PUBLIC_MAIL
+from .inboxes import TYPES as INBOXES, NAMES as INBOX_NAMES     # the helpdesks and newer trackers: items with an author, like the rest
 
 _SENT_FOLDERS = ('[Gmail]/Sent Mail', 'Sent', 'Sent Items', 'INBOX.Sent', 'Sent Messages')
 
@@ -195,7 +196,7 @@ def _said(text: str, stranger: bool = False) -> Said:
     s = Said(text); s.stranger = stranger
     return s
 
-_CH = {'whatsapp': 'WhatsApp', 'imessage': 'iMessage', 'google_chat': 'Google Chat', 'rocketchat': 'Rocket.Chat'}
+_CH = {'whatsapp': 'WhatsApp', 'imessage': 'iMessage', 'google_chat': 'Google Chat', 'rocketchat': 'Rocket.Chat', **INBOX_NAMES}
 def channel_name(ch) -> str: ch = str(ch or ''); return _CH.get(ch.lower(), ch[:1].upper() + ch[1:])
 NOBODY = 'so no agent starts on their words by itself'
 
@@ -415,7 +416,7 @@ def vouch(store, rows) -> None:
 # payload: devtools/pm); no author, or one who is not a member, is a stranger's. An alert is ALWAYS a stranger's text until the owner
 # trusts that source. The owner's presses (vouch, trust_org) are remembered per channel: the author ('<ch>:<id>'), or the project /
 # alert source ('project:<name>').
-TRACKERS = ('gitlab', 'jira', 'linear', 'asana', 'monday', 'clickup', 'todoist', 'azdo', 'trello', 'notion')
+TRACKERS = ('gitlab', 'jira', 'linear', 'asana', 'monday', 'clickup', 'todoist', 'azdo', 'trello', 'notion', *INBOXES)
 ALERTS = ('sentry', 'pagerduty')
 
 def _author(m: dict) -> str: return str(_chat_meta(m).get('author') or '').lower()

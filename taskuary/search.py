@@ -19,9 +19,10 @@ from datetime import datetime
 from urllib.parse import quote
 from . import connectorcatalog, settings_schema, wanames
 from .store import _fold, task_ref
+from .inboxes import TYPES as INBOXES
 
 CHAT = {'teams', 'slack', 'whatsapp', 'telegram', 'imessage', 'discord'}
-TICKET = {'jira', 'asana', 'monday', 'linear', 'clickup', 'todoist', 'trello', 'notion', 'azdo', 'sentry', 'pagerduty'}
+TICKET = {'jira', 'asana', 'monday', 'linear', 'clickup', 'todoist', 'trello', 'notion', 'azdo', 'sentry', 'pagerduty', *INBOXES}
 CLOSED = ('done', 'dropped')
 N_TASKS, N_MSGS, N_SRCS, N_PLACES = 8, 30, 6, 6
 

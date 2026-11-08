@@ -36,7 +36,7 @@ import { GoogleCalendar } from "./GoogleCalendar.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { CATALOGUE, matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
+import { CATALOGUE, PRESETS, matchCards, onceEach, oneOf, plannedFor, presetBody, presetOf, presetsLeft } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -228,6 +228,7 @@ const META = {
   imap: { group: "Messaging", channel: "email", srcLabel: "Mailbox", srcPh: "you@yourdomain.com",
     fields: [["Email address", "address"], ["IMAP host (e.g. imap.yourdomain.com)", "imap_host"],
              ["SMTP host (blank = imap host with imap->smtp)", "smtp_host"],
+             ["IMAP port (blank = 993; 143 or 1143 upgrade with STARTTLS)", "imap_port"], ["SMTP port (blank = 587)", "smtp_port"],
              ["TLS certificate (blank = check it; a sha256 to accept that one; 'any' for none)", "tls_accept"]],
     secretLabel: "Email password",
     desc: "Any mailbox that speaks IMAP - a domain.com address, Yahoo, an ISP, your webhost. In through triage, replies out over its SMTP.",
@@ -358,6 +359,104 @@ const META = {
       "SHARE the pages or databases you care about with the integration (page → ⋯ → Connections) — it sees nothing else.",
       "Paste the secret under Credentials (write-only). Test authenticates the integration.",
       "Every sync surfaces pages edited since the last poll. It ships as a feed; flip the trigger role on if edits should become work."] },
+  // ── helpdesks and the newer trackers (inboxes.py): one road - Test learns who you are, every sync reads what is pointed at you ──
+  zendesk: { group: "Project management", channel: "zendesk", srcLabel: "Help center", srcPh: "added by Test",
+    fields: [["subdomain (the \"yourco\" in yourco.zendesk.com)", "subdomain"], ["agent email (the one the token acts as)", "email"]],
+    secretLabel: "API token",
+    desc: "Zendesk tickets ASSIGNED TO YOU, and new unassigned ones in your groups, come in and are sorted like everything else that comes in.",
+    howto: ["Create an API token: Admin Center → Apps and integrations → APIs → Zendesk API → Add API token.",
+      "Enter the subdomain and your agent email under Credentials, paste the token (write-only).",
+      "Test signs in as you, remembers your groups and adds the help center under Sources.",
+      "Every sync brings in open tickets assigned to you and new unassigned ones in your groups, with status and priority, linking back to Zendesk.",
+      "A ticket from a customer (an end user) is a stranger's words: no agent starts on it by itself until you trust them.",
+      "Nothing is written back to Zendesk; Taskuary only reads."] },
+  freshdesk: { group: "Project management", channel: "freshdesk", srcLabel: "Helpdesk", srcPh: "added by Test",
+    fields: [["domain (the \"yourco\" in yourco.freshdesk.com)", "domain"]],
+    secretLabel: "API key",
+    desc: "Freshdesk tickets ASSIGNED TO YOU, and new ones in your groups, come in and are sorted like everything else that comes in.",
+    howto: ["Find your API key: your avatar → Profile settings → View API key.",
+      "Enter the domain and paste the key (write-only). Test signs in as you and remembers your groups.",
+      "Every sync brings in tickets assigned to you and new unassigned ones in your groups that changed since the last poll.",
+      "A ticket from a contact who is not one of your agents is a stranger's words until you trust them.",
+      "Nothing is written back to Freshdesk; Taskuary only reads."] },
+  intercom: { group: "Project management", channel: "intercom", srcLabel: "Workspace", srcPh: "added by Test",
+    fields: [],
+    secretLabel: "access token",
+    desc: "Open Intercom conversations ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
+    howto: ["Create an app: Intercom → Settings → Integrations → Developer Hub → New app; its Authentication page shows the access token.",
+      "Paste the token under Credentials (write-only) — that is all the config.",
+      "Test signs in as you and adds the workspace under Sources.",
+      "Every sync brings in open conversations assigned to you that changed since the last poll. A customer's message is a stranger's words; a teammate's is not.",
+      "Nothing is written back to Intercom; Taskuary only reads."] },
+  servicenow: { group: "Corporate systems", channel: "servicenow", srcLabel: "Instance", srcPh: "added by Test",
+    fields: [["instance (the \"yourco\" in yourco.service-now.com)", "instance"], ["user name", "username"],
+      ["tables, comma-separated (blank = incident; e.g. incident,sc_task,problem)", "tables"]],
+    secretLabel: "password",
+    desc: "ServiceNow incidents (or any task table) ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
+    howto: ["Use a ServiceNow user that can read the tables (the itil role reads incidents). Enter the instance and the user name, paste the password (write-only).",
+      "Test finds your user and adds the instance under Sources.",
+      "Every sync brings in active records assigned to you that changed since the last poll, with number, state and priority, linking back to ServiceNow.",
+      "A caller from your own directory is a colleague; a customer contact is a stranger's words until you trust them.",
+      "Nothing is written back to ServiceNow; Taskuary only reads."] },
+  shortcut: { group: "Project management", channel: "shortcut", srcLabel: "Workspace", srcPh: "added by Test",
+    fields: [],
+    secretLabel: "API token",
+    desc: "Shortcut stories YOU OWN come in and are sorted like everything else that comes in.",
+    howto: ["Create a token: Shortcut → Settings → Your account → API Tokens → Generate token.",
+      "Paste it under Credentials (write-only). Test signs in as you and adds the workspace under Sources.",
+      "Every sync brings in stories you own that are not done and changed since the last poll, linking back to Shortcut.",
+      "Nothing is written back to Shortcut; Taskuary only reads."] },
+  wrike: { group: "Project management", channel: "wrike", srcLabel: "Account", srcPh: "added by Test",
+    fields: [["host (blank = www.wrike.com; e.g. app-eu.wrike.com for an EU account)", "host"]],
+    secretLabel: "permanent access token",
+    desc: "Active Wrike tasks ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
+    howto: ["Create a permanent token: your avatar → Apps & Integrations → API → Create new → permanent access token.",
+      "Paste it under Credentials (write-only). An EU or other data-centre account sets its host too.",
+      "Every sync brings in active tasks assigned to you that changed since the last poll. A task by an external collaborator is a stranger's words until you trust them.",
+      "Nothing is written back to Wrike; Taskuary only reads."] },
+  smartsheet: { group: "Project management", channel: "smartsheet", srcLabel: "Account", srcPh: "added by Test",
+    fields: [["sheet ids, comma-separated (blank = the sheets changed since the last poll)", "sheet_ids"]],
+    secretLabel: "API access token",
+    desc: "Smartsheet rows whose contact column NAMES YOU come in and are sorted like everything else that comes in.",
+    howto: ["Create a token: Account → Personal settings → API Access → Generate new access token.",
+      "Paste it under Credentials (write-only). List sheet ids to pin the poll down (File → Properties shows the id).",
+      "Every sync brings in rows changed since the last poll whose Assigned To (any contact column) is you. A row by someone the sheet is not shared with is a stranger's words.",
+      "Nothing is written back to Smartsheet; Taskuary only reads."] },
+  airtable: { group: "Project management", channel: "airtable", srcLabel: "Table", srcPh: "added by Test",
+    fields: [["base id (appXXXX, from the base URL)", "base_id"], ["table name or id (tblXXXX)", "table"],
+      ["view (blank = the whole table)", "view"], ["title field (blank = the first text field)", "title_field"]],
+    secretLabel: "personal access token",
+    desc: "Rows in the Airtable view you choose come in as they change and are sorted like everything else that comes in.",
+    howto: ["Create a token: airtable.com/create/tokens → scope data.records:read, and add this base.",
+      "Enter the base id, the table and a view that holds your work (e.g. one filtered to Assignee = you).",
+      "Every sync brings in rows of that view changed since the last poll.",
+      "Airtable never says who in a base is a collaborator, so its rows wait for your press until you choose Trust everyone from this table.",
+      "Nothing is written back to Airtable; Taskuary only reads."] },
+  github_projects: { group: "Project management", channel: "github_projects", srcLabel: "Account", srcPh: "added by Test",
+    fields: [["organizations whose projects to read, comma-separated (blank = only your own)", "owners"]],
+    secretLabel: "token (read:project)",
+    desc: "GitHub Projects items ASSIGNED TO YOU — draft items too — come in and are sorted like everything else that comes in.",
+    howto: ["Create a token: GitHub → Settings → Developer settings → classic token with read:project (and repo for private repos), or a fine-grained one with Projects read.",
+      "Paste it under Credentials (write-only); list the organizations whose boards you work on.",
+      "Every sync brings in open project items assigned to you. An issue in a repo the GitHub card already watches stays that card's — never filed twice.",
+      "Nothing is written back to GitHub; Taskuary only reads."] },
+  bitbucket: { group: "Developer", channel: "bitbucket", srcLabel: "Workspace", srcPh: "added by Test",
+    fields: [["workspace (the first path segment of your Bitbucket URLs)", "workspace"], ["user name (app password) or Atlassian email (API token)", "username"],
+      ["repositories, comma-separated (blank = the 10 most recently updated)", "repos"]],
+    secretLabel: "API token or app password",
+    desc: "Bitbucket pull requests ASKING YOUR REVIEW and issues ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
+    howto: ["Create an API token (Atlassian account → Security → API tokens, Bitbucket scopes: read repositories, pull requests and issues) — or an app password.",
+      "Enter the workspace and the user name / email, paste the token (write-only). Test signs in as you.",
+      "Every sync brings in open PRs where you are a reviewer and open issues assigned to you. A PR from outside the workspace is a stranger's words.",
+      "Nothing is written back to Bitbucket; Taskuary only reads."] },
+  ms_planner: { group: "Project management", channel: "ms_planner", srcLabel: "Plans", srcPh: "added by Test",
+    fields: [["whose plans (their sign-in address) - for a company app, or to pick one of two Microsoft accounts", "user"]],
+    secretLabel: null,
+    desc: "Microsoft Planner tasks ASSIGNED TO YOU come in, through the Microsoft sign-in your Outlook card already has.",
+    howto: ["No key here: Planner reads through your Outlook card's Microsoft sign-in.",
+      "Your company's Microsoft app needs the Tasks.Read permission (Tasks.Read.All for a company app reading someone's plans) — IT adds it once; then sign in again on the Outlook card.",
+      "Test reads your tasks; every sync brings in open tasks assigned to you. A task made by a guest in your tenant is a stranger's words.",
+      "Nothing is written back to Planner; Taskuary only reads."] },
   discord: { group: "Messaging", channel: "discord", srcLabel: "Channel IDs", srcPh: "1234567890123456789",
     fields: [pollSecondsField("discord")],
     secretLabel: "bot token",
@@ -1964,6 +2063,14 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const plannedCards = (keys, rest = false) => (rest ? planned.filter((t) => !PLACED.has(t)) : keys.filter((t) => planned.includes(t)))
     .map((t) => ({ key: `p${t}`, title: PLANNED_TITLES[t] || t.replace(/_/g, " "), desc: "planned",
       channel: t, haystack: `${t} planned`, planned: true }));
+  // a mailbox preset not yet made into a card: one press makes an IMAP card with its servers filled in, and opens it
+  const presetCards = (types) => presetsLeft(types, connectors).map((t) => ({
+    key: `preset-${t}`, title: PRESETS[t].title, desc: PRESETS[t].desc, channel: "email",
+    haystack: `${t} ${PRESETS[t].title} ${PRESETS[t].desc} ${(PRESETS[t].match || []).join(" ")} imap email mail`,
+    go: async () => {
+      try { const { data } = await api.post("/api/connectors", presetBody(t)); await load(); setOpen({ kind: "connector", id: data.connectorId }); }
+      catch { const c = (connectors || []).find((x) => x.Type === PRESETS[t].preset.type && x.Name === PRESETS[t].title); if (c) setOpen({ kind: "connector", id: c.ConnectorId }); }
+    } }));
   // a vendor's own MCP server (remotemcp.py): a catalogue row with an `mcp` url is a working card in its group, then the planned ones
   const catalogCards = (category) => [
     ...CATALOGUE.filter((c) => c.mcp && c.group === category).flatMap((c) =>
@@ -2016,7 +2123,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
         ...specialCards("video_use", "video-use", "", "video-use video use browser use skill ffmpeg elevenlabs cut edit", toolDesc),
       ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall
-    { title: "Email", cards: [...channelCards(["outlook", "gmail", "imap"]), ...catalogCards("Email")] },
+    { title: "Email", cards: [...channelCards(["outlook", "gmail", "imap"]),
+      ...presetCards(["fastmail", "yahoo_mail", "proton_mail", "exchange"]), ...catalogCards("Email")] },
     { title: "Messaging", cards: [...channelCards(["teams", "slack", "telegram", "whatsapp", "imessage", "discord",
         "mattermost", "rocketchat", "matrix", "google_chat"]), ...catalogCards("Messaging")] },
     /* Publishing under your own name is neither a channel nor a data source: nothing arrives
@@ -2040,8 +2148,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       cards: [{ key: "signins", title: "Saved sign-ins", guide: true, desc: "Add or remove the sign-ins Taskuary types for your agents",
         haystack: "sign in signin sign-in login log in password vault saved credentials user name site portal",
         go: () => setOpen({ kind: "signins" }) }] },
-    { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
-    { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]), ...catalogCards("Project management")] },
+    { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "bitbucket", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
+    { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion",
+      "shortcut", "wrike", "ms_planner", "smartsheet", "airtable", "github_projects", "zendesk", "freshdesk", "intercom"]), ...catalogCards("Project management")] },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each
        other - a SQL server, a log store and a web-search API are three different jobs, and a
        rail entry saying "11" tells you nothing about which one you came for. Split by what
@@ -2060,6 +2169,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ...catalogCards("Cloud & infrastructure"),
     ]},
     { title: "Corporate systems", cards: [
+      ...channelCards(["servicenow"]),
       ...dataCards(["intacct", "quickbooks", "zoho_invoice", "amazon_sp", "stripe"]),
       ...catalogCards("Corporate systems"),
     ]},
@@ -2452,12 +2562,16 @@ const SIMPLE_HINT = {
   hipaa_ai: "The code is yours alone - usage is counted against it.",
 };
 
+// a card made from a mailbox preset reads the provider's own steps over the IMAP card's (connectorCatalog.presetOf)
+const metaOf = (conn) => { const p = presetOf(conn), m = META[conn.Type];
+  return p && m ? { ...m, desc: p.desc, secretLabel: p.preset.secret || m.secretLabel, howto: p.preset.howto || m.howto } : m; };
+
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected, chatsAsk = null }) {
   // EVERY FIELD SAVES ITSELF (ConnectorDraft.jsx): every control below draws from the draft and stages into it, and the draft saves it
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
   const onBack = leave;      // leaving saves what was still waiting to save (useCardDraft, useBoxesSave)
-  const m = META[conn.Type] || { fields: [], howto: [] };
+  const m = metaOf(conn) || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
   const [step, setStep] = useState(conn.HasSecret ? (conn.LastSyncAt ? 2 : 1) : 0);

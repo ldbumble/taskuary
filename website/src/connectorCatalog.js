@@ -74,3 +74,16 @@ export const oneOf = (type) => {
   const c = BY_TYPE[type];
   return c ? `${shortName(c.title)} ${UNIT[c.group] || "account"}` : `${type} connection`;
 };
+
+// A MAILBOX PRESET (Fastmail, Yahoo, Proton Mail Bridge, Exchange): a catalogue card whose `preset` is an IMAP card with its servers
+// filled in - no protocol of its own. Pressing it makes that card; the card remembers which preset it came from (ConfigJson.preset),
+// so its steps say the provider's own words and the preset is not offered again.
+export const PRESETS = Object.freeze(Object.fromEntries(catalogue.cards.filter((c) => c.preset).map((c) => [c.type, c])));
+const cfgOf = (conn) => { try { return JSON.parse(conn?.ConfigJson || "{}"); } catch { return {}; } };
+/** The catalogue card a connection was made from, or null. */
+export const presetOf = (conn) => { const p = PRESETS[cfgOf(conn).preset]; return p && p.preset.type === conn.Type ? p : null; };
+/** The new card's body for a preset - its type, its name and the servers it starts with. */
+export const presetBody = (type) => { const p = PRESETS[type];
+  return { Type: p.preset.type, Name: p.title, ConfigJson: JSON.stringify({ ...p.preset.config, preset: type }) }; };
+/** The presets still to offer: none already made into a card. */
+export const presetsLeft = (types, connectors) => types.filter((t) => PRESETS[t] && !(connectors || []).some((c) => cfgOf(c).preset === t));

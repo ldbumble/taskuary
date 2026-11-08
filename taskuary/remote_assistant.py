@@ -22,6 +22,7 @@ from loguru import logger
 from . import kinds as task_kinds
 from .timewords import plural
 from . import buttons, devphone, lanes
+from .inboxes import NAMES as INBOX_NAMES
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
 from .funnel_presentation import back_in as _back_in, is_own, move_of as move_title, shows, story_who
 
@@ -2061,7 +2062,7 @@ def _cut(text: str, n: int) -> str:
 
 BOX, TICKED = '☐', '☑'
 # the few sources whose own spelling title() would get wrong; everything else title-cases fine
-_SOURCE_WORDS = {'github': 'GitHub', 'gitlab': 'GitLab', 'pagerduty': 'PagerDuty', 'imessage': 'iMessage'}
+_SOURCE_WORDS = {'github': 'GitHub', 'gitlab': 'GitLab', 'pagerduty': 'PagerDuty', 'imessage': 'iMessage', **INBOX_NAMES}
 
 
 _CODE = re.compile(r'`+([^`\n]+?)`+')

@@ -2,11 +2,19 @@
   "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Advisor is handed the unconnected cards and judges which one the owner's threads are about (assistant.connect_evidence) - `match` decides nothing there any more.",
   "sources": {
     "_": "Where work comes in: the groups whose working cards are a source of incoming work - mail, chat and task systems. Setup's Connect your main source offers them (email first, the usual one) and is done once one of them is connected and passes its test.",
-    "groups": ["Messaging", "Email", "Project management", "Developer"]
+    "groups": [
+      "Messaging",
+      "Email",
+      "Project management",
+      "Developer"
+    ]
   },
   "own_systems": {
     "_": "Systems the owner signs into that hold their own records - their databases and their books. A report source on one of these groups' cards is marked 'my own system' unless the owner turns it off, and a report run whose every source is marked is trusted (reports.is_own, origin.report_rests_on). Everything else - news, the web, social timelines, a free REST URL - starts unmarked.",
-    "groups": ["Databases", "Corporate systems"]
+    "groups": [
+      "Databases",
+      "Corporate systems"
+    ]
   },
   "actions": {
     "_": "WHAT THE OWNER PRESSES, PER CONNECTOR (the owner, 2026-11-05: \"each connector should have settings what the action view looks like no?\"). A card's `actions` lists the acts it can be set up for under a chat turn's Next steps, and one card (ActionCard.jsx) draws whatever is declared. Each: `kind` (post, email, chat, tracker), `road` (run_tool: a proposal on `tool`; reply: propose_reply / propose_email), the press words (`press`, `busy`, `done`, `undone`, `note`) and `fields`. A field has a `key` (the proposal's own), a `label` and a `type` (text, line, image, choice, people, files); `edit`: the owner may change it on the card before pressing; `agent`: the agent may propose it (general.roads tells it which); `setting`: a per-connection default on the Connections card, saved as default_<key> on the card and filled into the agent's proposal when it names none (connectorcatalog.with_defaults); a choice's own `press` / `busy` / `done` replace the act's while it is picked."
@@ -160,10 +168,32 @@
           "undone": "Not created",
           "note": "Nothing is filed on GitHub until you press Create issue.",
           "fields": [
-            {"key": "repo", "label": "In", "type": "line", "agent": true},
-            {"key": "title", "label": "Title", "type": "line", "agent": true, "heading": true},
-            {"key": "labels", "label": "Labels", "type": "line", "agent": true},
-            {"key": "body", "label": "Issue", "type": "text", "edit": true, "agent": true}
+            {
+              "key": "repo",
+              "label": "In",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "title",
+              "label": "Title",
+              "type": "line",
+              "agent": true,
+              "heading": true
+            },
+            {
+              "key": "labels",
+              "label": "Labels",
+              "type": "line",
+              "agent": true
+            },
+            {
+              "key": "body",
+              "label": "Issue",
+              "type": "text",
+              "edit": true,
+              "agent": true
+            }
           ]
         }
       ]
@@ -1640,8 +1670,22 @@
       "type": "exchange",
       "title": "Exchange Server",
       "group": "Email",
-      "planned": true,
-      "desc": "On-premises Exchange mailboxes",
+      "planned": false,
+      "desc": "An on-premises Exchange mailbox over the server's IMAP and SMTP - in through triage, replies out from the same address, in-thread.",
+      "preset": {
+        "type": "imap",
+        "config": {
+          "imap_host": "",
+          "smtp_host": ""
+        },
+        "secret": "mailbox password",
+        "howto": [
+          "Your Exchange server must have IMAP4 and authenticated SMTP switched on - ask IT for the host names (often mail.yourcompany.com; IMAP 993, SMTP 587).",
+          "Enter the mailbox address, the IMAP host and, if different, the SMTP host; paste the mailbox password (write-only).",
+          "An internal certificate the server signs itself shows its fingerprint on the first Test - paste it into TLS certificate only if IT confirms it.",
+          "Exchange Online / Microsoft 365 no longer takes IMAP passwords: use the Outlook card for those."
+        ]
+      },
       "match": [
         "exchange server",
         "exchange"
@@ -1651,8 +1695,21 @@
       "type": "fastmail",
       "title": "Fastmail",
       "group": "Email",
-      "planned": true,
-      "desc": "Mail, contacts and calendars",
+      "planned": false,
+      "desc": "A Fastmail mailbox over its own IMAP and SMTP - in through triage, replies out from the same address, in-thread.",
+      "preset": {
+        "type": "imap",
+        "config": {
+          "imap_host": "imap.fastmail.com",
+          "smtp_host": "smtp.fastmail.com"
+        },
+        "secret": "app password (Fastmail: Settings → Privacy & Security → Integrations → New app password)",
+        "howto": [
+          "Fastmail wants an app password, not your sign-in password: Settings → Privacy & Security → Integrations → New app password, access IMAP and SMTP.",
+          "Enter your Fastmail address and paste the app password (write-only) - the servers are already filled in.",
+          "Test logs in and adds the mailbox as a source; new mail flows in on the next sync, and replies you approve go out over Fastmail's SMTP."
+        ]
+      },
       "match": [
         "fastmail"
       ]
@@ -1661,8 +1718,25 @@
       "type": "proton_mail",
       "title": "Proton Mail",
       "group": "Email",
-      "planned": true,
-      "desc": "Mail through Proton Mail Bridge",
+      "planned": false,
+      "desc": "A Proton Mail mailbox through Proton Mail Bridge, the app that runs on this computer - in through triage, replies out through the Bridge.",
+      "preset": {
+        "type": "imap",
+        "config": {
+          "imap_host": "127.0.0.1",
+          "imap_port": 1143,
+          "imap_starttls": true,
+          "smtp_host": "127.0.0.1",
+          "smtp_port": 1025
+        },
+        "secret": "Bridge password (shown in Proton Mail Bridge, not your Proton password)",
+        "howto": [
+          "Install Proton Mail Bridge on this computer (a paid Proton plan) and sign in to it - Proton's servers only speak to the Bridge, and Taskuary speaks to the Bridge.",
+          "In the Bridge, open your account's mailbox details: copy the user name (your address) and the Bridge password it shows. The ports are already filled in here (IMAP 1143, SMTP 1025, STARTTLS); change them only if you changed them in the Bridge.",
+          "The Bridge signs its connection with its own certificate, so the first Test names it and gives you its fingerprint - paste that into TLS certificate and Test again.",
+          "Mail flows in while the Bridge runs; replies you approve go out through it."
+        ]
+      },
       "match": [
         "proton mail",
         "proton"
@@ -1672,8 +1746,21 @@
       "type": "yahoo_mail",
       "title": "Yahoo Mail",
       "group": "Email",
-      "planned": true,
-      "desc": "Yahoo mailboxes and folders",
+      "planned": false,
+      "desc": "A Yahoo mailbox over Yahoo's IMAP and SMTP - in through triage, replies out from the same address, in-thread.",
+      "preset": {
+        "type": "imap",
+        "config": {
+          "imap_host": "imap.mail.yahoo.com",
+          "smtp_host": "smtp.mail.yahoo.com"
+        },
+        "secret": "app password (Yahoo: Account info → Account security → Generate app password)",
+        "howto": [
+          "Yahoo wants an app password: Account info → Account security → Generate app password (two-step verification must be on).",
+          "Enter your Yahoo address and paste the app password (write-only) - the servers are already filled in.",
+          "Test logs in and adds the mailbox as a source; new mail flows in on the next sync, and replies you approve go out over Yahoo's SMTP."
+        ]
+      },
       "match": [
         "yahoo mail",
         "yahoo"
@@ -1782,8 +1869,8 @@
       "type": "bitbucket",
       "title": "Bitbucket",
       "group": "Developer",
-      "planned": true,
-      "desc": "Repositories, pull requests and issues",
+      "planned": false,
+      "desc": "Bitbucket pull requests ASKING YOUR REVIEW and issues ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "bitbucket"
       ]
@@ -1930,8 +2017,8 @@
       "type": "ms_planner",
       "title": "Microsoft Planner",
       "group": "Project management",
-      "planned": true,
-      "desc": "Plans, buckets and assigned tasks",
+      "planned": false,
+      "desc": "Microsoft Planner tasks ASSIGNED TO YOU land on your work rail, through the Microsoft sign-in your Outlook card already has.",
       "match": [
         "microsoft planner",
         "microsoft",
@@ -1943,8 +2030,8 @@
       "type": "smartsheet",
       "title": "Smartsheet",
       "group": "Project management",
-      "planned": true,
-      "desc": "Sheets, rows and workflow updates",
+      "planned": false,
+      "desc": "Smartsheet rows whose contact column NAMES YOU land on your work rail through triage.",
       "match": [
         "smartsheet"
       ]
@@ -1954,9 +2041,19 @@
       "title": "Airtable",
       "group": "Project management",
       "planned": false,
-      "desc": "Airtable's own MCP server in your agent CLI — agents read and update bases, tables and records. You sign in once with Sign in.",
+      "desc": "Rows in the Airtable view you choose land on your work rail through triage as they change.",
       "match": [
         "airtable"
+      ]
+    },
+    {
+      "type": "airtable_mcp",
+      "title": "Airtable MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Airtable's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
+      "match": [
+        "airtable mcp"
       ],
       "mcp": {
         "url": "https://mcp.airtable.com/mcp",
@@ -1967,8 +2064,8 @@
       "type": "wrike",
       "title": "Wrike",
       "group": "Project management",
-      "planned": true,
-      "desc": "Projects, requests and assigned work",
+      "planned": false,
+      "desc": "Active Wrike tasks ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "wrike"
       ]
@@ -1977,8 +2074,8 @@
       "type": "shortcut",
       "title": "Shortcut",
       "group": "Project management",
-      "planned": true,
-      "desc": "Stories, epics and iterations",
+      "planned": false,
+      "desc": "Shortcut stories YOU OWN land on your work rail through triage.",
       "match": [
         "shortcut"
       ]
@@ -1987,8 +2084,8 @@
       "type": "github_projects",
       "title": "GitHub Projects",
       "group": "Project management",
-      "planned": true,
-      "desc": "Project boards and work items",
+      "planned": false,
+      "desc": "GitHub Projects items ASSIGNED TO YOU - draft items too - land on your work rail through triage.",
       "match": [
         "github projects",
         "github",
@@ -2294,8 +2391,8 @@
       "type": "servicenow",
       "title": "ServiceNow",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "Incidents, requests and workflows",
+      "planned": false,
+      "desc": "ServiceNow incidents (or any task table) ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "servicenow"
       ]
@@ -2889,11 +2986,21 @@
     {
       "type": "intercom",
       "title": "Intercom",
-      "group": "Everything else",
+      "group": "Project management",
       "planned": false,
-      "desc": "Intercom's own MCP server in your agent CLI — agents look up conversations, tickets and contacts. You sign in once with Sign in.",
+      "desc": "Open Intercom conversations ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "intercom"
+      ]
+    },
+    {
+      "type": "intercom_mcp",
+      "title": "Intercom MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Intercom's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
+      "match": [
+        "intercom mcp"
       ],
       "mcp": {
         "url": "https://mcp.intercom.com/mcp",
@@ -2903,11 +3010,21 @@
     {
       "type": "zendesk",
       "title": "Zendesk",
-      "group": "Everything else",
-      "planned": true,
-      "desc": "Support tickets and conversations",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Zendesk tickets ASSIGNED TO YOU, and new unassigned ones in your groups, land on your work rail through triage - a customer's words wait for your press.",
       "match": [
         "zendesk"
+      ]
+    },
+    {
+      "type": "freshdesk",
+      "title": "Freshdesk",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Freshdesk tickets ASSIGNED TO YOU, and new ones in your groups, land on your work rail through triage.",
+      "match": [
+        "freshdesk"
       ]
     },
     {

@@ -95,6 +95,10 @@ def peer_cert(host: str, port: int, starttls: bool) -> tuple:
     whose certificate it is before deciding to accept it. Read on a second connection that verifies
     the chain but not the name; a self-signed server falls through to the fingerprint alone."""
     def read(ctx):
+        if starttls == 'imap':
+            M = imaplib.IMAP4(host, port, timeout=15)
+            try: M.starttls(ssl_context=ctx); return (M.sock.getpeercert() or {}), fingerprint(M.sock)
+            finally: M.shutdown()
         if starttls:
             with smtplib.SMTP(host, port, timeout=15) as S:
                 S.starttls(context=ctx)
@@ -148,11 +152,15 @@ def _login(c):
         raise RuntimeError('Microsoft mailboxes (Outlook.com, Hotmail, Microsoft 365) no longer accept IMAP passwords - '
                            'use the Outlook connector and Sign in with Microsoft')
     port = int(cfg.get('imap_port') or 993)
+    # a server that upgrades a plain connection (Proton Mail Bridge on 1143, an Exchange server on 143) says STARTTLS, never SSL
+    up = 'imap' if cfg.get('imap_starttls') or port in (143, 1143) else False
     # timeout: a half-open socket after a sleep or a Wi-Fi change hung the poll thread in recv
     # forever, and every later poll skipped because the lock was held (audit 2026-09-02)
-    try: M = imaplib.IMAP4_SSL(imap_h, port, timeout=30, ssl_context=ssl_ctx(cfg))
+    try:
+        if up: M = imaplib.IMAP4(imap_h, port, timeout=30); M.starttls(ssl_context=ssl_ctx(cfg))
+        else: M = imaplib.IMAP4_SSL(imap_h, port, timeout=30, ssl_context=ssl_ctx(cfg))
     except ssl.SSLCertVerificationError as e:
-        raise tls_error(e, imap_h, port, False) from e
+        raise tls_error(e, imap_h, port, up) from e
     except OSError as e:
         if getattr(e, 'winerror', None) == 10013 or 'forbidden by its access permissions' in str(e):
             raise RuntimeError(f'this PC blocked the connection to {imap_h}:{port} - a firewall or security agent stops '

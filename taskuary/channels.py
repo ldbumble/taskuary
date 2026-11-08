@@ -17,6 +17,7 @@ from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message, rev_id, seen_before
 from .counsel import is_invite
 from .llm import AI_TYPES        # every brain picker and every brain Test read the one list
+from .inboxes import TYPES as INBOXES      # helpdesks and the newer project tools: one road (inboxes.py)
 # THIS RUN OF TASKUARY CAME UP: a connector's LastError stamped before it is last session's, not yet retried (evening.sources)
 BOOT = datetime.now().isoformat(sep=' ', timespec='seconds')
 
@@ -62,7 +63,9 @@ def graph_creds(store, c):
     ocfg = _cfg(o)
     out = {**ocfg, **{k: v for k, v in cfg.items() if v}, '_cid': o['ConnectorId'], '_kind': 'outlook'}
     # the same person's Outlook sign-in, asked for chats: one sign-in, two tokens (msauth.access_token keys on the scope)
-    if ocfg.get('auth') == 'user': out |= {'auth': 'user', '_scope': msauth.TEAMS_CHAT, '_for': 'teams'}
+    # ...and a Planner card the same sign-in for tasks - granted only where the company's app lists Tasks.Read (msauth.refresh says so)
+    if ocfg.get('auth') == 'user':
+        out |= {'auth': 'user', '_scope': msauth.PLANNER if c['Type'] == 'ms_planner' else msauth.TEAMS_CHAT, '_for': c['Type']}
     return out, sec or o.get('Secret'), True
 
 
@@ -78,6 +81,11 @@ def _outlook_for(store, c):
     def boxes(o): return {str(s['Address']).lower() for s in store.list_sources(active_only=False)
                           if s.get('Channel') == 'email' and s.get('ConnectorId') == o['ConnectorId'] and s.get('Address')}
     dom = lambda a: a.rpartition('@')[2]
+    # a Planner card reads through the one Microsoft account there is - or, with two, the one its `user` names
+    if c.get('Type') == 'ms_planner':
+        want = str(_cfg(c).get('user') or '').lower()
+        hit = [o for o in cards if want and want in {str(_cfg(o).get('account') or '').lower(), *boxes(o)}]
+        return (hit or (cards if len(cards) == 1 else [None]))[0]
     for o in cards if ups else ():
         k = _cfg(o)
         if k.get('auth') == 'user' and str(k.get('account') or '').lower() in ups: return o
@@ -331,6 +339,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] in ('gitlab', 'azdo', 'linear', 'trello', 'notion', 'discord', 'sentry', 'pagerduty'):
             from . import devtools
             detail = devtools.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
+        elif c['Type'] in INBOXES:
+            from . import inboxes
+            detail = inboxes.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
         elif c['Type'] in CHAT_SERVERS:
             from . import chatservers
             detail = chatservers.test(store, store.get_connector(c['ConnectorId'], with_secret=True))
@@ -1475,7 +1486,7 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
           'gitlab': 'gitlab', 'azdo': 'azdo', 'linear': 'linear', 'trello': 'trello',
           'notion': 'notion', 'discord': 'discord', 'sentry': 'sentry', 'pagerduty': 'pagerduty',
           'mattermost': 'mattermost', 'rocketchat': 'rocketchat', 'matrix': 'matrix',
-          'google_chat': 'google_chat',
+          'google_chat': 'google_chat', **{t: t for t in INBOXES},
           # cloud objects are DISCOVERED sources: each carries its own mode (report/feed/tasks/off)
           'aws': 'aws', 'azure': 'azure'}
 # One small mark per source, so a brief's line says where it came from without an '[Outlook mail]' label (the owner,
@@ -1483,7 +1494,7 @@ CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'git
 CH_ICON = {'email': '✉️', 'teams': '👥', 'calendar': '🗓️', 'github': '🔧', 'gitlab': '🔧', 'azdo': '🔧',
            **dict.fromkeys(('slack', 'whatsapp', 'telegram', 'imessage', 'discord', 'mattermost', 'rocketchat', 'matrix', 'google_chat', 'sms'), '💬'),
            **dict.fromkeys(('jira', 'asana', 'monday', 'clickup', 'todoist', 'linear', 'trello', 'notion'), '📋'),
-           'sentry': '🚨', 'pagerduty': '🚨'}
+           'sentry': '🚨', 'pagerduty': '🚨', **dict.fromkeys(INBOXES, '📋')}
 def ch_icon(ch) -> str: return CH_ICON.get(str(ch or 'email'), '🔗')
 # A cloud object's mode lives on the SOURCE, not the connector - one bucket can feed the
 # Timeline while the next is only a report. 'report' (the default) polls nothing at all.
@@ -1493,7 +1504,7 @@ CLOUD = ('aws', 'azure')
 # per-source dimension at all. Their source row is a label, so the poll must not depend
 # on one existing - see poll_channels.
 PER_CONNECTOR = ('telegram', 'whatsapp', 'imessage', 'jira', 'asana', 'monday', 'clickup', 'todoist',
-                 'gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty')
+                 'gitlab', 'azdo', 'linear', 'trello', 'notion', 'sentry', 'pagerduty', *INBOXES)
 
 def _cloud_explicit(store, channel) -> bool:
     """Any discovered object set to feed or tasks? Then the connector is polled even
@@ -1986,6 +1997,9 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
             elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
                 from . import pm
                 n += pm.poll(store, full, since, llm, file_only)
+            elif c['Type'] in INBOXES:
+                from . import inboxes
+                n += inboxes.poll(store, full, since, llm, file_only)
             else:
                 from . import devtools
                 n += devtools.poll(store, full, since, llm, file_only)

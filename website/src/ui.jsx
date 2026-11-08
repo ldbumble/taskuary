@@ -42,6 +42,7 @@ import ChecklistIcon from "@mui/icons-material/Checklist";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import MergeTypeIcon from "@mui/icons-material/MergeType";
 import ArticleIcon from "@mui/icons-material/Article";
+import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
@@ -93,6 +94,8 @@ export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b
   jira: "#0052CC", asana: "#F06A6A", monday: "#6161FF", clickup: "#7b68ee", todoist: "#e44332",
   gitlab: "#fc6d26", azdo: "#0078d4", linear: "#5e6ad2", trello: "#0079bf", notion: "#37352f",
   discord: "#5865F2", sentry: "#7b6bc9", pagerduty: "#048a24",
+  zendesk: "#03363d", freshdesk: "#25c16f", intercom: "#1f8ded", servicenow: "#62d84e", shortcut: "#58b1e4", wrike: "#08cf65",
+  smartsheet: "#0073ec", airtable: "#fcb400", github_projects: "#2b2a26", bitbucket: "#0052cc", ms_planner: "#31752f",
   aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459", own: "#8a7a5c" };
 // ...and the ONE colour that stands for a source, for the dot on the work rail. A channel with its
 // own brand mark is not in the table above (the mark colours itself), so its logo's colour is named
@@ -106,6 +109,9 @@ const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: Assessmen
   clickup: ViewKanbanIcon, todoist: ChecklistIcon,
   gitlab: MergeTypeIcon, azdo: ViewKanbanIcon, linear: ChecklistIcon, trello: ViewKanbanIcon,
   notion: ArticleIcon, discord: TagIcon, sentry: ErrorOutlineIcon, pagerduty: NotificationsActiveIcon,
+  zendesk: SupportAgentIcon, freshdesk: SupportAgentIcon, intercom: SupportAgentIcon, servicenow: SupportAgentIcon,
+  shortcut: ChecklistIcon, wrike: ChecklistIcon, smartsheet: ViewKanbanIcon, airtable: ViewKanbanIcon, github_projects: ViewKanbanIcon,
+  bitbucket: MergeTypeIcon, ms_planner: ChecklistIcon,
   aws: CloudQueueIcon, azure: CloudQueueIcon, database: StorageIcon, smb_file: StorageIcon,
   own: PersonOutlineIcon };
 // A product named on a card wears its OWN logo where we have one (logos.jsx, self-colored);

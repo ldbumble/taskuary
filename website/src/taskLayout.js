@@ -132,6 +132,8 @@ export const answeredOutside = ({ messages = [], outside = [], pending = false }
 // once, under the title, and From does not open the same words again as the message under it. Spacing and line breaks aside.
 const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();
 export const sameWords = (a, b) => !!squash(a) && squash(a) === squash(b);
+// ...and AN ASK THAT IS THE MESSAGE'S OWN WORDS - all of them, or a stretch of them - is read once, in What came in (the product audit, 2026-11-08)
+export const askInBody = (ask, body) => !!squash(ask) && squash(ask).length >= 20 && squash(body).includes(squash(ask));
 // ...and THE ASK THAT IS THE TITLE is not said under it again (the owner, 2026-10-26, a playbook task on a laptop: "you can't see anything.
 // there are too many lines on top"): the same words, or a title cut from the ask's own start (a playbook's is its first 100 characters) -
 // whoever waits on it still gets the band, and the ask's whole words are the title's hover

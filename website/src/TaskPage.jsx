@@ -96,7 +96,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { autostartPlan, isGeneralKind, opensOnRegular } from "./autostart.js";
 import { adviceKeyFor, taskNote } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
-import { SECTIONS, cameFrom, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
+import { SECTIONS, cameFrom, homeSection, liveTerminal, soloTodo, replyHolds, agentStatus, agentWord, answeredOutside, reportLine, askInBody, askIsTitle, writeupAt, focusOf, fromLine as fromLineOf, fromStatus, layoutOf, sameWords, waitingOn, workPane } from "./taskLayout.js";
 import { mainView, stageOf } from "./stages.js";
 import { taskStatus } from "./railStatus.js";
 import { StatusPill } from "./StatusMark.jsx";
@@ -1574,7 +1574,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const askText = (t?.SourceRef === "assistant:playbook" ? "" : cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "")) || taskAsk;
   const askQuoted = !verdict?.summary && !t?.Summary && !!(opener?.ReadText || opener?.BodyText);   // the sender's words, not triage's
   // ...said once where it is the title's own words (taskLayout.askIsTitle): the band under the head is for a different sentence, or who it waits on
-  const askBand = askText && !askIsTitle(askText, t?.Title) ? askText : "";
+  // ...nor under What came in when it IS that one message's words (the product audit, 2026-11-08: the to-do's paragraph stood twice) - askInBody
+  const askBand = askText && !askIsTitle(askText, t?.Title) && !(sourceCount === 1 && askInBody(askText, opener?.ReadText || opener?.BodyText)) ? askText : "";
   // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
   // ...unless the ask under the title IS that message's words (the task-view cleanup, owner-approved 2026-10-25): then From keeps its
   // one row, and the words are read once

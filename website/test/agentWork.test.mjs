@@ -7,14 +7,11 @@ import { agentName, workOf, doingNow, trailText, turnStart, elapsedText, sourceO
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
-test("the agent doing the work is Taskuary - the profile it runs under is never its name (the owner, 2026-10-28)", () => {
+test("the agent doing the work is Agent - never the app, a tool, a profile or a demo name (the owner, 2026-11-08)", () => {
   for (const t of [{ Kind: "research" }, { Kind: "coding" }, { Kind: "general", Assignee: "agent:researcher" }, { Assignee: "owner" }, {}, null])
-    assert.equal(agentName(t), "Taskuary");
-  // a coding session names its tool; a chat session's cli is Taskuary's own, and no session at all is Taskuary
-  assert.equal(shownAgent({ mode: "terminal", cli: "claude" }), "claude");
-  assert.equal(shownAgent({ mode: "chat", cli: "taskuary", agent: "researcher" }), "Taskuary");
-  assert.equal(shownAgent({ mode: "chat", cli: "codex" }), "Taskuary");
-  assert.equal(shownAgent(null), "Taskuary");
+    assert.equal(agentName(t), "Agent");
+  for (const run of [{ mode: "terminal", cli: "claude" }, { mode: "chat", cli: "taskuary", agent: "researcher" }, { mode: "terminal", cli: "demo" }, null])
+    assert.equal(shownAgent(run), "Agent");
   // ...and the profile is said only where a look for it finds it
   assert.equal(instructionsHint("researcher"), "Instructions: researcher");
   assert.equal(instructionsHint(""), "");

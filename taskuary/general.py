@@ -89,19 +89,19 @@ def keep_cut_turns(store) -> list:
     return out
 def to_box(store, tid: int) -> int:
     "This task's kept lines back into the owner's box: how many."
-    rows = [r for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
+    rows = [r for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
     for r in rows: store._exec('UPDATE comment SET ActorType=? WHERE CommentId=?', (BOX_TYPE, r['CommentId']))
     return len(rows)
 def box_text(store, tid: int) -> str:
     "What the owner's box holds again after a restart - '' when nothing."
-    return '\n\n'.join(t for r in store.list_comments(tid) if r.get('ActorType') == BOX_TYPE and (t := _line_of(r['Body'])['text']))
+    return '\n\n'.join(t for r in store.list_comments(tid, internal=True) if r.get('ActorType') == BOX_TYPE and (t := _line_of(r['Body'])['text']))
 def box_sent(store, tid: int):
     "The owner sent from the box: what it held again is theirs now, kept or cleared - never offered twice."
-    for r in store.list_comments(tid):
+    for r in store.list_comments(tid, internal=True):
         if r.get('ActorType') == BOX_TYPE: store.drop_comment(r['CommentId'])
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
-    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body'])} for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
+    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body'])} for r in store.list_comments(tid, internal=True) if r.get('ActorType') == WAITING_TYPE]
 # A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
 # which takes the kept line. 'has ended' is what every caller reads it by
 ENDED = 'this assistant session has ended - it starts again with the next line you send'
@@ -407,7 +407,7 @@ def _split(store, tid: int) -> tuple[list, list]:
     "The task's chat as (before the current run, the current run), split at the last RUN_TYPE row if there is one."
     from . import selfclose
     from .quickwork import report_of
-    rows = store.list_comments(tid)
+    rows = store.list_comments(tid, internal=True)
     at = max((i for i, c in enumerate(rows) if c.get('ActorType') == RUN_TYPE), default=-1)
     # ...an answer filed as a quick call's raw object reads back as its report, wherever the chat is read: the pane, the next turn, the close-out;
     # and a letter the answer wrote out is Close out's, there too (selfclose.without_draft): a turn stored before _file took it out still had
@@ -461,7 +461,7 @@ def owner_answered_last(store, tid: int) -> bool:
 # the draft waiting and when it was made, and what already went (selfclose.LATEST_LINE); the chat is told which turn a draft is (draft_turns)
 def newest_message(store, tid: int) -> dict | None:
     "The newest message on the task - the owner's own line in the chat or a mail that joined it: {who, at, words}. Taskuary's briefs are not one."
-    said = [c for c in store.list_comments(tid) if c.get('ActorType') == USER_TYPE and c.get('Actor') != BRIEF_ACTOR]
+    said = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == USER_TYPE and c.get('Actor') != BRIEF_ACTOR]
     mail = store._rows(JOINED, (tid,))
     a = {'who': 'the owner (in this chat)', 'at': str(said[-1].get('CreatedAt') or ''), 'words': said[-1].get('Body')} if said else None
     m = mail[-1] if mail else None
@@ -530,10 +530,10 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     new, sent = newest_message(store, tid), wrapup.sent_replies(store, tid)
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
-    answered = not resumed and any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid))
+    answered = not resumed and any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid, internal=True))
     from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
-    handed = [c for c in store.list_comments(tid) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
+    handed = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
     did = owner_did(store, tid)
     if not (rv or sent or answered or others or handed or did): return ''
     out = [selfclose.LATEST_LINE]
@@ -562,7 +562,7 @@ def turn_facts(store, tid: int, task: dict = None, resumed: bool = False) -> str
 def draft_turns(store, tid: int) -> list:
     """Each pending reply draft and the turn it belongs to, for the chat: {review, turn ('comment-<id>' of the answer that left it, None before
     any did), at (when it was drafted), stale (a later turn answered a newer message and left it untouched), before (that message's time)}."""
-    rows = store.list_comments(tid)
+    rows = store.list_comments(tid, internal=True)
     ins = sorted([str(c.get('CreatedAt') or '') for c in rows if c.get('ActorType') == USER_TYPE] + [str(x['JoinedAt']) for x in store._rows(JOINED, (tid,))])
     outs = [c for c in rows if c.get('ActorType') == ASSISTANT_TYPE]
     out = []
@@ -653,7 +653,7 @@ def shown_history(store, tid: int) -> list:
 def _record_turn(store, tid: int) -> list:
     "The stored record of an agent run on a task with no chat rows, as one answer - [] when there is none."
     from .wrapup import is_report, report_body
-    rep = next((c for c in reversed(store.list_comments(tid) or []) if is_report(c.get('Body'))), None)
+    rep = next((c for c in reversed(store.list_comments(tid, internal=True) or []) if is_report(c.get('Body'))), None)
     tr = None if rep else store.last_transcript(tid)
     body = report_body(rep['Body']) if rep else str((tr or {}).get('Text') or '').strip()[-1500:]
     if not body: return []
@@ -710,7 +710,7 @@ def take_corrections(store, tid: int, corrections) -> int:
     owner's message to correct from, words, and no credential in them (redact.scrub): what is learned is kept for good. Returns how many."""
     try:
         from .redact import scrub
-        last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') == USER_TYPE and not is_brief(c)), None)
+        last = next((c for c in reversed(store.list_comments(tid, internal=True)) if c.get('ActorType') == USER_TYPE and not is_brief(c)), None)
         if not last: return 0
         kept = 0
         for c in corrections or []:
@@ -856,7 +856,7 @@ def dock_snapshot(store) -> str:
     output = []
     for t in store.list_tasks()[:25]:
         if is_dock(t): continue
-        comments = store.list_comments(t['TaskId'])
+        comments = store.list_comments(t['TaskId'], internal=True)
         last = next((c for c in reversed(comments)
                      if c.get('ActorType') in ('agent', ASSISTANT_TYPE)
                      or str(c.get('Body') or '').startswith((*wrapup.REPORTS, 'HANDOVER NOTE'))), None)
@@ -890,7 +890,7 @@ def report_note(store, tid: int, lead: str = ''):
     is the same answer to the plain one the session's close files after it."""
     last = next((str(c.get('Body') or '').strip() for c in reversed(chat_rows(store, tid)) if c.get('ActorType') == ASSISTANT_TYPE), '')
     if not last: return None
-    filed = next((c.get('Body') for c in reversed(store.list_comments(tid)) if wrapup.is_report(c.get('Body'))), None)
+    filed = next((c.get('Body') for c in reversed(store.list_comments(tid, internal=True)) if wrapup.is_report(c.get('Body'))), None)
     # by its body, not its marker: an answer filed under the old word is the same answer
     body, was = wrapup.with_left_open(last, lead), (wrapup.report_body(filed) if filed is not None else None)
     if was is not None and (was == body or (not lead and was.endswith('\n\n' + last))): return None
@@ -1489,7 +1489,7 @@ def _lines_fit(head: str, lines: list, budget: int = COMPACT_CHARS) -> str:
 def turn_summaries(store, tid: int) -> dict:
     "{an answer's CommentId: its turn summary} - the summaries filed after each answer (SUMMARY_TYPE), as shown_history reads them."
     out, last = {}, None
-    for c in store.list_comments(tid):
+    for c in store.list_comments(tid, internal=True):
         if c.get('ActorType') == ASSISTANT_TYPE: last = c['CommentId']
         elif c.get('ActorType') == SUMMARY_TYPE and last:
             try: out[last] = json.loads(c.get('Body') or '')
@@ -1558,7 +1558,7 @@ class GeneralSession:
     quick = False                        # answered in one call (quickwork): takes no desk until a real turn runs on it
     argv = []
     cwd = ''
-    label = 'Taskuary assistant'
+    label = 'Agent'                     # how a task's agent is named everywhere (kinds.SHOWN)
     agent = 'assistant'
     cli = 'taskuary'
 
@@ -1669,7 +1669,7 @@ class GeneralSession:
 
     def _restore_terminal(self):
         title = (self.store.get_task(self.task_id) or {}).get('Title') or f'Task {self.task_id}'
-        self._append(f'\x1b[1;36mTaskuary assistant\x1b[0m  {self.provider or "no AI connector"} {self.model}\r\n'
+        self._append(f'\x1b[1;36mAgent\x1b[0m  {self.provider or "no AI connector"} {self.model}\r\n'
                      f'\x1b[2m{title}\x1b[0m\r\n\r\n')
         for row in chat_rows(self.store, self.task_id, run=True):
             if row.get('ActorType') == USER_TYPE:

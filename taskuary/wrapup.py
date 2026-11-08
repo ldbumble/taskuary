@@ -347,13 +347,13 @@ def answered_by_work(store, task_id: int, mid):
     if agent_drafted(rv): return rv
     at = str(rv.get('DecidedAt') or rv.get('CreatedAt') or '')
     worked = lambda c: c.get('ActorType') == 'assistant_agent' or str(c.get('Body') or '').startswith((*REPORTS, PAUSE_MARKER))
-    return rv if any(worked(c) and str(c.get('CreatedAt') or '') <= at for c in store.list_comments(task_id)) else None
+    return rv if any(worked(c) and str(c.get('CreatedAt') or '') <= at for c in store.list_comments(task_id, internal=True)) else None
 
 
 def owner_asked_since(store, task_id: int, at: str) -> bool:
     """Did the owner write to this task's agent after `at` - their own words in its conversation, never a canned prompt?"""
     from .general import USER_TYPE
-    return any(c.get('ActorType') == USER_TYPE and str(c.get('CreatedAt') or '') > str(at or '') for c in store.list_comments(task_id))
+    return any(c.get('ActorType') == USER_TYPE and str(c.get('CreatedAt') or '') > str(at or '') for c in store.list_comments(task_id, internal=True))
 
 
 def on_thread(store, task_id: int) -> set:

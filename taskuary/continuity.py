@@ -78,7 +78,7 @@ STRONG_AGAIN_PROMPT = (
 
 def last_agent_turn(store, tid) -> str:
     """When the agent last spoke on this task: its newest reply or report, or the saved conversation's own stamp."""
-    said = [c['CreatedAt'] for c in store.list_comments(tid) if c.get('CreatedAt') and (c.get('ActorType') == 'assistant_agent'
+    said = [c['CreatedAt'] for c in store.list_comments(tid, internal=True) if c.get('CreatedAt') and (c.get('ActorType') == 'assistant_agent'
             or str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'HANDOVER NOTE')))]
     saved = (store.saved_session(tid) or {}).get('UpdatedAt')
     return max([s for s in [*said, saved] if s] or [''])

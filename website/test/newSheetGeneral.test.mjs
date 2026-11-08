@@ -17,3 +17,9 @@ test("it asks the hand-off's three questions and dispatches them as general work
   assert.match(ns, /generalBrains=\{generalBrains\} brainsRead=\{agentsRead\} pick=\{pick\}/);
   assert.ok(ns.includes('/dispatch`, { ...(general\n            ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }'));
 });
+
+// EVERY KIND IN SIGHT (the product audit, 2026-11-08): the row scrolled with no scrollbar and cut "Playbo..." at 1440px - it wraps now
+test("New's kinds wrap rather than scroll out of sight", () => {
+  assert.match(ns, /<Box data-tq-new-kinds="" sx=\{\{ display: "flex", flexWrap: "wrap",/);
+  assert.doesNotMatch(ns, /overflowX: "auto", scrollbarWidth: "none" \}\}>\s*\{KINDS\.map/);
+});

@@ -134,7 +134,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const setCc = (v) => { hold(r, { cc: v ?? null }); setCcNow(v); };
   // ...and BCC and the subject, held the same way (the owner, 2026-11-08: one email card, every field editable, edits go out with Send)
   const [bcc, setBccNow] = useState(() => heldOf(r)?.bcc ?? null), [subj, setSubjNow] = useState(() => heldOf(r)?.subject ?? null);
-  const setBcc = (v) => { hold(r, { bcc: v ?? null }); setBccNow(v); }, setSubj = (v) => { hold(r, { subject: v ?? null }); setSubjNow(v); };
+  const setBcc = (v) => { hold(r, { bcc: v ?? null }); setBccNow(v); };
+  const setSubj = (v) => { hold(r, { subject: v ?? null }); setSubjNow(v); };
   const [bccOpen, setBccOpen] = useState(false);
   const rNow = useRef(r); rNow.current = r;
   useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null);
@@ -311,6 +312,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
   // `close`: Close out's Send and close - the send, then the task's close once the server's receipt says it went (onSent closes). Check
   // delivery and Send anyway pass nothing: they finish the press that froze the draft, held in `closing`
+  // ...the email card's BCC and a changed subject, on the send only
+  const envelopeEdits = (verb) => (verb === "approve" && !proposal && !delivery.frozen && isEmail
+    ? { bcc: bccNow, subject: subj != null && subj !== subjFiled ? subj : null } : {});
   const decide = async (verb, anyway = false, close = undefined, blanksOk = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
     if (verb === "approve" && !blanksOk && askBlank({ verb, anyway, close })) return;
@@ -324,9 +328,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk,
-          ...(verb === "approve" && !proposal && !delivery.frozen && isEmail ? { bcc: bccNow, subject: subj != null && subj !== subjFiled ? subj : null } : {}) },
-        { timeout: DECIDE_TIMEOUT });
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk, ...envelopeEdits(verb) }, { timeout: DECIDE_TIMEOUT });
       if (data.ok && !data.send_error && verb === "approve") closing.delete(r.ReviewId);    // the press is over: the next one says again which send
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }

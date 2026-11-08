@@ -105,6 +105,6 @@ test("the CC chip's remove ✕ is a real button, and it is named", () => {
   assert.ok(remove, "CC chip remove control exists in ui.jsx CcRow");
   assert.equal(remove[1], "button");
   assert.match(remove[2], /type="button"/);
-  assert.match(remove[2], /aria-label=\{`Remove \$\{a\} from CC`\}/);
+  assert.match(remove[2], /aria-label=\{`Remove \$\{a\} from \$\{name\}`\}/);     // CC and BCC are one row (2026-11-08)
   assert.match(remove[2], /border: 0/);
 });

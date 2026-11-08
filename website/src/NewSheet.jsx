@@ -269,7 +269,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   }, [open]);
   // A CONNECTOR NAMED IN AN AGENT'S JOB is offered its card on the row, beside Start (connectorCatalog.connectorNamed): "connect taskuary
   // to linkedin" was only ever an agent job, with no way to Connections (a tester, 2026-10-20). The words still go to an agent if pressed.
-  const [words, setWords] = useState(initialText);
+  const [words, setText] = useState(initialText);
   // ...a general agent's job is typed into the agent chat's own box (PromptBox) - its words are read at the press from here
   const agentBox = kind === "agent" && how === "general", wordsRef = useRef(words), agentBoxRef = useRef(agentBox);
   wordsRef.current = words; agentBoxRef.current = agentBox;
@@ -343,7 +343,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         filed.current = null;
         if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
-        aboutRef.current?.clear(); setWords(""); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
         askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
@@ -523,14 +523,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <Label>{aboutLabel}</Label>
           {/* ...THE CHAT'S OWN BOX (AgentSummary.PromptBox): paperclip, words, mic, Send - typing and Send make the task, start its agent and open
               its chat. With no AI connected it says so, with the way to connect one */}
-          <PromptBox text={words} setText={setWords} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
+          <PromptBox text={words} setText={setText} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
             placeholder="why did Site 3's census move four points in July?" sendOff={noAi} />
           {noAi && <Typography data-tq-new-no-ai="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }}>
             No AI is connected, so an agent can't run this yet - <Box component="a" href={place("ai").href}
               onClick={(e) => { e.preventDefault(); onClose?.(); openAppLink(place("ai").href); }} sx={{ color: "inherit", fontWeight: 600 }}>connect one</Box>.</Typography>}
         </Box> : !REPEATS.includes(kind) && kind !== "meeting" && <Box>
           <Label>{aboutLabel}</Label>
-          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setWords} label={aboutLabel} />
+          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setText} label={aboutLabel} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.

@@ -32,5 +32,5 @@ test("New offers the card on its own row, beside the job, and the job still star
   const src = readFileSync(new URL("../src/NewSheet.jsx", import.meta.url), "utf8");
   assert.ok(src.includes("useVerbs(`new-connect${me}`"));
   assert.ok(src.includes("openAppLink(`#connector=${named.type}`)"));
-  assert.ok(src.includes("onWords={setWords}"));
+  assert.ok(src.includes("onWords={setText}"));
 });

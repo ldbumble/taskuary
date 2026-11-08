@@ -288,8 +288,7 @@ def queue(store, task_id: int, p: dict, actor='agent', refused: list | None = No
         if why := picture_why(task_id, p): ok = False
         elif p.get('image'):                     # ...kept as its name in the folder: an agent names it by its full path as often as not
             from . import outputs
-            f = outputs.named(int(task_id), p['image'])
-            p = {**p, 'image': f.relative_to(outputs.folder(int(task_id))).as_posix()}
+            p = {**p, 'image': outputs.rel(int(task_id), outputs.named(int(task_id), p['image']))}
     # ...and what the agent left unnamed on a card's choices comes from the connection's own defaults (Connections), so the card shows them
     if ok and p.get('action') == 'run_tool':
         from . import connectorcatalog as cat

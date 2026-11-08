@@ -345,13 +345,18 @@ def rpc(msg: dict, run, skip=()) -> dict | None:
         name = p.get('name')
         if name not in TOOLS or name in skip: return err(-32602, f'unknown tool {name!r}')
         try: return ok({'content': [{'type': 'text', 'text': run(name, p.get('arguments') or {})}], 'isError': False})
-        except (ValueError, KeyError, TypeError, PermissionError, LookupError) as e:
-            return ok({'content': [{'type': 'text', 'text': f'{type(e).__name__}: {e}'}], 'isError': True})
-        except Exception as e:
-            detail = getattr(e, 'detail', None)              # an HTTPException from a door: its words are the refusal
-            if detail is None: logger.warning(f'mcp tool {name} failed: {e}')
-            return ok({'content': [{'type': 'text', 'text': str(detail or e)[:1000]}], 'isError': True})
+        except Exception as e: return ok({'content': [{'type': 'text', 'text': failed(name, e)}], 'isError': True})
     return err(-32601, f'method {m!r} is not served here')
+
+
+def failed(name: str, e: Exception) -> str:
+    """A tool's failure in plain words the agent can pass on - never a Python type name or traceback (a picture post came back as a raw
+    "ValueError: ... is not in the subpath of ...", and the agent read the owner that)."""
+    detail = getattr(e, 'detail', None)                      # an HTTPException from a door: its words are the refusal
+    if isinstance(e, KeyError): return f'{name} needs `{e.args[0] if e.args else "?"}` - call it again with it'
+    if detail is None and not isinstance(e, (ValueError, TypeError, PermissionError, LookupError)): logger.warning(f'mcp tool {name} failed: {e!r}')
+    said = str(detail if detail is not None else e).strip()[:1000]
+    return said or f'{name} did not work, and said nothing about why - try it once more, or tell the owner it failed'
 
 
 # ── wiring it into a session ───────────────────────────────────────────────────────────────────────────────────────────────────────

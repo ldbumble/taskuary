@@ -92,6 +92,35 @@ class OnePress(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(json.loads(server.store.get_review(r.json()['review'])['DraftText'])['image'], 'gas-prices.png')
 
+    def test_a_home_named_by_its_short_form_still_carries_the_picture(self):
+        """A home given as C:/Users/ABCDEF~1 (an 8.3 short name, as %TEMP% often is) resolves to the long name, and one side of the
+        comparison was never resolved: every picture post crashed. The short form is real where the disk makes one, else stood in for by
+        a path that resolves to somewhere spelled differently - the same mismatch."""
+        home = config.home()
+        short = home.parent / '_alias' / '..' / home.name                   # resolves to home, spelled otherwise
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(1024)
+            if ctypes.windll.kernel32.GetShortPathNameW(str(home), buf, 1024) and buf.value != str(home): short = type(home)(buf.value)
+        except (AttributeError, OSError): pass
+        self.assertNotEqual(str(short), str(short.resolve()))
+        with mock.patch.object(outputs.config, 'home', lambda: short):
+            r = self.propose(text='Hi', image=str(home / 'scratch' / 'outputs' / outputs.task_ref(self.tid) / 'gas-prices.png'))
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(json.loads(server.store.get_review(r.json()['review'])['DraftText'])['image'], 'gas-prices.png')
+
+    def test_a_tool_failure_comes_back_in_words(self):
+        from taskuary import agenttools
+        def run(name, a): raise ValueError("gas.png is not a file in your task folder - save the picture there first")
+        out = agenttools.rpc({'id': 1, 'method': 'tools/call', 'params': {'name': 'propose', 'arguments': {}}}, run)['result']
+        self.assertTrue(out['isError']); self.assertEqual(out['content'][0]['text'], 'gas.png is not a file in your task folder - save the picture there first')
+        def boom(name, a): raise RuntimeError('database is locked')
+        said = agenttools.rpc({'id': 1, 'method': 'tools/call', 'params': {'name': 'tick', 'arguments': {}}}, boom)['result']['content'][0]['text']
+        self.assertNotIn('Error', said); self.assertNotIn('Traceback', said)
+        def need(name, a): return a['item']
+        said = agenttools.rpc({'id': 1, 'method': 'tools/call', 'params': {'name': 'tick', 'arguments': {}}}, need)['result']['content'][0]['text']
+        self.assertEqual(said, 'tick needs `item` - call it again with it')
+
     def test_a_picture_outside_the_task_folder_is_refused(self):
         r = self.propose(text='Hi', image='../../secret.png')
         self.assertEqual(r.status_code, 422, r.text)

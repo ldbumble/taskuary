@@ -92,7 +92,7 @@ class NextTurn(unittest.TestCase):
         self.assertIn(ASK, self.brain.turn)
         self.assertLess(self.brain.turn.index(ASK), self.brain.turn.index(continuity.RESUME_PROMPT))   # the news leads, Resume's words follow
         self.assertNotIn('the owner says', self.brain.turn)                    # Taskuary's words, never put in the owner's mouth
-        brief = [c for c in s.list_comments(tid) if general.is_brief(c)][-1]
+        brief = [c for c in s.list_comments(tid, internal=True) if general.is_brief(c)][-1]
         self.assertIn(ASK, brief['Body'])                                       # ...and the chat shows the line it was handed
 
     def test_a_stopped_conversation_with_no_cli_to_resume_reads_it_too(self):
@@ -124,7 +124,7 @@ class NextTurn(unittest.TestCase):
         self.addCleanup(ended, tid)
         ingest._pass_general(s, tid, {**mail(**AGAIN), 'message_id': 9})
         self.assertIn(ASK, self.brain.turn)
-        self.assertTrue(any(general.is_brief(c) and ASK in c['Body'] for c in s.list_comments(tid)))
+        self.assertTrue(any(general.is_brief(c) and ASK in c['Body'] for c in s.list_comments(tid, internal=True)))
 
     def test_the_pane_shows_the_new_mail_in_its_senders_words(self):
         "The overnight run, 2026-11-03: the second mail of a thread was readable only inside the folded 'Taskuary's instructions'."

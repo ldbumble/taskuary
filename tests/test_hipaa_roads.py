@@ -190,7 +190,7 @@ class GeneralAgentRoad(unittest.TestCase):
         for model in (SONNET, FLASH, OPUS, PRO):
             s, tid, g, reply = self.turn(model)
             self.assertIn('Payworth is cheaper', reply); self.assertNotIn('TASKUARY-SUMMARY', reply)
-            summ = [c['Body'] for c in s.list_comments(tid) if c['ActorType'] == general.SUMMARY_TYPE]
+            summ = [c['Body'] for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.SUMMARY_TYPE]
             self.assertTrue(summ and 'a head cheaper' in summ[-1], model)
             b = g.said()
             self.assertEqual(b['model'], model)
@@ -352,7 +352,7 @@ class AgentStartsByItselfRoad(unittest.TestCase):
         with Gateway(lambda b: SUMMARY) as g, mock.patch.object(general, 'start_session', lambda st, t, **kw: general.GeneralSession(st, t)):
             self.assertTrue(ingest._start_general(s, tid))
         self.assertEqual(g.said()['model'], SONNET)
-        self.assertTrue([c for c in s.list_comments(tid) if c['ActorType'] == general.SUMMARY_TYPE])
+        self.assertTrue([c for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.SUMMARY_TYPE])
 
 
 class SmokeTool(unittest.TestCase):

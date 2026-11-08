@@ -78,7 +78,7 @@ class ContinueBringsTheMailTests(unittest.TestCase):
         self.assertTrue(args[0].startswith('NEW SINCE YOUR LAST TURN') and args[0].endswith(continuity.RESUME_PROMPT), args[0][:80])
         self.assertIn('What would building it take', args[0])
         self.assertEqual((kw['brief'], kw['kept'], 'delivery_instructions' in kw), (True, True, False))
-        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid) if c.get('ActorType') == general.USER_TYPE]
+        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.USER_TYPE]
         self.assertEqual([a for a, _ in said], [general.BRIEF_ACTOR], "shown in the chat as Taskuary's line, not the owner's")
         self.assertIn('What would building it take', said[0][1])
 
@@ -90,7 +90,7 @@ class ContinueBringsTheMailTests(unittest.TestCase):
         turn = session.send_prompt.call_args[0][0]
         at = [turn.index(x) for x in ('versus the vendor gateway', 'FROM THE OWNER: answer Paula first', continuity.RESUME_PROMPT)]
         self.assertEqual(at, sorted(at))
-        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid) if c.get('ActorType') == general.USER_TYPE]
+        said = [(c['Actor'], c['Body']) for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.USER_TYPE]
         self.assertEqual([a for a, _ in said], [general.BRIEF_ACTOR, 'owner'])        # the news as Taskuary's line, then the owner's note
         self.assertEqual(said[1][1], 'answer Paula first')
 

@@ -85,7 +85,7 @@ class PlaybooksLearnTests(unittest.TestCase):
         self.assertIn(general.LESSON_LINE, seen['prompt']); self.assertIn(general.CHECK_BACK_LINE, seen['prompt'])
         self.assertTrue(any('Payworth is vendor 4471' in c[0][1] for c in lf.call_args_list), 'the lesson went to LEARNED.md')
         t = s.get_task(tid); self.assertEqual(t['CheckBackWhat'], 'the bill shows paid'); self.assertTrue(t['CheckBackAt'])
-        kept = [json.loads(c['Body']) for c in s.list_comments(tid) if c['ActorType'] == general.SUMMARY_TYPE]
+        kept = [json.loads(c['Body']) for c in s.list_comments(tid, internal=True) if c['ActorType'] == general.SUMMARY_TYPE]
         self.assertTrue(kept and not any('lesson' in k or 'check_back' in k for k in kept))     # taken off the summary, never drawn
 
 

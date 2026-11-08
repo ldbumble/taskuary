@@ -51,7 +51,7 @@ class SharedSessionTests(unittest.TestCase):
                 # the first OUTPUT frame: `geom` (which pane drives the PTY size) precedes it
                 first = next(m for m in (ws.receive_json() for _ in range(8)) if m['type'] == 'out')
         self.assertEqual(first['type'], 'out')
-        self.assertIn('Taskuary assistant', first['data'])
+        self.assertIn('Agent', first['data'])
 
     @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH
     def test_setup_walkthrough_uses_a_tool_cli_and_starts_its_own_browser(self):

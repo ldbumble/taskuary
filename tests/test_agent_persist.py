@@ -57,7 +57,7 @@ def test_a_long_task_is_compacted_and_still_names_its_earlier_decisions():
     for i in range(30):
         s.add_comment(tid, 'owner', general.USER_TYPE, f'question {i}'); answered(s, tid, f'answer {i}')
     s.add_comment(tid, 'owner', general.USER_TYPE, 'Where did we land?')
-    before = len(s.list_comments(tid))
+    before = len(s.list_comments(tid, internal=True))
     with mock.patch.object(general, 'MAX_CONTEXT', 30_000), mock.patch('taskuary.learn.learn_from') as lf:
         user = general._prompt(s, tid)[1]
     assert 'EARLIER IN THIS CONVERSATION, COMPACTED' in user
@@ -66,7 +66,7 @@ def test_a_long_task_is_compacted_and_still_names_its_earlier_decisions():
     assert user.rstrip().endswith('Do not repeat the task context.') and 'Where did we land?' in user
     assert len(user) <= 30_000 + 200
     # ...nothing new is stored, and nothing goes around LEARNED.md: the chat keeps every turn, compaction is only what the model reads
-    assert len(s.list_comments(tid)) == before and len(general.chat_rows(s, tid)) == 63
+    assert len(s.list_comments(tid, internal=True)) == before and len(general.chat_rows(s, tid)) == 63
     lf.assert_not_called()
     assert not [n for n in s.doc_names() if n not in ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',
                                                       'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant')]

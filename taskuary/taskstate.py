@@ -24,7 +24,7 @@ def _general_waiting(store, t) -> bool:
     kind the rule can hold."""
     if str(t.get('Kind') or '') != 'general' or t.get('Status') not in ('open', 'in_progress'): return False
     from .general import ASSISTANT_TYPE, USER_TYPE
-    talked = any(c.get('ActorType') in (USER_TYPE, ASSISTANT_TYPE) for c in store.list_comments(t['TaskId']) or [])
+    talked = any(c.get('ActorType') in (USER_TYPE, ASSISTANT_TYPE) for c in store.list_comments(t['TaskId'], internal=True) or [])
     return funnel.general_not_started(t, talked, store.list_routes(t['TaskId']) or [])
 
 
@@ -112,7 +112,7 @@ def closed_why(store, t: dict, comments=None) -> str | None:
     ev = finish_evidence(store, t['TaskId'])
     if not ev or str(ev.get('who') or '').startswith('Its '): return None
     from .wrapup import is_report, report_body
-    rep = next((report_body(c.get('Body')) for c in reversed(comments if comments is not None else store.list_comments(t['TaskId']) or [])
+    rep = next((report_body(c.get('Body')) for c in reversed(comments if comments is not None else store.list_comments(t['TaskId'], internal=True) or [])
                 if is_report(c.get('Body'))), '')
     said = ' '.join(str(ev.get('summary') or '').split()) or next((ln.strip() for ln in rep.splitlines() if ln.strip()), '')
     return f'Closed by the agent: {said[:300]}' if said else 'Closed by the agent - it said it was finished.'

@@ -77,7 +77,7 @@ class SamePressTwiceTests(Base):
             r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json=body)
             self.assertEqual(r.status_code, 409, r.text)
             detail = r.json()['detail']
-            self.assertIn('Taskuary is already working on this task', detail)
+            self.assertIn('Agent is already working on this task', detail)
             for jargon in ('agent type', 'assistant is', 'session'): self.assertNotIn(jargon, detail)
         self.assertIn('Stop and save', detail)                   # ...the coding press: the way to another agent is a button they have
 

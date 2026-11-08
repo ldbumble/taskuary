@@ -15,11 +15,9 @@ SHOWN = _J['shown']                                          # who the owner see
 
 
 def shown(run=None) -> str:
-    """The name an agent goes by on every screen and line the owner reads. A general agent is Taskuary whatever profile it
-    runs under; a coding session may name its tool (`cli`) - a chat session's `cli` is Taskuary's own, never a tool."""
-    r = run if isinstance(run, dict) else {}
-    tool = '' if str(r.get('mode') or '') in ('chat', 'assistant') else str(r.get('cli') or '').strip()
-    return tool if tool and tool.lower() != SHOWN.lower() else SHOWN
+    """The name an agent goes by on every screen and line the owner reads: Agent, whatever profile, tool or demo runs it (the owner,
+    2026-11-08 - a coding session named its tool and a demo one read "demo is waiting on you"). `run` is kept for its callers."""
+    return SHOWN
 
 
 def instructions(profile) -> str:

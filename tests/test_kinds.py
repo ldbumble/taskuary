@@ -14,7 +14,7 @@ def test_the_json_is_the_table():
     assert kinds.KINDS == ('task', 'general', 'coding', 'reply') == tuple(k['key'] for k in J['kinds'])
     assert set(kinds.AGENT) == {'general', 'coding'} and set(kinds.TRIAGE) == {'task', 'general', 'coding'}
     assert [kinds.label(k) for k in kinds.KINDS] == [k['label'] for k in J['kinds']] and kinds.label('setup') == 'setup'
-    assert (kinds.worker('coding'), kinds.worker('general'), kinds.worker(None)) == ('the coding agent', 'the assistant', 'the assistant')
+    assert (kinds.worker('coding'), kinds.worker('general'), kinds.worker(None)) == ('the coding agent', 'the agent', 'the agent')
     assert categories.agent_word is kinds.worker
     assert [kinds.triage_kind(k) for k in ('coding', 'GENERAL', 'reply', 'nonsense', None)] == ['coding', 'general', 'task', 'task', 'task']
 

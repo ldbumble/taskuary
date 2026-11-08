@@ -228,7 +228,7 @@ const assistantBox = (taskId) => {
   const key = `${taskId}:assistant`;
   const box = state["/api/tasks/detail"][key] ||= { messages: [], providers: [], session: null };
   box.session ||= { sid: `demo${taskId}`, alive: true, provider: "Claude Code",
-    label: "Taskuary assistant", mode: "assistant", model: "", pick: "cli:claude", busy: false,
+    label: "Agent", mode: "assistant", model: "", pick: "cli:claude", busy: false,
     trace: [], trace_revision: 0 };
   if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) {
     box.session.provider = box.providers.find(p => p.id === box.session.pick)?.label || box.providers[0].label;
@@ -449,7 +449,7 @@ const write = (method, url, body) => {
       detail.comments.push({ ActorType: "assistant_user", Actor: "Ruth Bennett", Body: NUMBERS_REQUEST, CreatedAt: now() });
       startDemoAssistant(NUMBERS_TASK, { text: NUMBERS_REQUEST });
       const item = scriptedAssistant.pile.items.find((i) => i.tid === NUMBERS_TASK);
-      if (item) Object.assign(item, { kind: "agent", lane: "working", working: "Taskuary", agent: "Taskuary",
+      if (item) Object.assign(item, { kind: "agent", lane: "working", working: "Agent", agent: "Agent",
         why: "preparing the fictional report and checking its totals" });
       scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
       journeyChanged();

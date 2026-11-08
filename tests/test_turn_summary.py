@@ -29,7 +29,7 @@ def turn(s, tid, answer, sess=None):
         return sess.send_prompt('when is payday?'), sess
 
 
-def summaries(s, tid): return [c for c in s.list_comments(tid) if c.get('ActorType') == general.SUMMARY_TYPE]
+def summaries(s, tid): return [c for c in s.list_comments(tid, internal=True) if c.get('ActorType') == general.SUMMARY_TYPE]
 def on_you(s, tid): return [i for i in s.task_checklist(tid) if i.get('on_you')]
 
 

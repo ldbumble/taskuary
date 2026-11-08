@@ -598,7 +598,7 @@ def record(store, tid: int) -> dict:
                          'at': _when(chat[-1].get('CreatedAt')), 'source': 'conversation', 'steps': general_steps(store, tid),
                          **({'took': spent} if spent else {})})
     sessions.sort(key=lambda s: s['at'])
-    for c in store.list_comments(tid):
+    for c in store.list_comments(tid, internal=True):
         if str(c.get('Body') or '').startswith(REPORTS) and (s := _nearest(sessions, c.get('CreatedAt'))):
             rep = parse_report(c['Body'])
             if _keeps_last(s, rep): rep['last'] = s['report']['last']

@@ -877,7 +877,7 @@ def summary_line(store, tid) -> str:
     or what is on the owner. The Advisor lights Mark done on the first; nothing presses it. '' with no summary."""
     from . import general
     try:
-        last = next((c for c in reversed(store.list_comments(int(tid))) if c.get('ActorType') == general.SUMMARY_TYPE), None)
+        last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') == general.SUMMARY_TYPE), None)
         summ = json.loads(last['Body']) if last else None
     except (TypeError, ValueError, KeyError): summ = None
     if not isinstance(summ, dict): return ''

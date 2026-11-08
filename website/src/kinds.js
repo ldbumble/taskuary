@@ -15,16 +15,13 @@ export const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^a
 export const verdictLabel = (kind) => KIND[kind]?.verdict || String(kind || "");
 // "Start the coding agent": who works it, said by what it IS - a profile's name is not a worker (the owner, 2026-10-16)
 export const agentWord = (kind) => KIND[kind === "coding" ? "coding" : "general"].worker;
-// WHO THE OWNER SEES AT WORK (kinds.json `shown_`, the owner 2026-10-28): Taskuary, whatever profile the agent runs under. A coding
-// session may name its tool (`cli`); a chat session's `cli` is Taskuary's own. The profile is told on hover only (instructionsHint).
+// WHO THE OWNER SEES AT WORK (kinds.json `shown_`): Agent, whatever profile, tool or demo runs it (the owner, 2026-11-08 - Taskuary is the
+// app, the Assistant the corner pop-up). The profile is told on hover only (instructionsHint).
 export const AGENT_SHOWN = kinds.shown;
 // THE ONE PROMPT WORDING (audit, 2026-11-05): every box that talks to the agent says this; only a sign-in hand-over adds its own warning
 // ...WHO IS TALKING (the owner, 2026-11-06: "assistant should be more general bringing you around places and agent is more specific to this but
 // does more hard work"): in a task the one who works it is the Agent - its turns and its box; the corner pill is the Assistant
 export const AGENT_TURN = "Agent";
 export const MESSAGE = "Message the agent…", ASK_ASSISTANT = "Ask the Assistant…";
-export const shownAgent = (run) => {
-  const tool = ["chat", "assistant"].includes(String(run?.mode || "")) ? "" : String(run?.cli || "").trim();
-  return tool && tool.toLowerCase() !== AGENT_SHOWN.toLowerCase() ? tool : AGENT_SHOWN;
-};
+export const shownAgent = () => AGENT_SHOWN;      // `run` was read for a tool's name; every agent is Agent now
 export const instructionsHint = (profile) => profile ? `Instructions: ${profile}` : "";

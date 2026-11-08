@@ -179,6 +179,11 @@ ARTIFACT_COLS = ('TaskId', 'Name', 'ContentType', 'Size', 'Path', 'Kind', 'Creat
 _REVIEW_FROM = ('FROM review rv LEFT JOIN task t ON t.TaskId=rv.TaskId '
                 'LEFT JOIN message m ON m.MessageId=rv.MessageId')
 _NOT_ORPHAN = '(rv.TaskId IS NULL OR t.TaskId IS NOT NULL)'
+# ...the comment kinds that are prompt machinery, not something said on the task (Store.list_comments): a kept line, a line put back in the
+# owner's box, a turn's summary JSON, and a brief - a user turn filed by Taskuary (general.BRIEF_ACTOR) - each its own ActorType already
+INTERNAL_TYPES = ('assistant_waiting', 'assistant_box', 'assistant_summary')
+def is_internal(c) -> bool: return c.get('ActorType') in INTERNAL_TYPES or (c.get('ActorType') == 'assistant_user' and c.get('Actor') == 'taskuary')
+
 _VISIBLE_PENDING = ("NOT (rv.Status='pending' AND (IFNULL(t.Status,'') IN ('dropped','done') "
                     "OR IFNULL(m.Status,'') IN ('context','skipped','ignored')))")
 
@@ -5140,7 +5145,13 @@ class SQLiteStore:
                 (task_id, actor, actor_type, body, _now()))
             self.cx.commit(); self._writes += 1
             return cur.lastrowid
-    def list_comments(self, task_id): return self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
+    def list_comments(self, task_id, internal: bool = False):
+        """The task's comments, oldest first. PROMPT MACHINERY IS NOT A COMMENT (the owner, 2026-11-08): a brief Taskuary handed an agent ("THIS
+        TASK IS A REPLY OWED..."), a turn's summary JSON, a line kept for a turn - each its own ActorType already (is_internal) - stays out of
+        every reader (exports, search, the phone, an agent's my_task, the Assistant) unless it asks with `internal`: the agent's own
+        machinery (general, sessionrecord, the task's state) does."""
+        rows = self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
+        return rows if internal else [c for c in rows if not is_internal(c)]
     def drop_comment(self, comment_id): self._exec('DELETE FROM comment WHERE CommentId=?', (comment_id,))
     def take_lines(self, task_id, kind, as_kind, words=str) -> list:
         """THE OWNER'S LINES KEPT FOR A TURN, taken by it (general.send_prompt): each `kind` row moved to the END of the conversation as an

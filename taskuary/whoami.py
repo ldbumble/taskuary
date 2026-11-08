@@ -147,9 +147,13 @@ def palette(seed: str) -> tuple:
     return _hex(h1, 0.42, 0.42), _hex(h1 + 0.33, 0.38, 0.62), _hex(h1 + 0.5, 0.3, 0.92)
 
 
+# ...no name yet is a question, not Taskuary's own letter: a fresh install's avatar read "T" (the product audit, 2026-11-08) - and the
+# template's stand-in "the owner" is no name either
+NO_NAME = '?'
 def initials(name: str) -> str:
+    if ' '.join(str(name or '').split()).lower() == 'the owner': name = ''
     parts = [p for p in (name or '').replace('-', ' ').split() if p and p[0].isalnum()]
-    return ((parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')) if parts else 'T').upper()
+    return (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else NO_NAME
 
 
 def avatar_svg(name: str, seed: str, style: str = 'monogram', size: int = 160) -> str:

@@ -6,8 +6,9 @@ export const PROFILE_TIP = "About you";
 // the event About you sends when the name or the avatar changes, so the corner redraws without a reload
 export const PROFILE_CHANGED = "tq-profile-changed";
 export const initialsOf = (name) => {
-  const ps = String(name || "").replace(/-/g, " ").split(/\s+/).filter((p) => p && /^[\p{L}\p{N}]/u.test(p));
-  return ps.length ? (ps[0][0] + (ps.length > 1 ? ps[ps.length - 1][0] : "")).toUpperCase() : "T";
+  const n = String(name || "").trim().toLowerCase() === "the owner" ? "" : String(name || "");     // the template's stand-in is no name
+  const ps = n.replace(/-/g, " ").split(/\s+/).filter((p) => p && /^[\p{L}\p{N}]/u.test(p));
+  return ps.length ? (ps[0][0] + (ps.length > 1 ? ps[ps.length - 1][0] : "")).toUpperCase() : "?";   // no name yet: a question, never Taskuary's T
 };
 export const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg || "")}`;
 // what /api/whoami answers, as the corner draws it: the picture when there is one, the initials always (the img's alt, and its fallback)

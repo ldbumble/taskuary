@@ -95,7 +95,7 @@ class ProfileTests(unittest.TestCase):
         for st in whoami.STYLES:
             svg = whoami.avatar_svg('Dana Whitfield', 'x', st)
             self.assertTrue(svg.startswith('<svg') and svg.endswith('</svg>'), st)
-        self.assertEqual(whoami.initials('Dana J Whitfield'), 'DW'); self.assertEqual(whoami.initials(''), 'T')
+        self.assertEqual(whoami.initials('Dana J Whitfield'), 'DW'); self.assertEqual(whoami.initials(""), "?"); self.assertEqual(whoami.initials("the owner"), "?")
 
     def test_save_is_whitelisted_and_name_email_go_through_the_owner_route(self):
         s = MemoryStore()

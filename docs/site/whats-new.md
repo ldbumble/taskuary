@@ -2,6 +2,23 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.13 - 2026-11-07
+
+- Taskuary's own reports are never a new workstream
+- Dashboard charts draw again: an orphaned CSS line had dropped the palette
+- The token count is in the glance's top row, and its AI tiles sit up with the charts
+- White cards on a light page for the dashboard, and the End of day checkup laid out as a brief
+- An agent can show a table, chart or checklist in its chat
+- A table, chart or checklist goes through show, not a file
+- A shown view is not repeated in words
+- A chat agent's question is kept with the task, and a turn that asked nothing is done for now
+- On a chat task nothing tells the owner to press a Continue it does not have
+- Each turn keeps the file as it made it; the newest turn shows the file itself
+- Every line the owner sends is kept the moment it is sent, with the time it was typed
+- A line held behind a running turn takes the first line's road, and never says "reload the page"
+- After a restart, unsent lines go back into the owner's box, never to the agent
+- An agent's view draws every block as its own card, with tiles side by side and a chart beside its table
+
 ## 0.3.11.12 - 2026-11-07
 
 - A plain to-do is the one chat too: no Close out section; it still opens on what came in (WIP, bundles not rebuilt)

@@ -80,7 +80,8 @@ class ThreadChangeReplans(unittest.TestCase):
         self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
         self.assertEqual(s.pending_review(tid, kind='draft')['ReviewId'], rid)
 
-    def test_the_owners_own_teams_reply_wakes_it_too(self):
+    def test_the_owners_own_teams_reply_is_context_for_the_next_turn_never_a_turn(self):
+        # a line the owner said in a chat is theirs on the thread, not a prompt (the owner, 2026-11-08): no turn starts, the next one hears it
         s = store(); tid, rid = drafted_task(s)
         s.add_message({'TaskId': tid, 'ExternalId': 'tm-1', 'ConversationId': 'teams-chat-1', 'Channel': 'teams', 'FromName': 'Erin Blake',
                        'FromEmail': 'erin@northwind.example', 'SentAt': '2026-11-03 09:30', 'BodyText': 'pinged you here too', 'Status': 'routed'})
@@ -89,9 +90,10 @@ class ThreadChangeReplans(unittest.TestCase):
             channels.ingest_own_message(s, {'external_id': 'tm-2', 'channel': 'teams', 'conversation_id': 'teams-chat-1',
                                             'from_email': 'alex@northwind.example', 'body': 'Friday - Gail has the courier.',
                                             'sent_at': '2026-11-03 10:05'}, 'your line in the chat')
-        self.assertEqual(names(spawn.call_args_list), ['_replan_general'])
-        turn = spawn.call_args_list[0][0][-1]
-        self.assertIn('you already answered on Teams', turn); self.assertIn('Friday - Gail has the courier.', turn)
+        self.assertEqual(names(spawn.call_args_list), [])
+        s._exec("UPDATE comment SET CreatedAt='2026-11-03 09:00:00' WHERE TaskId=?", (tid,))
+        lb = general.latest_block(s, tid)
+        self.assertIn('WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES', lb); self.assertIn('on Teams: "Friday - Gail has the courier."', lb)
 
     def test_a_second_line_while_the_turn_is_live_queues_once(self):
         s = store(); tid, rid = drafted_task(s)

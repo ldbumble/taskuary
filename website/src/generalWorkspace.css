@@ -167,6 +167,7 @@
 .tq-aui-chat .tq-aui-user .tq-aui-user-bubble { justify-self: end; max-width: 75%; background: #e7efe6; border-color: #cfdccd; }
 .tq-aui-chat .tq-aui-arrived { justify-self: end; max-width: 75%; border-top: 0; margin: 2px 0 14px; padding: 8px 12px; background: #fff; border: 1px solid #dfdbd3; border-radius: 13px; }
 .tq-aui-chat .tq-aui-brief { justify-items: end; }
+.tq-aui-chat .tq-aui-arrived-own { justify-self: start; background: #f7f4ee; }
 .tq-aui-chat .tq-aui-arrived-head { color: #6b6559; font-weight: 600; font-size: 11.5px; }
 /* ...the next of a burst from the same sender sits close under the first, its time alone over it (GeneralWorkspace Arrived) */
 .tq-aui-chat .tq-aui-arrived-more { margin-top: -8px; }

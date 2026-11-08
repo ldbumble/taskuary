@@ -613,22 +613,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always
         elif jid not in want: continue                        # a direct chat is listed too, or it does not come in
-        if m.get('fromMe'):
-            # the owner's OWN line in a chat the funnel reads - typed on their phone, not here. It
-            # used to be dropped, so a WhatsApp thread the owner had answered still read as waiting
-            # on them, and the reader that splits a room into asks never saw our half of it
-            # (channels.ingest_own_message: context on the thread, never work, never counted)
-            if (m.get('text') or '').strip():
-                ingest_own_message(store, {
-                    'external_id': f"whatsapp:{jid}:{m.get('id')}", 'channel': 'whatsapp', 'subject': None,
-                    'body': m['text'].strip(), 'from_email': None, 'conversation_id': f'whatsapp:{jid}',
-                    'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
-                    'source_name': where(m, jid), 'quoted': (m.get('quoted') or '').strip() or None},
-                    'your line in this chat - kept for context')
-            took.append(m.get('id'))
-            continue
         body, audio, image = (m.get('text') or '').strip(), m.get('audio'), m.get('image')
-        doc = m.get('doc')
+        doc, ext_id = m.get('doc'), f"whatsapp:{jid}:{m.get('id')}"
+        if m.get('fromMe') and store.message_exists(ext_id): took.append(m.get('id')); continue     # kept already: never heard twice
         # a DOCUMENT counts. Without it in this list a .docx with no caption was dropped whole -
         # the owner watched a file they had just been sent never reach the Timeline (2026-09-01).
         if not body and not audio and not image and not doc: continue
@@ -659,7 +646,22 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 name = m.get('docName') or os.path.basename(doc)
                 atts.append({'id': f"doc:{m.get('id')}", 'name': name, 'contentType': mime,
                              'size': len(data), 'contentBytes': base64.b64encode(data).decode()})
-        ext_id = f"whatsapp:{jid}:{m.get('id')}"
+        if m.get('fromMe'):
+            # the owner's OWN line in a chat the funnel reads - typed on their phone, not here. It
+            # used to be dropped, so a WhatsApp thread the owner had answered still read as waiting
+            # on them, and the reader that splits a room into asks never saw our half of it
+            # (channels.ingest_own_message: context on the thread, never work, never counted)
+            # ...SAID AS A VOICE NOTE, A PHOTO OR A FILE TOO (the owner, 2026-11-08: two replies spoken into a group between the other side's
+            # lines, and the chat showed only theirs): only typed words were kept, so a spoken answer never reached the task at all
+            if ingest_own_message(store, {
+                    'external_id': ext_id, 'channel': 'whatsapp', 'subject': None, 'body': body or '(no text - see the attachment)', 'from_email': None,
+                    'conversation_id': f'whatsapp:{jid}', 'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
+                    'source_name': where(m, jid), 'quoted': (m.get('quoted') or '').strip() or None},
+                    'your line in this chat - kept for context') and atts:
+                try: save_attachments(store, store.message_by_external(ext_id)['MessageId'], atts, ext_id)
+                except Exception as e: logger.warning(f'whatsapp attachment failed: {e}')
+            took.append(m.get('id'))
+            continue
         # a person's JID, not a group's, is the one-to-one mark; `alias` is the same person's other id (phone vs LID), so
         # the group member the owner answers is the one they talk with directly (senders.chat_aliases)
         meta = {**({} if m.get('group') or jid.endswith('@g.us') else {'dm': True}), **({'alias': a} if (a := _wa_alias(m)) else {})}

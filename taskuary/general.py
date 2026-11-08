@@ -540,6 +540,20 @@ def follow_up(store, tid, press: str, actor: str = 'owner') -> bool:
         except Exception as e: logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
     threading.Thread(target=go, daemon=True, name=f'follow-up-{tid}').start()
     return True
+# WHAT THE OWNER SAID ON THE THREAD THEMSELVES (the owner, 2026-11-08: replies from their phone between the other side's lines): a line of theirs
+# in a chat is never a turn of its own (channels.ingest_own_message), so the next turn hears each one since the agent last answered
+def own_replies(store, tid: int) -> list:
+    """The owner's own lines on task `tid`'s thread since its agent last answered, oldest first - [] before any answer, and never one Taskuary
+    sent. The THREAD, not the task: in a room holding two tasks the line lands on the one it answers, and the other's agent hears it too (the
+    stress run, 2026-11-05: an answer filed on the newer task left the first's draft waiting as if nobody had answered)."""
+    since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
+    if not since: return []
+    from .channels import _same_words
+    sent = [str(x.get('text') or '') for x in wrapup.sent_replies(store, tid)]
+    rows = store._rows("SELECT * FROM message WHERE (IFNULL(Direction,'in')='out' OR Status='context') AND CreatedAt>? AND Status NOT IN ('history','skipped') "
+                       "AND (TaskId=? OR ConversationId IN (SELECT ConversationId FROM message WHERE TaskId=? AND ConversationId<>'')) "
+                       "ORDER BY SentAt, MessageId", (since, tid, tid))
+    return [x for x in rows if not any(_same_words(x.get('OwnText') or x.get('BodyText') or '', t) for t in sent)]
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
@@ -552,8 +566,8 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
     handed = [c for c in store.list_comments(tid, internal=True) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
-    did = owner_did(store, tid)
-    if not (rv or sent or answered or others or handed or did): return ''
+    did, own = owner_did(store, tid), own_replies(store, tid)
+    if not (rv or sent or answered or others or handed or did or own): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
     if rv:
@@ -567,6 +581,11 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
+    if own:
+        from .senders import channel_name
+        out.append("WHAT THE OWNER REPLIED ON THE THREAD THEMSELVES SINCE YOUR LAST TURN - their own words to the people on it, not a request to you; "
+                   'take it as said:\n' + '\n'.join(f"- {clock(x.get('SentAt') or x.get('CreatedAt'))} on {channel_name(x.get('Channel')) or 'another channel'}: "
+                                                      f"{_quote(mail_row(store, x)['words'], 600)}" for x in own))
     if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - take it as said; never undo it:\n' + '\n'.join(f'- {x}' for x in did))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
         f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))

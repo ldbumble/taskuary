@@ -1111,6 +1111,9 @@ def ingest_own_message(store, msg: dict, why: str, keep_unmatched: bool = True) 
         # ...and the task's assistant hears that you already answered, wherever you did (Task 4.5): what is left is its to re-plan.
         # Never Taskuary's own acknowledgement, which promises an answer and is not one
         from . import ingest
+        # ...but A LINE THE OWNER SAID IN A CHAT is context, never a turn (the owner, 2026-11-08: "it should show what i sent ... even if it
+        # does not trigger as a prompt"): it stands in the task's chat as theirs, and the agent hears it on its next turn (general.latest_block)
+        if ingest.is_chat(msg): return 1
         if not ingest.is_ack(store, sent):
             ingest.thread_moved(store, tid, msg, mid, None, 'router', own=True)
             # ...and every OTHER open task on the thread hears it too (the stress run, 2026-11-05): a follow-up that was a new ask made a

@@ -238,7 +238,7 @@ const when = (at) => {
 // IT IS A CHAT (the owner, 2026-11-05: "show the taskuary stuff on left. the inputs on right meaning little email logo like the rail ... that
 // shows trigger says something emails came in from x and was sent to agent.. then as new one comes in another one on right side"): each mail that
 // started or woke a turn is a prompt on the RIGHT - its channel's mark, who, when - with the answer it woke under it on the left. The owner's own
-// reply sent outside Taskuary draws nothing of its own ("not bubbles"): the re-think under it says what it saw
+// reply sent outside Taskuary is no prompt: it stands on the left among the lines it answers (Arrived, 2026-11-08)
 const CHANNEL_WORD = { email: "Email", whatsapp: "WhatsApp message", teams: "Teams message", slack: "Slack message", telegram: "Telegram message", sms: "Text" };
 const ChannelMark = ({ channel }) => {
   const c = String(channel || "").toLowerCase();
@@ -250,11 +250,17 @@ const ChannelMark = ({ channel }) => {
 // ...icon, who and when - no "sent to Taskuary" (the owner, 2026-11-05: every input goes to it; the words said nothing)
 const sameAs = (a, b) => !!a && !!b && a.who === b.who && String(a.channel || "") === String(b.channel || "");
 // ...and in the same minute as the one before, no head at all: "6:22 PM" over three lines in a row said nothing (the scenario run, 2026-11-06)
-const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => {
+// ...THE OWNER'S OWN REPLY, sent from their phone between the other side's lines, stands among them in time order (the owner, 2026-11-08: "it
+// should be left side thing but written as you responded"): on the LEFT, "You · on WhatsApp · 5:20 PM" - their answer on the thread, never a
+// prompt to the agent (channels.ingest_own_message wakes no turn; the next one hears it)
+const ON_WORD = { email: "by email", whatsapp: "on WhatsApp", teams: "on Teams", slack: "on Slack", telegram: "on Telegram", sms: "by text" };
+const headOf = (x) => x.own ? ["You", ON_WORD[String(x.channel || "").toLowerCase()] || "outside Taskuary"]
+  : [`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`];
+const Arrived = ({ mail }) => mail.map((x, i, all) => {
   const more = sameAs(all[i - 1], x), stamp = x.at ? when(x.at) : "", again = more && stamp === (all[i - 1].at ? when(all[i - 1].at) : "");
-  return <div key={i} className={`tq-aui-arrived${more ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
+  return <div key={i} className={`tq-aui-arrived${more ? " tq-aui-arrived-more" : ""}${x.own ? " tq-aui-arrived-own" : ""}`} data-tq-chat-arrived={x.own ? "own" : ""}>
     {!again && <span className="tq-aui-arrived-head">{more ? stamp : <><ChannelMark channel={x.channel} />
-      {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, stamp].filter(Boolean).join(" · ")}</>}</span>}
+      {[...headOf(x), stamp].filter(Boolean).join(" · ")}</>}</span>}
     {!!mailWords(x) && <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{mailWords(x)}</span>}
     <CameWith x={x} />
   </div>;
@@ -276,7 +282,7 @@ const UserMessage = () => {
   if (due) return <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="check-back">
     <span className="tq-aui-arrived-head"><AlarmIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{["Check-back due", at && when(new Date(at))].filter(Boolean).join(" · ")}</span>
     <span className="tq-aui-arrived-words" dir="auto">{due}</span></div></MessagePrimitive.Root>;
-  if (brief && chat) return mail?.some((x) => !x.own) ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
+  if (brief && chat) return mail?.length ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><Arrived mail={mail} /></MessagePrimitive.Root>
     : !mail?.length && words && words.length <= 140 ? <MessagePrimitive.Root className="tq-aui-message tq-aui-brief"><div className="tq-aui-arrived" data-tq-chat-trigger="">
       <span className="tq-aui-arrived-head"><KeyIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />{at ? when(new Date(at)) : ""}</span>
       <span className="tq-aui-arrived-words">{words}</span></div></MessagePrimitive.Root> : null;

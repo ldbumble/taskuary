@@ -48,13 +48,17 @@ class TwoTasksOneRoom(unittest.TestCase):
     def test_the_other_task_on_the_thread_hears_it_too(self):
         """The stress run, 2026-11-05: Ray's follow-up was a new ask, so his thread held two tasks; the owner's own answer to the first was
         filed on the newer one, and the first's agent never heard it - its draft sat waiting as if nobody had answered. The line still
-        lands on the task it answers; each other open task on the thread is woken to re-plan as well, and says whether it is left."""
+        lands on the task it answers, and wakes no turn - a line in a chat is context (the owner, 2026-11-08) - while each open task's
+        agent hears it on its next turn."""
         from unittest import mock
-        from taskuary import ingest
+        from taskuary import general, ingest
+        for t in (self.a, self.b): self.s.add_comment(t, 'assistant', general.ASSISTANT_TYPE, 'Looked at it.')
+        self.s._exec("UPDATE comment SET CreatedAt='2026-10-29 11:40:00'")
         woke = []
         with mock.patch.object(ingest, 'thread_moved', lambda store, tid, *a, **k: woke.append((tid, k.get('own')))):
             self.assertEqual(_own(self.s, 'o5', '2026-10-29 11:43:00', 'interesting one..'), self.b)
-        self.assertEqual(sorted(woke), sorted([(self.a, True), (self.b, True)]))
+        self.assertEqual(woke, [])
+        for t in (self.a, self.b): self.assertIn('on WhatsApp: "interesting one.."', general.latest_block(self.s, t))
 
     def test_a_room_with_one_task_keeps_it(self):
         s = MemoryStore()

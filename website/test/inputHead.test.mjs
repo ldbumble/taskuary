@@ -8,5 +8,6 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("no input bubble says it was sent to the agent", () => {
   const ws = read("GeneralWorkspace.jsx");
   assert.doesNotMatch(ws, /`sent to \$\{agent\}`/);
-  assert.match(ws, /from \$\{x\.who \|\| "someone"\}`, stamp\]\.filter\(Boolean\)\.join\(" · "\)/);
+  assert.match(ws, /from \$\{x\.who \|\| "someone"\}`\];/);
+  assert.match(ws, /\{\[\.\.\.headOf\(x\), stamp\]\.filter\(Boolean\)\.join\(" · "\)\}/);
 });

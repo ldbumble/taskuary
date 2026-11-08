@@ -209,6 +209,8 @@ def email_from_soul(soul: str):
 # missing from it, so every worker read "John decides" whoever the owner was (the email walk, 2026-10-29).
 OWNER_DOCS = ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel')
 TEMPLATE_OWNER = ('John Smith', 'john.smith@example.com')
+NO_NAME_YET = ("THE OWNER'S NAME IS NOT SET YET. Who the owner is comes from the mailbox the mail arrived in (addressed_to_you), never "
+               "from a name: an ask addressed to that mailbox is the owner's, whatever name it greets.")
 
 def docs_hold_template_owner(store) -> bool:
     """Does any owner document still name the shipped example? Then a name saved beside it never reached the docs."""
@@ -6319,8 +6321,15 @@ class SQLiteStore:
     def doc(self, name):
         """The document as the AI should read it: {{owner}} and friends filled in. The name used to
         be typed into six places across SOUL.md and three more in CODING.md, so changing it changed
-        one of them - a doc that half calls you by name and half calls you John Smith."""
-        return render_doc(self.get_doc(name) or '', self.owner())
+        one of them - a doc that half calls you by name and half calls you John Smith.
+        ...and with NOBODY named yet, the shipped example is a hole, not a person: triage read "You work for John Smith", found mail
+        greeting Alex, and filed Alex's own asks as someone else's (agent-flow audit, 2026-11-07). The owner is then "the owner",
+        known only by the mailbox the mail came to - SOUL.md says so."""
+        who, text = self.owner(), self.get_doc(name) or ''
+        if who['owner'] != 'the owner': return render_doc(text, who)
+        text = re.sub(r'\s*\(\s*\{\{\s*owner_email\s*\}\}\s*\)', '', retoken_doc(text, *TEMPLATE_OWNER))
+        if name == 'soul': text = f'{text.rstrip()}\n\n{NO_NAME_YET}'
+        return render_doc(text, who)
     def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
     def doc_names(self) -> list: return [r['Name'] for r in self._rows('SELECT Name FROM doc ORDER BY Name')]
     def github_permissions(self) -> tuple:

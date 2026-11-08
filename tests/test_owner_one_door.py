@@ -18,6 +18,18 @@ class OwnerOneDoorTests(unittest.TestCase):
         self.assertIn('Alex decides', s.doc('agent'))
         _clean(s, self)
 
+    def test_with_no_name_set_the_template_never_reaches_triage_as_the_owner(self):
+        # agent-flow audit 2026-11-07: "Written to Alex, not John" - real asks filed as FYI before the owner's name was set
+        from taskuary.store import NO_NAME_YET, TEMPLATE_OWNER
+        s = MemoryStore()
+        self.assertIn(TEMPLATE_OWNER[0], s.get_doc('soul'))                    # the doc as written keeps its readable example
+        soul = s.doc('soul')
+        for d in ('soul', 'agent', 'coding', 'triage'): self.assertNotIn('John', s.doc(d) or '', d)
+        self.assertNotIn(TEMPLATE_OWNER[1], soul); self.assertNotIn('()', soul)
+        self.assertIn('You work for **the owner**', soul); self.assertIn(NO_NAME_YET, soul)
+        set_owner(s, 'Alex Doyle', 'alex@northwind.example')
+        self.assertNotIn(NO_NAME_YET, s.doc('soul')); self.assertIn('**Alex Doyle** (alex@northwind.example)', s.doc('soul'))
+
     def test_the_mailbox_guess_goes_through_set_owner(self):
         s = MemoryStore()
         def claims(store, c):

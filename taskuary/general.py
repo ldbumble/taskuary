@@ -51,6 +51,28 @@ def carry_on(task) -> str:
     "How the owner picks the work back up, in words: typing on a chat task, Continue on a coding one."
     return CARRY_ON if handles(task) else f"{L('continue')} picks it up"
 def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor') == BRIEF_ACTOR
+# A LINE THE OWNER SENT, KEPT FOR THE AGENT until a turn takes it (the owner, 2026-11-07: "a word typed is a word kept"): a row of its own on
+# the task, the time it was typed its stamp, {text, files} its body - never a chat turn until a turn takes it (send_prompt), so the
+# conversation the agent continues stays in the order it read it. The page draws these as waiting for the agent (waiting_lines)
+WAITING_TYPE = 'assistant_waiting'
+def _line_of(body) -> dict:
+    try: got = json.loads(body or '{}')
+    except ValueError: got = {'text': str(body or '')}
+    return {'text': str(got.get('text') or ''), 'files': list(got.get('files') or [])}
+def wait_line(store, tid: int, text: str, files=None) -> int:
+    "Keep the owner's line for the agent now - every screen draws it at once (task-changed): its row id."
+    wid = store.add_comment(tid, 'owner', WAITING_TYPE, json.dumps({'text': text, 'files': list(files or [])}))
+    from . import handraise
+    handraise.moved(tid)
+    return wid
+def waiting_lines(store, tid: int) -> list:
+    "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
+    return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body'])} for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
+# A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out): `waiting` is the line kept for it, which the caller's 'has ended' road hands
+# to a fresh session (server.assistant_stream) instead of keeping it twice. 'has ended' is what every caller reads it by
+ENDED = 'this assistant session has ended - reload the page and ask again'
+class Ended(RuntimeError):
+    def __init__(self, waiting=None): super().__init__(ENDED); self.waiting = waiting
 # THE OWNER'S WORDS AS THEY TYPED THEM (the owner, 2026-11-04): answered through the Assistant, the agent's chat showed the Assistant's rewording
 # ("Option B: book the 3-year renewal at 6,000.") under YOU for "Go with option B, three years." Their words go under YOU exactly; what the
 # Assistant adds to them - its context, its rephrase - is Taskuary's, folded with its other instructions
@@ -1444,7 +1466,6 @@ class GeneralSession:
         self.spoke = False                   # a turn of this session has ended: before one, a session being opened is not an answer
         self.rows, self.cols = 32, 110
         self._input, self._lock = '', threading.Lock()
-        self._waiting, self._wlock = [], threading.Lock()     # the owner's lines waiting for the turn ahead (send_prompt: taken together)
         self._cancel = None                  # the stop switch for the answer being written now
         self.cli_sid = ''                    # the CLI's OWN conversation, resumed turn to turn
         from . import continuity
@@ -1633,39 +1654,39 @@ class GeneralSession:
 
     def send_prompt(self, text: str, attachments=None, connector_id=None, model=None, echo=True,
                     pick=None, trace=None, cancel=None, as_owner=True,
-                    delivery_instructions: str = None, kept: bool = False, brief: bool = False) -> str:
+                    delivery_instructions: str = None, kept: bool = False, brief: bool = False, waiting: int = None) -> str:
         """`as_owner=False` is an instruction to the assistant that the OWNER did not say - used to
         make it open a conversation (the walk, a setup). It is not written to the history and
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
         rest of this product is built to avoid; the assistant's answer is recorded as normal.
-        `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR)."""
+        `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR).
+        `waiting`: the owner's line already kept for the agent (wait_line) - a session that ended under it hands it to the next."""
         text = str(text or '').strip()
-        if not text: raise ValueError('empty message')
-        if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        if not text and waiting is None: raise ValueError('empty message')
+        if not self.alive: raise Ended(waiting)
         # LINES TYPED WHILE IT WORKS ARE ONE TURN (the owner, 2026-11-05: "either or what the model decides if it's clarification"): each
         # waits here; the first to get the turn files them all and the model reads them together - a later one may correct an earlier one.
         # The others find theirs already taken and end quietly: the turn that took them answers for them.
-        mine = object() if as_owner and not brief and not kept else None
-        if mine is not None:
-            with self._wlock: self._waiting.append((mine, text, list(attachments or [])))
+        # ...and EACH IS KEPT THE MOMENT IT IS SENT (the owner, 2026-11-07): with the time it was typed, on every screen as waiting for the
+        # agent, through a reload and a restart - never only in this process (WAITING_TYPE)
+        mine = as_owner and not brief and not kept
+        if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments)
         if not self._take(WAIT_TURN, cancel):
-            if mine is not None:
-                with self._wlock: self._waiting = [w for w in self._waiting if w[0] is not mine]
-            # ...it gave up only because the session ended under it (the caller's 'has ended' road starts a fresh one) or was cancelled
-            if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
+            # ...it gave up because the session ended under it - the caller's 'has ended' road starts a fresh one, which takes the kept
+            # line - or because it was cancelled, which takes the line back
+            if not self.alive: raise Ended(waiting)
+            if mine: self.store.drop_comment(waiting)
             raise RuntimeError('the assistant was still answering the previous question when this one was cancelled - send it again.')
         # ...it idled out while this waited for the lock (idle_out): the caller's 'has ended' road starts it again (server.assistant_stream)
-        if not self.alive:
-            if mine is not None:
-                with self._wlock: self._waiting = [w for w in self._waiting if w[0] is not mine]
-            self._lock.release(); raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        if not self.alive: self._lock.release(); raise Ended(waiting)
         lines = [text]
-        if mine is not None:
-            with self._wlock:
-                if not any(w[0] is mine for w in self._waiting): self._lock.release(); return ''     # an earlier turn took it with its own
-                # ...each line with the files sent with it (the owner, 2026-11-06): the turn that took a line carried only its own
-                lines, attachments, self._waiting = [w[1] for w in self._waiting], list(dict.fromkeys(p for w in self._waiting for p in w[2])), []
-            text = '\n\n'.join(lines)
+        if mine:
+            # ...every line kept for it, each with the files sent with it (the owner, 2026-11-06), filed as this turn's own at the time it was
+            # typed. None left: an earlier turn took them with its own, and answers for them
+            took = [{**r, **_line_of(r['Body'])} for r in self.store.take_lines(self.task_id, WAITING_TYPE, USER_TYPE, lambda b: _line_of(b)['text'])]
+            if not took: self._lock.release(); return ''
+            lines, attachments = [r['text'] for r in took], list(dict.fromkeys(p for r in took for p in r['files']))
+            text, kept = '\n\n'.join(lines), True
         if len(lines) > 1:
             together = (f"THE OWNER SENT {len(lines)} MESSAGES while you worked - the last {len(lines)} USER turns. Read them together: a later "
                         "one may correct or clarify an earlier one. Answer them in one reply, or each in turn, as fits.")
@@ -1696,7 +1717,7 @@ class GeneralSession:
             # the owner's words are kept FIRST, and the run says it is working only once it has an AI: with none, the message was
             # lost under "Started the selected agent" and a `working` record for an agent that never could start (2026-10-22 walk)
             if as_owner and not kept:
-                for w in lines: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else "owner", USER_TYPE, w)   # `kept`: the door wrote them already (continue-work)
+                for w in lines: self.store.add_comment(self.task_id, BRIEF_ACTOR if brief else "owner", USER_TYPE, w)   # `kept`: the door, or the take, wrote them
             if not self.pick:
                 self.trace = []; self.trace_revision += 1
                 # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
@@ -2011,9 +2032,9 @@ class GeneralSession:
         exactly as a general turn's do. `steps` are the call's own (kind, name, detail), kept as the turn's working. `brief`: as send_prompt's."""
         from . import quickwork, selfclose, workerstate as ws
         self.quick = True                    # before any event: every event of this turn says 'quick' (quickwork.only_quick)
-        if not self.alive: raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        if not self.alive: raise Ended()
         # outside the try: without the lock this turn never began - its finally would release a lock it does not hold, and the live turn is no failure
-        if not self._take(WAIT_TURN): raise RuntimeError('this assistant session has ended - reload the page and ask again')
+        if not self._take(WAIT_TURN): raise Ended()
         self.busy, self.last = True, time.time()
         selfclose.forget(self.task_id)
         t0 = self.last

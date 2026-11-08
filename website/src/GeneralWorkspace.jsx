@@ -18,7 +18,7 @@ import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
-import { heldLine, notShown, stillHeld } from "./heldLines.js";
+import { heldLine, notShown, stillHeld, waitingShown } from "./heldLines.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
@@ -665,7 +665,7 @@ export function AgentAsks({ asking, name, onAnswer, taskId }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onAttachBack,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false,
+  serverBusy = false, provider, name = "Taskuary", work, since, began = null, revision = 0, asking, onAnswer, drafts = [], acts = [], onDraftDecided, starting = "", noComposer = false, waiting = [],
   onEnded, chat = false, reading = null, came = null, noAi = null, closedLine = "", road = null, cards = null, landing = null, hint = "", placeholder = "",
   empty = "", stopShown = false }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
@@ -881,9 +881,12 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           <ThreadPrimitive.If running={false}>{serverBusy && atWork}</ThreadPrimitive.If>
           {/* ...and the lines typed while it works come UNDER its "Working on this…": over it, they stood between the turn's name and its
               clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
-          {notShown(held, mineDrawn).map((l) => <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
-            <div className="tq-aui-role">you</div><div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
-            {l.err && <div className="tq-aui-hint" role="alert">{l.err}</div>}</div>)}
+          {/* ...the SERVER'S copy first (`waiting`, kept the moment each was sent - on every screen, through a reload or a restart), each at the
+              time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
+          {[...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)].map((l) =>
+            <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
+            <div className="tq-aui-role">you{l.at ? ` · ${when(l.at)}` : ""}</div><div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
+            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
           {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
           {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -1233,7 +1236,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
   // STARTED AND SILENT: the agent is on its way and has filed nothing - the pane is that one line high, not the room an answer gets
-  const quiet = !dock && busy && !(data?.messages || []).some((m) => m.role === "assistant");
+  // ...and only while this turn has drawn nothing: a page opened four minutes into a first turn read "Starting… 3s" over its steps (2026-11-07)
+  const quiet = !dock && busy && !drawn && !(data?.messages || []).some((m) => m.role === "assistant");
   // ...and a start onto a conversation that has answered before (Continue, a carried-on turn): the same line until this turn draws its
   // first output, under the turns already there - never "is working" over a session that has not come up yet (2026-11-04)
   const starting = quiet || (!dock && (data?.starting || opening) && !drawn) ? startingLine(name, session?.provider || pickedLabel) : "";
@@ -1283,7 +1287,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy || codingBusy} provider={coding ? cc.live?.cli || "" : session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
-        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting}
+        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={data?.waiting || []}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""}

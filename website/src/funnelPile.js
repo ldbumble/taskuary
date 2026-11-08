@@ -327,7 +327,9 @@ export const placed = (row, card) => {
 // the agent that asked a question while it stood there read "on you" on the rail under a header saying it waited on you (G7)
 const AGENT_LANES = ["blocked", "working", "stopped", "saved"];
 // ...and so does any task whose agent is WORKING, whatever kind of card it came as: under Tasks, ring spinning, never on you
-export const pulledRow = (card) => (card?.tid && ((card.kind === "agent" && AGENT_LANES.includes(card.lane)) || card.lane === "working")
+// ...but a CLOSED task opened is only shown (the owner, 2026-11-08: a done task opened from Search took Tasks from 20 to 21): no row at all -
+// it comes back to Tasks when something acts on it (typed to, reopened, new mail), which the server's rail then says
+export const pulledRow = (card) => (card?.closed ? null : card?.tid && ((card.kind === "agent" && AGENT_LANES.includes(card.lane)) || card.lane === "working")
   ? { ...card, put_down: false, deferred: false, watching: false }
   : card?.tid ? { ...card, lane: "yours", order_band: 2, put_down: false, deferred: false, watching: false } : { ...card });
 // ONE ROW BY KEY OR ALIAS - the ring's own matching (AssistantView Pile `atTable`). A row that RE-RAN while it was on the table (a nightly

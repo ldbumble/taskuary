@@ -423,9 +423,11 @@ test('timeWords.band: the future reads "in ..." and a server stamp with a space 
 
 test('a task pulled onto the table from outside the pile sits under On you, not where its last message would', async () => {
   const { pulledRow } = await import("../src/funnelPile.js");
-  // a closed task looked up from search: its card speaks through a GitHub notification, so the server calls it fyi
-  const card = { key: 'processing:p1', kind: 'fyi', lane: 'fyi', order_band: 4, tid: 46, closed: true };
+  // an open task looked up from search: its card speaks through a GitHub notification, so the server calls it fyi
+  const card = { key: 'processing:p1', kind: 'fyi', lane: 'fyi', order_band: 4, tid: 46 };
   assert.equal(levelOf(pulledRow(card)), 'task');
+  // ...but a CLOSED one is only shown, never a row under Tasks (the owner, 2026-11-08: Tasks went 20 -> 21 on opening a done task)
+  assert.equal(pulledRow({ ...card, closed: true }), null);
   // ...a message with no task behind it stays where its own lane puts it
   assert.equal(levelOf(pulledRow({ key: 'msg:9', kind: 'fyi', lane: 'fyi', order_band: 4 })), 'fyi');
 });

@@ -384,7 +384,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28). A row from outside the pile takes
   // its place in the order (inOrder), never the top of its section.
   const drawn = inOrder(drawOrder(visibleItems).map((i) => (i.key === curKey && !i.moved ? { ...placed(i, current), key: i.key } : i)),
-    [...(curKey && !known ? [pulledRow(current)] : []), ...onTable, ...ghosts.filter((g) => !stillFyi.has(g.key))]);
+    [...(curKey && !known ? [pulledRow(current)].filter(Boolean) : []), ...onTable, ...ghosts.filter((g) => !stillFyi.has(g.key))]);
   const ringed = (i) => i.key === curKey && !twin(i), batched = (i) => batchKeys.has(i.key) && !twin(i);
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());

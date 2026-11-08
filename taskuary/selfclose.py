@@ -482,10 +482,12 @@ def withdraw_marker(text: str) -> tuple:
 
 
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)
-SHOW_LINE = ('SHOWING YOUR ANSWER: when a chart, an image, a table or a small page makes your answer easier to understand than '
-             'words alone, make it as a file in your working folder (.png .jpg .svg .html .md .csv .pdf) and name it on its own line: '
-             '[[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. Only when it truly '
-             'helps; never your working files, test data or drafts. An .html page runs with no network: put its data and scripts in it.')
+SHOW_LINE = ('SHOWING YOUR ANSWER: a table, a chart, a few numbers or a checklist goes in the chat itself through the `show` tool, '
+             'where your session has it - drawn in place, nothing to open. Make a file only for what show cannot draw: an image, a '
+             'long page, a spreadsheet the owner keeps (.png .jpg .svg .html .md .csv .pdf in your working folder), and name it on its '
+             'own line: [[TASKUARY-SHOW: <full path>]] - it appears in the chat under this answer and stays on the task. Only when it '
+             'truly helps, either way; never your working files, test data or drafts. An .html page runs with no network: put its data and '
+             'scripts in it.')
 
 
 def show_markers(text: str) -> tuple:

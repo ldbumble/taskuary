@@ -503,6 +503,14 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             from .reports import resolve_cfg
             head, _body = run_treg_tools(resolve_cfg(store, {'type': 'treg_tools', 'max_rows': 5, 'connector_id': cid}))
             detail = f'treg answered: {head}'
+        elif c['Type'] in READS:
+            from . import apireads
+            detail = apireads.test(store, c)                       # its one cheap GET (apireads.json `probe`)
+        elif c['Type'] == 'dynamodb':
+            from . import aws
+            from .reports import _card
+            head, _ = aws.run_dynamodb({**_card(store, 'dynamodb', 'secret_access_key', cid), 'max_rows': 1})
+            detail = f'DynamoDB answered: {head}'
         elif c['Type'] in DB_ENGINES:
             # SELECT 1 through the real driver: a card that cannot reach the server, or is missing
             # its driver, says so here rather than in a scheduled report nobody is watching
@@ -1476,6 +1484,7 @@ CHAT_SERVERS = ('mattermost', 'rocketchat', 'matrix', 'google_chat')
 # answers "no test for connector type 'x'" - a working connector that looks broken.
 PAGE_READERS = ('firecrawl', 'reader', 'scrapingbee')
 RESEARCH = ('exa', 'tavily', 'brave_search', 'serpapi', 'serper', 'apify') + PAGE_READERS
+READS = tuple(json.loads((__import__('pathlib').Path(__file__).with_name('apireads.json')).read_text(encoding='utf-8'))['services'])
 DB_ENGINES = ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb')
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',

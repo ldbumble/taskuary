@@ -268,6 +268,20 @@ def run_s3_object(cfg: dict):
     return rows_out(rows, lim, unit='objects', mine=mine)
 
 
+def run_dynamodb(cfg: dict):
+    """{"table": "orders", "key": {"id": {"S": "o-1"}}} reads one item; {"table"} scans its first rows; {} lists the tables. Reads only:
+    the DynamoDB card ships no PutItem, UpdateItem or DeleteItem, and its IAM user is the real ceiling (AmazonDynamoDBReadOnlyAccess).
+    (the owner, 2026-11-08: "all the ones that say coming soon just add them now")"""
+    from .reports import row_limit, rows_out
+    lim, mine = row_limit(cfg)
+    db = client(cfg, 'dynamodb')
+    if not cfg.get('table'): return rows_out([{'table': t} for t in db.list_tables(Limit=min(lim + 1, 100)).get('TableNames') or []], lim, 'tables', mine)
+    if cfg.get('key'):
+        item = db.get_item(TableName=cfg['table'], Key=cfg['key']).get('Item')
+        return (f"{cfg['table']}: {'1 item' if item else 'no such item'}", json.dumps(item or {}, default=str))
+    return rows_out(db.scan(TableName=cfg['table'], Limit=lim + 1).get('Items') or [], lim, 'items', mine)
+
+
 LOG_PAGE_CAP = 12        # one report is worth this many FilterLogEvents calls, not unbounded
 S3_PAGE_CAP = 50         # one feed poll walks at most this many pages of 1,000 keys (poll_source)
 

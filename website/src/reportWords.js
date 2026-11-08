@@ -1,3 +1,4 @@
+import { READ_LABELS } from "./apiReads.js";
 // WHAT A REPORT READS AND WHEN IT RUNS, in words (ReportsView's list and the report on the table, ItemSections) - kept apart so the Assistant's card
 // can say it without loading the whole Reports tab
 // A cron line, said in words when it is one of the shapes people actually write; the raw
@@ -30,6 +31,7 @@ export const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && 
   .filter(Boolean).join(" + ") || "only when you press Run now";
 
 export const TYPE_LABELS = {
+  ...READ_LABELS,
   zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary", taskuary_data: "Taskuary - its own rows",
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", graphql: "GraphQL", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",

@@ -62,6 +62,7 @@ import { PEOPLE_MISSING } from "./peopleSearch.js";
 import ReasonPanel from "./ReasonNetwork.jsx";
 import { DESKTOP_HOW } from "./newTask.js";
 import { openHelp, sayEarlier, viewResult } from "./pageView.js";
+import { READ_META, READ_TYPES } from "./apiReads.js";
 
 /* ── Get AI to set it up: THE ASSISTANT, IN THE CHAT (the owner, 2026-10-30: "don't you think this sort of ai troubleshooting should go
    on in the assistant. it's more intuitive and it will know if you change something in the screen"). The button is the card's door to
@@ -1152,6 +1153,13 @@ const DATA_META = {
     howto: ["Install the driver once: pip install duckdb duckdb-engine",
       "Give the path of the .duckdb file. It is opened read-only, so nothing a query says can change it.",
       "Test runs SELECT 1."] },
+  dynamodb: { title: "Amazon DynamoDB", types: ["dynamodb"],
+    fields: [["access key id", "access_key_id"], ["region (e.g. us-east-1)", "region"]],
+    secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
+    desc: "List tables, scan their first rows or read one item by key, as a report or an agent tool. Reads only.",
+    howto: ["Give an IAM user AmazonDynamoDBReadOnlyAccess - that is the ceiling; the card ships no write.",
+      "Enter the access key id and region, and paste the secret access key (write-only). boto3 is the driver: pip install boto3.",
+      "Test lists your tables."] },
   snowflake: { title: "Snowflake", types: ["snowflake"],
     fields: [["account identifier (e.g. xy12345.eu-west-1)", "account"], ["database", "database"],
              ["schema", "schema"], ["warehouse", "warehouse"], ["role", "role"], ["user", "user"]],
@@ -1615,6 +1623,7 @@ const DATA_META = {
       "Browse, discuss, vote and retire entries on the Hub tab. Keep the bar high: hard-earned discoveries and developed ideas only."],
     agent: ["GET {base}/api/hub{hdr} to browse, or POST {base}/api/tools/run{hdr} with {\"type\": \"hub_search\", \"query\": \"...\"}. Use hub_write only for a reusable discovery backed by substantial investigation/reasoning, or a developed company idea; include why_earned. Use hub_comment and hub_vote as either a coding or general agent. SETUP DONE."] },
 };
+Object.assign(DATA_META, READ_META);       // a vendor's REST API read with a key, one row each in apireads.json
 
 /* A question typed on the Knowledge base card, answered from the index - the same search a
    kb_search report or an agent's tool call gets, so what the card shows is what they would see. */
@@ -2164,6 +2173,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     } }));
   // a vendor's own MCP server (remotemcp.py): a catalogue row with an `mcp` url is a working card in its group, then the planned ones
   const catalogCards = (category) => [
+    // ...and a vendor's REST API read with a key (apireads.json), in its own catalogue group
+    ...dataCards(READ_TYPES.filter((t) => CATALOGUE.find((c) => c.type === t)?.group === category)),
     ...CATALOGUE.filter((c) => c.mcp && c.group === category).flatMap((c) =>
       specialCards(c.type, c.title, "", `${c.type} ${c.title} ${c.desc} ${(c.match || []).join(" ")} mcp agent tools`, toolDesc)),
     ...plannedFor(category).map((c) => ({
@@ -2250,7 +2261,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "Databases", cards: [
       ...specialCards("mssql", "Microsoft SQL Server", "mssql",
         "microsoft sql server mssql connection windows auth " + MSSQL_HOWTO.join(" ")),
-      ...dataCards(["postgresql", "mysql", "clickhouse", "snowflake", "bigquery", "cockroachdb", "oracle", "duckdb", "database"]),
+      ...dataCards(["postgresql", "mysql", "clickhouse", "snowflake", "bigquery", "cockroachdb", "oracle", "duckdb", "dynamodb", "database"]),
       ...plannedCards(["graphql", "sqlite"]), ...catalogCards("Databases"),
     ]},
     { title: "Cloud & infrastructure", cards: [

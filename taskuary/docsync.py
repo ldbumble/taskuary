@@ -60,7 +60,7 @@ def sync_connections(store, actor='system'):
         lines.append(f"- Report \"{cfg.get('title') or s['Address']}\" ({cfg.get('type', 'rest')}, {sched})")
     # the tool role is only real if the agents know how to reach it - spell out the call
     if any('tool' in roles_of(c) for c in store.list_connectors() if c['Active']):
-        from . import config
+        from . import apireads, config
         srv = config.load().get('server') or {}
         auth = ' (header X-Taskuary-Token)' if srv.get('token') else ''
         lines.append(f"- To USE one of the systems above, POST http://{srv.get('host', '127.0.0.1')}:{srv.get('port', 7787)}"
@@ -75,7 +75,7 @@ def sync_connections(store, actor='system'):
                      '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|alchemy_prices|alchemy_wallet|fx_rates|'
                      'td_quotes|td_indicator|av_quotes|fred_series|markets_screen|'
                      'finnhub_quotes|finnhub_news|finnhub_earnings|finnhub_insiders|'
-                     'polygon_bars|polygon_snapshot|tiingo_history|tiingo_news|marketstack_eod|eodhd_eod|'
+                     'polygon_bars|polygon_snapshot|tiingo_history|tiingo_news|marketstack_eod|eodhd_eod|dynamodb|' + '|'.join(f'{t}_read' for t in apireads.types()) + '|'
                      'fmp_fundamentals|fmp_ratios|alpaca_quotes|alpaca_bars", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
                      '"connector_id": <the id named above>; the raw output comes back. '

@@ -1879,8 +1879,8 @@
       "type": "jenkins",
       "title": "Jenkins",
       "group": "Developer",
-      "planned": true,
-      "desc": "Builds, failures and job status",
+      "planned": false,
+      "desc": "Jobs, builds and their console as reports and an agent tool - GET /api/json, /job/<name>/lastBuild/api/json.",
       "match": [
         "jenkins"
       ]
@@ -1889,8 +1889,8 @@
       "type": "circleci",
       "title": "CircleCI",
       "group": "Developer",
-      "planned": true,
-      "desc": "Pipelines, workflows and test failures",
+      "planned": false,
+      "desc": "Pipelines, workflows and failed jobs as reports and an agent tool - GET /project/<slug>/pipeline, /workflow/<id>/job.",
       "match": [
         "circleci"
       ]
@@ -1899,8 +1899,8 @@
       "type": "buildkite",
       "title": "Buildkite",
       "group": "Developer",
-      "planned": true,
-      "desc": "Build pipelines and agent status",
+      "planned": false,
+      "desc": "Builds, pipelines and agents as reports and an agent tool - GET /organizations/<org>/builds?state=failed.",
       "match": [
         "buildkite"
       ]
@@ -1921,8 +1921,8 @@
       "type": "sonarqube",
       "title": "SonarQube",
       "group": "Developer",
-      "planned": true,
-      "desc": "Quality gates and code findings",
+      "planned": false,
+      "desc": "Quality gates, issues and coverage as reports and an agent tool - GET /api/qualitygates/project_status?projectKey=<key>.",
       "match": [
         "sonarqube"
       ]
@@ -2282,8 +2282,8 @@
       "type": "dynamodb",
       "title": "Amazon DynamoDB",
       "group": "Databases",
-      "planned": true,
-      "desc": "Tables, items and query reports",
+      "planned": false,
+      "desc": "List tables, scan their first rows or read one item by key in Amazon DynamoDB, as reports and an agent tool - reads only.",
       "match": [
         "amazon dynamodb",
         "amazon",
@@ -2327,8 +2327,8 @@
       "type": "kubernetes",
       "title": "Kubernetes",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Clusters, workloads and events",
+      "planned": false,
+      "desc": "Namespaces, pods, deployments and events as reports and an agent tool - GET /api/v1/namespaces/<ns>/pods. Reads only.",
       "match": [
         "kubernetes"
       ]
@@ -2351,8 +2351,8 @@
       "type": "digitalocean",
       "title": "DigitalOcean",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Droplets, apps and managed databases",
+      "planned": false,
+      "desc": "Droplets, apps, databases, domains and billing as reports and an agent tool - GET /v2/droplets, /v2/apps, /v2/customers/my/balance.",
       "match": [
         "digitalocean"
       ]
@@ -2399,8 +2399,8 @@
       "type": "terraform_cloud",
       "title": "Terraform Cloud",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Runs, workspaces and policy checks",
+      "planned": false,
+      "desc": "Workspaces, runs and their state as reports and an agent tool - GET /organizations/<org>/workspaces, /workspaces/<id>/runs.",
       "match": [
         "terraform cloud",
         "terraform",
@@ -2634,8 +2634,8 @@
       "type": "tradier",
       "title": "Tradier",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Brokerage market data and trading",
+      "planned": false,
+      "desc": "Quotes, option chains, balances and positions as reports and an agent tool - read only: no order is ever placed from this card.",
       "match": [
         "tradier"
       ]
@@ -2668,8 +2668,8 @@
       "type": "intrinio",
       "title": "Intrinio",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Financial data feeds and fundamentals for public companies",
+      "planned": false,
+      "desc": "Company data, fundamentals and prices as reports and an agent tool - GET /companies/<ticker>, /securities/<ticker>/prices.",
       "match": [
         "intrinio"
       ]
@@ -2678,8 +2678,8 @@
       "type": "benzinga",
       "title": "Benzinga",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Market news, analyst ratings and calendar events",
+      "planned": false,
+      "desc": "Market news and calendars as reports and an agent tool - GET /news?tickers=AAPL, /calendar/earnings.",
       "match": [
         "benzinga"
       ]
@@ -2702,8 +2702,8 @@
       "type": "elastic",
       "title": "Elasticsearch",
       "group": "Observability",
-      "planned": true,
-      "desc": "Search, logs and indexed events",
+      "planned": false,
+      "desc": "Indices, cluster health and search results as reports and an agent tool - GET /_cat/indices?format=json, /<index>/_search?q=...",
       "match": [
         "elasticsearch",
         "elastic"
@@ -2729,8 +2729,8 @@
       "type": "splunk",
       "title": "Splunk",
       "group": "Observability",
-      "planned": true,
-      "desc": "Searches, dashboards and alerts",
+      "planned": false,
+      "desc": "Saved searches, their results and server health as reports and an agent tool, over the management port (8089).",
       "match": [
         "splunk"
       ]
@@ -2753,8 +2753,8 @@
       "type": "dynatrace",
       "title": "Dynatrace",
       "group": "Observability",
-      "planned": true,
-      "desc": "Problems, services and observability data",
+      "planned": false,
+      "desc": "Problems, entities and metrics as reports and an agent tool - GET /api/v2/problems, /api/v2/metrics/query?metricSelector=...",
       "match": [
         "dynatrace"
       ]
@@ -2763,8 +2763,8 @@
       "type": "better_stack",
       "title": "Better Stack",
       "group": "Observability",
-      "planned": true,
-      "desc": "Logs, incidents and uptime checks",
+      "planned": false,
+      "desc": "Uptime monitors, incidents and on-call as reports and an agent tool - GET /monitors, /incidents.",
       "match": [
         "better stack",
         "better",
@@ -2885,8 +2885,8 @@
       "type": "google_drive",
       "title": "Google Drive",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Files, folders and shared drives",
+      "planned": false,
+      "desc": "Find and list files in your Google Drive with the Google Sheets card's sign-in - GET /files?q=name contains 'budget'. Nothing to paste here.",
       "match": [
         "google drive",
         "google",
@@ -2897,8 +2897,8 @@
       "type": "onedrive",
       "title": "OneDrive",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Files and folders in Microsoft 365",
+      "planned": false,
+      "desc": "Find and list files in your OneDrive with the Outlook card's Microsoft sign-in - GET /me/drive/root/children, /me/drive/root/search(q='budget').",
       "match": [
         "onedrive"
       ]
@@ -2945,8 +2945,8 @@
       "type": "coda",
       "title": "Coda",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Docs, tables and rows",
+      "planned": false,
+      "desc": "Docs, tables and rows as reports and an agent tool - GET /docs, /docs/<id>/tables/<table>/rows.",
       "match": [
         "coda"
       ]
@@ -2955,8 +2955,8 @@
       "type": "office365_files",
       "title": "Microsoft 365 files",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Word, Excel and PowerPoint content",
+      "planned": false,
+      "desc": "Files shared with you across OneDrive and SharePoint, with the Outlook card's Microsoft sign-in - GET /me/drive/sharedWithMe, /sites?search=...",
       "match": [
         "microsoft 365 files",
         "microsoft",
@@ -3736,8 +3736,8 @@
       "type": "diffbot",
       "title": "Diffbot",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Turns a page into structured records - articles, products, people - rather than into text to re-read.",
+      "planned": false,
+      "desc": "A web page read into clean article text and fields - GET /v3/article?url=<page>, /v3/analyze?url=<page>.",
       "match": [
         "diffbot"
       ]

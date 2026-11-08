@@ -982,7 +982,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # five more (2026-09-08): finnhub/polygon/tiingo/fmp key like twelvedata; alpaca
                  # needs two credentials (key_id, secret_key) and ships market DATA only, no orders
                  'finnhub': 'report,tool', 'polygon': 'report,tool', 'tiingo': 'report,tool',
-                 'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool',
+                 'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool', 'dynamodb': 'report,tool',
+                 **{t: 'report,tool' for t in ('digitalocean', 'terraform_cloud', 'better_stack', 'circleci', 'buildkite', 'coda', 'intrinio', 'benzinga', 'tradier', 'diffbot', 'jenkins', 'sonarqube', 'elastic', 'splunk', 'dynatrace', 'kubernetes', 'google_drive', 'onedrive', 'office365_files')},      # apireads.json: reads, as reports and agent tools
                  'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
@@ -1487,7 +1488,7 @@ class SQLiteStore:
             # writer; a Fixed the owner chose carries who saved it (brainroute.set_panel, the Settings row), so only the seed moves
             self.cx.execute("UPDATE setting SET Value='auto', UpdatedBy='migration' WHERE Name='ai_route_mode' AND Value='fixed' "
                             "AND COALESCE(UpdatedBy, '')=''")
-            from . import connectorcatalog
+            from . import apireads, connectorcatalog
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
@@ -1520,7 +1521,9 @@ class SQLiteStore:
                          ('postgresql', 'PostgreSQL'),
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),
-                         ('cockroachdb', 'CockroachDB'), ('oracle', 'Oracle Database'), ('duckdb', 'DuckDB'),
+                         ('cockroachdb', 'CockroachDB'), ('oracle', 'Oracle Database'), ('duckdb', 'DuckDB'), ('dynamodb', 'Amazon DynamoDB'),
+                         # a vendor's REST API read with a key (apireads.json)
+                         *((t, r['title']) for t, r in apireads.table().items()),
                          ('snowflake', 'Snowflake'),
                          ('bigquery', 'Google BigQuery'),
                          ('imessage', 'Apple Messages'),

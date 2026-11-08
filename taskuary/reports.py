@@ -10,7 +10,7 @@ taking it out of PLANNED - PRs welcome.
 import contextlib, contextvars, io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
-from . import spawn
+from . import apireads, spawn
 from .timewords import ago_m, plural, span
 
 PLANNED = [
@@ -768,6 +768,9 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'snowflake': _lazy('databases', 'runner')('snowflake'),
             'bigquery': _lazy('databases', 'runner')('bigquery'),
             **{e: _lazy('databases', 'runner')(e) for e in ('cockroachdb', 'oracle', 'duckdb')},
+            # a vendor's REST API read with a key, one row each in apireads.json; and DynamoDB's reads on its own card's keys
+            **{f'{t}_read': _lazy('apireads', 'runner')(t) for t in apireads.types()},
+            'dynamodb': _lazy('aws', 'run_dynamodb'),
             # treg over its hosted MCP: search the catalogue (free), then call one endpoint.
             # The call is a write whatever the endpoint does - it spends money, and the same
             # door reaches endpoints that publish and order.
@@ -911,7 +914,8 @@ def executor_for(type_name):
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery',
-           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 
+           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 'dynamodb': 'dynamodb',
+           **{f'{t}_read': t for t in apireads.types()}, 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github',
            'bluesky_me': 'bluesky', 'bluesky_timeline': 'bluesky', 'bluesky_post': 'bluesky',
@@ -1169,6 +1173,9 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  **{e: engine_connection(e) for e in
                     ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb')},
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
+                 'dynamodb': lambda store, connector_id=None: _card(store, 'dynamodb', 'secret_access_key', connector_id),
+                 **{f'{t}_read': _apikey_card(t) for t in apireads.types()
+                    if t not in apireads.BORROWED},
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,
                  'entra_signins': azure_connection, 'entra_licenses': azure_connection,
@@ -1195,7 +1202,9 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
 # run_due_reports runs these FIRST for that reason, so keep the two uses of this list together.
 STORE_BACKED = ('onedrive_save', 'taskuary', 'taskuary_data', 'dashboard', 'digest', 'evening_inbox', 'automate', 'assistant', 'agent', 'calendar', 'kb_search', 'kb_reindex',
                 'metric', 'metric_check', 'handbook_search', 'handbook_write', 'handbook_vote',
-                'hub_search', 'hub_write', 'hub_vote', 'hub_comment', 'image_generate')
+                'hub_search', 'hub_write', 'hub_vote', 'hub_comment', 'image_generate',
+                # Google Drive and OneDrive read with the app's own sign-ins, which the store holds (apireads._token)
+                'google_drive_read', 'onedrive_read', 'office365_files_read')
 
 
 def gate(store, cfg: dict) -> None:

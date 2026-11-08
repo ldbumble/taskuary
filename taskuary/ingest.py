@@ -258,7 +258,7 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     elif kind == 'coding':
         if not auto_code_enabled(cfg): return False, said(f"Starting the coding agent by itself is switched off in {words.name('coding')}.")
     else: return False, said('A person has to do this one, so it is on your list.')
-    return senders.known(store, msg, exclude_mid=mid, deep=True)
+    return senders.start_known(store, msg, mid)
 
 
 def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') -> dict | None:
@@ -2074,7 +2074,7 @@ def pass_in_why(store, tid, msg: dict, mid, follow: dict | None) -> str:
     if msg.get('no_auto'): return 'the channel waits for the owner'
     if live_agent(store, tid) not in task_kinds.AGENT: return 'no live session to pass it to'
     if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
-    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
+    ok, why = senders.start_known(store, msg, mid)
     return '' if ok else str(why)
 
 
@@ -2458,7 +2458,7 @@ def wake_why(store, tid, msg: dict, mid, follow: dict | None, own: bool = False)
         return '' if general.provider_options(store) else f"No AI is set up for an agent to run on yet ({words.name('ai')})."
     if live:
         if (d := danger(store, msg, mid, follow)): return f'it reads as an attempt to steer an AI ({d}) - it waits for you'
-        ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
+        ok, why = senders.start_known(store, msg, mid)
     else: ok, why = auto_start_ok(store, msg, mid, 'general')
     return '' if ok else str(why)
 

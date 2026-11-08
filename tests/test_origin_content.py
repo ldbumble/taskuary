@@ -115,3 +115,11 @@ def test_att_marks_reads_attached_mails_and_counts_files():
     from taskuary.channels import att_marks
     assert att_marks([{'contentType': 'application/pdf'}, {'isInline': True}, {'contentType': 'message/rfc822', 'from': OUTSIDE},
                       {'@odata.type': '#microsoft.graph.itemAttachment'}]) == {'atts': 1, 'attached': [OUTSIDE, '']}
+
+
+def test_an_unverified_from_waits_on_a_mailbox_whose_server_verifies():
+    s = _store(); m = {'channel': 'email', 'from_email': 'erin@northwind.example', 'from_name': 'Erin', 'source_name': ME, 'body': 'hi'}
+    assert senders.start_known(s, m)[0]                                       # a server that never stamps: nothing to go on, as before
+    _mail(s, None, 'x', MailMetaJson=json.dumps({'auth': 'pass'}))
+    ok, why = senders.start_known(s, m); assert not ok and 'could not verify' in why
+    assert senders.start_known(s, {**m, 'auth': 'pass'})[0] and senders.known(s, m)[0]   # verified starts; the task's trust is unchanged

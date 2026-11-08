@@ -54,3 +54,9 @@ test("the top bar wraps on a phone instead of widening the page", () => {
   const hub = src("TaskHubPage.jsx"), nav = hub.slice(hub.indexOf('<Box id="tqTopNav"'), hub.indexOf('<Box id="tqTopNav"') + 300);
   assert.match(nav, /flexWrap: \{ xs: "wrap", md: "nowrap" \}/);
 });
+
+test("the owner's turn on a stacked page takes the room, and says the page scrolls (TQ-1354)", () => {
+  // Google's 2-Step Verification put its Next under a 560px pane's edge, with nothing saying the picture scrolls
+  assert.match(term, /yourTurn \|\| turn \|\| held\.length \? \{ flex: "0 1 85%", minHeight: 360, maxHeight: 900 \} : \{ flex: "0 1 60%", minHeight: 220, maxHeight: 560 \}/);
+  assert.match(pane, /your turn — click the page and type; scroll it for a button below the edge/);
+});

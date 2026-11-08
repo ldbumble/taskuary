@@ -321,7 +321,7 @@ Take over to drive it yourself; close the session to close it."
           <Typography sx={{ ...mono, position: "absolute", left: 8, bottom: 6, fontSize: 10, color: CATPPUCCIN.yellow,
             bgcolor: "#000000aa", px: 0.75, py: 0.25, borderRadius: 1, pointerEvents: "none" }}>
             {/* ...only over a page that has drawn: "click the page and type" stood over a pane with no frame in it (2026-11-04) */}
-            {!live ? "Loading the page…" : handed.current ? "your turn — the agent is waiting on you; click the page and type" : "you are driving — the agent's next command still runs; press I'm done when finished"}
+            {!live ? "Loading the page…" : handed.current ? "your turn — click the page and type; scroll it for a button below the edge" : "you are driving — the agent's next command still runs; press I'm done when finished"}
           </Typography>
         )}
         {asked && !driving && (

@@ -848,8 +848,12 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
           </IconButton>
         </Tooltip>
       )}
+      {/* THE OWNER'S TURN ON THE PAGE TAKES THE ROOM: 560px is a page to watch, and the page is shaped to the pane - Google's 2-Step
+          Verification put its Next under the bottom edge, with nothing saying the picture scrolls (Gabi, TQ-1354, 2026-11-08) */}
       {layout === "stack" && (
-        <Box data-tq-browser-view="" sx={{ flex: "0 1 60%", minHeight: 220, maxHeight: 560, display: "flex", flexDirection: "column",
+        <Box data-tq-browser-view="" data-tq-browser-turn-room={yourTurn || turn || held.length ? "" : undefined}
+          sx={{ display: "flex", flexDirection: "column",
+          ...(yourTurn || turn || held.length ? { flex: "0 1 85%", minHeight: 360, maxHeight: 900 } : { flex: "0 1 60%", minHeight: 220, maxHeight: 560 }),
           mb: 1, "& > *": { flex: 1, minHeight: 0 } }}>
           <BrowserPane sid={sid} taskId={taskId} url={browser.url || (ended ? lastPage.current : "")} open={browser.open} filling={!!browser.filling}
             yourTurn={yourTurn} onFold={() => fold(true)} waiting={held} turn={turn} onHandBack={onHandBack} onDecided={onDecided} ended={ended} />

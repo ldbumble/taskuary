@@ -77,6 +77,9 @@ class EveryCardCanBeTested(unittest.TestCase):
         out = set(re.findall(r"'([a-z0-9_]+)'", region))
         for name in ('RESEARCH', 'PAGE_READERS', 'DB_ENGINES', 'CHAT_SERVERS', 'AI_TYPES'):
             if name in region: out |= set(getattr(channels, name))
+        if 'remotemcp.road(' in region:               # every vendor MCP server and video skill tests on its road (remotemcp.test)
+            from taskuary import remotemcp, videotools
+            out |= set(remotemcp.MCPS) | set(videotools.SKILLS)
         return out
 
     def test_every_seeded_card_has_a_branch(self):
@@ -119,6 +122,8 @@ class EveryCardIsOnThePage(unittest.TestCase):
             listed |= set(re.findall(r'"([a-z0-9_]+)"', call))
         if 'channelCards(AI_SHELF)' in groups: listed |= ai_shelf()
         catalogue = json.loads((ROOT / 'taskuary' / 'connectorcatalog.json').read_text(encoding='utf-8'))
+        if 'c.mcp && c.group === category' in src:    # catalogCards draws every catalogue row with an `mcp` url in its own group
+            listed |= {r['type'] for r in catalogue['cards'] if r.get('mcp')}
         working = {r['type'] for r in catalogue['cards'] if not r['planned']}
         missing = sorted(t for t in {c['Type'] for c in MemoryStore().list_connectors()} & working
                          if t not in listed)

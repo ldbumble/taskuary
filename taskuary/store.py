@@ -1483,6 +1483,7 @@ class SQLiteStore:
             # writer; a Fixed the owner chose carries who saved it (brainroute.set_panel, the Settings row), so only the seed moves
             self.cx.execute("UPDATE setting SET Value='auto', UpdatedBy='migration' WHERE Name='ai_route_mode' AND Value='fixed' "
                             "AND COALESCE(UpdatedBy, '')=''")
+            from . import connectorcatalog
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
                          ('slack', 'Slack'), ('github', 'GitHub'),
                          ('anthropic', 'Anthropic API'), ('openai', 'OpenAI API'),
@@ -1555,7 +1556,9 @@ class SQLiteStore:
                          ('openai_image', 'OpenAI images'), ('azure_openai_image', 'Azure OpenAI images'),
                          ('gemini_image', 'Google Gemini images'), ('stability_image', 'Stability AI'),
                          ('openrouter_image', 'OpenRouter images'), ('replicate_image', 'Replicate'), ('runway_image', 'Runway'),
-                         ('xai_image', 'xAI Grok images'), ('image_server', 'Any image server')):
+                         ('xai_image', 'xAI Grok images'), ('image_server', 'Any image server'),
+                         # every vendor's own MCP server for the agents (remotemcp.py): a catalogue row with an `mcp` url is a card
+                         *((c['type'], c['title']) for c in connectorcatalog.cards() if c.get('mcp'))):
                 # Type is intentionally not unique anymore. Seed only when a type has no card;
                 # INSERT OR IGNORE would now insert another blank copy on every startup.
                 self.cx.execute('''INSERT INTO connector (Type, Name, Roles)

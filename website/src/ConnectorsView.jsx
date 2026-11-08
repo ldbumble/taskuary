@@ -1818,7 +1818,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "agent_desktop" ? <DesktopDetail key={conn.ConnectorId} {...shared} />
-    : VIDEO_TOOLS.includes(conn.Type) ? <VideoToolDetail key={conn.ConnectorId} {...shared} />
+    : AGENT_TOOLS.has(conn.Type) ? <AgentToolDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
   const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
@@ -1858,10 +1858,14 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const plannedCards = (keys, rest = false) => (rest ? planned.filter((t) => !PLACED.has(t)) : keys.filter((t) => planned.includes(t)))
     .map((t) => ({ key: `p${t}`, title: PLANNED_TITLES[t] || t.replace(/_/g, " "), desc: "planned",
       channel: t, haystack: `${t} planned`, planned: true }));
-  const catalogCards = (category) => plannedFor(category).map((c) => ({
-    key: `catalog-${c.type}`, title: c.title, desc: `planned — ${c.desc}`, channel: c.type,
-    haystack: `${c.type} ${c.title} ${c.desc} planned`, planned: true,
-  }));
+  // a vendor's own MCP server (remotemcp.py): a catalogue row with an `mcp` url is a working card in its group, then the planned ones
+  const catalogCards = (category) => [
+    ...CATALOGUE.filter((c) => c.mcp && c.group === category).flatMap((c) =>
+      specialCards(c.type, c.title, "", `${c.type} ${c.title} ${c.desc} ${(c.match || []).join(" ")} mcp agent tools`, toolDesc)),
+    ...plannedFor(category).map((c) => ({
+      key: `catalog-${c.type}`, title: c.title, desc: `planned — ${c.desc}`, channel: c.type,
+      haystack: `${c.type} ${c.title} ${c.desc} planned`, planned: true,
+    }))];
 
   const groups = onceEach([
     { title: "AI — agents & models", cards: [
@@ -1898,15 +1902,11 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ] },
     // video for the agents (videotools.py): clips from a key card, and editors that live in the agent CLI as MCP servers or skills
     { title: "AI — video",
-      note: "Runway and Kling make a clip from a sentence with a key on their card. Descript, InVideo, Vidova and OpusClip are the vendor's own MCP server, added to Claude Code or Codex - you sign in to the vendor there, once. video-use is a Claude Code skill that edits video files on this computer.",
+      note: "Runway and Kling make a clip from a sentence with a key on their card. Descript, InVideo, Vidova and OpusClip are the vendor's own MCP server, added to Claude Code or Codex - press Sign in on the card once. video-use is a Claude Code skill that edits video files on this computer.",
       cards: [
         ...channelCards(["runway_image", "kling"]),
-        ...specialCards("descript", "Descript", "", "descript mcp edit video podcast transcript", videoDesc),
-        ...specialCards("invideo", "InVideo", "", "invideo mcp make a video script", videoDesc),
-        ...specialCards("vidova", "Vidova", "", "vidova mcp skills edit clips", videoDesc),
-        ...specialCards("opusclip", "OpusClip", "", "opusclip opus clip mcp short clips captions social", videoDesc),
-        ...specialCards("video_use", "video-use", "", "video-use video use browser use skill ffmpeg elevenlabs cut edit", videoDesc),
         ...catalogCards("AI — video"),
+        ...specialCards("video_use", "video-use", "", "video-use video use browser use skill ffmpeg elevenlabs cut edit", toolDesc),
       ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall
     { title: "Email", cards: [...channelCards(["outlook", "gmail", "imap"]), ...catalogCards("Email")] },
@@ -2859,10 +2859,10 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
   );
 }
 
-/* ── A video tool for the agents: a vendor's MCP server added to the agent CLIs here, and/or a skill on disk (videotools.py) ── */
-const VIDEO_TOOLS = ["descript", "invideo", "vidova", "opusclip", "video_use"];
-const videoDesc = (c) => (c.Active ? "added · your agents can use it" : "not added");
-function VideoToolDetail({ conn, reload, onBack, onCreated }) {
+/* ── A tool for the agents: a vendor's MCP server added to the agent CLIs here (remotemcp.py), and/or a skill on disk (videotools.py) ── */
+const AGENT_TOOLS = new Set([...CATALOGUE.filter((c) => c.mcp).map((c) => c.type), "video_use"]);
+const toolDesc = (c) => (c.Active ? "added · your agents can use it" : "not added");
+function AgentToolDetail({ conn, reload, onBack, onCreated }) {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState(null);         // what the last Add press said, one line per step
@@ -2884,7 +2884,8 @@ function VideoToolDetail({ conn, reload, onBack, onCreated }) {
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>{CATALOGUE.find((c) => c.type === conn.Type)?.desc}</Typography>
-      {st?.url && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>MCP server <code>{st.url}</code></Typography>}
+      {st?.url && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>MCP server <code>{st.url}</code>
+        {st.docs && <> · <a href={st.docs} target="_blank" rel="noreferrer">the vendor's guide</a></>}</Typography>}
       {clis.map(([c, v]) => (
         <Typography key={c} variant="body2" sx={{ color: INK }}>{name[c]}: {!v.here ? "not on this computer" : !v.added ? "not added yet"
           : v.signed_in ? "added · signed in" : v.signing_in ? "added · signing in…" : "added"}</Typography>))}

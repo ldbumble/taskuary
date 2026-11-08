@@ -484,6 +484,16 @@ app. Windows and browser speech may use their own online services. The microphon
 words on the card. These built-in services handle live dictation; voice-note files still use a
 transcription card. On a Mac, click in the box and press the Dictation key (or Fn twice).
 
+## A vendor's own MCP server
+
+Many cards — Notion MCP, Linear MCP, Atlassian, Airtable, Dropbox, Figma, Stripe MCP, Sentry MCP,
+Cloudflare, Vercel, Supabase, Zapier and about thirty more — are the vendor's own hosted MCP server,
+added to your agent CLI. **Add** registers it in Claude Code and Codex on this computer; **Sign in**
+opens the vendor's own sign-in page in your browser, once. Taskuary never holds that sign-in, so it
+cannot list the server's tools: adding the card is your word that your agents may use all of them.
+Where a card for the same vendor already brings work in (Notion, Linear, Jira, Monday.com, Todoist,
+Stripe, Sentry, Datadog), that card is unchanged and the MCP card sits beside it.
+
 ## A system with no card
 
 Search the catalogue first. When nothing matches, **Request** under the empty grid drafts a feature

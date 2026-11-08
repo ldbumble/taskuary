@@ -10,7 +10,7 @@ from html import unescape
 from datetime import datetime, timedelta
 from loguru import logger
 
-from . import msauth, net, spawn
+from . import msauth, net, remotemcp, spawn
 from .timewords import plural
 requests = net      # pooled Session + (connect, read) timeouts; the name keeps patches of channels.requests.get biting
 from .github import _h as gh_headers, list_accessible_repos
@@ -482,9 +482,8 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] == 'agent_desktop':
             from . import agentdesktop
             detail = agentdesktop.test()
-        elif c['Type'] in ('descript', 'invideo', 'vidova', 'opusclip', 'video_use'):
-            from . import videotools
-            detail = videotools.test(store, c['Type'])
+        elif (road := remotemcp.road(c['Type'])):    # a vendor's MCP server / a video skill
+            detail = road.test(store, c['Type'])
         elif c['Type'] == 'kling':
             from . import videotools
             detail = videotools.test_kling(c)

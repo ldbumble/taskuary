@@ -1,120 +1,12 @@
-"""VIDEO TOOLS (videotools.py, the owner 2026-11-08): a vendor's remote MCP server added to the agent CLIs here, a skill put on disk with
-its key, and a clip made on a key card - every command stood in for, nothing installed and nothing reached."""
+"""VIDEO TOOLS (videotools.py, the owner 2026-11-08): a skill put on disk with its key (the MCP server beside it: test_remotemcp.py),
+and a clip made on a key card - every command stood in for, nothing installed and nothing reached."""
 import json, tempfile, unittest
 from pathlib import Path
 from unittest import mock
 
-from taskuary import sendfilter, videotools as vt
+from taskuary import videotools as vt
 from taskuary.store import MemoryStore
-
-EXE = {'claude': r'C:\bin\claude.exe', 'codex': r'C:\bin\codex.exe', 'git': 'git', 'uv': r'C:\bin\uv.exe', 'ffmpeg': r'C:\bin\ffmpeg.exe'}
-
-
-class Machine:
-    "A computer as the card sees it: which programs are here, which servers each CLI has, and a skills folder of its own."
-    def __init__(self, have=EXE, claude=(), codex=()):
-        self.have, self.servers, self.ran = dict(have), {'claude': set(claude), 'codex': set(codex)}, []
-        self.root = Path(tempfile.mkdtemp(prefix='tq-skills-'))
-    def run(self, argv, cwd=None, timeout=0):
-        self.ran.append((list(argv), cwd))
-        if argv[1:3] == ['mcp', 'add']: self.servers['claude' if 'claude' in argv[0] else 'codex'].add(argv[-1] if 'claude' in argv[0] else argv[3])
-        if argv[1] == 'clone': (Path(argv[-1])).mkdir(parents=True); (Path(argv[-1]) / 'SKILL.md').write_text('x')
-        return 0, 'ok'
-    def __enter__(self):
-        self.ps = [mock.patch.object(vt, '_which', side_effect=lambda c: self.have.get(c, '')),
-                   mock.patch.object(vt, 'skills_root', return_value=self.root),
-                   mock.patch.object(sendfilter, 'claude_servers', side_effect=lambda: {n: {} for n in self.servers['claude']}),
-                   mock.patch.object(sendfilter, 'codex_servers', side_effect=lambda: {n: {} for n in self.servers['codex']}),
-                   mock.patch.object(vt, 'signed_in', side_effect=lambda c, n: (c, n) in self.signed)]
-        self.signed = set()
-        for p in self.ps: p.start()
-        return self
-    def __exit__(self, *a):
-        for p in self.ps: p.stop()
-
-
-class TheMcpRoad(unittest.TestCase):
-    def test_each_cli_gets_its_own_spelling(self):
-        self.assertEqual(vt.add_argv('claude', 'claude', 'invideo', 'https://mcp.invideo.io/mcp'),
-                         ['claude', 'mcp', 'add', '--transport', 'http', '--scope', 'user', 'invideo', 'https://mcp.invideo.io/mcp'])
-        self.assertEqual(vt.add_argv('codex', 'codex', 'invideo', 'https://mcp.invideo.io/mcp'),
-                         ['codex', 'mcp', 'add', 'invideo', '--url', 'https://mcp.invideo.io/mcp'])
-
-    def test_add_registers_where_missing_keeps_it_for_the_send_filter_and_turns_the_card_on(self):
-        s = MemoryStore()
-        with Machine(claude={'descript'}) as m:                          # already in Claude Code, not in Codex
-            self.assertFalse(vt.state(s, 'descript')['ready'])            # ...so Add still has Codex to do
-            out = vt.add(s, 'descript', runner=m.run)
-        self.assertEqual([a[0] for a, _ in m.ran], [EXE['codex']])        # only the CLI that lacked it was touched
-        self.assertEqual(m.ran[0][0][1:], ['mcp', 'add', 'descript', '--url', 'https://api.descript.com/v2/mcp'])
-        self.assertTrue(out['ready'] and all(v['added'] for v in out['clis'].values()))
-        self.assertIn('codex mcp login descript', ' '.join(out['sign_in']))
-        self.assertEqual(json.loads(s.get_setting(sendfilter.OVERRIDES))['descript/*'], 'keep')
-        self.assertTrue(s.get_connector_by_type('descript')['Active'])
-        with Machine(claude={'descript'}, codex={'descript'}): self.assertIn('ready in Claude Code, Codex', vt.test(s, 'descript'))
-
-    def test_no_agent_cli_here_says_so_and_adds_nothing(self):
-        s = MemoryStore()
-        with Machine(have={}) as m:
-            st = vt.add(s, 'invideo', runner=m.run)
-            with self.assertRaises(RuntimeError): vt.test(s, 'invideo')
-        self.assertEqual((m.ran, st['ready'], st['missing']), ([], False, ['Claude Code or Codex on this computer']))
-        self.assertFalse(s.get_setting(sendfilter.OVERRIDES))
-        self.assertFalse(s.get_connector_by_type('invideo')['Active'])
-
-    def test_the_demo_shows_nobodys_machine_and_installs_nothing(self):
-        with mock.patch('taskuary.demo.enabled', return_value=True), Machine(claude={'opusclip'}) as m:
-            self.assertEqual((vt.state(MemoryStore(), 'opusclip')['clis'], vt.state(MemoryStore(), 'opusclip')['demo']), ({}, True))
-            with self.assertRaises(RuntimeError): vt.add(MemoryStore(), 'opusclip', runner=m.run)
-        self.assertEqual(m.ran, [])
-
-
-class SignInOnePress(unittest.TestCase):
-    "The card's Sign in: each CLI that has the server runs its own `mcp login` (the browser opens), and the card says Signed in once it is."
-    class P:
-        def __init__(self): self.rc = None
-        def poll(self): return self.rc
-        def kill(self): self.rc = -9
-
-    def setUp(self): vt.LOGINS.clear()
-
-    def test_one_press_starts_each_clis_login_once_and_the_card_says_signed_in(self):
-        s, started = MemoryStore(), []
-        start = lambda argv: started.append(argv) or self.P()
-        with Machine(claude={'descript'}, codex={'descript'}) as m:
-            m.signed.add(('codex', 'descript'))                                  # Codex is signed in already
-            out = vt.sign_in(s, 'descript', start=start)
-            self.assertEqual(started, [[EXE['claude'], 'mcp', 'login', 'descript']])
-            self.assertEqual((out['said'], out['clis']['claude']['signing_in']), (['Claude Code: sign-in opened in your browser'], True))
-            self.assertEqual(vt.sign_in(s, 'descript', start=start)['said'], ['The sign-in is open in your browser'])    # never twice
-            vt.LOGINS[('claude', 'descript')][0].rc = 0; m.signed.add(('claude', 'descript'))
-            st = vt.state(s, 'descript')
-            self.assertTrue(all(v['signed_in'] and not v['signing_in'] for v in st['clis'].values()))
-            self.assertEqual((st['sign_in'], vt.sign_in(s, 'descript', start=start)['said']), ([], ['Already signed in']))
-        self.assertEqual(len(started), 1)
-
-    def test_nothing_added_nothing_signs_in_and_a_left_page_is_let_go(self):
-        with Machine() as m:
-            self.assertEqual(vt.sign_in(MemoryStore(), 'invideo', start=lambda a: 1 / 0)['said'], ['Add it first - there is nothing to sign in to yet'])
-        p = vt.LOGINS[('claude', 'x')] = (self.P(), 0)
-        self.assertFalse(vt.signing_in('claude', 'x')); self.assertEqual(p[0].rc, -9)
-
-    def test_only_the_owner_presses_it_and_the_demo_signs_in_nothing(self):
-        from taskuary import guard
-        self.assertTrue(guard.denied('POST', '/api/connectors/7/tool/sign-in'))
-        with mock.patch('taskuary.demo.enabled', return_value=True), self.assertRaises(RuntimeError): vt.sign_in(MemoryStore(), 'opusclip')
-
-    def test_the_clis_own_record_says_who_is_signed_in(self):
-        d = Path(tempfile.mkdtemp(prefix='tq-claude-'))
-        (d / '.credentials.json').write_text(json.dumps({'mcpOAuth': {'descript|ab12': {'serverName': 'descript', 'accessToken': 't'},
-                                                                      'invideo|cd34': {'serverName': 'invideo', 'accessToken': ''}}}))
-        with mock.patch('taskuary.climodels.claude_home', return_value=d):
-            self.assertEqual((vt.signed_in('claude', 'descript'), vt.signed_in('claude', 'invideo')), (True, False))
-        with mock.patch('taskuary.climodels.claude_home', return_value=d / 'none'): self.assertIsNone(vt.signed_in('claude', 'descript'))
-        listed = json.dumps([{'name': 'descript', 'auth_status': 'o_auth'}, {'name': 'invideo', 'auth_status': 'not_logged_in'}])
-        with mock.patch('taskuary.spawn.run', return_value=mock.Mock(stdout=listed)) as run, mock.patch.object(vt, '_which', return_value='codex'):
-            self.assertEqual((vt.signed_in('codex', 'descript'), vt.signed_in('codex', 'invideo')), (True, False))
-        self.assertEqual(run.call_args[0][0], ['codex', 'mcp', 'list', '--json'])
+from tests.test_remotemcp import EXE, Machine
 
 
 class TheSkillRoad(unittest.TestCase):

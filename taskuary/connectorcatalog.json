@@ -1355,50 +1355,66 @@
       "title": "Descript",
       "group": "AI — video",
       "planned": false,
-      "desc": "Descript's own MCP server in your agent CLI — agents edit video and podcasts by editing the transcript. You sign in to Descript in the agent the first time it is used.",
+      "desc": "Descript's own MCP server in your agent CLI — agents edit video and podcasts by editing the transcript. You sign in once with Sign in.",
       "match": [
         "descript",
         "descript mcp",
         "edit video",
         "podcast edit"
-      ]
+      ],
+      "mcp": {
+        "url": "https://api.descript.com/v2/mcp",
+        "docs": "https://help.descript.com/api-and-mcp/mcp"
+      }
     },
     {
       "type": "invideo",
       "title": "InVideo",
       "group": "AI — video",
       "planned": false,
-      "desc": "InVideo's MCP server in your agent CLI — agents turn a script or an idea into a finished video. You sign in to InVideo in the agent the first time it is used.",
+      "desc": "InVideo's MCP server in your agent CLI — agents turn a script or an idea into a finished video. You sign in once with Sign in.",
       "match": [
         "invideo",
         "invideo ai",
         "make a video"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.invideo.io/mcp",
+        "docs": "https://help.invideo.io/en/articles/11316042-invideo-model-context-protocol-server"
+      }
     },
     {
       "type": "vidova",
       "title": "Vidova",
       "group": "AI — video",
       "planned": false,
-      "desc": "Vidova's MCP server and its skill pack in your agent CLI — agents turn raw clips into finished, post-ready videos from a plain request. You sign in to Vidova in the agent the first time it is used.",
+      "desc": "Vidova's MCP server and its skill pack in your agent CLI — agents turn raw clips into finished, post-ready videos from a plain request. You sign in once with Sign in.",
       "match": [
         "vidova",
         "vidova ai",
         "edit my clips"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.vidova.ai/mcp",
+        "docs": "https://github.com/youneslaaroussi/vidova-skills"
+      }
     },
     {
       "type": "opusclip",
       "title": "OpusClip",
       "group": "AI — video",
       "planned": false,
-      "desc": "OpusClip's MCP server in your agent CLI — agents cut a long video into short social clips with captions. You sign in to OpusClip in the agent the first time it is used.",
+      "desc": "OpusClip's own MCP server in your agent CLI — agents cut a long video into short social clips with captions. You sign in once with Sign in.",
       "match": [
         "opusclip",
         "opus clip",
         "opus pro",
         "short clips"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.opus.pro/mcp",
+        "docs": "https://www.opus.pro/mcp"
+      }
     },
     {
       "type": "video_use",
@@ -1825,14 +1841,90 @@
       ]
     },
     {
+      "type": "sentry_mcp",
+      "title": "Sentry MCP",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Sentry's own MCP server in your agent CLI — agents read issues, stack traces and releases and run Seer on a bug. You sign in once with Sign in.",
+      "match": [
+        "sentry mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.sentry.dev/mcp",
+        "docs": "https://mcp.sentry.dev/"
+      }
+    },
+    {
+      "type": "postman",
+      "title": "Postman",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Postman's own MCP server in your agent CLI — agents read and run your collections, environments and APIs (the US region). You sign in once with Sign in.",
+      "match": [
+        "postman"
+      ],
+      "mcp": {
+        "url": "https://mcp.postman.com/mcp",
+        "docs": "https://learning.postman.com/docs/developer/postman-api/postman-mcp-remote-server/postman-mcp-remote-server/"
+      }
+    },
+    {
+      "type": "socket_dev",
+      "title": "Socket.dev",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Socket.dev's own MCP server in your agent CLI — agents check a package's supply-chain risk before it is added. You sign in once with Sign in.",
+      "match": [
+        "socket.dev",
+        "socket security"
+      ],
+      "mcp": {
+        "url": "https://mcp.socket.dev/",
+        "docs": "https://github.com/SocketDev/socket-mcp"
+      }
+    },
+    {
+      "type": "stytch",
+      "title": "Stytch",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Stytch's own MCP server in your agent CLI — agents set up projects, redirect URLs and auth settings. You sign in once with Sign in.",
+      "match": [
+        "stytch"
+      ],
+      "mcp": {
+        "url": "https://mcp.stytch.dev/mcp",
+        "docs": "https://stytch.com/docs/resources/workspace-management/stytch-mcp-server"
+      }
+    },
+    {
+      "type": "jam_dev",
+      "title": "Jam.dev",
+      "group": "Developer",
+      "planned": false,
+      "desc": "Jam.dev's own MCP server in your agent CLI — agents read bug reports with their console logs, network calls and repro steps. You sign in once with Sign in.",
+      "match": [
+        "jam.dev",
+        "jam bug"
+      ],
+      "mcp": {
+        "url": "https://mcp.jam.dev/mcp",
+        "docs": "https://jam.dev/docs/debug-a-jam/mcp"
+      }
+    },
+    {
       "type": "basecamp",
       "title": "Basecamp",
       "group": "Project management",
-      "planned": true,
-      "desc": "Projects, to-dos and messages",
+      "planned": false,
+      "desc": "Basecamp's own MCP server in your agent CLI — agents read and post to-dos, messages and project updates. You sign in once with Sign in.",
       "match": [
         "basecamp"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.basecamp.com/mcp",
+        "docs": "https://basecamp.com/ai"
+      }
     },
     {
       "type": "ms_planner",
@@ -1861,11 +1953,15 @@
       "type": "airtable",
       "title": "Airtable",
       "group": "Project management",
-      "planned": true,
-      "desc": "Bases, records and automations",
+      "planned": false,
+      "desc": "Airtable's own MCP server in your agent CLI — agents read and update bases, tables and records. You sign in once with Sign in.",
       "match": [
         "airtable"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.airtable.com/mcp",
+        "docs": "https://support.airtable.com/docs/using-the-airtable-mcp-server"
+      }
     },
     {
       "type": "wrike",
@@ -1898,6 +1994,79 @@
         "github",
         "projects"
       ]
+    },
+    {
+      "type": "notion_mcp",
+      "title": "Notion MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Notion's own MCP server in your agent CLI — agents search, read and write your Notion pages and databases. You sign in once with Sign in.",
+      "match": [
+        "notion mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.notion.com/mcp",
+        "docs": "https://developers.notion.com/docs/get-started-with-mcp"
+      }
+    },
+    {
+      "type": "linear_mcp",
+      "title": "Linear MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Linear's own MCP server in your agent CLI — agents find, create and update Linear issues, projects and comments. You sign in once with Sign in.",
+      "match": [
+        "linear mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.linear.app/mcp",
+        "docs": "https://linear.app/docs/mcp"
+      }
+    },
+    {
+      "type": "atlassian",
+      "title": "Atlassian (Jira & Confluence)",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Atlassian's own MCP server in your agent CLI — agents search, create and update Jira issues and Confluence pages. You sign in once with Sign in.",
+      "match": [
+        "atlassian",
+        "confluence",
+        "rovo",
+        "jira mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.atlassian.com/v2/mcp",
+        "docs": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/"
+      }
+    },
+    {
+      "type": "monday_mcp",
+      "title": "Monday.com MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Monday.com's own MCP server in your agent CLI — agents read and update boards, items and updates (your monday admin installs the monday MCP app once). You sign in once with Sign in.",
+      "match": [
+        "monday mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.monday.com/mcp",
+        "docs": "https://github.com/mondaycom/mcp"
+      }
+    },
+    {
+      "type": "todoist_mcp",
+      "title": "Todoist MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Todoist's own MCP server in your agent CLI — agents add, find and complete your Todoist tasks. You sign in once with Sign in.",
+      "match": [
+        "todoist mcp"
+      ],
+      "mcp": {
+        "url": "https://ai.todoist.net/mcp",
+        "docs": "https://github.com/Doist/todoist-mcp"
+      }
     },
     {
       "type": "postgresql",
@@ -2011,11 +2180,15 @@
       "type": "cloudflare",
       "title": "Cloudflare",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Zones, Workers and security events",
+      "planned": false,
+      "desc": "Cloudflare's own MCP server in your agent CLI — agents manage zones, DNS and Workers and read their logs. You sign in once with Sign in.",
       "match": [
         "cloudflare"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.cloudflare.com/mcp",
+        "docs": "https://developers.cloudflare.com/agents/model-context-protocol/mcp-servers-for-cloudflare/"
+      }
     },
     {
       "type": "digitalocean",
@@ -2031,21 +2204,29 @@
       "type": "vercel",
       "title": "Vercel",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Deployments, projects and build failures",
+      "planned": false,
+      "desc": "Vercel's own MCP server in your agent CLI — agents check projects and deployments and read build logs. You sign in once with Sign in.",
       "match": [
         "vercel"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.vercel.com",
+        "docs": "https://vercel.com/docs/agent-resources/vercel-mcp"
+      }
     },
     {
       "type": "netlify",
       "title": "Netlify",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Sites, deploys and functions",
+      "planned": false,
+      "desc": "Netlify's own MCP server in your agent CLI — agents create and deploy sites and read deploy status. You sign in once with Sign in.",
       "match": [
         "netlify"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.netlify.com/mcp",
+        "docs": "https://docs.netlify.com/build/build-with-ai/agent-setup-guides/set-up-claude-code-for-netlify/"
+      }
     },
     {
       "type": "heroku",
@@ -2200,6 +2381,64 @@
       ]
     },
     {
+      "type": "stripe_mcp",
+      "title": "Stripe MCP",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Stripe's own MCP server in your agent CLI — agents look up customers, payments and invoices and create payment links. You sign in once with Sign in.",
+      "match": [
+        "stripe mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.stripe.com",
+        "docs": "https://docs.stripe.com/mcp"
+      }
+    },
+    {
+      "type": "close_crm",
+      "title": "Close CRM",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Close CRM's own MCP server in your agent CLI — agents look up and update leads, contacts and opportunities. You sign in once with Sign in.",
+      "match": [
+        "close crm",
+        "close.com"
+      ],
+      "mcp": {
+        "url": "https://mcp.close.com/mcp",
+        "docs": "https://help.close.com/integrations/close-mcp-server"
+      }
+    },
+    {
+      "type": "attio",
+      "title": "Attio",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Attio's own MCP server in your agent CLI — agents search and update records, lists and notes in your CRM. You sign in once with Sign in.",
+      "match": [
+        "attio"
+      ],
+      "mcp": {
+        "url": "https://mcp.attio.com/mcp",
+        "docs": "https://docs.attio.com/mcp/overview"
+      }
+    },
+    {
+      "type": "apollo",
+      "title": "Apollo.io",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Apollo.io's own MCP server in your agent CLI — agents search people and companies and enrich contacts. You sign in once with Sign in.",
+      "match": [
+        "apollo.io",
+        "apollo io"
+      ],
+      "mcp": {
+        "url": "https://mcp.apollo.io/mcp",
+        "docs": "https://docs.apollo.io/docs/apollo-mcp"
+      }
+    },
+    {
       "type": "plaid",
       "title": "Plaid",
       "group": "Markets & finance",
@@ -2292,11 +2531,15 @@
       "type": "grafana",
       "title": "Grafana",
       "group": "Observability",
-      "planned": true,
-      "desc": "Dashboards, alerts and annotations",
+      "planned": false,
+      "desc": "Grafana Cloud's own MCP server in your agent CLI — agents query dashboards, metrics, logs and alerts. You sign in once with Sign in.",
       "match": [
         "grafana"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.grafana.com/mcp",
+        "docs": "https://grafana.com/docs/grafana-cloud/ai-tools/mcp-servers/cloud-mcp/"
+      }
     },
     {
       "type": "elastic",
@@ -2313,13 +2556,17 @@
       "type": "new_relic",
       "title": "New Relic",
       "group": "Observability",
-      "planned": true,
-      "desc": "APM incidents, errors and alerts",
+      "planned": false,
+      "desc": "New Relic's own MCP server in your agent CLI — agents query APM data, errors and alerts with NRQL. You sign in once with Sign in.",
       "match": [
         "new relic",
         "new",
         "relic"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.newrelic.com/mcp/",
+        "docs": "https://docs.newrelic.com/docs/agentic-ai/mcp/setup/"
+      }
     },
     {
       "type": "splunk",
@@ -2335,11 +2582,15 @@
       "type": "honeycomb",
       "title": "Honeycomb",
       "group": "Observability",
-      "planned": true,
-      "desc": "Traces, triggers and SLOs",
+      "planned": false,
+      "desc": "Honeycomb's own MCP server in your agent CLI — agents query traces, triggers and SLOs. You sign in once with Sign in.",
       "match": [
         "honeycomb"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.honeycomb.io/mcp",
+        "docs": "https://docs.honeycomb.io/integrations/mcp/configuration-guide"
+      }
     },
     {
       "type": "dynatrace",
@@ -2372,6 +2623,20 @@
       "match": [
         "uptimerobot"
       ]
+    },
+    {
+      "type": "datadog_mcp",
+      "title": "Datadog MCP",
+      "group": "Observability",
+      "planned": false,
+      "desc": "Datadog's own MCP server in your agent CLI — agents query logs, metrics, monitors and incidents (the US1 site). You sign in once with Sign in.",
+      "match": [
+        "datadog mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.datadoghq.com/v1/mcp",
+        "docs": "https://docs.datadoghq.com/bits_ai/mcp_server/setup/"
+      }
     },
     {
       "type": "perplexity",
@@ -2485,11 +2750,15 @@
       "type": "dropbox",
       "title": "Dropbox",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Files, folders and shared content",
+      "planned": false,
+      "desc": "Dropbox's own MCP server in your agent CLI — agents find, read and organise your files and folders. You sign in once with Sign in.",
       "match": [
         "dropbox"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.dropbox.com/mcp",
+        "docs": "https://help.dropbox.com/integrations/connect-dropbox-mcp-server"
+      }
     },
     {
       "type": "box",
@@ -2505,11 +2774,15 @@
       "type": "egnyte",
       "title": "Egnyte",
       "group": "Files & sheets",
-      "planned": true,
-      "desc": "Enterprise files and governed content",
+      "planned": false,
+      "desc": "Egnyte's own MCP server in your agent CLI — agents search and read your company files (your Egnyte admin turns the MCP add-on on). You sign in once with Sign in.",
       "match": [
         "egnyte"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp-server.egnyte.com/mcp",
+        "docs": "https://developers.egnyte.com/integration/cfs/api-docs/remote-mcp-server"
+      }
     },
     {
       "type": "coda",
@@ -2559,11 +2832,15 @@
       "type": "paypal",
       "title": "PayPal",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Payments, disputes and transactions",
+      "planned": false,
+      "desc": "PayPal's own MCP server in your agent CLI — agents look up transactions, invoices and disputes. You sign in once with Sign in.",
       "match": [
         "paypal"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.paypal.com/http",
+        "docs": "https://developer.paypal.com/ai-tools/mcp-server"
+      }
     },
     {
       "type": "twilio",
@@ -2599,21 +2876,29 @@
       "type": "calendly",
       "title": "Calendly",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Scheduled events and invitees",
+      "planned": false,
+      "desc": "Calendly's own MCP server in your agent CLI — agents see scheduled events and invitees and share booking links. You sign in once with Sign in.",
       "match": [
         "calendly"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.calendly.com",
+        "docs": "https://developer.calendly.com/docs/mcp/calendly-mcp-server"
+      }
     },
     {
       "type": "intercom",
       "title": "Intercom",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Customer conversations and tickets",
+      "planned": false,
+      "desc": "Intercom's own MCP server in your agent CLI — agents look up conversations, tickets and contacts. You sign in once with Sign in.",
       "match": [
         "intercom"
-      ]
+      ],
+      "mcp": {
+        "url": "https://mcp.intercom.com/mcp",
+        "docs": "https://developers.intercom.com/docs/guides/mcp"
+      }
     },
     {
       "type": "zendesk",
@@ -2634,6 +2919,163 @@
       "match": [
         "shipstation"
       ]
+    },
+    {
+      "type": "figma",
+      "title": "Figma",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Figma's own MCP server in your agent CLI — agents read designs, frames and variables to build from them. You sign in once with Sign in.",
+      "match": [
+        "figma"
+      ],
+      "mcp": {
+        "url": "https://mcp.figma.com/mcp",
+        "docs": "https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/"
+      }
+    },
+    {
+      "type": "miro",
+      "title": "Miro",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Miro's own MCP server in your agent CLI — agents read boards and draw diagrams and stickies on them. You sign in once with Sign in.",
+      "match": [
+        "miro",
+        "miro board"
+      ],
+      "mcp": {
+        "url": "https://mcp.miro.com/",
+        "docs": "https://developers.miro.com/docs/connecting-to-miro-mcp"
+      }
+    },
+    {
+      "type": "granola",
+      "title": "Granola",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Granola's own MCP server in your agent CLI — agents search your meeting notes and transcripts. You sign in once with Sign in.",
+      "match": [
+        "granola"
+      ],
+      "mcp": {
+        "url": "https://mcp.granola.ai/mcp",
+        "docs": "https://docs.granola.ai/help-center/sharing/integrations/mcp"
+      }
+    },
+    {
+      "type": "fireflies",
+      "title": "Fireflies.ai",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Fireflies.ai's own MCP server in your agent CLI — agents search meeting transcripts, summaries and action items. You sign in once with Sign in.",
+      "match": [
+        "fireflies",
+        "fireflies.ai"
+      ],
+      "mcp": {
+        "url": "https://api.fireflies.ai/mcp",
+        "docs": "https://docs.fireflies.ai/getting-started/mcp-configuration"
+      }
+    },
+    {
+      "type": "webflow",
+      "title": "Webflow",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Webflow's own MCP server in your agent CLI — agents edit site pages and CMS collections and publish. You sign in once with Sign in.",
+      "match": [
+        "webflow"
+      ],
+      "mcp": {
+        "url": "https://mcp.webflow.com/mcp",
+        "docs": "https://developers.webflow.com/mcp/installing/claude-code"
+      }
+    },
+    {
+      "type": "wix",
+      "title": "Wix",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Wix's own MCP server in your agent CLI — agents manage your Wix site, store and bookings. You sign in once with Sign in.",
+      "match": [
+        "wix"
+      ],
+      "mcp": {
+        "url": "https://mcp.wix.com/mcp",
+        "docs": "https://dev.wix.com/docs/api-reference/articles/ai-tools/wix-mcp/about-the-wix-mcp"
+      }
+    },
+    {
+      "type": "klaviyo",
+      "title": "Klaviyo",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Klaviyo's own MCP server in your agent CLI — agents read campaigns, flows, lists and their results. You sign in once with Sign in.",
+      "match": [
+        "klaviyo"
+      ],
+      "mcp": {
+        "url": "https://mcp.klaviyo.com/mcp",
+        "docs": "https://developers.klaviyo.com/en/docs/connect_to_the_klaviyo_mcp_server"
+      }
+    },
+    {
+      "type": "bitly",
+      "title": "Bitly",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Bitly's own MCP server in your agent CLI — agents shorten links and read their clicks. You sign in once with Sign in.",
+      "match": [
+        "bitly"
+      ],
+      "mcp": {
+        "url": "https://api-ssl.bitly.com/v4/mcp",
+        "docs": "https://dev.bitly.com/bitly-mcp/using-the-bitly-mcp-server/configuration-details/"
+      }
+    },
+    {
+      "type": "sanity_cms",
+      "title": "Sanity (CMS)",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Sanity's own MCP server in your agent CLI — agents query and edit content in your Sanity datasets. You sign in once with Sign in.",
+      "match": [
+        "sanity cms",
+        "sanity.io"
+      ],
+      "mcp": {
+        "url": "https://mcp.sanity.io",
+        "docs": "https://www.sanity.io/docs/ai/mcp-server"
+      }
+    },
+    {
+      "type": "amplitude",
+      "title": "Amplitude",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Amplitude's own MCP server in your agent CLI — agents query charts, cohorts and product analytics (the US site). You sign in once with Sign in.",
+      "match": [
+        "amplitude"
+      ],
+      "mcp": {
+        "url": "https://mcp.amplitude.com/mcp",
+        "docs": "https://amplitude.com/docs/amplitude-ai/amplitude-mcp"
+      }
+    },
+    {
+      "type": "mixpanel",
+      "title": "Mixpanel",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Mixpanel's own MCP server in your agent CLI — agents query events, funnels and reports (the US site). You sign in once with Sign in.",
+      "match": [
+        "mixpanel"
+      ],
+      "mcp": {
+        "url": "https://mcp.mixpanel.com/mcp",
+        "docs": "https://docs.mixpanel.com/docs/mcp"
+      }
     },
     {
       "type": "deepseek",
@@ -2929,6 +3371,21 @@
       ]
     },
     {
+      "type": "huggingface",
+      "title": "Hugging Face",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Hugging Face's own MCP server in your agent CLI — agents search models, datasets, papers and Spaces and run Spaces. You sign in once with Sign in.",
+      "match": [
+        "hugging face",
+        "huggingface"
+      ],
+      "mcp": {
+        "url": "https://huggingface.co/mcp?login",
+        "docs": "https://huggingface.co/learn/context-course/en/unit2/mcp-clients"
+      }
+    },
+    {
       "type": "treg",
       "title": "treg (agent tools)",
       "group": "Agent tools",
@@ -2960,6 +3417,20 @@
         "agent-desktop",
         "desktop app"
       ]
+    },
+    {
+      "type": "zapier",
+      "title": "Zapier",
+      "group": "Agent tools",
+      "planned": false,
+      "desc": "Zapier's own MCP server in your agent CLI — agents run the Zapier actions you pick across thousands of apps. You sign in once with Sign in.",
+      "match": [
+        "zapier"
+      ],
+      "mcp": {
+        "url": "https://mcp.zapier.com/api/v1/connect",
+        "docs": "https://docs.zapier.com/mcp/get-started/connect/claude-code"
+      }
     },
     {
       "type": "oracle",
@@ -3001,6 +3472,35 @@
       "match": [
         "neo4j"
       ]
+    },
+    {
+      "type": "supabase",
+      "title": "Supabase",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Supabase's own MCP server in your agent CLI — agents query your projects, run SQL and manage tables. You sign in once with Sign in.",
+      "match": [
+        "supabase"
+      ],
+      "mcp": {
+        "url": "https://mcp.supabase.com/mcp",
+        "docs": "https://supabase.com/docs/guides/getting-started/mcp"
+      }
+    },
+    {
+      "type": "neon",
+      "title": "Neon Postgres",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Neon Postgres's own MCP server in your agent CLI — agents create branches, run SQL and manage your Neon projects. You sign in once with Sign in.",
+      "match": [
+        "neon postgres",
+        "neon.tech"
+      ],
+      "mcp": {
+        "url": "https://mcp.neon.tech/mcp",
+        "docs": "https://neon.com/docs/ai/neon-mcp-server"
+      }
     },
     {
       "type": "zulip",

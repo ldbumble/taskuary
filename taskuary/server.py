@@ -7615,14 +7615,14 @@ def _failed_test(cid: int, name: str, out: dict):
 class ConnectorTestBody(BaseModel): ConfigJson: str | None = None; Secret: str | None = None
 
 def _video_card(cid: int):
-    from . import videotools
+    from . import remotemcp
     c = store.get_connector(cid)
-    if not c or c['Type'] not in videotools.TYPES: raise HTTPException(404, 'not a video tool card')
-    return videotools, c['Type']
+    if not c or not (road := remotemcp.road(c['Type'])): raise HTTPException(404, 'not an agent tool card')
+    return road, c['Type']
 
 @app.get('/api/connectors/{cid}/tool')
 def video_tool_state(cid: int):
-    "A video tool card's state (videotools.state): which CLI has its MCP server, whether its skill is on disk, what is missing."
+    "An agent tool card's state (remotemcp.state, videotools.state): which CLI has its MCP server, whether its skill is on disk, what is missing."
     vt, t = _video_card(cid)
     return vt.state(store, t)
 
@@ -7635,7 +7635,7 @@ def video_tool_add(cid: int):
 
 @app.post('/api/connectors/{cid}/tool/sign-in')
 def video_tool_sign_in(cid: int):
-    "The card's Sign in press - the owner's only (guard.DENIED): each agent CLI with the server signs in to it in the browser (videotools.sign_in)."
+    "The card's Sign in press - the owner's only (guard.DENIED): each agent CLI with the server signs in to it in the browser (remotemcp.sign_in)."
     vt, t = _video_card(cid)
     try: return vt.sign_in(store, t, ACTOR)
     except RuntimeError as e: raise HTTPException(422, str(e))

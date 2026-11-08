@@ -33,8 +33,10 @@ test("the requested Grok API connector is BUILT, not merely planned", () => {
 });
 
 test("Everything else is a useful catalog rather than an empty bucket", () => {
+  // ten planned until the vendors' own MCP servers made Intercom, PayPal and Calendly working cards here (remotemcp.py, 2026-11-08)
   const entries = plannedFor("Everything else");
-  assert.ok(entries.length >= 10);
+  assert.ok(entries.length >= 5);
+  assert.ok(CATALOGUE.filter((c) => c.group === "Everything else" && c.mcp && !c.planned).length >= 10);
   assert.ok(entries.some((c) => c.type === "shopify"));      // stripe was the example here until it was built (2026-11-01)
   assert.ok(entries.some((c) => c.type === "docusign"));
 });

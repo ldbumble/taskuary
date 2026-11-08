@@ -4233,19 +4233,46 @@ def waiting_on_owner(store, tid: int) -> list:
     reply or email for a Send, an agent session still open, a run or workflow still going, an agent queued to start. [] when nothing does.
     A SEND THAT CLOSES (close_after_send) asks this first: a Close out Send closed a task whose agent's `git push` was held for the
     owner's Approve - never approved, never pushed, and the task read done (2026-10-29)."""
+    from . import workerstate as ws
+    return [i['says'] for i in owed_items(store, tid, asks=False)] + ws.live_work(store, tid)   # ...and anything still working or live on it
+
+
+def owed_items(store, tid: int, asks: bool = True) -> list:
+    """EVERYTHING A TASK HOLDS FOR THE OWNER, item by item, from the reads its own page draws (server._assistant_payload): each pending or
+    held review - the reply draft, an email it owes, a post, any other proposal - and the agent's open question. Each {rid, verb, line,
+    says}: `line` one short line for the Assistant and the dock, `verb` the button that answers it (button.light), `says` the waiting
+    words close_after_send keeps a task open with. The Assistant said "it's waiting on you, I haven't seen what it needs yet" of a task
+    with two emails waiting to send (the owner, 2026-11-07)."""
     from . import buttons, proposals, workerstate as ws
     A, S, out = buttons.label('approve', 'action'), buttons.label('approve'), []
     for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') ORDER BY ReviewId", (tid,)):
+        try: d = json.loads((r.get('DraftText') if r.get('Kind') == 'action' else r.get('Deliver')) or '{}') or {}
+        except ValueError: d = {}
+        d = d if isinstance(d, dict) else {}
         if r.get('Kind') != 'action':
-            out.append(f"an email this task owes still waits for your {S}" if r.get('Kind') == 'slot' else
-                       'a reply held while the agent worked comes back for your Send' if r.get('Status') == 'held' else f'another reply still waits for your {S}')
+            to = ', '.join(d['to']) if isinstance(d.get('to'), list) else str(d.get('to') or '')
+            to = to or str((store.get_message(r['MessageId']) or {}).get('FromEmail') or '') if r.get('MessageId') else to
+            what = f"{'an email' if r.get('Kind') == 'slot' else 'a reply'}{' to ' + to if to else ''}"
+            says = (f"an email this task owes still waits for your {S}" if r.get('Kind') == 'slot' else
+                    'a reply held while the agent worked comes back for your Send' if r.get('Status') == 'held' else f'another reply still waits for your {S}')
+            out.append({'rid': r['ReviewId'], 'verb': 'approve', 'says': says, 'line': f"{what} is drafted - {S} sends it"
+                        + (' (held while the agent works)' if r.get('Status') == 'held' else '')})
             continue
-        try: p = json.loads(r.get('DraftText') or '{}')
-        except ValueError: p = {}
-        if p.get('action') in proposals.HELD_ACTS:
-            out.append(f"the agent's held step still waits for your {A} - {p.get('what') or str(p.get('command') or 'a step')[:120]}")
-        else: out.append(f"{str(r.get('Reason') or 'a proposal').strip()[:200]} - still waiting for your {A}")
-    return out + ws.live_work(store, tid)        # ...and anything still working or live on it (the one check, workerstate.live_work)
+        if d.get('action') in proposals.HELD_ACTS:
+            step = d.get('what') or str(d.get('command') or 'a step')[:120]
+            says, line = f"the agent's held step still waits for your {A} - {step}", f"the agent's held step - {step} - waits for your {A}"
+        else:
+            why = ' '.join(str(r.get('Reason') or 'a proposal').split())[:200]
+            says = f"{why} - still waiting for your {A}"
+            line = f"a {proposals.POSTS[d['type']]} post waits for your {A}" if proposals.is_post(d) else f"{why} - {A} does it"
+        out.append({'rid': r['ReviewId'], 'verb': 'approve', 'says': says, 'line': line})
+    if asks:
+        from . import general
+        live = general.session_for(tid) or ws._live(tid)
+        q = ws.asking_of(store, live) if live else None
+        if q and q.get('text'):
+            out.append({'rid': None, 'verb': 'answer_agent', 'says': '', 'line': f"the agent asks: {_cut(' '.join(str(q['text']).split()), 200)}"})
+    return out
 
 
 def close_after_send(store, tid: int, actor: str = 'owner') -> dict:
@@ -5780,7 +5807,7 @@ def _asks_block(store, p: dict) -> str:
 RAIL_CAP = 20
 
 
-def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
+def _rail_block(p: dict, cap: int = RAIL_CAP, store=None) -> str:
     """THE RAIL BY NAME, for this turn: ref, who and what of each row the pile already holds - no read, no build. "Remind me
     tomorrow about the Payworth invoice" had nothing in the prompt that said the Payworth invoice was TQ-0005, so it became a
     new to-do every time (2026-10-06). Only for resolving a name the owner uses; the item on the table still comes first."""
@@ -5792,8 +5819,11 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
         bits = [x for x in (handle_of(i), i.get('who'), _cut(i.get('title') or '', 90)) if x]
         # ...and whether a DRAFT waits on it: the lane's word alone ("ready to send") left "reject the draft on TQ-0004" answered
         # "there is no draft", and "send the reply to Sam" written as a new one (real-AI check, 2026-10-18)
+        # ...and WHAT IT HOLDS, item by item (owed_items, the reads its page draws): an agent task's emails, post and question
+        held = owed_items(store, int(i['tid'])) if store is not None and str(i.get('tid') or '').isdigit() else []
         if bits: rows.append(f"- {' · '.join(bits)} ({funnel.lane_word(i)}"
-                             + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')
+                             + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') and not held else '') + ')'
+                             + ''.join(f"\n  · {x['line']}" + (f" [rv{x['rid']}]" if x.get('rid') else '') for x in held[:6]))
     if not rows: return ''
     more = f"\n- ...and {len(items) - cap} more" if len(items) > cap else ''
     # ...and THE WHOLE RAIL BY COUNT, with the read that holds every row: "summarize the FYI emails" was answered from the twenty
@@ -5802,7 +5832,10 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
     live = [i for i in items if not i.get('settling')]
     whole = (f"\nTHE WHOLE RAIL: {len(live)} rows ({rail_counts(live)}). pipe.read reads every one with what its sender wrote - "
              '`section` (task, reports, fyi...) or `who` to narrow it; one call summarizes a whole section.') if live else ''
-    return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more + whole       # what it is for is said once (TURN_GUIDE)
+    # ..."what's waiting on me" is answered by bringing each up with its button lit - one short line per item, never "not seen yet"
+    owed = ('\nWHAT WAITS ON THE OWNER is each row\'s · lines: asked about it, bring the item up and light its button (button.light), one '
+            'short line per item with its task link - never say you have not seen what a task needs.') if any('\n  · ' in r for r in rows) else ''
+    return f'{RAIL_HEAD}\n' + '\n'.join(rows) + more + whole + owed       # what it is for is said once (TURN_GUIDE)
 
 
 def _view_lines(raw: str) -> str:
@@ -5969,7 +6002,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
                       # ...said whole once per conversation, then "unchanged" while it is (rail_for_turn - the owner, 2026-10-27)
-                      + (f"{rail_sent}\n\n" if (rail_sent := rail_for_turn(llm, tid, rail := _rail_block(p))) else '')
+                      + (f"{rail_sent}\n\n" if (rail_sent := rail_for_turn(llm, tid, rail := _rail_block(p, store=store))) else '')
                       + (f"CONVERSATION SO FAR:\n{so_far}\n\n" if so_far else '')
                       # THE CARD BROWSED OPEN in the canvas (the canvas redesign, 2026-09-29): "this", "it", "set it up"
                       # mean that card - a connector, a settings group, a report - when no item is on the table
@@ -6120,7 +6153,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and decision.get('on') and _resolve_named(store, decision['on'], item) == '?' and llm:
         try:
             # ...on the turn's own instructions: a CLI brain is launched with them, and other ones restarted its process twice
-            again = str(llm(turn_system(store, llm), f"{table}\n\n{_rail_block(p)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
+            again = str(llm(turn_system(store, llm), f"{table}\n\n{_rail_block(p, store=store)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
                                                 f"with `on`: {str(decision['on'])[:80]!r}, which names no row. Put the row's handle in `on` - the "
                                                 'TQ ref or m-number that starts its line above, or one a look-up gave you - and CALL it again. '
                                                 'If none of them is it, say so in plain words.', max_tokens=MAX_TOKENS) or '')

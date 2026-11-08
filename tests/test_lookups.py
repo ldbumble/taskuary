@@ -143,7 +143,7 @@ class AppAtWorkTests(unittest.TestCase):
         s.add_review({'TaskId': 2, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Thanks, on it.'})
         s.add_review({'TaskId': 1, 'Kind': 'action', 'Status': 'pending', 'DraftText': '{"action": "open_pr"}', 'Reason': 'the fix is ready'})
         out = read(s, 'approvals.list')
-        self.assertIn('draft reply', out); self.assertIn('open_pr', out); self.assertIn('the fix is ready', out)
+        self.assertIn('a reply is drafted - Send sends it', out); self.assertIn('the fix is ready - Approve does it', out)     # each by what it holds (owed_items)
 
     def test_pipe_list_names_everything_on_the_rail_not_only_approvals(self):
         s = world()

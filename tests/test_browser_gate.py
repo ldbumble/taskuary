@@ -313,3 +313,26 @@ class Hook(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class LooksThatAreNot(unittest.TestCase):
+    """M4: an address carrying a token is a magic link or a way out, and `get value` reads a password box the vault just filled."""
+    def test_an_address_with_a_token_or_a_long_query_is_judged_and_a_plain_one_is_not(self):
+        for cmd in ('agent-browser open https://toll.example', 'agent-browser goto https://docs.example/guide/setup?tab=mail',
+                    'agent-browser get text @e3'):
+            self.assertEqual(bg.acts(cmd), [], cmd)
+        for url in ('https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c', 'https://x.example/?d=' + 'a' * 50,
+                    'https://x.example/c/eyJhbGciOiJIUzI1NiJ9eyJzdWIiOiIxMjM0NTY3ODkwIn0'):
+            self.assertEqual([a['verb'] for a in bg.acts(f'agent-browser open {url}')], ['navigate'], url)
+        with on(), verdict({'irreversible': True, 'sure': True, 'what': 'approve a payment'}):
+            s = MemoryStore(); t = Factory(s).task()
+            out = bg.check(s, t, 's1', 'agent-browser open https://bank.example/approve?t=9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c', brain=Brain({}))
+        self.assertEqual(out['hookSpecificOutput']['permissionDecision'], 'deny')
+
+    def test_get_value_on_a_password_box_or_an_unknown_box_is_refused(self):
+        snap = '- textbox "Email" [ref=e1]\n- textbox "Password" [ref=e2]'
+        s = MemoryStore(); t = Factory(s).task()
+        with on(snap=snap):
+            self.assertEqual(bg.check(s, t, 's1', 'agent-browser get value @e1'), {})
+            for ref in ('@e2', '@e9', '"#pw"'):
+                self.assertEqual(bg.check(s, t, 's1', f'agent-browser get value {ref}')['hookSpecificOutput']['permissionDecision'], 'deny', ref)

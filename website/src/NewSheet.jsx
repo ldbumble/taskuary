@@ -43,6 +43,7 @@ import { label as btn } from "./buttons.js";
 import { capabilities, useCapabilities } from "./capabilities.js";
 import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { askAssistant } from "./askAssistant.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
@@ -61,6 +62,9 @@ const KINDS = [
   // ...and the third thing Reports keeps (the owner, 2026-10-22: "this is not playbook ui?" - asked for one, the Assistant handed it to a
   // general agent as its job). Its words go to the shelf's own New playbook, which sets it up with AI there (playbookOpen.askPlaybook)
   { key: "playbook", mark: "📖", label: "Playbook", hint: "how one kind of request is handled from now on — triage matches new mail to it, and its steps are followed your way" },
+  // ...and the door for what fits none of them (Gabi, TQ-1358: "some things dont fit into these categories"): the words go to the Assistant's
+  // chat as a line typed there (askAssistant.js), and it works out what it is - nothing is filed here
+  { key: "chat", mark: "💬", label: "Chat with Taskuary", hint: "anything that fits none of these — say it and the Assistant takes it from there" },
 ];
 const REPEATS = ["report", "dashboard", "workflow"];
 
@@ -165,7 +169,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     if (bus?.current || onWords) { clearTimeout(timer.current); timer.current = setTimeout(() => { bus?.current?.(next); onWords?.(next); }, 200); }
   };
   // ...and a picture pasted or dropped into it goes with the words (a note to self keeps words only)
-  const withPics = pics && kind !== "note" && kind !== "playbook";     // ...and New playbook takes words (POST /api/playbooks/setup)
+  const withPics = pics && !["note", "playbook", "chat"].includes(kind);     // ...New playbook and the chat hand-off take words only
   return (
     <>
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
@@ -178,6 +182,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
         : kind === "agent" ? (how === "general" ? "why did Site 3's census move four points in July?"
           : "work out why the nightly export drops the last facility")
         : kind === "playbook" ? "when someone asks for their leave balance, gather it from payroll and draft the reply for my review"
+        : kind === "chat" ? "what's still open with Payworth, and which of it comes first?"
         : "chase the Payworth AP replacement"}
       // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
       // its words appended where the typing would go
@@ -198,8 +203,9 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 // `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
 // `initialChannel` / `initialTo`: Send something already addressed - a People hit's Message them (SearchEverything, trust audit F6)
 // `start`: the Assistant pressed the agent's Send to agent for the owner - the card presses it once it can go (concierge._new)
+// `chat`: offer Chat with Taskuary - off where the Assistant is not on screen to take it (the Board)
 export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid, start = false,
-  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null }) {
+  initialChannel = "", initialTo = "", initialMeeting = null, initialRoutine = null, chat = true }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
@@ -344,6 +350,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
         aboutRef.current?.clear(); setText(""); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+      } else if (kind === "chat") {
+        // said in the chat as if typed there: the Assistant answers, or files it as whatever it turns out to be
+        askAssistant(about); aboutRef.current?.clear(); setHasAbout(false); onClose?.();
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
         askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
@@ -376,7 +385,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it")
-    : kind === "playbook" ? "Set up with AI" : "Note it";
+    : kind === "playbook" ? "Set up with AI" : kind === "chat" ? "Ask Taskuary" : "Note it";
   // THE ASSISTANT PRESSED IT (`start`, concierge._new - the owner, 2026-11-02: "why can't assistant start an agent. i'm okay with that"):
   // an agent's job it wrote here is started by this card's own button, once, the moment the card can go - the same press the owner's is
   const autoPressed = useRef(false);
@@ -387,7 +396,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
   const aboutLabel = kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
     : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
-    : kind === "playbook" ? "What should this playbook do" : "What do you want to remember";
+    : kind === "playbook" ? "What should this playbook do" : kind === "chat" ? "What's on your mind" : "What do you want to remember";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
@@ -408,7 +417,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       {/* ...every one in sight: a row that scrolled with no scrollbar cut the last at 1440px ("Playbo...") and hid four on a phone, with nothing
           to say there were more (the product audit, 2026-11-08) - the row wraps instead */}
       <Box data-tq-new-kinds="" sx={{ display: "flex", flexWrap: "wrap", gap: 0.25, px: { xs: 1, sm: 3 }, borderBottom: `1px solid ${BORDER}` }}>
-        {KINDS.map((k) => (
+        {KINDS.filter((k) => chat || k.key !== "chat").map((k) => (
           <Box key={k.key} {...pressable(() => { setKind(k.key); setErr(""); setOk(""); })} role="tab"
             aria-selected={kind === k.key} title={k.hint}
             sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.25 }, py: 1, cursor: "pointer", flexShrink: 0,
@@ -539,6 +548,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           {kind === "playbook" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               It opens under Reports → Playbooks, where your assistant drafts the steps with you — Approve there saves it.
+            </Typography>
+          )}
+          {kind === "chat" && (
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
+              It goes to your Assistant's chat. It answers, or turns it into whatever it really is — a task, a draft, a reminder — and asks before anything goes out.
             </Typography>
           )}
         </Box>}

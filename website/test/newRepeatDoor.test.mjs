@@ -46,6 +46,6 @@ test("a routine the Assistant wrote up opens New → Routine with its words, car
   assert.match(canvas, /initialText=\{state\?\.text \|\| ""\}/);
   assert.match(canvas, /initialRoutine=\{state\?\.routine \|\| null\}/);
   assert.match(canvas, /JSON\.stringify\(state\?\.routine \|\| ""\)/, "a new prefill remounts the sheet, so its fields are the new ones");
-  assert.match(sheet, /initialRoutine = null \}\) \{/);
+  assert.match(sheet, /initialRoutine = null, chat = true \}\) \{/);
   assert.match(read("SetupWithAi.jsx"), /`Help me set up \$\{WHAT\[kind\] \|\| WHAT\.report\}\$\{String\(words \|\| ""\)\.trim\(\) \? `: \$\{String\(words\)\.trim\(\)\}` : ""\}`/);
 });

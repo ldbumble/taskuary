@@ -10,7 +10,7 @@ from datetime import datetime
 import requests
 from loguru import logger
 
-from .pm import CAP, _cfg, _seed_source, _stamp
+from .pm import CAP, _cfg, _seed_source, _stamp, author_meta
 
 
 def _die(r, who, hint):
@@ -38,13 +38,28 @@ def test_gitlab(store, c) -> str:
     return f"authenticated as {me.get('name') or me.get('username')} on {host} - issues and MRs assigned to you flow in on the next sync"
 
 
+_MEMBER = {}
+def gitlab_member(c, pid, uid):
+    """Is this GitLab user a member of the project (direct or inherited)? GitLab's own members API, once per project and person;
+    None when it cannot say - and an unknown author is a stranger's (senders._item_known)."""
+    if not (pid and uid): return None
+    k = (_cfg(c).get('base_url') or '', pid, uid)
+    if k not in _MEMBER:
+        base = (_cfg(c).get('base_url') or 'https://gitlab.com').strip().rstrip('/')
+        try: r = requests.get(f'{base}/api/v4/projects/{pid}/members/all/{uid}', timeout=30, headers={'PRIVATE-TOKEN': c.get('Secret') or ''})
+        except requests.RequestException as e: logger.debug(f'gitlab: membership unread ({e})'); return None
+        if r.status_code not in (200, 404): return None
+        _MEMBER[k] = r.status_code == 200
+    return _MEMBER[k]
+
+
 def poll_gitlab(store, c, since, llm=None, file_only=False) -> int:
     from .ingest import ingest_tracker
     after, n = since.astimezone().isoformat(), 0
     items = ([('issue', i) for i in _gitlab(c, '/issues', scope='assigned_to_me', updated_after=after, per_page=CAP)]
              + [('merge request', m) for m in _gitlab(c, '/merge_requests', scope='assigned_to_me', updated_after=after, per_page=CAP)])
     for kind, i in items:
-        who = (i.get('author') or {})
+        who_ = (i.get('author') or {})
         # a project in a nested group is group/sub/project: everything between the host and '/-/'
         proj = '/'.join(str(i.get('web_url') or '').split('/-/')[0].split('/')[3:]) or 'GitLab'
         n += ingest_tracker(store, file_only=file_only, msg={
@@ -52,8 +67,9 @@ def poll_gitlab(store, c, since, llm=None, file_only=False) -> int:
             'subject': f"{'!' if kind[0] == 'm' else '#'}{i.get('iid')} {i.get('title') or ''}".strip(),
             'body': f"[GitLab {kind} in {proj} - state {i.get('state')} - assigned to you]\n"
                     f"{str(i.get('description') or '(no description)')[:20000]}",
-            'from_name': who.get('name') or 'GitLab', 'conversation_id': f"gitlab:{kind[0]}{i['id']}",
-            'sent_at': _stamp(i.get('updated_at')), 'source_link': i.get('web_url'), 'source_name': proj}, llm=llm)
+            'from_name': who_.get('name') or 'GitLab', 'conversation_id': f"gitlab:{kind[0]}{i['id']}",
+            'sent_at': _stamp(i.get('updated_at')), 'source_link': i.get('web_url'), 'source_name': proj,
+            **author_meta('gitlab', who_.get('id'), gitlab_member(c, i.get('project_id'), who_.get('id')))}, llm=llm)
     return n
 
 
@@ -99,7 +115,8 @@ def poll_azdo(store, c, since, llm=None, file_only=False) -> int:
             'from_name': ((f.get('System.CreatedBy') or {}).get('displayName')
                           if isinstance(f.get('System.CreatedBy'), dict) else f.get('System.CreatedBy')) or 'Azure DevOps',
             'conversation_id': f"azdo:{w['id']}", 'sent_at': _stamp(f.get('System.ChangedDate')),
-            'source_link': f'{base}/{proj}/_workitems/edit/{w["id"]}', 'source_name': proj or 'Azure DevOps'}, llm=llm)
+            'source_link': f'{base}/{proj}/_workitems/edit/{w["id"]}', 'source_name': proj or 'Azure DevOps',
+            **author_meta('azdo', (f.get('System.CreatedBy') or {}).get('id') if isinstance(f.get('System.CreatedBy'), dict) else None, True)}, llm=llm)
     return n
 
 
@@ -125,7 +142,7 @@ def poll_linear(store, c, since, llm=None, file_only=False) -> int:
     iso = since.astimezone().isoformat()
     data = _linear(c, '{ issues(filter: {assignee: {isMe: {eq: true}}, updatedAt: {gt: "%s"}}, first: %d) '
                       '{ nodes { identifier title description url updatedAt state { name } '
-                      'creator { name } project { name } } } }' % (iso, CAP))
+                      'creator { id name } project { name } } } }' % (iso, CAP))
     n = 0
     for i in (data.get('issues') or {}).get('nodes') or []:
         proj = (i.get('project') or {}).get('name')
@@ -136,7 +153,7 @@ def poll_linear(store, c, since, llm=None, file_only=False) -> int:
                     f"{str(i.get('description') or '(no description)')[:20000]}",
             'from_name': ((i.get('creator') or {}).get('name')) or 'Linear',
             'conversation_id': f"linear:{i['identifier']}", 'sent_at': _stamp(i.get('updatedAt')),
-            'source_link': i.get('url'), 'source_name': proj or 'Linear'}, llm=llm)
+            'source_link': i.get('url'), 'source_name': proj or 'Linear', **author_meta('linear', (i.get('creator') or {}).get('id'), True)}, llm=llm)
     return n
 
 

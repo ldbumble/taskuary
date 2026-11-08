@@ -17,6 +17,18 @@ from loguru import logger
 CAP = 25                     # items per poll, like the other channels
 
 
+def author_meta(ch: str, uid, member) -> dict:
+    """An item's author as senders._item_known reads it: their id on the tracker, and whether the tracker's own payload says they
+    are a member of the project (True / False). No id, no author: the item is a stranger's until the owner trusts the project."""
+    return {'mail_meta': {'author': f'{ch}:{uid}', **({'member': member} if member is not None else {})}} if uid else {}
+
+
+def jira_member(a: dict):
+    "A Jira account's own word on whether it is the organisation's: 'atlassian' is a licensed user, 'customer' a portal customer."
+    t = (a or {}).get('accountType')
+    return None if not t else t == 'atlassian'
+
+
 def _cfg(c):
     try: return json.loads(c.get('ConfigJson') or '{}')
     except ValueError: return {}
@@ -119,7 +131,7 @@ def _jira_comments(store, c, issue, base: str, llm, file_only: bool) -> int:
                'body': str(cm.get('body') or '')[:20000], 'from_name': who,
                'from_email': a.get('emailAddress'), 'sent_at': _stamp(cm.get('created')),
                'source_link': f"{_jira_base(c)}/browse/{base.split(':', 1)[-1]}",
-               'source_name': _jira_base(c).split('//', 1)[-1]}
+               'source_name': _jira_base(c).split('//', 1)[-1], **author_meta('jira', a.get('accountId'), jira_member(a))}
         if (me and a.get('accountId') == me) or (a.get('accountType') or '') == 'app':
             n += ingest_own_message(store, msg, f'comment on {base} by {who} - history, not work')
             continue
@@ -152,7 +164,8 @@ def poll_jira(store, c, since, llm=None, file_only=False) -> int:
             'body': f"{head}\n{str(f.get('description') or '(no description)')[:20000]}",
             'from_name': rep.get('displayName') or 'Jira', 'from_email': rep.get('emailAddress'),
             'conversation_id': f"jira:{i['key']}", 'sent_at': _stamp(f.get('updated')),
-            'source_link': f"{base}/browse/{i['key']}", 'source_name': base.split('//', 1)[-1]}, llm=llm)
+            'source_link': f"{base}/browse/{i['key']}", 'source_name': base.split('//', 1)[-1],
+            **author_meta('jira', rep.get('accountId') or rep.get('key'), jira_member(rep))}, llm=llm)
     return n
 
 
@@ -182,7 +195,7 @@ def poll_asana(store, c, since, llm=None, file_only=False) -> int:
     gid = _cfg(c).get('workspace_gid')
     if not gid: raise RuntimeError('no workspace known yet - run Test on the Asana card once')
     rows = _asana_get(c, '/tasks', assignee='me', workspace=gid, completed_since='now', limit=CAP,
-                      opt_fields='name,notes,modified_at,created_by.name,permalink_url,memberships.project.name') or []
+                      opt_fields='name,notes,modified_at,created_by.name,created_by.gid,permalink_url,memberships.project.name') or []
     n = 0
     for t in rows:
         if _stamp(t.get('modified_at')) < since.strftime('%Y-%m-%d %H:%M:%S'): continue
@@ -194,7 +207,7 @@ def poll_asana(store, c, since, llm=None, file_only=False) -> int:
                     f"{str(t.get('notes') or '(no description)')[:20000]}",
             'from_name': ((t.get('created_by') or {}).get('name')) or 'Asana',
             'conversation_id': f"asana:{t['gid']}", 'sent_at': _stamp(t.get('modified_at')),
-            'source_link': t.get('permalink_url'), 'source_name': proj or 'Asana'}, llm=llm)
+            'source_link': t.get('permalink_url'), 'source_name': proj or 'Asana', **author_meta('asana', (t.get('created_by') or {}).get('gid'), True)}, llm=llm)
     return n
 
 
@@ -229,7 +242,7 @@ def poll_monday(store, c, since, llm=None, file_only=False) -> int:
     ids = [b.strip() for b in str(cfg.get('board_ids') or '').split(',') if b.strip()]
     scope = f'ids: [{", ".join(ids)}]' if ids else 'limit: 25, order_by: used_at'
     data = _monday(c, '{ boards (%s) { name items_page (limit: 50) { items { id name updated_at url '
-                      'creator { name } column_values { text type ... on PeopleValue '
+                      'creator { id name } column_values { text type ... on PeopleValue '
                       '{ persons_and_teams { id kind } } } } } } }' % scope)
     n = 0
     for b in data.get('boards') or []:
@@ -246,7 +259,7 @@ def poll_monday(store, c, since, llm=None, file_only=False) -> int:
                 'body': f"[Monday item on board \"{b.get('name')}\" - assigned to you]\n{cols or '(no details)'}",
                 'from_name': ((it.get('creator') or {}).get('name')) or 'Monday',
                 'conversation_id': f"monday:{it['id']}", 'sent_at': _stamp(it.get('updated_at')),
-                'source_link': it.get('url'), 'source_name': b.get('name') or 'Monday'}, llm=llm)
+                'source_link': it.get('url'), 'source_name': b.get('name') or 'Monday', **author_meta('monday', (it.get('creator') or {}).get('id'), True)}, llm=llm)
     return n
 
 
@@ -311,7 +324,7 @@ def poll_clickup(store, c, since, llm=None, file_only=False) -> int:
             'from_name': ((t.get('creator') or {}).get('username')) or 'ClickUp',
             'from_email': ((t.get('creator') or {}).get('email')),
             'conversation_id': f"clickup:{t['id']}", 'sent_at': _cu_ms(t.get('date_updated')),
-            'source_link': t.get('url'), 'source_name': lst}, llm=llm)
+            'source_link': t.get('url'), 'source_name': lst, **author_meta('clickup', (t.get('creator') or {}).get('id'), True)}, llm=llm)
     return n
 
 
@@ -360,7 +373,7 @@ def poll_todoist(store, c, since, llm=None, file_only=False) -> int:
             'sent_at': _stamp(t.get('updated_at') or t.get('added_at')),
             # v1 dropped the task's own url field; this is the documented deep link
             'source_link': f"https://app.todoist.com/app/task/{t['id']}",
-            'source_name': 'Todoist'}, llm=llm)
+            'source_name': 'Todoist', **author_meta('todoist', t.get('added_by_uid') or t.get('user_id'), True)}, llm=llm)
     return n
 
 

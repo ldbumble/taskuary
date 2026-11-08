@@ -360,7 +360,7 @@ const PANEL_OWNED = new Set(schema.panel_owned);
 // settings senders.py reads, they just are not their own rows any more. Plus two one-shot
 // migration sentinels that end in _fixed and _dropped rather than _seeded and so slipped the
 // suffix rule - the second of which was the only thing keeping "Other" on the page at all.
-const STATE = new Set(["trust_sent_history", "trust_non_email", "triage_pr_rule_fixed",
+const STATE = new Set(["trust_sent_history", "trust_non_email", "trust_trackers", "triage_pr_rule_fixed",
   "whatsapp_star_dropped",
   "handbook_on_by_default", "processing_membership_rules", "voice_vocabulary",
   "assistant_card", "counsel_enabled",

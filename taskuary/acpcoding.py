@@ -486,7 +486,10 @@ class ACPCoding:
         from . import browserview, handraise, terminal as term
         try:
             st = browserview.state(self.sid, fresh=True)
-            if st.get('open'): browserview.keep_page(self.task_id, st.get('url')); browserview.close(self.sid, self.task_id)
+            if st.get('open'): browserview.keep_page(self.task_id, st.get('url'))
+            # ...and closed whether or not its view answers: a daemon whose screencast went quiet kept its Chrome alive past the session
+            # (the product audit, 2026-11-08) - close() asks only agent-browser's own files whether there is one to close
+            browserview.close(self.sid, self.task_id)
         except Exception as e: logger.debug(f'the browser of task {self.task_id} was not closed on idle: {e}')
         term.SESSIONS.pop(self.sid, None)
         self._emit_end()

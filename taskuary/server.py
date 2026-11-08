@@ -463,7 +463,8 @@ async def token_gate(request: Request, call_next):
     # a deny list left /api/operations running review.approve for it under a path nobody had named.
     scope = guard.scope_of(cfg['server'], request.headers)
     if scope == guard.AGENT:
-        why = guard.denied(request.method, request.url.path)
+        why = guard.denied(request.method, request.url.path) or await run_in_threadpool(
+            guard.agent_read_denied, cfg['server'], request.headers, request.method, request.url.path, _stranger_file_task, store.get_setting('assistant_dock_task_id'))
         if why:
             logger.warning(f'agent refused {request.method} {request.url.path} - {why}')
             return JSONResponse({'detail': f'agents cannot do this: {why}. Ask the owner - it is '
@@ -480,8 +481,13 @@ async def token_gate(request: Request, call_next):
     return await call_next(request)
 
 
-def _stranger_file_task(kind: str, aid: int):
-    "Which task an attachment or a session artifact belongs to, for the stranger gate (guard.stranger_denied)."
+def _stranger_file_task(kind: str, aid):
+    "Which task an attachment, a session artifact, a message or an agent's pane is on, for the session gates (guard.stranger_denied, agent_read_denied)."
+    if kind == 'terminal':          # an agent's pane only: a plain shell is the owner's, whatever task it was opened on
+        t = hub_term.SESSIONS.get(str(aid))
+        return getattr(t, 'task_id', None) if t is not None and getattr(t, 'agent', '') else None
+    if kind == 'message': return (store.get_message(int(aid)) or {}).get('TaskId')
+    aid = int(aid)
     if kind == 'artifact': return (store.get_task_artifact(aid) or {}).get('TaskId')
     mid = (store.get_attachment(aid) or {}).get('MessageId')
     return (store.get_message(mid) or {}).get('TaskId') if mid else None

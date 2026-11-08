@@ -66,7 +66,7 @@ import ReviewDecision from "./ReviewDecision.jsx";
 import { heldActsLine } from "./reviewProposal.js";
 import BriefLine from "./BriefLine.jsx";
 import AgentSummary, { OneBox, StaleDrafts } from "./AgentSummary.jsx";
-import { answerShown, foldedSummaries, freshNext, lastAnswerSummed, withTurns } from "./agentSummary.js";
+import { turnAnswered, foldedSummaries, freshNext, lastAnswerSummed, withTurns } from "./agentSummary.js";
 import { asUtc, dayLabel, fmtTime12 } from "./dates.js";
 import { readingOf } from "./threadReading.js";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
@@ -380,7 +380,6 @@ const AtWork = ({ since, began, ...props }) => {
   // ...the server's own start wins when it has said it: a mail that joined mid-turn is newer than the turn and set its clock back to 0s
   return folded && level !== "summary" ? null : <AgentBand {...props} since={began || Math.max(since || 0, typed || 0) || null} />;
 };
-const Nothing = () => null;
 // WHEN EACH TURN ANSWERED AND HOW LONG IT RAN (the owner, 2026-11-05: "we need a time and how long each taskuary thing ran and timestamp"): over
 // each answer in a chat task, its time and the time from what it answered (the message before it) to the answer
 // ...and WHILE IT RUNS, ONE CLOCK (the owner, 2026-11-06): "Working on this… 3s" under it - the head's own "working 0:03" was a second one
@@ -419,18 +418,19 @@ const AssistantMessage = () => {
   const rest = chat ? shownRest.filter((p) => !madeNames.has(p.name) && !postPics.has(String(p.name || "").split(/[\\/]/).pop())) : shownRest;
   const running = useAuiState((s) => live(s.message));
   // ...and it copies at its corner (the owner, 2026-11-05): what the turn says - its words, else its summary's parts
-  const said = custom?.summary && !answerShown(custom.summary, words)
+  // ...and ONE OF THE TWO, never both (the owner, 2026-11-08: "never show anything twice in a turn"): the agent's own words are the turn, and its
+  // summary's prose is drawn only for a turn with none (a work-only run) - what it set up as cards stays under the words either way
+  const answered = turnAnswered(words);
+  const said = custom?.summary && !answered
     ? [custom.summary.about, custom.summary.did].map((x) => String(x || "").trim()).filter(Boolean).join("\n\n") : words;
   return (
     <MessagePrimitive.Root className={`tq-aui-message tq-aui-agent${chat && said ? " tq-copy-host" : ""}`}>
       {chat && !!said && !running && <CopyCorner text={said} label="Copy this answer" />}
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}{React.useContext(ChatCtx) && <RanFor />}</div>
       <div className="tq-aui-agent-body">
-        {/* ...where the chat is home, a turn that ended in its summary IS that summary: the agent's own prose above it said the same at
-            length (the owner, 2026-11-05: "short text as possible") */}
-        {/* ...but never when the words ARE the answer - the agent says so in its summary (agentSummary.answerShown; the owner, 2026-11-05:
-            "it should say where the link is. this is just patting itself on the back and not showing the link") */}
-        <MessagePrimitive.Parts components={{ Text: chat && custom?.summary && !answerShown(custom.summary, words) ? Nothing : AssistantText, data: { by_name: { [PARTS]: TurnWork, agent_steps: TurnWork } } }} />
+        {/* THE AGENT'S WORDS ARE THE TURN (the owner, 2026-11-08: "never show anything twice in a turn"): drawn whenever it said any, and its
+            summary's prose then stays out (AgentSummary `answered`) - it was drawn under the words, saying them again */}
+        <MessagePrimitive.Parts components={{ Text: AssistantText, data: { by_name: { [PARTS]: TurnWork, agent_steps: TurnWork } } }} />
         {!!rest.length && <PublishedPages pages={rest} open />}
         {!custom?.summary && files}
         {!custom?.summary && lead && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
@@ -440,7 +440,7 @@ const AssistantMessage = () => {
         {work && !custom?.summary && newest && work.next && freshNext(work.reviews) && chat && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1 }}>
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
-          acts={work.acts} next={custom.folded || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} />}
+          acts={work.acts} next={custom.folded || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
       </div>
     </MessagePrimitive.Root>
   );

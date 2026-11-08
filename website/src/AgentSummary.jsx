@@ -40,8 +40,10 @@ const DraftHead = () => <Head>Next steps</Head>;
 // `lead`: what this turn SET UP for the owner's press, drawn as itself (a post, ActionCard) - it leads Next steps, the action section (the owner,
 // 2026-11-05: "Next steps is the action section"). `made`: the files the turn made, inline under What I did (TurnFiles). `kept`: the drafts this
 // turn wrote, as it wrote them (draft_snapshot)
+// `answered`: the turn has words of its own - they ARE the turn (the owner, 2026-11-08: "never show anything twice in a turn"), so the summary's
+// prose (About, What I did, On you) stays out and only what is drawn as a card is here: the files, the post, the drafts and their Send
 export default function AgentSummary({ summary, reviews = [], checklist = [], acts = [], cards = true, next = null, folded = false, lastAnswered = false,
-  kept = null, lead = null, made = null, turnId = null }) {
+  kept = null, lead = null, made = null, turnId = null, answered = false }) {
   if (!summary) return null;
   const did = String(summary.did || "").trim(), about = String(summary.about || "").trim();
   // ...a turn that is history keeps the draft it left, read-only: what was drafted and to whom, no Send (the owner, 2026-11-05)
@@ -64,6 +66,9 @@ export default function AgentSummary({ summary, reviews = [], checklist = [], ac
     <Typography component="span" sx={{ display: "block", fontSize: 11.5, fontWeight: 700, color: FAINT, mb: 0.25 }}>
       {["Drafted", who(r) && `to ${who(r)}`, fate(r)].filter(Boolean).join(" · ")}</Typography>
     <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 220, overflow: "auto" }}>{r.DraftText}</Box></Box>);
+  if (answered) return made || lead || next || stale.length || (folded && drafted.length) ? (
+    <Box data-tq-summary="cards" className="tq-aui-summary">{made}{(lead || next) && <DraftHead />}{lead}
+      {next ? <Box sx={{ mt: 0.75 }}>{next}</Box> : null}{folded && <Drafted />}<Stale /></Box>) : null;
   // ...a nothing-new turn is its one line, folded or not: no heads, no Next steps, and the draft stays on the turn that wrote it (oneLine)
   if (oneLine(summary)) return <>{<Box data-tq-summary="line" className="tq-aui-summary" sx={LINE}><Md text={did} /></Box>}{made}{lead}</>;
   if (folded) return did || drafted.length ? (<>

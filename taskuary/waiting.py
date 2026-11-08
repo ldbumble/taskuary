@@ -14,11 +14,10 @@ Read-only, like inboxes.py: nothing is answered, approved or paid from here. Eve
 fake HTTP sees all of it.
 """
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from urllib.parse import quote
 from loguru import logger
 
-from .inboxes import item, _req, _need, _site, _host, _keep, _me, _utc, _when, _text, _cfg, _seed_source, CAP
 from .timewords import plural
 
 NAMES = {'front': 'Front', 'helpscout': 'Help Scout', 'gorgias': 'Gorgias', 'ringcentral': 'RingCentral', 'aircall': 'Aircall', 'dialpad': 'Dialpad',
@@ -416,3 +415,5 @@ def items_lever(store, c, since) -> list:
 TYPES = tuple(NAMES)
 TESTS = {t: globals()[f'test_{t}'] for t in TYPES}
 ITEMS = {t: globals()[f'items_{t}'] for t in TYPES}
+# ...the road's own helpers, imported last: inboxes.py imports this module at its end, and either may be imported first
+from .inboxes import item, _req, _need, _site, _host, _keep, _me, _utc, _text, _cfg, _seed_source, CAP  # noqa: E402

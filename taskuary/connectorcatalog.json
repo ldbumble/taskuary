@@ -2000,6 +2000,36 @@
       }
     },
     {
+      "type": "github_mcp",
+      "title": "GitHub MCP",
+      "group": "Developer",
+      "planned": false,
+      "desc": "GitHub's own MCP server in Claude Code — agents read and work on repositories, issues, pull requests and Actions with your token. You paste a personal token on the card once; Add puts it in Claude Code.",
+      "match": [
+        "github mcp"
+      ],
+      "mcp": {
+        "url": "https://api.githubcopilot.com/mcp/",
+        "docs": "https://github.com/github/github-mcp-server/blob/main/docs/installation-guides/install-claude.md",
+        "header": "Authorization: Bearer {token}"
+      }
+    },
+    {
+      "type": "pagerduty_mcp",
+      "title": "PagerDuty MCP",
+      "group": "Developer",
+      "planned": false,
+      "desc": "PagerDuty's own MCP server in Claude Code — agents look up incidents, services, schedules and on-call. You paste a personal token on the card once; Add puts it in Claude Code.",
+      "match": [
+        "pagerduty mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.pagerduty.com/mcp",
+        "docs": "https://docs.pagerduty.com/ai-automation/advance/pagerduty-mcp-server",
+        "header": "Authorization: Token token={token}"
+      }
+    },
+    {
       "type": "basecamp",
       "title": "Basecamp",
       "group": "Project management",
@@ -2037,6 +2067,21 @@
       ]
     },
     {
+      "type": "smartsheet_mcp",
+      "title": "Smartsheet MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Smartsheet's own MCP server in Claude Code — agents read and update sheets, rows and reports. You paste a personal token on the card once; Add puts it in Claude Code.",
+      "match": [
+        "smartsheet mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.smartsheet.com",
+        "docs": "https://developers.smartsheet.com/ai-mcp/smartsheet/install-the-smartsheet-mcp-server/connect-claude-code",
+        "header": "Authorization: Bearer {token}"
+      }
+    },
+    {
       "type": "airtable",
       "title": "Airtable",
       "group": "Project management",
@@ -2069,6 +2114,21 @@
       "match": [
         "wrike"
       ]
+    },
+    {
+      "type": "wrike_mcp",
+      "title": "Wrike MCP",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Wrike's own MCP server in Claude Code — agents find, create and update tasks, projects and comments. You paste a personal token on the card once; Add puts it in Claude Code.",
+      "match": [
+        "wrike mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.wrike.com/v2",
+        "docs": "https://developers.wrike.com/docs/setup-other-mcp-clients-with-wrike-mcp",
+        "header": "Authorization: Bearer {token}"
+      }
     },
     {
       "type": "shortcut",
@@ -2872,7 +2932,7 @@
       "title": "Egnyte",
       "group": "Files & sheets",
       "planned": false,
-      "desc": "Egnyte's own MCP server in your agent CLI — agents search and read your company files (your Egnyte admin turns the MCP add-on on). You sign in once with Sign in.",
+      "desc": "Egnyte's own MCP server in your agent CLI — agents search and read your company files (the MCP server is a paid Egnyte add-on your admin turns on). You sign in once with Sign in.",
       "match": [
         "egnyte"
       ],

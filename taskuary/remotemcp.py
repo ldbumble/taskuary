@@ -15,6 +15,10 @@ from loguru import logger
 from . import connectorcatalog
 
 MCPS = {c['type']: (c['title'], c['mcp']['url']) for c in connectorcatalog.cards() if c.get('mcp')}    # type -> (title, url)
+# A SERVER THAT TAKES A PERSONAL TOKEN (the owner, 2026-11-08: GitHub's, PagerDuty's, Smartsheet's, Wrike's - none signs in by OAuth for an
+# agent CLI): the card holds the token as its secret, and Add writes it into Claude Code's own config as the header the vendor names
+# (`claude mcp add ... --header`). Codex takes a bearer only from an environment variable it is started with, so these stay Claude Code's.
+HEADERS = {c['type']: c['mcp']['header'] for c in connectorcatalog.cards() if (c.get('mcp') or {}).get('header')}
 CLIS = {'claude': 'Claude Code', 'codex': 'Codex'}
 SIGN_IN = {'claude': 'in a Claude Code terminal type /mcp and pick {n}', 'codex': 'run `codex mcp login {n}` once'}
 # SIGN IN, ONE PRESS (the owner, 2026-11-08): both CLIs sign in to a server themselves - `<cli> mcp login <name>` opens the vendor's page in the
@@ -25,8 +29,13 @@ LOGINS, LOGIN_WAIT = {}, 600          # (cli, name) -> (the login running, when 
 def _which(c):
     from . import clis
     return clis.which(c) or ''
-def add_argv(cli: str, exe: str, name: str, url: str) -> list:
-    return ([exe, 'mcp', 'add', '--transport', 'http', '--scope', 'user', name, url] if cli == 'claude' else [exe, 'mcp', 'add', name, '--url', url])
+def add_argv(cli: str, exe: str, name: str, url: str, header: str = '') -> list:
+    if cli == 'codex': return [exe, 'mcp', 'add', name, '--url', url]
+    return [exe, 'mcp', 'add', '--transport', 'http', '--scope', 'user', name, url] + (['--header', header] if header else [])
+def clis_for(t: str) -> tuple: return ('claude',) if t in HEADERS else tuple(CLIS)
+def _token(store, t: str) -> str:
+    c = store.get_connector_by_type(t, with_secret=True) if store and t in HEADERS else None
+    return (c or {}).get('Secret') or ''
 def login_argv(cli: str, exe: str, name: str) -> list: return [exe, 'mcp', 'login', name]
 def registered(name: str) -> dict:
     from . import sendfilter
@@ -68,11 +77,13 @@ def state(store, t: str) -> dict:
     out = {'type': t, 'title': title, 'url': url, 'docs': connectorcatalog.by_type(t)['mcp'].get('docs', ''), 'clis': {}, 'skill': None,
            'missing': [], 'sign_in': []}
     if demo.enabled(): return {**out, 'demo': True}          # the demo world shows nobody's machine
-    on = registered(t)
-    out['clis'] = {c: {'here': bool(_which(c)), 'added': on[c], 'signed_in': signed_in(c, t) if on[c] else False,
-                       'signing_in': signing_in(c, t)} for c in CLIS}
+    on, tok = registered(t), t in HEADERS
+    out['clis'] = {c: {'here': bool(_which(c)), 'added': on[c], 'signed_in': on[c] if tok else signed_in(c, t) if on[c] else False,
+                       'signing_in': False if tok else signing_in(c, t)} for c in clis_for(t)}      # a token is its own sign-in
     out['sign_in'] = [SIGN_IN[c].format(n=t) for c, v in out['clis'].items() if v['added'] and not v['signed_in']]
-    if not any(v['here'] for v in out['clis'].values()): out['missing'].append('Claude Code or Codex on this computer')
+    if tok: out['token'] = True
+    if not any(v['here'] for v in out['clis'].values()): out['missing'].append('Claude Code on this computer' if tok else 'Claude Code or Codex on this computer')
+    if tok and not on['claude'] and not _token(store, t): out['missing'].append('your token on this card')
     out['ready'] = not out['missing'] and all(v['added'] for v in out['clis'].values() if v['here'])
     return out
 
@@ -80,10 +91,12 @@ def state(store, t: str) -> dict:
 def register(store, t: str, actor: str = 'owner', run=None) -> list:
     "Add the server to each CLI here that lacks it, and keep it for the send filter once one has it. One line said per CLI."
     from . import sendfilter
-    run, said, st = run or _run, [], state(store, t)
+    run, said, st, tok = run or _run, [], state(store, t), _token(store, t)
+    if t in HEADERS and not tok: return ['Paste your token on the card first - the server reads it on every call']
     for c, v in st['clis'].items():
         if not v['here'] or v['added']: continue
-        rc, out = run(add_argv(c, _which(c), t, MCPS[t][1]), None, 120)
+        rc, out = run(add_argv(c, _which(c), t, MCPS[t][1], HEADERS[t].format(token=tok) if tok else ''), None, 120)
+        out = out.replace(tok, '…') if tok else out             # the CLI echoes the header it was given: the token is never said back
         said.append(f"{CLIS[c]}: {'added' if rc == 0 else f'did not add it ({out[-200:]})'}")
     if any(v['added'] for v in state(store, t)['clis'].values()):
         sendfilter.correct(store, t, '*', 'keep', actor)       # its tools cannot be listed without the vendor's sign-in: the owner's Add keeps it
@@ -111,7 +124,7 @@ def sign_in(store, t: str, actor: str = 'owner', start=None) -> dict:
     `mcp login`, which opens the vendor's sign-in in the browser. Returns state() with `said`; the card asks again until it says signed in."""
     from . import demo, spawn
     if demo.enabled(): raise RuntimeError('This is the demo - nothing signs in here.')
-    if t not in MCPS: raise RuntimeError(f'{t} has no sign-in of its own')
+    if t not in MCPS or t in HEADERS: raise RuntimeError(f'{t} has no sign-in of its own' if t not in MCPS else 'This card signs in with the token pasted on it')
     start, said = start or (lambda argv: spawn.popen(argv, stdin=spawn.subprocess.DEVNULL, stdout=spawn.subprocess.DEVNULL,
                                                       stderr=spawn.subprocess.DEVNULL)), []
     clis = state(store, t)['clis']

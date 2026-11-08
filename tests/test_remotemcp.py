@@ -127,7 +127,7 @@ class TheTableIsTheCatalogue(unittest.TestCase):
             self.assertTrue(title.strip() and c and c['planned'] is False and c['title'] == title, t)
             self.assertEqual(urlparse(url).scheme, 'https', t); self.assertTrue(urlparse(url).netloc, t)
             self.assertEqual(urlparse(c['mcp']['docs']).scheme, 'https', t)
-            self.assertIn('Sign in', c['desc'], t)
+            self.assertIn('token on the card' if t in rm.HEADERS else 'Sign in', c['desc'], t)
             self.assertRegex(t, r'^[a-z][a-z0-9_]*$')                     # the type is the CLI's server name
 
     def test_every_row_is_seeded_and_rides_this_road(self):
@@ -138,6 +138,7 @@ class TheTableIsTheCatalogue(unittest.TestCase):
 
     def test_add_and_sign_in_argv_for_every_row(self):
         for t, (_, url) in rm.MCPS.items():
+            if t in rm.HEADERS: continue                                  # TokenServers below
             s, started = MemoryStore(), []
             with Machine() as m:
                 out = rm.road(t).add(s, t, runner=m.run)
@@ -158,6 +159,31 @@ class TheTableIsTheCatalogue(unittest.TestCase):
         self.assertTrue(out['ok'], out); self.assertIn('Notion MCP is ready in Claude Code, Codex', out['detail'])
         native = connectorcatalog.by_type('notion')
         self.assertFalse(native.get('mcp') or native['planned'])          # the Notion feed card stays as it was, beside its server
+
+
+
+class TokenServers(unittest.TestCase):
+    "GitHub, PagerDuty, Smartsheet, Wrike: the card's token rides the header the vendor names, into Claude Code only, and is never said back."
+    def test_the_four_and_their_headers(self):
+        self.assertEqual(sorted(rm.HEADERS), ['github_mcp', 'pagerduty_mcp', 'smartsheet_mcp', 'wrike_mcp'])
+        self.assertEqual(rm.HEADERS['pagerduty_mcp'], 'Authorization: Token token={token}')
+
+    def test_no_token_adds_nothing_then_the_token_rides_the_header(self):
+        s = MemoryStore(); c = s.get_connector_by_type('github_mcp')
+        with Machine() as m:
+            st = rm.state(s, 'github_mcp')
+            self.assertEqual((list(st['clis']), st['token'], st['missing']), (['claude'], True, ['your token on this card']))
+            self.assertIn('token on the card', rm.add(s, 'github_mcp', runner=m.run)['said'][0]); self.assertEqual(m.ran, [])
+            s.save_connector({'ConnectorId': c['ConnectorId'], 'Secret': 'ghp_secret123'}, 't')
+            leak = lambda argv, cwd=None, timeout=0: (m.run(argv, cwd, timeout), (1, f'Added header {argv[-1]}'))[1]
+            out = rm.add(s, 'github_mcp', runner=leak)
+        self.assertEqual(m.ran[0][0], [EXE['claude'], 'mcp', 'add', '--transport', 'http', '--scope', 'user', 'github_mcp',
+                                       'https://api.githubcopilot.com/mcp/', '--header', 'Authorization: Bearer ghp_secret123'])
+        self.assertEqual(len(m.ran), 1)                                         # Codex is never handed it
+        self.assertNotIn('ghp_secret123', json.dumps(out)); self.assertIn('…', out['said'][0])
+        with Machine(claude={'github_mcp'}):
+            self.assertTrue(rm.state(s, 'github_mcp')['clis']['claude']['signed_in'])
+            with self.assertRaisesRegex(RuntimeError, 'token'): rm.sign_in(s, 'github_mcp')
 
 
 if __name__ == '__main__':

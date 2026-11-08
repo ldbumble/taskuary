@@ -3187,6 +3187,14 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
     setBusy(false); reload();
   };
   const add = press("", "Add did not run"), signIn = press("/sign-in", "Sign in did not start");
+  // a server that takes a personal token (remotemcp.HEADERS): the token is the card's secret, and Add writes it into Claude Code's config
+  const [tok, setTok] = useState("");
+  const saveTok = async () => {
+    if (!tok.trim()) return;
+    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Secret: tok.trim() }); setTok(""); setSaid(["Token saved - press Add"]); }
+    catch (e) { setSaid([e?.response?.data?.detail || "The token was not saved"]); }
+    look(); reload();
+  };
   const clis = Object.entries(st?.clis || {}), skill = st?.skill, sign = signState(st);
   // ...while the vendor's page is open in the browser, the card asks the CLI again until it says signed in (videotools.signed_in)
   useEffect(() => { if (sign !== "signing") return undefined; const h = setInterval(look, 3000); return () => clearInterval(h); }, [sign, conn.ConnectorId]);
@@ -3203,13 +3211,15 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
           : v.signed_in ? "added · signed in" : v.signing_in ? "added · signing in…" : "added"}</Typography>))}
       {skill && <Typography variant="body2" sx={{ color: INK }}>Skill <a href={skill.repo} target="_blank" rel="noreferrer">{skill.name}</a>: {skill.here ? "installed" : "not installed"}</Typography>}
       {(st?.missing || []).map((m) => <Typography key={m} variant="body2" sx={{ color: DIM }}>Still needs {m}.</Typography>)}
+      {st?.token && !clis.some(([, v]) => v.added) && <TextField size="small" type="password" label="Personal token" value={tok} sx={{ bgcolor: "#fff", minWidth: 320, mt: 1 }}
+        onChange={(e) => setTok(e.target.value)} onBlur={saveTok} helperText="Kept as this card's secret and written only into Claude Code's own config" />}
       {!!st?.sign_in?.length && <Typography variant="body2" sx={{ color: DIM, mt: 1, maxWidth: 720 }}>
         Sign-in is the vendor's, in the agent: press Sign in, or {st.sign_in.join("; or ")}. Taskuary never sees that sign-in, so it cannot list this server's tools - adding it here is your word that your agents may use all of them.</Typography>}
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
         <Button variant="outlined" disabled={busy || !st || st.ready} onClick={add} startIcon={busy ? <CircularProgress size={12} /> : null}>
           {st?.ready ? "Added" : skill && !st?.url ? "Install" : "Add"}</Button>
         {/* SIGN IN, ONE PRESS (the owner, 2026-11-08): the agent CLI's own `mcp login` opens the vendor's sign-in in the browser */}
-        {sign && (st?.demo ? <Typography variant="body2" sx={{ color: DIM }}>This is the demo - nothing signs in here.</Typography>
+        {sign && !st?.token && (st?.demo ? <Typography variant="body2" sx={{ color: DIM }}>This is the demo - nothing signs in here.</Typography>
           : <Button variant="outlined" data-tq-video-sign-in={sign} disabled={busy || sign !== "out"} onClick={signIn}
             startIcon={sign === "signing" ? <CircularProgress size={12} /> : null}>{SIGN_LABEL[sign]}</Button>)}
       </Box>

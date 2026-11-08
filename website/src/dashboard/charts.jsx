@@ -182,6 +182,7 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
 }
 
 // ── a value over time: line or area, one series, a crosshair that finds the day ────────────────────────────
+export const runLength = (s) => s.slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - s[i][0], p[1] - s[i][1]), 0);
 function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
 export function Line({ c, points, onDrill, stale }) {
   const [ref, w] = useWidth(), [hover, setHover] = useState(null), f = c.fmt || fmt;
@@ -203,7 +204,9 @@ export function Line({ c, points, onDrill, stale }) {
             {[0, 0.5, 1].map((k) => <g key={k}><line className={k === 0 ? "axis" : "grid"} x1={L} x2={L + iw} y1={y(top * k)} y2={y(top * k)} />
               <text x={L - 6} y={y(top * k) + 4} textAnchor="end">{f(top * k)}</text></g>)}
             {c.kind === "area" && segs.map((s, i) => <path key={`a${i}`} className="ar" d={`M${s[0][0]},${y(0)} ${s.map(([a, b]) => `L${a},${b}`).join(" ")} L${s[s.length - 1][0]},${y(0)} Z`} />)}
-            {segs.map((s, i) => s.length > 1 ? <polyline key={i} className="ln" pathLength="1" points={s.map(([a, b]) => `${a},${b}`).join(" ")} />
+            {/* ...drawn in along its own measured length (--len), never pathLength="1": a browser that scales the dash by the first
+                segment's length stopped the draw-in there, the rest of the line never showing (2026-11-07) */}
+            {segs.map((s, i) => s.length > 1 ? <polyline key={i} className="ln" style={{ "--len": Math.ceil(runLength(s)) + 1 }} points={s.map(([a, b]) => `${a},${b}`).join(" ")} />
               : <circle key={i} className="dot" cx={s[0][0]} cy={s[0][1]} r={4} />)}
             {[0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) => (
               <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{shortDay(points[i].key)}</text>))}

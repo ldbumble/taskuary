@@ -421,6 +421,23 @@ def send_block(store, channel) -> str:
     if ch == 'email': return send_probe(store, ch)
     return ''
 
+def connect_fix(store, kind) -> dict | None:
+    """A SEND CARD WHOSE CHANNEL IS NOT CONNECTED SAYS SO (the owner, 2026-11-08): {says, label, href} - "LinkedIn isn't connected" and its
+    Connect LinkedIn, which opens that connection's card - else None. `kind`: a reply's channel or an act's connector type (a post's
+    `linkedin`). One answer for every card: the reply, an agent's email, a post, a chat reply. An email with no mailbox at all had Send lit,
+    and the press came back "no mailbox is connected"."""
+    k = str(kind or '').lower()
+    if not k or k in NEVER: return None
+    from .imapmail import HOSTS
+    from . import connectorcatalog
+    live = {str(c.get('Type') or '').lower() for c in store.list_connectors() if c.get('Active')}
+    if k == 'email': return None if live & {*MAILBOXES, *HOSTS} else {'says': 'No mailbox is connected', 'label': MAIL[0], 'href': MAIL[1]}
+    card = connectorcatalog.by_type(k)
+    if not card or k in live: return None
+    name = card.get('title') or k
+    return {'says': f"{name} isn't connected", 'label': f'Connect {name}', 'href': f'#connector={k}'}
+
+
 def block_fix(store, channel) -> dict | None:
     """...and the button that lifts it, branch for branch with send_block: the reason named a place ("(Settings → Replies)",
     "its card"), the row gets the way there. None where nothing here lifts it - a Teams chat is answered in Teams."""

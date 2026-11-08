@@ -429,8 +429,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     catch (e) { setErr(e?.message || e?.response?.data?.detail || `${btn("close")} didn't go through.`); }
     setBusy(false);
   };
+  // ITS CHANNEL IS NOT CONNECTED (the owner, 2026-11-08): the card says so and its one move is Connect, which opens that connection's card -
+  // the draft waits as it is, and Send is back once it is connected (server: outbound.connect_fix, `Connect` on the review)
+  const connect = !proposal && !delivery.frozen ? r.Connect : null;
   const moves = r.Status !== "pending" ? [] : [
-    ...(delivery.frozen ? [
+    ...(connect ? [
+      { id: no("connect"), label: connect.label, tone: "p", disabled: off, run: () => openAppLink(connect.href), title: `${connect.says} - opens its connection` },
+    ] : delivery.frozen ? [
       { id: no("approve"), label: busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: off || !delivery.canCheck,
         run: () => decide("approve"), title: delivery.line, why: delivery.active ? "waiting for the provider" : "" },
       ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: off, run: sendAnyway, title: btnHint("approve", "unknown") },
@@ -751,6 +756,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           sx={{ alignSelf: "center", color: "#55697a", fontSize: 12.5, minWidth: 0, overflowWrap: "anywhere" }}>{why}</Typography>}
         </>
       </Box>
+      {connect && <Typography data-tq-not-connected="" variant="body2" sx={{ color: DIM, mt: 0.75 }}>{connect.says} - the draft waits here until it is.</Typography>}
       {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
       {asked && <BlankAsk line={asked.line} onCancel={() => setAsked(null)}
         onSend={() => (asked.both ? decideBoth(asked.verb, asked.close, true) : decide(asked.verb, asked.anyway, asked.close, true))} />}

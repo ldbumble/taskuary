@@ -21,7 +21,7 @@ what keeps a slow tab looking at the current page instead of ten seconds of hist
 proxy generating acks itself would leave frames queued on the far side (agent-browser's
 streaming notes say exactly this).
 """
-import base64, contextlib, json, os, re, shutil, socket, subprocess, tempfile, threading, time
+import base64, contextlib, json, os, re, shutil, socket, subprocess, sys, tempfile, threading, time
 from datetime import datetime
 from pathlib import Path
 from loguru import logger
@@ -100,9 +100,23 @@ IDLE_MS = '0'
 # owner typed survives a session that ends cleanly, and not one whose daemon is killed. Still required on
 # 0.38.2, as is the env-borne idle timeout above (re-measured 2026-10-02).
 AUTOSAVE_MS = '0'
+# ...AND A USER-AGENT THAT DOES NOT SAY "HeadlessChrome". Headless Chrome sends `HeadlessChrome/<v>` in its
+# User-Agent header, and Akamai-fronted sites reset the HTTP/2 stream on it: fidelity.com and its sign-in page
+# both failed with net::ERR_HTTP2_PROTOCOL_ERROR (TQ-1359, 2026-11-08; curl with that UA alone gets the same
+# reset, the identical request as `Chrome/<v>` gets 200). The client hints already say plain Chromium, so the
+# fix is the same engine version under its ordinary name - read from agent-browser's own Chrome build, so it
+# never drifts from what the browser really is. It rides in env() for the reason IDLE_MS does: the UA is in
+# agent-browser's launch fingerprint, and a launch that set it alone would be replaced by the next plain command.
+def user_agent() -> str:
+    "Chrome's ordinary UA for the newest Chrome build agent-browser installed; '' (agent-browser's own) when there is none."
+    vs = [tuple(map(int, m[1].split('.'))) for p in (home()/'browsers').glob('chrome-*') if (m := re.fullmatch(r'chrome-(\d+(?:\.\d+)*)', p.name))]
+    if not vs: return ''
+    plat = 'Windows NT 10.0; Win64; x64' if os.name=='nt' else 'Macintosh; Intel Mac OS X 10_15_7' if sys.platform=='darwin' else 'X11; Linux x86_64'
+    return f'Mozilla/5.0 ({plat}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{max(vs)[0]}.0.0.0 Safari/537.36'
 def env(sid: str) -> dict:
-    return {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS,
-            'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
+    e = {'AGENT_BROWSER_SESSION': session_name(sid), 'AGENT_BROWSER_IDLE_TIMEOUT_MS': IDLE_MS, 'AGENT_BROWSER_AUTOSAVE_INTERVAL_MS': AUTOSAVE_MS}
+    if not os.environ.get('AGENT_BROWSER_USER_AGENT') and (ua := user_agent()): e['AGENT_BROWSER_USER_AGENT'] = ua    # the owner's own setting wins
+    return e
 def _cli_env(sid: str) -> dict: return {**os.environ, **env(sid)}    # the server's own calls match the pty's
 def home() -> Path: return Path(os.environ.get('AGENT_BROWSER_HOME') or Path.home() / '.agent-browser')
 

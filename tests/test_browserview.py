@@ -81,6 +81,20 @@ class StateTests(unittest.TestCase):
                 self.assertTrue(bv.start('slow'))
         self.assertGreater(sum(slept), 10, 'it waited past the warm budget rather than giving up on it')
 
+    def test_the_browser_does_not_announce_itself_as_headless(self):
+        """Akamai sites (fidelity.com) reset the HTTP/2 stream on a `HeadlessChrome` UA - ERR_HTTP2_PROTOCOL_ERROR (TQ-1359).
+        Every command's env carries the ordinary Chrome UA at the installed build's major version; none installed, or the
+        owner's own AGENT_BROWSER_USER_AGENT, leaves it alone."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': d}):
+            os.environ.pop('AGENT_BROWSER_USER_AGENT', None)
+            self.assertNotIn('AGENT_BROWSER_USER_AGENT', bv.env('x'), 'no Chrome build: agent-browser keeps its own')
+            for v in ('chrome-99.0.1.2', 'chrome-152.0.7977.64', 'chrome-not-a-version'): (Path(d)/'browsers'/v).mkdir(parents=True)
+            ua = bv.env('x')['AGENT_BROWSER_USER_AGENT']
+            self.assertIn('Chrome/152.0.0.0', ua); self.assertNotIn('Headless', ua)
+            with mock.patch.dict(os.environ, {'AGENT_BROWSER_USER_AGENT': 'mine'}):
+                self.assertNotIn('AGENT_BROWSER_USER_AGENT', bv.env('x'), "the owner's setting is inherited, not overridden")
+
     def test_the_session_name_rides_in_the_pty_environment(self):
         """Every pty gets AGENT_BROWSER_SESSION=tq-<sid>: whatever agent-browser command the agent
         runs lands in a session Taskuary can find - no cooperation from the agent needed."""

@@ -57,6 +57,7 @@ export const TYPE_LABELS = {
   td_quotes: "Twelve Data — quotes", td_indicator: "Twelve Data — technical indicator", av_quotes: "Alpha Vantage — quotes",
   finnhub_quotes: "Finnhub — quotes", finnhub_news: "Finnhub — company news", finnhub_earnings: "Finnhub — earnings", finnhub_insiders: "Finnhub — insider transactions",
   polygon_bars: "Polygon.io — bars", polygon_snapshot: "Polygon.io — snapshot", tiingo_history: "Tiingo — price history", tiingo_news: "Tiingo — news",
+  marketstack_eod: "Marketstack — end-of-day bars", eodhd_eod: "EOD Historical Data — end-of-day bars",
   fmp_fundamentals: "FMP — fundamentals", fmp_ratios: "FMP — ratios", alpaca_quotes: "Alpaca — quotes", alpaca_bars: "Alpaca — bars",
   markets_screen: "Strategy screen — only the rows that match",
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",

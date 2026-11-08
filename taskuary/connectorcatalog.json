@@ -2487,8 +2487,8 @@
       "type": "eodhd",
       "title": "EOD Historical Data",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "End-of-day and fundamental data across global exchanges",
+      "planned": false,
+      "desc": "End-of-day bars with adjusted closes across global exchanges, as reports and an agent tool, on one API token.",
       "match": [
         "eod historical data",
         "eod",
@@ -2501,8 +2501,8 @@
       "type": "marketstack",
       "title": "Marketstack",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Historical and intraday stock market data",
+      "planned": false,
+      "desc": "End-of-day stock bars on 70+ exchanges, as reports and an agent tool, on one access key.",
       "match": [
         "marketstack"
       ]

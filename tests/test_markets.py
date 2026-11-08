@@ -802,6 +802,46 @@ class TheAlpaca(unittest.TestCase):
             self.assertFalse(hasattr(markets, bad), bad)
 
 
+# documented shape, NOT a live capture - marketstack v2 /eod answers {pagination, data: [...]}, newest first
+MARKETSTACK_EOD = {"pagination": {"limit": 1000, "offset": 0, "count": 2, "total": 2},
+                   "data": [{"open": 318.0, "high": 320.1, "low": 316.9, "close": 319.4, "volume": 39000000.0, "adj_close": 319.4,
+                             "symbol": "AAPL", "exchange": "XNAS", "date": "2026-09-08T00:00:00+0000"},
+                            {"open": 315.5, "high": 318.2, "low": 314.8, "close": 316.2, "volume": 41000000.0, "adj_close": 316.2,
+                             "symbol": "AAPL", "exchange": "XNAS", "date": "2026-09-04T00:00:00+0000"}]}
+# documented shape, NOT a live capture - eodhd /eod/<SYM.EX>?fmt=json is a bare array
+EODHD_EOD = [{"date": "2026-09-04", "open": 315.5, "high": 318.2, "low": 314.8, "close": 316.2, "adjusted_close": 316.2, "volume": 41000000}]
+
+
+class MarketstackAndEodhd(unittest.TestCase):
+    def test_marketstack_is_oldest_first_with_its_access_key(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, MARKETSTACK_EOD)) as g:
+            head, body = markets.run_marketstack_eod({'symbols': 'AAPL', 'from': '2026-09-01', 'api_key': 'k'})
+        rows = [json.loads(l) for l in body.splitlines() if l.strip()]
+        self.assertEqual([r['date'] for r in rows], ['2026-09-04', '2026-09-08'])
+        self.assertEqual(rows[0], {'symbol': 'AAPL', 'date': '2026-09-04', 'open': 315.5, 'high': 318.2, 'low': 314.8, 'close': 316.2, 'volume': 41000000})
+        self.assertEqual(g.call_args.args[0], 'https://api.marketstack.com/v2/eod')
+        self.assertEqual((g.call_args.kwargs['params']['access_key'], g.call_args.kwargs['params']['date_from']), ('k', '2026-09-01'))
+
+    def test_eodhd_reads_a_bare_ticker_as_us_and_keeps_the_adjusted_close(self):
+        with mock.patch.object(markets.requests, 'get', return_value=_resp(200, EODHD_EOD)) as g:
+            head, body = markets.run_eodhd_eod({'symbol': 'AAPL', 'api_key': 'k'})
+        self.assertEqual(json.loads(body.splitlines()[0])['adj_close'], 316.2)
+        self.assertEqual(g.call_args.args[0], 'https://eodhd.com/api/eod/AAPL.US')
+        self.assertEqual(g.call_args.kwargs['params']['api_token'], 'k')
+
+    def test_wired_as_reads_on_their_own_cards_with_a_test(self):
+        from taskuary import channels, reports, scopes
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        for card, t, fake in (('marketstack', 'marketstack_eod', MARKETSTACK_EOD), ('eodhd', 'eodhd_eod', EODHD_EOD)):
+            self.assertEqual((reports.card_of(t), scopes.needs(t)), (card, 'read'))
+            cid = s.connectors_by_type(card)[0]['ConnectorId']; s.save_connector({'ConnectorId': cid, 'Secret': 'key'}, 'owner')
+            self.assertEqual(reports.CONNECTION_OF[t](s)['api_key'], 'key')
+            with mock.patch.object(markets.requests, 'get', return_value=_resp(200, fake)):
+                self.assertTrue(channels.test_connector(s, cid)['ok'], card)
+        with self.assertRaisesRegex(markets.MarketError, 'Marketstack'): markets.run_marketstack_eod({'symbols': 'AAPL'})
+
+
 class TheFiveNewProvidersWiring(unittest.TestCase):
     TYPES = ('finnhub_quotes', 'finnhub_news', 'finnhub_earnings', 'finnhub_insiders',
             'polygon_bars', 'polygon_snapshot', 'tiingo_history', 'tiingo_news',

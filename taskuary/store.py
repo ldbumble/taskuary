@@ -981,7 +981,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # five more (2026-09-08): finnhub/polygon/tiingo/fmp key like twelvedata; alpaca
                  # needs two credentials (key_id, secret_key) and ships market DATA only, no orders
                  'finnhub': 'report,tool', 'polygon': 'report,tool', 'tiingo': 'report,tool',
-                 'fmp': 'report,tool', 'alpaca': 'report,tool',
+                 'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool',
                  'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',
@@ -1543,6 +1543,7 @@ class SQLiteStore:
                          ('yahoo', 'Yahoo Finance (best-effort)'), ('sec_edgar', 'SEC filings (EDGAR)'),
                          ('twelvedata', 'Twelve Data'), ('alphavantage', 'Alpha Vantage'), ('fred', 'FRED (keyless)'),
                          ('finnhub', 'Finnhub'), ('polygon', 'Polygon.io'), ('tiingo', 'Tiingo'),
+                         ('marketstack', 'Marketstack'), ('eodhd', 'EOD Historical Data'),
                          ('fmp', 'Financial Modeling Prep'), ('alpaca', 'Alpaca (market data)'),
                          ('screen', 'Strategy screen'),
                          ('zoho_invoice', 'Zoho Invoice'),

@@ -271,6 +271,39 @@ def run_polygon_snapshot(cfg):
 TIINGO_BASE = 'https://api.tiingo.com'
 
 
+# ---- marketstack and EODHD: end-of-day bars on one key (the owner, 2026-11-08: "all the ones that say coming soon just add them now") --
+# field mapping written from each provider's documented shape 2026-11-08 (marketstack.com/documentation_v2, eodhd.com/financial-apis/
+# api-for-historical-data-and-volumes), NOT verified against a live response - report a mismatch rather than working around it
+MARKETSTACK_BASE, EODHD_BASE = 'https://api.marketstack.com/v2', 'https://eodhd.com/api'
+
+
+def _bar(sym, r): return {'symbol': sym, 'date': str(r.get('date') or '')[:10], 'open': _flt(r.get('open')), 'high': _flt(r.get('high')),
+                          'low': _flt(r.get('low')), 'close': _flt(r.get('close')), 'volume': _int(r.get('volume'))}
+
+
+def run_marketstack_eod(cfg):
+    """{"symbols": "AAPL,MSFT", "from": "2026-08-01" (blank = the latest day)} - end-of-day bars, oldest first. /eod answers
+    {"pagination": ..., "data": [{symbol, date, open, high, low, close, volume, ...}]}, newest first; the key is `access_key`."""
+    key = _need(cfg, 'Marketstack', 'api_key', 'secret')
+    syms, frm = _syms(cfg, 'symbols', 'symbol') or ['AAPL'], str(cfg.get('from') or '').strip()
+    j = _get(f"{MARKETSTACK_BASE}/eod{'' if frm else '/latest'}", {'access_key': key, 'symbols': ','.join(syms), 'limit': 1000,
+                                                                   **({'date_from': frm} if frm else {})})
+    rows = [_bar(str(r.get('symbol') or ''), r) for r in (j or {}).get('data') or []]
+    return _rows(cfg, sorted(rows, key=lambda r: (r['date'], r['symbol'])), 'bars')
+
+
+def run_eodhd_eod(cfg):
+    """{"symbol": "AAPL.US" (a bare ticker is read as US), "from": "2026-08-01" (blank = 30 days back)} - end-of-day bars, oldest first,
+    with the adjusted close. /eod/<SYMBOL.EXCHANGE>?fmt=json is a bare ARRAY of {date, open, high, low, close, adjusted_close, volume}."""
+    from datetime import datetime, timedelta, timezone
+    key = _need(cfg, 'EOD Historical Data', 'api_key', 'secret')
+    sym = (_syms(cfg, 'symbol', 'symbols') or ['AAPL'])[0]
+    sym = sym if '.' in sym else f'{sym}.US'
+    frm = str(cfg.get('from') or '').strip() or (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+    j = _get(f'{EODHD_BASE}/eod/{sym}', {'api_token': key, 'fmt': 'json', 'from': frm})
+    return _rows(cfg, [{**_bar(sym, r), 'adj_close': _flt(r.get('adjusted_close'))} for r in (j if isinstance(j, list) else [])], 'bars')
+
+
 def run_tiingo_history(cfg):
     """{"symbol": "AAPL", "from": "2026-08-01" (blank = 30 days back)} - one row per day, oldest
     first: close, adj_close, volume.
@@ -783,4 +816,6 @@ def probe_tiingo(cfg) -> str:
 
 
 def probe_fmp(cfg) -> str: return _probe(*run_fmp_fundamentals({**cfg, 'symbol': 'AAPL', 'limit': 1, 'max_rows': 1}))
+def probe_marketstack(cfg) -> str: return _probe(*run_marketstack_eod({**cfg, 'symbols': 'AAPL', 'max_rows': 1}))
+def probe_eodhd(cfg) -> str: return _probe(*run_eodhd_eod({**cfg, 'symbol': 'AAPL.US', 'max_rows': 1}))
 def probe_alpaca(cfg) -> str: return _probe(*run_alpaca_quotes({**cfg, 'symbols': 'AAPL', 'max_rows': 1}))

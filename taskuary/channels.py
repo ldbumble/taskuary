@@ -404,7 +404,7 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             from .reports import _card
             detail = probe(_card(store, 'alchemy', 'api_key', cid))
         elif c['Type'] in ('coingecko', 'frankfurter', 'yahoo', 'sec_edgar', 'fred', 'screen',
-                           'twelvedata', 'alphavantage', 'finnhub', 'polygon', 'tiingo', 'fmp'):
+                           'twelvedata', 'alphavantage', 'finnhub', 'polygon', 'tiingo', 'fmp', 'marketstack', 'eodhd'):
             # every market card probes the same way: one cheap real call, through markets.py's
             # probe_<type> - a keyless card (coingecko/frankfurter/yahoo/sec_edgar/fred/screen)
             # runs with whatever ConfigJson carries; a keyed one resolves its saved api_key first,

@@ -65,7 +65,7 @@ ACTIONS = {
     # ships market DATA only, no order/trading executor at all
     'finnhub_quotes': 'read', 'finnhub_news': 'read', 'finnhub_earnings': 'read', 'finnhub_insiders': 'read',
     'polygon_bars': 'read', 'polygon_snapshot': 'read',
-    'tiingo_history': 'read', 'tiingo_news': 'read',
+    'tiingo_history': 'read', 'tiingo_news': 'read', 'marketstack_eod': 'read', 'eodhd_eod': 'read',
     'fmp_fundamentals': 'read', 'fmp_ratios': 'read',
     'alpaca_quotes': 'read', 'alpaca_bars': 'read',
     # Robinhood is the first connection here that can MOVE MONEY. Listing the manifest and

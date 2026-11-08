@@ -243,7 +243,7 @@ const TYPE_GROUPS = [
     "teller_transactions", "teller_accounts", "teller_balances", "teller_spend",
     "yahoo_quotes", "yahoo_history", "coingecko_prices", "alchemy_prices", "alchemy_wallet", "fx_rates", "edgar_filings", "edgar_facts", "fred_series",
     "td_quotes", "td_indicator", "av_quotes", "finnhub_quotes", "finnhub_news", "finnhub_earnings", "finnhub_insiders",
-    "polygon_bars", "polygon_snapshot", "tiingo_history", "tiingo_news", "fmp_fundamentals", "fmp_ratios",
+    "polygon_bars", "polygon_snapshot", "tiingo_history", "tiingo_news", "marketstack_eod", "eodhd_eod", "fmp_fundamentals", "fmp_ratios",
     "alpaca_quotes", "alpaca_bars", "markets_screen"]],
   ["The AI itself", ["agent"]],
   ["Research the web", ["tavily", "exa", "reader", "firecrawl"]],

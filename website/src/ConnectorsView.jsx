@@ -47,7 +47,7 @@ import { waLine } from "./waStatus.js";
 import { DraftProvider, Tick, useBoxesSave, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { cfgPatch, editedBoxes, syncState } from "./connectorDraft.js";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
-import { cliCardOf } from "./cliCard.js";
+import { cliCardOf, toolUpdateLine } from "./cliCard.js";
 import SavedSignins from "./SavedSignins.jsx";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
@@ -2816,6 +2816,7 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
         </Alert>
       )}
       {tool?.installed && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>Found at <code>{tool.path}</code></Typography>}
+      {toolUpdateLine(tool) && <Typography variant="caption" data-tool-update="" sx={{ color: DIM, display: "block", mb: 1 }}>{toolUpdateLine(tool)}</Typography>}
       <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 1 }}>{DESKTOP_HOW}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: .75, borderBottom: `1px solid ${BORDER}`, maxWidth: 720 }}>
         <Switch checked={!!conn.Active} disabled={draft.flipping} onChange={(e) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: e.target.checked })} />

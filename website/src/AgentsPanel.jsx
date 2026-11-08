@@ -12,6 +12,7 @@ import { useCliInstall, InstallLine, UpdateLine, ConnectorLine } from "./cliInst
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
 import SkillImport from "./SkillImport.jsx";
 import { openAppLink } from "./appLinks.js";
+import { toolUpdateLine } from "./cliCard.js";
 
 const lines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
 const failure = (e) => e?.response?.data?.detail || e?.message || "Could not save changes";
@@ -41,6 +42,9 @@ export const CliConnectionsPage = ({ onBack }) => {
     catch (e) { setErr(e?.response?.status === 404 ? "Restart Taskuary to load the updated CLI connections configuration." : failure(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // ...and the optional tools the agents drive (agent-browser, agent-desktop): a line only when one is behind npm's latest (clis.tools)
+  const [behind, setBehind] = useState([]);
+  useEffect(() => { api.get("/api/cli/detect").then(({ data }) => setBehind((data.tools || []).map(toolUpdateLine).filter(Boolean))).catch(() => {}); }, []);
   // a connector installing beside a Set it up (acpadapter.start) is read again until it lands - its line says it meanwhile
   useEffect(() => {
     if (!(clis || []).some((c) => c.connector?.status === "installing")) return undefined;
@@ -131,6 +135,7 @@ export const CliConnectionsPage = ({ onBack }) => {
         {tests[cli.name] && !tests[cli.name].busy && <Alert severity={tests[cli.name].ok ? "success" : "error"} sx={{ mt: 1 }}>{tests[cli.name].ok ? tests[cli.name].result || "Connection works" : tests[cli.name].error}</Alert>}
       </Box>)}
     </Box>
+    {behind.map((l) => <Typography key={l} variant="caption" data-tool-update="" sx={{ color: DIM, display: "block", mt: 1.5 }}>{l}</Typography>)}
     {[note, setupNote].filter(Boolean).map((message, i) => <Alert key={i} severity={message.bad ? "error" : "success"} sx={{ mt: 2 }}>{message.text}</Alert>)}
     {installPane && <Box ref={installerRef} sx={{ mt: 2, ...card, p: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>

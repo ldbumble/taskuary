@@ -1011,7 +1011,8 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # image models (images.py): a tool, never a poll - a picture is drawn when
                  # something asks for one, and lands as an attachment where the owner can see it
                  'openai_image': 'tool', 'azure_openai_image': 'tool', 'xai_image': 'tool', 'image_server': 'tool',
-                 'gemini_image': 'tool', 'stability_image': 'tool', 'openrouter_image': 'tool', 'replicate_image': 'tool', 'runway_image': 'tool'}
+                 'gemini_image': 'tool', 'stability_image': 'tool', 'openrouter_image': 'tool', 'replicate_image': 'tool', 'runway_image': 'tool',
+                 'kling': 'tool'}     # video from a sentence (videotools.py): a tool, like the image cards
 ROLES = ('trigger', 'feed', 'report', 'tool', 'notify')      # 'notify': retired, kept so old rows parse
 
 def roles_of(c) -> set: return {r for r in (c.get('Roles') or '').split(',') if r}
@@ -1499,7 +1500,10 @@ class SQLiteStore:
                          ('linkedin', 'LinkedIn'),
                          ('treg', 'treg (agent tools)'),
                          ('reason_network', 'Reason Network'),
-                         ('agent_desktop', 'Agent Desktop'),          # seeded off, like every card: the owner's desktop is opt-in (agentdesktop.py)
+                         ('agent_desktop', 'Agent Desktop'),
+                         # video tools for the agents (videotools.py): remote MCP servers, a skill, and a key card - each seeded off
+                         ('descript', 'Descript'), ('invideo', 'InVideo'), ('vidova', 'Vidova'), ('opusclip', 'OpusClip'),
+                         ('video_use', 'video-use (Browser Use)'), ('kling', 'Kling AI'),          # seeded off, like every card: the owner's desktop is opt-in (agentdesktop.py)
                          ('postgresql', 'PostgreSQL'),
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),

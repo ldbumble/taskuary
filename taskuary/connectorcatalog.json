@@ -1326,13 +1326,92 @@
     {
       "type": "runway_image",
       "title": "Runway",
-      "group": "AI — images",
+      "group": "AI — video",
       "planned": false,
-      "desc": "Runway's Gen-4 image model on its developer API — the same account's credits, for campaign pictures drawn from a sentence.",
+      "desc": "Runway's developer API, one key for both: Gen-4 pictures drawn from a sentence, and Gen-4.5 video clips from a sentence or a picture — agents make them with runway_video.",
       "match": [
         "runway",
         "runwayml",
-        "runway image"
+        "runway image",
+        "runway video",
+        "gen-4"
+      ]
+    },
+    {
+      "type": "kling",
+      "title": "Kling AI",
+      "group": "AI — video",
+      "planned": false,
+      "desc": "Kling's video models on its own API key — agents make a 5 or 10 second clip from a sentence or animate a picture (kling_video), filed in the task's outputs.",
+      "match": [
+        "kling",
+        "klingai",
+        "kling ai",
+        "kling video"
+      ]
+    },
+    {
+      "type": "descript",
+      "title": "Descript",
+      "group": "AI — video",
+      "planned": false,
+      "desc": "Descript's own MCP server in your agent CLI — agents edit video and podcasts by editing the transcript. You sign in to Descript in the agent the first time it is used.",
+      "match": [
+        "descript",
+        "descript mcp",
+        "edit video",
+        "podcast edit"
+      ]
+    },
+    {
+      "type": "invideo",
+      "title": "InVideo",
+      "group": "AI — video",
+      "planned": false,
+      "desc": "InVideo's MCP server in your agent CLI — agents turn a script or an idea into a finished video. You sign in to InVideo in the agent the first time it is used.",
+      "match": [
+        "invideo",
+        "invideo ai",
+        "make a video"
+      ]
+    },
+    {
+      "type": "vidova",
+      "title": "Vidova",
+      "group": "AI — video",
+      "planned": false,
+      "desc": "Vidova's MCP server and its skill pack in your agent CLI — agents turn raw clips into finished, post-ready videos from a plain request. You sign in to Vidova in the agent the first time it is used.",
+      "match": [
+        "vidova",
+        "vidova ai",
+        "edit my clips"
+      ]
+    },
+    {
+      "type": "opusclip",
+      "title": "OpusClip",
+      "group": "AI — video",
+      "planned": false,
+      "desc": "OpusClip's MCP server in your agent CLI — agents cut a long video into short social clips with captions. You sign in to OpusClip in the agent the first time it is used.",
+      "match": [
+        "opusclip",
+        "opus clip",
+        "opus pro",
+        "short clips"
+      ]
+    },
+    {
+      "type": "video_use",
+      "title": "video-use (Browser Use)",
+      "group": "AI — video",
+      "planned": false,
+      "desc": "Browser Use's video-use skill for Claude Code — agents cut and edit video files on this computer with ffmpeg, using the key on your ElevenLabs card for the transcript.",
+      "match": [
+        "video-use",
+        "video use",
+        "browser use video",
+        "cut a video",
+        "ffmpeg"
       ]
     },
     {

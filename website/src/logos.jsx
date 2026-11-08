@@ -461,6 +461,13 @@ LOGOS.gemini_image = (p) => (
 LOGOS.vertex_ai = LOGOS.gemini_image;          // Gemini is what Vertex serves first, so it wears the Gemini mark
 LOGOS.stability_image = (p) => <T p={p} bg="#8b5cf6" text="S" />;
 LOGOS.runway_image = (p) => <T p={p} bg="#111111" text="R" />;
+// video tools (videotools.py): a letter on each vendor's own colour, like the other cards with no mark of their own here
+LOGOS.kling = (p) => <T p={p} bg="#0b0b0b" text="K" />;
+LOGOS.descript = (p) => <T p={p} bg="#0a66ff" text="D" />;
+LOGOS.invideo = (p) => <T p={p} bg="#5b3df5" text="iV" />;
+LOGOS.vidova = (p) => <T p={p} bg="#111827" text="V" />;
+LOGOS.opusclip = (p) => <T p={p} bg="#e3473c" text="O" />;
+LOGOS.video_use = (p) => <T p={p} bg="#1f2937" text="vu" />;
 LOGOS.replicate_image = (p) => (
   <S {...p}>
     <rect x="2" y="2" width="20" height="20" rx="5" fill="#0f0f0f" />

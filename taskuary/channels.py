@@ -482,6 +482,12 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] == 'agent_desktop':
             from . import agentdesktop
             detail = agentdesktop.test()
+        elif c['Type'] in ('descript', 'invideo', 'vidova', 'opusclip', 'video_use'):
+            from . import videotools
+            detail = videotools.test(store, c['Type'])
+        elif c['Type'] == 'kling':
+            from . import videotools
+            detail = videotools.test_kling(c)
         elif c['Type'] == 'treg':
             from .treg import run_treg_tools
             from .reports import resolve_cfg

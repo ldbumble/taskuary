@@ -1,0 +1,15 @@
+/* A VIEW THE AGENT SHOWED (ViewSpec.jsx), in the chat's column: the dashboards' tokens and cards (dashboard.css) and a report's table
+   (reportRows.css) laid on the chat itself - no box round the whole, a little air between its parts */
+.tq-view { gap: 10px; margin: 6px 0 10px; max-width: 760px; }
+.tq-view-title { margin: 0; font-size: 14px; font-weight: 650; color: var(--d-ink); }
+.tq-view-el, .tq-view-kids { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tq-view-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.tq-view .tq-dash-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tq-view .tq-dash-card { box-shadow: none; padding: 10px 12px; gap: 6px; }
+.tq-view .tq-dash-value { font-size: 24px; }
+.tq-view .tq-rep-table { max-height: 320px; }
+.tq-view-list { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 1.5; color: var(--d-ink); }
+.tq-view-list li + li { margin-top: 2px; }
+.tq-view .tq-cc-plan { margin: 0; }
+.tq-view-raw { margin: 6px 0; padding: 8px 10px; max-height: 260px; overflow: auto; font-size: 12px; background: #f6f4f1; border-radius: 6px;
+  white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1,0 +1,14 @@
+{
+  "_": "THE SHOW TOOL'S CATALOG (agenttools `show`, viewspec.py; website/src/viewSpec.js reads the same file). The only element types an agent may draw in its chat, each prop's kind ('!' = required, 'a|b' = one of those words), and the caps. A button names a buttons.json verb that has a row id (it lights that button) or an app link (#...) it opens - it never presses anything.",
+  "caps": { "elements": 40, "children": 20, "chars": 5000, "items": 50, "columns": 12, "short": 200, "long": 2000 },
+  "types": {
+    "table": { "columns": "strs!", "rows": "rows!" },
+    "stats": { "items": "tiles!" },
+    "chart": { "kind": "bar|line", "title": "str", "points": "points!" },
+    "list": { "items": "strs!" },
+    "checklist": { "items": "checks!" },
+    "steps": { "items": "strs!" },
+    "text": { "text": "md!" },
+    "button": { "label": "str!", "verb": "verb", "open": "link" }
+  }
+}

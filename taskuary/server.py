@@ -5796,7 +5796,7 @@ async def mcp_rpc(request: Request, task: int = 0):
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}
     def run(name, args):
         cls = agenttools.TOOLS[name][0]
-        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger') and not (
+        if cls == 'read' and name not in ('my_task', 'list_systems', 'run_system', 'ask_stronger', 'show') and not (
                 name == 'read_message' and agenttools.own_message(store, task, args)): _owner_history(request, task)
         # ...this door is never a stranger's session's, so a stranger's words on its own task are never read through it (agenttools.UNVOUCHED)
         if name == 'read_message' and agenttools.unvouched(store, task, args): raise HTTPException(403, agenttools.UNVOUCHED)

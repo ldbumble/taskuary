@@ -241,6 +241,7 @@ const OWN = {
   replynotneeded: () => ({ kind: "plan", summary: "Marked the reply as not needed" }),
   signform: () => ({ kind: "edit", summary: "Filled in and signed a form" }),
   propose: () => ({ kind: "plan", summary: "Asked for your yes" }),
+  show: () => ({ kind: "plan", summary: "Showed you a view" }),
   // ...and where it works (repochoice.py): the one line the chat shows for the agent's pick - "Working in northwind/ledger - <why>"
   userepo: (a) => { const w = String(a.path_or_name || "").trim(), at = /[\\/]/.test(w) && !/^[\w.-]+\/[\w.-]+$/.test(w) ? baseName(w) : w;
     return { kind: "plan", summary: `Working in ${at || "a checkout"}${a.why ? ` - ${clip(a.why, 100)}` : ""}` }; },
@@ -303,7 +304,7 @@ const ING = { Read: "Reading", Searched: "Searching", Wrote: "Writing", Edited: 
   Listed: "Listing", Changed: "Changing", Typed: "Typing", Clicked: "Clicking", Used: "Using", Handed: "Handing", Updated: "Updating",
   Checked: "Checking", Went: "Going", Reloaded: "Reloading", Scrolled: "Scrolling", Closed: "Closing", Pressed: "Pressing", Ticked: "Ticking",
   Unticked: "Unticking", Chose: "Choosing", Uploaded: "Uploading", Saved: "Saving", Started: "Starting", Drafted: "Drafting", Marked: "Marking",
-  Filled: "Filling", Asked: "Asking", Deleted: "Deleting", Moved: "Moving", Renamed: "Renaming", Copied: "Copying",
+  Filled: "Filling", Asked: "Asking", Showed: "Showing", Deleted: "Deleting", Moved: "Moving", Renamed: "Renaming", Copied: "Copying",
   Thought: "Thinking" };
 export const present = (s) => { const t = String(s || ""), m = /^([A-Z][a-z]+)\b/.exec(t); return m && ING[m[1]] ? ING[m[1]] + t.slice(m[1].length) : t; };
 // the row's words: what it is doing while it runs, what it did once done

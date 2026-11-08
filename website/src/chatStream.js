@@ -8,6 +8,7 @@
 import { baseName, describeCall, isWork, stepsOf } from "./agentSteps.js";
 import { editHunks, stat } from "./diffView.js";
 import { liveTerminal } from "./taskLayout.js";
+import { viewOf } from "./viewSpec.js";
 
 // ── ACP's session/update -> the log's step shape ─────────────────────────────────────────────────
 // an ACP tool call names its KIND (read, edit, execute...), not a tool: the name a log would carry for it, so describeCall reads both alike
@@ -120,8 +121,8 @@ export function planOf(e) {
 }
 
 // ── THE ONE MAPPER: trace events -> a turn's parts ──────────────────────────────────────────────
-// in order: its words, a fold of the work it did, each edit with its diff, its plan. `answer`: the words the turn filed as its answer, which its
-// trail does not say twice (agentSteps.stepsOf). A call's result is its own wherever it came - a run of steps cut by an edit keeps the results
+// in order: its words, a fold of the work it did, each edit with its diff, each view it showed, its plan. `answer`: the words the turn
+// filed as its answer, which its trail does not say twice (agentSteps.stepsOf). A call's result is its own wherever it came - a run of steps cut by an edit keeps the results
 // that arrived after the edit, so nothing it started is left spinning
 export function turnParts(events, { answer = "", keepStart = false } = {}) {
   const evs = (events || []).filter(Boolean), results = new Map(), parts = [], special = new Set();
@@ -139,7 +140,8 @@ export function turnParts(events, { answer = "", keepStart = false } = {}) {
   };
   for (const e of evs) {
     if (e.type === "tool_result") continue;
-    const p = editOf(e) || planOf(e);
+    // ...and a VIEW the agent showed (agenttools `show`) is its own part, drawn as the UI it describes (ViewSpec.jsx)
+    const p = editOf(e) || planOf(e) || viewOf(e, results.get(e.detail?.tool_call_id));
     if (p) { flush(); special.add(e.detail?.tool_call_id); parts.push(p); } else run.push(e);
   }
   flush();

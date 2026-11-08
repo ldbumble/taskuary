@@ -157,7 +157,9 @@ test("over ACP the box is a prompt and Stop ends the turn; there is no Terminal 
   // the owner, 2026-11-06: "hate this terminal button. it's also not a terminal"
   const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   assert.match(src, /\/api\/tasks\/\$\{task\.TaskId\}\/agent\/cancel/);
-  assert.match(src, /data-tq-plan/);
+  // ...the plan's checklist row is ViewSpec's, which an agent's own checklist view draws with too
+  assert.match(src, /<PlanRow key=\{p\.id\} p=\{p\} \/>/);
+  assert.match(fs.readFileSync(new URL("../src/ViewSpec.jsx", import.meta.url), "utf8"), /data-tq-plan/);
   assert.doesNotMatch(src, /terminal-toggle|TerminalIcon|<span>Terminal<\/span>/);
   assert.match(src, /screenAsks = coding && !!cc\.live\?\.asking && !acp/);
   assert.match(src, /data-tq-chat-screen[^]*The agent's screen is asking something[^]*<TerminalPane/);

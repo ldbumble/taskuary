@@ -470,7 +470,12 @@ def _act(store, item: dict, how: str, actor: str, note: str = None, until: str =
     if how in ('all_read', 'next'): return {'closed': True, 'read': True}
     # ...the act ran on its own road already (the task page's write-up, a hand-off, a fold, a typed put-down, a proposal): only the move,
     # and the row closed exactly when it has left the line - so a kept-open row is re-presented, never walked past
-    if how == 'left': return {'closed': not find(line(_rows(store)), item['key'])}
+    # ...and a row whose close is on its way - Mark done on a live agent writes it up first, then closes it (writeup.py) - has left too
+    # (the owner, 2026-11-08: "tasks are still coming back after mark done ... the walk does not work"): read while the write-up ran, the
+    # task was still on the line, the walk re-presented it, and the page went back to the task just closed
+    if how == 'left':
+        from . import writeup
+        return {'closed': not find(line(_rows(store)), item['key']) or (bool(item.get('tid')) and writeup.closing(int(item['tid'])))}
     # ...a card's own Done (an FYI batch's All read, a reply sent from its card): the row settled, nothing behind it closed
     if how == 'settle': _settle_unmoved(store, item, actor); return {'closed': True}
     # ...Remind me through the picker's own road (remind.set_reminder): its agent-open refusal and its receipt stay the same

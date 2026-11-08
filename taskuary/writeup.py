@@ -63,6 +63,12 @@ def running(tid) -> bool:
     return e is not None and not e.is_set()
 
 
+def closing(tid) -> bool:
+    "A write-up is running that closes the task when it ends (Mark done on a live agent): the task is as good as closed."
+    with _LOCK: st = _STATE.get(int(tid)) or {}
+    return running(tid) and bool(st.get('close')) and not st.get('error')
+
+
 def wait_for(tid, timeout: float = 600) -> bool:
     """Block until the write-up running for this task is done (True), or there is none. A close waits here."""
     with _LOCK: e = _JOBS.get(int(tid))

@@ -467,8 +467,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
   // ...and it is THE HEADINGS ADDED UP, the table's rows with them until they are put down (funnelPile.awayFromClear)
   const left = awayFromClear(bands, tail);
-  const cheer = !left || left > 15 ? "" : left === 1 ? "One more and you're clear."
-    : left <= 5 ? `${left} to go, then you're clear.` : `${left} away from clear.`;
+  // ...in ONE phrase, whatever the count (the product audit, 2026-11-08: "2 to go, then you're clear" one moment, "8 away from clear" the next)
+  const cheer = !left || left > 15 ? "" : left === 1 ? "1 to go, then you're clear." : `${left} to go, then you're clear.`;
   const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
   const wrapRef = useRef(null);
   // what is on the table is ringed WHERE THE OWNER CAN SEE IT (railReveal.js): once per change, after the rows' .55s glide

@@ -50,3 +50,9 @@ class ContinueFailure(unittest.TestCase):
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})
             time.sleep(0.3)
         self.assertTrue(any('could not continue: no AI is connected' in c['Body'] for c in s.list_comments(tid)))
+
+
+def test_the_agent_speaks_to_the_owner_never_of_them():
+    # the product audit, 2026-11-08: "Alex has what they need on this one" in the owner's own chat
+    from taskuary import selfclose
+    assert 'You are talking TO the owner in their own chat: say "you" and "your", never their name' in selfclose.SUMMARY_LINE

@@ -1363,10 +1363,13 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
 const ACTOR_LABEL = { owner: "you", router: "the router", triage: "triage", report: "a report", system: "the app", startup: "startup", "connector-test": "a Test", msauth: "sign-in" };
 // WHAT THE ASSISTANT CHANGED - a setting, a report's clock, a connection switched off - kept visible on the page that owns the knobs
 // (2026-09-18). A record, with no undo (the owner, 2026-10-19: "no take it back button"): a knob set wrong is set again here. Hidden when empty.
+const CHANGED = ["setting", "source", "connector"];
 const AssistantChanges = () => {
   const [rows, setRows] = useState([]);
   const load = useCallback(async () => {
-    try { const { data } = await api.get("/api/audit/assistant", { params: { limit: 8 } }); setRows(data.data || []); }
+    // ...only what it CHANGED in the app - a setting, a report, a connection: its other acts ("review attached", "hub post", a demo's seeding)
+    // read in raw internal words under this heading (the product audit, 2026-11-08)
+    try { const { data } = await api.get("/api/audit/assistant", { params: { limit: 24 } }); setRows((data.data || []).filter((r) => CHANGED.includes(r.entity)).slice(0, 8)); }
     catch { /* the list is a nicety */ }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1376,7 +1379,7 @@ const AssistantChanges = () => {
     if (r.entity === "setting") return `${d.key}: ${d.from ?? "(blank)"} → ${d.to}`;
     if (r.entity === "source") return `${r.action} · ${d.title || `report ${r.id}`}${d.to ? ` → ${d.to}` : ""}${d.changed ? ` (${d.changed.join(", ")})` : ""}`;
     if (r.entity === "connector") return `${r.action.replace("_", " ")} · ${d.name || `connection ${r.id}`}`;
-    return `${r.entity} ${r.action}`;
+    return "";
   };
   return (
     <Box sx={{ ...card, mb: 2, px: 1.5, py: 1.1, borderLeft: "4px solid #6f8a6e" }}>

@@ -142,7 +142,8 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mt: 0.85, flexWrap: "wrap" }}>
             <Typography variant="caption" sx={{ color: FAINT, display: "flex", alignItems: "center", gap: 0.55 }}>
               <TaskuaryMark size={13} />
-              {byOwner(p.Author) ? "written by you" : `agent ${p.Author || "unknown"}`} · {ago(p.UpdatedAt)}
+              {/* ...an agent is Agent, never its profile or tool ("agent coding", the product audit 2026-11-08) */}
+              {byOwner(p.Author) ? "written by you" : "written by an agent"} · {ago(p.UpdatedAt)}
             </Typography>
             {p.TaskId ? (
               <Button size="small" variant="outlined" onClick={() => onOpenTask?.(p.TaskId)}
@@ -150,9 +151,9 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
                   color: "#55697a", borderColor: BORDER }}>
                 from TQ-{String(p.TaskId).padStart(4, "0")}
               </Button>
-            ) : (
+            ) : byOwner(p.Author) ? (
               <Typography variant="caption" sx={{ color: FAINT }}>posted by hand</Typography>
-            )}
+            ) : null}
             <Button size="small" data-tq-post-open="" aria-label={`${plural(commentCount, "comment")} on ${named}`} onClick={() => (onOpen ? onOpen() : setOpen((v) => !v))}
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
               sx={{ fontSize: 11.5, color: commentCount ? ACCENT2 : DIM, minWidth: 0,

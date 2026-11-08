@@ -615,7 +615,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
       title: "Reports", wide: true,
-      summary: `${plural(reportSources.length, "report")} · ${plural(dashboardSources.length, "dashboard")} · ${plural(workflowSources.length, "workflow")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, dashboards show the numbers, workflows write, playbooks say how a kind of job is done`,
+      summary: `${plural(reportSources.length, "report")} · ${plural(dashboardSources.length, "dashboard")} · ${plural(workflowSources.length, "routine")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, dashboards show the numbers, routines act, playbooks say how a kind of job is done`,
       // DASHBOARDS BESIDE REPORTS (the owner, 2026-10-23): Reports, Dashboards, Workflows, Playbooks - and the + New chips in that order
       sections: [{ key: "reports", label: "Reports", n: reportSources.length },
         { key: "dashboards", label: placeName("dashboards").split(" → ").pop(), n: dashboardSources.length },

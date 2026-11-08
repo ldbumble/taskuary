@@ -14044,7 +14044,7 @@
     "Owner": null,
     "ConnectorId": null,
     "Active": 1,
-    "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Vendor spend, weekly\", \"weekly_at\": \"Mon 07:00\", \"sources\": [{\"key\": \"spend\", \"label\": \"AP payments\", \"type\": \"local_file\", \"path\": \"C:\\\\Users\\\\dana\\\\AppData\\\\Local\\\\Temp\\\\taskuary-demo\\\\exports\\\\ap-payments-daily.csv\", \"date\": \"day\"}], \"filters\": {\"range\": 90}, \"components\": [{\"kind\": \"stat\", \"title\": \"Last 90 days\", \"source\": \"spend\", \"agg\": \"sum\", \"y\": \"amount\", \"unit\": \"USD\"}, {\"kind\": \"stat\", \"title\": \"Last 7 days\", \"source\": \"spend\", \"agg\": \"sum\", \"y\": \"amount\", \"range\": 7, \"unit\": \"USD\"}, {\"kind\": \"stacked\", \"title\": \"Spend by day\", \"source\": \"spend\", \"x\": \"day\", \"y\": \"amount\", \"agg\": \"sum\", \"series\": \"vendor\", \"w\": 4}, {\"kind\": \"bar\", \"title\": \"Top vendors\", \"source\": \"spend\", \"x\": \"vendor\", \"y\": \"amount\", \"agg\": \"sum\", \"limit\": 5, \"w\": 2}, {\"kind\": \"bar\", \"title\": \"By category\", \"source\": \"spend\", \"x\": \"category\", \"y\": \"amount\", \"agg\": \"sum\", \"w\": 2}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
+    "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Vendor spend, weekly\", \"cron\": \"0 7 * * 1\", \"sources\": [{\"key\": \"spend\", \"label\": \"AP payments\", \"type\": \"local_file\", \"path\": \"C:\\\\Users\\\\dana\\\\AppData\\\\Local\\\\Temp\\\\taskuary-demo\\\\exports\\\\ap-payments-daily.csv\", \"date\": \"day\"}], \"filters\": {\"range\": 90}, \"components\": [{\"kind\": \"stat\", \"title\": \"Last 90 days\", \"source\": \"spend\", \"agg\": \"sum\", \"y\": \"amount\", \"unit\": \"USD\"}, {\"kind\": \"stat\", \"title\": \"Last 7 days\", \"source\": \"spend\", \"agg\": \"sum\", \"y\": \"amount\", \"range\": 7, \"unit\": \"USD\"}, {\"kind\": \"stacked\", \"title\": \"Spend by day\", \"source\": \"spend\", \"x\": \"day\", \"y\": \"amount\", \"agg\": \"sum\", \"series\": \"vendor\", \"w\": 4}, {\"kind\": \"bar\", \"title\": \"Top vendors\", \"source\": \"spend\", \"x\": \"vendor\", \"y\": \"amount\", \"agg\": \"sum\", \"limit\": 5, \"w\": 2}, {\"kind\": \"bar\", \"title\": \"By category\", \"source\": \"spend\", \"x\": \"category\", \"y\": \"amount\", \"agg\": \"sum\", \"w\": 2}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
     "LastPolledAt": "2026-11-05 17:30:46",
     "RouteWords": "Reports: every run; alert: never"
    }
@@ -28809,7 +28809,7 @@
   "config": {
    "type": "dashboard",
    "title": "Vendor spend, weekly",
-   "weekly_at": "Mon 07:00",
+   "cron": "0 7 * * 1",
    "sources": [
     {
      "key": "spend",

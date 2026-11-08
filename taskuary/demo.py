@@ -1082,7 +1082,9 @@ def seed_agent_day(store, f) -> int:
     export = config.home() / 'exports' / 'ap-payments-daily.csv'; export.parent.mkdir(parents=True, exist_ok=True)
     export.write_text('day,vendor,category,amount\n' + ''.join(f'{a},{b},{c},{d}\n' for a, b, c, d in rows), encoding='utf-8')
     week = str(today - timedelta(days=6)); last = sum(d for a, *_, d in rows if a >= week)
-    spec = {'type': 'dashboard', 'title': 'Vendor spend, weekly', 'weekly_at': 'Mon 07:00',
+    # ...on Mondays at 7:00, as the agent says it refreshes - in a key the scheduler reads: `weekly_at` was no clock at all, and the page
+    # framed the dashboard red with "No schedule" (the product audit, 2026-11-08)
+    spec = {'type': 'dashboard', 'title': 'Vendor spend, weekly', 'cron': '0 7 * * 1',
             'sources': [{'key': 'spend', 'label': 'AP payments', 'type': 'local_file', 'path': str(export), 'date': 'day'}],
             'filters': {'range': 90},
             'components': [{'kind': 'stat', 'title': 'Last 90 days', 'source': 'spend', 'agg': 'sum', 'y': 'amount', 'unit': 'USD'},

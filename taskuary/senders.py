@@ -215,6 +215,22 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = N
     return False, o['said']
 
 
+# AN UNVERIFIED FROM STARTS NOTHING BY ITSELF (M1, 2026-11-08): a 'none' verdict - a domain with no DMARC record, a mail no check
+# vouched for - fell through to the address rules, so a forged From of a past correspondent started a full agent. On a mailbox whose
+# server does verify (it has stamped a pass or a fail here before), a 'none' waits for the owner's press; the task's trust is unchanged.
+def verifies(store, mailbox: str) -> bool:
+    "Has this mailbox's server ever stamped a verdict on mail here (mailauth)?"
+    return bool(mailbox) and store._one("SELECT 1 x FROM message WHERE lower(SourceName)=lower(?) AND Channel='email' "
+                                        "AND json_extract(MailMetaJson, '$.auth') IN ('pass', 'fail') LIMIT 1", (mailbox,)) is not None
+
+def start_known(store, msg: dict, mid=None) -> tuple:
+    "known() for the unattended start and for passing a line into a live agent: and a mail's From must be verified where it can be."
+    ok, why = known(store, msg, exclude_mid=mid, deep=True)
+    if not ok or str(msg.get('channel') or '') != 'email' or auth(msg) != 'none' or not verifies(store, msg.get('source_name') or ''): return ok, why
+    return False, _said(f"The mail server could not verify that {str(msg.get('from_email') or 'this sender')[:80]} sent this (no DMARC or "
+                        "DKIM pass), so it waits for your press.")
+
+
 def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = None) -> tuple:
     """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
     to PW-081): a chat person the owner talks with (or a workspace item); the owner's own domains; and

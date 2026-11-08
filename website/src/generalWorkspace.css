@@ -115,9 +115,6 @@
 .tq-aui-dock .tq-aui-hint { display: none; }
 /* on the assistant canvas the room is the agent's answer, not the keyboard help (the owner, 2026-10-18); a closed chat's notice keeps its line */
 [data-tq-canvas-item] .tq-aui-footer { padding: 8px 14px 7px; }
-/* ...and ON A PHONE (its row docked at the view's foot) the box stays at the foot of what is visible while the stacked page scrolls - a reply
-   task's Came from pushed it under the row, to scroll for (the owner, 2026-11-08) */
-[data-tq-canvas-item]:has(> .tq-docked) .tq-aui-footer { position: sticky; bottom: 0; z-index: 2; }
 [data-tq-canvas-item] .tq-aui-viewport { padding: 14px 18px 2px; }
 [data-tq-canvas-item] .tq-aui-message { margin-bottom: 14px; }
 [data-tq-canvas-item] .tq-aui-hint:not([role]) { display: none; }

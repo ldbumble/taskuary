@@ -96,3 +96,8 @@ class TheTool(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+def test_the_tool_says_not_to_repeat_the_view_in_words():
+    from taskuary import agenttools
+    assert 'never the same table or list again in text' in agenttools.TOOLS['show'][1]

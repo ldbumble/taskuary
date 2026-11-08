@@ -61,7 +61,7 @@ TOOLS = {
                     'additionalProperties': True}, ('POST', '/api/tools/run')),
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
     'show': ('read', "Show the owner a small view in this chat when a table, chart or checklist would be clearer than text - plain text is "
-             "fine otherwise, and this is never required. `elements` maps an id to {type, props, children?}; `root` is the id drawn first, "
+             "fine otherwise, and this is never required. Your words then say what the view means - never the same table or list again in text. `elements` maps an id to {type, props, children?}; `root` is the id drawn first, "
              "each element's children under it. Types: table {columns, rows}, stats {items: [{label, value, note?}]}, chart {kind: bar|line, "
              "title?, points: [{label, value}]}, list {items}, checklist {items: [{text, done}]}, steps {items}, text {text: markdown}, button "
              "{label, verb: a task-page button to light for the owner (close, defer, reply, continue...) | open: an app page link like #settings}. A "

@@ -103,7 +103,7 @@ export const CalendarLine = ({ meta }) => (
 export const BlankAsk = ({ line, onSend, onCancel }) => (
   <Alert severity="warning" data-tq-blank-ask="" sx={{ mt: 0.75, alignItems: "center" }}
     action={<Box sx={{ display: "flex", gap: 0.5 }}>
-      <Button size="small" color="inherit" data-tq-blank-send="" onClick={onSend}>Send anyway</Button>
+      <Button size="small" color="inherit" data-tq-blank-send="" onClick={onSend}>{btn("approve", "unknown")}</Button>
       <Button size="small" color="inherit" onClick={onCancel}>Cancel</Button></Box>}>{line}</Alert>
 );
 

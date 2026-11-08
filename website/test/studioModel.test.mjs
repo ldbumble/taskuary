@@ -17,17 +17,17 @@ test("a real run name and task state drive the character", () => {
   const task = { Status: "in_progress", Kind: "coding", Assignee: "agent:fallback", RunStatus: "running" };
   // the desk names the tool a coding session runs, never the profile it runs under (the owner, 2026-10-28)
   const live = { AgentName: "coding", cli: "codex", StartedAt: "2026-09-10 12:00:00" };
-  assert.equal(studioAgentName(task, live), "codex");
+  assert.equal(studioAgentName(task, live), "Agent");      // Agent, never its tool (2026-11-08)
   assert.equal(studioPose(task), "type");
   assert.deepEqual(studioTaskState(task, live, [], Date.parse("2026-09-10T12:14:00")), {
-    agent: "codex", label: "working · 14m", tone: "working", pose: "type",
+    agent: "Agent", label: "working · 14m", tone: "working", pose: "type",
   });
 });
 
 test("an owner wait raises the agent's hand", () => {
   const task = { Status: "waiting", Kind: "coding", Assignee: "agent:atlas" };
   assert.deepEqual(studioTaskState(task, null), {
-    agent: "Taskuary", label: "waiting on you", tone: "waiting", pose: "hand",
+    agent: "Agent", label: "waiting on you", tone: "waiting", pose: "hand",
   });
 });
 

@@ -6,7 +6,7 @@ import { agentAssignee, assignedAgent, assigneeLabel } from "../src/agentIdentit
 test("agent ownership storage syntax never leaks into the UI", () => {
   assert.equal(agentAssignee("Atlas"), "agent:Atlas");
   assert.equal(assignedAgent("agent:Atlas"), "Atlas");
-  assert.equal(assigneeLabel("agent:Atlas"), "Taskuary", "the profile is instructions, never who works it");
+  assert.equal(assigneeLabel("agent:Atlas"), "Agent", "the profile is instructions, never who works it");
   assert.equal(assigneeLabel("Erin Blake"), "Erin Blake", "a person keeps their name");
   assert.equal(assigneeLabel("owner"), "you");
   assert.equal(assigneeLabel(""), "unassigned");

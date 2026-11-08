@@ -51,7 +51,7 @@ test("a process disappearing twice raises a finished event, but a parked session
   assert.deepEqual(working.raises, []);
   working = advanceHandRaises(working.state, []);
   assert.equal(working.raises.length, 1);
-  assert.equal(handRaiseWhat(working.raises[0]), "codex finished");
+  assert.equal(handRaiseWhat(working.raises[0]), "Agent finished");      // Agent, never its tool (2026-11-08)
 
   let parked = advanceHandRaises({}, [session({ phase: "parked", waiting: true })]);
   assert.equal(parked.raises.length, 1);

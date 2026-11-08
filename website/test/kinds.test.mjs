@@ -16,7 +16,7 @@ test("kinds.js reads kinds.json: the picker, the panel's destination and the wor
   assert.equal(KIND_OPTIONS, json.kinds);
   for (const k of json.kinds) { assert.equal(kindLabel(k.key), k.label); assert.equal(verdictLabel(k.key), k.verdict); }
   assert.deepEqual([shortKind("coding"), shortKind(""), kindLabel("setup")], ["coding", "your task", "setup"]);
-  assert.deepEqual([agentWord("coding"), agentWord("general"), agentWord("task")], ["the coding agent", "the assistant", "the assistant"]);
+  assert.deepEqual([agentWord("coding"), agentWord("general"), agentWord("task")], ["the coding agent", "the agent", "the agent"]);
   assert.equal(panelLabel, verdictLabel); assert.equal(storyWord, agentWord);
   assert.deepEqual(KIND_OPTIONS.filter((o) => o.made === false).map((o) => o.key), ["reply"], "a reply is never made by hand");
 });

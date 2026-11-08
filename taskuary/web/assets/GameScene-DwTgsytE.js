@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:taskuary/web/assets/GameScene-DwTgsytE.js
 import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fm as xc}from"./index-BAlg-ofy.js";/**
+========
+import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fm as xc}from"./index-CDy8WM_Q.js";/**
+>>>>>>>> 68d3bafbd (Rebuild the app and the demo; the Done today test follows the pick's new line):taskuary/web/assets/GameScene-CU_JXvx3.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

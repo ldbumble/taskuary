@@ -44,4 +44,6 @@ def test_an_agent_asking_from_a_terminal_on_a_general_task_has_its_question_in_t
     with mock.patch.dict(terminal.SESSIONS, {'p1': pty}):
         asked = payload(s, tid)['asking']
     assert asked['text'] == 'Keep the inter-company rows, or drop them?' and asked['choices'] == ['Keep', 'Drop'] and asked['sid'] == 'p1'
-    assert payload(s, tid)['asking'] is None, 'nothing live on the task: nothing is asking'
+    # ...and it stays asked once the terminal is gone: an open question is kept with the task until it is answered (the owner, 2026-11-07:
+    # "of course it should be saved") - the agent idling out or its pane closing never answers it
+    assert (payload(s, tid)['asking'] or {}).get('text') == 'Keep the inter-company rows, or drop them?'

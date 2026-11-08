@@ -24,14 +24,15 @@ test("each fyi line says when it came, on a white box", () => {
 test("a closed task's conversation shows why it cannot be typed into, in place of the composer", () => {
   const ws = read("GeneralWorkspace.jsx");
   assert.match(ws, /const closedChat = !dock && !chat && \["done", "dropped"\]\.includes\(String\(task\?\.Status \|\| ""\)\);/);
-  assert.match(ws, /\{closedChat \? <div className="tq-aui-hint" role="status"[\s\S]*?This task is closed\. Press \{btn\("reopen"\)\}\{chat \? "" : <>, then \{btn\("continue"\)\},<\/>\}[\s\S]*?: <>[\s\S]{0,600}?<OneBox root=\{ComposerPrimitive\.Root\}/);
+  // ...a coding source names Reopen, then Continue; a chat task keeps its box under "Type to reopen it" (the owner, 2026-11-07)
+  assert.match(ws, /\{closedChat && road \? <div className="tq-aui-hint" role="status"[\s\S]*?This task is closed\. Press \{btn\("reopen"\)\}, then \{btn\("continue"\)\}[\s\S]*?: noComposer \? null : <>[\s\S]*?This task is closed\. Type to reopen it\.[\s\S]{0,1200}?<OneBox root=\{ComposerPrimitive\.Root\}/);
 });
 
 // ONE DOOR (the owner, 2026-10-26: "before I hit continue it has a space to type into the agent? coding agents don't have that"): the
 // chat agent's box goes exactly when the row offers Continue - an open conversation keeps it, as its way on (2026-09-29)
 test("a chat agent's box is gone exactly when the row offers Continue", () => {
   const ws = read("GeneralWorkspace.jsx"), page = read("TaskPage.jsx");
-  assert.match(ws, /: noComposer \? null : <>[\s\S]{0,600}?<OneBox root=\{ComposerPrimitive\.Root\}/);
+  assert.match(ws, /: noComposer \? null : <>[\s\S]{0,1200}?<OneBox root=\{ComposerPrimitive\.Root\}/);
   assert.match(page, /noComposer=\{isGeneral && continueHere && !chatPane\}/);
   assert.match(page, /const continueHere = !liveSession && notDone && \(barContinue \|\| \(stage !== "agent" && canContinue\)\);/);
 });

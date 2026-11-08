@@ -36,6 +36,7 @@ import { GoogleCalendar } from "./GoogleCalendar.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
+import { WAITING_META, waitingIn } from "./waitingMeta.js";
 import { CATALOGUE, PRESETS, matchCards, onceEach, oneOf, plannedFor, presetBody, presetOf, presetsLeft } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
@@ -981,6 +982,7 @@ const META = {
       "Put the model in owner/name form. flux-schnell is fast and cheap; flux-dev is slower and better.",
       "Test draws one small grey square — a Replicate run takes a few seconds longer because it queues. Enable to use it."],
     agent: ["Ask the owner for a Replicate API token, save it as Secret, leave model blank for flux-schnell unless they name one, Test, turn it on, SETUP DONE."] },
+  ...WAITING_META,          // shared inboxes, phones, forms, hiring and money that wait on you (waitingMeta.js)
 };
 // a chat card off the fast clock (pollFields.CHAT_CONNECTORS) gets null for its poll field: opening Mattermost, Rocket.Chat, Matrix
 // or Google Chat drew "Something in this view failed to draw" (the setup sweep, 2026-10-27)
@@ -2203,6 +2205,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     } }));
   // a vendor's own MCP server (remotemcp.py): a catalogue row with an `mcp` url is a working card in its group, then the planned ones
   const catalogCards = (category) => [
+    // ...the sources where work waits on you elsewhere (waiting.py), each in its catalogue group
+    ...channelCards(waitingIn(category)),
     // ...and a vendor's REST API read with a key (apireads.json), in its own catalogue group
     ...dataCards(READ_TYPES.filter((t) => CATALOGUE.find((c) => c.type === t)?.group === category)),
     ...CATALOGUE.filter((c) => c.mcp && c.group === category).flatMap((c) =>

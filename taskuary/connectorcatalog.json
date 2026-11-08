@@ -2606,6 +2606,159 @@
       }
     },
     {
+      "type": "lever",
+      "title": "Lever",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Lever candidates you own land on your work rail when they change stage.",
+      "match": [
+        "lever",
+        "hire.lever.co"
+      ]
+    },
+    {
+      "type": "lattice",
+      "title": "Lattice",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Lattice people, review cycles and the tasks due on you as reports and an agent tool - GET /me, /user/<id>/tasks, /reviewCycles.",
+      "match": [
+        "lattice",
+        "latticehq"
+      ]
+    },
+    {
+      "type": "xero",
+      "title": "Xero",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "xero"
+      ],
+      "mcp": {
+        "url": "https://api.xero.com/mcp/v1",
+        "docs": "https://developer.xero.com/faq/remote-mcp"
+      },
+      "desc": "Xero's own MCP server in your agent CLI — agents look up invoices, bills, contacts and reports in your Xero organisation. You sign in once with Sign in."
+    },
+    {
+      "type": "bill_com",
+      "title": "BILL",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "bill.com",
+        "bill com"
+      ],
+      "mcp": {
+        "url": "https://gateway.prod.bill.com/ai-mcp-server/v1",
+        "docs": "https://developer.bill.com/docs/bill-mcp-server"
+      },
+      "desc": "BILL's own MCP server in your agent CLI — agents read bills, approvals waiting on you, vendors and payments (BILL's server only reads). You sign in once with Sign in."
+    },
+    {
+      "type": "expensify",
+      "title": "Expensify",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "expensify"
+      ],
+      "mcp": {
+        "url": "https://www.expensify.com/mcp",
+        "docs": "https://help.expensify.com/articles/new-expensify/connections/connect-ai-assistants/Use-the-Expensify-MCP-Server-With-AI-Assistants"
+      },
+      "desc": "Expensify's own MCP server in your agent CLI — agents read expense reports, expenses and policies (it only reads). You sign in once with Sign in."
+    },
+    {
+      "type": "ramp",
+      "title": "Ramp",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "ramp card",
+        "ramp.com"
+      ],
+      "mcp": {
+        "url": "https://mcp.ramp.com/mcp",
+        "docs": "https://docs.ramp.com/llms-guides/ramp-mcp.txt"
+      },
+      "desc": "Ramp's own MCP server in your agent CLI — agents look up card transactions, missing receipts, reimbursements and bills. You sign in once with Sign in."
+    },
+    {
+      "type": "brex",
+      "title": "Brex",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "brex"
+      ],
+      "mcp": {
+        "url": "https://api.brex.com/mcp",
+        "docs": "https://developer.brex.com/docs/mcp"
+      },
+      "desc": "Brex's own MCP server in your agent CLI — agents look up expenses, receipts due, cards and budgets. You sign in once with Sign in."
+    },
+    {
+      "type": "avalara",
+      "title": "Avalara",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "avalara",
+        "avatax"
+      ],
+      "mcp": {
+        "url": "https://mcp.avalara.com/avatax",
+        "docs": "https://developer.avalara.com/mcp-servers/avatax/"
+      },
+      "desc": "Avalara's own MCP server in your agent CLI — agents work out sales tax and look up AvaTax transactions. You sign in once with Sign in."
+    },
+    {
+      "type": "deel",
+      "title": "Deel",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "deel",
+        "letsdeel"
+      ],
+      "mcp": {
+        "url": "https://api.letsdeel.com/mcp",
+        "docs": "https://developer.deel.com/mcp/authorization"
+      },
+      "desc": "Deel's own MCP server in your agent CLI — agents look up people, contracts, time off and payroll. You sign in once with Sign in."
+    },
+    {
+      "type": "greenhouse",
+      "title": "Greenhouse",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "greenhouse"
+      ],
+      "mcp": {
+        "url": "https://mcp.greenhouse.io/mcp",
+        "docs": "https://support.greenhouse.io/hc/en-us/articles/52096319906971"
+      },
+      "desc": "Greenhouse's own MCP server in your agent CLI — agents look up candidates, jobs, interviews and scorecards (an admin allows the tool in Greenhouse first). You sign in once with Sign in."
+    },
+    {
+      "type": "ashby",
+      "title": "Ashby",
+      "group": "Corporate systems",
+      "planned": false,
+      "match": [
+        "ashby",
+        "ashbyhq"
+      ],
+      "mcp": {
+        "url": "https://mcp.ashbyhq.com/mcp/v1",
+        "docs": "https://docs.ashbyhq.com/ashby-mcp-server-beta"
+      },
+      "desc": "Ashby's own MCP server in your agent CLI — agents look up candidates, jobs and interview schedules (an admin turns it on in Ashby first). You sign in once with Sign in."
+    },
+    {
       "type": "plaid",
       "title": "Plaid",
       "group": "Markets & finance",
@@ -2693,6 +2846,31 @@
       "match": [
         "benzinga"
       ]
+    },
+    {
+      "type": "mercury",
+      "title": "Mercury",
+      "group": "Markets & finance",
+      "planned": false,
+      "desc": "Mercury bank accounts, balances and transactions as reports and an agent tool - GET /accounts, /account/<id>/transactions.",
+      "match": [
+        "mercury bank",
+        "mercury.com"
+      ]
+    },
+    {
+      "type": "mercury_mcp",
+      "title": "Mercury MCP",
+      "group": "Markets & finance",
+      "planned": false,
+      "match": [
+        "mercury mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.mercury.com/mcp",
+        "docs": "https://docs.mercury.com/docs/connecting-mercury-mcp"
+      },
+      "desc": "Mercury's own MCP server in your agent CLI — agents look up accounts, balances and transactions (Mercury calls it a beta). You sign in once with Sign in."
     },
     {
       "type": "grafana",
@@ -3104,6 +3282,66 @@
       ]
     },
     {
+      "type": "front",
+      "title": "Front",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Open Front conversations ASSIGNED TO YOU land on your work rail through triage - a contact's words wait for your press.",
+      "match": [
+        "front",
+        "frontapp"
+      ]
+    },
+    {
+      "type": "helpscout",
+      "title": "Help Scout",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Active Help Scout conversations ASSIGNED TO YOU land on your work rail through triage - a customer's words wait for your press.",
+      "match": [
+        "help scout",
+        "helpscout"
+      ]
+    },
+    {
+      "type": "gorgias",
+      "title": "Gorgias",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Open Gorgias tickets ASSIGNED TO YOU land on your work rail through triage - a shopper's words wait for your press.",
+      "match": [
+        "gorgias"
+      ]
+    },
+    {
+      "type": "helpscout_mcp",
+      "title": "Help Scout MCP",
+      "group": "Project management",
+      "planned": false,
+      "match": [
+        "help scout mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.helpscout.net/mcp",
+        "docs": "https://docs.helpscout.com/article/1779-connect-your-ai-agent-with-help-scout-to-search-conversations-and-pull-reports"
+      },
+      "desc": "Help Scout's own MCP server in your agent CLI — agents search conversations and pull reports. You sign in once with Sign in."
+    },
+    {
+      "type": "gorgias_mcp",
+      "title": "Gorgias MCP",
+      "group": "Project management",
+      "planned": false,
+      "match": [
+        "gorgias mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.gorgias.com/mcp",
+        "docs": "https://docs.gorgias.com/en-US/connect-your-ai-assistant-to-the-gorgias-mcp-6310546"
+      },
+      "desc": "Gorgias's own MCP server in your agent CLI — agents look up tickets, customers and orders. You sign in once with Sign in."
+    },
+    {
       "type": "shipstation",
       "title": "ShipStation",
       "group": "Everything else",
@@ -3269,6 +3507,146 @@
         "url": "https://mcp.mixpanel.com/mcp",
         "docs": "https://docs.mixpanel.com/docs/mcp"
       }
+    },
+    {
+      "type": "ringcentral",
+      "title": "RingCentral",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Voicemails (with RingCentral's transcript), texts and missed calls to your extension land on your work rail through triage.",
+      "match": [
+        "ringcentral",
+        "ring central"
+      ]
+    },
+    {
+      "type": "aircall",
+      "title": "Aircall",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Missed calls and voicemails on your Aircall lines land on your work rail through triage, with the transcript where Aircall has one.",
+      "match": [
+        "aircall"
+      ]
+    },
+    {
+      "type": "dialpad",
+      "title": "Dialpad",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Missed calls and voicemails to you on Dialpad land on your work rail through triage, with Dialpad's transcript.",
+      "match": [
+        "dialpad"
+      ]
+    },
+    {
+      "type": "typeform",
+      "title": "Typeform",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "New Typeform responses on the forms you pick land on your work rail with every answer.",
+      "match": [
+        "typeform"
+      ]
+    },
+    {
+      "type": "jotform",
+      "title": "Jotform",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "New Jotform submissions on the forms you pick land on your work rail with every answer.",
+      "match": [
+        "jotform"
+      ]
+    },
+    {
+      "type": "surveymonkey",
+      "title": "SurveyMonkey",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "New SurveyMonkey responses on the surveys you pick land on your work rail with every answer.",
+      "match": [
+        "surveymonkey",
+        "survey monkey"
+      ]
+    },
+    {
+      "type": "tally",
+      "title": "Tally",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "New Tally submissions on the forms you pick land on your work rail with every answer.",
+      "match": [
+        "tally.so",
+        "tally form"
+      ]
+    },
+    {
+      "type": "google_forms",
+      "title": "Google Forms",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "New Google Forms responses on the forms you pick land on your work rail, read with the Google Sheets card's sign-in.",
+      "match": [
+        "google forms",
+        "google form"
+      ]
+    },
+    {
+      "type": "aircall_mcp",
+      "title": "Aircall MCP",
+      "group": "Everything else",
+      "planned": false,
+      "match": [
+        "aircall mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.aircall.io/mcp",
+        "docs": "https://support.aircall.io/en-gb/articles/39677926959517"
+      },
+      "desc": "Aircall's own MCP server in your agent CLI — agents look up calls, contacts and numbers (Aircall calls it a beta, and it only reads). You sign in once with Sign in."
+    },
+    {
+      "type": "typeform_mcp",
+      "title": "Typeform MCP",
+      "group": "Everything else",
+      "planned": false,
+      "match": [
+        "typeform mcp"
+      ],
+      "mcp": {
+        "url": "https://api.typeform.com/mcp",
+        "docs": "https://www.typeform.com/developers/mcp/"
+      },
+      "desc": "Typeform's own MCP server in your agent CLI — agents read forms and responses. You sign in once with Sign in."
+    },
+    {
+      "type": "jotform_mcp",
+      "title": "Jotform MCP",
+      "group": "Everything else",
+      "planned": false,
+      "match": [
+        "jotform mcp"
+      ],
+      "mcp": {
+        "url": "https://mcp.jotform.com",
+        "docs": "https://www.jotform.com/developers/mcp"
+      },
+      "desc": "Jotform's own MCP server in your agent CLI — agents read forms and submissions. You sign in once with Sign in."
+    },
+    {
+      "type": "tally_mcp",
+      "title": "Tally MCP",
+      "group": "Everything else",
+      "planned": false,
+      "match": [
+        "tally mcp"
+      ],
+      "mcp": {
+        "url": "https://api.tally.so/mcp",
+        "docs": "https://developers.tally.so/api-reference/mcp"
+      },
+      "desc": "Tally's own MCP server in your agent CLI — agents read and build forms and read submissions. You sign in once with Sign in."
     },
     {
       "type": "deepseek",

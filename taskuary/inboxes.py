@@ -1256,9 +1256,12 @@ def items_sendgrid(store, c, since) -> list:
     return out
 
 
+TESTS = {t: globals()[f'test_{t}'] for t in NAMES}
+ITEMS = {t: globals()[f'items_{t}'] for t in NAMES}
+# ...and the shared inboxes, phones, forms, hiring and money that wait on you (waiting.py): the same road, one module of their own
+from . import waiting
+NAMES |= waiting.NAMES; TESTS |= waiting.TESTS; ITEMS |= waiting.ITEMS
 TYPES = tuple(NAMES)
-TESTS = {t: globals()[f'test_{t}'] for t in TYPES}
-ITEMS = {t: globals()[f'items_{t}'] for t in TYPES}
 
 def test(store, c) -> str: return TESTS[c['Type']](store, c)
 

@@ -60,6 +60,9 @@ const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack
   zulip: "Zulip messages", signal: "Signal messages", twilio: "Texts", discourse: "Discourse notifications", reddit: "Reddit inbox",
   youtube: "YouTube comments", calendly: "Calendly bookings", shipstation: "ShipStation orders", shopify: "Shopify orders",
   square: "Square disputes", paypal: "PayPal disputes",
+  front: "Front conversations", helpscout: "Help Scout conversations", gorgias: "Gorgias tickets", ringcentral: "RingCentral calls & texts",
+  aircall: "Aircall calls", dialpad: "Dialpad calls", typeform: "Typeform responses", jotform: "Jotform submissions",
+  surveymonkey: "SurveyMonkey responses", tally: "Tally submissions", google_forms: "Google Forms responses", lever: "Lever candidates",
   aws: "AWS buckets & log groups", azure: "Azure containers & workspaces" };
 
 

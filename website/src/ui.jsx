@@ -116,6 +116,8 @@ const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: Assessmen
   bitbucket: MergeTypeIcon, ms_planner: ChecklistIcon,
   zulip: TagIcon, signal: SendIcon, twilio: SendIcon, discourse: TagIcon, reddit: TagIcon, youtube: TagIcon,
   calendly: GroupsIcon, shipstation: StorageIcon, shopify: StorageIcon, square: ErrorOutlineIcon, paypal: ErrorOutlineIcon,
+  front: SupportAgentIcon, helpscout: SupportAgentIcon, gorgias: SupportAgentIcon, ringcentral: SendIcon, aircall: SendIcon, dialpad: SendIcon,
+  typeform: ArticleIcon, jotform: ArticleIcon, surveymonkey: ArticleIcon, tally: ArticleIcon, google_forms: ArticleIcon, lever: GroupsIcon,
   aws: CloudQueueIcon, azure: CloudQueueIcon, database: StorageIcon, smb_file: StorageIcon,
   own: PersonOutlineIcon };
 // A product named on a card wears its OWN logo where we have one (logos.jsx, self-colored);

@@ -129,6 +129,12 @@ class EveryCardIsOnThePage(unittest.TestCase):
         if 'dataCards(READ_TYPES' in src:             # ...and every vendor REST read (apireads.json) in its catalogue group
             from taskuary import apireads
             listed |= set(apireads.types())
+        if 'channelCards(waitingIn(category))' in src:   # ...and every source where work waits on you (waitingMeta.js), each card described there
+            meta = (ROOT / 'website' / 'src' / 'waitingMeta.js').read_text(encoding='utf-8')
+            from taskuary import waiting
+            drawn = set(re.findall(r'^  ([a-z0-9_]+): \{', meta, re.M))
+            self.assertEqual(drawn, set(waiting.NAMES), 'waitingMeta.js describes each waiting.py source, no more')
+            listed |= drawn
         working = {r['type'] for r in catalogue['cards'] if not r['planned']}
         missing = sorted(t for t in {c['Type'] for c in MemoryStore().list_connectors()} & working
                          if t not in listed)

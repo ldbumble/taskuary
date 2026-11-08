@@ -3214,7 +3214,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     the sentence and the row that held it both go. */}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
                 {/* ...the task's own read too: the table opens a task with no list row, and the row lags the task's read (2026-11-04) */}
-                {!liveSession && queuedRow && <Box sx={{ mb: chatPane ? 0.5 : 1 }}>
+                {!liveSession && queuedRow && !chatPane && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={queuedRow} line={chatPane} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 {/* ...and NONE OVER A CHAT (the owner, 2026-11-05: "don't like Taskuary answered"): the chat says who said what, its live steps and
@@ -3473,6 +3473,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           source (chatStream.chatSource) - a coding task's sessions, or the general agent's conversation - and the branch's landing
                           card joins it wherever the task works in a checkout */}
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} reread={chatRead}
+                        queued={chatPane && !liveSession && queuedRow ? <QueuedStart taskId={t.TaskId} queued={queuedRow} line onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} /> : null}
                         liveSid={term?.alive && term.mode === "assistant" ? term.sid : ""}
                         mails={storedMessages} reviews={detail?.reviews || []} checklist={detail?.checklist || null} next={chatCards}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}

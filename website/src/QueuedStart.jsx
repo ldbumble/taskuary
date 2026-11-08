@@ -28,11 +28,15 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
       .finally(() => setBusy(""));
   };
   const c = failed ? { bg: "#f3e7e9", bd: ALERT, ink: ALERT } : { bg: ROLES.working.tint, bd: ROLES.working.solid, ink: ROLES.working.ink };
+  // ...SAID IN THE CHAT BY THE AGENT (the owner, 2026-11-08: "this should not be on top of the chat but in the chat as the agent talking to
+  // you"): the line is the agent's own turn in the stream, in its own voice, with its Cancel beside it
   if (line) return (
-    <Box data-tq-queued-line={queued.state || "waiting"} onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "baseline", gap: 1, minWidth: 0, px: 0.5, py: 0.25 }}>
-      <Typography noWrap title={queued.lastError || ""} sx={{ flex: 1, minWidth: 0, fontSize: 12.5, color: failed ? ALERT : ROLES.working.ink }}>
-        {failed ? `Couldn't start - ${why || "it ran out of tries"}. Type below to try again.` : retrying ? `Couldn't start yet - trying again${at ? ` at ${at}` : " shortly"}`
-          : queued.behind ? `Waiting on ${queued.behind} - starts by itself when it is done` : "Waiting its turn - starts by itself when a slot frees up"}</Typography>
+    <Box data-tq-queued-line={queued.state || "waiting"} onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", minWidth: 0 }}>
+      <Typography title={queued.lastError || ""} sx={{ flex: "1 1 auto", minWidth: 0, fontSize: 14, color: failed ? ALERT : "inherit" }}>
+        {failed ? `I couldn't start - ${why || "I ran out of tries"}. Type below and I'll try again.`
+          : retrying ? `I couldn't start yet - I'll try again${at ? ` at ${at}` : " shortly"}.`
+          : queued.behind ? `I'm waiting on ${queued.behind} - I'll start by myself when it's done.`
+          : "I'm waiting for a free agent slot - I'll start by myself as soon as one frees up."}</Typography>
       <Button size="small" disabled={!!busy} onClick={(e) => act(e, "cancel")} sx={{ fontSize: 11.5, minHeight: 0, py: 0, px: 0.75, flexShrink: 0 }}>
         {busy === "cancel" ? "Cancelling…" : "Cancel"}</Button>
       {err && <Typography variant="caption" sx={{ color: ALERT }}>{err}</Typography>}

@@ -38,3 +38,45 @@
    a column down the left of an empty card once the side panes fold (the owner, 2026-10-29: use the whole space, like a data report) */
 [data-tq-report-body] .tq-card-full.report { background: transparent; border: 0; padding: 0; margin-top: 0; max-width: none;
   font-size: 13.5px; line-height: 1.6; max-height: none; overflow: visible; }
+
+/* A BRIEF (ReportBrief: the End of day checkup's shape): the roll-ups side by side on one white card, then a card per group, one row per
+   item - the source's mark in its own narrow column, who and what on the first line, the gist under it in the second ink. The cards are
+   the dashboards' (dashboard.css), so a brief, a data report and a dashboard read as one design. */
+.tq-brief { gap: 12px; max-width: 1180px; }
+.tq-brief-sum, .tq-brief-group { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(38, 37, 33, .05), 0 6px 16px -10px rgba(38, 37, 33, .12); min-width: 0; }
+.tq-brief-sum { display: grid; grid-template-columns: minmax(0, 1fr); }
+.tq-brief-sum > div { padding: 16px 20px; min-width: 0; }
+.tq-brief-sum > div + div { border-top: 1px solid var(--d-grid); }
+.tq-brief h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--d-muted); letter-spacing: .005em; }
+.tq-brief-sum p { margin: 6px 0 0; font-size: 15px; line-height: 1.5; color: var(--d-ink); text-wrap: pretty; }
+.tq-brief-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.tq-brief-group header { display: flex; align-items: baseline; gap: 8px; padding: 14px 20px 10px; }
+.tq-brief-group header h3 { color: var(--d-ink); font-size: 13.5px; }
+.tq-brief-group header span { font-size: 12px; color: var(--d-muted); font-variant-numeric: tabular-nums; }
+.tq-brief-group ul { list-style: none; margin: 0; padding: 0 20px 6px; }
+.tq-brief-group li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 11px 0; border-top: 1px solid var(--d-grid); }
+.tq-brief-group .src { font-size: 14px; line-height: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
+.tq-brief-group .body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tq-brief-group .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 13.5px; line-height: 20px; color: var(--d-ink); }
+.tq-brief-group .line b { font-weight: 600; }
+.tq-brief-group .what { color: var(--d-ink2); }
+.tq-brief-group .line b + .what::before { content: "·"; color: var(--d-muted); margin-right: 8px; }
+.tq-brief-group .tag { font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 7px; border-radius: 9px; color: var(--d-ink2);
+  background: var(--d-chip); }
+.tq-brief-group .gist { font-size: 13px; line-height: 1.5; color: var(--d-ink2); text-wrap: pretty; }
+.tq-brief-note { margin: 0; padding: 10px 14px; border: 1px solid var(--d-border); border-radius: 10px; background: var(--d-surface);
+  font-size: 12.5px; color: var(--d-ink2); }
+.tq-brief-close { margin: 2px 2px 0; font-size: 13px; line-height: 1.5; color: var(--d-muted); }
+.tq-brief a { color: var(--d-focus); font-weight: 600; text-decoration: none; }
+.tq-brief a:hover { text-decoration: underline; text-underline-offset: 2px; }
+@container (min-width: 720px) {
+  .tq-brief-sum { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .tq-brief-sum > div + div { border-top: 0; border-left: 1px solid var(--d-grid); }
+}
+@container (min-width: 760px) { .tq-brief-groups { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); } }
+/* ...its cards are the page's: the section's white body box around them goes, as a dashboard has none (no card around the cards) */
+[data-tq-report-body]:has(> [data-tq-report-brief]) { background: transparent; border: 0; box-shadow: none; padding: 0; }
+/* ...and stacked (a phone), the page is the task's own ground: a lighter box inside it read as a panel, not a page */
+[data-tq-stacked] .tq-item-sec:has(> [data-tq-dash-body]), [data-tq-stacked] .tq-item-sec:has([data-tq-report-brief]) { background: transparent; }
+.tq-brief-sum p::first-letter { text-transform: uppercase; }

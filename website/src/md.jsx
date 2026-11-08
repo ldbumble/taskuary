@@ -119,6 +119,10 @@ const Td = ({ children, node, ...rest }) => <td {...rest}>{keepRefs(children)}</
 const Pre = ({ children, node, ...rest }) => { const box = React.useRef(null);
   return <div className="tq-copy-host"><pre ref={box} {...rest}>{children}</pre><CopyCorner text={() => box.current?.innerText || ""} /></div>; };
 
+// ...and one line of it, inline: a brief's bullet keeps its bold and its links without a paragraph around them (ReportBrief)
+export const MdLine = ({ text }) => (
+  <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: A, img: Img, p: ({ children }) => <>{children}</> }}>{plainCitations(text || "")}</ReactMarkdown>
+);
 export const Md = ({ text, onTask = null }) => (
   <Box sx={sx}>
     <ReactMarkdown remarkPlugins={[remarkGfm]}

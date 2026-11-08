@@ -1267,7 +1267,9 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from . import browserview as _bv, ingest as _ingest
         # ...or that triage read the work as done on a web page (2026-10-29) - launched now only on the page it was last on: with no
         # address the agent's first navigate launches it (browserview.on_demand, the owner 2026-11-04: "no browser ... if we don't have a URL")
-        if _ingest.mark_browser(store, task_id) and (last := _bv.last_page(task_id)):
+        # ...and only while the owner has a part on that page (general.page_needs_owner): a dead page is not brought back
+        from .general import page_needs_owner
+        if _ingest.mark_browser(store, task_id) and (last := _bv.last_page(task_id)) and page_needs_owner(store, task_id):
             threading.Thread(target=_bv.start, args=(t.sid, last), daemon=True).start()
         from . import agentdesktop as _ad
         _ad.mark_from_triage(store, task_id)               # ...and in a desktop app, with Agent Desktop on (2026-10-31)
@@ -1906,9 +1908,11 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     from . import browserview as _bv
     # the hold is promised only to a CLI whose hook can refuse (llm.HOLDS_CLI): Codex was told "held" and paid (2026-10-25)
     from .llm import HOLDS_CLI
-    # ...told it is OPEN only when there is a page to open it on (last_page); else offered, launched by its first navigate (on_demand)
+    # ...told it is OPEN only when there is a page to open it on (last_page) that the owner has a part on; else offered, launched by its
+    # first navigate (on_demand)
+    from .general import page_needs_owner
     if _bv.wanted(t) and shutil.which('agent-browser'):
-        parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI, open_now=bool(_bv.last_page(tid))))
+        parts.append(_bv.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI, open_now=bool(_bv.last_page(tid)) and bool(page_needs_owner(store, tid))))
     # ...and the owner's desktop apps, once Agent Desktop is on and the task is marked "needs desktop" - never on a stranger's task
     # (agentdesktop.py; its hook refuses there too)
     if not stranger and _ad.on(store) and _ad.wanted(store.get_task(tid)): parts.append(_ad.brief(held=not cli or cli_named({'cmd': cli}) in HOLDS_CLI))

@@ -138,6 +138,9 @@ async def _lifespan(_app):
     if not instance.claim(_hooks.base_url()):
         at = instance.holder().get('url')
         raise RuntimeError(f"another Taskuary is already running on {config.home()}{f' at {at}' if at else ''} - open that one, or quit it first")
+    # ...so the browsers this folder's last run left open are its own to close - off the start, each close can take seconds
+    from . import browserview as _bv
+    threading.Thread(target=_bv.close_orphans, name='browser-orphans', daemon=True).start()
     is_demo = demo.enabled()
     if not is_demo:
         # Capture historical read results before startup catch-up, worker repair,

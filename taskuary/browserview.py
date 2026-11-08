@@ -345,7 +345,7 @@ def close(sid: str, tid: int = None):
         if exe and _read(session_name(sid), 'stream'):
             try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True)
             except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the browser of {sid}: {e}')
-        _CACHE.pop(sid, None); LAST.pop(sid, None)
+        _CACHE.pop(sid, None); LAST.pop(sid, None); listed(sid, False)
     with _START_LOCKS_GUARD:
         if _START_LOCKS.get(sid) is lock: _START_LOCKS.pop(sid, None)
 
@@ -547,6 +547,7 @@ def start(sid: str, url: str = 'about:blank') -> bool:
         # exactly what makes agent-browser replace this daemon with a blank default one (see IDLE_MS).
         cmd = [exe, '--session', session_name(sid), '--restore', RESTORE_KEY,
                '--args', LAUNCH_ARGS, 'open', url or 'about:blank']
+        listed(sid, True)
         try:
             # detached and HEADLESS: the live pane is the visible browser. --headed opens a second
             # desktop window outside Taskuary and defeats the side-by-side surface.
@@ -560,6 +561,38 @@ def start(sid: str, url: str = 'about:blank') -> bool:
             if state(sid, fresh=True)['open']: return True
         logger.warning(f'the browser for {sid} did not come up within {LAUNCH_WAIT:.0f}s')
         return False
+
+
+# A BROWSER OUTLIVES A KILLED TASKUARY: agent-browser's daemon is detached, outside our process tree, so a server killed without its
+# orderly close (terminal.shutdown_sessions) left Chrome and agent-browser's helper running with nothing able to reach them (agent-flow
+# audit, 2026-11-07). Each browser start() launches is listed in this data folder - never another install's, which shares agent-browser's
+# own folder - and the next launch of Taskuary closes what the last one left (close_orphans).
+_LISTED_LOCK = threading.Lock()
+def _listed_file() -> Path:
+    from .config import home
+    return home() / 'browser_sessions.json'
+
+def _listed() -> list:
+    try: return [str(x) for x in json.loads(_listed_file().read_text(encoding='utf-8')) or []]
+    except (OSError, ValueError, TypeError): return []
+
+def listed(sid: str, on: bool) -> None:
+    with _LISTED_LOCK:
+        had = _listed(); now = sorted(set(had) | {str(sid)}) if on else [x for x in had if x != str(sid)]
+        if now == had: return
+        try: _listed_file().write_text(json.dumps(now), encoding='utf-8')
+        except OSError as e: logger.debug(f'the browser list was not saved: {e}')
+
+def close_orphans() -> int:
+    """At start, before any session of this run exists: close every browser the last run listed and never closed. Returns how many."""
+    exe, n = program(), 0
+    for sid in _listed():
+        if exe and _read(session_name(sid), 'stream'):
+            try: spawn.run([exe, '--session', session_name(sid), 'close'], env=_cli_env(sid), timeout=20, capture_output=True); n += 1
+            except (OSError, subprocess.SubprocessError) as e: logger.debug(f'could not close the left-over browser {sid}: {e}')
+        listed(sid, False)
+    if n: logger.info(f'closed {n} browser(s) the last run left open')
+    return n
 
 
 def set_viewport(sid: str, w: int, h: int) -> bool:

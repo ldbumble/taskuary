@@ -12,7 +12,7 @@ of a workflow").
 A browser job is now a workflow: dispatched to a real session, whose task carries `needs:browser`,
 which is what opens the same named browser restored from the owner's own profile.
 """
-import json, unittest
+import json, os, unittest
 from unittest import mock
 
 from taskuary import blackboard, browserview, concierge, general, ingest, reports, selfclose, terminal, triage, workflows
@@ -233,11 +233,42 @@ class ARestartReopensTheTasksPageTests(unittest.TestCase):
         s = store()
         tid = s.create_task({'Title': 'Bills', 'Kind': 'general', 'Status': 'open', 'Tags': browserview.WANTS}, 'o')
         browserview.keep_page(tid, 'https://portal.example/login')
+        # ...while the owner still has a part on it (general.page_needs_owner): the sign-in the agent asked for outlived the restart
+        from taskuary import signin, workerstate
+        workerstate.record(s, tid, 'run-before', 'input_needed', request_id=f'{signin.PREFIX}portal.example', text='Sign in to the portal')
         with mock.patch.object(browserview, 'start') as start, mock.patch.object(general.threading, 'Thread') as th:
             session = general.start_session(s, tid, actor='owner')
         self.addCleanup(terminal.SESSIONS.pop, session.sid, None)      # a session left registered holds its task id in later tests
         args = th.call_args.kwargs.get('args') or th.call_args[1].get('args')
         self.assertEqual(args[1], 'https://portal.example/login')
+
+
+class ALeftOverBrowserIsClosedTests(unittest.TestCase):
+    """agent-flow audit 2026-11-07: the server's process tree was killed, and the agent's Chrome and agent-browser's helper lived on -
+    the daemon is detached, outside Taskuary's tree. Each browser Taskuary launches is listed in its own folder; the next start closes it."""
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.dir = Path(tempfile.mkdtemp()); self.addCleanup(lambda: __import__('shutil').rmtree(self.dir, ignore_errors=True))
+        for p in (mock.patch.object(browserview, '_listed_file', return_value=self.dir / 'listed.json'),
+                  mock.patch.dict(os.environ, {'AGENT_BROWSER_HOME': str(self.dir)})):
+            p.start(); self.addCleanup(p.stop)
+
+    def test_a_started_browser_is_listed_and_a_closed_one_is_not(self):
+        with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'popen'), \
+             mock.patch.object(browserview, 'state', return_value={'open': False}), mock.patch.object(browserview, 'LAUNCH_WAIT', 0):
+            browserview.start('run-a', 'https://portal.example/')
+        self.assertEqual(browserview._listed(), ['run-a'])
+        with mock.patch.object(browserview, 'program', return_value=''): browserview.close('run-a')
+        self.assertEqual(browserview._listed(), [])
+
+    def test_the_next_start_closes_what_the_last_run_left_and_only_that(self):
+        browserview.listed('run-a', True); browserview.listed('run-b', True)
+        (self.dir / 'tq-run-a.stream').write_text('9222')                  # run-b's browser is already gone: nothing to close
+        with mock.patch.object(browserview, 'program', return_value='agent-browser'), mock.patch.object(browserview.spawn, 'run') as run:
+            self.assertEqual(browserview.close_orphans(), 1)
+        self.assertEqual([c.args[0] for c in run.call_args_list], [['agent-browser', '--session', 'tq-run-a', 'close']])
+        self.assertEqual(browserview._listed(), [])
 
 
 if __name__ == '__main__':

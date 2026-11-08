@@ -71,7 +71,8 @@ class SharedSessionTests(unittest.TestCase):
         self.assertFalse([c for c in thread.call_args_list if c.kwargs.get('target') is browserview.start])
         store.update_task(tid, {'Tags': browserview.WANTS}, 'owner')
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(general.threading, 'Thread') as thread, \
-             mock.patch.object(browserview, 'last_page', return_value='https://zoho.example/signin'):
+             mock.patch.object(browserview, 'last_page', return_value='https://zoho.example/signin'), \
+             mock.patch.object(general, 'page_needs_owner', return_value='the owner has a part on its page'):
             session = general.start_session(store, tid)
         go = [c.kwargs['args'] for c in thread.call_args_list if c.kwargs.get('target') is browserview.start]
         self.assertEqual(go, [(session.sid, 'https://zoho.example/signin')])

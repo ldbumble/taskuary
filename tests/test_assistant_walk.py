@@ -50,8 +50,8 @@ def test_the_walks_lines_name_what_comes_up_and_repeat_nothing_its_card_shows():
     assert {k.split(':')[0] for k, _ in seen} >= {'msg', 'review', 'report', 'fyis'}, seen       # every kind of card the demo has
 
 
-# CI's macOS runners are shared and slow, and missed by a tenth of a second; on a desk machine the budgets stay as written
-SLACK = 1.25 if os.environ.get('CI') and sys.platform == 'darwin' else 1
+# CI's runners are shared and slow, and missed by a tenth of a second; on a desk machine the budgets stay as written
+SLACK = 1.25 if os.environ.get('CI') else 1          # ...and Windows' runners too: 1.61s against 1.5 (2026-11-08)
 
 
 def test_every_step_answers_inside_its_budget(rows):

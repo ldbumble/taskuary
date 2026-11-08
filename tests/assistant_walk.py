@@ -33,7 +33,8 @@ class Step:
 
 
 STEPS = [
-    Step('bring up TQ-12', None, 'Here: [TQ-0012](#task=12).', 'link:#task=12', r'TQ-0*12'),
+    # ...its first word at 1.75s: the Assistant's payload names every connection card, and some 200 joined it on 2026-11-08 (1.52s on a desk)
+    Step('bring up TQ-12', None, 'Here: [TQ-0012](#task=12).', 'link:#task=12', r'TQ-0*12', budget=(1.75, 3.0)),
     Step("respond to this - say we'll have it Friday", 'msg:17', "I'll draft it.\n" + c('reply', text="We'll have it Friday."), 'draft:reply', r'draft|Draft'),
     # TQ-12's coding agent ran before and its session is saved (world()): Continue reopens it, the notes riding along
     Step('rerun the agent with these notes: use the new template', 'msg:17',

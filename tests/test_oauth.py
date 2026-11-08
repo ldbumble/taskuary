@@ -70,7 +70,7 @@ class TheRoad(unittest.TestCase):
                 mock.patch.object(oauth.requests, 'get', return_value=R({'access_token': 'long', 'expires_in': 5184000})) as g:
             self.assertTrue(oauth.finish(s, 'c', q(url)['state'])[0])
         self.assertEqual(g.call_args.kwargs['params'], {'grant_type': 'th_exchange_token', 'client_secret': 'ts', 'access_token': 'short'})
-        self.assertEqual(oauth.status(s, cid, SERVER)['days_left'], 59)               # no refresh token: the card counts the days
+        self.assertIn(oauth.status(s, cid, SERVER)['days_left'], (59, 60))         # no refresh token: the card counts the days (60 days less the test's own second)
         s.save_connector({'ConnectorId': cid, 'Secret': json.dumps({'access_token': 'long', 'expires_at': 1})}, 't')
         with mock.patch.object(oauth.requests, 'get', return_value=R({'access_token': 'longer', 'expires_in': 5184000})) as g:
             self.assertEqual(oauth.access(s, s.get_connector(cid, with_secret=True)), 'longer')

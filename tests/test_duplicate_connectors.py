@@ -76,7 +76,7 @@ class DuplicateConnectors(unittest.TestCase):
         msg = {'Channel': 'telegram', 'ConversationId': 'telegram:222'}
         with mock.patch('taskuary.messengers.tg_send', return_value={'ok': True}) as send:
             outbound.reply_to_message(store, msg, 'resolved')
-        send.assert_called_once_with(store, '222', 'resolved', second)
+        send.assert_called_once_with(store, '222', 'resolved', connector_id=second)
 
     def test_testing_the_second_card_of_a_type_tests_that_card(self):
         from taskuary import channels

@@ -426,6 +426,23 @@ def run_hub_write(cfg):
     return run_handbook_write(cfg)
 
 
+# ── the company and its people, beside the systems ──────────────────────────────────────
+# The Hub's entries are the SYSTEMS half of what a newcomer needs: an entry must be costly to discover, and "who is the head
+# accountant" never is, so the people kind stayed empty (TQ-1353, 2026-11-08). The company and its people are already written down -
+# JOB.md and LEARNED.md's "Your people" - so the Hub page SHOWS them above the systems, read-only, and never keeps a second copy.
+def about(store) -> dict:
+    "{company: JOB.md as prompts read it, people: LEARNED.md's in-use people lines, tags off} - '' / [] while either says nothing."
+    from .triage import job_doc
+    from .learned_cut import lines, PEOPLE
+    from .learnedgraph import TAG
+    try: company = job_doc(store)
+    except Exception: company = ''
+    def plain(raw): m = TAG.match(raw); return (m.group('text') if m else raw.strip().lstrip('-* ')).strip()
+    try: people = [t for t in (plain(r) for r, _ in lines(store.doc('learned') or '', PEOPLE)) if t]
+    except Exception: people = []
+    return {'company': company, 'people': people}
+
+
 def status(store, c: dict) -> dict:
     n = store.lore_count()
     return {**n, 'recent': [{'topic': p['Topic'], 'title': p['Title'], 'by': p['Author'], 'at': (p['UpdatedAt'] or '')[:16]}

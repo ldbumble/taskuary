@@ -5233,6 +5233,12 @@ def hub_list(topic: str = None, q: str = None, kind: str = None, sort: str = 'ne
     for p in posts: p['MyVote'] = next((v['Delta'] for v in store.lore_votes(p['LoreId']) if v['Actor'] == ACTOR), 0)
     return {'topics': store.lore_topics(), 'data': posts, 'count': store.lore_count()}
 
+@app.get('/api/hub/about')
+def hub_about():
+    "The company (JOB.md) and its people (LEARNED.md) the Hub page shows above the systems - read-only, kept where they are written."
+    from . import handbook
+    return handbook.about(store)
+
 @app.get('/api/hub/{lid}')
 @app.get('/api/handbook/{lid}')
 def hub_one(lid: int):

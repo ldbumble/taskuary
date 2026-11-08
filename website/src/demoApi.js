@@ -202,12 +202,24 @@ const read = (url) => {
       (b.Score || 0) - (a.Score || 0) || (b.Comments || 0) - (a.Comments || 0));
     return clone({ ...hubBox(), data: rows });
   }
+  // the company and its people above the systems (handbook.about): the demo world's own, since its recording has no JOB.md
+  if (p === "/api/hub/about") return clone(state["/api/hub/about"] || DEMO_ABOUT);
   m = p.match(/^\/api\/(?:hub|handbook)\/(\d+)$/);
   if (m) { const r = [...hubRows(false), ...hubRows(true)].find((x) => String(x.LoreId) === m[1]); return clone(r ? { ...r, comments: r.comments || [], votes: [] } : null); }
   if (p.startsWith("/api/tasks")) return clone(state["/api/tasks"]);
   // New → Meeting: the recorded demo has no calendar behind it - said in its one line, not drawn as a full week
   if (p === "/api/meetings/slots") return { ok: false, say: "This is the demo - no calendar is behind it. In your own Taskuary, Find times reads yours and theirs.", fix: null };
   return { data: [] };                 // an unrecorded list reads as empty, never as a crash
+};
+
+const DEMO_ABOUT = {
+  company: "### The job\n\n- **My role:** Head of engineering at Northwind\n- **My organisation:** Northwind - billing and payroll software for mid-size firms\n\n"
+    + "#### What I am responsible for\n- Keeping the ledger and the customer portal up, and their releases safe\n"
+    + "- Integrations with Payworth (payroll) and Spendly (expenses)\n- Reviewing my team's changes before anything reaches production",
+  people: ["Erin Blake owns the month-end close; finance questions go to her first",
+    "Gail Moreno runs payroll and signs off on anything touching Payworth",
+    "Ray Colton reports to you and owns northwind/portal",
+    "Marcus Reed is the customer contact at Payworth for API changes"],
 };
 
 // Hub's two shelves: what is live, and what the vote (or the visitor) took off.

@@ -330,3 +330,27 @@ class LaidOut(unittest.TestCase):
         with self.assertRaises(ValueError) as e: handbook.post(s, 'The export runs at 2am', 'it still does', 'census', 'system', 'coding')
         self.assertIn('retired', str(e.exception))
         self.assertEqual((s.lore_get(p['LoreId'])['Status'], s.lore_get(p['LoreId'])['Body']), ('retired', 'it does'))
+
+
+class CompanyAndPeopleBesideTheSystems(unittest.TestCase):
+    """TQ-1353: the Hub's entries are the systems; the company and its people are SHOWN from where they are written - JOB.md and the
+    memory's "Your people" - never filed as a second copy agents would have to keep in step."""
+    def test_about_reads_job_and_the_people_lines_without_their_tags(self):
+        from taskuary import learned_cut as lc
+        s = MemoryStore()
+        s.save_doc('job', '## The job\n\n- **My role:** Director of IT at Northwind, running payroll and finance systems.\n', 'owner')
+        s.save_doc('learned', f"{lc.PEOPLE}\n- Erin Blake owns the month-end close [s:5 | ev: task1 | seen: 2026-11-01]\n"
+                              f"- Gail Moreno is the payroll lead\n\n{lc.CARE}\n- Accuracy over speed\n", 'owner')
+        a = handbook.about(s)
+        self.assertIn('Northwind', a['company'])
+        self.assertEqual(a['people'], ['Erin Blake owns the month-end close', 'Gail Moreno is the payroll lead'])
+
+    def test_an_untouched_install_says_nothing_rather_than_the_template(self):
+        a = handbook.about(MemoryStore())
+        self.assertEqual(a['people'], [])
+        self.assertNotIn('Write it here', a['company'])
+
+    def test_the_route_is_not_read_as_an_entry_id(self):
+        r = c.get('/api/hub/about')
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(set(r.json()), {'company', 'people'})

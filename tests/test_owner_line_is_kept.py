@@ -47,17 +47,17 @@ class OwnerLineIsKept(unittest.TestCase):
     def test_a_line_typed_mid_turn_is_kept_at_once_with_its_time_and_taken_with_the_next_turn(self):
         first = threading.Thread(target=lambda: general.say_line(self.s, self.tid, 'Compare three tools.')); first.start()
         time.sleep(0.3)
-        held = [threading.Thread(target=lambda w=w: general.say_line(self.s, self.tid, w)) for w in ('Make it cheapest first.', 'And add Ramp.')]
+        held = [threading.Thread(target=lambda w=w: general.say_line(self.s, self.tid, w)) for w in ('Make it cheapest first.', 'And add Trainly.')]
         for t in held: t.start(); time.sleep(0.1)
         time.sleep(0.1)
         kept = general.waiting_lines(self.s, self.tid)
-        self.assertEqual([w['text'] for w in kept], ['Make it cheapest first.', 'And add Ramp.'])      # kept the moment they were sent...
+        self.assertEqual([w['text'] for w in kept], ['Make it cheapest first.', 'And add Trainly.'])      # kept the moment they were sent...
         self.assertEqual([w['text'] for w in server._assistant_payload(self.tid)['waiting']], [w['text'] for w in kept])   # ...on every screen
-        self.assertNotIn('And add Ramp.', [b for _, b in self.said()])                                # ...waiting, not yet a turn of its own
+        self.assertNotIn('And add Trainly.', [b for _, b in self.said()])                                # ...waiting, not yet a turn of its own
         typed = {w['text']: w['at'] for w in kept}
         for t in [first, *held]: t.join(15)
         self.assertEqual(self.said(), [(general.USER_TYPE, 'Compare three tools.'), (general.ASSISTANT_TYPE, 'Answer 1.'),
-                                       (general.USER_TYPE, 'Make it cheapest first.'), (general.USER_TYPE, 'And add Ramp.'),
+                                       (general.USER_TYPE, 'Make it cheapest first.'), (general.USER_TYPE, 'And add Trainly.'),
                                        (general.ASSISTANT_TYPE, 'Answer 2.')])                         # one turn took both, after the first
         rows = {c['Body']: c['CreatedAt'] for c in self.s.list_comments(self.tid)}
         self.assertEqual({w: rows[w] for w in typed}, typed)                                          # ...each at the time it was typed

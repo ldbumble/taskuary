@@ -1,8 +1,8 @@
 """LANDING A CODING TASK'S BRANCH (the owner, 2026-11-06: "rebase fast forward is a question on each one and they can ask").
 
 Agents share the checkout (no copy per task - "let the agents figure it out"), so what a task changed is read off git against where it
-started: `mark_start` notes the checkout, its branch and HEAD when the task's first session opens, and the close-out shows the diff since
-then and asks ONE question per task - Rebase and fast-forward, Merge commit, Open a PR - plus Discard, offered only when the agent made a
+started: `mark_start` notes the checkout, its branch and HEAD when the task's first session opens, and the close-out shows its work - its own
+branch against where it left the base, or on a shared base only the commits and edits its own calls made (`own`) - and asks ONE question per task - Rebase and fast-forward, Merge commit, Open a PR - plus Discard, offered only when the agent made a
 branch of its own (discarding the base would throw away what it shares with everyone).
 
 Nothing lands half-done: a rebase or merge that conflicts is aborted, the checkout is as it was, and the conflict goes to the agent as its
@@ -42,7 +42,9 @@ def head_branch(cwd) -> str:
 
 
 def sha(cwd, ref) -> str: return _git(cwd, 'rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
-def dirty(cwd) -> list: return [l[3:].strip().strip('"') for l in _git(cwd, 'status', '--porcelain').splitlines() if len(l) > 3]
+# ...by name, never by `status --porcelain`'s columns: _git strips its output, and the first line's " M " lost a character of the file's name
+def dirty(cwd) -> list:
+    return [l for l in [*_git(cwd, 'diff', '--name-only', 'HEAD').splitlines(), *_git(cwd, 'ls-files', '--others', '--exclude-standard').splitlines()] if l.strip()]
 def is_ancestor(cwd, a, b) -> bool: return _run(cwd, 'merge-base', '--is-ancestor', a, b)[0] == 0
 def conflicted(cwd) -> list: return [l for l in _git(cwd, 'diff', '--name-only', '--diff-filter=U').splitlines() if l.strip()]
 
@@ -98,8 +100,158 @@ def _stat(cwd, a, b) -> list:
     return out
 
 
+# ── WHAT IS THIS TASK'S OWN (the owner's live coding task, 2026-11-08: "518 files changed, +17417 -5334 since the task started" - every commit
+# other agents and two releases made on the shared master since its first session, counted as its work). A task's changes are what ITS agent
+# did: the commits its own commit calls made, and the files its own edit calls wrote, still uncommitted - read off the calls themselves (the
+# ACP record kept beside the task, codingchat.record_update; the hooks a pty's CLI sends, hooks.receive -> saw), never off the branch's history.
+# A commit call is matched to git's history by its time - the commits made on a local branch while it ran - as `git commit -q` prints no sha
+_COMMIT = re.compile(r'''\bgit\b(?:\s+-[cC]\s+(?:"[^"]*"|'[^']*'|\S+))*\s+(?:commit|cherry-pick|revert|am)\b''')
+_PATCHED = re.compile(r'^\*\*\* (?:Update|Add) File: (.+)$', re.M)
+_EDITS = {'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'edit', 'write', 'create', 'str_replace_editor'}
+SLACK = 3                           # seconds either side of a commit call: git's clock and ours are one machine's, read a beat apart
+HOOK_RUN = 120                      # a hook says when a call ENDED, not when it began: its commits are the newest made within this
+
+
+def _cmd(x) -> str: return ' '.join(map(str, x)) if isinstance(x, list) else str(x or '')
+def _epoch(at) -> float:
+    try: return time.mktime(time.strptime(str(at)[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S'))
+    except (TypeError, ValueError): return 0.
+def _stamp(t) -> str: return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t)) if t else ''
+
+
+def _rel(cwd, p) -> str:
+    "A path as the checkout names it - '' for one outside it."
+    p = str(p or '').strip()
+    if not p: return ''
+    try: r = os.path.relpath(p if os.path.isabs(p) else os.path.join(cwd, p), cwd)
+    except ValueError: return ''                                 # another drive
+    return '' if r.startswith('..') or os.path.isabs(r) else r.replace(os.sep, '/')
+
+
+def saw(store, tid: int, tool: str, args: dict, at: float = None):
+    """One finished tool call of the task's own agent (a hook's PostToolUse): a commit call is a window to find its commits in, an edit call
+    the file it wrote. Anything else, or a task that never started in a checkout, changes nothing."""
+    r = record(store, tid)
+    if not r.get('cwd') or not isinstance(args, dict): return
+    at, got = at or time.time(), False
+    if (n := len(_COMMIT.findall(_cmd(args.get('command') or args.get('cmd'))))):
+        r['calls'] = [*r.get('calls', []), {'t0': at - HOOK_RUN, 't1': at, 'n': n}][-500:]; got = True
+    paths = [args.get(k) for k in ('file_path', 'notebook_path', 'path') if args.get(k)] if str(tool) in _EDITS else []
+    for p in filter(None, (_rel(r['cwd'], x) for x in [*paths, *_PATCHED.findall(str(args.get('input') or args.get('patch') or ''))])):
+        r.setdefault('paths', {})[p] = at; got = True
+    if got: _save(store, tid, r)
+
+
+_SCAN = {}                          # an ACP record's path -> ((mtime, size), (calls, paths)): read again only once it grew
+
+
+def _scan(f) -> tuple:
+    c, p, calls = [], {}, {}
+    for line in f.read_text(encoding='utf-8', errors='replace').splitlines():
+        if '"tool_call' not in line: continue
+        try: u = json.loads(line)
+        except ValueError: continue
+        t = _epoch(u.get('_at'))
+        o = calls.setdefault(str(u.get('toolCallId') or ''), {'t0': t, 'cmd': ''})
+        if (cmd := _cmd((u.get('rawInput') or {}).get('command'))): o['cmd'] = cmd
+        for b in u.get('content') or []:
+            if isinstance(b, dict) and b.get('type') == 'diff' and b.get('path'): p[str(b['path'])] = t
+        for l in (u.get('locations') or []) if u.get('kind') == 'edit' else []:
+            if isinstance(l, dict) and l.get('path'): p[str(l['path'])] = t
+        if u.get('status') in ('completed', 'failed') and (n := len(_COMMIT.findall(o['cmd']))): c.append({'t0': o['t0'] or t, 't1': t, 'n': n}); o['cmd'] = ''
+    return c, p
+
+
+def _acp_seen(tid: int) -> tuple:
+    "([{t0, t1, n}], {path: at}) - the commit calls and the edits of every ACP session of the task, read off its kept record."
+    from . import session_artifacts
+    calls, paths = [], {}
+    for f in sorted((session_artifacts.root() / str(int(tid))).glob('acp-*.jsonl')):
+        try: st = f.stat(); key = (st.st_mtime, st.st_size)
+        except OSError: continue
+        if not ((hit := _SCAN.get(str(f))) and hit[0] == key): hit = _SCAN[str(f)] = (key, _scan(f))
+        calls += hit[1][0]; paths.update(hit[1][1])
+    return calls, paths
+
+
+def own(store, tid: int, r: dict = None) -> dict:
+    """{'commits': [sha, ...] oldest first, 'paths': {path: at}, 'at'} - the task's own commits (still on a local branch) and the files its
+    edits wrote. Each commit call takes the newest commits made while it ran, as many as it made: never one from before it or after it."""
+    r = r if r is not None else record(store, tid)
+    cwd = r.get('cwd') or ''
+    if not cwd or not os.path.isdir(cwd): return {'commits': [], 'paths': {}, 'at': ''}
+    calls, seen_ = _acp_seen(tid)
+    calls, paths = [*calls, *r.get('calls', [])], {**{q: t for k, t in seen_.items() if (q := _rel(cwd, k))}, **r.get('paths', {})}
+    hist = [(x[0], int(x[1])) for l in _git(cwd, 'log', '--branches', '-n', '5000', '--format=%H %ct').splitlines()
+            if len(x := l.split()) == 2 and x[1].isdigit()] if calls else []
+    mine = {}
+    for c in calls: mine.update([(h, t) for h, t in hist if c['t0'] - SLACK <= t <= c['t1'] + SLACK and h not in mine][:c['n']])   # newest first
+    return {'commits': [h for h, _ in sorted(mine.items(), key=lambda x: x[1])], 'paths': paths, 'at': _stamp(max([*mine.values(), *paths.values()], default=0))}
+
+
+def _numstat(out: str, got: dict = None) -> dict:
+    got = {} if got is None else got
+    for l in out.splitlines():
+        p = l.split('\t')
+        if len(p) < 3: continue
+        f = got.setdefault(p[2], {'path': p[2], 'plus': 0, 'minus': 0})
+        f['plus'] += int(p[0]) if p[0].isdigit() else 0; f['minus'] += int(p[1]) if p[1].isdigit() else 0
+    return got
+
+
+def _edited(cwd, paths) -> list:
+    "Of the files the task's edits wrote, those still uncommitted in the checkout."
+    d = set(dirty(cwd)) if paths else set()
+    return [p for p in paths if p in d]
+
+
+def _untracked(cwd, paths) -> list:
+    return [l for l in _git(cwd, 'ls-files', '--others', '--exclude-standard', '--', *paths).splitlines() if l.strip()][:NEW_N] if paths else []
+
+
+def _new_diff(cwd, f) -> str: return _run(cwd, 'diff', '--no-index', '--', '/dev/null', f)[1]    # git exits 1 when they differ: its output is the diff
+
+
+def _own_files(cwd, o) -> list:
+    got, ed = {}, _edited(cwd, list(o['paths']))
+    for h in o['commits']: _numstat(_git(cwd, 'show', '--numstat', '--format=', h), got)
+    if ed: _numstat(_git(cwd, 'diff', '--numstat', 'HEAD', '--', *ed), got)
+    for n in _untracked(cwd, ed):
+        try:
+            with open(os.path.join(cwd, n), encoding='utf-8', errors='replace') as f: lines = sum(1 for _ in f)
+        except OSError: lines = 0
+        got.setdefault(n, {'path': n, 'plus': lines, 'minus': 0})
+    return list(got.values())
+
+
+def merged(diffs) -> str:
+    """Several unified diffs as one, each file once: a file two commits touched is its first header with every part under it, in order - the
+    way a pull request lists a file once however many commits changed it."""
+    heads, parts = {}, {}
+    for d in diffs:
+        for blk in re.split(r'(?m)^(?=diff --git )', d or ''):
+            if not blk.startswith('diff --git '): continue
+            head, at, body = blk.partition('\n@@')
+            k = blk.split('\n', 1)[0]
+            heads.setdefault(k, head.rstrip('\n') + '\n'); parts.setdefault(k, [])
+            if at: parts[k].append('@@' + body if body.endswith('\n') else '@@' + body + '\n')
+    return ''.join(heads[k] + ''.join(parts[k]) for k in heads)
+
+
+def _own_diff(cwd, o) -> str:
+    ed = _edited(cwd, list(o['paths']))
+    return merged([*(_git(cwd, 'show', '--format=', '-p', h) for h in o['commits']), _git(cwd, 'diff', 'HEAD', '--', *ed) if ed else '',
+                   *(_new_diff(cwd, f) for f in _untracked(cwd, ed))])
+
+
+def _fork(cwd, base, br, start) -> str:
+    "Where the agent's own branch left its base - what a pull request of it starts from; the task's start where git cannot say."
+    return _git(cwd, 'merge-base', base, br) or start
+
+
 def state(store, tid: int, full: bool = False) -> dict | None:
-    """What the task's work is against where it started, and the question to land it - None when no session of it started in a checkout."""
+    """What the task's work is, and the question to land it - None when no session of it started in a checkout. On a branch of its own: that
+    branch against where it left its base. On the base itself, shared with every other agent and release: only its own commits and edits."""
     r = record(store, tid)
     # the checkout's HEAD is this task's branch only while its agent is the one in there: with a peer in the same checkout it may be the
     # peer's, so it is read then only at this task's own close (wrapup -> seen)
@@ -107,17 +259,19 @@ def state(store, tid: int, full: bool = False) -> dict | None:
     cwd, base, start = r.get('cwd'), r.get('base'), r.get('start')
     if not (cwd and base and start and os.path.isdir(cwd)): return None
     br = r.get('branch') or ''
-    own = bool(br) and bool(sha(cwd, f'refs/heads/{br}'))
-    tip = br if own else base
-    files = _stat(cwd, start, tip) if sha(cwd, tip) else []
-    ahead = int(_git(cwd, 'rev-list', '--count', f'{base}..{br}') or 0) if own else 0
-    out = {'task': task_ref(tid), 'cwd': cwd, 'repo': _repo(cwd), 'base': base, 'branch': br if own else base, 'own': own, 'ahead': ahead,
+    mine = bool(br) and bool(sha(cwd, f'refs/heads/{br}'))
+    o = None if mine else own(store, tid, r)
+    files = (_stat(cwd, _fork(cwd, base, br, start), br) if mine else _own_files(cwd, o)) if sha(cwd, br if mine else base) else []
+    ahead = int(_git(cwd, 'rev-list', '--count', f'{base}..{br}') or 0) if mine else 0
+    out = {'task': task_ref(tid), 'cwd': cwd, 'repo': _repo(cwd), 'base': base, 'branch': br if mine else base, 'own': mine, 'ahead': ahead,
+           'shared': not mine, 'commits': ahead if mine else len(o['commits']),
+           'at': _stamp(int(_git(cwd, 'log', '-1', '--format=%ct', br) or 0)) if mine else o['at'],
            'files': files, 'changed': len(files), 'plus': sum(f['plus'] for f in files), 'minus': sum(f['minus'] for f in files),
            'landed': r.get('landed'), 'proposal': r.get('proposal')}
-    out['ask'] = own and ahead > 0 and not r.get('landed')
-    out['answers'] = [{'how': k, 'label': v} for k, v in HOW.items() if k != 'discard' or own] if out['ask'] else []
+    out['ask'] = mine and ahead > 0 and not r.get('landed')
+    out['answers'] = [{'how': k, 'label': v} for k, v in HOW.items() if k != 'discard' or mine] if out['ask'] else []
     out['line'] = said(out)
-    if full: out['diff'] = _git(cwd, 'diff', start, tip)[:DIFF_CAP]
+    if full: out['diff'] = (_git(cwd, 'diff', _fork(cwd, base, br, start), br) if mine else _own_diff(cwd, o))[:DIFF_CAP]
     return out
 
 
@@ -125,24 +279,23 @@ NEW_N = 40                           # new files read into one Changes diff: pas
 
 
 def changes(store, tid: int) -> dict | None:
-    """THE TASK'S WORK SO FAR, AS ONE DIFF (the owner, 2026-11-06: "where is the diff button to see code changed?"): everything since the
-    checkout's HEAD when the task's first session opened (mark_start) - committed or not, new files too - while the agent works, not only
-    at landing. None when no session of it started in a checkout."""
+    """THE TASK'S WORK SO FAR, AS ONE DIFF (the owner, 2026-11-06: "where is the diff button to see code changed?"): its own branch since it left
+    the base - committed or not, new files too, while the agent works - or, on the shared base, its own commits and edits alone (own). None
+    when no session of it started in a checkout."""
     r = record(store, tid)
     # ...its own branch as the checkout shows it, read as state() reads it: only while no peer's session is in the same checkout
     alone = bool(r.get('cwd')) and _alone(tid, r['cwd'])
     if alone: r = seen(store, tid)
     cwd, start, base, br = r.get('cwd'), r.get('start'), r.get('base'), r.get('branch') or ''
     if not (cwd and start and os.path.isdir(cwd) and sha(cwd, start)): return None
-    # the working tree is this task's only while its own branch is checked out (the base, when it made none) and no peer works in it -
-    # else what it committed is what is its
-    own = bool(br) and bool(sha(cwd, f'refs/heads/{br}'))
-    if alone and head_branch(cwd) == (br if own else base):
+    mine = bool(br) and bool(sha(cwd, f'refs/heads/{br}'))
+    if not mine: diff = _own_diff(cwd, own(store, tid, r))
+    # ...the working tree is its own branch's only while that branch is checked out and no peer works in it - else what it committed is its
+    elif alone and head_branch(cwd) == br:
         new = [l for l in _git(cwd, 'ls-files', '--others', '--exclude-standard').splitlines() if l.strip()][:NEW_N]
-        # ...a new file's diff from nothing: git's own --no-index, which exits 1 when the two differ - its output is the diff
-        diff = '\n'.join([_git(cwd, 'diff', start), *(_run(cwd, 'diff', '--no-index', '--', '/dev/null', f)[1] for f in new)])
-    else: diff = _git(cwd, 'diff', start, br if own else base)
-    return {'base': base, 'start': start[:7], 'since': r.get('at'), 'diff': diff[:DIFF_CAP], 'cut': len(diff) > DIFF_CAP}
+        diff = '\n'.join([_git(cwd, 'diff', _fork(cwd, base, br, start)), *(_new_diff(cwd, f) for f in new)])
+    else: diff = _git(cwd, 'diff', _fork(cwd, base, br, start), br)
+    return {'base': base, 'start': start[:7], 'since': r.get('at'), 'shared': not mine, 'diff': diff[:DIFF_CAP], 'cut': len(diff) > DIFF_CAP}
 
 
 def said(s: dict) -> str:
@@ -152,7 +305,7 @@ def said(s: dict) -> str:
     if s.get('landed'): return f"{s['branch']} landed ({HOW.get(s['landed'].get('how'), s['landed'].get('how'))}) - {n}."
     if s['ask']: return f"{s['branch']} is {plural(s['ahead'], 'commit')} ahead of {s['base']}: {n}. How should it land?"
     if s['own']: return f"{s['branch']} has nothing {s['base']} does not already have."
-    return f"The agent worked on {s['base']} itself - {n} since it started; there is no branch of its own to land."
+    return f"The agent worked on {s['base']} itself, shared with other agents - {n} by its own commits and edits; there is no branch of its own to land."
 
 
 def _repo(cwd) -> str:
@@ -295,7 +448,8 @@ def revert(store, tid: int, picks: list, actor: str = 'owner') -> dict:
     if not s: raise ValueError('no session of this task started in a git checkout - there is nothing to review')
     if s.get('landed'): raise Refused('it has already landed - nothing changed')
     if not picks: raise ValueError('no part was marked to revert')
-    cwd, br, start = s['cwd'], s['branch'], record(store, tid).get('start')
+    cwd, br = s['cwd'], s['branch']
+    start = _fork(cwd, s['base'], br, record(store, tid).get('start'))           # the parts as the card's diff numbered them (state)
     if (head := head_branch(cwd)) != br: raise Refused(f'reverting a part needs {br} checked out in {cwd}; it is on {head or "a detached HEAD"} - nothing changed')
     if any(norm(t.cwd) == norm(cwd) for t in peers._cli_sessions()):
         raise Refused('an agent is working in this checkout - stop it or let it finish first; nothing changed')

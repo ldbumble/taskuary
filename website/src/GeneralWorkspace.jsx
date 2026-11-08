@@ -19,6 +19,7 @@ import api from "./api.js";
 import { onLive, touches } from "./live.js";
 import { AttachChip, IMAGE_TYPES, MAX_IMAGES, savePromptFile } from "./promptImages.jsx";
 import { heldLine, notShown, stillHeld, waitingShown } from "./heldLines.js";
+import { landingTurn } from "./landing.js";
 import { howToOpen } from "./bugReportOpen.js";
 import { streamAssistant } from "./assistantStream.js";
 import { baseName, isWork } from "./agentSteps.js";
@@ -299,6 +300,9 @@ const UserMessage = () => {
 };
 // what each answer published or showed, by the answer's id (the server's `after`): drawn under it, open - the agent chose it
 const ShownCtx = React.createContext({});
+// THE BRANCH'S LANDING IS A CARD OF THE TURN THAT MADE IT (the owner, 2026-11-08): pinned at the chat's foot it stood under everything, whichever
+// turn did the work - {after: the turn's message id, node} (landing.js landingTurn)
+const LandingCtx = React.createContext(null);
 // what a turn's Next steps count against (agentSummary.nextSteps): the task's reviews and checklist. Null in the dock, which has no turns
 // of an agent's to sum up and draws its steps as ever
 const WorkCtx = React.createContext(null);
@@ -397,6 +401,7 @@ const RanFor = () => {
 };
 const AssistantMessage = () => {
   const id = useAuiState((s) => s.message.id), shown = React.useContext(ShownCtx)[id], at = useTurnOutputs(id), work = React.useContext(WorkCtx);
+  const landing = React.useContext(LandingCtx);
   const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
   // the turn is the chat's last entry AND has answered: it carries its card - a turn still at work never takes the one before it's draft (the owner,
   // 2026-11-05: "email draft is being shown below the new prompt ... it's connected to the prior agent taskuary thing")
@@ -440,6 +445,7 @@ const AssistantMessage = () => {
           <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Next steps</Typography>{work.next}</Box>}
         {work && custom?.summary && <AgentSummary summary={custom.summary} folded={!!custom.folded} reviews={work.reviews} checklist={work.checklist}
           acts={work.acts} next={custom.folded || !freshNext(work.reviews) ? null : work.next} lastAnswered={lastAnswered} kept={custom.drafts} lead={lead} made={files} turnId={id} answered={answered} />}
+        {landing?.after === id && landing.node}
       </div>
     </MessagePrimitive.Root>
   );
@@ -858,10 +864,13 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
     (road ? road(w, files.map((a) => a.path)) : api.post(`/api/tasks/${task.TaskId}/assistant/messages`, { text: w, attachments: files.map((a) => a.path) }, { timeout: 0 }))
       .catch((x) => { setHeld((h) => h.map((l) => (l.id === id ? { ...l, err: errText(x) } : l))); if (files.length) onAttachBack(files); });
   };
+  const [landState, setLandState] = useState(null);
+  const landAt = landing ? landingTurn(messages, landState?.at) : null;
+  const landNode = landing ? React.cloneElement(landing, { onState: setLandState }) : null;
   const askWords = dock || !asking ? "" : String(asking.request_id || "").startsWith("signin:") ? "Message the agent - never your password" : "Answer the agent's question…";
   const atWork = dock ? <Thinking provider={provider} /> : <AtWork name={name} provider={provider} work={work} since={since} began={began} starting={starting} />;
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
+    <AssistantRuntimeProvider runtime={runtime}><LandingCtx.Provider value={landAt && !dock ? { after: landAt, node: landNode } : null}>
       <ThreadPrimitive.Root className={chat ? "tq-aui-thread tq-aui-chat" : "tq-aui-thread"}>
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {/* ...where the chat is home, the ask as triage read it is its first line (ChatCtx) */}
@@ -936,8 +945,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}
           {!dock && nextAt?.next && freshNext(nextAt.reviews) && !summed && !working && (!chat || messages?.at(-1)?.role !== "assistant") && <Box data-tq-next-steps="" className="tq-aui-summary" sx={{ mt: 1, mx: { xs: 1, sm: 2 } }}>
             <Typography component="span" sx={{ display: "block", color: "#292824", fontSize: 13.5, fontWeight: 700, mt: 1.5, mb: 0.25 }}>Suggested reply</Typography>{nextAt.next}</Box>}
-          {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout) */}
-          {!dock && landing}
+          {/* ...the branch's landing, where the task works in a checkout (landing.has_checkout): in its turn (LandingCtx), here only before any */}
+          {!dock && !landAt && landNode}
           {/* ...A START WAITING FOR A SLOT is the agent's own line in the chat, not a strip over it (the owner, 2026-11-08) */}
           {!dock && queued && <div className="tq-aui-message tq-aui-agent" data-tq-queued-turn="">
             <div className="tq-aui-role">{AGENT_TURN}</div><div className="tq-aui-agent-body">{queued}</div></div>}
@@ -979,7 +988,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             <div className="tq-aui-hint">{hint || "Enter sends · Shift+Enter adds a line · paste, drop or attach a file"}</div></>}
           </div>
       </ThreadPrimitive.Root>
-    </AssistantRuntimeProvider>
+    </LandingCtx.Provider></AssistantRuntimeProvider>
   );
 }
 
@@ -1243,9 +1252,11 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
   // runs on some renders and not others - which is React #310, and it blanked the whole view.
   const name = dock ? "Taskuary" : agentName(task);
   const work = workOf(session?.trace);
-  // ...a coding turn at work counts from its own first step, as a general one from the server's `turn_started`
+  // ...a coding turn at work counts from its own start, as a general one from the server's `turn_started`: the live session's `turnStarted`
+  // (codingchat.live_of), else its first step - never the owner's last line drawn, two days back under a resumed session ("2947m 55s", 2026-11-08)
   const codingAt = coding ? shownMessages.find((m) => String(m.id).startsWith("live-"))?.createdAt : null;
-  const since = turnStart(shownMessages), began = session?.busy && session?.turn_started ? session.turn_started * 1000 : codingAt ? +asUtc(codingAt) || null : null;
+  const since = turnStart(shownMessages), began = session?.busy && session?.turn_started ? session.turn_started * 1000
+    : coding && cc.live?.working && cc.live?.turnStarted ? cc.live.turnStarted * 1000 : codingAt ? +asUtc(codingAt) || null : null;
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
@@ -1301,7 +1312,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
         asking={turn && viewShown ? null : asking} onAnswer={answerAsk} noComposer={noComposer}
         onBusyChange={threadBusy} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy || codingBusy} provider={coding ? cc.live?.cli || "" : session?.provider || pickedLabel} name={name} work={work} since={since} began={began}
-        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={data?.waiting || []} box={data?.box || ""}
+        drafts={data?.playbookDrafts || []} acts={actsHere} onDraftDecided={refresh} starting={starting} waiting={(coding ? cc.got?.waiting : data?.waiting) || []} box={data?.box || ""}
         chat={chat && !dock} reading={chat && !dock && readingOf(data?.thread || task?.ThreadJson)?.asking
           ? <div className="tq-aui-ask" data-tq-chat-ask="">{readingOf(data?.thread || task?.ThreadJson).asking}</div> : null}
         came={chat && !dock ? came : null} closedLine={chat && !dock ? closedLine : ""} queued={chat && !dock ? queued : null}

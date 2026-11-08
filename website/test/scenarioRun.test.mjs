@@ -19,7 +19,9 @@ test("the rail's bottom fade sits on the card's inner edge", () => {
 // turn three seconds old - the server's turn_started when it has said it, and never before the newest input in the thread
 test("Working on this… counts from the turn's own start", () => {
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-  assert.match(ws, /const since = turnStart\(shownMessages\), began = session\?\.busy && session\?\.turn_started \? session\.turn_started \* 1000 : codingAt \? \+asUtc\(codingAt\) \|\| null : null;/);
+  // ...a coding turn from the live session's own `turnStarted` first (codingchat.live_of): its first turn on a resume is a brief, drawn as no line,
+  // and the owner's last line drawn was two days back - "Working on this… 2947m 55s" (the owner's live coding task, 2026-11-08)
+  assert.match(ws, /const since = turnStart\(shownMessages\), began = session\?\.busy && session\?\.turn_started \? session\.turn_started \* 1000\n\s+: coding && cc\.live\?\.working && cc\.live\?\.turnStarted \? cc\.live\.turnStarted \* 1000 : codingAt \? \+asUtc\(codingAt\) \|\| null : null;/);
   assert.match(ws, /const typed = useAuiState\(\(s\) => turnBegan\(s\.thread\.messages\.filter\(\(m\) => m\.role === "user"\)\.map\(\(m\) => m\.createdAt\)\)\);/);
   // ...the server's start first: a mail joining mid-turn is newer than the turn, and set its clock back to 0s
   assert.match(ws, /<AgentBand \{\.\.\.props\} since=\{began \|\| Math\.max\(since \|\| 0, typed \|\| 0\) \|\| null\} \/>/);

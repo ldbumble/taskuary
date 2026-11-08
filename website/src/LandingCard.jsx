@@ -3,16 +3,25 @@
 // The agent's own pick (propose_land) is marked; nothing lands until the owner answers. A conflict lands nothing: the agent gets it.
 // ...IN THE CODING CHAT IT IS A CARD OF ITS OWN (`inChat`, GeneralWorkspace.jsx), and the whole diff opens in the code viewer, a file a fold (DiffView);
 // while it waits to land each part can be marked Keep or Revert, and the reverted ones are taken out of the branch first (landing.revert)
+// ...THE DIFF OPENS LIKE A PULL REQUEST, the whole window wide (the owner, 2026-11-08): the file list on the left, the diffs on the right - inside
+// a turn of the chat it was a column too narrow for either. The card's own list folds the generated files as that view does (diffView `generated`)
 import React, { useEffect, useState } from "react";
-import { Box, Button, CircularProgress, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Dialog, DialogContent, IconButton, Typography } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
-import { landingWords } from "./landing.js";
+import { landingFiles, landingWords } from "./landing.js";
 import { hunkText, parseUnified } from "./diffView.js";
 import DiffView from "./DiffView.jsx";
 import { plural } from "./timeWords.js";
 import { ACCENT, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const btn = { minHeight: 32, py: 0, px: 1.4, fontSize: 12.5, textTransform: "none" };
+
+const FileLine = ({ f }) => (
+  <Typography variant="caption" sx={{ ...mono, display: "block", color: DIM, fontSize: 11 }} noWrap>
+    <Box component="span" sx={{ color: "#47654a" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "#7a2f3c" }}>-{f.minus}</Box> {f.path}
+  </Typography>);
+export const SHOWN = 8;
 
 export default function LandingCard({ taskId, onChanged, onState, inChat = false }) {
   const [s, setS] = useState(null), [diff, setDiff] = useState(null), [busy, setBusy] = useState(""), [said, setSaid] = useState(""),
@@ -32,7 +41,7 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
     setBusy("");
   };
   // REVIEW: only on the agent's own branch while it waits to land - the base is every agent's, and what landed is history
-  const files = diff ? parseUnified(diff) : [];
+  const files = diff ? parseUnified(diff) : [], { src, gen } = landingFiles(s.files);
   const reviewing = !!s.ask && !!s.own;
   const picked = Object.entries(marks).filter(([, v]) => v === "revert").map(([k]) => k);
   const revert = async () => {
@@ -52,24 +61,34 @@ export default function LandingCard({ taskId, onChanged, onState, inChat = false
         {s.own ? <> into <Box component="span" sx={mono}>{s.base}</Box></> : null}
         <Box component="span" sx={{ color: DIM }}> · {w.stat}</Box>
       </Typography>
+      {s.shared && <Typography variant="caption" data-tq-landing-shared="" sx={{ display: "block", color: FAINT }}>{w.shared}</Typography>}
       {!!s.files?.length && (
         <Box sx={{ mt: 0.5 }}>
-          {diff === null && s.files.slice(0, 8).map((f) => (
-            <Typography key={f.path} variant="caption" sx={{ ...mono, display: "block", color: DIM, fontSize: 11 }} noWrap>
-              <Box component="span" sx={{ color: "#47654a" }}>+{f.plus}</Box> <Box component="span" sx={{ color: "#7a2f3c" }}>-{f.minus}</Box> {f.path}
-            </Typography>))}
-          {diff === null && s.files.length > 8 && <Typography variant="caption" sx={{ color: FAINT }}>and {s.files.length - 8} more</Typography>}
-          <Button size="small" sx={{ ...btn, minHeight: 0, p: 0, mt: 0.3, color: DIM }} data-tq-landing-diff="" onClick={seeDiff}>
-            {diff !== null ? "Hide the diff" : reviewing ? "See the diff · review it" : "See the diff"}</Button>
+          {src.slice(0, SHOWN).map((f) => <FileLine key={f.path} f={f} />)}
+          {src.length > SHOWN && <Typography variant="caption" sx={{ display: "block", color: FAINT }}>and {src.length - SHOWN} more</Typography>}
+          {!!gen.length && <Box component="details" data-tq-landing-generated="" sx={{ "& > summary": { cursor: "pointer", color: FAINT, fontSize: 11 } }}>
+            <summary>Generated · {plural(gen.length, "file")}</summary>{gen.map((f) => <FileLine key={f.path} f={f} />)}</Box>}
+          <Button size="small" sx={{ ...btn, minHeight: 0, p: 0, mt: 0.3, color: DIM, display: "flex" }} data-tq-landing-diff="" onClick={seeDiff}>
+            {reviewing ? "See the diff · review it" : "See the diff"}</Button>
         </Box>)}
-      {diff !== null && <Box sx={{ mt: 0.75 }}>
-        {reviewing && <Typography variant="caption" sx={{ display: "block", color: FAINT, mb: 0.5 }}>
-          Mark a part Revert to take it out of {s.branch} before it lands - one commit on the branch, nothing else touched.</Typography>}
-        <DiffView files={files} marks={reviewing ? marks : null} onMark={reviewing ? (k, m) => setMarks((x) => ({ ...x, [k]: m })) : null} />
-        {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "#7a2f3c", borderColor: BORDER }}
-          startIcon={busy === "revert" ? <CircularProgress size={12} color="inherit" /> : null} onClick={revert}>
-          Revert {plural(picked.length, "marked part")}</Button>}
-      </Box>}
+      <Dialog open={diff !== null} onClose={() => setDiff(null)} fullWidth maxWidth={false} data-tq-landing-dialog=""
+        slotProps={{ paper: { sx: { width: "min(1400px, 96vw)", height: "90vh", m: 1 } } }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
+          <Typography variant="body2" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>
+            <Box component="span" sx={{ ...mono, fontWeight: 600 }}>{s.branch}</Box>
+            {s.own ? <> into <Box component="span" sx={mono}>{s.base}</Box></> : null}
+            <Box component="span" sx={{ color: DIM }}> · {w.stat}</Box></Typography>
+          <IconButton size="small" aria-label="Close the diff" onClick={() => setDiff(null)}><CloseIcon fontSize="small" /></IconButton>
+        </Box>
+        <DialogContent sx={{ p: 2 }}>
+          {reviewing && <Typography variant="caption" sx={{ display: "block", color: FAINT, mb: 0.75 }}>
+            Mark a part Revert to take it out of {s.branch} before it lands - one commit on the branch, nothing else touched.</Typography>}
+          {diff !== null && <DiffView files={files} marks={reviewing ? marks : null} onMark={reviewing ? (k, m) => setMarks((x) => ({ ...x, [k]: m })) : null} />}
+          {reviewing && !!picked.length && <Button size="small" variant="outlined" disabled={!!busy} data-tq-landing-revert="" sx={{ ...btn, mt: 0.75, color: "#7a2f3c", borderColor: BORDER }}
+            startIcon={busy === "revert" ? <CircularProgress size={12} color="inherit" /> : null} onClick={revert}>
+            Revert {plural(picked.length, "marked part")}</Button>}
+        </DialogContent>
+      </Dialog>
       {s.ask && <>
         <Typography variant="body2" sx={{ mt: 0.9, color: INK, fontWeight: 600 }}>How should it land?</Typography>
         {w.proposal && <Typography variant="caption" data-tq-landing-proposal="" sx={{ display: "block", color: DIM }}>{w.proposal}</Typography>}

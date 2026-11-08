@@ -95,6 +95,7 @@ class ACPCoding:
         try: proof.mark_start(store, task_id, cwd)
         except Exception as e: logger.debug(f'acp coding {self.sid}: no proof start - {e}')
         self.alive, self.busy, self.client, self.stop_reason, self.in_turn = True, True, None, None, False   # busy from the start: opening is working
+        self.turn_at = time.time()                                # when the turn at work began: its clock (codingchat.live_of `turnStarted`)
         self._q, self._qlock, self._wake, self._steer_lock = [], threading.Lock(), threading.Event(), threading.Lock()
         self.touched, self.calls, self.history, self.has_output, self._live_at = {}, {}, [], False, 0.
         self.held, self.steps, self.gate, self.turns = {}, None, None, 0
@@ -127,13 +128,21 @@ class ACPCoding:
         line = getattr(self, '_line', '')
         for ch in str(data or ''):
             if ch in '\r\n':
-                if line.strip(): self._out('\r\n'); self.prompt(line.strip())
+                if line.strip(): self._out('\r\n'); self._typed(line.strip())
                 line = ''
             elif ch in '\x08\x7f':
                 if line: line = line[:-1]; self._out('\b \b')
             elif ch == '\x03': self.cancel(); line = ''
             elif ch >= ' ': line += ch; self._out(ch)
         self._line = line
+
+    def _typed(self, line: str):
+        """...BY THE CHAT BOX'S OWN ROAD, the waiting room (the owner, 2026-11-08: "i asked another question and the text was never sent into the
+        prompt"): a line typed here mid-turn went straight to the session's queue in memory - on no screen, in no record, gone with a restart.
+        Kept on the task, it is drawn as the owner's on every screen until a turn takes it. A session on no task has no room: its prompt."""
+        if not (self.store and self.task_id): return self.prompt(line)
+        from . import waitroom
+        threading.Thread(target=lambda: waitroom.add(self.store, self.task_id, line, 'owner'), daemon=True).start()
 
     # ── what the rest of Taskuary reads off a session ──────────────────────────────────────────────────────────────────────
     def idle(self) -> float: return round(time.time() - self.last, 1)
@@ -301,7 +310,7 @@ class ACPCoding:
         from . import agents, acpgate
         text = '\n\n'.join(t for t, *_ in items)
         self._show(items)
-        self.busy, self.seeding, self.accepted, self.stop_reason = True, False, True, None
+        self.busy, self.seeding, self.accepted, self.stop_reason, self.turn_at = True, False, True, None, time.time()
         self.seeded = self.seeded or text
         self.witness.note({'k': 'turn'})
         self._event('UserPromptSubmit', prompt=text)

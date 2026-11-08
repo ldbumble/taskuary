@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
-import { chatRows, stepsFromAcp } from "../src/chatStream.js";
+import { chatRows, ownerIn, stepsFromAcp } from "../src/chatStream.js";
 import { editHunks, headerOf, hunksOf, hunkText, langOf, numbered, parseUnified, tokens } from "../src/diffView.js";
 
 const before = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
@@ -61,6 +61,18 @@ test("Taskuary's own brief is never drawn; the owner's typed line is, on its own
   const rows = chatRows({ sessions: [ses({ steps: LOG })] });
   assert.ok(!JSON.stringify(rows).includes("TASKUARY: work"));
   assert.equal(rows[1].text, "Run the whole suite too.");
+});
+
+test("the owner's words inside a Resume brief are their own line, the rest stays Taskuary's", () => {
+  // the owner, 2026-11-08: "i asked another question and the text was never sent into the prompt" - typed to a session at rest, it led the brief
+  const brief = "FROM THE OWNER: was this code completed?\n\nThe owner chose Resume for this task. Use the saved conversation and handover...";
+  const rows = chatRows({ sessions: [ses({ source: "acp", updates: [
+    { sessionUpdate: "user_message_chunk", content: { type: "text", text: brief }, _meta: { taskuary: "brief" } },
+    ...chunks("agent_message_chunk", "Not yet - the Hub page is half built.")] })] });
+  assert.deepEqual(rows.map((r) => r.kind), ["you", "turn"]);
+  assert.equal(rows[0].text, "was this code completed?");
+  assert.ok(!JSON.stringify(rows).includes("The owner chose Resume"));
+  assert.equal(ownerIn("TASKUARY: work TQ-0042 ..."), "");
 });
 
 test("the mail that came in stands over the turn it woke, a burst as one row", () => {

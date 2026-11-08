@@ -380,6 +380,7 @@ def _events(t, p: dict) -> None:
                 ws.record(st, tid, sid, 'answered', request_id=r['RequestId'], text=why, source='hook')
     try:
         if ev == 'UserPromptSubmit':
+            t.turn_at = time.time()             # the turn at work began now: its clock in the chat (codingchat.live_of `turnStarted`)
             # ...including a turn Claude took because a background job reported. That one is marked: it is the agent
             # working again, not the owner speaking, so it must not overtake a question still open (open_requests)
             from .background import is_wake
@@ -682,6 +683,12 @@ def receive(payload: dict, cli: str) -> dict:
                 claude_artifacts.capture_doc(getattr(t, 'store', None), t.task_id, payload['tool_input'], payload.get('tool_response'),
                                              by=getattr(t, 'agent', '') or 'agent')
     _events(t, payload)
+    # ...and a commit or an edit it made is the task's own work, the only work its landing card counts (landing.saw)
+    if payload.get('hook_event_name') == 'PostToolUse':
+        try:
+            from . import landing
+            landing.saw(getattr(t, 'store', None), t.task_id, str(payload.get('tool_name') or ''), payload.get('tool_input'))
+        except Exception as e: logger.debug(f'task {t.task_id}: a tool call was not noted for its landing - {e}')
     # ...and whatever Reason Network showed this agent goes on its task (reasonnet.on_hook): never a reason to fail the hook
     try:
         from . import reasonnet

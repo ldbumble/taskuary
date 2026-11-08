@@ -154,6 +154,11 @@ export const hasParts = (parts) => (parts || []).some((p) => p.type !== "said" |
 
 // ── a coding session -> the chat's rows: what came in, what the owner said, and each turn - oldest first ──
 const at = (x) => String(x || "").replace("T", " ").slice(0, 19);
+// THE OWNER'S WORDS INSIDE TASKUARY'S BRIEF (the owner, 2026-11-08: "i asked another question and the text was never sent into the prompt"): a line
+// typed to a session at rest picks it back up (server continue-work) as "FROM THE OWNER: <words>" ahead of Resume's instructions - one brief, and
+// the chat draws no brief, so their question stood nowhere. Their words are their line; the rest stays Taskuary's
+export const ownerIn = (text) => (/^FROM THE OWNER:[ \t]*([^\n]+(?:\n(?!\n)[^\n]*)*)/.exec(String(text || "")) || [])[1]?.trim() || "";
+
 export function chatRows({ sessions = [], mails = [], live = null, permissions = [] } = {}) {
   // THE TURN THAT ENDED IS NOT WORKING (the owner's live coding task, 2026-11-06: the turn ended on "Should I go ahead?", the chip said "agent
   // waiting on you", and "Working on this…" still turned under the answer): a live session is one that is alive, not one at work - it works
@@ -166,7 +171,11 @@ export function chatRows({ sessions = [], mails = [], live = null, permissions =
     let turn = null;
     const close = () => { if (turn) rows.push(turn); turn = null; };
     steps.forEach((s) => {
-      if (s.k === "you" || s.k === "brief") { close(); if (s.k === "you" && s.text) rows.push({ kind: "you", at: s.at, text: s.text }); return; }
+      if (s.k === "you" || s.k === "brief") {
+        close(); const w = s.k === "you" ? s.text : ownerIn(s.text);
+        if (w) rows.push({ kind: "you", at: s.at, text: w });
+        return;
+      }
       if (s.k === "gap" || s.k === "screen") return;
       if (!turn) turn = { kind: "turn", at: s.at, sid: ses.sid, steps: [] };
       turn.steps.push(s);

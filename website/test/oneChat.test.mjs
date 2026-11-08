@@ -159,7 +159,7 @@ test("the Changes popover and the landing card show only where the task works in
   assert.match(page, /\{canCode && detail\?\.checkout && <HeadPop id="changes" title="Changes" wide /);
   assert.match(page, /landing=\{canCode && detail\?\.checkout && <LandingCard /);
   assert.doesNotMatch(page, /t\.Kind === "coding" && <HeadPop id="changes"/);
-  assert.match(gw, /\{!dock && landing\}/);
+  assert.match(gw, /\{!dock && !landAt && landNode\}/);               // ...in the turn that made it (LandingCtx), at the foot only before any
 });
 
 // ── 5. every chat fix of the day, held in the one chat ──────────────────────────────────────────
@@ -251,7 +251,7 @@ test("regression: a nothing-new turn is one line", () => {
 
 test("regression: how it closed is the stream's last line, under the landing card", () => {
   const thread = gw.slice(gw.indexOf("function AssistantThread("), gw.indexOf("export function GeneralWorkspace("));
-  const land = thread.indexOf("{!dock && landing}"), closed = thread.indexOf('{!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">');
+  const land = thread.indexOf("{!dock && !landAt && landNode}"), closed = thread.indexOf('{!dock && closedLine && <div className="tq-aui-closed" data-tq-chat-closed="">');
   assert.ok(land > 0 && closed > land && closed > thread.indexOf("data-tq-next-steps"));
 });
 

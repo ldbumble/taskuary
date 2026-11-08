@@ -135,6 +135,27 @@ def test_the_box_while_it_works_waits_and_goes_in_as_one_prompt_and_stop_cancels
     assert 'heard: also the tax line and keep it short' in ' '.join(said.split()) and 'turn=2' in said
 
 
+def test_a_line_typed_while_it_works_is_kept_shown_and_taken_by_the_next_turn(world, monkeypatch):
+    """The owner, 2026-11-08: "i asked another question and the text was never sent into the prompt". A line typed mid-turn - in the chat's box
+    or the session's Terminal - is the waiting room's: on the task, drawn as theirs on every screen (codingchat `waiting`), and the next turn's.
+    And the chat's clock counts from this turn's start, never the session's or the owner's line days back (codingchat.live_of `turnStarted`)."""
+    s, tid, repo = world
+    monkeypatch.setenv('FAKE_ACP_HANG', '1')
+    t = open_(s, tid, repo, seed='look at the totals')
+    assert until(lambda: t.in_turn) and not t.steerable()
+    t.started, t.turn_at = '2026-11-06 14:43:44', time.time() - 5                           # a session opened two days ago, its turn 5 s old
+    live = codingchat.live_of(t)
+    assert live['working'] and abs(live['turnStarted'] - (time.time() - 5)) < 2
+    t.write('was this code completed?\r')                                                   # ...typed in its Terminal
+    assert until(lambda: [w['text'] for w in codingchat.chat(s, tid)['waiting']] == ['was this code completed?'])
+    assert s.waiting_notes(tid)[0]['CreatedBy'] == 'owner'
+    assert t.cancel() and idle(t, 2)
+    assert until(lambda: 'was this code completed?' in ' '.join([x for k, x in t.history if k == 'said'][-1].split()))
+    assert codingchat.chat(s, tid)['waiting'] == []
+    ups = [u for u in codingchat.acp_updates(tid, t.sid) if u['sessionUpdate'] == 'user_message_chunk']
+    assert any(u['content']['text'] == 'was this code completed?' and '_meta' not in u for u in ups)      # drawn as theirs
+
+
 def test_a_note_from_the_waiting_room_is_drawn_as_the_owners_words(world):
     s, tid, repo = world
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)

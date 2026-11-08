@@ -1,7 +1,7 @@
 """Landing a coding task's branch (landing.py): the diff since the task started, the one question - rebase and fast-forward, merge commit,
 PR, discard (only for a branch of its own) - and nothing landed half-done: a conflict aborts and goes to the agent. A real git repo in a
 temp folder, no network."""
-import os, subprocess, tempfile, unittest
+import os, subprocess, tempfile, time, unittest
 from unittest import mock
 
 from taskuary import guard, landing
@@ -9,14 +9,14 @@ from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
 
-def git(cwd, *a):
+def git(cwd, *a, env=None):
     return subprocess.run(['git', '-C', cwd, '-c', 'user.name=Alex Doyle', '-c', 'user.email=alex@northwind.example', *a],
-                          capture_output=True, text=True, check=True).stdout.strip()
+                          capture_output=True, text=True, check=True, env={**os.environ, **(env or {})}).stdout.strip()
 
 
-def commit(cwd, name, text, msg=None):
+def commit(cwd, name, text, msg=None, env=None):
     with open(os.path.join(cwd, name), 'w', encoding='utf-8', newline='\n') as f: f.write(text)
-    git(cwd, 'add', name); git(cwd, 'commit', '-q', '-m', msg or f'edit {name}')
+    git(cwd, 'add', name); git(cwd, 'commit', '-q', '-m', msg or f'edit {name}', env=env)
 
 
 class LandingTests(unittest.TestCase):
@@ -67,9 +67,56 @@ class LandingTests(unittest.TestCase):
 
     def test_work_straight_on_the_base_asks_nothing_and_never_offers_discard(self):
         commit(self.cwd, 'ledger.py', 'one\nTWO\nthree\n')
+        landing.saw(self.s, self.tid, 'Bash', {'command': 'git commit -q -m "edit ledger.py"'})
         s = landing.state(self.s, self.tid)
         self.assertFalse(s['ask'] or s['own']); self.assertEqual(s['answers'], []); self.assertEqual(s['changed'], 1)
+        self.assertTrue(s['shared']); self.assertIn('shared with other agents', s['line'])
         with self.assertRaises(ValueError): landing.land(self.s, self.tid, 'discard')
+
+    def test_on_a_shared_base_each_task_counts_only_its_own_commits(self):
+        # the owner's live coding task, 2026-11-08: "518 files changed" on master - every other agent's and release's commit since it began
+        peer = Factory(self.s).task(title='Tidy the portal', kind='coding'); landing.mark_start(self.s, peer, self.cwd)
+        t = int(git(self.cwd, 'log', '-1', '--format=%ct')) + 10
+        for k, (tid, name) in enumerate([(self.tid, 'ledger.py'), (peer, 'portal.py'), (None, 'release.txt'), (self.tid, 'rounding.py')]):
+            when = t + 10 * k
+            commit(self.cwd, name, f'v{k}\n', env={'GIT_COMMITTER_DATE': f'{when} +0000'})
+            if tid: landing.saw(self.s, tid, 'Bash', {'command': f'git -C "{self.cwd}" commit -q -m step'}, at=when + 1)
+        mine, theirs = landing.state(self.s, self.tid, full=True), landing.state(self.s, peer)
+        self.assertEqual(sorted(f['path'] for f in mine['files']), ['ledger.py', 'rounding.py'])
+        self.assertEqual([f['path'] for f in theirs['files']], ['portal.py'])
+        self.assertEqual(mine['commits'], 2); self.assertNotIn('release.txt', mine['diff']); self.assertNotIn('portal.py', mine['diff'])
+        self.assertNotIn('release.txt', landing.changes(self.s, self.tid)['diff'])
+
+    def test_its_uncommitted_edits_count_and_a_peers_do_not(self):
+        for name in ('ledger.py', 'peer.txt'):
+            with open(os.path.join(self.cwd, name), 'a', encoding='utf-8', newline='\n') as f: f.write('four\n')
+        landing.saw(self.s, self.tid, 'Edit', {'file_path': os.path.join(self.cwd, 'ledger.py')})
+        s = landing.state(self.s, self.tid, full=True)
+        self.assertEqual([f['path'] for f in s['files']], ['ledger.py']); self.assertIn('+four', s['diff']); self.assertNotIn('peer.txt', s['diff'])
+
+    def test_an_acp_sessions_own_record_says_what_it_committed_and_edited(self):
+        import json
+        from pathlib import Path
+        root = Path(tempfile.mkdtemp()); (root / str(self.tid)).mkdir()
+        t = int(git(self.cwd, 'log', '-1', '--format=%ct')) + 30
+        commit(self.cwd, 'peer.txt', 'p\n', env={'GIT_COMMITTER_DATE': f'{t - 15} +0000'})              # a peer's, before the call
+        commit(self.cwd, 'ledger.py', 'one\nTWO\nthree\n', env={'GIT_COMMITTER_DATE': f'{t} +0000'})
+        at = lambda x: time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(x))
+        rows = [{'sessionUpdate': 'tool_call', 'toolCallId': 'c1', 'kind': 'execute', 'rawInput': {'command': 'git commit -q -F -'}, '_at': at(t - 1)},
+                {'sessionUpdate': 'tool_call_update', 'toolCallId': 'c1', 'status': 'completed', 'rawOutput': 'done', '_at': at(t + 1)},
+                {'sessionUpdate': 'tool_call', 'toolCallId': 'c2', 'kind': 'edit', '_at': at(t + 5),
+                 'content': [{'type': 'diff', 'path': os.path.join(self.cwd, 'notes.md')}]}]
+        (root / str(self.tid) / 'acp-s1.jsonl').write_text('\n'.join(json.dumps(r) for r in rows), encoding='utf-8')
+        with open(os.path.join(self.cwd, 'notes.md'), 'w', encoding='utf-8') as f: f.write('n\n')
+        with mock.patch('taskuary.session_artifacts.root', return_value=root):
+            s = landing.state(self.s, self.tid)
+        self.assertEqual(sorted(f['path'] for f in s['files']), ['ledger.py', 'notes.md']); self.assertEqual(s['commits'], 1)
+
+    def test_a_file_two_commits_touched_reads_once(self):
+        a = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n'
+        b = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-b\n+c\ndiff --git a/y b/y\n--- a/y\n+++ b/y\n@@ -1 +1 @@\n-1\n+2\n'
+        m = landing.merged([a, b])
+        self.assertEqual((m.count('diff --git a/x'), m.count('@@ -1 +1 @@'), m.count('diff --git a/y')), (1, 3, 1))
 
     def test_rebase_fast_forwards_when_the_base_did_not_move(self):
         self.branch()

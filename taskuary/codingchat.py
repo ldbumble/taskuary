@@ -78,9 +78,29 @@ def live_of(t) -> dict | None:
     except Exception: phase = 'unknown'
     acp = term.is_acp(t)
     # ...over ACP (acpcoding.py) there is no screen to ask from, and its terminal is its commands' output: none yet is no Terminal toggle
+    # ...and WHEN THE TURN AT WORK BEGAN, its clock (the owner's live coding task, 2026-11-08: "Working on this… 2947m 55s"): the chat counted from
+    # the owner's last line it draws, two days back - a resumed session's first turn is Taskuary's brief, drawn as no line. Never before this run
+    began = getattr(t, 'turn_at', 0) or getattr(t, 'started_ts', 0) or _epoch(t.started)
     return {'sid': t.sid, 'cli': getattr(t, 'cli', '') or term.cli_of(getattr(t, 'argv', None) or []), 'started': t.started,
             'asking': asking, 'working': phase == 'working', 'promptPending': bool(term.prompt_pending(t)),
+            'turnStarted': max(began, _epoch(t.started)) if began else None,
             'transport': 'acp' if acp else 'pty', 'terminal': bool(getattr(t, 'has_output', False)) if acp else True}
+
+
+def _epoch(at) -> float:
+    try: return datetime.strptime(str(at or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S').timestamp()
+    except ValueError: return 0.
+
+
+def waiting(store, tid: int, t=None) -> list:
+    """THE OWNER'S LINES NO TURN HAS TAKEN YET, on every screen (the owner, 2026-11-08: "i asked another question and the text was never sent into
+    the prompt"): the waiting room's notes not yet handed over, and what a live ACP session holds for its next turn - each drawn as theirs,
+    "Waiting for the agent", until a turn takes it. The general chat's own road (general.waiting_lines); [{id, text, at}], oldest first."""
+    from .waitroom import TEAMMATE, parts
+    out = [{'id': f"w{x['WId']}", 'text': parts(x.get('Note'))[0], 'at': x.get('CreatedAt')} for x in store.waiting_notes(int(tid))
+           if (x.get('CreatedBy') or 'owner') not in ('router', TEAMMATE)]
+    held = list(getattr(t, '_q', None) or []) if t is not None else []
+    return out + [{'id': f'q{i}', 'text': w, 'at': None} for i, (_t, _b, shown, _d) in enumerate(held) for w in shown]
 
 
 # ...each step's time in the server's own zone, as every stamp the page reads (store.norm_stamp): a CLI log stamps UTC, and the turn read
@@ -124,4 +144,5 @@ def chat(store, tid: int) -> dict:
     from .landing import has_checkout
     return {'task': int(tid), 'sessions': sessions(store, tid), 'mails': mails(store, tid), 'live': live_of(t),
             'checkout': has_checkout(store, tid, getattr(t, 'cwd', '') or ''),
+            'waiting': waiting(store, tid, t),
             'permissions': permissions.pending(int(tid), store)}         # what the agent waits on the owner's button for

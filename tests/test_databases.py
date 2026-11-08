@@ -92,5 +92,28 @@ class TheDriver(unittest.TestCase):
         self.assertEqual(rr.call_args[0][0]['query'], 'select 1')
 
 
+
+class TheThreeAddedOn2026_11_08(unittest.TestCase):
+    "CockroachDB on the Postgres driver, Oracle by service name, DuckDB a file opened read-only - and each card's Test asks its own probe."
+    def test_their_urls(self):
+        self.assertEqual(databases.url_for('cockroachdb', {'host': 'h', 'database': 'app', 'user': 'ro', 'password': 'p'}),
+                         'postgresql+psycopg2://ro:p@h:26257/app')
+        self.assertEqual(databases.url_for('oracle', {'host': 'h', 'database': 'ORCLPDB1', 'user': 'ro', 'password': 'p'}),
+                         'oracle+oracledb://ro:p@h:1521/?service_name=ORCLPDB1')
+        self.assertEqual(databases.url_for('duckdb', {'path': 'C:/data/sales.duckdb'}), 'duckdb:///C:/data/sales.duckdb?access_mode=read_only')
+        with self.assertRaisesRegex(RuntimeError, 'path'): databases.url_for('duckdb', {})
+
+    def test_the_cards_test_runs_the_engines_probe(self):
+        from taskuary import channels
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        for e, probe in (('oracle', 'SELECT 1 FROM DUAL'), ('cockroachdb', 'SELECT 1'), ('duckdb', 'SELECT 1')):
+            c = s.get_connector_by_type(e)
+            s.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': '{"host": "h", "database": "d", "path": "x.duckdb"}', 'Secret': 'pw'}, 't')
+            with mock.patch('taskuary.db.run_report', return_value=('1 row', '[{"1": 1}]')) as rr:
+                out = channels.test_connector(s, c['ConnectorId'])
+            self.assertTrue(out['ok'], out); self.assertEqual(rr.call_args[0][0]['query'], probe, e)
+
+
 if __name__ == '__main__':
     unittest.main()

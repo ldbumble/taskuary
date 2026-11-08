@@ -498,7 +498,7 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             from . import databases
             from .reports import _card
             cfg = _card(store, c['Type'], 'password', cid)
-            head, _body = databases.runner(c['Type'])({**cfg, 'query': 'SELECT 1', 'max_rows': 1})
+            head, _body = databases.runner(c['Type'])({**cfg, 'query': databases.PROBE.get(c['Type'], 'SELECT 1'), 'max_rows': 1})
             detail = f"{c['Type']} answered: {head}"
         elif c['Type'] == 'sharepoint':
             from . import sharepoint
@@ -1464,7 +1464,7 @@ CHAT_SERVERS = ('mattermost', 'rocketchat', 'matrix', 'google_chat')
 # answers "no test for connector type 'x'" - a working connector that looks broken.
 PAGE_READERS = ('firecrawl', 'reader', 'scrapingbee')
 RESEARCH = ('exa', 'tavily', 'brave_search', 'serpapi', 'serper', 'apify') + PAGE_READERS
-DB_ENGINES = ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery')
+DB_ENGINES = ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb')
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',
           'telegram': 'telegram', 'whatsapp': 'whatsapp', 'imessage': 'imessage',

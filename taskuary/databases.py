@@ -27,7 +27,13 @@ ENGINES = {
     'clickhouse': ('clickhouse+http', 8123, 'clickhouse-sqlalchemy'),
     'snowflake': ('snowflake', None, 'snowflake-sqlalchemy'),
     'bigquery': ('bigquery', None, 'sqlalchemy-bigquery'),
+    # (the owner, 2026-11-08: "all the ones that say coming soon just add them now") - CockroachDB speaks the Postgres wire, so the
+    # Postgres driver reads it; Oracle by service name (python-oracledb, thin: no Oracle client); DuckDB a file, opened read-only
+    'cockroachdb': ('postgresql+psycopg2', 26257, 'psycopg2-binary'),
+    'oracle': ('oracle+oracledb', 1521, 'oracledb'),
+    'duckdb': ('duckdb', None, 'duckdb-engine'),
 }
+PROBE = {'oracle': 'SELECT 1 FROM DUAL'}           # the card's Test: Oracle has no FROM-less SELECT
 
 
 def url_for(engine: str, cfg: dict) -> str:
@@ -48,6 +54,11 @@ def url_for(engine: str, cfg: dict) -> str:
         if not project: raise RuntimeError('BigQuery needs a project')
         return f"bigquery://{project}" + (f"/{cfg['dataset'].strip()}" if cfg.get('dataset') else '')
 
+    if engine == 'duckdb':
+        path = (cfg.get('path') or db).strip()
+        if not path: raise RuntimeError('DuckDB needs the path of its database file')
+        return f"duckdb:///{path}?access_mode=read_only"
+
     if engine == 'snowflake':
         # snowflake://user:pw@account/database/schema?warehouse=&role= - the account identifier
         # goes where a host would, and warehouse is usually required for a query to run at all.
@@ -64,7 +75,7 @@ def url_for(engine: str, cfg: dict) -> str:
     raw = cfg.get('port') or port
     try: where = f"{host}:{port_number(raw)}"
     except ValueError: raise RuntimeError(f'{engine} port {raw!r} is not a number from 1 to 65535') from None
-    return f'{dialect}://{at}{where}/{db}'
+    return f'{dialect}://{at}{where}/' + (f'?service_name={quote_plus(db)}' if engine == 'oracle' else db)
 
 
 def runner(engine: str):

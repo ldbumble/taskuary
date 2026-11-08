@@ -767,6 +767,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'clickhouse': _lazy('databases', 'runner')('clickhouse'),
             'snowflake': _lazy('databases', 'runner')('snowflake'),
             'bigquery': _lazy('databases', 'runner')('bigquery'),
+            **{e: _lazy('databases', 'runner')(e) for e in ('cockroachdb', 'oracle', 'duckdb')},
             # treg over its hosted MCP: search the catalogue (free), then call one endpoint.
             # The call is a write whatever the endpoint does - it spends money, and the same
             # door reaches endpoints that publish and order.
@@ -908,7 +909,8 @@ def executor_for(type_name):
 
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
-CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery', 
+CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery',
+           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github',
            'bluesky_me': 'bluesky', 'bluesky_timeline': 'bluesky', 'bluesky_post': 'bluesky',
@@ -1163,7 +1165,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'mastodon_post': mastodon_connection,
                  'treg_tools': treg_connection, 'treg_search': treg_connection, 'treg_call': treg_connection,
                  **{e: engine_connection(e) for e in
-                    ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery')},
+                    ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb')},
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,
                  'entra_users': azure_connection, 'entra_groups': azure_connection,

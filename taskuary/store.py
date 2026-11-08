@@ -1515,6 +1515,7 @@ class SQLiteStore:
                          ('postgresql', 'PostgreSQL'),
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),
+                         ('cockroachdb', 'CockroachDB'), ('oracle', 'Oracle Database'), ('duckdb', 'DuckDB'),
                          ('snowflake', 'Snowflake'),
                          ('bigquery', 'Google BigQuery'),
                          ('imessage', 'Apple Messages'),

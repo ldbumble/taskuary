@@ -3436,8 +3436,8 @@
       "type": "oracle",
       "title": "Oracle Database",
       "group": "Databases",
-      "planned": true,
-      "desc": "Query Oracle through SQLAlchemy",
+      "planned": false,
+      "desc": "Query Oracle Database by service name as a report or an agent tool - SELECTs only, python-oracledb's thin mode, no Oracle client.",
       "match": [
         "oracle"
       ]
@@ -3446,8 +3446,8 @@
       "type": "cockroachdb",
       "title": "CockroachDB",
       "group": "Databases",
-      "planned": true,
-      "desc": "Postgres-compatible distributed SQL",
+      "planned": false,
+      "desc": "Query CockroachDB as a report or an agent tool through the Postgres driver - SELECTs only, the password kept as the card's secret.",
       "match": [
         "cockroach",
         "cockroachdb"
@@ -3457,8 +3457,8 @@
       "type": "duckdb",
       "title": "DuckDB",
       "group": "Databases",
-      "planned": true,
-      "desc": "A local analytical database over a file or parquet",
+      "planned": false,
+      "desc": "Query a DuckDB file on this computer, and the CSV and Parquet files a query names - opened read-only.",
       "match": [
         "duckdb"
       ]

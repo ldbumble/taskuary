@@ -43,12 +43,14 @@ class Base(unittest.TestCase):
 
 
 class CapacityTests(Base):
-    def test_every_live_session_counts_whatever_it_is_doing(self):
-        t1, t2, t3, t4 = self.task('a'), self.task('b'), self.task('c', 'general'), self.task('d')
+    def test_only_a_working_session_holds_a_slot(self):
+        # the owner, 2026-11-08: an agent waiting on you must not hold up another one starting - only WORKING sessions count
+        t1, t2, t3, t4, t6 = self.task('a'), self.task('b'), self.task('c', 'general'), self.task('d'), self.task('f')
         term.SESSIONS['w'] = fake_session(t1, phase='working')
-        term.SESSIONS['p'] = fake_session(t2, phase='parked')                      # idle at its prompt: still a desk taken
+        term.SESSIONS['p'] = fake_session(t2, phase='parked')                      # waiting on the owner: no slot
         term.SESSIONS['g'] = fake_session(t3, agent='assistant')                    # a general session counts the same
         term.SESSIONS['x'] = fake_session(t4, alive=False)                          # ended: not counted
+        term.SESSIONS['v'] = fake_session(t6, phase='working')
         self.assertEqual(bb.live_count(), 3)
         self.s.set_setting('auto_sessions', '3', 't')
         t5 = self.task('e'); self.s.enqueue_dispatch(t5, None, 'coding', 'slot')

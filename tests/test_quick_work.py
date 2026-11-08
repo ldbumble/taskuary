@@ -268,9 +268,10 @@ def test_a_quick_session_takes_no_desk():
     from taskuary import blackboard as bb
     s = home(); tid, _ = arrived(s)
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True):
-        ses = opened(s, tid); ses.quick = True
+        ses = opened(s, tid); ses.quick = True; ses.busy = True        # working: only a working session holds a slot (2026-11-08)
         assert bb.live_count() == 0
         ses.quick = False; assert bb.live_count() == 1
+        ses.busy = False; assert bb.live_count() == 0                    # ...parked, waiting on the owner, it holds none
 
 def test_file_quick_marks_the_session_quick_itself():
     s = home(); tid, _ = arrived(s)

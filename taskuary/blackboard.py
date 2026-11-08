@@ -396,10 +396,15 @@ PERMANENT = ('unknown agent', 'no coding agent is set up', 'repositor', 'repo:',
 
 
 def live_count() -> int:
-    """Every LIVE session, whatever it is doing: working, idle at its prompt, or stopped at an approval.
-    A desk is taken until the process ends (owner, PW-084) - waiting for approval frees nothing."""
+    """The sessions WORKING right now - what the agent cap is read against. One parked at its prompt, waiting on the owner's answer or an
+    approval, holds no slot (the owner, 2026-11-08: "some are waiting on me and that still holds up another agent being opened?? we can't have
+    that" - option 1, replacing PW-084's "a desk is taken until the process ends"). The owner's own lines never wait on the cap (general.say_line
+    checks none), so answering parked agents may run over it for a while; only new starts wait until the working count is back under."""
     from . import terminal as term
-    return len([t for t in list(term.SESSIONS.values()) if t.alive and getattr(t, 'quick', False) is not True])   # a quick answer is one call, no desk
+    def working(t):
+        try: return t.phase() != 'parked'
+        except Exception: return True          # a session that cannot say counts, as before
+    return len([t for t in list(term.SESSIONS.values()) if t.alive and getattr(t, 'quick', False) is not True and working(t)])   # a quick answer is one call, no desk
 
 def subagent_count() -> int:
     "Subagents the live sessions left running at their last Stop (hooks.py keeps them on the session) - light load, ingest.agent_load."

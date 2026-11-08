@@ -509,6 +509,7 @@ class DecideBody(BaseModel):
     cc: list[str] | None = None      # loop somebody in on this answer (email only)
     reply_text: str | None = None    # on a close-out: the task's pending reply, sent once the merge/close succeeded
     anyway: bool = False             # Send anyway: past a delivery nobody can confirm (verdicts._deliver_review)
+    blanks_ok: bool = False          # ...and past a blank still in the draft, the owner having been asked (blanks.js blankAsk)
     fields: dict | None = None       # an action card's choices the owner changed (who sees a post, now or a draft): connectorcatalog.owner_edits
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
@@ -4976,7 +4977,8 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                       + '; review it and approve again.' if draft
                                       else f"Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
-                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields)
+                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway, fields=body.fields,
+                blanks_ok=body.blanks_ok)
 
 @app.get('/api/reviews/{rid}/closeout')
 def closeout_state(rid: int):

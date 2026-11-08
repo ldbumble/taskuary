@@ -26,7 +26,7 @@ import { DECIDE_TIMEOUT, draftState, failureHead, replySendFailure, reviewDelive
 import { openAppLink } from "./appLinks.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
-import { blankRefusal, blankSpans } from "./blanks.js";
+import { blankAsk, blankRefusal, blankSpans } from "./blanks.js";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -96,6 +96,15 @@ export const CalendarLine = ({ meta }) => (
         {meta.act === "propose" && meta.was ? ` · instead of ${meta.was}` : ""}</Typography>
       {!!meta.clash && <Typography variant="caption" sx={{ color: "#7a2f3c" }}>This {meta.clash}.</Typography>}
     </Box>
+);
+
+// A SEND PRESSED OVER A BLANK ASKS ONCE (the owner, 2026-11-08): one inline line under the buttons, blanks.js's own words, and the press goes
+// only on Send anyway - every card that sends a draft draws this one
+export const BlankAsk = ({ line, onSend, onCancel }) => (
+  <Alert severity="warning" data-tq-blank-ask="" sx={{ mt: 0.75, alignItems: "center" }}
+    action={<Box sx={{ display: "flex", gap: 0.5 }}>
+      <Button size="small" color="inherit" data-tq-blank-send="" onClick={onSend}>Send anyway</Button>
+      <Button size="small" color="inherit" onClick={onCancel}>Cancel</Button></Box>}>{line}</Alert>
 );
 
 // `onOpenTask` is optional: on the task page you are already there.
@@ -246,26 +255,30 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or Draft with AI again.`);
   }, [job]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ...the press stops there, before anything is posted, with the cursor on the first blank
-  const refuseBlank = () => {
+  // ...the press ASKS ONCE, before anything is posted (the owner, 2026-11-08: Send stays lit): "This still has [ROOM]. Send anyway?" with Send
+  // anyway / Cancel under the buttons, the cursor on the first blank. `asked`: the press it holds - replayed as it was, with the text as it is
+  const [asked, setAsked] = useState(null);
+  useEffect(() => { setAsked(null); }, [value]);
+  const askBlank = (press) => {
     if (!blanks.length) return false;
-    setFillIn(true);
+    setAsked({ line: blankAsk(value), ...press });
     const el = draftRef.current?.querySelector("textarea[data-tq-draft]");
     if (el) { el.focus(); el.setSelectionRange(blanks[0][0], blanks[0][1]); }
     return true;
   };
 
   // `close`: false on the pair's plain Approve - the close-out and the reply go, and the task stays open (twoApproves)
-  const decideBoth = async (verb, close = true) => {
+  const decideBoth = async (verb, close = true, blanksOk = false) => {
     if (delivery.frozen) return;
-    // the reply that rides with the close-out is checked before the merge, not after it (verdicts.decide refuses it there too)
-    if (verb !== "reject" && sendable && words.trim() && refuseBlank()) return;
+    // the reply that rides with the close-out is asked about before the merge, not after it (verdicts.decide refuses it there too)
+    if (!blanksOk && verb !== "reject" && sendable && words.trim() && askBlank({ both: true, verb, close })) return;
+    setAsked(null);
     const id = verb === "approve" && close && twoApproves ? "send_close" : verb;
     announce(no(id)); setPressed(id);
     setBusy(true); setErr(""); setSendErr(""); setCoFail(null);
     try {
       const { data } = await api.post(`/api/reviews/${closeout.ReviewId}/decide`,
-        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null },
+        { verb, final_text: null, note: null, reply_text: verb !== "reject" && sendable && words.trim() ? value : null, cc: sendable ? ccNow : null, blanks_ok: blanksOk },
         { timeout: DECIDE_TIMEOUT });
       if (data.blanks?.length) { setFillIn(true); if (!blanks.length) setErr(data.send_error); }
       // refused before anything happened is not "approved, but it did not send"
@@ -288,9 +301,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
   // `close`: Close out's Send and close - the send, then the task's close once the server's receipt says it went (onSent closes). Check
   // delivery and Send anyway pass nothing: they finish the press that froze the draft, held in `closing`
-  const decide = async (verb, anyway = false, close = undefined) => {
+  const decide = async (verb, anyway = false, close = undefined, blanksOk = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
-    if (verb === "approve" && refuseBlank()) return;
+    if (verb === "approve" && !blanksOk && askBlank({ verb, anyway, close })) return;
+    setAsked(null);
     if (close !== undefined) { if (close) closing.add(r.ReviewId); else closing.delete(r.ReviewId); }
     const shut = closing.has(r.ReviewId);
     announce(no(verb === "approve" && shut ? "send_close" : verb));
@@ -300,7 +314,7 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway }, { timeout: DECIDE_TIMEOUT });
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk }, { timeout: DECIDE_TIMEOUT });
       if (data.ok && !data.send_error && verb === "approve") closing.delete(r.ReviewId);    // the press is over: the next one says again which send
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }
@@ -738,6 +752,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         </>
       </Box>
       {fillLine && <Alert severity="warning" data-tq-fill-in="" sx={{ mt: 0.75 }} onClose={() => setFillIn(false)}>{fillLine} - nothing was sent.</Alert>}
+      {asked && <BlankAsk line={asked.line} onCancel={() => setAsked(null)}
+        onSend={() => (asked.both ? decideBoth(asked.verb, asked.close, true) : decide(asked.verb, asked.anyway, asked.close, true))} />}
       {/* what the one word does HERE - the buttons never change, this line does */}
       {thenLine && <Typography data-tq-then-line="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.5 }}>{thenLine}</Typography>}
       {(coFail || (gh && (blocked || gh.note))) && (() => {

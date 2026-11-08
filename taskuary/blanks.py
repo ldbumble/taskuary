@@ -10,7 +10,10 @@ from pathlib import Path
 _J = json.loads(Path(__file__).with_name('blanks.json').read_text(encoding='utf-8'))
 NOT_SLOTS, SAID = frozenset(_J['not_slots']), frozenset(_J['said'])
 # a bracket not glued to a word before it (an index) and not a link's text or a reference's label after it
-BOX = re.compile(r'(?<![\w\]\\])\[([^\[\]\n]{1,60})\](?!\(|\[|:\s*(?:https?://|<))', re.A)
+BOX = re.compile(r'(?<![\w\]\\])\[([^\[\]\n]{1,160})\](?!\(|\[|:\s*(?:https?://|<))', re.A)
+# ...a choice left for the owner ("[Gail is joining / Gail is not joining]", the product audit 2026-11-08) and a bare line to fill ("by ___")
+_CHOICE = re.compile(r'\S\s+/\s+\S')
+LINE = re.compile(r'(?<![\w_])_{3,}(?![\w_])')
 _SHOUT = re.compile(r"[A-Z][A-Z0-9'’&/.,#_ -]*")
 _CUE = re.compile(r"(?ai)(?:%s)\b" % '|'.join(re.escape(c) for c in sorted(_J['cues'], key=len, reverse=True)))
 _PHRASE = re.compile(r"[A-Za-z][\w'’&/.,# -]{0,39}", re.A)
@@ -21,7 +24,8 @@ _ASIDE = re.compile(r'```[\s\S]*?(?:```|\Z)|`[^`\n]*`|^[ \t]*>[^\n]*', re.M)
 def is_slot(inner: str) -> bool:
     s = inner.strip()
     if not s or s.upper() in NOT_SLOTS or SAID & set(re.findall(r'[a-z]+', s.lower())): return False
-    if re.fullmatch(r'_{2,}', s): return True
+    if re.fullmatch(r'_{2,}', s) or _CHOICE.search(s): return True
+    if len(s) > 60: return False
     if _SHOUT.fullmatch(s): return len(re.findall('[A-Z]', s)) >= 2
     return bool(_PHRASE.fullmatch(s) and _CUE.match(s))
 
@@ -30,7 +34,9 @@ def spans(text: str) -> list:
     """(start, end, '[SLOT]') for every blank still in the text, in order."""
     if not text: return []
     seen = _ASIDE.sub(lambda m: re.sub(r'[^\n]', ' ', m.group()), text)
-    return [(m.start(), m.end(), text[m.start():m.end()]) for m in BOX.finditer(seen) if is_slot(m.group(1))]
+    box = [(m.start(), m.end(), text[m.start():m.end()]) for m in BOX.finditer(seen) if is_slot(m.group(1))]
+    line = [(m.start(), m.end(), m.group()) for m in LINE.finditer(seen) if not any(a <= m.start() < b for a, b, _ in box)]
+    return sorted(box + line)
 
 
 def find(text: str) -> list:

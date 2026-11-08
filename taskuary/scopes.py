@@ -30,6 +30,7 @@ ACTIONS = {
     # ── read: the connection is a window, nothing upstream moves ──────────────────────
     'poll': 'read', 'fetch': 'read', 'search': 'read', 'list': 'read', 'discover': 'read',
     'image_generate': 'read',      # draws a picture: it spends, but nothing upstream moves
+    'kling_video': 'read', 'runway_video': 'read',     # ...and a clip, the same way
     'sqlite': 'read', 'mssql': 'read', 'database': 'read',
     'taskuary_data': 'read', 'dashboard': 'read',     # a dashboard's own rows and the dashboard: reads (each source is gated on its own card)
     'intacct': 'read', 'intacct_fields': 'read',      # readByQuery and lookup; nothing posts

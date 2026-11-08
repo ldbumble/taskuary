@@ -35,7 +35,7 @@ import { GoogleCalendar } from "./GoogleCalendar.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
+import { CATALOGUE, matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
 import { settingsOf } from "./actionCard.js";
 import { isPollField, pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
@@ -679,14 +679,22 @@ const META = {
       "core is the cheap default; ultra costs more per image.",
       "Test draws one small grey square. Enable to use it."],
     agent: ["Ask the owner for a Stability AI key, save it as Secret, leave model blank for core, Test, turn it on, SETUP DONE."] },
-  runway_image: { group: "AI — images", channel: "ai", srcLabel: null,
-    fields: [["model (default gen4_image)", "model"]],
+  runway_image: { group: "AI — video", channel: "ai", srcLabel: null,
+    fields: [["image model (default gen4_image)", "model"], ["video model (default gen4.5)", "video_model"]],
     secretLabel: "Runway API key",
-    desc: "Runway's Gen-4 image model, on its developer API — credits bought in the Runway developer portal, apart from a Runway app plan.",
+    desc: "Runway's developer API, one key for both: Gen-4 pictures, and Gen-4.5 video clips your agents make from a sentence or a picture (runway_video) — credits bought in the Runway developer portal, apart from a Runway app plan.",
     howto: ["Create a key in the Runway developer portal (dev.runwayml.com) and paste it under Credentials.",
       "The developer API bills its own credits - add some there before testing.",
       "Test draws one small grey square. Enable to use it."],
     agent: ["Ask the owner for a Runway API key from dev.runwayml.com, save it as Secret, leave model blank for gen4_image, Test, turn it on, SETUP DONE."] },
+  kling: { group: "AI — video", channel: "ai", srcLabel: null,
+    fields: [["model (default kling-2.6)", "model"]],
+    secretLabel: "Kling API key",
+    desc: "Kling's video models on its own API — your agents make a 5 or 10 second clip from a sentence, or animate a picture (kling_video), into the task's outputs.",
+    howto: ["Sign in to the Kling AI developer console (kling.ai) and press + Create a new API Key. It is shown once.",
+      "Paste it under Credentials. The API bills its own resource packs - buy one there first.",
+      "Test reads your task list, which spends nothing. Enable to let agents make clips."],
+    agent: ["Ask the owner for a Kling API key from the Kling AI developer console, save it as Secret, leave model blank for kling-2.6, Test, turn it on, SETUP DONE."] },
   openrouter_image: { group: "AI — images", channel: "ai", srcLabel: null,
     fields: [["model (default google/gemini-3-flash-image)", "model"]],
     secretLabel: "OpenRouter API key",
@@ -1809,6 +1817,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
     : conn.Type === "agent_desktop" ? <DesktopDetail key={conn.ConnectorId} {...shared} />
+    : VIDEO_TOOLS.includes(conn.Type) ? <VideoToolDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} chatsAsk={chatsAsk} />;
   const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
@@ -1883,8 +1892,20 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       note: "Without a card here, nothing can draw. With one, an agent asked for a picture generates it and files it on the task, where the timeline shows it inline. Replicate reaches the most models for one token; a local OpenAI-compatible server costs nothing and keeps the prompt on this machine.",
       cards: [
         ...channelCards(["openai_image", "azure_openai_image", "gemini_image", "stability_image",
-          "openrouter_image", "replicate_image", "runway_image", "xai_image", "image_server"]),
+          "openrouter_image", "replicate_image", "xai_image", "image_server"]),
         ...catalogCards("AI — images"),
+      ] },
+    // video for the agents (videotools.py): clips from a key card, and editors that live in the agent CLI as MCP servers or skills
+    { title: "AI — video",
+      note: "Runway and Kling make a clip from a sentence with a key on their card. Descript, InVideo, Vidova and OpusClip are the vendor's own MCP server, added to Claude Code or Codex - you sign in to the vendor there, once. video-use is a Claude Code skill that edits video files on this computer.",
+      cards: [
+        ...channelCards(["runway_image", "kling"]),
+        ...specialCards("descript", "Descript", "", "descript mcp edit video podcast transcript", videoDesc),
+        ...specialCards("invideo", "InVideo", "", "invideo mcp make a video script", videoDesc),
+        ...specialCards("vidova", "Vidova", "", "vidova mcp skills edit clips", videoDesc),
+        ...specialCards("opusclip", "OpusClip", "", "opusclip opus clip mcp short clips captions social", videoDesc),
+        ...specialCards("video_use", "video-use", "", "video-use video use browser use skill ffmpeg elevenlabs cut edit", videoDesc),
+        ...catalogCards("AI — video"),
       ] },
     // mail and chat are different jobs: one group held nine cards and read as a wall
     { title: "Email", cards: [...channelCards(["outlook", "gmail", "imap"]), ...catalogCards("Email")] },
@@ -2831,6 +2852,46 @@ function DesktopDetail({ conn: savedConn, reload, onBack, onCreated }) {
       </Box>
       <TestLine test={test} mt={1} />
       {draft.err && <Typography role="alert" sx={{ mt: 1, color: "#8a3646", fontSize: 12 }}>{draft.err}</Typography>}
+      <CardPlaybooks type={conn.Type} />
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+    </Box>
+  );
+}
+
+/* ── A video tool for the agents: a vendor's MCP server added to the agent CLIs here, and/or a skill on disk (videotools.py) ── */
+const VIDEO_TOOLS = ["descript", "invideo", "vidova", "opusclip", "video_use"];
+const videoDesc = (c) => (c.Active ? "added · your agents can use it" : "not added");
+function VideoToolDetail({ conn, reload, onBack, onCreated }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState(null);         // what the last Add press said, one line per step
+  const look = () => api.get(`/api/connectors/${conn.ConnectorId}/tool`).then(({ data }) => setSt(data || {})).catch(() => setSt({}));
+  useEffect(() => { look(); }, [conn.ConnectorId]);
+  const add = async () => {
+    setBusy(true);
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/tool`); setSt(data); setSaid(data.said || []); }
+    catch (e) { setSaid([e?.response?.data?.detail || "Add did not run"]); }
+    setBusy(false); reload();
+  };
+  const clis = Object.entries(st?.clis || {}), skill = st?.skill;
+  const name = { claude: "Claude Code", codex: "Codex" };
+  return (
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>{CATALOGUE.find((c) => c.type === conn.Type)?.desc}</Typography>
+      {st?.url && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>MCP server <code>{st.url}</code></Typography>}
+      {clis.map(([c, v]) => (
+        <Typography key={c} variant="body2" sx={{ color: INK }}>{name[c]}: {!v.here ? "not on this computer" : v.added ? "added" : "not added yet"}</Typography>))}
+      {skill && <Typography variant="body2" sx={{ color: INK }}>Skill <a href={skill.repo} target="_blank" rel="noreferrer">{skill.name}</a>: {skill.here ? "installed" : "not installed"}</Typography>}
+      {(st?.missing || []).map((m) => <Typography key={m} variant="body2" sx={{ color: DIM }}>Still needs {m}.</Typography>)}
+      {!!st?.sign_in?.length && <Typography variant="body2" sx={{ color: DIM, mt: 1, maxWidth: 720 }}>
+        Sign-in is the vendor's, in the agent: {st.sign_in.join("; or ")}. Taskuary never sees that sign-in, so it cannot list this server's tools - adding it here is your word that your agents may use all of them.</Typography>}
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
+        <Button variant="outlined" disabled={busy || !st || st.ready} onClick={add} startIcon={busy ? <CircularProgress size={12} /> : null}>
+          {st?.ready ? "Added" : skill && !st?.url ? "Install" : "Add"}</Button>
+      </Box>
+      {(said || []).map((l) => <Typography key={l} variant="caption" sx={{ color: DIM, display: "block", mt: .5 }}>{l}</Typography>)}
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>

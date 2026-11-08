@@ -862,6 +862,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # the knowledge base: documents indexed in this store (knowledge.py) - searched, and refreshed on a schedule
             'kb_search': _lazy('knowledge', 'run_kb_search'), 'kb_reindex': _lazy('knowledge', 'run_kb_reindex'),
             'image_generate': _lazy('images', 'run_image_tool'),   # a picture, filed on its task or message
+            'kling_video': _lazy('videotools', 'run_kling_video'), 'runway_video': _lazy('videotools', 'run_runway_video'),   # a clip, into the task's outputs
             'handbook_search': _lazy('handbook', 'run_handbook_search'), 'handbook_write': _lazy('handbook', 'run_handbook_write'),
             'handbook_vote': _lazy('handbook', 'run_handbook_vote'),
             'hub_search': _lazy('hub', 'run_hub_search'), 'hub_write': _lazy('hub', 'run_hub_write'),
@@ -938,6 +939,7 @@ CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhou
            'alpaca_quotes': 'alpaca', 'alpaca_bars': 'alpaca',
            'markets_screen': 'screen',
            'kb_search': 'knowledge', 'kb_reindex': 'knowledge',
+           'kling_video': 'kling', 'runway_video': 'runway_image',     # Runway's video spends the same key as its pictures
            'handbook_search': 'handbook', 'handbook_write': 'handbook', 'handbook_vote': 'handbook',
            'hub_search': 'handbook', 'hub_write': 'handbook', 'hub_vote': 'handbook', 'hub_comment': 'handbook',
            **{f'{t}_{v}': t for t in ('jira', 'monday', 'linear') for v in ('comment', 'move', 'assign', 'close')}}
@@ -1139,6 +1141,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'brave_search': _apikey_card('brave_search'), 'serpapi': _apikey_card('serpapi'),
                  'serper': _apikey_card('serper'), 'scrapingbee': _apikey_card('scrapingbee'),
                  'apify': _apikey_card('apify'),
+                 'kling_video': _apikey_card('kling'), 'runway_video': _apikey_card('runway_image'),
                  # fred needs no entry here - fredgraph.csv is keyless, unlike its JSON api
                  'td_quotes': _apikey_card('twelvedata'), 'td_indicator': _apikey_card('twelvedata'),
                  'av_quotes': _apikey_card('alphavantage'),

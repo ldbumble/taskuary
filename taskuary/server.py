@@ -7552,6 +7552,25 @@ def _failed_test(cid: int, name: str, out: dict):
 
 class ConnectorTestBody(BaseModel): ConfigJson: str | None = None; Secret: str | None = None
 
+def _video_card(cid: int):
+    from . import videotools
+    c = store.get_connector(cid)
+    if not c or c['Type'] not in videotools.TYPES: raise HTTPException(404, 'not a video tool card')
+    return videotools, c['Type']
+
+@app.get('/api/connectors/{cid}/tool')
+def video_tool_state(cid: int):
+    "A video tool card's state (videotools.state): which CLI has its MCP server, whether its skill is on disk, what is missing."
+    vt, t = _video_card(cid)
+    return vt.state(store, t)
+
+@app.post('/api/connectors/{cid}/tool')
+def video_tool_add(cid: int):
+    "The card's Add / Install press - the owner's only (guard.DENIED): registers the server in the CLIs here and installs the skill."
+    vt, t = _video_card(cid)
+    try: return vt.add(store, t, ACTOR)
+    except RuntimeError as e: raise HTTPException(422, str(e))
+
 @app.post('/api/connectors/{cid}/test')
 def connector_test(cid: int, body: ConnectorTestBody | None = None):
     from .channels import test_connector

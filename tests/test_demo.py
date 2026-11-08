@@ -551,3 +551,17 @@ class TheGeneralAgentsDayTests(unittest.TestCase):
         tid = next(t for n, t in tids.items() if 'Trainly' in n)
         self.assertTrue(general.owner_answered_last(s, tid))
         self.assertIn('recommend closing', general.shown_history(s, tid)[-1]['summary']['did'])
+
+
+class DemoChatTurnTests(unittest.TestCase):
+    """agent-flow audit 2026-11-07: a task the visitor just made was told "the turns above were written in advance" - with none above."""
+    def test_the_answer_points_at_turns_above_only_when_there_are_some(self):
+        from taskuary import general, server
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Plan the team lunch', 'Kind': 'general', 'Status': 'open', 'Source': 'assistant'}, 'owner')
+        with mock.patch.object(server, 'store', s), mock.patch.object(demo, 'enabled', return_value=True):
+            self.assertEqual(server._demo_turn(tid, 'book it'), demo.NEW_CHAT_TURN)
+            self.assertEqual(server._demo_turn(tid, 'and invite Erin'), demo.NEW_CHAT_TURN)       # its own answer is not a turn above
+            s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I found three places near the office.')
+            self.assertEqual(server._demo_turn(tid, 'the second one'), demo.CHAT_TURN)
+        self.assertNotIn('above', demo.NEW_CHAT_TURN)

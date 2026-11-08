@@ -961,6 +961,10 @@ AGENT_DAY = {
 # ...and what is typed into one of those chats: kept, and answered in words that say why nothing ran (server._demo_turn)
 CHAT_TURN = ('This is the demo, so no agent runs here - the turns above were written in advance to show what it does. In your own '
              'Taskuary, what you type here goes straight to the agent on this task, and its answer lands in this chat.')
+# ...and on a task the visitor just made there are no turns above to point at (agent-flow audit, 2026-11-07)
+NEW_CHAT_TURN = ('This is the demo, so no agent runs here. In your own Taskuary, what you type here goes straight to the agent on this '
+                 'task, and its answer lands in this chat.')
+def chat_turn(had_turns: bool) -> str: return CHAT_TURN if had_turns else NEW_CHAT_TURN
 
 
 def _at(mins: float) -> str: return (datetime.now() - timedelta(minutes=mins)).strftime('%Y-%m-%d %H:%M:%S')

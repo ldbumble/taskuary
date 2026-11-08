@@ -377,7 +377,7 @@ def main():
     ap.add_argument('--search', metavar='WORDS', nargs='?', const='',
                     help="search the owner's own mail and messages in Taskuary - with --from, --subject, --since, --until - "
                          'and print each hit: its id, when, who, subject, thread and a snippet')
-    ap.add_argument('--from', dest='sender', default='', metavar='WHO', help='with --search: the sender, a name or an address')
+    ap.add_argument('--from', dest='sender', default='', metavar='WHO', help='with --search: the sender, a name or an address; with --draft, the connected mailbox it is sent FROM')
     ap.add_argument('--since', default='', metavar='YYYY-MM-DD', help='with --search: sent on or after this day')
     ap.add_argument('--until', default='', metavar='YYYY-MM-DD', help='with --search: sent on or before this day')
     ap.add_argument('--limit', type=int, default=20, help='with --search: how many hits at most')
@@ -438,7 +438,7 @@ def main():
             except OSError as e: print(f'not saved: cannot read {a}: {e.strerror or e}'); return
         who = os.environ.get('TASKUARY_AGENT') or 'agent'
         got = (_post('/api/agent/draft', {'task_id': int(tid), 'text': text, 'to': args.to, 'subject': args.subject, 'slot': args.slot,
-                                          'agent': who, 'files': files, 'cc': args.cc or []}, stranger) if drafting
+                                          'agent': who, 'files': files, 'cc': args.cc or [], 'mailbox': args.sender}, stranger) if drafting
                else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up,
                                                 'to': args.to, 'answers': args.answers, 'only': args.only, 'cc': args.cc, 'why_to': args.why_to}, stranger))
         if not got: return

@@ -129,12 +129,23 @@ def seen(store, tid: int):
 
 
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
-          channel: str = 'email', name: str = '', cc=()) -> dict:
+          channel: str = 'email', name: str = '', cc=(), mailbox: str = '') -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
     else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it. `cc`: who
-    else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her)."""
+    else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her).
+    `mailbox`: the connected mailbox it leaves FROM - a + New task has no mail in to answer from, so "send it from my JOIN
+    Gmail" fell to the first Outlook card, and the agent, with no way to say it, tried the Gmail card as a tool (TQ-1354)."""
     text = str(text or '').strip()
     if not text: return {'ok': False, 'why': 'no email text'}
+    mailbox = str(mailbox or '').strip()
+    if mailbox:
+        from . import outbound
+        if channel != 'email': return {'ok': False, 'why': f'{channel} has no From - only an email leaves from a mailbox'}
+        box = outbound._box(store, mailbox)
+        if not box:
+            have = ', '.join(m['address'] for m in outbound.mailboxes(store)) or 'none is connected'
+            return {'ok': False, 'why': f'{mailbox} is not a connected mailbox - send from one of: {have}'}
+        mailbox = box['address']
     cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
     if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
     if bad := [a for a in cc if '@' not in a]: return {'ok': False, 'why': f"cc takes email addresses - {', '.join(bad)} is not one"}
@@ -161,8 +172,13 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
     subj = subject_of(store, tid, hit, subject) if kind == 'email' else ''
-    deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
+    # a rewrite that names no From keeps the one already picked - the owner's, or the agent's first draft's
+    try: was = (json.loads(rv.get('Deliver') or '{}') or {}).get('mailbox') if rv and rv.get('Status') == 'pending' else None
+    except (TypeError, ValueError): was = None
+    box = (mailbox or was) if kind == 'email' else None
+    deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid),
+                          **({'mailbox': box} if box else {})})
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
         if not store.set_review_deliver(rid, deliver): return {'ok': False, 'why': 'that email is already being sent'}

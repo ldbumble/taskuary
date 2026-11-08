@@ -133,9 +133,11 @@ TOOLS = {
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'propose_email': ('propose', "Draft one more email this task needs, to someone. `subject` is the line its reader sees - write it for "
                       "them, never this task's title (that is the owner's own label); writing back to someone who mailed on this task, "
-                      "keep their mail's subject with \"Re: \". It waits with a Send button for the owner - nothing is sent. `cc`: who else is copied (addresses). `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
+                      "keep their mail's subject with \"Re: \". It waits with a Send button for the owner - nothing is sent. `cc`: who else is copied (addresses). "
+                      "`from`: the connected mailbox it leaves from (an address list_systems names) - leave it out and it goes from the "
+                      "mailbox this task's mail came in on, else the first one; a mailbox is never a run_system tool. `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
                       "takes the place of - it is withdrawn in the same call.",
-                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'cc': {'type': 'array', 'items': _STR}, 'attach': _ATTACH, 'replaces': _STR},
+                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'cc': {'type': 'array', 'items': _STR}, 'from': _STR, 'attach': _ATTACH, 'replaces': _STR},
                          ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
@@ -299,7 +301,7 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         return _j(replaced(doors, tid, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
     if name == 'propose_email':
         out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')),
-                            a.get('cc') or ())
+                            a.get('cc') or (), str(a.get('from') or ''))
         return _j(replaced(doors, tid, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
     if name == 'sign_form':
         out = doors['sign'](tid, a)

@@ -99,14 +99,20 @@ def agent_systems(store) -> str:
     from .store import roles_of
     from . import scopes
     from .reports import REGISTRY, card_of
-    tools = [c for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c)]
-    if not tools: return ''
+    from .outbound import mailboxes
     # the TOOL types each card runs, by name: a card's own type is not one when its tools are named apart from it - the Hub card
-    # is `handbook` and its tools handbook_search/..., so "type handbook" came back "unknown tool type" (2026-10-05)
-    def kinds(c): return sorted(t for t in REGISTRY if card_of(t) == c['Type'] and not t.startswith('_')) or [c['Type']]
-    lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(kinds(c))}"
-             for c in tools]
-    return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n'
+    # is `handbook` and its tools handbook_search/..., so "type handbook" came back "unknown tool type" (2026-10-05). A card with
+    # no tool at all is not listed as one: the Gmail card read "tools: gmail" and the agent sending from it got "unknown tool type:
+    # gmail" (TQ-1354) - a mailbox is sent FROM with propose_email, named below
+    def kinds(c): return sorted(t for t in REGISTRY if card_of(t) == c['Type'] and not t.startswith('_'))
+    tools = [(c, k) for c in store.list_connectors() if c['Active'] and 'tool' in roles_of(c) and (k := kinds(c))]
+    boxes = mailboxes(store)
+    mail = ('MAILBOXES you can send FROM (an email waits for the owner\'s Send): ' + ', '.join(f"{m['address']} ({m['kind']})" for m in boxes)
+            + ' - propose_email with `from` set to one (taskuary --draft ... --from <address>); they are not run_system tools.') if boxes else ''
+    if not tools: return mail
+    lines = [f"- {c['Name'] or c['Type']} (connector_id {c['ConnectorId']}, authority {scopes.scope_of(c)}) - tools: {', '.join(k)}"
+             for c, k in tools]
+    return ('YOUR SYSTEMS (the owner\'s connections you may use)\n' + '\n'.join(lines) + '\n' + (mail + '\n' if mail else '') +
             'Call one: curl -s -X POST "$TASKUARY_URL/api/tools/run" -H "X-Taskuary-Token: $TASKUARY_TOKEN" '
             '-H "X-Taskuary-Task-Token: $TASKUARY_TASK_TOKEN" -H "Content-Type: application/json" '
             '-d \'{"type": "<one of its tools>", "connector_id": <id>, "task_id": \'"$TASKUARY_TASK"\', ...}\' - saved credentials are '

@@ -402,11 +402,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
       {/* the kinds are tabs, not a select: three doors that all exist is the point of the sheet,
           and a closed dropdown hides two of them behind a click */}
-      <Box sx={{ display: "flex", gap: 0.25, px: { xs: 1, sm: 3 }, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", scrollbarWidth: "none" }}>
+      {/* ...every one in sight: a row that scrolled with no scrollbar cut the last at 1440px ("Playbo...") and hid four on a phone, with nothing
+          to say there were more (the product audit, 2026-11-08) - the row wraps instead */}
+      <Box data-tq-new-kinds="" sx={{ display: "flex", flexWrap: "wrap", gap: 0.25, px: { xs: 1, sm: 3 }, borderBottom: `1px solid ${BORDER}` }}>
         {KINDS.map((k) => (
           <Box key={k.key} {...pressable(() => { setKind(k.key); setErr(""); setOk(""); })} role="tab"
             aria-selected={kind === k.key} title={k.hint}
-            sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.5 }, py: 1, cursor: "pointer", flexShrink: 0,
+            sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.25 }, py: 1, cursor: "pointer", flexShrink: 0,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", mb: "-1px",
               color: kind === k.key ? INK : FAINT,
               borderBottom: `2px solid ${kind === k.key ? ACCENT : "transparent"}`,

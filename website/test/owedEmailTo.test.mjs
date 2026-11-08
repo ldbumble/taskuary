@@ -12,3 +12,10 @@ test("in the chat's cards the owed email wears its own To, and the sender's line
   const page = src("TaskPage.jsx");
   assert.match(page, /<Typography sx=\{\{ \.\.\.label, flexShrink: 0 \}\} data-tq-reply-to="">\{owesEmails \? "Reply to" : "To"\}<\/Typography>/);
 });
+
+test("a drafted owed email says its To once - on its card, with Change - never again on the slot's own line", () => {
+  const slot = src("SlotList.jsx");
+  assert.match(slot, /const carded = rv\?\.Status === "pending" && \(i\.out\.kind \|\| "email"\) === "email";/);
+  assert.match(slot, /\{carded \? i\.out\.name && <Typography[^]*?: <>\s*<Typography sx=\{\{ \.\.\.label, flexShrink: 0 \}\} data-tq-slot-to/);
+  assert.match(src("ReviewDecision.jsx"), /<ToRow to=\{replyContext\(filedDelivery\)\}/);
+});

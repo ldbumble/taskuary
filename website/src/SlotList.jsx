@@ -36,14 +36,17 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
       {items.map((i) => {
         const rv = byRid[i.rid];
         const named = String(i.out.to || "");
+        // ...a drafted EMAIL's To is its card's own row, with its Change - said here as well it read twice (agent-flow audit, 2026-11-07)
+        const carded = rv?.Status === "pending" && (i.out.kind || "email") === "email";
         return (
           <Box key={i.id} sx={{ mb: 1 }}>
             {/* ...each wears its OWN To, drafted or not (the owner, 2026-11-02): the sender's To under it read as this email's */}
             <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8 }}>
+              {carded ? i.out.name && <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{i.out.name}</Typography> : <>
               <Typography sx={{ ...label, flexShrink: 0 }} data-tq-slot-to={i.id}>To</Typography>
               <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, fontWeight: 600 }}>{(i.out.kind || "email") === "email"
                 ? <>{i.out.name ? `${i.out.name} · ` : ""}{named}{named.includes("@") ? "" : " ?"}</>
-                : `${i.out.name || named} · ${i.out.kind}`}</Typography>
+                : `${i.out.name || named} · ${i.out.kind}`}</Typography></>}
               <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}
                 {i.out.candidates?.length ? ` · could be ${i.out.candidates.slice(0, 3).join(" or ")}` : ""}</Typography>
               {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>Drop</Button>}

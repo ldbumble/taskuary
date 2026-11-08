@@ -2,6 +2,14 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.16 - 2026-11-08
+
+- The agent's own turn picks the lit button; the bar drops Reply and Hand it to a person
+- No Send is lit over a card whose channel is not connected; a phone's chat box stays at its foot
+- Search reaches the agent chat: the owner's lines, the agent's answers and its drafts
+- A video tool's card signs in with one press
+- A turn whose words equal its summary's What I did draws its words
+
 ## 0.3.11.15 - 2026-11-08
 
 - An agent's email keeps its CC, and a withdrawn email can be written again

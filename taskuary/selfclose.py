@@ -509,7 +509,8 @@ DRAFT_OPEN, DRAFT_CLOSE = '[[TASKUARY-DRAFT', '[[/TASKUARY-DRAFT]]'
 _DRAFT_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?DRAFT\b([^\]]*)\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?DRAFT\s*\]\]', re.I | re.S)
 _ATTR_RE = re.compile(r'(slot|to|subject)\s*=\s*(?:"([^"]*)"|(\S+))', re.I)
 DRAFT_LINE = ('EMAILS THAT CLOSE THIS TASK: the checklist lines marked "-> email to" are emails this task owes. Write each one as '
-              f'{DRAFT_OPEN} slot=<id>]]<the email>{DRAFT_CLOSE} (or to=<address> subject="<subject>" for one that is not listed). '
+              f'{DRAFT_OPEN} slot=<id> subject="<subject>"]]<the email>{DRAFT_CLOSE} (to=<address> in place of slot for one that is not '
+              'listed). The subject is written for its reader, never the title of this task; to someone who mailed on this task, "Re: " their subject. '
               "Each waits for the owner's approval - nothing is sent until they approve it.")
 
 

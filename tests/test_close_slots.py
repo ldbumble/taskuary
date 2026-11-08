@@ -207,6 +207,18 @@ def test_a_drafted_slot_on_a_mail_task_still_sends(s):
     assert approve(s, out['review_id'])['ok']
 
 
+def test_an_agent_email_never_goes_out_headed_with_the_task_title(s):
+    tid = typed(s, FOUR[:2]); subj = lambda out: json.loads(s.get_review(out['review_id'])['Deliver'])['subject']
+    s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Tab 2 numbers', 'FromEmail': 'ray@northwind.example',
+                   'BodyText': 'Can you check tab 2?', 'SentAt': '2026-10-01 09:00:00', 'Status': 'routed'})
+    assert subj(slots.draft(s, tid, 'Fine.', to='omar@northwind.example', subject='Lunch on Friday')) == 'Lunch on Friday'
+    assert subj(slots.draft(s, tid, 'Tab 2 is fine.', to='ray@northwind.example')) == 'Re: Tab 2 numbers'
+    assert subj(slots.draft(s, tid, 'Tab 1 is fine.', to='paula@northwind.example')) == 'Where tab 1 stands'
+    assert 'Check the four tabs' not in {subj(slots.draft(s, tid, 'Hi.', to='gail@northwind.example'))}
+    from taskuary import agenttools
+    assert {'to', 'subject', 'text'} <= set(agenttools.TOOLS['propose_email'][2]['required'])
+
+
 def test_the_chat_block_is_read_and_taken_out():
     text, found = selfclose.draft_markers('Done.\n[[TASKUARY-DRAFT to=paula@northwind.example subject="Tab 1"]]Tab 1 is fine.[[/TASKUARY-DRAFT]]')
     assert text == 'Done.' and found == [({'to': 'paula@northwind.example', 'subject': 'Tab 1'}, 'Tab 1 is fine.')]

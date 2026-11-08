@@ -154,7 +154,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         hit, added = made[0], True
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
-    subj = str(subject or o.get('subject') or (store.get_task(tid) or {}).get('Title') or '')[:200] if kind == 'email' else ''
+    subj = subject_of(store, tid, hit, subject) if kind == 'email' else ''
     deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': [], 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
     if rv and rv.get('Status') == 'pending':
@@ -169,6 +169,19 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
+
+
+def subject_of(store, tid: int, hit: dict, subject: str = '') -> str:
+    """The subject an email goes out with: the one written for its reader, else the slot's, else "Re:" the mail its person
+    sent on this task, else what the slot is about. Never the task's title - that is the owner's own label, and three poll
+    emails went out headed with it (agent-flow audit, 2026-11-07)."""
+    from .outbound import re_subject
+    o, to = hit['out'], str(hit['out'].get('to') or '').casefold()
+    theirs = store._one("SELECT Subject FROM message WHERE TaskId=? AND LOWER(IFNULL(FromEmail,''))=? AND IFNULL(Subject,'')<>'' "
+                        "ORDER BY SentAt DESC, MessageId DESC LIMIT 1", (tid, to)) if '@' in to else None
+    about = str(hit.get('text') or '').partition(' - ')[2].strip()
+    s = ' '.join(str(subject or o.get('subject') or (theirs and re_subject(theirs['Subject'])) or about[:1].upper() + about[1:]).split())
+    return s[:200]
 
 
 def readdress(store, rv: dict, to: list, actor: str = 'owner') -> dict:

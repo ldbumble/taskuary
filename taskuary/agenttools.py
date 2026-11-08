@@ -131,10 +131,11 @@ TOOLS = {
                        "correct a reply, just propose the new one: it takes the old one's place. Setting up a new email IN PLACE of an old one "
                        "(the owner changed who it goes to), give the new one `replaces` instead - one call, one Send left.",
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
-    'propose_email': ('propose', "Draft one more email this task needs (to someone, with a subject). It waits with a Send button for "
-                      "the owner - nothing is sent. `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
+    'propose_email': ('propose', "Draft one more email this task needs, to someone. `subject` is the line its reader sees - write it for "
+                      "them, never this task's title (that is the owner's own label); writing back to someone who mailed on this task, "
+                      "keep their mail's subject with \"Re: \". It waits with a Send button for the owner - nothing is sent. `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
                       "takes the place of - it is withdrawn in the same call.",
-                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH, 'replaces': _STR}, ('text',)),
+                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH, 'replaces': _STR}, ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
     # want me to send it out'"): signed with the picture the owner saved, which the agent never sees (handsign)

@@ -30,6 +30,22 @@ class RegularAgentQuestionTests(unittest.TestCase):
         self.assertEqual(info['state'], 'asking')
         self.assertIn('Which letterhead?', info['line'])
 
+    def test_several_questions_show_the_first_with_how_many_more_and_bind_as_one_set(self):
+        # agent-flow audit 2026-11-07: four questions in one turn, and the rail held only "any airline?" - "where from?" was hidden
+        from taskuary import taskstate
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Book the flight', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        qs = ['Where are you flying from?', 'Which dates?', 'One way or return?', 'Any airline?']
+        g = ws.group_key('g1:' + '|'.join(qs))
+        for i, q in enumerate(qs, 1): ws.record(s, t, 'g1', 'input_needed', request_id=ws.question_id(g, i), text=q, source='api')
+        fake = types.SimpleNamespace(store=s, task_id=t, sid='g1')
+        for got in (ws.asking_of(s, fake), taskstate.open_question(s, t)):
+            self.assertEqual(got['text'], 'Where are you flying from? (+3 more)')
+            self.assertEqual(got['questions'], qs)
+        self.assertEqual(len(ws.question_group(s, fake)), 4)
+        self.assertIn('the main question first', general.WORK_LINE)
+        self.assertIn('Never end a turn with only questions', general.WORK_LINE)
+
 
 if __name__ == '__main__': unittest.main()
 

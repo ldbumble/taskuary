@@ -430,8 +430,13 @@ def connect_fix(store, kind) -> dict | None:
     if not k or k in NEVER: return None
     from .imapmail import HOSTS
     from . import connectorcatalog
-    live = {str(c.get('Type') or '').lower() for c in store.list_connectors() if c.get('Active')}
-    if k == 'email': return None if live & {*MAILBOXES, *HOSTS} else {'says': 'No mailbox is connected', 'label': MAIL[0], 'href': MAIL[1]}
+    cards = store.list_connectors()
+    live = {str(c.get('Type') or '').lower() for c in cards if c.get('Active')}
+    if k == 'email':
+        if live & {*MAILBOXES, *HOSTS}: return None
+        # ...its button opens the mailbox's own card - one set up and switched off, else Email's section, where each mailbox has its card
+        had = next((str(c.get('Type')).lower() for c in cards if str(c.get('Type') or '').lower() in (*MAILBOXES, *HOSTS)), '')
+        return {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': f'#connector={had}' if had else MAIL[1]}
     card = connectorcatalog.by_type(k)
     if not card or k in live: return None
     name = card.get('title') or k

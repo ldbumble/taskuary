@@ -14,4 +14,6 @@ test("the reply and email card and the post card both lead with Connect when the
   assert.match(ac, /st\.live && row\?\.connect \? <>/);
   assert.match(ac, /data-tq-act-connect="" onClick=\{\(\) => openAppLink\(row\.connect\.href\)\}>\{row\.connect\.label\}/);
   assert.doesNotMatch(rd + ac, /step=1/, "it opens the connection's card, not a setup step");
+  // ...and under the draft itself Connect is the one button - no lit Send and close beside "No mailbox is connected" (2026-11-08 render check)
+  assert.match(rd, /\{connect && r\.Status === "pending" \? \(\s*<Button size="small" variant="contained" disableElevation data-tq-connect=""/);
 });

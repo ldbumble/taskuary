@@ -11,7 +11,8 @@ from taskuary.store import MemoryStore
 def test_one_answer_says_what_is_not_connected_and_where_to_connect_it():
     s = MemoryStore()
     assert outbound.connect_fix(s, 'linkedin') == {'says': "LinkedIn isn't connected", 'label': 'Connect LinkedIn', 'href': '#connector=linkedin'}
-    assert outbound.connect_fix(s, 'email')['label'] == outbound.MAIL[0]
+    s.save_connector({'Type': 'outlook', 'Name': 'Outlook', 'Active': 0}, 'owner')
+    assert outbound.connect_fix(s, 'email') == {'says': 'No mailbox is connected', 'label': 'Connect email', 'href': '#connector=outlook'}
     assert outbound.connect_fix(s, 'own') is None and outbound.connect_fix(s, '') is None      # nothing to connect for those
     s.save_connector({'Type': 'linkedin', 'Name': 'LinkedIn', 'Active': 1}, 'owner'); s.save_connector({'Type': 'gmail', 'Name': 'Mail', 'Active': 1}, 'owner')
     assert outbound.connect_fix(s, 'linkedin') is None and outbound.connect_fix(s, 'email') is None

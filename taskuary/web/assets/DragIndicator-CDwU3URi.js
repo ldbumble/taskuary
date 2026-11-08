@@ -1,9 +1,0 @@
-<<<<<<< HEAD:taskuary/web/assets/DragIndicator-CuviMbMb.js
-<<<<<<<< HEAD:taskuary/web/assets/DragIndicator-DhvCMkAd.js
-import{ad as s,j as c}from"./index-A8PQuoW6.js";const o=s(c.jsx("path",{d:"M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2m-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2m0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2"}),"DragIndicator");export{o as D};
-========
-import{ad as s,j as c}from"./index-DJbL2U-Z.js";const o=s(c.jsx("path",{d:"M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2m-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2m0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2"}),"DragIndicator");export{o as D};
->>>>>>>> 930fda89a (Rebuild the app, the demo and the docs; the catalogue test judges a category by all its cards):taskuary/web/assets/DragIndicator-CuviMbMb.js
-=======
-import{ad as s,j as c}from"./index-3xTK3D2N.js";const o=s(c.jsx("path",{d:"M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2m-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2m0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2"}),"DragIndicator");export{o as D};
->>>>>>> 9d8da02ef (Rebuild the app, the demo and the docs):taskuary/web/assets/DragIndicator-CDwU3URi.js

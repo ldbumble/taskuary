@@ -2150,6 +2150,8 @@ class GeneralSession:
         finally:
             self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
+            from . import clipool
+            self.cli_up = clipool.is_live(f'general:{self.task_id}')       # watched while it sits idle (cli_gone)
             # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One whose session was killed under it
             # keeps what it said - the process may be going down with it
             if self.alive:
@@ -2375,13 +2377,20 @@ class GeneralSession:
         if not self.alive: return 'ended'
         if is_dock(self.store.get_task(self.task_id)): return "the dock is the app's own chat"
         if self.busy or getattr(self, 'waiting_turns', 0) or (not locked and self._lock.locked()): return 'a turn is on'
-        if ((now or time.time()) - max(self.last, self.seen)) < idle_for(): return 'not idle long enough'
+        if ((now or time.time()) - max(self.last, self.seen)) < idle_for() and not self.cli_gone(): return 'not idle long enough'
         from . import ingest, quickwork, workerstate as ws
         if self.task_id in OPENING or self.task_id in quickwork.RUNNING or self.task_id in ingest._PASSING: return 'an input is on its way'
         if self.store.waiting_notes(self.task_id): return 'notes wait for it'
         if ws.held_for(self.task_id): return 'a question is held for the owner'
         # ...nor while the owner has a part on its page (a sign-in, a step handed over, a held act): the browser stays up until the agent answers
         return page_needs_owner(self.store, self.task_id)
+
+    def cli_gone(self) -> bool:
+        """ITS CLI DIED WHILE IT SAT IDLE (the product audit, 2026-11-08): killed, the session still read alive - "waiting on you" on the bell,
+        the rail and the Assistant over an agent that did not exist. One whose process was up after its last turn and is not now is idled out
+        at the next sweep, as quietly as idle time would; the next line starts it again with the whole conversation."""
+        from . import clipool
+        return bool(getattr(self, 'cli_up', False)) and not clipool.is_live(f'general:{self.task_id}')
 
     def idle_out(self, now: float = None) -> bool:
         """Close QUIETLY after idle_for() with nothing going on (the owner, 2026-11-05: "instead of keeping it open forever it should just shut

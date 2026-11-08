@@ -20,11 +20,15 @@ import requests
 from loguru import logger
 from . import words
 
-VOICE_TYPES = ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper')
-NEEDS_KEY = {'gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt'}
+# four more (the owner, 2026-11-08: "all the ones that say coming soon just add them now"), each a file in and its text out over the
+# vendor's own REST call with a key - AssemblyAI, Speechmatics and Gladia upload, submit and poll; Azure's fast transcription answers at once
+POLLED = ('assemblyai', 'speechmatics', 'gladia', 'azure_speech')
+VOICE_TYPES = ('gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', 'stt_server', 'local_whisper', *POLLED)
+NEEDS_KEY = {'gemini_stt', 'groq_stt', 'openai_stt', 'deepgram', 'elevenlabs_stt', *POLLED}
 LABELS = {'groq_stt': 'Groq (Whisper)', 'openai_stt': 'OpenAI transcription', 'deepgram': 'Deepgram',
           'elevenlabs_stt': 'ElevenLabs Scribe', 'stt_server': 'Any Whisper server (OpenAI-compatible)',
-          'local_whisper': 'Local Whisper (on this machine)', 'gemini_stt': 'Google Gemini transcription'}
+          'local_whisper': 'Local Whisper (on this machine)', 'gemini_stt': 'Google Gemini transcription',
+          'assemblyai': 'AssemblyAI', 'speechmatics': 'Speechmatics', 'gladia': 'Gladia', 'azure_speech': 'Azure AI Speech'}
 # (base url, default model) for the OpenAI-compatible three
 COMPAT = {'groq_stt': ('https://api.groq.com/openai/v1', 'whisper-large-v3-turbo'),
           'openai_stt': ('https://api.openai.com/v1', 'gpt-4o-mini-transcribe'),
@@ -98,6 +102,9 @@ def transcribe(store, data: bytes, mime: str = 'audio/ogg', name: str = 'audio.o
     elif t == 'deepgram': text, model = _deepgram(cfg, key, data, mime, terms)
     elif t == 'elevenlabs_stt': text, model = _elevenlabs(cfg, key, data, mime, name, terms)
     elif t == 'local_whisper': text, model = _local(cfg, data, name, terms)
+    elif t in POLLED:
+        if not key: raise RuntimeError(f'{LABELS[t]}: no API key saved')
+        text, model = {'assemblyai': _assemblyai, 'speechmatics': _speechmatics, 'gladia': _gladia, 'azure_speech': _azure}[t](cfg, key, data, mime, name, terms)
     else: raise RuntimeError(f'unknown voice connector type {t!r}')
     return {'text': (text or '').strip(), 'provider': t, 'model': model}
 
@@ -147,6 +154,79 @@ def _elevenlabs(cfg, key, data, mime, name, terms=()):
                       files={'file': (name, data, mime)}, data=form, timeout=180)
     if r.status_code >= 300: _fail(r, 'ElevenLabs')
     return r.json().get('text', ''), model
+
+
+POLL_EVERY, POLL_FOR = 2, 600              # a voice note is seconds of audio; an hour-long file still lands inside ten minutes
+
+
+def _ok(r, who):
+    if r.status_code >= 300: _fail(r, who)
+    return r.json() or {}
+
+
+def _until(get, done, who):
+    "Ask `get()` until `done(job)` says (text, '') or raises; a job still running after POLL_FOR is a failure."
+    end = time.time() + POLL_FOR
+    while time.time() < end:
+        if (out := done(get())) is not None: return out
+        time.sleep(POLL_EVERY)
+    raise RuntimeError(f'{who}: still transcribing after {POLL_FOR}s')
+
+
+def _assemblyai(cfg, key, data, mime, name, terms=()):
+    "assemblyai.com/docs/getting-started/transcribe-an-audio-file: upload the bytes, submit their url, poll the transcript."
+    base, h = 'https://api.assemblyai.com/v2', {'authorization': key}
+    up = _ok(requests.post(f'{base}/upload', headers=h, data=data, timeout=180), 'AssemblyAI')['upload_url']
+    body = {'audio_url': up, **({'language_code': cfg['language']} if cfg.get('language') else {'language_detection': True}),
+            **({'keyterms_prompt': list(terms)} if terms else {}), **({'speech_model': cfg['model']} if cfg.get('model') else {})}
+    tid = _ok(requests.post(f'{base}/transcript', headers=h, json=body, timeout=60), 'AssemblyAI')['id']
+    def done(j):
+        if j.get('status') == 'error': raise RuntimeError(f"AssemblyAI: {j.get('error') or 'the transcript failed'}")
+        return j.get('text') or '' if j.get('status') == 'completed' else None
+    return _until(lambda: _ok(requests.get(f'{base}/transcript/{tid}', headers=h, timeout=60), 'AssemblyAI'), done, 'AssemblyAI'), cfg.get('model') or 'best'
+
+
+def _speechmatics(cfg, key, data, mime, name, terms=()):
+    "docs.speechmatics.com/api-ref/batch: a job with the file and its config, polled, then its transcript as plain text."
+    base, h = f"https://{cfg.get('region') or 'eu1'}.asr.api.speechmatics.com/v2", {'Authorization': f'Bearer {key}'}
+    tc = {'language': cfg.get('language') or 'auto', **({'additional_vocab': [{'content': x} for x in terms]} if terms else {}),
+          **({'operating_point': cfg['model']} if cfg.get('model') else {})}
+    jid = _ok(requests.post(f'{base}/jobs', headers=h, files={'data_file': (name, data, mime)},
+                            data={'config': json.dumps({'type': 'transcription', 'transcription_config': tc})}, timeout=180), 'Speechmatics')['id']
+    def done(j):
+        st = (j.get('job') or {}).get('status')
+        if st in ('rejected', 'deleted', 'expired'): raise RuntimeError(f'Speechmatics: the job was {st}')
+        return '' if st == 'done' else None
+    _until(lambda: _ok(requests.get(f'{base}/jobs/{jid}', headers=h, timeout=60), 'Speechmatics'), done, 'Speechmatics')
+    r = requests.get(f'{base}/jobs/{jid}/transcript', headers=h, params={'format': 'txt'}, timeout=60)
+    if r.status_code >= 300: _fail(r, 'Speechmatics')
+    return r.text, cfg.get('model') or 'standard'
+
+
+def _gladia(cfg, key, data, mime, name, terms=()):
+    "docs.gladia.io/chapters/pre-recorded-stt/quickstart: upload, submit, poll the result."
+    base, h = 'https://api.gladia.io/v2', {'x-gladia-key': key}
+    url = _ok(requests.post(f'{base}/upload', headers=h, files={'audio': (name, data, mime)}, timeout=180), 'Gladia')['audio_url']
+    body = {'audio_url': url, **({'language_config': {'languages': [cfg['language']]}} if cfg.get('language') else {}),
+            **({'custom_vocabulary': True, 'custom_vocabulary_config': {'vocabulary': list(terms)}} if terms else {})}
+    jid = _ok(requests.post(f'{base}/pre-recorded', headers=h, json=body, timeout=60), 'Gladia')['id']
+    def done(j):
+        if j.get('status') == 'error': raise RuntimeError(f"Gladia: {j.get('error_code') or 'the transcription failed'}")
+        return (((j.get('result') or {}).get('transcription') or {}).get('full_transcript') or '') if j.get('status') == 'done' else None
+    return _until(lambda: _ok(requests.get(f'{base}/pre-recorded/{jid}', headers=h, timeout=60), 'Gladia'), done, 'Gladia'), 'gladia'
+
+
+AZURE_SPEECH_VERSION = '2025-10-15'
+def _azure(cfg, key, data, mime, name, terms=()):
+    """learn.microsoft.com/azure/ai-services/speech-service/fast-transcription-create: one POST, the text in combinedPhrases. The card
+    names its resource's endpoint (https://<resource>.cognitiveservices.azure.com) or its region (eastus)."""
+    ep = (cfg.get('endpoint') or '').rstrip('/') or (f"https://{cfg['region'].strip()}.api.cognitive.microsoft.com" if cfg.get('region') else '')
+    if not ep: raise RuntimeError("Azure AI Speech: the card needs its resource's endpoint or region")
+    d = {'locales': [cfg.get('language') or 'en-US'], **({'phraseList': {'phrases': list(terms)}} if terms else {})}
+    j = _ok(requests.post(f'{ep}/speechtotext/transcriptions:transcribe', params={'api-version': AZURE_SPEECH_VERSION},
+                          headers={'Ocp-Apim-Subscription-Key': key}, files={'audio': (name, data, mime), 'definition': (None, json.dumps(d))},
+                          timeout=300), 'Azure AI Speech')
+    return ' '.join(p.get('text') or '' for p in (j.get('combinedPhrases') or [])[:1]), 'fast transcription'
 
 
 _LOCAL = {}

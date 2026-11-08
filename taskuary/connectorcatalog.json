@@ -1585,8 +1585,8 @@
       "type": "assemblyai",
       "title": "AssemblyAI",
       "group": "AI — voice",
-      "planned": true,
-      "desc": "Hosted transcription and audio intelligence",
+      "planned": false,
+      "desc": "AssemblyAI Universal - strong accuracy across many languages, with free hours to start.",
       "match": [
         "assemblyai"
       ]
@@ -1595,8 +1595,8 @@
       "type": "azure_speech",
       "title": "Azure AI Speech",
       "group": "AI — voice",
-      "planned": true,
-      "desc": "Microsoft speech-to-text and diarization",
+      "planned": false,
+      "desc": "Azure AI Speech fast transcription - your company's own Azure Speech resource, one call per file.",
       "match": [
         "azure ai speech",
         "azure",
@@ -1620,8 +1620,8 @@
       "type": "speechmatics",
       "title": "Speechmatics",
       "group": "AI — voice",
-      "planned": true,
-      "desc": "Multilingual speech recognition",
+      "planned": false,
+      "desc": "Speechmatics batch transcription - 50+ languages, EU or US processing, with free hours each month.",
       "match": [
         "speechmatics"
       ]
@@ -1630,8 +1630,8 @@
       "type": "gladia",
       "title": "Gladia",
       "group": "AI — voice",
-      "planned": true,
-      "desc": "Real-time and recorded transcription",
+      "planned": false,
+      "desc": "Gladia - multilingual transcription with code-switching, with free hours each month.",
       "match": [
         "gladia"
       ]

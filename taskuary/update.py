@@ -108,6 +108,32 @@ def _download(url: str, dest: Path, progress=None) -> int:
     return got
 
 
+# THE NEW INSTALLER IS SIGNED BY WHOEVER SIGNED THIS ONE (M5, 2026-11-08): TLS and the first two bytes were the whole check, so a
+# replaced release asset ran on every machine's next Update. A signed build only runs a download that Windows calls validly signed by
+# the same signer as itself; an unsigned build (releases before signing was set up, a local build) has no signer to hold it to.
+def signer(path) -> tuple:
+    "(status, subject) of a Windows program's Authenticode signature; ('', '') where it cannot be read."
+    from . import spawn
+    q = str(path).replace("'", "''")
+    try: out = spawn.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                          f"$s = Get-AuthenticodeSignature -LiteralPath '{q}'; \"$($s.Status)|$($s.SignerCertificate.Subject)\""],
+                         capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError) as e: logger.warning(f'update: signature unread - {e}'); return '', ''
+    st, _, sub = str(out or '').strip().partition('|')
+    return st.strip(), sub.strip()
+
+def check_signed(new: Path, exe: Path):
+    "Raises, and deletes the download, unless it is validly signed by this program's own signer (a signed build only)."
+    if os.name != 'nt' or not getattr(sys, 'frozen', False): return
+    st, mine = signer(exe)
+    if st != 'Valid' or not mine: logger.warning(f'update: this build is not signed ({st or "unread"}), so the download is not held to a signer'); return
+    got = signer(new)
+    if got != ('Valid', mine):
+        new.unlink(missing_ok=True)
+        raise RuntimeError(f"the downloaded installer is not signed by {mine.split(',')[0]} ({got[0] or 'no signature'}"
+                           f"{', signed by ' + got[1].split(',')[0] if got[1] and got[1] != mine else ''}), so it was not run")
+
+
 def staging() -> Path:
     """Where the new build is assembled before it is put in place.
 
@@ -262,6 +288,7 @@ def _run_setup(url: str, road: str, progress=None, **kw) -> dict:
     new.unlink(missing_ok=True)          # a leftover from a run that never finished is not our copy
     try:
         size = _download(url, new, progress)
+        check_signed(new, exe)
         script = stage / 'taskuary-update.cmd'
         script.write_text(setup_script(new, exe, os.getpid(), sys.argv[1:], **{'all_users': for_all_users(exe), **kw}), encoding='utf-8')
     except OSError as e:

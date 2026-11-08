@@ -676,9 +676,9 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     ans = wrapup.answers_for(store, task_id, (seen['saw'] or {}).get('MessageId'))     # the mail holding the ask, when triage read one
     try: text = draft_reply(store, task_id, llm, resolution, nudge, seen, pressed, answers=ans)
     except NoReply:
-        # ...carried out, and said: the draft is put down as no reply, the way the owner's own No reply does it (which closes
-        # the task when nothing else of it waits), never left on the card as an email of one signature
-        from . import verdicts
+        # ...carried out, and said: the empty draft is put down as no reply, never left on the card as an email of one signature - and
+        # the task STAYS OPEN with the writer's why (selfclose.nothing_left): the owner's No reply closes a task, the writer's never does
+        from . import selfclose, verdicts
         rv = store.get_review(review_id)
         # a draft already waiting (a new mail joined the thread and this was the redraft) is never put down or deleted: it is marked
         # Not needed, with the writer's WHY, and Send still sends it
@@ -687,8 +687,9 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
             logger.info(f'redraft for task {task_id}: the writer says no reply is owed now; the draft is marked not needed')
             return ''
         if rv and rv.get('Status') in ('pending', 'held'):
-            store.add_comment(task_id, 'responder', 'agent', 'No reply drafted - from what was done, nothing needs to go back to the sender.')
-            verdicts.decide(store, rv, 'no_reply', None, None, 'responder')
+            store.decide_review(rv['ReviewId'], 'no_reply', None, 'responder', 'the reply writer found nothing needs to go back')
+            store.audit('review', rv['ReviewId'], 'no_reply', 'responder', detail={'kind': rv.get('Kind'), 'closed': False})
+            selfclose.nothing_left(store, task_id, 'responder', seen.get('why') or 'from what was done, nothing needs to go back to the sender')
         logger.info(f'no reply for task {task_id}: the writer said nothing needs to go back')
         return ''
     saw, revision = seen['saw'], seen['revision']

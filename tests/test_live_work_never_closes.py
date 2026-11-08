@@ -70,9 +70,9 @@ class SelfCloseUnderAnotherSession(Base):
         self.assertEqual(self.closed, []); self.assertNotEqual(self.s.get_task(self.tid)['Status'], 'done')
         self.assertIn('The agent says it is finished: fixed the cron', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))
 
-    def test_done_from_the_only_live_session_still_closes(self):
+    def test_done_from_the_only_live_session_still_ends_its_run(self):
         term.SESSIONS['run1'] = live(self.tid)
-        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent', sid='run1').get('closed'))
+        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent', sid='run1').get('ended'))
 
     def test_done_while_a_routine_runs_on_the_task_does_not_close(self):
         from taskuary import workflows

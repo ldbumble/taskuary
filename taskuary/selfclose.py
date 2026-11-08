@@ -196,13 +196,21 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     # where to move it (wrapup.asks_to_move), and "The agent closed this itself" over an open task read as handled (2026-10-27)
     if out.get('asks'):
         store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.'); return out
-    if not out.get('closed'): return out                    # _wrap said why it could not, where the owner reads it
-    store.add_comment(tid, agent, 'agent',
-                      (f'The agent closed this itself: {line}' if line else 'The agent closed this itself.')
-                      # NO REPLY IS THE AGENT'S CALL TO MAKE, said where the owner reads it (the owner, 2026-10-08: "allow done with
-                      # no reply") - told "not ours, don't answer", --done could only draft the reply anyway
-                      + (' It says no reply is owed, so none was drafted.' if no_reply else ''))
+    if not out.get('ended'): return out                     # _wrap said why it could not, where the owner reads it
+    # NO REPLY IS THE AGENT'S CALL TO MAKE, said where the owner reads it (the owner, 2026-10-08: "allow done with no reply") - and the
+    # close is still the owner's (nothing_left)
+    first = next((x.strip() for x in str(out.get('report') or '').splitlines() if x.strip()), '')[:300]       # no sentence: its report says what
+    nothing_left(store, tid, agent, '; '.join(x for x in (line or first, 'no reply is owed, so none was drafted' if no_reply else '') if x), said=DONE_SAID)
     return out
+
+
+# NOTHING TO DO IS SAID, AND THE TASK STAYS OPEN (the owner, 2026-11-07): the reply writer decided nothing went back and closed a task
+# triage had said needed a reply, 14 s after it came in - off the rail, unseen. Neither the agent nor the reply writer closes a task: the
+# finding is said in one plain line on the task, which stays where the owner sees it, and their Mark done is the close.
+def nothing_left(store, tid: int, by: str, why: str, said: str = 'Nothing to do here: ') -> None:
+    from .buttons import label
+    why = ' '.join(str(why or '').split()).rstrip('.')
+    store.add_comment(tid, by, 'agent', f"{said}{why}. You can close it with {label('close')}." if why else f"{said.rstrip(': ')}. You can close it with {label('close')}.")
 
 
 def _finished(store, tid: int, s, line: str) -> str:
@@ -228,7 +236,8 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
     from . import wrapup
     from .store import task_ref
     try:
-        out = wrapup.wrap(store, tid, close=True, actor=agent or 'agent', final_message=final_message, no_reply=no_reply)
+        # ...the ending runs (report, drafted reply, proposals) and the task stays open: closing it is the owner's (nothing_left)
+        out = wrapup.wrap(store, tid, close=False, actor=agent or 'agent', final_message=final_message, no_reply=no_reply)
         # ...and a reply already waiting (triage's early draft, one the agent saved) goes down with it: nobody hears back
         if no_reply:
             for rv in (store.pending_review(tid, 'draft_reply', live_only=False), store.pending_review(tid, 'draft', live_only=False),
@@ -247,10 +256,10 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
     if out.get('asks') == 'repo':
         forget(tid)
         return {**out, 'closed': False, 'why': 'the work is in another repository - the owner was asked where to move it'}
-    store.audit('task', tid, 'self_close', agent or 'agent', 'agent', {'why': why[:300], 'drafting': out.get('drafting')})
-    logger.info(f'{task_ref(tid)} closed itself - {why[:120]}'
+    store.audit('task', tid, 'self_close', agent or 'agent', 'agent', {'why': why[:300], 'drafting': out.get('drafting'), 'closed': False})
+    logger.info(f'{task_ref(tid)}: its agent ended its run, the task stays open for the owner - {why[:120]}'
                 + (' (reply drafted)' if out.get('drafting') else ''))
-    return {'closed': True, 'drafting': bool(out.get('drafting')), 'why': why, **out}
+    return {**out, 'closed': False, 'ended': True, 'drafting': bool(out.get('drafting')), 'why': why}
 
 
 # ── what the session is told ────────────────────────────────────────────────────────────
@@ -261,7 +270,7 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
 # 1024 bytes, so the WHOLE rule lives in CODING.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
 SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
-             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one; '
+             'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it files your ending and drafts the reply unless you saved one; the owner closes the task; '
              'add `--no-reply` when nobody should hear back. '
              'ONLY SOMEONE ELSE CAN ANSWER: ask them, then `taskuary --waiting-on "<who>"` - their reply brings the task back.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
@@ -286,7 +295,7 @@ _MARK_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?DONE\s*\]\]\s*:?\s*(.*)', re.I)
 CHAT_LINE = (
     f'ENDING THE TASK: when the work this task asked for is COMPLETE and you need nothing further '
     f'from the owner, end your reply with a final line: {MARKER} <one sentence on what you did or '
-    f'found>. That closes the task and drafts the answer the person who asked will get - the owner '
+    f'found>. That files your ending and drafts the answer the person who asked will get - the owner closes the task and '
     f'approves it before it leaves. Only on a real ending. Never write it when you have asked a '
     f'question, offered options, or still need something; a conversation that is still going is '
     f'not an ending, and neither is an answer the owner may want to push back on.')

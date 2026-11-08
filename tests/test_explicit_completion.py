@@ -95,14 +95,17 @@ class ExplicitFinishTests(Base):
         self.assertIn('The agent says it is finished: cleared the stuck job', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))
         # ...and once the owner takes the mark off, the same word is the ending
         selfclose.unclaim(self.s, self.tid)
-        self.assertTrue(selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'agent').get('closed'))
+        self.assertTrue(selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'agent').get('ended'))
         self.assertEqual(self.closed, ['run1']); self.assertEqual(ws.status(self.s, self.tid)['state'], 'finished')
+        # ...the run ends, and the task stays open: the agent never closes it (the owner, 2026-11-07) - it says so, and Mark done is the owner's
+        self.assertNotIn(self.s.get_task(self.tid)['Status'], ('done', 'dropped'))
+        self.assertTrue(self.s.list_comments(self.tid)[-1]['Body'].startswith('The agent says it is finished: cleared the stuck job. You can close it with'))
 
     def test_a_second_finish_for_the_same_run_does_nothing_twice(self):
         term.SESSIONS['run1'] = live(self.tid)
         a = selfclose.declare(self.s, self.tid, 'done', 'agent')
         b = selfclose.declare(self.s, self.tid, 'done again', 'agent')
-        self.assertTrue(a.get('closed') or a.get('closed_run')); self.assertFalse(b.get('closed') or b.get('closed_run'))
+        self.assertTrue(a.get('ended')); self.assertFalse(b.get('ended') or b.get('closed'))
         self.assertEqual(len(self.artifacts()), 1)
 
     def test_a_finish_whose_save_fails_can_be_retried(self):
@@ -111,7 +114,7 @@ class ExplicitFinishTests(Base):
             a = selfclose.declare(self.s, self.tid, 'done', 'agent')
         self.assertFalse(a.get('closed')); self.assertTrue(any('could not' in c['Body'] for c in self.s.list_comments(self.tid)))
         b = selfclose.declare(self.s, self.tid, 'done', 'agent')
-        self.assertTrue(b.get('closed') or b.get('closed_run')); self.assertEqual(len(self.artifacts()), 1)
+        self.assertTrue(b.get('ended')); self.assertEqual(len(self.artifacts()), 1)
 
 
 
@@ -122,7 +125,7 @@ class QuestionGateTests(Base):
         sess = live(self.tid); sess.tail = lambda k=3: ['Fixed the cron. Why did it fail? It ran as the wrong user.', 'Should I also tidy the logs?']
         term.SESSIONS['run1'] = sess
         self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
-        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent').get('closed'))
+        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent').get('ended'))
 
     def test_an_open_marker_question_refuses_done(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess
@@ -163,7 +166,7 @@ class NoReplyTests(Base):
         term.SESSIONS['run1'] = live(self.tid)
         rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, on it.'})
         out = selfclose.declare(self.s, self.tid, 'not ours - the owner chose no reply', 'agent', no_reply=True)
-        self.assertTrue(out.get('closed'))
+        self.assertTrue(out.get('ended')); self.assertFalse(out.get('closed'))
         self.assertTrue(wrapup.finish.call_args.kwargs.get('no_reply'), 'finish is told no reply is owed')
         self.assertEqual(self.s.get_review(rid)['Status'], 'no_reply')
         self.assertIn('no reply is owed', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))

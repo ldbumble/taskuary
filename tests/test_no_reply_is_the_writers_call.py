@@ -32,7 +32,21 @@ def test_the_writer_saying_nothing_goes_back_puts_the_draft_down_and_says_so(s, 
     tid, rid, out = write(s, said)
     assert out == ''
     assert s.get_review(rid)['Status'] == 'no_reply'
-    assert any('No reply drafted' in c['Body'] for c in s.list_comments(tid))
+    assert any(c['Body'].startswith('Nothing to do here: ') and c['Body'].endswith('You can close it with Mark done.') for c in s.list_comments(tid))
+
+
+def test_the_writer_never_closes_the_task(s):
+    """The owner, 2026-11-07: triage said a mail needed a reply, and 14 s later the writer decided nothing went back and closed the task - off
+    the rail, unseen. The writer's finding is said with its why, and the task stays open for the owner's Mark done."""
+    tid, mid, rid = make_review(s); s._exec("UPDATE review SET DraftText='' WHERE ReviewId=?", (rid,))    # triage's empty draft, to be written
+    def writer(store, task_id, llm, resolution, nudge, seen, *a, **k):        # the writer says why nothing goes back, then NO_REPLY
+        seen['why'] = 'the answer is already in the email (approved 11/3)'; raise responder.NoReply('NO REPLY')
+    with mock.patch.object(learn, 'learn_from'), mock.patch.object(responder, 'draft_reply', writer):
+        responder.draft_for_review(s, tid, rid, llm=lambda *a, **k: 'NO REPLY')
+    assert s.get_task(tid)['Status'] not in ('done', 'dropped')
+    assert not [a for a in s._rows("SELECT * FROM audit WHERE EntityId=? AND Action='close_from_assistant'", (tid,))]
+    assert s.list_comments(tid)[-1]['Body'] == ('Nothing to do here: the answer is already in the email (approved 11/3). '
+                                                 'You can close it with Mark done.')
 
 
 @pytest.mark.parametrize('said', ['Thanks,\nAlex', 'Thank you!', 'Cheers'])

@@ -103,14 +103,15 @@ class SelfCloseTests(unittest.TestCase):
         # ...and once moved, a later --done may close it
         with selfclose._LOCK: self.assertNotIn(tid, selfclose._DONE)
 
-    def test_a_real_done_still_says_closed(self):
+    def test_a_real_done_says_finished_and_leaves_the_close_to_the_owner(self):
         s = MemoryStore(); tid, _ = coding_task(s)
         selfclose.forget(tid)
         def wrap(store, t, **kw):
-            store.update_task(t, {'Status': 'done'}, 'coding'); return {'wrap': 'done', 'drafting': False}
+            assert kw['close'] is False; return {'wrap': 'done', 'drafting': False}
         with mock.patch('taskuary.wrapup.wrap', side_effect=wrap):
-            self.assertTrue(selfclose.declare(s, tid, 'fixed the export', 'coding')['closed'])
-        self.assertTrue(any(c['Body'].startswith('The agent closed this itself: fixed the export') for c in s.list_comments(tid)))
+            out = selfclose.declare(s, tid, 'fixed the export', 'coding')
+        self.assertTrue(out['ended']); self.assertFalse(out['closed']); self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
+        self.assertTrue(any(c['Body'].startswith(selfclose.DONE_SAID + 'fixed the export') for c in s.list_comments(tid)))
         selfclose.forget(tid)
 
 

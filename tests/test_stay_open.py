@@ -62,13 +62,14 @@ class TheTaskDecidesWhetherItsAgentMayClose(unittest.TestCase):
         self.assertIn('The agent says it is finished: fixed the export', [c['Body'] for c in s.list_comments(tid)])
         self.assertNotIn(tid, selfclose._DONE, 'refused is not "already ran": once the owner lifts the mark, --done works')
 
-    def test_taskuary_done_closes_a_task_that_allows_it(self):
+    def test_taskuary_done_ends_the_run_and_leaves_the_close_to_the_owner(self):
+        """The ending runs on a task that allows it; the task itself is the owner's to close (the owner, 2026-11-07)."""
         s = MemoryStore()
         tid = _task(s)
-        with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w:
+        with mock.patch.object(selfclose, '_wrap', return_value={'ended': True, 'closed': False}) as w:
             out = selfclose.declare(s, tid, 'fixed the export', 'coding')
-        self.assertTrue(out['closed']); w.assert_called_once()
-        self.assertIn('The agent closed this itself: fixed the export', [c['Body'] for c in s.list_comments(tid)])
+        self.assertTrue(out['ended']); self.assertFalse(out['closed']); w.assert_called_once()
+        self.assertIn('The agent says it is finished: fixed the export. You can close it with Mark done.', [c['Body'] for c in s.list_comments(tid)])
 
     def test_the_seed_says_what_declare_does(self):
         """The rule and the prompt must not disagree again: the stay-open seed says --done is refused, never 'closes'."""

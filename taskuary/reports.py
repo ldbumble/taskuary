@@ -114,7 +114,11 @@ CONNECTION_KEYS = frozenset({'base_url', 'site', 'account', 'gateway', 'server',
                              # a tool call carrying its own share/root would walk straight out of the
                              # folder the owner configured, which is the whole authority of those cards.
                              'share', 'root', 'port', 'hostkey', 'private_key',
-                             '_card'})      # a tracker's whole card, secret and all (trackers.connection) - only ever the saved one
+                             '_card',       # a tracker's whole card, secret and all (trackers.connection) - only ever the saved one
+                             # ...and where a keyed read's sign-in goes (apireads.json, nosql.py, 2026-11-08): a tool call naming its own token URL,
+                             # tenant or connection string would carry the card's secret to an address the owner never typed
+                             'conn_str', 'uri', 'user', 'token_url', 'kid', 'subdomain', 'environment', 'access_token', 'consumer_key',
+                             'consumer_secret', 'token_id', 'tenant', 'org_uuid', 'cert_file', 'key_file'})
 def query_only(body: dict) -> dict:
     """The body minus every connection field - what an agent may say about a tool call. `_write` goes too: whether a
     query may commit is the card's Authority (tools/run) or the owner's approval, never the caller's say-so."""
@@ -768,6 +772,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'snowflake': _lazy('databases', 'runner')('snowflake'),
             'bigquery': _lazy('databases', 'runner')('bigquery'),
             **{e: _lazy('databases', 'runner')(e) for e in ('cockroachdb', 'oracle', 'duckdb')},
+            **{e: _lazy('nosql', f'run_{e}') for e in ('mongodb', 'redis', 'neo4j')},       # reads only, each engine its own way (nosql.py)
             # a vendor's REST API read with a key, one row each in apireads.json; and DynamoDB's reads on its own card's keys
             **{f'{t}_read': _lazy('apireads', 'runner')(t) for t in apireads.types()},
             'dynamodb': _lazy('aws', 'run_dynamodb'),
@@ -914,7 +919,7 @@ def executor_for(type_name):
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery',
-           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 'dynamodb': 'dynamodb',
+           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 'dynamodb': 'dynamodb', 'mongodb': 'mongodb', 'redis': 'redis', 'neo4j': 'neo4j',
            **{f'{t}_read': t for t in apireads.types()}, 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github',
@@ -1171,7 +1176,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                  'mastodon_post': mastodon_connection,
                  'treg_tools': treg_connection, 'treg_search': treg_connection, 'treg_call': treg_connection,
                  **{e: engine_connection(e) for e in
-                    ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb')},
+                    ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb', 'mongodb', 'redis', 'neo4j')},
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'dynamodb': lambda store, connector_id=None: _card(store, 'dynamodb', 'secret_access_key', connector_id),
                  **{f'{t}_read': _apikey_card(t) for t in apireads.types()

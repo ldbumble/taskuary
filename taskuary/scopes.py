@@ -75,7 +75,7 @@ ACTIONS = {
     # A named database card runs SELECTs. The engine's own user is the real ceiling, so point
     # these at a read-only account and the ladder holds even if everything above it fails.
     'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
-    'cockroachdb': 'read', 'oracle': 'read', 'duckdb': 'read', 'dynamodb': 'read',
+    'cockroachdb': 'read', 'oracle': 'read', 'duckdb': 'read', 'dynamodb': 'read', 'mongodb': 'read', 'redis': 'read', 'neo4j': 'read',
     **{f'{t}_read': 'read' for t in ('digitalocean', 'terraform_cloud', 'better_stack', 'circleci', 'buildkite', 'coda', 'intrinio', 'benzinga', 'tradier', 'diffbot', 'jenkins', 'sonarqube', 'elastic', 'splunk', 'dynatrace', 'kubernetes', 'google_drive', 'onedrive', 'office365_files')},       # apireads.json: GET only
     # treg: the catalogue is free to read; CALLING spends money and can reach a publish or an
     # order, so it is a write: at a card's read scope every call is a proposal. Cards start at FULL below, so that

@@ -511,6 +511,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
             from .reports import _card
             head, _ = aws.run_dynamodb({**_card(store, 'dynamodb', 'secret_access_key', cid), 'max_rows': 1})
             detail = f'DynamoDB answered: {head}'
+        elif c['Type'] in NOSQL:
+            from . import nosql
+            detail = nosql.test(store, c)                          # its cheapest read: the collections, the key count, RETURN 1
         elif c['Type'] in DB_ENGINES:
             # SELECT 1 through the real driver: a card that cannot reach the server, or is missing
             # its driver, says so here rather than in a scheduled report nobody is watching
@@ -1485,6 +1488,7 @@ CHAT_SERVERS = ('mattermost', 'rocketchat', 'matrix', 'google_chat')
 PAGE_READERS = ('firecrawl', 'reader', 'scrapingbee')
 RESEARCH = ('exa', 'tavily', 'brave_search', 'serpapi', 'serper', 'apify') + PAGE_READERS
 READS = tuple(json.loads((__import__('pathlib').Path(__file__).with_name('apireads.json')).read_text(encoding='utf-8'))['services'])
+NOSQL = ('mongodb', 'redis', 'neo4j')                  # nosql.py: reads only, each engine its own way
 DB_ENGINES = ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb')
 
 CH2SRC = {'outlook': 'email', 'teams': 'teams', 'slack': 'slack', 'github': 'github',

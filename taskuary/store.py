@@ -1522,6 +1522,7 @@ class SQLiteStore:
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),
                          ('cockroachdb', 'CockroachDB'), ('oracle', 'Oracle Database'), ('duckdb', 'DuckDB'), ('dynamodb', 'Amazon DynamoDB'),
+                         ('mongodb', 'MongoDB'), ('redis', 'Redis'), ('neo4j', 'Neo4j'),
                          # a vendor's REST API read with a key (apireads.json)
                          *((t, r['title']) for t, r in apireads.table().items()),
                          ('snowflake', 'Snowflake'),

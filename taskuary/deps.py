@@ -43,6 +43,9 @@ OPTIONAL = {
     'faster_whisper': 'faster-whisper>=1.0',  # local speech to text
     'winpty': 'pywinpty',                    # the interactive terminal on Windows
     'paramiko': 'paramiko>=2.11',            # the SFTP card (files.py)
+    'pymongo': 'pymongo>=4',                 # the MongoDB card (nosql.py)
+    'redis': 'redis>=5',                     # the Redis card
+    'neo4j': 'neo4j>=5',                     # the Neo4j card
 }
 
 # What Taskuary.exe ships with, read by taskuary.spec at build time so the list lives in ONE

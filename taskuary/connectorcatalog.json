@@ -2272,8 +2272,8 @@
       "type": "mongodb",
       "title": "MongoDB",
       "group": "Databases",
-      "planned": true,
-      "desc": "Collections, documents and Atlas clusters",
+      "planned": false,
+      "desc": "Find, count and aggregate documents as reports and an agent tool - reads only: $out and $merge are refused.",
       "match": [
         "mongodb"
       ]
@@ -2304,8 +2304,8 @@
       "type": "redis",
       "title": "Redis",
       "group": "Databases",
-      "planned": true,
-      "desc": "Keys, streams and operational metrics",
+      "planned": false,
+      "desc": "Keys, hashes, lists and streams as reports and an agent tool - one command from a closed list of reads.",
       "match": [
         "redis"
       ]
@@ -3664,8 +3664,8 @@
       "type": "neo4j",
       "title": "Neo4j",
       "group": "Databases",
-      "planned": true,
-      "desc": "Cypher queries against a graph database",
+      "planned": false,
+      "desc": "Cypher queries as reports and an agent tool, each in a read transaction the server refuses to write in.",
       "match": [
         "neo4j"
       ]

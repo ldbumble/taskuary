@@ -2,6 +2,16 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.19 - 2026-11-08
+
+- MongoDB, Redis and Neo4j cards: reads only, each engine its own way
+- Nineteen more cards read a vendor's API from the keyed-read table: cloud, web, markets, corporate
+- The Bing Web Search card goes: Microsoft retired the API
+- Amazon Transcribe on the voice road: the owner's bucket, one job, nothing left behind
+- The guide, the golden and the tests follow the cards that left the roadmap
+- One OAuth 2.0 sign-in road: authorization code + PKCE over a loopback redirect
+- Finish the sign-in and push connectors: OAuth cards, push sources, Mailgun, Substack
+
 ## 0.3.11.18 - 2026-11-08
 
 - Vendors' own remote MCP servers as working cards, on one road

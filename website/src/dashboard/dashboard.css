@@ -179,11 +179,11 @@
   .tq-dash-bars .bar, .tq-dash-fill { transform-origin: left center;
     animation: tq-dash-grow .8s cubic-bezier(.16, 1, .3, 1) backwards; animation-delay: calc(min(var(--i, 0), 12) * 35ms + 120ms); }
   .tq-dash-col { animation: tq-dash-rise .8s cubic-bezier(.16, 1, .3, 1) backwards; animation-delay: calc(min(var(--i, 0), 12) * 35ms + 120ms); }
-  .tq-dash-svg .ln { stroke-dasharray: 1; animation: tq-dash-draw 1s cubic-bezier(.33, 1, .68, 1) backwards; }
+  .tq-dash-svg .ln { stroke-dasharray: calc(var(--len, 0) * 1px); animation: tq-dash-draw 1s cubic-bezier(.33, 1, .68, 1) backwards; }
   .tq-dash-spark .ln { stroke-dasharray: none; }
 }
 @keyframes tq-dash-in { from { opacity: .35; transform: translateY(6px); } }
 @keyframes tq-dash-grow { from { transform: scaleX(0); } }
 @keyframes tq-dash-rise { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
-@keyframes tq-dash-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes tq-dash-draw { from { stroke-dashoffset: calc(var(--len, 0) * 1px); } to { stroke-dashoffset: 0; } }
 @media (forced-colors: active) { .tq-dash-bars .bar, .tq-dash-col .seg, .tq-dash-fill { forced-color-adjust: none; border: 1px solid CanvasText; } }

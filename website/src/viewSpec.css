@@ -82,7 +82,6 @@
 .tq-view .tq-dash-bars.hi .tq-dash-press:not(.pick) .val { color: var(--d-muted); font-weight: 400; }
 .tq-view .tq-dash-bars.hi .pick .val { font-weight: 600; }
 .tq-view .tq-dash-svg .dot.pick { fill: var(--d-surface); stroke: var(--d-s1); stroke-width: 2.5; }
-.tq-view .tq-dash-svg .ln { stroke-dasharray: none; animation: none; }
 
 /* a checklist: how far along beside its title ("2 of 6"), a thin bar across under it, then the items, done ones ticked and quieter */
 .tq-view-count { flex: none; padding-top: 1px; font-size: 13px; font-weight: 500; color: var(--d-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }

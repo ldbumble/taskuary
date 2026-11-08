@@ -394,17 +394,51 @@ def not_needed(store, tid: int, why: str, by: str) -> dict:
 # ...AND ONE THAT NO LONGER ANSWERS IS WITHDRAWN (the owner, 2026-11-06: corrected, the agent left its earlier draft standing under the newest
 # turn as if it answered the correction): the agent takes it off the table itself, with why. Closed unsent like a superseded draft - its words
 # kept under Close out's "Not sent", Bring it back still sends it - never deleted
-def withdraw(store, tid: int, why: str, by: str) -> dict:
-    "Withdraw the task's pending reply draft, for `why`. {'ok': False, 'why': ...} when there is none or no reason was given."
+def withdraw(store, tid: int, why: str, by: str, which='') -> dict:
+    """Withdraw one unsent draft on the task, for `why`: `which` is its review id or who it was to; none means the reply draft (or the one
+    unsent thing, when there is only one). {'ok': False, 'why': ...} when there is none, several match, or no reason was given."""
+    from . import slots
     from .wrapup import WITHDRAWN
-    why = ' '.join(str(why or '').split())
+    why, which = ' '.join(str(why or '').split()), ' '.join(str(which or '').split()).casefold().removeprefix('rv')
     if not why: return {'ok': False, 'why': 'say in one line why the draft no longer answers - what the newest message changed'}
-    rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
-    if not rv: return {'ok': False, 'why': 'no draft is waiting on this task, so there is nothing to withdraw'}
-    if not store.decide_review(rv['ReviewId'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
-        return {'ok': False, 'why': 'that draft is being sent or already went - it cannot be withdrawn'}
-    store.add_comment(tid, by, 'agent', f"Withdrew the drafted reply: {why.rstrip('.')}. It is kept under Not sent - Bring it back still sends it.")
-    return {'ok': True, 'review_id': rv['ReviewId']}
+    left = unsent(store, tid)
+    if not left: return {'ok': False, 'why': 'nothing unsent is waiting on this task, so there is nothing to withdraw'}
+    if which.isdigit(): hit = [r for r in left if r['rid'] == int(which)]
+    elif which: hit = [r for r in left if which in r['to'].casefold() or which in r['what'].casefold()]
+    else: hit = [r for r in left if r['kind'] in ('draft', 'draft_reply')][:1] or (left if len(left) == 1 else [])
+    if len(hit) != 1:
+        return {'ok': False, 'why': ('several match - ' if hit else 'name which one - ' if not which else f'nothing unsent matches {which!r} - ') +
+                'give its review id: ' + '; '.join(f"{r['rid']}: {r['what']}" for r in (hit or left))}
+    r = hit[0]
+    if not store.decide_review(r['rid'], 'closed_unsent', None, by, note=WITHDRAWN + why[:300]):
+        return {'ok': False, 'why': 'that one is being sent or already went - it cannot be withdrawn'}
+    if r['kind'] == slots.KIND and (sid := slots.of_review(store.get_review(r['rid']))): slots.mark(store, tid, sid, done=True, actor=by)
+    back = '' if r['kind'] == 'action' else ' It is kept under Not sent - Bring it back still sends it.'
+    store.add_comment(tid, by, 'agent', f"Withdrew {r['what']}: {why.rstrip('.')}.{back}")
+    return {'ok': True, 'review_id': r['rid']}
+
+
+def unsent(store, tid: int) -> list:
+    """What the agent may still take back on task `tid`, newest first: its reply draft, its emails (slots), its posts and other proposals -
+    each {rid, kind, to, what}. Never a close-out or a playbook (Taskuary's, not the agent's), and never anything already sent."""
+    from . import proposals
+    out = []
+    for rv in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('pending','held') AND DeliveryClaim IS NULL "
+                          "AND IFNULL(DeliveryState,'')<>'sent' ORDER BY ReviewId DESC", (int(tid),)):
+        k = rv.get('Kind')
+        try: d = json.loads((rv.get('DraftText') if k == 'action' else rv.get('Deliver')) or '{}') or {}
+        except (TypeError, ValueError): d = {}
+        if not isinstance(d, dict): d = {}
+        if k == 'action':
+            if d.get('closeout') or d.get('action') in (*proposals.PLAYBOOKS, *proposals.CLOSEOUT) or str(rv.get('Reason') or '').startswith('the workflow'): continue
+            to, what = str(d.get('type') or d.get('action') or ''), f"the proposal ({' '.join(str(rv.get('Reason') or d.get('action')).split())[:160]})"
+        elif k in ('draft', 'draft_reply', 'slot'):
+            to = ', '.join(d.get('to') or []) if isinstance(d.get('to'), list) else str(d.get('to') or '')
+            if not to and rv.get('MessageId'): to = str((store.get_message(rv['MessageId']) or {}).get('FromEmail') or '')
+            what = f"the {'email' if k == 'slot' else 'reply'}" + (f' to {to}' if to else '')
+        else: continue
+        out.append({'rid': rv['ReviewId'], 'kind': k, 'to': to, 'what': what})
+    return out
 
 
 def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):

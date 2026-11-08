@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:site/demo/assets/GameScene-CcgZLjyn.js
 import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fr as xc}from"./index-CXUB7m2N.js";/**
+========
+import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fr as xc}from"./index-DKLzXgQO.js";/**
+>>>>>>>> 930fda89a (Rebuild the app, the demo and the docs; the catalogue test judges a category by all its cards):site/demo/assets/GameScene-C8mHUnIs.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

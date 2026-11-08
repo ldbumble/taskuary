@@ -2992,7 +2992,7 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>{CATALOGUE.find((c) => c.type === conn.Type)?.desc}</Typography>
       {st?.url && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>MCP server <code>{st.url}</code>
-        {st.docs && <> · <a href={st.docs} target="_blank" rel="noreferrer">the vendor's guide</a></>}</Typography>}
+        {st.docs && <> · <a href={st.docs} target="_blank" rel="noreferrer">{"the vendor's guide"}</a></>}</Typography>}
       {clis.map(([c, v]) => (
         <Typography key={c} variant="body2" sx={{ color: INK }}>{name[c]}: {!v.here ? "not on this computer" : !v.added ? "not added yet"
           : v.signed_in ? "added · signed in" : v.signing_in ? "added · signing in…" : "added"}</Typography>))}

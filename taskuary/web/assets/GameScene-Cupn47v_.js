@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:taskuary/web/assets/GameScene-Cupn47v_.js
 import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fm as xc}from"./index-A8PQuoW6.js";/**
+========
+import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fm as xc}from"./index-DJbL2U-Z.js";/**
+>>>>>>>> 930fda89a (Rebuild the app, the demo and the docs; the catalogue test judges a category by all its cards):taskuary/web/assets/GameScene-OkGxqvVr.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

@@ -16,11 +16,16 @@ const CATEGORIES = [
   "Social",
 ];
 
-test("every connector category has several roadmap entries", () => {
-  assert.deepEqual(Object.keys(PLANNED_CONNECTORS), CATEGORIES);
+// THE ROADMAP EMPTIES AS IT IS BUILT (the owner, 2026-11-08: "all the ones that say coming soon just add them now"): a category is
+// judged by every card it holds, working or planned, and the planned ones are only those no road reaches yet
+test("every connector category holds several cards, working or planned", () => {
+  const groups = new Set(CATALOGUE.map((c) => c.group));
   for (const category of CATEGORIES) {
-    assert.ok(plannedFor(category).length >= 5, `${category} should not look empty`);
+    assert.ok(groups.has(category), category);
+    assert.ok(CATALOGUE.filter((c) => c.group === category).length >= 5, `${category} should not look empty`);
   }
+  for (const category of Object.keys(PLANNED_CONNECTORS)) assert.ok(CATEGORIES.includes(category), category);
+  assert.equal(plannedFor("AI — agents & models").length, 0);      // every model provider on the roadmap now has a card
 });
 
 test("the requested Grok API connector is BUILT, not merely planned", () => {

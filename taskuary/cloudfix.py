@@ -12,8 +12,10 @@ Taskuary then opens the fix's pull request with the OWNER's token - one the work
 repository's CI - and the batch item carries it: the report is its finding and Merge merges the fix, the contributor's commits
 with it. The workflow runs from the default branch, so a pull request cannot change what it does.
 
-The one secret the workflow needs (CLAUDE_CODE_OAUTH_TOKEN, from `claude setup-token`) sits in job `fix` beside the stranger's
-code: it can be read there and is revocable; it cannot reach the repository or this machine.
+The one secret the workflow needs sits in job `fix` beside the stranger's code: it can be read there. So the better one is
+ANTHROPIC_API_KEY - a key of its own with a spend limit on it - and CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`, the owner's
+subscription) is the fallback; either is revocable and cannot reach the repository or this machine. Every action is pinned to a
+commit and the CLI to a version, and job `push` keeps no token in .git/config while it applies a patch the stranger shaped (M6).
 """
 import base64, io, json, zipfile
 from datetime import datetime, timezone
@@ -25,7 +27,7 @@ from .store import task_ref
 
 FILE = 'taskuary-fix.yml'
 PATH = f'.github/workflows/{FILE}'
-SECRET = 'CLAUDE_CODE_OAUTH_TOKEN'
+SECRET, KEY = 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'
 NEVER_STARTED_MIN = 30          # a dispatch with no run to show for it after this long has failed to start
 REPORT_CHARS = 1200
 
@@ -47,20 +49,21 @@ jobs:
     timeout-minutes: 60
     permissions: {contents: read}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {ref: 'refs/pull/${{ inputs.pr }}/head', persist-credentials: false}
       - name: The head that was reviewed, and nothing pushed since
         env: {PR: '${{ inputs.pr }}', SHA: '${{ inputs.sha }}'}
         run: |
           [[ "$PR" =~ ^[0-9]+$ ]] || { echo "not a pull request number"; exit 1; }
           test "$(git rev-parse HEAD)" = "$SHA" || { echo "the pull request moved since it was reviewed"; exit 1; }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 22}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: '3.12'}
-      - run: npm install -g @anthropic-ai/claude-code
+      - run: npm install -g @anthropic-ai/claude-code@2.1.299
       - name: Fix
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ASK: ${{ inputs.ask }}
         run: claude -p "$ASK" --permission-mode bypassPermissions > "$RUNNER_TEMP/report.md"
@@ -70,7 +73,7 @@ jobs:
           git add -A -- . ':!.github'
           git diff --cached --binary > "$RUNNER_TEMP/fix.patch"
           touch "$RUNNER_TEMP/report.md"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: taskuary-fix
@@ -82,19 +85,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {contents: write}
     steps:
-      - uses: actions/checkout@v4
-        with: {ref: 'refs/pull/${{ inputs.pr }}/head'}
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {ref: 'refs/pull/${{ inputs.pr }}/head', persist-credentials: false}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: {name: taskuary-fix, path: '${{ runner.temp }}/fix'}
       - name: Push the fix to taskuary/pr-N
-        env: {PR: '${{ inputs.pr }}', SHA: '${{ inputs.sha }}'}
+        env: {PR: '${{ inputs.pr }}', SHA: '${{ inputs.sha }}', GH_TOKEN: '${{ github.token }}'}
         run: |
           [[ "$PR" =~ ^[0-9]+$ ]] || exit 1
           test "$(git rev-parse HEAD)" = "$SHA" || exit 1
           if [ ! -s "$RUNNER_TEMP/fix/fix.patch" ]; then echo "the agent changed nothing"; exit 0; fi
           git apply --index "$RUNNER_TEMP/fix/fix.patch"
           git -c user.name="taskuary[bot]" -c user.email="taskuary@users.noreply.github.com" commit -m "Taskuary's fix for #$PR"
-          git push --force origin "HEAD:refs/heads/taskuary/pr-$PR"
+          git push --force "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/taskuary/pr-$PR"
 """
 
 
@@ -117,8 +120,9 @@ def setup_state(store, repo) -> dict:
     if not tok: return {**out, 'why': 'the GitHub card has no token'}
     r = requests.get(f'{github.GH}/repos/{repo}/contents/{PATH}', headers=github._h(tok), timeout=20)
     out['workflow'] = r.status_code == 200
-    s = requests.get(f'{github.GH}/repos/{repo}/actions/secrets/{SECRET}', headers=github._h(tok), timeout=20)
-    out['secret'] = True if s.status_code == 200 else False if s.status_code == 404 else None
+    codes = [requests.get(f'{github.GH}/repos/{repo}/actions/secrets/{n}', headers=github._h(tok), timeout=20).status_code for n in (KEY, SECRET)]
+    # a spend-limited key of its own, or the subscription token: either will do; a token that may not look is no answer
+    out['secret'] = True if 200 in codes else False if all(c == 404 for c in codes) else None
     return out
 
 
@@ -156,7 +160,7 @@ def start(store, tid, it: dict, extra: str = '', actor='owner') -> dict:
     repo, n = p
     st = setup_state(store, repo)
     if not st['workflow']: return {'ok': False, 'setup': st, 'why': f'{repo} does not have the cloud-fix workflow yet - set it up first'}
-    if st['secret'] is False: return {'ok': False, 'setup': st, 'why': f'{repo} has no {SECRET} secret - add it on GitHub first'}
+    if st['secret'] is False: return {'ok': False, 'setup': st, 'why': f'{repo} has neither a {KEY} nor a {SECRET} secret - add one on GitHub first'}
     try:
         sha = it.get('Sha') or github.pr(tok, repo, n)['sha']
         ref = github.repo_info(tok, repo).get('default_branch') or 'main'

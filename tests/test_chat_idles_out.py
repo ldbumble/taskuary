@@ -59,9 +59,12 @@ class IdleOut(unittest.TestCase):
         self.ses.cli_up = True
         with mock.patch.object(clipool, 'is_live', return_value=True):
             self.assertNotIn(self.tid, general.idle_sweep(self.ses.last + 1))       # alive and not idle long enough: it stays
-        with mock.patch.object(clipool, 'is_live', return_value=False):
+        # ...and its browser goes with it, its view answering or not (the product audit, 2026-11-08: the daemon and Chrome outlived it)
+        from taskuary import browserview
+        with mock.patch.object(clipool, 'is_live', return_value=False), mock.patch.object(browserview, 'state', return_value={'open': False}),              mock.patch.object(browserview, 'close') as shut:
             self.assertIn(self.tid, general.idle_sweep(self.ses.last + 1))          # gone: closed quietly, as idle time would
         self.assertFalse(self.ses.alive); self.assertTrue(general.idled(self.tid, self.s))
+        shut.assert_called_once_with(self.sid, self.tid)
 
     def test_an_idle_session_closes_quietly_after_the_period(self):
         s, tid = self.s, self.tid

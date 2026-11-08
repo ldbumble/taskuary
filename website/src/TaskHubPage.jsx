@@ -570,9 +570,18 @@ export default function TaskHubPage() {
           flexWrap: { xs: "wrap", md: "nowrap" }, rowGap: 0.5,
           px: { xs: 1.25, md: 2.5 }, py: 1,
           bgcolor: PANEL, borderBottom: `1px solid ${BORDER}`, position: "sticky", top: 0, zIndex: 30 }}>
-          <TaskuaryMark size={26} sx={{ borderRadius: 1.5 }} />
-          {/* the word gives way on a phone: with it the bar wrapped, and the bell and refresh sat alone on a second row (2026-10-06) */}
-          <Typography sx={{ fontWeight: 600, fontSize: 14.5, color: INK, letterSpacing: 0.2, display: { xs: "none", sm: "block" } }}>Taskuary</Typography>
+          {/* THE LOGO IS THE WAY HOME (Gabi, 2026-11-08: "we need an easy way to get back to your feed. Maybe the taskuary logo"): from a task,
+              a page, the Board or the Game it lands on the feed - the same 'home' road Back to the bare address takes, so Back returns */}
+          <Tooltip title="Back to your feed">
+            <Box component="button" type="button" aria-label="Back to your feed" data-tq-home=""
+              onClick={() => { pickAsstGame(false); go("Assistant"); ask({ kind: "home" }); }}
+              sx={{ display: "flex", alignItems: "center", gap: { xs: 0.75, md: 1.25 }, p: 0.25, m: -0.25, border: 0, bgcolor: "transparent",
+                borderRadius: 1.5, cursor: "pointer", font: "inherit", "&:hover": { opacity: 0.8 }, "&:focus-visible": { outline: `2px solid ${ACCENT}` } }}>
+              <TaskuaryMark size={26} sx={{ borderRadius: 1.5 }} />
+              {/* the word gives way on a phone: with it the bar wrapped, and the bell and refresh sat alone on a second row (2026-10-06) */}
+              <Typography sx={{ fontWeight: 600, fontSize: 14.5, color: INK, letterSpacing: 0.2, display: { xs: "none", sm: "block" } }}>Taskuary</Typography>
+            </Box>
+          </Tooltip>
           {/* no tagline here (the cleanup, 2026-10-06): the top bar is the logo, the views and three icons */}
           {/* no version number here (audit, 2026-11-05): it is Settings → Updates' to say */}
           <DemoBadge demo={demo} />

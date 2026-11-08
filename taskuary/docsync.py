@@ -126,6 +126,33 @@ def agent_systems(store) -> str:
             'your reply what it will change and why. At write you may make the change yourself; say what you changed.')
 
 
+def not_a_tool(store, t) -> str:
+    """WHAT A CALL TO A NAME THAT IS NO TOOL IS TOLD (TQ-1354, 2026-11-08: an agent sending from a Gmail mailbox called run_system with
+    "gmail" and read only "unknown tool type: gmail", a dead end it could not reason past). Every connection the agent can see is one of a
+    few kinds, and each has its own way in - the answer names that way, so the next call is the right one, whatever the card."""
+    import difflib
+    from .reports import REGISTRY, card_of
+    from .outbound import MAILBOXES, mailboxes
+    from . import connectorcatalog
+    t = str(t or '').strip()
+    real = sorted(k for k in REGISTRY if not k.startswith('_'))
+    own = [k for k in real if card_of(k) == t]
+    cat = next((c for c in connectorcatalog.cards() if c['type'] == t), None)
+    if own: why = f'"{t}" is a connection, not a tool - call one of its tools: {", ".join(own)}.'
+    elif t in MAILBOXES:
+        boxes = ', '.join(m['address'] for m in mailboxes(store) if m['kind'] == t)
+        why = (f'"{t}" is a mailbox, not a tool - an email from it is propose_email with `from` set to its address'
+               f'{" (" + boxes + ")" if boxes else ""}; it waits for the owner\'s Send.')
+    elif cat and cat.get('mcp'): why = f'"{t}" is {cat["title"]}\'s own MCP server in your CLI, not a run_system tool - call its MCP tools directly.'
+    elif cat and cat.get('planned'): why = f'"{t}" ({cat["title"]}) is not built yet - say so to the owner instead of working round it.'
+    elif cat: why = (f'"{t}" ({cat["title"]}) brings work in or sends replies, it is no tool - an answer on it is a draft the owner sends '
+                     '(propose_reply / propose_email).')
+    else:
+        near = difflib.get_close_matches(t, real, 3, 0.6)
+        why = f'unknown tool type: {t}' + (f' - did you mean {", ".join(near)}?' if near else '')
+    return why + ' YOUR SYSTEMS in your brief lists every tool you can call.'
+
+
 def sync_projects(store, actor='system'):
     """Render structured project links into one replaceable, human-readable SOUL.md block.
 

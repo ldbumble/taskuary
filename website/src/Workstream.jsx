@@ -24,10 +24,13 @@ export const WorkstreamLabel = ({ name, slug, sx = {} }) => {
   const shown = name || xs.find((w) => w.slug === slug)?.name;
   if (!shown) return null;
   return (
-    <Box component="span" data-tq-workstream={slug || ""} title="Workstream"
+    // ...cut short on a narrow rail it ends in "…" and says its whole name on hover (the owner, 2026-11-08: "this is cut off??") - it was clipped
+    // mid-word by the row's edge with nothing to say what it was
+    <Box component="span" data-tq-workstream={slug || ""} title={`Workstream: ${shown}`}
       sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, fontSize: 11, color: FAINT, border: `1px solid ${BORDER}`,
-        borderRadius: 1, px: 0.6, py: 0.05, lineHeight: 1.5, whiteSpace: "nowrap", ...sx }}>
-      <LayersIcon sx={{ fontSize: 12 }} />{shown}
+        borderRadius: 1, px: 0.6, py: 0.05, lineHeight: 1.5, whiteSpace: "nowrap", minWidth: 0, maxWidth: "45%", ...sx }}>
+      <LayersIcon sx={{ fontSize: 12, flexShrink: 0 }} />
+      <Box component="span" sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{shown}</Box>
     </Box>
   );
 };

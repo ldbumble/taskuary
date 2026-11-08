@@ -1,6 +1,24 @@
 /* the diff as an editor shows it (DiffView.jsx) - the app's own diff colours (ui.jsx DiffBlock), its mono face, line numbers down the side */
 .tq-dv { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .tq-dv-all { display: flex; gap: 10px; justify-content: flex-end; }
+/* LAID OUT LIKE A PULL REQUEST (DiffView, more than one file): the file list on the left stays put while the diffs scroll; on a narrow
+   screen it sits on top, short, and scrolls on its own */
+.tq-dv.tq-dv-pr { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 12px; align-items: start; }
+.tq-dv-tree { position: sticky; top: 0; max-height: min(70vh, 640px); overflow: auto; border: 1px solid #e1dcd5; border-radius: 8px; background: #fbfaf7; padding: 6px 0; font-size: 12px; }
+.tq-dv-thead { display: flex; align-items: center; gap: 8px; padding: 2px 10px 6px; color: #6e685f; font-weight: 600; border-bottom: 1px solid #ece8e1; margin-bottom: 4px; }
+.tq-dv-thead .tq-dv-all { margin-left: auto; }
+.tq-dv-tgroup { padding: 2px 0; }
+.tq-dv-tdir { padding: 4px 10px 2px; color: #8b877e; font: 11px/1.4 'Cascadia Mono', Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tq-dv-tgen > summary { cursor: pointer; }
+.tq-dv-titem { appearance: none; width: 100%; display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 18px; border: 0; background: none; cursor: pointer; text-align: left; font: inherit; color: #292824; }
+.tq-dv-titem:hover { background: #efe9df; }
+.tq-dv-titem.tq-dv-on { background: #e5ded2; font-weight: 600; }
+.tq-dv-tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11.5px/1.4 'Cascadia Mono', Consolas, monospace; }
+.tq-dv-tstat { flex-shrink: 0; font-size: 10.5px; }
+.tq-dv-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tq-dv-body .tq-dv-file { scroll-margin-top: 8px; }
+.tq-dv-gen { font-size: 10px; font-weight: 600; color: #8b877e; border: 1px solid #ddd6cb; border-radius: 99px; padding: 0 6px; }
+@media (max-width: 760px) { .tq-dv.tq-dv-pr { grid-template-columns: minmax(0, 1fr); } .tq-dv-tree { position: static; max-height: 200px; } }
 .tq-dv-all button, .tq-dv-marks button { appearance: none; border: 0; background: none; padding: 0; font-family: inherit; font-size: 11px; font-weight: 600; line-height: 1.4; color: #6e685f; cursor: pointer; }
 .tq-dv-all button:hover { color: #292824; text-decoration: underline; }
 .tq-dv-file { border: 1px solid #e1dcd5; border-radius: 8px; overflow: hidden; background: #fff; min-width: 0; }

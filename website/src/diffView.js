@@ -108,6 +108,20 @@ const KW = {
 };
 const LANG = { py: "py", pyw: "py", js: "js", jsx: "js", mjs: "js", cjs: "js", ts: "js", tsx: "js", json: "js", css: "js", sh: "sh", bash: "sh", ps1: "sh", yml: "sh", yaml: "sh", toml: "sh" };
 export const langOf = (path) => LANG[(/\.([A-Za-z0-9]+)$/.exec(String(path || "")) || [])[1]?.toLowerCase()] || "";
+// GENERATED FILES FOLD AWAY, as GitHub does (the owner, 2026-11-08: "the diff looks horrible ... should look like github pr's"): a landing's
+// diff was 50 rebuilt bundles before the one source file that mattered. A build's output is named by what it is - a content-hashed asset,
+// a minified file, a lock file, a build folder - never by this repo's own folder names
+const GEN = [/(^|\/)(node_modules|dist|build|vendor)\//, /\.min\.(js|css)$/, /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|uv\.lock|Cargo\.lock)$/,
+  /(^|\/)assets\/[^/]+-[A-Za-z0-9_-]{8}\.(js|css|map)$/];
+export const generated = (path) => GEN.some((r) => r.test(String(path || "")));
+// ...and the file list on the left: the source first, by folder, then the generated ones in one group of their own
+export function fileTree(files) {
+  const dir = (p) => { const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i); }, base = (p) => p.slice(p.lastIndexOf("/") + 1);
+  const src = files.filter((f) => !generated(f.path)), gen = files.filter((f) => generated(f.path));
+  const groups = [...src.reduce((m, f) => m.set(dir(f.path), [...(m.get(dir(f.path)) || []), f]), new Map())]
+    .sort(([a], [b]) => a.localeCompare(b)).map(([d, fs]) => ({ dir: d, files: fs.map((f) => ({ ...f, name: base(f.path) })) }));
+  return { groups, generated: gen.map((f) => ({ ...f, name: f.path })) };
+}
 const RX = {
   py: /(#.*$)|("""[^]*?"""|'''[^]*?'''|[rbfu]?"(?:[^"\\]|\\.)*"|[rbfu]?'(?:[^'\\]|\\.)*')|\b(\d[\d_.]*)\b|\b([A-Za-z_]\w*)\b/g,
   js: /(\/\/.*$|\/\*.*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|\b(\d[\d_.]*)\b|\b([A-Za-z_$][\w$]*)\b/g,

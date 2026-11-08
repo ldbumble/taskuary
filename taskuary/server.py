@@ -8375,7 +8375,9 @@ def tool_run(body: dict, request: Request):
     without the 'tool' role also refuses, and so does one whose Authority sits below what
     the executor needs - running PowerShell on a box is 'admin', reading a table is 'read'."""
     t = (body or {}).get('type')
-    if t not in REGISTRY: raise HTTPException(422, f'unknown tool type: {t}')
+    if t not in REGISTRY:
+        from .docsync import not_a_tool
+        raise HTTPException(422, not_a_tool(store, t))
     from .reports import card_of, query_only
     from . import scopes
     connector_id = (body or {}).get('connector_id')

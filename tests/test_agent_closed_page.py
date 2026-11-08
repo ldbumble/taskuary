@@ -35,33 +35,27 @@ def agent_closes(s, tid, said='the run failed on a missing secret; re-added it a
         return selfclose.declare(s, tid, said, 'assistant')
 
 
-def test_the_agents_own_close_leaves_its_write_up(s):
+def test_the_agents_own_ending_leaves_its_write_up_and_the_task_open(s):
+    """The agent never closes a task (the owner, 2026-11-07): its ending is written up, and the close is the owner's Mark done."""
     tid = worked(s)
-    assert agent_closes(s, tid)['closed']
-    assert s.get_task(tid)['Status'] == 'done'
+    out = agent_closes(s, tid)
+    assert out['ended'] and not out['closed'] and s.get_task(tid)['Status'] not in ('done', 'dropped')
     reports = [c['Body'] for c in s.list_comments(tid) if str(c['Body']).startswith('AGENT REPORT')]
     assert reports == [f'AGENT REPORT\n{ANSWER}']
 
 
-def test_the_page_reads_the_agents_close_and_says_why_without_a_list_row(s):
+def test_the_page_says_what_the_agent_did_and_that_the_close_is_the_owners(s):
     tid = worked(s); agent_closes(s, tid)
     d = server.task_detail(tid)
-    assert d['state'] == 'agentdone'
-    assert d['closedWhy'] == 'Closed by the agent: the run failed on a missing secret; re-added it and the re-run passed'
-
-
-def test_the_agents_own_close_is_its_own_stage_on_the_agent_section(s):
-    """S2: who closed it and why are the Agent's - the task opens there, not on Close out; one the owner closed is still `done`."""
-    from taskuary import stages
-    tid = worked(s); agent_closes(s, tid)
-    assert server.task_detail(tid)['stage'] == 'closed_by_agent' and stages.parts('closed_by_agent')['section'] == 'agent'
-    mine = worked(s); s.update_task(mine, {'Status': 'done'}, 'owner')
-    assert server.task_detail(mine)['stage'] == 'done'
+    assert d['state'] != 'closed' and d['closedWhy'] is None                                                       # nothing closed it
+    assert s.list_comments(tid)[-1]['Body'] == ('The agent says it is finished: the run failed on a missing secret; re-added it and the '
+                                                 're-run passed. You can close it with Mark done.')
+    assert server.task_detail(tid)['stage'] != 'closed_by_agent'
 
 
 def test_with_no_done_sentence_the_reason_is_the_reports_first_line(s):
     tid = worked(s); agent_closes(s, tid, said='')
-    assert server.task_detail(tid)['closedWhy'] == f'Closed by the agent: {ANSWER}'
+    assert s.list_comments(tid)[-1]['Body'] == f'The agent says it is finished: {ANSWER.rstrip(".")}. You can close it with Mark done.'
 
 
 def test_a_task_the_owner_closed_carries_no_agent_reason(s):

@@ -98,7 +98,7 @@ class MidTurnTests(SessionTest):
         ws.record(self.s, self.tid, 's1', 'working', source='hook')
         for n in (1, 2): batch.report(self.s, self.tid, n, 'Done.', settled=True)
         out = selfclose.declare(self.s, self.tid, 'Both items reviewed and settled.', agent='coding')
-        self.assertTrue(out['closed'], out)
+        self.assertTrue(out['ended'], out)
         self.assertEqual(len(self.wraps), 1)
         ws.record(self.s, self.tid, 's1', 'turn_end', text='Done.', source='hook')
         self.flush()

@@ -35,6 +35,7 @@ from urllib.parse import urlsplit
 from loguru import logger
 
 EXE = 'agent-browser'
+NAVS = frozenset('open goto navigate'.split())
 # agent-browser's commands that only LOOK or move between pages - its grammar, from `agent-browser --help` (0.38): none of them
 # presses, types or runs anything on a page. Every other command is judged.
 LOOKS = frozenset('''snapshot get screenshot is wait open goto navigate back forward reload scroll scrollintoview hover highlight
@@ -104,11 +105,24 @@ def acts(cmd: str) -> list:
         i = 0
         while i < len(a) and a[i].startswith('-'): i += 2 if a[i] in VALUED and '=' not in a[i] else 1
         verb = a[i].lower() if i < len(a) else ''
-        if verb and verb not in LOOKS: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
+        nxt = a[i + 1] if i + 1 < len(a) else ''
+        # A LOOK THAT IS NOT ONE (M4, 2026-11-08): an address carrying a token or a long query is a magic link ("approve", "confirm",
+        # one-click pay) or a way out for what the agent read (`open https://x/?d=...`) - judged like a click; and `get value` reads
+        # whatever a box holds, a password the sign-in vault just filled included - checked against the page (check)
+        if verb in NAVS and carries(nxt): verb = 'navigate'
+        elif verb == 'get' and nxt.lower() == 'value': out.append({'args': a, 'verb': 'get value', 'read': True}); continue
+        elif verb in LOOKS: continue
+        if verb: out.append({'args': a, 'verb': verb, **({'nl': True} if _NL.search(str(cmd)) else {})})
     return out
 
 
-NAVS = frozenset('open goto navigate'.split())
+def carries(url: str) -> bool:
+    "Does this address carry more than a place - a query or fragment past a few short words, or a token-like run in it?"
+    u = urlsplit(str(url or ''))
+    tail = f'{u.query}#{u.fragment}' if u.fragment else u.query
+    return len(tail) > 40 or bool(re.search(r'[A-Za-z0-9_%=+/.-]{32,}', f'{u.path}?{tail}'.replace('/', ' ')))
+
+
 def opens(cmd: str) -> str:
     "The address the first agent-browser open / goto / navigate in a shell command goes to, else '' (browserview.on_demand)."
     if EXE not in str(cmd or '').lower(): return ''
@@ -287,6 +301,11 @@ def check(store, tid: int, sid: str, cmd: str, brain=None) -> dict:
     if not todo: return {}
     pg = page(sid)
     for a in todo:
+        if a.get('read'):           # a box's value is read only where the page shows it is no password box
+            c = control(a, pg)
+            if not c.get('role') or 'password' in f"{c.get('name')} {c.get('role')}".lower():
+                return _deny(f"{HELD}: reading what is typed in that box is refused - it is a password box, or the page does not say what it is.")
+            continue
         v = judge(store, a, pg, brain)
         if not v['hold']: continue
         args = _own_args(a['args'])

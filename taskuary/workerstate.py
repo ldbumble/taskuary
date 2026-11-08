@@ -590,7 +590,18 @@ def asking_of(store, t):
     open_ = open_requests(evs)
     if not open_: return None
     approvals = [e for e in open_ if e['Kind'] == 'approval_needed']
-    return _public_request((approvals or open_)[-1])
+    return _public_request(approvals[-1]) if approvals else shown_ask([_public_request(e) for e in open_])
+
+
+def shown_ask(reqs: list) -> dict | None:
+    """The ask to SHOW of these open requests (public, oldest first): the newest one - or, when that turn asked several, its FIRST question
+    with "(+N more)" and every one in `questions`. The rail and the chip held only the last of four, and "where from?" was hidden behind
+    "any airline?" (agent-flow audit, 2026-11-07). What an answer binds to is the whole set either way (answer_open, question_group)."""
+    if not reqs: return None
+    g = group_of(reqs[-1]['request_id'])
+    grp = [r for r in reqs if g and group_of(r['request_id']) == g] or reqs[-1:]
+    one = grp[0]
+    return one if len(grp) < 2 else {**one, 'text': f"{one['text']} (+{len(grp) - 1} more)", 'questions': [r['text'] for r in grp]}
 
 
 def request_line(agent: str, req: dict) -> str:

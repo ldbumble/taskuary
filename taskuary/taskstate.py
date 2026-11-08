@@ -44,7 +44,7 @@ def open_question(store, tid: int) -> dict | None:
     """THE AGENT'S OPEN QUESTION, AS SAVED WITH THE TASK (the owner, 2026-11-07: an idled-out agent's question vanished from the chip, the rail
     and the Assistant though nobody answered it): its run's own recorded ask, open until the owner speaks - whether its process is alive or
     not. None when none is open."""
-    return next((r for r in reversed(workerstate.status(store, tid)['requests']) if workerstate.own_question(r)), None)
+    return workerstate.shown_ask([r for r in workerstate.status(store, tid)['requests'] if workerstate.own_question(r)])
 
 
 def _chat_resting(store, t: dict) -> str | None:

@@ -116,6 +116,8 @@ TOOLS = [
 def tools() -> list:
     """Every optional tool, with whether it resolves on PATH - the install hint is for the ones that do not - and, once a day's check has
     answered, the version here, npm's latest and `update` (the latest, when the one here is behind it; '' otherwise)."""
+    from . import demo
+    if demo.enabled(): return demo.tool_rows()                # the demo's machine is invented: the visitor's is never read
     from .pathcache import which as w
     seen = versions()
     def ver(t):
@@ -338,7 +340,8 @@ def detect(store=None) -> list:
     Neither means it WORKS - only a test run does, which is why the wizard runs one.
     """
     import json, os
-    from . import cliinstall, clisetup
+    from . import cliinstall, clisetup, demo
+    if demo.enabled(): return demo.cli_rows()                 # ...nor here
     # configured = some row already runs this CLI. A profile is never a row of its own here: it is instructions on whichever
     # tool is the brain, and listing `coding` beside Claude Code read as a second CLI (the owner, 2026-10-15)
     def cmd_of(a):

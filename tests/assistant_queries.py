@@ -1322,7 +1322,8 @@ def _world():
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     if _SEEDED: s = _copy(_SEEDED[0]); funnel.invalidate(); return s
     s = MemoryStore()
-    with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(s)
+    # ...the demo's tasks without its connected cards (demo.CONNECTIONS): this corpus's owner has the one Outlook card, Work mail, below
+    with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch.object(demo, 'seed_connections', lambda s: 0): demo.seed(s)
     for k in ('auto_draft_enabled',): s.set_setting(k, '0', 't')
     s.set_task_checklist(1, ['pull the bank feed', 'find the 4,180', 'send Marcus the answer'], 'owner')
     s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')

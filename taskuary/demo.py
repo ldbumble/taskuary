@@ -110,6 +110,7 @@ OFF = 'This is the demo - that would reach something real, so it is switched off
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.
 REFUSALS = (
+    (r'^/api/(cli|deps|update)(/|$)', 'This is the demo - nothing happens. Its AI tools are pretend, and nothing on your computer is touched.'),
     (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/(send|decide)|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
@@ -438,6 +439,70 @@ def _tile(text):
     return json.dumps({'component': {'kind': 'stat', 'title': str(ask.get('sentence') or 'Rows')[:38], 'source': src['key'], 'agg': 'count'}})
 
 
+# ── the demo's machine (F47) ──────────────────────────────────────────────────────────────
+# What is installed is a fact about the VISITOR'S computer: an AI tool's card read it through GET routes the deny list lets by - "Installed",
+# Update, Connect - in a demo that says nothing real is reachable. Here the machine is invented too: every read of install state answers
+# from these, and no GET below touches the host (answer(), the middleware's one guard; clis.detect/tools and agents.runs_here ask here()).
+CLIS_HERE = {'claude': '2.1.4', 'codex': '0.152.0'}         # name -> the version "installed"
+CLIS_ON = ('claude',)                                       # ...and connected, as Claude Code
+TOOLS_HERE = {'agent-browser': '0.9.1'}
+NOT_HERE = 'This is the demo - nothing is installed here.'
+
+def here(cmd) -> bool: return re.split(r'[\\/]', str(cmd or ''))[-1].lower().rsplit('.', 1)[0] in {**CLIS_HERE, **TOOLS_HERE}
+
+def cli_rows() -> list:
+    from . import clis
+    return [{**k, 'installed': k['name'] in CLIS_HERE, 'path': '', 'runs': '', 'store': False, 'install': k['name'], 'installable': False,
+             'configured': k['name'] in CLIS_ON, 'updatable': False, 'why_not': '' if k['name'] in CLIS_HERE else NOT_HERE, 'setup': '',
+             'version': CLIS_HERE.get(k['name'], '')} for k in clis.KNOWN]
+
+def tool_rows() -> list:
+    from . import clis
+    return [{**t, 'installed': t['name'] in TOOLS_HERE, 'path': '', 'version': TOOLS_HERE.get(t['name'], ''),
+             'latest': TOOLS_HERE.get(t['name'], ''), 'update': ''} for t in clis.TOOLS]
+
+def cli_connections() -> dict: return {n: {'cmd': n} for n in CLIS_ON}
+
+def _cli_conns() -> dict:
+    return {'data': [{**r, 'config': {'cmd': r['name']}, 'used_by': [], 'models': {'models': [], 'current': {}, 'choices': [], 'source': 'the demo'}}
+                     for r in cli_rows() if r['installed']]}
+
+def _deps() -> dict:
+    from . import deps
+    return {'can_install': False, 'why': NOT_HERE, 'python': '', 'frozen': False, 'where': '',
+            'packages': {k: {'name': deps.pip_name(k), 'installed': True, 'bundled': False} for k in deps.OPTIONAL}}
+
+def _update() -> dict:
+    from . import __version__ as v
+    return {'current': v, 'how': 'demo', 'latest': v, 'newer': False, 'url': None, 'notes': None, 'error': None, 'waits': '', 'queued': False, 'queued_error': None}
+
+def _wa() -> dict:
+    from .messengers import wa_status_line
+    st = {'connected': True, 'me': OWNER, 'jid': '', 'phone': '', 'pairing_code': '', 'qr_svg': '', 'reconnect': {}, 'filter': {}, 'admitted': None,
+          'turned_away': None, 'last_inbound_at': 0, 'last_failure': None, 'contact_sync': {}, 'logged_out': False, 'bridge': True, 'node': True, 'manager': {}}
+    return {**st, **wa_status_line(st)}
+
+# GET path -> the demo's answer. Every route that reads the machine, or reaches past a connection to its system, is answered here and never
+# reaches its handler: the deny list shuts the writes, this the reads.
+ANSWERS = (
+    (r'^/api/cli/detect$', lambda: {'data': cli_rows(), 'tools': tool_rows()}),
+    (r'^/api/cli/connections$', _cli_conns),
+    (r'^/api/deps$', _deps),
+    (r'^/api/update$', _update),
+    (r'^/api/connectors/\d+/wa/status$', _wa),
+    (r'^/api/connectors/\d+/wa/chats$', lambda: {'data': [{'jid': 'ops@g.us', 'group': True, 'name': 'Ops chat', 'n': 12, 'last': 0, 'snippet': '', 'people': 6, 'self': False}]}),
+    (r'^/api/connectors/\d+/linkedin/status$', lambda: {'redirect_uri': '', 'connected': True, 'has_app': True, 'member': OWNER, 'days_left': 58}),
+    (r'^/api/connectors/\d+/mail/folders$', lambda: {'data': [{'id': 'inbox', 'name': 'Inbox', 'count': 214, 'well_known': 'inbox'},
+                                                             {'id': 'vendors', 'name': 'Vendors', 'count': 38, 'well_known': ''}]}),
+    (r'^/api/connectors/\d+/(google|ms|quickbooks|zoho|teller|simplefin)/', lambda: {'detail': OFF, 'demo': True}),
+)
+
+def answer(method: str, path: str):
+    "The demo's own answer to a GET that would read the host or a real system - None for every other request, and outside the demo."
+    if not enabled() or method.upper() not in READ_ONLY_METHODS: return None
+    return next((f() for pattern, f in ANSWERS if re.match(pattern, path)), None)
+
+
 # ── the world, invented ──────────────────────────────────────────────────────────────────
 # Northwind Facilities: a plausible mid-size operation with a plausible morning. Everything
 # below is written; nobody's mail was borrowed for it.
@@ -454,6 +519,29 @@ DIRECTORY = [{'email': 'lortiz@dynamo.example', 'name': 'Lena Ortiz', 'company':
              {'email': 'nprice@dynamo.example', 'name': 'Nora Price', 'company': 'Dynamo Freight', 'title': 'Account manager'},
              {'email': 'gmoreno@northwind.example', 'name': 'Gail Moreno', 'company': 'Northwind', 'title': 'Controller'},
              {'email': 'eblake@northwind.example', 'name': 'Erin Blake', 'company': 'Northwind', 'title': 'Payroll lead'}]
+
+# THE WORLD IS CONNECTED (F31): its tasks post to LinkedIn and read Teams, WhatsApp and GitHub, so Connections says so - each card on and
+# checked, never "0 connected" beside them, and no send card says "LinkedIn isn't connected" (outbound.connect_fix reads these rows)
+CONNECTIONS = (    # (Type, Name, ConfigJson, a stand-in secret: a card reads "signed in" off one; nothing ever uses it)
+    ('outlook', 'Northwind mail', {'auth': 'user', 'client_id': 'northwind-demo-app', 'account': OWNER_EMAIL, 'name': OWNER}, 'demo'),
+    # ...Teams as the company's app, as most are: it reads the ops chat, and a reply there is copied into Teams (outbound.no_sender)
+    ('teams', 'Northwind Teams', {'client_id': 'northwind-demo-app', 'tenant_id': 'northwind-demo-tenant'}, 'demo'),
+    ('whatsapp', 'WhatsApp', {}, None),
+    ('linkedin', 'LinkedIn', {'member_name': OWNER}, 'demo'),
+    ('github', 'GitHub', {}, 'demo'),
+)
+SOURCES = (('outlook', 'email', OWNER_EMAIL), ('teams', 'teams', OWNER_EMAIL), ('github', 'github', 'northwind/ledger'))
+
+def seed_connections(store) -> int:
+    ids = {}
+    for typ, name, conf, secret in CONNECTIONS:
+        had = store.get_connector_by_type(typ)                    # the catalogue's own card, switched on - never a second one beside it
+        ids[typ] = store.save_connector({**({'ConnectorId': had['ConnectorId']} if had else {}), 'Type': typ, 'Name': name,
+                                         'ConfigJson': json.dumps(conf), 'Secret': secret, 'Active': 1}, 'demo')
+        store._exec('UPDATE connector SET LastSyncAt=? WHERE ConnectorId=?', (_at(4), ids[typ]))
+    for typ, ch, addr in SOURCES: store.save_source({'Channel': ch, 'Address': addr, 'ConnectorId': ids[typ], 'Active': 1}, 'demo')
+    return len(ids)
+
 
 SEEDS = [
     # (channel, who, subject, body, what triage did, why)
@@ -712,6 +800,7 @@ def seed(store) -> int:
     # what a connected directory named once, so To and Cc can find a vendor's people by their company (peoplesearch.DIR_KEY)
     from . import peoplesearch
     peoplesearch.remember(store, DIRECTORY)
+    seed_connections(store)
     made = 0
     refs = {}
     for i, (channel, who, subject, body, verdict, why) in enumerate(SEEDS):

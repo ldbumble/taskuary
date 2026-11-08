@@ -803,6 +803,7 @@ const write = (method, url, body) => {
   // said as the demo, not as a fault: the Assistant posts these as a plain line (AssistantView demoNo), never with "Report this bug"
   const why = /send|approve/.test(p) ? SENDS
     : /dispatch|continue|terminals|agents/.test(p) ? STARTS
+    : /^\/api\/(cli|deps|update)(\/|$)/.test(p) ? "This is the demo - nothing happens. Its AI tools are pretend, and nothing on your computer is touched."
     : /connector|tools|sync|ingest/.test(p) ? "This is the demo - there are no real systems behind it, so nothing connects or runs."
     : "This is the demo - that one needs a Taskuary of your own. This page is a recording you can click.";
   const err = new Error(why);

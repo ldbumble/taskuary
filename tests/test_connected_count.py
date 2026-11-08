@@ -23,7 +23,7 @@ class ConnectedCount(unittest.TestCase):
         page = (Path(__file__).parent.parent / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
         self.assertIn('c.data.connected', page)
         src = (Path(__file__).parent.parent / 'taskuary' / 'server.py').read_text(encoding='utf-8')
-        self.assertIn("'connected': connected_count(store, cfg.get('cli_connections'))", src)
+        self.assertIn("'connected': connected_count(store, demo.cli_connections() if demo.enabled() else cfg.get('cli_connections'))", src)
 
 
 if __name__ == '__main__': unittest.main()

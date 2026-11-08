@@ -10274,15 +10274,16 @@
      "--resume"
     ],
     "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\claude.CMD",
-    "runs": "C:\\Users\\dana\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe",
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "claude",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
+    "installable": false,
+    "configured": true,
+    "updatable": false,
     "why_not": "",
-    "setup": "claude"
+    "setup": "",
+    "version": "2.1.4"
    },
    {
     "name": "codex",
@@ -10294,15 +10295,16 @@
      "--dangerously-bypass-hook-trust"
     ],
     "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.EXE",
-    "runs": "C:\\Users\\dana\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.EXE",
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "codex",
-    "installable": true,
+    "installable": false,
     "configured": false,
-    "updatable": true,
+    "updatable": false,
     "why_not": "",
-    "setup": "codex"
+    "setup": "",
+    "version": "0.152.0"
    },
    {
     "name": "gemini",
@@ -10318,16 +10320,17 @@
     "acp": [
      "--acp"
     ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\gemini.CMD",
-    "runs": "C:\\Program Files\\nodejs\\node.EXE",
+    "installed": false,
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "gemini",
-    "installable": true,
+    "installable": false,
     "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "gemini"
+    "updatable": false,
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "qwen",
@@ -10344,16 +10347,17 @@
     "acp": [
      "--acp"
     ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\qwen.CMD",
-    "runs": "C:\\Program Files\\nodejs\\node.EXE",
+    "installed": false,
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "qwen",
-    "installable": true,
+    "installable": false,
     "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "qwen"
+    "updatable": false,
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "opencode",
@@ -10369,16 +10373,17 @@
     "resume_args": [
      "--session"
     ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\opencode.CMD",
-    "runs": "C:\\Users\\dana\\AppData\\Roaming\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe",
+    "installed": false,
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "opencode",
-    "installable": true,
+    "installable": false,
     "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "opencode"
+    "updatable": false,
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "kimi",
@@ -10397,11 +10402,12 @@
     "runs": "",
     "store": false,
     "install": "kimi",
-    "installable": true,
+    "installable": false,
     "configured": false,
     "updatable": false,
-    "why_not": "",
-    "setup": "kimi"
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "cursor",
@@ -10427,8 +10433,9 @@
     "installable": false,
     "configured": false,
     "updatable": false,
-    "why_not": "its installer does not run on Windows - install it inside WSL2 (wsl --install), or use this vendor's API connector instead",
-    "setup": "cursor"
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "copilot",
@@ -10444,16 +10451,17 @@
     "acp": [
      "--acp"
     ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\copilot.CMD",
-    "runs": "C:\\Program Files\\nodejs\\node.EXE",
+    "installed": false,
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "copilot",
-    "installable": true,
+    "installable": false,
     "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "copilot"
+    "updatable": false,
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "muse",
@@ -10468,11 +10476,12 @@
     "runs": "",
     "store": false,
     "install": "muse",
-    "installable": true,
+    "installable": false,
     "configured": false,
     "updatable": false,
-    "why_not": "",
-    "setup": "muse"
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    },
    {
     "name": "devin",
@@ -10487,16 +10496,17 @@
     "acp": [
      "acp"
     ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Local\\devin\\cli\\bin\\devin.EXE",
-    "runs": "C:\\Users\\dana\\AppData\\Local\\devin\\cli\\bin\\devin.EXE",
+    "installed": false,
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "devin",
-    "installable": true,
+    "installable": false,
     "configured": false,
     "updatable": false,
-    "why_not": "",
-    "setup": "devin"
+    "why_not": "This is the demo - nothing is installed here.",
+    "setup": "",
+    "version": ""
    }
   ],
   "tools": [
@@ -10510,7 +10520,10 @@
     "why": "a local headless Chromium the coding agent drives from the terminal, shown live beside the session (browserview.py)",
     "status": "available",
     "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\agent-browser.CMD"
+    "path": "",
+    "version": "0.9.1",
+    "latest": "0.9.1",
+    "update": ""
    },
    {
     "name": "agent-desktop",
@@ -10522,7 +10535,10 @@
     "why": "the owner's desktop apps, read and operated through the accessibility tree, once Agent Desktop is on under Connections (agentdesktop.py)",
     "status": "available",
     "installed": false,
-    "path": ""
+    "path": "",
+    "version": "",
+    "latest": "",
+    "update": ""
    }
   ]
  },
@@ -10543,205 +10559,26 @@
      "--resume"
     ],
     "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\claude.CMD",
-    "runs": "C:\\Users\\dana\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe",
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "claude",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
+    "installable": false,
+    "configured": true,
+    "updatable": false,
     "why_not": "",
-    "setup": "claude",
+    "setup": "",
+    "version": "2.1.4",
     "config": {
-     "cmd": "claude",
-     "args": [
-      "-p",
-      "--dangerously-skip-permissions",
-      "--output-format",
-      "stream-json",
-      "--verbose"
-     ],
-     "resume_args": [
-      "--resume"
-     ]
+     "cmd": "claude"
     },
+    "used_by": [],
     "models": {
-     "models": [
-      {
-       "id": "claude-opus-5-5",
-       "label": "Opus 5.5",
-       "desc": "For complex work and everyday tasks",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "claude-fable-5-1",
-       "label": "Fable 5.1",
-       "desc": "For your toughest challenges",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-sonnet-5-5",
-       "label": "Sonnet 5.5",
-       "desc": "Most efficient for simpler tasks",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "claude-haiku-5-5",
-       "label": "Haiku 5.5",
-       "desc": "Fastest for quick answers",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "claude-haiku-4-5-20251001",
-       "label": "Haiku 4.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-5",
-       "label": "Sonnet 5",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-opus-5",
-       "label": "Opus 5",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-fable-5",
-       "label": "Fable 5",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-opus-4-8",
-       "label": "Opus 4.8",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-opus-4-7",
-       "label": "Opus 4.7",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "xhigh"
-      },
-      {
-       "id": "claude-opus-4-6",
-       "label": "Opus 4.6",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-sonnet-4-6",
-       "label": "Sonnet 4.6",
-       "desc": "",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "max"
-       ],
-       "default_effort": "high"
-      },
-      {
-       "id": "claude-fable-5-1[1m]",
-       "label": "Fable",
-       "desc": "Fable 5.1 · Most capable for your hardest and longest-running tasks",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
+     "models": [],
      "current": {},
-     "source": "claude model catalog",
-     "choices": [
-      "claude-opus-5-5",
-      "claude-fable-5-1",
-      "claude-sonnet-5-5",
-      "claude-haiku-5-5",
-      "claude-haiku-4-5-20251001",
-      "claude-sonnet-5",
-      "claude-opus-5",
-      "claude-fable-5",
-      "claude-opus-4-8",
-      "claude-opus-4-7",
-      "claude-opus-4-6",
-      "claude-sonnet-4-6",
-      "claude-fable-5-1[1m]"
-     ]
-    },
-    "used_by": []
+     "choices": [],
+     "source": "the demo"
+    }
    },
    {
     "name": "codex",
@@ -10753,1211 +10590,26 @@
      "--dangerously-bypass-hook-trust"
     ],
     "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.EXE",
-    "runs": "C:\\Users\\dana\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.EXE",
+    "path": "",
+    "runs": "",
     "store": false,
     "install": "codex",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "codex",
-    "config": {
-     "cmd": "codex",
-     "args": [
-      "exec",
-      "--dangerously-bypass-approvals-and-sandbox",
-      "--dangerously-bypass-hook-trust"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "gpt-6.1-sol",
-       "label": "GPT-6.1-Sol",
-       "desc": "Latest workhorse model for coding and everyday work.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-       ],
-       "default_effort": "low"
-      },
-      {
-       "id": "gpt-6-astra",
-       "label": "GPT-6-Astra",
-       "desc": "Frontier intelligence for the most demanding work.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "gpt-6.1-terra",
-       "label": "GPT-6.1 Terra",
-       "desc": "GPT-6.1 Terra Codex model.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-       ],
-       "default_effort": "low"
-      },
-      {
-       "id": "gpt-6-sol",
-       "label": "GPT-6-Sol",
-       "desc": "Previous generation workhorse model.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "gpt-6-luna",
-       "label": "GPT-6-Luna",
-       "desc": "Fast and affordable model for easier tasks.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "gpt-5.6-sol",
-       "label": "GPT-5.6-Sol",
-       "desc": "Older generation workhorse model.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-       ],
-       "default_effort": "low"
-      },
-      {
-       "id": "gpt-5.6-terra",
-       "label": "GPT-5.6-Terra",
-       "desc": "Older balanced model for straightforward work.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-        "ultra"
-       ],
-       "default_effort": "medium"
-      },
-      {
-       "id": "gpt-5.6-luna",
-       "label": "GPT-5.6-Luna",
-       "desc": "Older fast and efficient model.",
-       "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-       ],
-       "default_effort": "medium"
-      }
-     ],
-     "current": {
-      "model": "gpt-6-astra",
-      "effort": "high"
-     },
-     "source": "codex models_cache.json",
-     "choices": [
-      "gpt-6.1-sol",
-      "gpt-6-astra",
-      "gpt-6.1-terra",
-      "gpt-6-sol",
-      "gpt-6-luna",
-      "gpt-5.6-sol",
-      "gpt-5.6-terra",
-      "gpt-5.6-luna"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "gemini",
-    "cmd": "gemini",
-    "label": "Gemini CLI",
-    "args": [
-     "-p",
-     "--yolo"
-    ],
-    "resume_args": [
-     "--resume"
-    ],
-    "acp": [
-     "--acp"
-    ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\gemini.CMD",
-    "runs": "C:\\Program Files\\nodejs\\node.EXE",
-    "store": false,
-    "install": "gemini",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "gemini",
-    "config": {
-     "cmd": "gemini",
-     "args": [
-      "-p",
-      "--yolo"
-     ],
-     "resume_args": [
-      "--resume"
-     ],
-     "acp": [
-      "--acp"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "gemini-3.8-flash",
-       "label": "gemini-3.8-flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-2.5-pro",
-       "label": "gemini-2.5-pro",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-2.5-flash",
-       "label": "gemini-2.5-flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "built-in",
-     "choices": [
-      "gemini-3.8-flash",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "qwen",
-    "cmd": "qwen",
-    "label": "Qwen Code",
-    "args": [
-     "--yolo",
-     "--output-format",
-     "stream-json"
-    ],
-    "resume_args": [
-     "--resume"
-    ],
-    "acp": [
-     "--acp"
-    ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\qwen.CMD",
-    "runs": "C:\\Program Files\\nodejs\\node.EXE",
-    "store": false,
-    "install": "qwen",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "qwen",
-    "config": {
-     "cmd": "qwen",
-     "args": [
-      "--yolo",
-      "--output-format",
-      "stream-json"
-     ],
-     "resume_args": [
-      "--resume"
-     ],
-     "acp": [
-      "--acp"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "coder-model",
-       "label": "Qwen OAuth coding model",
-       "desc": "Requires Qwen OAuth sign-in",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "built-in",
-     "choices": [
-      "coder-model"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "opencode",
-    "cmd": "opencode",
-    "label": "OpenCode (DeepSeek, GLM, MiniMax)",
-    "description": "Use /connect to add a provider, then /models to choose it. Task execution only; choose another provider for triage and reports.",
-    "args": [
-     "run",
-     "--format",
-     "json",
-     "--auto"
-    ],
-    "resume_args": [
-     "--session"
-    ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\opencode.CMD",
-    "runs": "C:\\Users\\dana\\AppData\\Roaming\\npm\\node_modules\\opencode-ai\\bin\\opencode.exe",
-    "store": false,
-    "install": "opencode",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
-    "why_not": "",
-    "setup": "opencode",
-    "config": {
-     "cmd": "opencode",
-     "args": [
-      "run",
-      "--format",
-      "json",
-      "--auto"
-     ],
-     "resume_args": [
-      "--session"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "deepseek/deepseek-v4-pro",
-       "label": "deepseek/deepseek-v4-pro",
-       "desc": "Connect this provider in OpenCode first",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "deepseek/deepseek-v4-flash",
-       "label": "deepseek/deepseek-v4-flash",
-       "desc": "Connect this provider in OpenCode first",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "zai/glm-5.3",
-       "label": "zai/glm-5.3",
-       "desc": "Connect this provider in OpenCode first",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "zhipuai/glm-5.3",
-       "label": "zhipuai/glm-5.3",
-       "desc": "Connect this provider in OpenCode first",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "minimax/MiniMax-M3",
-       "label": "minimax/MiniMax-M3",
-       "desc": "Connect this provider in OpenCode first",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "minimax-cn/MiniMax-M3",
-       "label": "minimax-cn/MiniMax-M3",
-       "desc": "Connect this provider in OpenCode first",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "built-in",
-     "choices": [
-      "deepseek/deepseek-v4-pro",
-      "deepseek/deepseek-v4-flash",
-      "zai/glm-5.3",
-      "zhipuai/glm-5.3",
-      "minimax/MiniMax-M3",
-      "minimax-cn/MiniMax-M3"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "kimi",
-    "cmd": "kimi",
-    "label": "Kimi Code (Moonshot AI)",
-    "description": "Use /login to connect Kimi or Moonshot. Windows requires Git Bash. Task execution only; choose another provider for triage and reports.",
-    "args": [
-     "--output-format",
-     "stream-json"
-    ],
-    "resume_args": [
-     "--session"
-    ],
-    "installed": false,
-    "path": "",
-    "runs": "",
-    "store": false,
-    "install": "kimi",
-    "installable": true,
-    "configured": false,
-    "updatable": false,
-    "why_not": "",
-    "setup": "kimi",
-    "config": {
-     "cmd": "kimi",
-     "args": [
-      "--output-format",
-      "stream-json"
-     ],
-     "resume_args": [
-      "--session"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "kimi-code/kimi-for-coding",
-       "label": "kimi-code/kimi-for-coding",
-       "desc": "Provisioned by Kimi /login",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "kimi-code/k3",
-       "label": "kimi-code/k3",
-       "desc": "Provisioned by Kimi /login",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "kimi-code/kimi-for-coding-highspeed",
-       "label": "kimi-code/kimi-for-coding-highspeed",
-       "desc": "Provisioned by Kimi /login",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "built-in",
-     "choices": [
-      "kimi-code/kimi-for-coding",
-      "kimi-code/k3",
-      "kimi-code/kimi-for-coding-highspeed"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "cursor",
-    "cmd": "cursor-agent",
-    "label": "Cursor CLI",
-    "args": [
-     "-p",
-     "--force",
-     "--output-format",
-     "text"
-    ],
-    "resume_args": [
-     "--resume={id}"
-    ],
-    "acp": [
-     "acp"
-    ],
-    "installed": false,
-    "path": "",
-    "runs": "",
-    "store": false,
-    "install": "cursor",
     "installable": false,
     "configured": false,
     "updatable": false,
-    "why_not": "its installer does not run on Windows - install it inside WSL2 (wsl --install), or use this vendor's API connector instead",
-    "setup": "cursor",
-    "config": {
-     "cmd": "cursor-agent",
-     "args": [
-      "-p",
-      "--force",
-      "--output-format",
-      "text"
-     ],
-     "resume_args": [
-      "--resume={id}"
-     ],
-     "acp": [
-      "acp"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "auto",
-       "label": "auto",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5",
-       "label": "gpt-5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "sonnet-4-thinking",
-       "label": "sonnet-4-thinking",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "built-in",
-     "choices": [
-      "auto",
-      "gpt-5",
-      "sonnet-4-thinking"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "copilot",
-    "cmd": "copilot",
-    "label": "GitHub Copilot CLI",
-    "args": [
-     "-p",
-     "--allow-all-tools"
-    ],
-    "resume_args": [
-     "--resume={id}"
-    ],
-    "acp": [
-     "--acp"
-    ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Roaming\\npm\\copilot.CMD",
-    "runs": "C:\\Program Files\\nodejs\\node.EXE",
-    "store": false,
-    "install": "copilot",
-    "installable": true,
-    "configured": false,
-    "updatable": true,
     "why_not": "",
-    "setup": "copilot",
+    "setup": "",
+    "version": "0.152.0",
     "config": {
-     "cmd": "copilot",
-     "args": [
-      "-p",
-      "--allow-all-tools"
-     ],
-     "resume_args": [
-      "--resume={id}"
-     ],
-     "acp": [
-      "--acp"
-     ]
+     "cmd": "codex"
     },
+    "used_by": [],
     "models": {
-     "models": [
-      {
-       "id": "auto",
-       "label": "auto",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5-mini",
-       "label": "gpt-5-mini",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-4.1",
-       "label": "gpt-4.1",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-4.5",
-       "label": "claude-sonnet-4.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.5",
-       "label": "claude-opus-4.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.6",
-       "label": "claude-opus-4.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.6-1m",
-       "label": "claude-opus-4.6-1m",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.6-fast",
-       "label": "claude-opus-4.6-fast",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-4.6",
-       "label": "claude-sonnet-4.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.7",
-       "label": "claude-opus-4.7",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-haiku-4.5",
-       "label": "claude-haiku-4.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-4",
-       "label": "claude-sonnet-4",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.2",
-       "label": "gpt-5.2",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.3-codex",
-       "label": "gpt-5.3-codex",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.4",
-       "label": "gpt-5.4",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.4-mini",
-       "label": "gpt-5.4-mini",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.1",
-       "label": "gpt-5.1",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.2-codex",
-       "label": "gpt-5.2-codex",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "goldeneye",
-       "label": "goldeneye",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
+     "models": [],
      "current": {},
-     "source": "installed Copilot SDK",
-     "choices": [
-      "auto",
-      "gpt-5-mini",
-      "gpt-4.1",
-      "claude-sonnet-4.5",
-      "claude-opus-4.5",
-      "claude-opus-4.6",
-      "claude-opus-4.6-1m",
-      "claude-opus-4.6-fast",
-      "claude-sonnet-4.6",
-      "claude-opus-4.7",
-      "claude-haiku-4.5",
-      "claude-sonnet-4",
-      "gpt-5.2",
-      "gpt-5.3-codex",
-      "gpt-5.4",
-      "gpt-5.4-mini",
-      "gpt-5.1",
-      "gpt-5.2-codex",
-      "goldeneye"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "muse",
-    "cmd": "muse",
-    "label": "Meta Muse Code",
-    "args": [
-     "exec",
-     "--yolo"
-    ],
-    "installed": false,
-    "path": "",
-    "runs": "",
-    "store": false,
-    "install": "muse",
-    "installable": true,
-    "configured": false,
-    "updatable": false,
-    "why_not": "",
-    "setup": "muse",
-    "config": {
-     "cmd": "muse",
-     "args": [
-      "exec",
-      "--yolo"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "muse-spark-1.3",
-       "label": "Muse Spark 1.3",
-       "desc": "newest; standard (private) tier",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "muse-spark-1.2",
-       "label": "Muse Spark 1.2",
-       "desc": "standard (private) tier",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "muse-spark-1.2-contributor",
-       "label": "Muse Spark 1.2 (contributor)",
-       "desc": "far cheaper - Meta trains on your prompts and completions",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "built-in",
-     "choices": [
-      "muse-spark-1.3",
-      "muse-spark-1.2",
-      "muse-spark-1.2-contributor"
-     ]
-    },
-    "used_by": []
-   },
-   {
-    "name": "devin",
-    "cmd": "devin",
-    "label": "Devin CLI",
-    "args": [
-     "--permission-mode",
-     "dangerous",
-     "--respect-workspace-trust=false",
-     "-p"
-    ],
-    "acp": [
-     "acp"
-    ],
-    "installed": true,
-    "path": "C:\\Users\\dana\\AppData\\Local\\devin\\cli\\bin\\devin.EXE",
-    "runs": "C:\\Users\\dana\\AppData\\Local\\devin\\cli\\bin\\devin.EXE",
-    "store": false,
-    "install": "devin",
-    "installable": true,
-    "configured": false,
-    "updatable": false,
-    "why_not": "",
-    "setup": "devin",
-    "config": {
-     "cmd": "devin",
-     "args": [
-      "--permission-mode",
-      "dangerous",
-      "--respect-workspace-trust=false",
-      "-p"
-     ],
-     "acp": [
-      "acp"
-     ]
-    },
-    "models": {
-     "models": [
-      {
-       "id": "adaptive",
-       "label": "Adaptive",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "swe-2",
-       "label": "SWE-2",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "swe-2-flash",
-       "label": "SWE-2 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "swe-1.6-slow",
-       "label": "SWE-1.6 Slow",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-fable-5.1",
-       "label": "Claude Fable 5.1",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-5.5",
-       "label": "Claude Opus 5.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-6-astra",
-       "label": "GPT-6 Astra",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-6-sol",
-       "label": "GPT-6 Sol",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-6-luna",
-       "label": "GPT-6 Luna",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-4-argon",
-       "label": "Gemini 4 Argon",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "kimi-k3",
-       "label": "Kimi K3",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "glm-5.2",
-       "label": "GLM-5.2",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "glm-5.3",
-       "label": "GLM-5.3",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-5.5",
-       "label": "Claude Sonnet 5.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-3.8-flash",
-       "label": "Gemini 3.8 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.7",
-       "label": "Claude Opus 4.7",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.8",
-       "label": "Claude Opus 4.8",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-5",
-       "label": "Claude Opus 5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-fable-5",
-       "label": "Claude Fable 5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-5",
-       "label": "Claude Sonnet 5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-haiku-5.5",
-       "label": "Claude Haiku 5.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-3.5-flash",
-       "label": "Gemini 3.5 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-3.6-flash",
-       "label": "Gemini 3.6 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gemini-3.7-flash",
-       "label": "Gemini 3.7 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.6-sol",
-       "label": "GPT-5.6 Sol",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.6-terra",
-       "label": "GPT-5.6 Terra",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.6-luna",
-       "label": "GPT-5.6 Luna",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-6.1-sol",
-       "label": "GPT-6.1 Sol",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-6.1-terra",
-       "label": "GPT-6.1 Terra",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "grok-4.6",
-       "label": "Grok 4.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "grok-4.7",
-       "label": "Grok 4.7",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "muse-wonder",
-       "label": "Muse Wonder",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "nemotron-3.5-super",
-       "label": "Nemotron 3.5 Super",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "kimi-k3.1-pro",
-       "label": "Kimi K3.1 Pro",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "glm-5.3-flash",
-       "label": "GLM-5.3 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "deepseek-v4-flash",
-       "label": "DeepSeek V4 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "deepseek-v4.1-flash",
-       "label": "DeepSeek V4.1 Flash",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "swe-1.7",
-       "label": "SWE-1.7",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "fusion",
-       "label": "Fusion",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-opus-4.6",
-       "label": "Claude Opus 4.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.4",
-       "label": "GPT-5.4",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.5",
-       "label": "GPT-5.5",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "gpt-5.4-mini",
-       "label": "GPT-5.4 Mini",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "claude-sonnet-4.6",
-       "label": "Claude Sonnet 4.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "kimi-k2.6",
-       "label": "Kimi K2.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "kimi-k2.7",
-       "label": "Kimi K2.7",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "nemotron-3-ultra",
-       "label": "Nemotron 3 Ultra",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "swe-1.6",
-       "label": "SWE-1.6",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      },
-      {
-       "id": "deepseek-v4-pro",
-       "label": "DeepSeek V4 Pro",
-       "desc": "",
-       "efforts": [],
-       "default_effort": ""
-      }
-     ],
-     "current": {},
-     "source": "devin models list",
-     "choices": [
-      "adaptive",
-      "swe-2",
-      "swe-2-flash",
-      "swe-1.6-slow",
-      "claude-fable-5.1",
-      "claude-opus-5.5",
-      "gpt-6-astra",
-      "gpt-6-sol",
-      "gpt-6-luna",
-      "gemini-4-argon",
-      "kimi-k3",
-      "glm-5.2",
-      "glm-5.3",
-      "claude-sonnet-5.5",
-      "gemini-3.8-flash",
-      "claude-opus-4.7",
-      "claude-opus-4.8",
-      "claude-opus-5",
-      "claude-fable-5",
-      "claude-sonnet-5",
-      "claude-haiku-5.5",
-      "gemini-3.5-flash",
-      "gemini-3.6-flash",
-      "gemini-3.7-flash",
-      "gpt-5.6-sol",
-      "gpt-5.6-terra",
-      "gpt-5.6-luna",
-      "gpt-6.1-sol",
-      "gpt-6.1-terra",
-      "grok-4.6",
-      "grok-4.7",
-      "muse-wonder",
-      "nemotron-3.5-super",
-      "kimi-k3.1-pro",
-      "glm-5.3-flash",
-      "deepseek-v4-flash",
-      "deepseek-v4.1-flash",
-      "swe-1.7",
-      "fusion",
-      "claude-opus-4.6",
-      "gpt-5.4",
-      "gpt-5.5",
-      "gpt-5.4-mini",
-      "claude-sonnet-4.6",
-      "kimi-k2.6",
-      "kimi-k2.7",
-      "nemotron-3-ultra",
-      "swe-1.6",
-      "deepseek-v4-pro"
-     ]
-    },
-    "used_by": []
+     "choices": [],
+     "source": "the demo"
+    }
    }
   ]
  },
@@ -11966,40 +10618,40 @@
    {
     "ConnectorId": 1,
     "Type": "outlook",
-    "Name": "Outlook mail",
-    "ConfigJson": null,
-    "Active": 0,
+    "Name": "Northwind mail",
+    "ConfigJson": "{\"auth\": \"user\", \"client_id\": \"northwind-demo-app\", \"account\": \"alex@northwind.example\", \"name\": \"Dana Whitfield\"}",
+    "Active": 1,
     "Roles": "trigger,tool",
     "Scope": null,
-    "LastSyncAt": null,
+    "LastSyncAt": "2026-11-08 11:28:55",
     "LastError": null,
     "LastErrorAt": null,
-    "HasSecret": 0,
+    "HasSecret": 1,
     "ScopeDefault": "admin",
     "SignedOut": false,
     "LastErrorPlain": "",
     "PeopleMissing": [],
-    "MsApp": "",
+    "MsApp": "card",
     "MsRedirect": "http://localhost:7811/api/ms/callback",
     "MsScopes": "offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite People.Read Contacts.Read"
    },
    {
     "ConnectorId": 2,
     "Type": "teams",
-    "Name": "Microsoft Teams",
-    "ConfigJson": null,
-    "Active": 0,
+    "Name": "Northwind Teams",
+    "ConfigJson": "{\"client_id\": \"northwind-demo-app\", \"tenant_id\": \"northwind-demo-tenant\"}",
+    "Active": 1,
     "Roles": "trigger,tool",
     "Scope": null,
-    "LastSyncAt": null,
+    "LastSyncAt": "2026-11-08 11:28:55",
     "LastError": null,
     "LastErrorAt": null,
-    "HasSecret": 0,
+    "HasSecret": 1,
     "ScopeDefault": "admin",
     "SignedOut": false,
     "LastErrorPlain": "",
     "PeopleMissing": [],
-    "MsApp": "",
+    "MsApp": "card",
     "MsRedirect": "http://localhost:7811/api/ms/callback",
     "MsScopes": "offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send People.Read"
    },
@@ -12023,14 +10675,14 @@
     "ConnectorId": 4,
     "Type": "github",
     "Name": "GitHub",
-    "ConfigJson": null,
-    "Active": 0,
+    "ConfigJson": "{}",
+    "Active": 1,
     "Roles": "tool",
     "Scope": null,
-    "LastSyncAt": null,
+    "LastSyncAt": "2026-11-08 11:28:55",
     "LastError": null,
     "LastErrorAt": null,
-    "HasSecret": 0,
+    "HasSecret": 1,
     "ScopeDefault": "admin",
     "SignedOut": false,
     "LastErrorPlain": ""
@@ -12376,11 +11028,11 @@
     "ConnectorId": 26,
     "Type": "whatsapp",
     "Name": "WhatsApp",
-    "ConfigJson": null,
-    "Active": 0,
+    "ConfigJson": "{}",
+    "Active": 1,
     "Roles": "trigger,tool",
     "Scope": null,
-    "LastSyncAt": null,
+    "LastSyncAt": "2026-11-08 11:28:55",
     "LastError": null,
     "LastErrorAt": null,
     "HasSecret": 0,
@@ -12392,14 +11044,14 @@
     "ConnectorId": 27,
     "Type": "linkedin",
     "Name": "LinkedIn",
-    "ConfigJson": "{}",
-    "Active": 0,
+    "ConfigJson": "{\"member_name\": \"Dana Whitfield\"}",
+    "Active": 1,
     "Roles": "",
     "Scope": null,
-    "LastSyncAt": null,
+    "LastSyncAt": "2026-11-08 11:28:55",
     "LastError": null,
     "LastErrorAt": null,
-    "HasSecret": 0,
+    "HasSecret": 1,
     "ScopeDefault": "admin",
     "SignedOut": false,
     "LastErrorPlain": "",
@@ -13956,7 +12608,7 @@
     "LastErrorPlain": ""
    }
   ],
-  "connected": 0
+  "connected": 6
  },
  "/api/sources": {
   "data": [
@@ -14047,6 +12699,36 @@
     "ConfigJson": "{\"type\": \"dashboard\", \"title\": \"Vendor spend, weekly\", \"cron\": \"0 7 * * 1\", \"sources\": [{\"key\": \"spend\", \"label\": \"AP payments\", \"type\": \"local_file\", \"path\": \"C:\\\\Users\\\\dana\\\\AppData\\\\Local\\\\Temp\\\\taskuary-demo\\\\exports\\\\ap-payments-daily.csv\", \"date\": \"day\"}], \"filters\": {\"range\": 90}, \"components\": [{\"kind\": \"stat\", \"title\": \"Last 90 days\", \"source\": \"spend\", \"agg\": \"sum\", \"y\": \"amount\", \"unit\": \"USD\"}, {\"kind\": \"stat\", \"title\": \"Last 7 days\", \"source\": \"spend\", \"agg\": \"sum\", \"y\": \"amount\", \"range\": 7, \"unit\": \"USD\"}, {\"kind\": \"stacked\", \"title\": \"Spend by day\", \"source\": \"spend\", \"x\": \"day\", \"y\": \"amount\", \"agg\": \"sum\", \"series\": \"vendor\", \"w\": 4}, {\"kind\": \"bar\", \"title\": \"Top vendors\", \"source\": \"spend\", \"x\": \"vendor\", \"y\": \"amount\", \"agg\": \"sum\", \"limit\": 5, \"w\": 2}, {\"kind\": \"bar\", \"title\": \"By category\", \"source\": \"spend\", \"x\": \"category\", \"y\": \"amount\", \"agg\": \"sum\", \"w\": 2}], \"route\": {\"timeline\": {\"how\": \"always\"}, \"alert\": {\"how\": \"never\"}, \"send\": {\"how\": \"always\"}, \"triage\": {\"how\": \"never\"}}}",
     "LastPolledAt": "2026-11-05 17:30:46",
     "RouteWords": "Reports: every run; alert: never"
+   },
+   {
+    "SourceId": 9,
+    "Channel": "email",
+    "Address": "alex@northwind.example",
+    "Owner": null,
+    "ConnectorId": 1,
+    "Active": 1,
+    "ConfigJson": null,
+    "LastPolledAt": null
+   },
+   {
+    "SourceId": 10,
+    "Channel": "teams",
+    "Address": "alex@northwind.example",
+    "Owner": null,
+    "ConnectorId": 2,
+    "Active": 1,
+    "ConfigJson": null,
+    "LastPolledAt": null
+   },
+   {
+    "SourceId": 11,
+    "Channel": "github",
+    "Address": "northwind/ledger",
+    "Owner": null,
+    "ConnectorId": 4,
+    "Active": 1,
+    "ConfigJson": null,
+    "LastPolledAt": null
    }
   ],
   "default_repo": null

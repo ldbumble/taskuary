@@ -474,6 +474,39 @@ def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + 
 # THE OWNER'S HAND-OFF (Hand it to a person, server.handoff) is a 'human' comment headed this - the agent's next turn hears it with what went
 # (the owner, 2026-11-08: it was never told, so it could draft the answer to someone the task had already been handed to)
 HANDED_OFF = 'Handed off to '
+# ...AND EVERY OTHER PRESS THE OWNER MADE on the task since the agent last answered (the owner, 2026-11-08): Remind me, Watch it, Change,
+# Reopen, a send or a take-back on its cards, a share - read off the audit chain and the reviews, one line each. Words for the presses the
+# agent must read right; any other owner press is said by its own name
+PRESSES = {'remind': lambda d: f"Remind me - put it away until {d.get('to') or 'later'}", 'watch': lambda d: 'Watch it - waits quietly for a reply',
+           'unwatch': lambda d: 'stopped watching it', 'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
+           'reopened': lambda d: 'reopened it', 'reopen': lambda d: f"reopened it ({d.get('why')})" if d.get('why') else 'reopened it',
+           'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
+           'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
+           'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later'}
+QUIET = {'handoff', 'chat', 'continue', 'continue-work', 'continue-session', 'create', 'judged', 'kind_by_typing', 'reopened_by_typing',
+         'waitroom_image', 'stay_open', 'funnel_pin'}       # said elsewhere in the turn, or the turn itself
+DECIDED = {'approved': 'approved (sent, if it sends)', 'edited': 'edited and sent', 'rejected': 'turned down', 'closed_unsent': 'closed, unsent',
+           'no_reply': 'said no reply is needed for'}
+def owner_did(store, tid: int) -> list:
+    "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
+    from .continuity import clock
+    from .processing_unread import OWNER_ACTORS
+    since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
+    if not since: return []
+    who = ','.join('?' * len(OWNER_ACTORS))
+    def detail(r):
+        try: d = json.loads(r.get('Detail') or '{}'); return d if isinstance(d, dict) else {}
+        except ValueError: return {}
+    out = [(r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(detail(r)))
+           for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
+                                (tid, *OWNER_ACTORS, since)) if r['Action'] not in QUIET]
+    out += [(r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
+        f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since))
+        if detail(r).get('task') == tid]
+    out += [(r['DecidedAt'], f"{DECIDED[r['Status']]} rv{r['ReviewId']}" + (f" ({' '.join(str(r['Reason']).split())[:120]})" if r.get('Reason') else ''))
+            for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
+            if r['Status'] in DECIDED]
+    return [f'{clock(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
@@ -486,7 +519,8 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
     handed = [c for c in store.list_comments(tid) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
-    if not (rv or sent or answered or others or handed): return ''
+    did = owner_did(store, tid)
+    if not (rv or sent or answered or others or handed or did): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
     if rv:
@@ -500,6 +534,7 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
+    if did: out.append('WHAT THE OWNER DID SINCE YOUR LAST TURN - take it as said; never undo it:\n' + '\n'.join(f'- {x}' for x in did))
     if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
         f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))
     return '\n\n'.join(out)

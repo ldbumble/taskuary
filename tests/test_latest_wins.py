@@ -146,3 +146,21 @@ def test_a_hand_off_is_in_the_turns_context():
     s.add_comment(tid, 'owner', 'human', f'{general.HANDED_OFF}gail@northwind.example by email:\nGail - can you take the renewal?')
     got = general.latest_block(s, tid, resumed=True)
     assert 'THE OWNER HANDED THIS TO A PERSON' in got and 'Handed off to gail@northwind.example by email - "Gail - can you take the renewal?"' in got
+
+
+
+def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
+    # the owner, 2026-11-08: Remind me, Watch it, Change, a send on its card - the agent's next turn heard none of them
+    s = MemoryStore(); tid = s.create_task({'Title': 'Payworth renewal', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Drafted Gail an email.')
+    assert general.owner_did(s, tid) == []
+    s._exec("UPDATE comment SET CreatedAt='2000-01-01 00:00:00' WHERE TaskId=?", (tid,))
+    rid = s.add_review({'TaskId': tid, 'Kind': 'slot', 'Status': 'pending', 'Reason': 'the email to Gail', 'DraftText': 'Hi Gail'})
+    s.decide_review(rid, 'approved', 'Hi Gail', 'owner')
+    s.audit('task', tid, 'remind', 'owner', detail={'from': None, 'to': '2026-11-10 09:00:00'})
+    s.audit('task', tid, 'priority', 'owner', detail={'from': 'regular', 'to': 'urgent'})
+    s.audit('task', tid, 'continue-work', 'owner'); s.audit('task', tid, 'woke', 'assistant')      # the turn itself; not the owner's
+    did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
+    assert sorted(did) == sorted([f'approved (sent, if it sends) rv{rid} (the email to Gail)', 'Remind me - put it away until 2026-11-10 09:00:00',
+                                  'changed its priority from regular to urgent']), did
+    assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.latest_block(s, tid, resumed=True)

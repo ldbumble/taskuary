@@ -68,6 +68,25 @@ def wait_line(store, tid: int, text: str, files=None) -> int:
 # ...AND A RESTART NEVER SENDS THEM (the owner, 2026-11-07: "it should show the old messages pending in the prompt box instead of sending
 # automatically"): lines no turn took when the process went away go back into the owner's box, theirs to send, change or clear
 BOX_TYPE = 'assistant_box'
+# ...AND A TURN THE RESTART CUT KEEPS WHAT IT SAID (the product audit, 2026-11-08): its words and steps went with the process, and nothing in
+# the chat said the turn was cut. Filed at start-up as the turn's answer so far, its steps under it, with one quiet line under its words
+CUT = f'_Cut short when Taskuary restarted - {CARRY_ON}._'
+def keep_cut_turns(store) -> list:
+    "Every turn a restart cut, filed on its open task: [task ids]."
+    from . import sessionrecord
+    out = []
+    for tid, trace in sessionrecord.cut_turns():
+        if (store.get_task(tid) or {}).get('Status') in (None, 'done', 'dropped'): continue
+        words = sessionrecord.said(trace)
+        rid = store.add_comment(tid, 'assistant', ASSISTANT_TYPE, f'{words}\n\n{CUT}' if words else CUT)
+        sessionrecord.keep_turn(tid, rid, trace)
+        if (t0 := next((e.get('at') for e in trace[:1] if e.get('type') == 'start'), None)):
+            from . import outputs
+            try: outputs.keep_turn(tid, rid, float(t0))
+            except Exception as e: logger.debug(f'task {tid}: the files of the cut turn were not kept with it - {e}')
+        out.append(tid)
+
+    return out
 def to_box(store, tid: int) -> int:
     "This task's kept lines back into the owner's box: how many."
     rows = [r for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
@@ -1645,6 +1664,10 @@ class GeneralSession:
         self.trace.append(event)
         if len(self.trace) > 100: self.trace = self.trace[-100:]
         self.trace_revision += 1
+        if getattr(self, 'busy', False) and event['type'] in ('tool_call', 'progress', 'error'):     # a restart must not erase it (keep_cut_turns)
+            from . import sessionrecord
+            try: sessionrecord.keep_live(self.task_id, self.trace)
+            except OSError as e: logger.debug(f'task {self.task_id}: the turn under way was not kept on disk - {e}')
 
     def _take(self, wait: float, cancel=None) -> bool:
         """Wait our turn to speak.
@@ -1777,7 +1800,7 @@ class GeneralSession:
             # ...and a run under way is not a session saved: a mark left on the task spoke over this run's own ending (2026-11-04)
             from . import terminal
             self.store.tag_task(self.task_id, terminal.SAVED, False, 'assistant')
-            self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}}]
+            self.trace = [{'type': 'start', 'session': {'provider': self.provider, 'model': self.model}, 'at': t0}]      # `at`: a cut turn's files are its own (keep_cut_turns)
             self.trace_revision += 1
             system, user = _prompt(self.store, self.task_id)
             if delivery_instructions:
@@ -2067,8 +2090,14 @@ class GeneralSession:
         finally:
             self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
+            # ...the turn ended in this process, filed or failed: nothing is left for a restart to keep. One whose session was killed under it
+            # keeps what it said - the process may be going down with it
+            if self.alive:
+                from . import sessionrecord
+                sessionrecord.drop_live(self.task_id)
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
+
 
     def _end_soon(self, **kw):
         """Close once this turn has let go of the session - a failed or cut-off turn's ending. Marked AT ONCE: a line waiting behind it would

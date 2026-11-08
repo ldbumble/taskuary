@@ -365,6 +365,28 @@ def _gen_path(tid: int) -> Path:
     return d / 'general-steps.jsonl'
 
 
+def _live_path(tid: int) -> Path: return _gen_path(tid).with_name('general-live.json')
+# A TURN UNDER WAY IS ON DISK TOO (the product audit, 2026-11-08): its words and steps lived only in the process until the turn filed its
+# reply, so a restart mid-turn erased 70 seconds of work and said nothing. The trace so far is written as it grows; the turn's own end
+# takes it away (drop_live), and one still there at start-up is a turn the restart cut (general.keep_cut_turns)
+def keep_live(tid: int, trace: list):
+    p = _live_path(tid); tmp = p.with_suffix('.tmp')
+    tmp.write_text(json.dumps(trace, default=str), encoding='utf-8'); tmp.replace(p)
+def drop_live(tid: int): _live_path(tid).unlink(missing_ok=True)
+def cut_turns() -> list:
+    "[(task id, its trace)] of every turn a restart cut, each taken off disk as it is read."
+    out = []
+    for p in session_artifacts.root().glob('*/general-live.json'):
+        try: out.append((int(p.parent.name), json.loads(p.read_text(encoding='utf-8')) or []))
+        except (ValueError, OSError) as e: logger.debug(f'cut turn {p} unreadable - {e}')
+        p.unlink(missing_ok=True)
+    return out
+def said(trace: list) -> str:
+    "What a turn said so far: its text, in order."
+    return '\n\n'.join(str(e.get('detail')).strip() for e in trace or []
+                       if e.get('type') == 'progress' and e.get('name') in ('text', 'agent_message') and str(e.get('detail') or '').strip())
+
+
 def keep_turn(tid: int, reply_id, trace: list):
     """A general turn's tool calls and thinking, filed under the reply they led to (general.send_prompt)."""
     steps = []

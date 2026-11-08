@@ -189,6 +189,10 @@ async def _lifespan(_app):
     # No interactive or headless worker survives into this process. Repair any persisted
     # in-progress/running flags before the Board and funnel get their first read.
     hub_term.recover_after_restart(store)
+    # ...and a chat turn the restart cut keeps what it said, with a line that it was cut (general.keep_cut_turns)
+    from . import general as _general
+    try: _general.keep_cut_turns(store)
+    except Exception as e: logger.warning(f'turns cut by the restart not kept: {e}')
     # ...and an agent the restart cut off while it asked the owner is back at its question (resume_asking) - off the window's path
     threading.Thread(target=resume_asking, daemon=True, name='resume-asking').start()
     # ...and the browsers this folder's last run left open are its own to close (instance.claim made it the one live run) - off the

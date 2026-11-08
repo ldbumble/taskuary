@@ -47,4 +47,3 @@
 /* the agent's screen, while it asks (GeneralWorkspace): a card in the stream with the live terminal in it */
 .tq-cc-screen { flex-shrink: 0; margin: 8px 0 12px; border: 1px solid #dfdbd3; border-radius: 10px; overflow: hidden; background: #fbfaf7; }
 .tq-cc-screen-head { padding: 7px 12px; font-size: 13px; font-weight: 600; color: #292824; border-bottom: 1px solid #ece6da; }
-  background: #f4f1ec; color: #6e685f; font-family: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }

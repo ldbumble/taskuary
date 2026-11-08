@@ -47,7 +47,7 @@
 <div class="entry on">
       <a class="page" href="./connections" aria-current="page">Connections</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Connections's sections"></button>
-      <div class="secs"><a class="sec" href="#what-a-connection-is" data-sec="what-a-connection-is">What a connection is</a><a class="sec" href="#the-five-roles" data-sec="the-five-roles">The five roles</a><a class="sec" href="#mail" data-sec="mail">Mail</a><a class="sec" href="#chat" data-sec="chat">Chat</a><a class="sec" href="#repositories-and-trackers" data-sec="repositories-and-trackers">Repositories and trackers</a><a class="sec" href="#data-and-report-sources" data-sec="data-and-report-sources">Data and report sources</a><a class="sec" href="#coding-clis-and-ai-providers" data-sec="coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="#voice-notes-and-dictation" data-sec="voice-notes-and-dictation">Voice notes and dictation</a><a class="sec" href="#a-vendors-own-mcp-server" data-sec="a-vendors-own-mcp-server">A vendor's own MCP server</a><a class="sec" href="#a-system-with-no-card" data-sec="a-system-with-no-card">A system with no card</a><a class="sec" href="#adding-another-of-the-same-kind" data-sec="adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="#pushing-something-in-yourself" data-sec="pushing-something-in-yourself">Pushing something in yourself</a></div>
+      <div class="secs"><a class="sec" href="#what-a-connection-is" data-sec="what-a-connection-is">What a connection is</a><a class="sec" href="#the-five-roles" data-sec="the-five-roles">The five roles</a><a class="sec" href="#mail" data-sec="mail">Mail</a><a class="sec" href="#chat" data-sec="chat">Chat</a><a class="sec" href="#repositories-and-trackers" data-sec="repositories-and-trackers">Repositories and trackers</a><a class="sec" href="#data-and-report-sources" data-sec="data-and-report-sources">Data and report sources</a><a class="sec" href="#coding-clis-and-ai-providers" data-sec="coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="#voice-notes-and-dictation" data-sec="voice-notes-and-dictation">Voice notes and dictation</a><a class="sec" href="#a-vendors-own-mcp-server" data-sec="a-vendors-own-mcp-server">A vendor's own MCP server</a><a class="sec" href="#a-vendors-api-read-with-a-key" data-sec="a-vendors-api-read-with-a-key">A vendor's API, read with a key</a><a class="sec" href="#a-system-with-no-card" data-sec="a-system-with-no-card">A system with no card</a><a class="sec" href="#adding-another-of-the-same-kind" data-sec="adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="#pushing-something-in-yourself" data-sec="pushing-something-in-yourself">Pushing something in yourself</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
@@ -697,6 +697,17 @@ opens the vendor&#39;s own sign-in page in your browser, once. Taskuary never ho
 cannot list the server&#39;s tools: adding the card is your word that your agents may use all of them.
 Where a card for the same vendor already brings work in (Notion, Linear, Jira, Monday.com, Todoist,
 Stripe, Sentry, Datadog), that card is unchanged and the MCP card sits beside it.</p>
+<p>A few servers sign in with a personal token instead — GitHub MCP, PagerDuty MCP, Smartsheet and Wrike.
+Paste the token on the card and press <strong>Add</strong>: it goes into Claude Code&#39;s own configuration as the
+header the vendor names. Codex reads such a token only from an environment variable, so these cards
+add to Claude Code alone.</p>
+<h2 id="a-vendors-api-read-with-a-key">A vendor&#39;s API, read with a key<a class="anchor" href="#a-vendors-api-read-with-a-key" aria-label="Link to this section">#</a></h2>
+<p>DigitalOcean, Terraform Cloud, Better Stack, CircleCI, Buildkite, Coda, Intrinio, Benzinga, Tradier,
+Diffbot, and the self-hosted Jenkins, SonarQube, Elasticsearch, Splunk, Dynatrace and Kubernetes each
+take a key (and, when self-hosted, the address). Google Drive, OneDrive and Microsoft 365 files take
+nothing: they read with the Google Sheets card&#39;s and the Outlook card&#39;s sign-ins. <strong>Test</strong> makes one
+cheap read. A report or an agent then asks any address under that vendor&#39;s API by its path, and only
+ever reads: nothing but a GET is sent, so a Tradier key on this card places no order.</p>
 <h2 id="a-system-with-no-card">A system with no card<a class="anchor" href="#a-system-with-no-card" aria-label="Link to this section">#</a></h2>
 <p>Search the catalogue first. When nothing matches, <strong>Request</strong> under the empty grid drafts a feature
 request for that card, and the Assistant offers the same when you ask it to connect something the

@@ -2,6 +2,53 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.15 - 2026-11-08
+
+- An agent's email keeps its CC, and a withdrawn email can be written again
+- An email the agent set up waits on you: store.waiting_on_owner
+- A finished run's row says "agent finished", on the rail and in the header alike
+- A chat turn a restart cut keeps what it said, with one line that it was cut
+- A Send over a blank asks once - "This still has [ROOM]. Send anyway?"
+- A #task link opens its task over setup, and setup has a quiet "Set up later"
+- The demo's weekly dashboard runs on a clock the scheduler reads
+- The agent's next turn hears the owner's hand-off
+- A goal slipped by a late step says that step's day
+- The agent's next turn hears every press the owner made since its last turn
+- Opening a closed task shows it and leaves the Tasks band alone
+- A closed task looked up by any road carries closed
+- Each press the owner makes on a task is their line in its chat
+- A turn is drawn once: the agent's words, and only the cards it set up under them
+- #settings=audit off Developer mode says why it is not there
+- A send card whose channel is not connected says so, and its move is Connect
+- Every kind opens on its chat with Came from folded thin, unless it has no chat
+- Send and close is filled on every reply card unless a move drawn beside it is lit
+- A chat agent whose CLI died while it sat idle is noticed at the next sweep
+- Log says why a quick answer failed; expected outcomes are no warnings
+- An agent's browser closes with its session, its view answering or not
+- A task's agent is Agent everywhere; prompt machinery stays out of comment readers
+- An answer's raw file path is its file card, not a line of its own
+- Copy: one word for one thing, no internal words on screen
+- New's kinds wrap instead of scrolling out of sight
+- UI tests read the agent as Agent; Send anyway's label comes from buttons.js
+- Trust follows whose words are in a task, and who wrote a tracker item
+- A task bound to a teammate chat runs in safe mode by default
+- A stranger's session may not name the CLI's own sign-in variables
+- An unverified From on a verifying mailbox starts nothing by itself
+- A read-level database card runs one SELECT, checked before it connects
+- The browser gate judges an open that carries a token, and never reads a password box
+- A signed build runs only an installer signed by its own signer
+- The cloud-fix workflow pins its actions and CLI, and push keeps no token on disk
+- A task-bound agent session reads only its own task, and no other pane's screen
+- A run that finished with a post or act waiting reads as that press, not agent done
+- A reply with no mailbox leads with Connect email under the draft
+- One email card for the reply and the agent's email: To, CC, BCC, Subject, files
+- New: a general agent's job is typed into the agent chat's own box
+- The Assistant reports what the agent needs; no name yet is ? on the avatar
+- Said once: the ask that is its message, New playbook, a single page's back crumb
+- A held line wears the owner's head and stands under everything the turn drew
+- A phone's task view fits its chat body; a reply's card shows its subject
+- Tests follow the shared CC/BCC row and the New box; the send's envelope edits are one helper
+
 ## 0.3.11.14 - 2026-11-08
 
 - Video tools for the agents: Descript, InVideo, Vidova, OpusClip, video-use, Kling and Runway video

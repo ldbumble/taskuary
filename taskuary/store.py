@@ -817,6 +817,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     'general_agent_hands': 'cli',   # ...with the CLI agent's own permissions unless the owner narrows it (general.full_hands)
                     # who counts as ours on a GitHub repository (batch.outside_row), and what an outsider's PR gets (cloudfix.py)
                     'repo_trust_private': 'ours', 'repo_trust_public': 'writers', 'outside_prs': 'review',
+                    # a task bound to a chat with teammates runs as a stranger's unless the owner chose full power (origin.teammate_bound)
+                    'teammate_chat_power': 'safe',
                     # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
                     # Sent Items evidence that the receiving mailbox wrote to the exact address, chat people the owner talks
                     # with, members of a tracker's project (senders._item_known). Prior incoming mail is never a rule here.

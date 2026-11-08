@@ -167,3 +167,14 @@ class TaskPageTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_the_workflow_pins_every_action_and_the_cli_and_push_keeps_no_token_on_disk():
+    import re
+    from taskuary import cloudfix
+    uses = re.findall(r'uses: (\S+)', cloudfix.WORKFLOW)
+    assert uses and all(re.fullmatch(r'actions/[\w-]+@[0-9a-f]{40}', u) for u in uses), uses
+    assert re.search(r'claude-code@\d+\.\d+\.\d+', cloudfix.WORKFLOW)
+    push = cloudfix.WORKFLOW.split('  push:')[1]
+    assert 'persist-credentials: false' in push and 'x-access-token:$GH_TOKEN' in push
+    assert 'ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}' in cloudfix.WORKFLOW

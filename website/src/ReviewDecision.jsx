@@ -87,6 +87,12 @@ const hold = (r, part) => {
 const closing = new Set();
 
 const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose", schedule: "Invite" };
+// ...and ITS PRESS SAYS THE ACT (the owner, 2026-11-08: "fix it like email or all other actions"): the card the agent set up is pressed as
+// what it does - Accept, Decline, Propose this time, Send invite - where an email's says Send
+export const CAL_PRESS = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose this time", schedule: "Send invite" };
+// ...and an invite's other answers beside it, each setting that one up instead (POST /api/messages/{mid}/calendar - the row's own draft; a new
+// time with none named is the first free one): nothing reaches the calendar before the lit press
+const CAL_OTHER = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: btn("propose_time") };
 // The times are the server's words (calwrite.when): the envelope carries them as they will be said.
 export const CalendarLine = ({ meta }) => (
     <Box data-tq-calendar={meta.act} sx={{ display: "grid", gap: 0.25, mb: 1, px: 1.25, py: 0.8, bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
@@ -95,9 +101,25 @@ export const CalendarLine = ({ meta }) => (
       <Typography variant="caption" sx={{ color: DIM }}>
         {meta.act === "schedule" ? `Invites ${(meta.to || []).join(", ") || "them"}` : `${(meta.to || [])[0] || "The organizer"} is told`}
         {meta.act === "propose" && meta.was ? ` · instead of ${meta.was}` : ""}</Typography>
+      {!!meta.link && <Typography variant="caption" data-tq-calendar-link={meta.link} sx={{ color: DIM }}>With a {meta.link} link, made when it is sent</Typography>}
       {!!meta.clash && <Typography variant="caption" sx={{ color: "#7a2f3c" }}>This {meta.clash}.</Typography>}
     </Box>
 );
+
+// WHAT A SHARE SHARES, OVER ITS PRESS (the owner, 2026-11-08: "the agent shows the dashboard inline in the chat"): the dashboard as Reports
+// draws it, from its last run - lazy, so a card with none never loads the charts
+const Dashboard = React.lazy(() => import("./dashboard/Dashboard.jsx"));
+export function SharedDashboard({ report, title }) {
+  const [got, setGot] = useState(null);
+  useEffect(() => { let live = true; api.get(`/api/dashboards/${report}`).then(({ data }) => live && setGot(data)).catch(() => live && setGot({}));
+    return () => { live = false; }; }, [report]);
+  return <Box data-tq-shared-dashboard={report} sx={{ mb: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden", maxHeight: 420, overflowY: "auto" }}>
+    <Typography variant="caption" sx={{ display: "block", px: 1.25, pt: 0.75, color: INK, fontWeight: 600 }}>{title || "Dashboard"}
+      <Box component="a" href={`#report=${report}`} sx={{ ml: 1, color: "#55697a", fontWeight: 400 }}>Open it</Box></Typography>
+    {got?.data ? <React.Suspense fallback={null}><Dashboard spec={got.config} data={got.data} /></React.Suspense>
+      : <Typography variant="caption" sx={{ display: "block", px: 1.25, pb: 0.75, color: FAINT }}>{got ? "It has not run yet." : "Loading…"}</Typography>}
+  </Box>;
+}
 
 // A SEND PRESSED OVER A BLANK ASKS ONCE (the owner, 2026-11-08): one inline line under the buttons, blanks.js's own words, and the press goes
 // only on Send anyway - every card that sends a draft draws this one
@@ -195,6 +217,17 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const meta = deliveryMeta(r);
   const isEmail = String(r.Channel || meta.channel || "").toLowerCase() === "email";     // the one email card: To, CC, BCC, Subject, files
   const isCal = meta.kind === "calendar";             // an invite answered or a meeting booked: its note may be empty
+  const newMeeting = isCal && meta.act === "schedule";
+  const [switching, setSwitching] = useState("");
+  // ...an invite's answer set up instead: drafted in its place (calwrite.draft replaces the pending one), the card read again
+  const answerInstead = async (act) => {
+    setSwitching(act); setErr("");
+    try {
+      const { data } = await api.post(`/api/messages/${r.MessageId}/calendar`, { act });
+      if (!data?.ok) setErr(data?.say || "That answer could not be set up."); else onChanged?.();
+    } catch (e) { setErr(e?.response?.data?.detail || "That answer could not be set up."); }
+    finally { setSwitching(""); }
+  };
   const co = closeout && !proposal ? proposalPresentation(closeout) : null;
   // the slots in a REPLY's box (blanks.js): a proposal's text is the agent's act, and a frozen one is past changing
   const blanks = proposal || isCal || delivery.frozen ? [] : blankSpans(value);
@@ -217,7 +250,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // close is the one that closes, and the primary; Send sends and the task stays open, as it does everywhere else
   const closesIt = closeOnSend && onTask && !!onSent;
   // ...but never while work on it is live (the owner, 2026-11-01): the reply goes and the task stays open - the server keeps it so too
-  const sendWord = btn("approve"), closeWord = btn("send_close"), closeCo = btn("send_close", "closeout"), stays = `the task stays open until you ${btn("close")}`;
+  // ...a calendar card's press is its act, and a share's names who it is for (sharing.agent_share's `share`)
+  const calWord = isCal ? CAL_PRESS[meta.act] : "", shareTo = String(meta.share?.to || "").split(/\s+/)[0];
+  const sendWord = calWord || (shareTo ? `Share with ${shareTo}` : btn("approve")), closeWord = calWord ? `${calWord} and close` : btn("send_close");
+  const closeCo = btn("send_close", "closeout"), stays = `the task stays open until you ${btn("close")}`;
   const closeThen = liveWork ? `the task stays open while ${liveWork}` : "then the task closes";
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
   // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
@@ -313,8 +349,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   // `close`: Close out's Send and close - the send, then the task's close once the server's receipt says it went (onSent closes). Check
   // delivery and Send anyway pass nothing: they finish the press that froze the draft, held in `closing`
   // ...the email card's BCC and a changed subject, on the send only
-  const envelopeEdits = (verb) => (verb === "approve" && !proposal && !delivery.frozen && isEmail
-    ? { bcc: bccNow, subject: subj != null && subj !== subjFiled ? subj : null } : {});
+  // ...and a new meeting's title, the one field of its invite the card edits (calwrite.deliver reads the envelope's subject)
+  const envelopeEdits = (verb) => verb !== "approve" || proposal || delivery.frozen ? {}
+    : isEmail ? { bcc: bccNow, subject: subj != null && subj !== subjFiled ? subj : null }
+    : newMeeting ? { subject: subj != null && subj !== subjFiled ? subj : null } : {};
   const decide = async (verb, anyway = false, close = undefined, blanksOk = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
     if (verb === "approve" && !blanksOk && askBlank({ verb, anyway, close })) return;
@@ -584,6 +622,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       {!proposal && <Inbound r={r} />}
       {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not - and a
           calendar answer goes to the calendar: what it will be told stands in their place, with no copies and no files */}
+      {meta.share?.report != null && <SharedDashboard report={meta.share.report} title={meta.share.title} />}
+      {newMeeting && !delivery.frozen && r.Status === "pending" && <SubjectRow subject={subjNow} onChange={setSubj} disabled={off} />}
       {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
         <ToRow to={replyContext(filedDelivery)} disabled={off || delivery.frozen}
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
@@ -769,6 +809,10 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         {canRedraft && !r.Stale && !delivery.frozen && !warnTop && <Button data-tq-redraft-btn="" size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={off} onClick={redraft}
           title={btnHint("redraft")}>
           {redraftLabel}</Button>}
+        {isCal && CAL_OTHER[meta.act] && r.MessageId && r.Status === "pending" && !delivery.frozen && Object.entries(CAL_OTHER).filter(([a]) => a !== meta.act).map(([a, w]) =>
+          <Button key={a} size="small" variant="outlined" data-tq-cal-instead={a} disabled={off || !!switching} onClick={() => answerInstead(a)}
+            title={`Sets up "${w}" in place of this answer - nothing reaches the calendar until you press it`}>
+            {switching === a ? "Setting up…" : w}</Button>)}
         {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}
         {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={off} onClick={onDrop}
           title="Drop this email - it is never sent, and the task stays open">Don't send</Button>}

@@ -233,6 +233,8 @@ class AllowListTests(unittest.TestCase):
             'POST /api/agent/done', 'POST /api/agent/draft', 'POST /api/agent/item', 'POST /api/agent/not-needed', 'POST /api/agent/withdraw-draft', 'POST /api/agent/reply', 'POST /api/agent/tick', 'POST /api/agent/waiting',
             'POST /api/agent/propose', 'POST /api/mcp',     # the toolbox (2026-10-25): a proposal on its own task, and its tools' one door
             'POST /api/agent/sign-form',                    # a form on its own task signed into its own folder (handsign, 2026-11-04) - nothing leaves
+            # an invite's answer, a new meeting and a share set up on its own task (2026-11-08) - each a card the owner presses
+            'POST /api/agent/answer-invite', 'POST /api/agent/meeting', 'POST /api/agent/share',
             'POST /api/agent/use-repo',                     # the checkout its own task is worked in (repochoice, 2026-11-06) - inside the allowed folders
             'POST /api/agent/check-back',                   # its own follow-up on its own task (checkback.py, 2026-11-05) - nothing leaves
             'POST /api/agent/note-peers', 'POST /api/agent/propose-land',   # a note to a peer, and its pick for how its branch lands (2026-11-06)

@@ -46,7 +46,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
 import { noteKey, noteOf, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
-import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
+import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import ReviewDecision from "./ReviewDecision.jsx";
@@ -1817,7 +1817,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pane = "agent", shows = (p) => p === pane;
   // ...and a reply owed with nothing drafted shows its empty box in the chat, Draft with AI under it - only where nothing else waits there: a
   // GitHub finish to approve, a proposal, emails owed or a write-up under way have their own box
-  const replyEmpty = !!replyMessage && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
+  // ...never on an INVITE (the owner, 2026-11-08): its answer is the calendar's card - Accept, Decline, Propose a new time - not an email
+  const replyEmpty = !!replyMessage && !detail?.calendar?.invite && !pendingReview && !sentReview && !unsentReview && !ended && !liveSession && !closeoutRv && !allProposals.length
     && !owesEmails && !emailsWaiting && !writeup && !outside
     && !!t && !["done", "dropped"].includes(t.Status);
   // the one line From folds to while an agent works (sessionView)
@@ -2440,7 +2441,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       setOpenStage("reply"); loadDetail(selected); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That could not be drafted."); }
   };
-  const calVerbs = !calAsk ? [] : calAsk.invite ? [
+  // ...and once a calendar card waits in the chat its press and its other answers are ON it: the bar holds them only while none does
+  const calCard = !!pendingReview && deliveryMeta(pendingReview).kind === "calendar";
+  const calVerbs = !calAsk || calCard ? [] : calAsk.invite ? [
     { id: "accept_invite", group: "decide", tone: "s", label: btn("accept_invite"), run: () => calAnswer("accept"), title: btnHint("accept_invite") },
     { id: "decline_invite", group: "decide", tone: "s", label: btn("decline_invite"), run: () => calAnswer("decline"), title: btnHint("decline_invite") },
     { id: "propose_time", group: "decide", tone: "s", label: btn("propose_time"), run: (e, a) => setSlotAt({ act: "propose", at: steady(a || e?.currentTarget) || document.body }), title: btnHint("propose_time") },

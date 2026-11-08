@@ -34,7 +34,8 @@ const demoRecord = (detail) => {
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
 // the demo's two no's, in the words taskuary/demo.py uses for the same doors
 const SENDS = "This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.";
-const STARTS = "This is the demo - the agents here are recordings, so nothing new starts.";
+export const DEMO_PRESS = "This is the demo - nothing reaches a calendar or anyone's chat. In your own Taskuary this press sends it.";
+const STARTS ="This is the demo - the agents here are recordings, so nothing new starts.";
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 // Two clocks, each moved to the visitor's now (demoClock.js): the recording's (when it was dumped) and the
@@ -500,6 +501,12 @@ const write = (method, url, body) => {
 
   if (method === "post" && (m = p.match(/^\/api\/reviews\/(\d+)\/decide$/))) {
     const review = (state["/api/reviews"]?.data || []).find((r) => String(r.ReviewId) === m[1]);
+    // ...an answer to an invite, a meeting's invite or a share the agent set up says it is the demo where it was pressed - nothing is told
+    let env = {};
+    try { env = JSON.parse(review?.Deliver || "{}") || {}; } catch { env = {}; }
+    if (body?.verb === "approve" && (env.kind === "calendar" || env.share)) {
+      const err = new Error(DEMO_PRESS); err.response = { status: 403, data: { detail: DEMO_PRESS, demo: true } }; throw err;
+    }
     if (review) {
       review.Status = body?.verb === "approve" ? "sent" : body?.verb || "dismissed";
       review.FinalText = body?.final_text ?? review.DraftText;

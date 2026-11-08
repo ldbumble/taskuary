@@ -527,7 +527,7 @@ class TheGeneralAgentsDayTests(unittest.TestCase):
     def test_every_chat_opens_on_what_came_in_and_every_answer_has_its_summary(self):
         from taskuary import general
         s, tids = self.seeded()
-        self.assertEqual(len(tids), len(demo.AGENT_DAY))
+        self.assertEqual(len(tids), len(demo.AGENT_DAY) + 1, 'and the invite the agent answered (seed_calendar)')
         for title, tid in tids.items():
             h = general.shown_history(s, tid)
             self.assertTrue(h[0].get('brief') and h[0].get('mail'), title)

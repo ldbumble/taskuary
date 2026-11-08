@@ -562,3 +562,37 @@ def share(store, server: dict, req: dict, actor: str = 'owner') -> dict:
     if how == 'email': return email(store, snap, req.get('to') or [], actor)
     if how == 'link': return link(store, snap, server, req.get('days') or DAYS, actor)
     return (onedrive if how == 'onedrive' else gdrive)(store, snap, actor)
+
+
+# ── THE AGENT SETS THE SHARE UP (the owner, 2026-11-08: a dashboard turn ended "Share the dashboard with Gail, or say if she would rather get
+# it by mail" as prose): a reply on the person's own chat or an email on the agent's task - the cards every send takes - marked with what it
+# shares (`share` on the envelope), so the chat draws the dashboard over its "Share with <name>". Nothing is sent before that press.
+def _way(store, tid: int, to: str) -> str:
+    "chat or email: how the person last wrote on this task - their newest message's channel - else how the task came in."
+    who = str(to or '').strip().lower()
+    msgs = [m for m in store.list_messages(int(tid)) if m.get('Direction') != 'out']
+    m = next((m for m in reversed(msgs) if who and who.split()[0] in f"{m.get('FromName') or ''} {m.get('FromEmail') or ''}".lower()), msgs[-1] if msgs else {})
+    return 'email' if str(m.get('Channel') or 'email').lower() == 'email' else 'chat'
+
+
+def agent_share(store, tid: int, report, to: str, text: str, via: str = '', actor: str = 'agent') -> dict:
+    """{ok, review, via, says} - or ValueError with what to fix. `report` the source the agent made (#report=N)."""
+    from . import dashboards, slots, wrapup
+    from .calwrite import people_of
+    src = store.get_source(int(report)) if str(report or '').isdigit() else None
+    if not src or src.get('Channel') != 'report': raise ValueError(f'there is no report {report} - the N of #report=N names it')
+    title, text, to = dashboards.cfg_of(src).get('title') or src.get('Address') or 'Report', str(text or '').strip(), str(to or '').strip()
+    if not text or not to: raise ValueError('say who it goes `to`, and in `text` what goes with it')
+    via = via if via in ('chat', 'email') else _way(store, tid, to)
+    if via == 'chat': out = wrapup.agent_reply(store, tid, text, actor, to=to)
+    else:
+        got, _ = people_of(store, [to])
+        if not got: raise ValueError(f"no address for {to} in the owner's mail or directory - give the address, or ask the owner for it")
+        out = slots.draft(store, tid, text, to=got[0], subject=title, agent=actor, channel='email')
+    if not out.get('ok'): raise ValueError(out.get('why') or 'the share could not be set up')
+    rid = out['review_id']
+    env = json.loads((store.get_review(rid) or {}).get('Deliver') or '{}') or {}
+    store.set_review_deliver(rid, json.dumps({**env, 'share': {'report': int(report), 'title': title, 'to': to}}))
+    _audit(store, tid, f'agent-{via}', actor, {'kind': 'dashboard', 'title': title}, to=[to], review=rid)
+    return {'ok': True, 'review': rid, 'via': via, 'says': f"Set up for the owner's press: {title} to {to} by {via}, with the dashboard drawn over "
+                                                         f"its Share with {to.split()[0]}. Nothing is sent until they press it."}

@@ -25,7 +25,8 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
 export function BrowseFrame({ title, summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
-  openLabel = "", openKey = null, search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false, noneAction = null }) {
+  openLabel = "", openKey = null, search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false, noneAction = null,
+  noBack = false }) {
   // ONE WAY TO SAY A PAGE'S BOX FOUND NOTHING (verify, 2026-10-20): a page that forgot to pass its own line said "Nothing here." under
   // the words typed - Settings did. `query` is the box's words; while there are any, the frame says it, the way the search does
   const none = String(query || "").trim() ? nothingMatches(query, searched || title) : empty || "Nothing here.";
@@ -73,7 +74,9 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
       {/* 3. one - the view's own detail, in place of its list */}
       {detail && (
         <Box ref={one} data-tq-browse-one="" tabIndex={-1} sx={{ scrollMarginTop: "8px", outline: "none", border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden" }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.75, py: 1.1, borderBottom: `1px solid ${BORDER}` }}>
+          {/* ...`noBack`: a section that IS its one page (Phone & chats, You) - its own chip, lit above, is where it is; a back crumb under it
+              said so twice (the product audit, 2026-11-08) */}
+          {!noBack && <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.75, py: 1.1, borderBottom: `1px solid ${BORDER}` }}>
             <Box component="button" type="button" data-tq-browse-back="" onClick={onBack}
               sx={{ display: "flex", alignItems: "center", gap: 0.5, height: 32, pl: 1, pr: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`,
                 bgcolor: PANEL, color: "#41525f", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
@@ -81,7 +84,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
             </Box>
             {/* the back button says where you are; "the other 5 reports cards are hidden while this one is open" said it again
                 (the owner, 2026-10-15: "too many steps") */}
-          </Box>
+          </Box>}
           <Box sx={{ p: { xs: 1, sm: 1.75 } }}>{detail}</Box>
         </Box>
       )}

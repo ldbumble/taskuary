@@ -87,13 +87,14 @@ export function RecentlyDeleted({ items, onRestore }) {
 // ...a connector card's link (#playbook=new:<type>) arrives with `connectorType`, the dialog open for that card
 // ...and `asked` (+ New playbook, New's Playbook tab): open at once, with the words New handed over (playbookOpen.askPlaybook) - taken
 // once, so this button pressed again later opens a blank one
-export function NewPlaybook({ onManual, onDone, connectorType = "", asked = false }) {
+// ...`button`: false where the shelf's own "+ New playbook" pill is the press - two of them stood one over the other (the product audit, 2026-11-08)
+export function NewPlaybook({ onManual, onDone, connectorType = "", asked = false, button = true }) {
   const [ask, setAsk] = useState(() => (asked ? takePlaybookAsk() || { text: "", start: false } : null));
   const [open, setOpen] = useState(!!connectorType || !!ask);
   const shut = () => { setOpen(false); setAsk(null); };
   return <>
-    <Button size="small" variant="outlined" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setOpen(true)}
-      sx={{ mt: 1.5, alignSelf: "flex-start" }}>New playbook</Button>
+    {button && <Button size="small" variant="outlined" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setOpen(true)}
+      sx={{ mt: 1.5, alignSelf: "flex-start" }}>New playbook</Button>}
     {open && <NewPlaybookDialog connectorType={connectorType} initialText={ask?.text || ""} autoStart={!!ask?.start}
       onClose={() => { shut(); onDone?.(); }} onManual={() => { shut(); onManual(); }} />}
   </>;

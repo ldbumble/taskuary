@@ -1236,7 +1236,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     const label = (k) => (k === "you" ? "You" : k === "profiles" ? "Profiles" : k === "memory" ? "Memory" : PAGES[k].title);
     const where = about ? "About you" : "Settings";
     return browse({
-      title: where, wide: about && section === "memory",
+      title: where, wide: about && section === "memory", noBack: section === PHONE_PAGE || section === "you",
       summary: about ? "how you sound, how you do your job, and what Taskuary has learned · pick a section" : "how Taskuary works for you · pick a section",
       sections: mine.map((k) => ({ key: k, label: label(k) })),
       section: needle ? "" : section,

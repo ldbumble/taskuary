@@ -637,7 +637,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       },
       // the tab's own tools, beside its list: run what is due, and describe one for the AI to draft
       tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
-        <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load}
+        <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load} button={false}
           onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
         {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (

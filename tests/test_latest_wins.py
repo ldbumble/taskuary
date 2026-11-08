@@ -161,6 +161,11 @@ def test_the_owners_presses_since_the_last_turn_are_in_the_turns_context():
     s.audit('task', tid, 'priority', 'owner', detail={'from': 'regular', 'to': 'urgent'})
     s.audit('task', tid, 'continue-work', 'owner'); s.audit('task', tid, 'woke', 'assistant')      # the turn itself; not the owner's
     did = [x.split(': ', 1)[1] for x in general.owner_did(s, tid)]
-    assert sorted(did) == sorted([f'approved (sent, if it sends) rv{rid} (the email to Gail)', 'Remind me - put it away until 2026-11-10 09:00:00',
+    monday = f"set a reminder for {general.clock_of('2026-11-10 09:00:00')}"
+    assert sorted(did) == sorted([f'approved (sent, if it sends) rv{rid} (the email to Gail)', monday,
                                   'changed its priority from regular to urgent']), did
     assert 'WHAT THE OWNER DID SINCE YOUR LAST TURN' in general.latest_block(s, tid, resumed=True)
+    # ...and each press is the owner's own line in the chat, at its time - a line, never a turn (the owner, 2026-11-08)
+    lines = [m for m in general.shown_history(s, tid) if m.get('press')]
+    assert [m['content'][0]['text'] for m in lines] == [f'You {monday}.', 'You changed its priority from regular to urgent.']
+    assert all(m['role'] == 'user' for m in lines) and not [m for m in general.history(s, tid) if m.get('press')]

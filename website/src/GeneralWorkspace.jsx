@@ -85,7 +85,7 @@ const initial = (messages) => {
   const folded = foldedSummaries(messages);
   return (messages || []).map((m) => {
     const custom = { ...(m.brief ? { brief: true, mail: m.mail || [] } : {}), ...(m.summary ? { summary: m.summary, folded: folded.has(m.id), drafts: m.drafts_then || null } : {}),
-      ...(m.since ? { since: m.since } : {}) };
+      ...(m.since ? { since: m.since } : {}), ...(m.press ? { press: true } : {}) };   // a press of the owner's (general.press_lines): their line, no turn
     return { ...m, ...(Object.keys(custom).length ? { metadata: { custom } } : {}),
       // ...a stamp is the SERVER'S LOCAL time (dates.js, store.norm_stamp), read through asUtc with the zone setting - read as UTC, every
       // answer said 7:32 AM for 12:32 PM (the owner, 2026-11-05: "time is wrong. we have settings for time zone")

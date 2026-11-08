@@ -477,36 +477,51 @@ HANDED_OFF = 'Handed off to '
 # ...AND EVERY OTHER PRESS THE OWNER MADE on the task since the agent last answered (the owner, 2026-11-08): Remind me, Watch it, Change,
 # Reopen, a send or a take-back on its cards, a share - read off the audit chain and the reviews, one line each. Words for the presses the
 # agent must read right; any other owner press is said by its own name
-PRESSES = {'remind': lambda d: f"Remind me - put it away until {d.get('to') or 'later'}", 'watch': lambda d: 'Watch it - waits quietly for a reply',
-           'unwatch': lambda d: 'stopped watching it', 'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
-           'reopened': lambda d: 'reopened it', 'reopen': lambda d: f"reopened it ({d.get('why')})" if d.get('why') else 'reopened it',
+# ...each said in the owner's voice, so one phrase serves both: "You set a reminder for ..." on the page, "set a reminder for ..." to the agent
+PRESSES = {'remind': lambda d: f"set a reminder for {clock_of(d.get('to'))}" if d.get('to') else 'took the reminder off',
+           'watch': lambda d: 'chose Watch it - it waits quietly for a reply', 'unwatch': lambda d: 'stopped watching it',
+           'priority': lambda d: f"changed its priority from {d.get('from')} to {d.get('to')}",
+           'handoff': lambda d: f"handed this to {d.get('to')} by {d.get('channel')}", 'reopened': lambda d: 'reopened it', 'reopen': lambda d: 'reopened it',
            'split_into_task': lambda d: f"split part of it off as its own task: {d.get('title') or ''}".rstrip(': '),
            'set_repo': lambda d: 'changed where its code lives', 'set_workstream': lambda d: 'changed its workstream',
            'not_coding': lambda d: 'said it is not coding work', 'funnel_later': lambda d: 'put it for later'}
-QUIET = {'handoff', 'chat', 'continue', 'continue-work', 'continue-session', 'create', 'judged', 'kind_by_typing', 'reopened_by_typing',
-         'waitroom_image', 'stay_open', 'funnel_pin'}       # said elsewhere in the turn, or the turn itself
+QUIET = {'chat', 'continue', 'continue-work', 'continue-session', 'create', 'judged', 'kind_by_typing', 'reopened_by_typing',
+         'waitroom_image', 'stay_open', 'funnel_pin'}       # the turn itself, or said by it
 DECIDED = {'approved': 'approved (sent, if it sends)', 'edited': 'edited and sent', 'rejected': 'turned down', 'closed_unsent': 'closed, unsent',
            'no_reply': 'said no reply is needed for'}
+def clock_of(at) -> str:
+    from .continuity import clock
+    return clock(str(at))
+def _detail(r):
+    try: d = json.loads(r.get('Detail') or '{}'); return d if isinstance(d, dict) else {}
+    except ValueError: return {}
+def presses(store, tid: int, since: str = '') -> list:
+    "The owner's presses on task `tid` after `since`, oldest first: [(audit id, at, what)] - its own and its shares."
+    from .processing_unread import OWNER_ACTORS
+    who = ','.join('?' * len(OWNER_ACTORS))
+    out = [(r['Id'], r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(_detail(r)))
+           for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
+                                (tid, *OWNER_ACTORS, since or '')) if r['Action'] not in QUIET]
+    out += [(r['Id'], r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
+        f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since or ''))
+        if _detail(r).get('task') == tid]
+    return sorted(out, key=lambda x: x[0])
+def press_lines(store, tid: int) -> list:
+    """EACH PRESS IS A LINE OF THE OWNER'S IN THE CHAT (the owner, 2026-11-08: "You handed this to Erin by email"), on the right where their
+    typed lines are - drawn by the page, never a turn: the agent hears them with the owner's next line (owner_did)."""
+    return [{'id': f'press-{i}', 'role': 'user', 'press': True, 'content': [{'type': 'text', 'text': f'You {what}.'}], 'createdAt': at}
+            for i, at, what in presses(store, tid)]
 def owner_did(store, tid: int) -> list:
     "The owner's presses on task `tid` since its agent last answered, oldest first: ['<time>: <what>']. [] before any answer."
-    from .continuity import clock
     from .processing_unread import OWNER_ACTORS
     since = (store._one('SELECT MAX(CreatedAt) AS at FROM comment WHERE TaskId=? AND ActorType=?', (tid, ASSISTANT_TYPE)) or {}).get('at')
     if not since: return []
     who = ','.join('?' * len(OWNER_ACTORS))
-    def detail(r):
-        try: d = json.loads(r.get('Detail') or '{}'); return d if isinstance(d, dict) else {}
-        except ValueError: return {}
-    out = [(r['CreatedAt'], (PRESSES.get(r['Action']) or (lambda d, a=r['Action']: a.replace('_', ' ').replace('-', ' ')))(detail(r)))
-           for r in store._rows(f"SELECT * FROM audit WHERE EntityType='task' AND EntityId=? AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id",
-                                (tid, *OWNER_ACTORS, since)) if r['Action'] not in QUIET]
-    out += [(r['CreatedAt'], f"shared it ({r['Action']})") for r in store._rows(
-        f"SELECT * FROM audit WHERE EntityType='share' AND Actor IN ({who}) AND CreatedAt>? ORDER BY Id", (*OWNER_ACTORS, since))
-        if detail(r).get('task') == tid]
+    out = [(at, what) for _, at, what in presses(store, tid, since)]
     out += [(r['DecidedAt'], f"{DECIDED[r['Status']]} rv{r['ReviewId']}" + (f" ({' '.join(str(r['Reason']).split())[:120]})" if r.get('Reason') else ''))
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
             if r['Status'] in DECIDED]
-    return [f'{clock(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
+    return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
@@ -630,6 +645,10 @@ def shown_history(store, tid: int) -> list:
     for m in msgs:
         if m['id'] in summ: m['summary'] = summ[m['id']]
         if (got := snaps.get(_cid(m['id']))): m['drafts_then'] = got
+    # ...and the owner's presses, each a line of theirs at its time (press_lines) - placed among the turns, never moving one
+    for p in press_lines(store, tid):
+        at = next((k for k, m in enumerate(msgs) if str(m.get('createdAt') or '') > str(p['createdAt'])), len(msgs))
+        msgs.insert(at, p)
     return msgs
 def _record_turn(store, tid: int) -> list:
     "The stored record of an agent run on a task with no chat rows, as one answer - [] when there is none."

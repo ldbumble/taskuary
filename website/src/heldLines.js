@@ -3,7 +3,8 @@
 // same session, which answers it as its next turn. It is drawn until the conversation the server keeps has it.
 // ...the OWNER'S words only: a brief is Taskuary's (general.BRIEF_ACTOR - `brief` from the server, metadata.custom.brief in the thread), and counted as
 // theirs it took a held line away before the server had it
-const words = (m) => m?.brief || m?.metadata?.custom?.brief ? "" : (m?.content || []).filter((p) => p?.type === "text").map((p) => p.text).join("").trim();
+// ...nor a PRESS drawn as their line (general.press_lines, "You set a reminder for ..."): no held line is it
+const words = (m) => m?.brief || m?.metadata?.custom?.brief || m?.press || m?.metadata?.custom?.press ? "" : (m?.content || []).filter((p) => p?.type === "text").map((p) => p.text).join("").trim();
 
 // the line Enter holds - the box's words - or null when this key is not that (Shift+Enter, an IME, an empty box, nothing running)
 export function heldLine(e, text, running) {

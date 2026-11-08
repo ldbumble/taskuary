@@ -47,3 +47,13 @@ test("the lines the server kept for the agent show on every screen, once (the ow
   assert.deepEqual(waitingShown(waiting, [], [...server, said("and copy Erin")], server).map((w) => w.id), [7]);
   assert.deepEqual(waitingShown(undefined, [], server, server), []);
 });
+
+// A PRESS IS THE OWNER'S LINE, NOT A HELD ONE (the owner, 2026-11-08: "You set a reminder for Monday" drawn on the right): a press landing
+// while a line is held never takes that line away
+test("a press drawn as the owner's line never counts as the held line arriving", () => {
+  const held = [{ text: "copy Erin", after: 1 }];
+  const press = { ...said("You set a reminder for Monday."), press: true };
+  assert.deepEqual(stillHeld(held, [said("hi"), press]), held);
+  assert.deepEqual(stillHeld(held, [said("hi"), { ...press, press: undefined, metadata: { custom: { press: true } } }]), held);
+  assert.deepEqual(stillHeld(held, [said("hi"), said("copy Erin")]), []);
+});

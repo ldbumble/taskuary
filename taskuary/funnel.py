@@ -907,6 +907,16 @@ def agent_found(store, tid) -> str:
     return _short(m.group(1) if m else rep['Body'].split('\n', 1)[-1], 300)
 
 
+def chat_done(store, task: dict, when=None) -> dict:
+    "A chat agent done for now - its turn asked nothing - as the task's wrap-up row: after a Send, that the reply went (taskstate.chat_moved_on)."
+    from . import taskstate
+    tid = task['TaskId']
+    why = ('your reply went out - the agent is done for now, and the task is still open' if taskstate.chat_moved_on(store, tid)
+           else 'the agent is done for now - type to carry on, and the task is still open')
+    return _item(f"wrap:{tid}", 'wrapup', 'report', task.get('Title') or f'task {tid}', who='you', when=when, tid=tid,
+                 priority=task.get('Priority'), chat_done=True, why=why)
+
+
 def paused_conversation(store, item: dict) -> dict:
     """Render resumable general work as a paused agent conversation, never as an unowned task."""
     tid = item.get('tid')
@@ -918,7 +928,16 @@ def paused_conversation(store, item: dict) -> dict:
         if not general.handles(task) or tid in general.OPENING or general.session_for(tid): return item
         # ...nor one that IDLED OUT (general.idle_out): nothing stopped and nothing was saved - its agent is just not running until the next
         # input, and the task reads as the task (a reply ready, on you), never "agent stopped" or "conversation saved" (the owner, 2026-11-05)
-        if general.idled(tid, store): return item
+        # ...and AS IT READ LIVE (the owner, 2026-11-07): its open question still asks you, and a turn that asked nothing is done for now
+        if general.idled(tid, store):
+            from . import taskstate
+            if (q := taskstate.open_question(store, tid)):
+                return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'agent': 'assistant', 'mode': 'assistant',
+                               'tail': [str(q.get('text') or '')[:300]], 'request_id': q.get('request_id'), 'request_kind': q.get('kind'),
+                               'since': _ts(q.get('at')) or item.get('since'), 'why': request_line(None, q)}
+            if item.get('lane') in ('yours', 'queued') and not store.pending_review(tid) and taskstate.state(store, task) == 'agentdone':
+                return item | {k: v for k, v in chat_done(store, task).items() if k in ('key', 'kind', 'lane', 'who', 'why', 'chat_done')}
+            return item
     except Exception:
         return item
     replies = [c for c in store.list_comments(tid) if c.get('ActorType') == 'assistant_agent']
@@ -982,13 +1001,11 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # Timeline, reading the session, said "is waiting on you". No words on the tail decide it any more (2026-10-11):
         # a session with no state of its own is parked, never "asked you" from a "?" in what it wrote.
         asking = t.get('state') == 'asking'
-        # ...A CHAT AGENT THE OWNER ALREADY ANSWERED is done for now (taskstate.chat_moved_on, the owner 2026-11-06): after a Send its row said
-        # "agent ready for you" and "Taskuary is waiting on you" - it is the task's wrap-up, "agent done", until something is typed again
-        from . import general, taskstate
-        if not asking and t.get('mode') == 'assistant' and general.handles(task) and taskstate.chat_moved_on(store, tid):
-            out.append(_item(f"wrap:{tid}", 'wrapup', 'report', task.get('Title') or f'task {tid}', who='you', when=t.get('started'), tid=tid,
-                             priority=task.get('Priority'), chat_done=True, why='your reply went out - the agent is done for now, and the task is still open'))
-            continue
+        # ...A CHAT AGENT THAT ASKED NOTHING is done for now (the owner, 2026-11-07; after a Send too, 2026-11-06): its row said "Taskuary is
+        # waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A reply it drafted still waits on you
+        from . import general
+        if not asking and t.get('mode') == 'assistant' and general.handles(task) and not store.pending_review(tid):
+            out.append(chat_done(store, task, t.get('started'))); continue
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
                          channel=src,

@@ -2223,7 +2223,9 @@ class GeneralSession:
         """Close QUIETLY after idle_for() with nothing going on (the owner, 2026-11-05: "instead of keeping it open forever it should just shut
         down keeping the chat same ui ... restart in backend"). Not a close: no report, no learning, no held reply released, no line in the chat,
         no worker event, the task's state untouched. Its CLI stops, its conversation stays saved, and the next typed line or joined mail starts
-        it again as this same run (IDLED, start_session). Idle time only - a turn running is never cut off."""
+        it again as this same run (IDLED, start_session). Idle time only - a turn running is never cut off. What the task reads is not this
+        process's to keep (the owner, 2026-11-07): its open question is the run's recorded ask, open until answered, and a turn that asked
+        nothing is done for now - both read off the task (taskstate.open_question), so idling out changes neither."""
         if not self._lock.acquire(blocking=False): return False
         try:
             if self.idle_why(now, locked=True): return False

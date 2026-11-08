@@ -76,8 +76,32 @@ class IdleOut(unittest.TestCase):
         from taskuary import funnel, taskstate
         general.idle_sweep(self.later())
         item = {'tid': self.tid, 'lane': 'yours', 'kind': 'task'}
-        self.assertEqual(funnel.paused_conversation(self.s, item), item)
-        self.assertNotIn(taskstate.state(self.s, self.s.get_task(self.tid)), ('stopped', 'saved', 'blocked', 'working', 'queued'))
+        # ...and as it read live (the owner, 2026-11-07): a turn that asked nothing is done for now, never "waiting on you"
+        self.assertEqual({k: funnel.paused_conversation(self.s, item).get(k) for k in ('lane', 'chat_done')}, {'lane': 'report', 'chat_done': True})
+        self.assertEqual(taskstate.state(self.s, self.s.get_task(self.tid)), 'agentdone')
+
+    def test_the_task_reads_the_same_live_or_idled_out(self):
+        """The audit, 2026-11-07: the agent asked, idled out, and the question vanished from the chip, the rail and the Assistant though nobody
+        answered it; after the restart a turn that asked nothing read "waiting on you" until the next idle-out. Its question is the run's own
+        recorded ask - open until answered - and a turn that asked nothing is done for now, whether its process is alive or not."""
+        from taskuary import funnel, server, taskstate
+        s, tid = self.s, self.tid
+        state = lambda: taskstate.state(s, s.get_task(tid), (general.session_for(tid) or mock.Mock(info=lambda: None)).info())
+        self.assertEqual(state(), 'agentdone')                                     # live, asked nothing
+        ws.record(s, tid, self.sid, 'input_needed', text='Which site goes first?', source='api')
+        self.assertEqual(state(), 'blocked')                                       # live, asking
+        general.idle_sweep(self.later())
+        self.assertEqual(state(), 'blocked')                                       # idled out: still asking...
+        self.assertEqual(taskstate.open_question(s, tid)['text'], 'Which site goes first?')
+        row = funnel.paused_conversation(s, {'tid': tid, 'lane': 'yours', 'kind': 'task'})
+        self.assertEqual((row['lane'], row['tail']), ('blocked', ['Which site goes first?']))      # ...on the rail...
+        with mock.patch.object(server, 'store', s):
+            asked = server._assistant_payload(tid)['asking']
+        self.assertEqual((asked['text'], asked['resting']), ('Which site goes first?', True))     # ...and on the page, answered by typing
+        general.start_session(s, tid, actor='owner').send_prompt('Riverside first.')
+        self.assertEqual(state(), 'agentdone')                                     # answered, and the turn after it asked nothing
+        general.idle_sweep(general.session_for(tid).last + 61)
+        self.assertEqual(state(), 'agentdone')                                     # ...the same once idled out again
 
     def test_a_turn_running_is_never_cut_off(self):
         self.ses.busy = True

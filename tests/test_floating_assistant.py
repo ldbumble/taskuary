@@ -119,7 +119,7 @@ class FloatingAssistantTests(unittest.TestCase):
         self.assertIn('ACTION SURFACE', system)
         self.assertIn('Commentary explains; the clearly labelled owner button acts.', system)
         self.assertIn('exactly ONE unresolved item', system)
-        self.assertIn('[TQ-0001](#task=1)', system)
+        self.assertIn('[TQ-0001](#task=1)', system)                # ...by the line every task agent reads too (words.LINK_LINE)
         self.assertIn('WORKSPACE SNAPSHOT', user)
         self.assertIn(f'TQ-{work:04d}', user)
 

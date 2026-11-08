@@ -102,3 +102,15 @@ test("a Hub topic and an open post round-trip through the address, and the Board
   assert.equal(placeOf(BOARD), "#board");
   assert.equal(canvasRequestFromHash(BOARD), null, "the Board is no canvas page");
 });
+
+// THE LINE EVERY AGENT READS (taskuary/words.py LINK_LINE, the owner 2026-11-07): each address it teaches lands on the canvas - a task, or a
+// page - and #connector=<type> opens that ONE card, so "connect your books" can be the QuickBooks card itself
+test("every address the agents' link line teaches opens in place", () => {
+  const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "words.py"), "utf8");
+  const line = /LINK_LINE = \(([\s\S]*?)\)\r?\n/.exec(py)[1].replace(/#settings=<page>|#report=<id>/g, "");
+  const addrs = [...line.matchAll(/#[\w=&%.:/-]+/g)].map((m) => m[0].replace(/\.$/, ""));
+  assert.ok(addrs.length >= 6, addrs.join(" "));
+  for (const h of addrs) assert.ok(["task", "browse"].includes(canvasRequestFromHash(h)?.kind), h);
+  assert.equal(canvasRequestFromHash("#connector=quickbooks").state.connector, "quickbooks");
+  assert.equal(canvasRequestFromHash("#connector=quickbooks&step=1").state.step, true);
+});

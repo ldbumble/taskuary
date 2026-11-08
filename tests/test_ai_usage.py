@@ -157,6 +157,44 @@ def test_the_built_in_dashboard_draws_the_ai_tiles_and_an_old_copy_gets_them_onc
     assert [c['title'] for c in got['components'][-5:]] == [c['title'] for c in dashboards.AI_TILES] and dashboards.validate(got, s)[0]
 
 
+def _glance_row(s, spec):
+    row = next(r for r in s.list_sources(active_only=False) if r['Address'] == dashboards.GLANCE['title'])
+    s.save_source({'SourceId': row['SourceId'], 'ConfigJson': json.dumps(spec)}, 'owner')
+    return lambda: dashboards.cfg_of(s.get_source(row['SourceId']))
+
+
+def test_the_token_total_is_in_the_top_row_and_a_copy_with_the_ai_tiles_last_moves_them_up_once():
+    # the owner, 2026-11-07: "I don't see the token count?" - the AI tiles were the last five, below the fold
+    top = dashboards.GLANCE['components'][:4]
+    assert dashboards.AI_TOKENS in top and all(c['kind'] == 'stat' for c in top)
+    assert dict(dashboards.headline(dashboards.GLANCE, dashboards.collect(_usage_store()[0], dashboards.GLANCE)))['AI tokens'] == '97.1K'
+    # an unedited copy saved 2026-11-06 (the AI tiles last, the calls bar two wide, the source renamed) becomes today's layout, once
+    plain = [c for c in dashboards.GLANCE['components'] if c['source'] != 'ai']
+    old = {**dashboards.GLANCE, 'sources': [{**x, 'key': 'ai_used'} if x['key'] == 'ai' else x for x in dashboards.GLANCE['sources']],
+           'components': [*plain, *({**c, 'source': 'ai_used', **({'w': 2} if c['kind'] == 'bar' else {})} for c in dashboards.AI_TILES)]}
+    s, _ = _usage_store(); got = _glance_row(s, old)
+    assert dashboards.migrate_ai_tiles_up(s) == 1
+    assert got()['components'] == [{**c, 'source': 'ai_used'} if c['source'] == 'ai' else c for c in dashboards.GLANCE['components']]
+    assert dashboards.validate(got(), s)[0]
+    # ...and once only: the owner who puts them back at the end keeps them there
+    _glance_row(s, old)
+    assert dashboards.migrate_ai_tiles_up(s) == 0 and got()['components'] == old['components']
+    # an edited copy keeps its own tiles and order: the total after its first three numbers, the AI tiles after the rest of them
+    t = {c['title']: c for c in plain}
+    order = ['Came in', 'New tasks', 'Open now', 'Median reply time', 'Closed this week', 'Agent time per session', 'How far it got',
+             'What came in, by channel', 'Agent sessions, and how they ended', 'Open work by kind', 'Who writes most', 'Waiting longest on you']
+    mine = {**old, 'components': [*(t[x] for x in order[:6]), {'kind': 'stat', 'title': 'Mine', 'source': 'mail', 'agg': 'count'},
+                                  *(t[x] for x in order[6:]), *old['components'][-5:]]}
+    assert dashboards.validate(mine, s)[0]
+    titles = [c['title'] for c in dashboards.ai_tiles_up(mine)['components']]
+    assert titles[:4] == ['Came in', 'New tasks', 'Open now', 'AI tokens']
+    assert titles[4:8] == ['Median reply time', 'Closed this week', 'Agent time per session', 'Mine']
+    assert titles[8:13] == [c['title'] for c in dashboards.AI_TILES] and titles[13] == 'How far it got'
+    # ...and a copy whose AI tiles the owner already moved, or today's own, is left as it is
+    moved = {**old, 'components': [*old['components'][-5:], *plain]}
+    assert dashboards.ai_tiles_up(moved) is moved and dashboards.ai_tiles_up(dashboards.GLANCE) is dashboards.GLANCE
+
+
 def test_retention_keeps_what_was_used_for_ninety_days_and_the_reason_for_thirty():
     from datetime import datetime, timedelta
     s = MemoryStore(); now = datetime(2026, 11, 6, 12)

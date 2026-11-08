@@ -1,7 +1,7 @@
 // A DASHBOARD'S SPEC, AS A PERSON EDITS IT (DashboardEditor.jsx): its sources' small conversions, and its tiles - each ONE sentence the
 // owner writes (the owner, 2026-11-06: "maybe we should just use text to say what it shows"), turned into a tile by the AI on the
 // server (POST /api/dashboards/tile, compose.compose_tile). Pure - test/dashboardSetup.test.mjs holds it.
-export const MAX_SOURCES = 8, MAX_COMPONENTS = 18;                 // dashboards.MAX_SOURCES, MAX_COMPONENTS
+export const MAX_SOURCES = 8, MAX_COMPONENTS = 20;                 // dashboards.MAX_SOURCES, MAX_COMPONENTS
 
 // a value set to nothing is a key gone, so a saved spec carries only what was chosen
 export const withField = (c, k, v) => {

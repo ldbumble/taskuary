@@ -22,7 +22,7 @@ KINDS = {'stat': ((), 1), 'progress': (('target',), 1), 'line': (('x',), 2), 'ar
          'stacked': (('x', 'series'), 2), 'table': ((), 4), 'list': (('label',), 2)}
 AGGS = ('count', 'sum', 'avg', 'median', 'min', 'max')
 RANGES = (7, 30, 90, 0)            # days back; 0 is everything the sources returned
-MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 18, 2000
+MAX_SOURCES, MAX_COMPONENTS, ROWS = 8, 20, 2000
 COLUMN_KEYS = ('x', 'y', 'series', 'label', 'meta', 'value', 'date')
 
 
@@ -162,43 +162,52 @@ AI_TILES = [
     {'kind': 'stat', 'title': 'Minutes per agent run', 'said': 'The median minutes one agent run takes', 'source': 'ai', 'agg': 'median', 'y': 'minutes',
      'unit': 'min', 'where': {'kind': 'agent run'}, 'good': 'none'},
     {'kind': 'bar', 'title': 'AI calls: quick, normal or hard', 'said': 'How many AI calls were quick, normal or hard, in that order', 'source': 'ai',
-     'x': 'tier', 'agg': 'sum', 'y': 'calls', 'order': ['quick', 'normal', 'hard'], 'w': 2}]
+     'x': 'tier', 'agg': 'sum', 'y': 'calls', 'order': ['quick', 'normal', 'hard'], 'w': 1}]
+# ...and the total, in the top row (the owner, 2026-11-07: "I don't see the token count?" - the AI tiles came last, below the fold).
+# The ai_usage rows carry tokens and time, no price, so there is no cost to show beside it
+AI_TOKENS = {'kind': 'stat', 'title': 'AI tokens', 'said': 'How many tokens the AI used', 'source': 'ai', 'agg': 'sum', 'y': 'tokens', 'good': 'none'}
 AI_SOURCE_KEY = 'ai'
 _own = lambda key, label, dataset, date: {'key': key, 'label': label, 'type': 'taskuary_data', 'dataset': dataset, 'days': 90, 'date': date}
+_by_model, _by_job, _per_run, _run_minutes, _calls = AI_TILES
 GLANCE = {'type': 'dashboard', 'title': 'Taskuary at a glance', 'daily_at': '07:00',
           'sources': [_own('mail', 'What came in', 'mail', 'day'), _own('flow', 'How far it got', 'flow', 'day'),
                       _own('tasks', 'Tasks', 'tasks', 'arrived'), _own('closed', 'Tasks closed', 'tasks', 'closed'),
                       _own('agents', 'Agent sessions', 'agent_runs', 'day'), _own('replies', 'Replies', 'replies', 'day'),
                       _own('ai', 'AI used', 'ai_usage', 'day')],
           'filters': {'range': 7, 'segment': 'channel'},
+          # four columns with every row filled: a 1-wide tile is a number, a 2-wide one a chart
           'components': [
-              # the numbers first: what came in, what it became, what is still open, and how fast the owner answers
+              # the numbers first: what came in, what it became, what is still open, and what the AI used
               {'kind': 'stat', 'title': 'Came in', 'said': 'How many messages came in', 'source': 'mail', 'agg': 'count'},
               {'kind': 'stat', 'title': 'New tasks', 'said': 'How many new tasks arrived', 'source': 'tasks', 'agg': 'count'},
               {'kind': 'stat', 'title': 'Open now', 'said': 'How many tasks are open right now, lower is better', 'source': 'tasks',
                'agg': 'count', 'where': {'state': 'open'}, 'range': False, 'good': 'down'},
+              AI_TOKENS,
+              # ...how fast the owner answers and the week's close against its target, beside the funnel (four bars: a tile's height)
               {'kind': 'stat', 'title': 'Median reply time', 'said': 'The median hours from an ask to my reply, lower is better',
                'source': 'replies', 'agg': 'median', 'y': 'hours', 'unit': 'h', 'good': 'down'},
-              # ...the week's close against its target and an agent's time, beside the funnel (four bars: a tile's height, so the row is even)
               {'kind': 'progress', 'title': 'Closed this week', 'said': 'Tasks closed in the last 7 days, toward a target of 15',
                'source': 'closed', 'agg': 'count', 'where': {'state': 'closed'}, 'range': 7, 'target': 15},
-              {'kind': 'stat', 'title': 'Agent time per session', 'said': 'The median minutes an agent session takes',
-               'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
               {'kind': 'bar', 'title': 'How far it got', 'said': 'How far what came in got, stage by stage, each as a share of what came in',
                'source': 'flow', 'x': 'stage', 'order': list(STAGES), 'share': True, 'w': 2},
-              # ...then the days: what came in, and what the agents did with theirs
+              # ...then the days: what came in beside the tokens it took, what the agents did beside what the AI was doing
               {'kind': 'stacked', 'title': 'What came in, by channel', 'said': 'Messages in per day, split by channel, stacked',
                'source': 'mail', 'x': 'day', 'series': 'channel', 'w': 2},
+              _by_model,
               {'kind': 'stacked', 'title': 'Agent sessions, and how they ended', 'said': 'Agent sessions per day, split by how they ended',
                'source': 'agents', 'x': 'day', 'series': 'outcome', 'w': 2},
+              _by_job,
+              # ...an agent's time and tokens
+              {'kind': 'stat', 'title': 'Agent time per session', 'said': 'The median minutes an agent session takes',
+               'source': 'agents', 'agg': 'median', 'y': 'minutes', 'unit': 'min', 'good': 'none'},
+              _per_run, _run_minutes, _calls,
               # ...the rankings
               {'kind': 'bar', 'title': 'Open work by kind', 'said': 'Open tasks right now, by kind', 'source': 'tasks', 'x': 'kind',
                'where': {'state': 'open'}, 'range': False, 'w': 2},
               {'kind': 'bar', 'title': 'Who writes most', 'said': 'Who sends the most messages, top 8', 'source': 'mail', 'x': 'sender', 'limit': 8, 'w': 2},
               # ...and the detail: the asks that have waited longest on the owner, each opening its task
               {'kind': 'list', 'title': 'Waiting longest on you', 'said': 'The open tasks that have waited longest on me, with how long, at most 6',
-               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4},
-              *AI_TILES]}
+               'source': 'tasks', 'label': 'title', 'meta': 'waiting', 'where': {'status': 'open'}, 'range': False, 'sort': 'arrived', 'limit': 6, 'w': 4}]}
 TEMPLATES = {'glance': {'title': GLANCE['title'], 'config': GLANCE,
                         'explain': 'What came in and from where, how far it got, what is still open, how fast you answer and what your '
                                    'agents did - from this app\'s own records, so there is nothing to connect.'}}
@@ -369,6 +378,43 @@ def migrate_ai_tiles(store) -> int:
         if src.get('Channel') == 'report' and (new := with_ai_tiles(cfg)) != cfg:
             store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(new)}, 'migrate'); n += 1
     store.set_setting(AI_TILES_KEY, '1', 'migrate')
+    return n
+
+
+# a tile matched by what it shows, whatever its sentence or its source's name (and its width, `w=False`: the AI calls bar narrowed)
+def _shape(c, w=True): return json.dumps({k: v for k, v in c.items() if k not in ('said', 'source', *(() if w else ('w',)))}, sort_keys=True)
+
+
+def ai_tiles_up(spec: dict) -> dict:
+    """A saved Taskuary at a glance whose AI-use tiles still sit at its end (migrate_ai_tiles) with them moved up and the AI tokens total
+    in its top row (2026-11-07): an unedited copy becomes today's GLANCE, an edited one keeps its own tiles in its own order with the
+    total after its first three numbers and the AI tiles after the rest of them. The same spec when it is not the built-in, already
+    shows the total, or its AI tiles are not where they were put (the owner moved them)."""
+    if not is_dashboard(spec) or spec.get('title') != GLANCE['title']: return spec
+    comps, n = spec.get('components') or [], len(AI_TILES)
+    key = next((_key(s, i) for i, s in enumerate(spec.get('sources') or [], 1) if isinstance(s, dict) and s.get('dataset') == 'ai_usage'), None)
+    if not key or not all(isinstance(c, dict) for c in comps) or any(_shape(c) == _shape(AI_TOKENS) for c in comps): return spec
+    rest, ai = comps[:-n], comps[-n:]
+    if [_shape(c, False) for c in ai] != [_shape(c, False) for c in AI_TILES]: return spec
+    if sorted(map(_shape, rest)) == sorted(_shape(c) for c in GLANCE['components'] if c['source'] != AI_SOURCE_KEY):
+        return {**spec, 'components': [{**c, 'source': key} if c['source'] == AI_SOURCE_KEY else c for c in GLANCE['components']]}
+    top = next((i for i, c in enumerate(rest) if c.get('kind') not in ('stat', 'progress')), len(rest)); k = min(top, 3)
+    total = [{**AI_TOKENS, 'source': key}] if len(comps) < MAX_COMPONENTS else []
+    return {**spec, 'components': [*rest[:k], *total, *rest[k:top], *ai, *rest[top:]]}
+
+
+AI_UP_KEY = 'glance_ai_tiles_up'
+
+
+def migrate_ai_tiles_up(store) -> int:
+    """ai_tiles_up on every saved dashboard, once: an owner who moves the tiles back down later is not overridden."""
+    if store.get_setting(AI_UP_KEY): return 0
+    n = 0
+    for src in store.list_sources(active_only=False):
+        cfg = cfg_of(src)
+        if src.get('Channel') == 'report' and (new := ai_tiles_up(cfg)) != cfg:
+            store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(new)}, 'migrate'); n += 1
+    store.set_setting(AI_UP_KEY, '1', 'migrate')
     return n
 
 

@@ -267,7 +267,7 @@ def test_the_template_runs_deterministically_over_the_apps_own_rows():
     assert runs['s1']['minutes'] == 30 and runs['s3']['minutes'] is None
     tiles = dict(dashboards.headline(dashboards.GLANCE, one))
     assert tiles == {'Came in': '4', 'New tasks': '2', 'Open now': '1', 'Median reply time': '3 h', 'Agent time per session': '45 min',
-                     'Tokens per agent run': '-', 'Minutes per agent run': '-'}      # no AI ran in this store
+                     'AI tokens': '-', 'Tokens per agent run': '-', 'Minutes per agent run': '-'}      # no AI ran in this store
     closed = next(c for c in dashboards.GLANCE['components'] if c['kind'] == 'progress')
     week = dashboards.in_range(src['closed']['rows'], 'closed', dashboards.span(closed, 90))
     assert dashboards.span(closed, 90) == 7 and dashboards.aggregate(dashboards.where(week, closed['where'])) == 1

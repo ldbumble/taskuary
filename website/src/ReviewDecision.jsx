@@ -15,8 +15,8 @@ import ActionCard from "./ActionCard.jsx";
 import { withoutSignature } from "./signature.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
-import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
-import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
+import { CcRow, DraftField, SubjectRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
+import { deliveryBcc, deliveryCc, deliveryFiles, deliveryMeta, deliverySubject, replyContext } from "./replyDelivery.js";
 import { acted, announce, repeatClick, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { boxText, editAfterRefile, followDraft, useDraftJob } from "./replyDraft.js";
@@ -24,6 +24,7 @@ import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { DECIDE_TIMEOUT, draftState, failureHead, replySendFailure, reviewDeliveryState, sendFix, timedOut } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
+import { FOCUS_RING, pressable } from "./pressable.js";
 import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { blankAsk, blankRefusal, blankSpans } from "./blanks.js";
@@ -77,8 +78,8 @@ export const InvoiceLine = ({ meta }) => (
 const edits = new Map(), heard = new Set();
 const heldOf = (r) => { const e = edits.get(r?.ReviewId); return e && e.filed === reviewText(r) ? e : null; };
 const hold = (r, part) => {
-  const e = { text: null, cc: null, ...heldOf(r), ...part, filed: reviewText(r) };
-  if (e.text == null && e.cc == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
+  const e = { text: null, cc: null, bcc: null, subject: null, ...heldOf(r), ...part, filed: reviewText(r) };
+  if (e.text == null && e.cc == null && e.bcc == null && e.subject == null) edits.delete(r.ReviewId); else edits.set(r.ReviewId, e);
   heard.forEach((f) => f(r.ReviewId));
 };
 // SEND AND CLOSE OUTLIVES THE PRESS (the owner, 2026-11-03): a send nobody could confirm comes back as Check delivery or Send anyway, and the
@@ -131,8 +132,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const setText = (v) => { hold(r, { text: v ?? null }); setTextNow(v); };
   const [cc, setCcNow] = useState(() => heldOf(r)?.cc ?? null);         // null means "the CC the draft was filed with"
   const setCc = (v) => { hold(r, { cc: v ?? null }); setCcNow(v); };
+  // ...and BCC and the subject, held the same way (the owner, 2026-11-08: one email card, every field editable, edits go out with Send)
+  const [bcc, setBccNow] = useState(() => heldOf(r)?.bcc ?? null), [subj, setSubjNow] = useState(() => heldOf(r)?.subject ?? null);
+  const setBcc = (v) => { hold(r, { bcc: v ?? null }); setBccNow(v); }, setSubj = (v) => { hold(r, { subject: v ?? null }); setSubjNow(v); };
+  const [bccOpen, setBccOpen] = useState(false);
   const rNow = useRef(r); rNow.current = r;
-  useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null); };
+  useEffect(() => { const f = (id) => { if (id !== rNow.current.ReviewId) return; const e = heldOf(rNow.current); setTextNow(e?.text ?? null); setCcNow(e?.cc ?? null);
+    setBccNow(e?.bcc ?? null); setSubjNow(e?.subject ?? null); };
     heard.add(f); return () => { heard.delete(f); }; }, []);
   const [busyNow, setBusy] = useState(false);
   // SENT STAYS SENT until the page's re-read takes the card away (the owner, 2026-10-26: "when you hit send on close out email it grey's
@@ -182,7 +188,11 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const value = delivery.frozen ? delivery.body : boxText({ text, draft: reviewText(r), drafting, signature: r.Signature });
   const words = withoutSignature(value, r.Signature);
   const ccNow = delivery.frozen ? deliveryCc(filedDelivery) : cc ?? deliveryCc(r);
+  const bccNow = delivery.frozen ? deliveryBcc(filedDelivery) : bcc ?? deliveryBcc(r);
+  // the subject the card shows: the owner's, else the envelope's (an agent's email), else "Re:" the mail it answers
+  const subjFiled = deliverySubject(r), subjNow = delivery.frozen ? deliverySubject(filedDelivery) : subj ?? subjFiled;
   const meta = deliveryMeta(r);
+  const isEmail = String(r.Channel || meta.channel || "").toLowerCase() === "email";     // the one email card: To, CC, BCC, Subject, files
   const isCal = meta.kind === "calendar";             // an invite answered or a meeting booked: its note may be empty
   const co = closeout && !proposal ? proposalPresentation(closeout) : null;
   // the slots in a REPLY's box (blanks.js): a proposal's text is the agent's act, and a frozen one is past changing
@@ -314,7 +324,9 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk }, { timeout: DECIDE_TIMEOUT });
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway, blanks_ok: blanksOk,
+          ...(verb === "approve" && !proposal && !delivery.frozen && isEmail ? { bcc: bccNow, subject: subj != null && subj !== subjFiled ? subj : null } : {}) },
+        { timeout: DECIDE_TIMEOUT });
       if (data.ok && !data.send_error && verb === "approve") closing.delete(r.ReviewId);    // the press is over: the next one says again which send
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }
@@ -588,15 +600,23 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
           <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
         </Box>
       )}
+      {/* THE ONE EMAIL CARD (the owner, 2026-11-08): the reply and the agent's email alike - To, CC, BCC folded until asked for, Subject, files */}
+      {isEmail && !proposal && !isCal && (busy || delivery.frozen ? (
+        <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
+          CC: {ccNow.length ? ccNow.join(", ") : "none"}{bccNow.length ? ` · BCC: ${bccNow.join(", ")}` : ""}{subjNow ? ` · ${subjNow}` : ""}
+        </Typography>
+      ) : <>
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, flexWrap: "wrap" }}>
+          <CcRow cc={ccNow} setCc={setCc} channel="email" />
+          {!bccOpen && !bccNow.length && <Typography {...pressable(() => setBccOpen(true))} data-tq-add-bcc=""
+            sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>Add BCC</Typography>}
+        </Box>
+        {(bccOpen || bccNow.length > 0) && <CcRow cc={bccNow} setCc={setBcc} channel="email" label="BCC" />}
+        <SubjectRow subject={subjNow} onChange={setSubj} disabled={off} />
+      </>)}
       {!proposal && !isCal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
         promised={filesPromised(r)} short={filesShort(filedDelivery, deliveryFiles(filedDelivery))} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen} />}
-      {/* an agent's email (slots.draft) has no message, so no r.Channel: its envelope says email - the CC it was given showed nowhere
-          (the product audit, 2026-11-08). One with none gets no Add CC here: that is the owner's call to make (ASK OWNER, F27) */}
-      {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || meta.channel || "").toLowerCase() === "email" && (
-        <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
-          CC: {ccNow.length ? ccNow.join(", ") : "none"}
-        </Typography>
-      ) : !proposal && (!isSlot || ccNow.length > 0) && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel || meta.channel} />}
+      {/* ...a chat reply copies nobody: its CC row is the email card's alone (above) */}
       {/* why there is no Send (outbound.send_block, PW-044) is the Copy button's hover under the draft, not a line over it (2026-10-22) */}
       {/* THE WARNING SITS OVER THE DRAFT IT IS ABOUT, ITS REDRAFT IN IT (the owner, 2026-10-28: "redraft warning on top of the reply should
           have the redraft button on it, not below the message box") */}

@@ -863,13 +863,13 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
 
 
 def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = None, cc: list = None,
-              attachments: list = None, html: str = None, references: list = None) -> dict:
+              attachments: list = None, html: str = None, references: list = None, bcc: list = None) -> dict:
     """The reply, over the provider's own SMTP, threaded with In-Reply-To/References. `cc` is the
     colleague the owner looped in: on the header so everyone sees it, and in the envelope so the
     server actually delivers to them (the header alone sends nothing - it is only text)."""
     imap_h, smtp_h, cfg = _hosts(c)
     user = (cfg.get('address') or '').strip()
-    cc = [a for a in (cc or []) if a]
+    cc, bcc = [a for a in (cc or []) if a], [a for a in (bcc or []) if a]     # `bcc`: in the envelope only - never on a header
     # A reply that carries files is a multipart message; without them it stays the plain text it was.
     # ...and a shared result (sharing.email_html) carries its HTML beside the same text, which stays the fallback part
     from email.mime.multipart import MIMEMultipart
@@ -899,6 +899,6 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         except ssl.SSLCertVerificationError as e: raise tls_error(e, smtp_h, port, True) from e
         verify_pin(S.sock, cfg, smtp_h)
         S.login(user, c['Secret'])
-        S.sendmail(user, list(to) + cc, m.as_string())
-    return {'channel': 'email', 'to': to, 'cc': cc, 'mailbox': user, 'threaded': bool(in_reply_to),
+        S.sendmail(user, list(to) + cc + bcc, m.as_string())
+    return {'channel': 'email', 'to': to, 'cc': cc, 'bcc': bcc, 'mailbox': user, 'threaded': bool(in_reply_to),
             'attached': [f['name'] for f in (attachments or [])]}

@@ -28,5 +28,5 @@ test("each mouse-only control the audit named is pressable now", () => {
   assert.match(page, /<Box \{\.\.\.pressable\(onToggle\)\} aria-expanded=/);
   const ui = src("ui.jsx");
   assert.ok(ui.includes('<Typography {...pressable(() => { setText(bareAddresses(to).join(", ")); setOpen(true); })} data-tq-to-change'));
-  assert.match(ui, /<Typography \{\.\.\.pressable\(\(\) => setOpen\(true\)\)\}\s+sx=\{\{ \.\.\.FOCUS_RING[\s\S]{0,200}\Add CC/);
+  assert.match(ui, /<Typography \{\.\.\.pressable\(\(\) => setOpen\(true\)\)\}\s+sx=\{\{ \.\.\.FOCUS_RING[\s\S]{0,200}Add \$\{name\}/);
 });

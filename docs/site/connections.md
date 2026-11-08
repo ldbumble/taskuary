@@ -302,7 +302,7 @@ Azure (blob containers, Log Analytics, arbitrary ARM paths, and it can reuse the
 registration), Microsoft Entra ID, Prometheus, Datadog, WinRM for PowerShell on a remote Windows
 machine.
 
-**Finance** — Sage Intacct, QuickBooks Online, Zoho Invoice, and bank and card feeds through
+**Finance** — Sage Intacct, QuickBooks Online, FreshBooks (signed in by OAuth), Zoho Invoice, and bank and card feeds through
 SimpleFIN or Teller. These are the cards where the read/write distinction bites: each ships at
 `read`, so an agent proposes a bill or an invoice and you approve it on the task. Raising a card to
 `write` is what lets a routing policy pass small, known items through without you.

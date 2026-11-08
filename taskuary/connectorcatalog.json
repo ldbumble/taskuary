@@ -889,6 +889,16 @@
       ]
     },
     {
+      "type": "freshbooks",
+      "title": "FreshBooks",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Invoices, clients, expenses and payments from FreshBooks for the agents and reports, read with your own sign-in - GET /accounting/account/<account id>/invoices/invoices. Reads only.",
+      "match": [
+        "freshbooks"
+      ]
+    },
+    {
       "type": "quickbooks",
       "title": "QuickBooks Online",
       "group": "Corporate systems",

@@ -34,6 +34,7 @@ DOC = {'digitalocean': {'account': {'email': 'alex@northwind.example', 'status':
        'zoom_chat': {'id': 'z1', 'email': 'alex@northwind.example', 'account_id': 'a1'},
        'webex': {'id': 'p1', 'orgId': 'o1', 'displayName': 'Alex Doyle'}, 'threads': {'id': 't1', 'username': 'alexdoyle'},
        'hubspot': {'results': [{'id': '77', 'email': 'alex@northwind.example'}]}, 'salesforce': {'user_id': '005000000000001AAA'},
+       'freshbooks': {'response': {'id': 1, 'email': 'alex@northwind.example', 'first_name': 'Alex', 'business_memberships': [{'business': {'account_id': 'AbC1'}}]}},
        'docusign': {'folders': [{'folderId': 'f1', 'name': 'Inbox'}]}, 'basecamp_todos': {'id': 10, 'name': 'Alex Doyle'},
        'mailgun': {'items': [{'name': 'mg.northwind.example'}]}, 'sendgrid': {'scopes': ['mail.send']},
        'line': {'userId': 'U1', 'basicId': '@northwind', 'displayName': 'Northwind'}, 'substack': [],

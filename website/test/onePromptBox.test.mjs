@@ -53,3 +53,10 @@ test("an attachment row shows a few, then +N more, and every file chip is the on
   }
   assert.doesNotMatch(read("ReplyFiles.jsx"), /<Chip /);
 });
+
+// ...and ON A PHONE the chips are a line of their own over the words: beside them "From Priya Shah" squeezed the placeholder a word wide (2026-11-08)
+test("on a phone the box's chips wrap above its words", () => {
+  const css = read("generalWorkspace.css");
+  assert.match(css, /@media \(max-width: 599\.95px\) \{\s+\.tq-aui-composer:has\(> \.tq-aui-attachments\) \{ flex-wrap: wrap;/);
+  assert.match(css, /\.tq-aui-composer > \.tq-aui-attachments \{ order: -1; flex: 1 0 100%; max-width: 100%;/);
+});

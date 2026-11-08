@@ -2,6 +2,20 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.18 - 2026-11-08
+
+- Vendors' own remote MCP servers as working cards, on one road
+- CockroachDB, Oracle Database and DuckDB cards on the named-database road
+- Seven more model providers on the OpenAI-compatible card road
+- AssemblyAI, Speechmatics, Gladia and Azure AI Speech voice cards
+- Marketstack and EOD Historical Data cards on the markets road
+- Rebuild the app, the demo and the docs; the catalogue test judges a category by all its cards
+- Helpdesks, more trackers and mailbox presets bring work in
+- Chat, community, texts and business systems bring work in too
+- MCP servers that take a personal token: GitHub, PagerDuty, Smartsheet, Wrike
+- Nineteen planned cards read a vendor's REST API with a key, from one table; DynamoDB reads
+- The token card's save and the docs for token servers and keyed reads
+
 ## 0.3.11.17 - 2026-11-08
 
 - A phone's task page is the view's height, its message box at the foot on every kind

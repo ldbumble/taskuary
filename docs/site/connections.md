@@ -509,7 +509,7 @@ transcription card. On a Mac, click in the box and press the Dictation key (or F
 ## A vendor's own MCP server
 
 Many cards — Notion MCP, Linear MCP, Atlassian, Airtable, Dropbox, Figma, Stripe MCP, Sentry MCP,
-Cloudflare, Vercel, Supabase, Zapier, and for money and people Xero, BILL, Expensify, Ramp, Brex,
+Cloudflare, Vercel, Supabase, Zapier, Canva, PostHog, and for money and people Xero, BILL, Expensify, Ramp, Brex,
 Mercury, Avalara, Deel, Greenhouse and Ashby, and about thirty more — are the vendor's own hosted MCP server,
 added to your agent CLI. **Add** registers it in Claude Code and Codex on this computer; **Sign in**
 opens the vendor's own sign-in page in your browser, once. Taskuary never holds that sign-in, so it
@@ -529,7 +529,25 @@ Diffbot, Mercury, Lattice, and the self-hosted Jenkins, SonarQube, Elasticsearch
 take a key (and, when self-hosted, the address). Google Drive, OneDrive and Microsoft 365 files take
 nothing: they read with the Google Sheets card's and the Outlook card's sign-ins. **Test** makes one
 cheap read. A report or an agent then asks any address under that vendor's API by its path, and only
-ever reads: nothing but a GET is sent, so a Tradier key on this card places no order.
+ever reads: a GET, or a POST only where the vendor reads that way (a search, a report query, a tracking
+lookup), so a Tradier key on this card places no order.
+
+The same road carries CRMs (Pipedrive, Copper), time tracking (Toggl Track, Harvest, Clockify), parcel
+tracking (UPS, FedEx, USPS), analytics and BI (Google Analytics 4, Search Console and Google Ads on the
+Google sign-in, Power BI on the Microsoft one, Meta Ads, Segment, Looker, Tableau, Metabase, Databricks,
+dbt Cloud, Fivetran), commerce and billing (eBay, Etsy, WooCommerce, BigCommerce, Paddle, Chargebee,
+Recurly, Zuora, Toast, Clover), publishing and marketing (TikTok, Ghost, Mailchimp, Kit, Vimeo) and
+Gong and Veeva Vault. Where a vendor swaps your client id and secret for a short-lived session first,
+the card does that itself. eBay, Etsy and TikTok take a user token that expires within a day for now -
+a sign-in on the card comes later.
+
+Some of these cards bring work in as well: WooCommerce orders waiting to ship, BigCommerce orders
+awaiting fulfillment, comments on your Instagram posts and Facebook Page, messages to your Page, posts on
+X that mention you, and WordPress comments held for moderation. Everyone who writes from outside is a
+stranger until you trust them, and an order carries no author at all.
+
+An **Obsidian** card takes the folder your vault is in and reads the notes there - never its .obsidian
+folder, its trash, or anything outside it.
 
 Some take more than a key, and the card asks for each piece:
 

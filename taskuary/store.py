@@ -818,9 +818,9 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # who counts as ours on a GitHub repository (batch.outside_row), and what an outsider's PR gets (cloudfix.py)
                     'repo_trust_private': 'ours', 'repo_trust_public': 'writers', 'outside_prs': 'review',
                     # who may start a worker UNATTENDED (senders.known, PW-079..081): the owner's own domains, verified
-                    # Sent Items evidence that the receiving mailbox wrote to the exact address, chat channels inside a
-                    # workspace the owner controls. Prior incoming mail is never a rule here.
-                    'trust_own_domain': '1', 'trust_sent_history': '1', 'trust_non_email': '1',
+                    # Sent Items evidence that the receiving mailbox wrote to the exact address, chat people the owner talks
+                    # with, members of a tracker's project (senders._item_known). Prior incoming mail is never a rule here.
+                    'trust_own_domain': '1', 'trust_sent_history': '1', 'trust_non_email': '1', 'trust_trackers': '1',
                     'auto_sessions': '4',           # unattended agent sessions at once; the rest queue
                     'auto_sessions_light': '5',     # quick answers / subagents that count as one of those (ingest.agent_load)
                     'triage_ai': '',      # '' = first active AI connector | connector:<id> | cli:<agent>

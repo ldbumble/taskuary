@@ -204,6 +204,11 @@ def _body_and_attachments(msg) -> tuple:
     from .channels import _clean
     text, html, atts = '', '', []
     for part in msg.walk():
+        # a mail attached whole: its own From rides along (channels.att_marks), so whose words it carries is read, not guessed
+        if part.get_content_type() == 'message/rfc822':
+            inner = part.get_payload(0) if isinstance(part.get_payload(), list) and part.get_payload() else {}
+            atts.append({'id': f'mail-{len(atts)}', 'name': _dec((inner.get('Subject') if inner else '') or 'attached mail')[:120],
+                         'contentType': 'message/rfc822', 'size': 0, 'isInline': False, 'from': _dec(inner.get('From') or '') if inner else ''})
         if part.is_multipart(): continue
         ctype = part.get_content_type()
         fname = part.get_filename()
@@ -800,7 +805,8 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     'sent_at': sent_at, 'source_name': user}
                 from .calendar import tz_of
                 incoming.update(protocol_marks(msg, me=(user,), tz=tz_of(store)))
-                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid), **html_links(msg)}
+                from .channels import att_marks
+                incoming['mail_meta'] = {**(incoming.get('mail_meta') or {}), **mail_ids(msg, thrid), **html_links(msg), **att_marks(atts)}
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             # ...and the thread a mail already here files under wins over the header root. Outside the decode guard:

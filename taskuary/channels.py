@@ -667,6 +667,13 @@ def save_attachments(store, mid: int, items: list, ext_prefix: str) -> int:
     return n
 
 
+def att_marks(atts) -> dict:
+    """What senders.outsider reads off a mail's attachments, kept on its mail_meta: how many files rode on it, and who wrote each mail
+    attached whole ('' when it cannot be read - Graph's itemAttachment names nobody without another request, so it is nobody known)."""
+    mail = [a for a in atts if a.get('contentType') == 'message/rfc822' or 'itemAttachment' in str(a.get('@odata.type') or '')]
+    return {'atts': sum(not a.get('isInline') for a in atts if a not in mail), **({'attached': [str(a.get('from') or '') for a in mail]} if mail else {})}
+
+
 def wants_attachments(m: dict) -> bool:
     """Fetch this mail's attachments? When Graph says it has some - OR its HTML draws a pasted picture (cid:). Graph's
     hasAttachments is FALSE for a mail whose only attachments are inline, so a screenshot pasted into the body - the
@@ -2059,7 +2066,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             **_header_marks(m),
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
-                                          'invite': inv, **({'cal': cal_} if cal_ else {}),
+                                          'invite': inv, **({'cal': cal_} if cal_ else {}), **att_marks(atts),
                                           **({'links': ln} if (ln := mail_links((m.get('body') or {}).get('content'))) else {})}}, llm=llm)
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")

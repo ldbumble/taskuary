@@ -18,7 +18,7 @@ Items evidence, and chat channels inside a workspace the owner controls. "Has wr
 NOT one of them - a stranger's own earlier mail, a historical import or a retry never turns them
 into someone the owner deals with.
 """
-import json
+import json, re
 from loguru import logger
 
 from .projects import PUBLIC_MAIL
@@ -82,8 +82,11 @@ def trust_org(store, tid: int, actor: str) -> dict:
     Slack workspace - joins trusted_orgs, and the task is vouched for. Raises ValueError when there is no organisation to name (a
     public mail domain, a sender nobody can place)."""
     from . import origin
-    m = _opener(store, tid)
+    m = whom(store, store.list_messages(tid), int((store.get_task(tid) or {}).get('TrustedThrough') or 0))
     if not m: raise ValueError('nobody else wrote on this task')
+    if (ch := str(m.get('Channel') or '').lower()) in TRACKERS + ALERTS:          # a project's or an alert source's every item, from now on
+        store.remember_trust(ch, _place(m), 'you trust this source'); origin.raise_to(store, tid, 'trusted', actor)
+        return {'domain': '', 'tenant': '', 'name': str(m.get('SourceName') or '')}
     if not (o := sender_org(store, m)):
         d = _domain(m.get('FromEmail'))
         raise ValueError(f'{d} is a public mail service, so it cannot be trusted as one organisation - use Trust them' if d in PUBLIC_MAIL
@@ -101,9 +104,13 @@ def trust_offer(store, tid: int, msgs=None) -> dict | None:
     """The two presses that lift a stranger's hold, worded for the channel (the owner, 2026-10-26: "we should have button on untrusted
     user to either trust user or trust domain and then we won't have issue again"): {'person': 'Trust Erin', 'org': 'Trust everyone at
     vendor.example' | 'Trust <workspace>' | None} - no organisation button where there is none to name, rather than one that fails."""
-    m = _opener(store, tid, msgs)
+    m = whom(store, store.list_messages(tid) if msgs is None else msgs, int((store.get_task(tid) or {}).get('TrustedThrough') or 0))
     if not m: return None
     meta, ch = _chat_meta(m), (m.get('Channel') or '').lower()
+    if ch in ALERTS: return {'person': 'Trust alerts from this source', 'org': None}
+    if ch in TRACKERS:
+        n, org = str(m.get('FromName') or '').split(), f"Trust everyone from {str(m.get('SourceName') or 'this project')[:60]}"
+        return {'person': f'Trust {n[0]}' if n and _author(m) else org, 'org': org if _author(m) else None}
     # a Slack line's name is a user id (U0...): its profile's real name when the poller recorded one, else "them"
     words = str(meta.get('name') or ('' if ch == 'slack' else m.get('FromName')) or '').split()
     first = words[0] if words and '@' not in words[0] else ''
@@ -201,6 +208,14 @@ def _person(msg: dict, addr: str = '') -> str:
 
 
 def known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = None) -> tuple:
+    """(may this message start a worker unattended, why): its sender (_known), then whose words and attachments ride in a mail
+    (outsider) - a colleague's forward of an outsider's text is the outsider's."""
+    ok, why = _known(store, msg, exclude_mid, deep, memo)
+    if not ok or str(msg.get('channel') or '') != 'email' or not (o := outsider(store, msg, memo, deep, exclude_mid)): return ok, why
+    return False, o['said']
+
+
+def _known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = None) -> tuple:
     """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
     to PW-081): a chat person the owner talks with (or a workspace item); the owner's own domains; and
     verified SENT evidence that THIS mailbox wrote to the exact address - what the store already
@@ -216,7 +231,8 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False, memo: dict = N
         return True, _said('Taskuary wrote this report.' if ch == 'report' else "Taskuary's assistant wrote this.")
     from .ingest import CHAT_CHANNELS
     if ch.lower() in CHAT_CHANNELS: return _chat_known(store, msg, ch.lower(), exclude_mid, on('trust_non_email'), memo)
-    # a tracker, an alert or the local API is a workspace item, not a room of people - and GitHub has its own gate (GH_AUTO)
+    if ch in ALERTS or ch in TRACKERS: return _item_known(store, msg, ch, on('trust_trackers'), memo)
+    # a calendar, a cloud or billing feed or the local API is the owner's own system, not a room of people - GitHub has its own gate (GH_AUTO)
     if ch != 'email':
         return (True, _said(f'It came from {channel_name(ch) or "a workspace"}, a workspace you control.')) if on('trust_non_email') else \
                (False, _said(f'Starting an agent from {channel_name(ch) or "this channel"} is switched off in Settings, {NOBODY}.'))
@@ -362,16 +378,136 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool, memo: dict = N
 
 
 def vouch(store, rows) -> None:
-    """The owner's say-so for the task's OPENER (release, Trust this task) - the first line on it that is not ours, as
-    ingest.from_opener reads it: remembered per channel and person. Everyone else a group put on the task stays a stranger."""
-    from .ingest import CHAT_CHANNELS, is_ours
-    m = next((m for m in rows if not is_ours(m)), None)
+    """The owner's say-so for the person the task's presses name (whom: the outsider a forward quoted, else the OPENER - the first
+    line on it that is not ours, as ingest.from_opener reads it): remembered per channel and person. Everyone else a group put on the task stays a stranger."""
+    from .ingest import CHAT_CHANNELS
+    m = whom(store, rows)
     ch = ((m or {}).get('Channel') or '').lower()
     if ch in CHAT_CHANNELS and (who := chat_key(m)): store.remember_trust(ch, who, 'you vouched for them')
+    # a tracker's author, else (no author to name) its project; an alert's source - never "everyone who can raise an alert"
+    elif ch in TRACKERS + ALERTS: store.remember_trust(ch, (ch in TRACKERS and _author(m)) or _place(m), 'you vouched for them')
     # ...and a mail sender too, per mailbox like the Sent Items hit: their next mail is no stranger's either ("then we won't have issue
     # again", 2026-10-26). A From that failed verification may be forged - the task is vouched for, the address is not remembered.
     elif ch == 'email' and '@' in (addr := str(m.get('FromEmail') or '')) and auth(m) != 'fail':
         store.remember_trust(m.get('SourceName') or '', addr, 'you vouched for them')
+
+
+# ── TRACKERS AND ALERTS: WHO WROTE THE ITEM (H2, the owner 2026-11-08) ─────────────────────────────────────────────────────────
+# Every tracker and alert was "a workspace you control" - but anyone can open an issue on a public GitLab project, a portal customer
+# files a Jira Service Management ticket, and anyone who can make the owner's site throw an error writes a Sentry alert. A tracker
+# item is trusted when its poller recorded the author as a member of that project (mail_meta 'member', read off the connector's own
+# payload: devtools/pm); no author, or one who is not a member, is a stranger's. An alert is ALWAYS a stranger's text until the owner
+# trusts that source. The owner's presses (vouch, trust_org) are remembered per channel: the author ('<ch>:<id>'), or the project /
+# alert source ('project:<name>').
+TRACKERS = ('gitlab', 'jira', 'linear', 'asana', 'monday', 'clickup', 'todoist', 'azdo', 'trello', 'notion')
+ALERTS = ('sentry', 'pagerduty')
+
+def _author(m: dict) -> str: return str(_chat_meta(m).get('author') or '').lower()
+def _place(m: dict) -> str: return f"project:{str(m.get('SourceName') or m.get('source_name') or '').strip().lower()}"
+
+def _item_known(store, msg: dict, ch: str, on: bool, memo: dict = None) -> tuple:
+    room, src = channel_name(ch), str(msg.get('source_name') or msg.get('SourceName') or '') or 'this source'
+    name = ' '.join(str(msg.get('from_name') or msg.get('FromName') or '').split()) or 'Someone'
+    if _vouched(store, ch, _place(msg), memo): return True, _said(f'You trust everything from {src} on {room}.')
+    if ch in ALERTS:
+        return False, _said(f"{room} alerts carry text anyone can trigger (an error's message, a page's address), so they are a "
+                            f"stranger's words until you trust alerts from {src}, {NOBODY}.", True)
+    if (a := _author(msg)) and _vouched(store, ch, a, memo): return True, _said(f'You vouched for {name}.')
+    if not on: return False, _said(f'Starting an agent from {room} is switched off in Settings, {NOBODY}.')
+    if _chat_meta(msg).get('member') is True: return True, _said(f'{name} is a member of {src} on {room}.')
+    if not a: return False, _said(f"{room} does not say who wrote this item on {src}, so it is a stranger's until you trust {src}, {NOBODY}.", True)
+    return False, _said(f'{name} is not a member of {src} on {room}, {NOBODY}.', True)
+
+
+# ── WHOSE WORDS ARE IN A MAIL (H1, the owner 2026-11-08) ──────────────────────────────────────────────────────────────────────────
+# Trust was decided by who SENT a mail, so an outsider's text forwarded by a colleague - or quoted under their one-line reply - ran on
+# a full-power agent. It is read from the mail's own STRUCTURE, by code: the header block a client writes above a forward or a quote
+# (From: with Sent:/To:/Subject: under it, "On ... <addr> wrote:"), a mail attached whole (mail_meta 'attached'), and the attachments
+# a forward carries. Never a model and never a list of words in the text: injected text could talk a model into trusting it. A mail
+# that is mostly a quoted or forwarded block whose author is not someone the owner deals with - or whose author cannot be read - is
+# that author's; so is one carrying attachments under an outsider's header, or a mail attached whole by an outsider. A fake header
+# planted in the text can only make a mail stricter: the outermost block is the forwarder's own client's.
+_HDR = re.compile(r'^[\s>]*(from|sent|date|to|cc|subject):[ \t]*(.*)$', re.I)
+_WROTE = re.compile(r'^[\s>]*on\s[^\n]{4,200}(?:\n[\s>]*[^\n]{0,120})?\bwrote:[ \t]*$', re.I | re.M)
+_ADDR = re.compile(r'[\w.+%-]+@[\w-]+(?:\.[\w-]+)+')
+
+def _who_of(v: str) -> tuple:
+    "(name, address) off one header value: 'Erin Blake <erin@vendor.example>', 'Blake, Erin [mailto:...]', a bare name or address."
+    a = m[0].lower() if (m := _ADDR.search(v or '')) else ''
+    n = re.sub(r'\s*[<\[(].*$', '', v or '').strip(' "\'\t')
+    return ('' if '@' in n else n), a
+
+def quoted_authors(text: str) -> list:
+    "Every (name, address) a client's header block or attribution line names in this text, once each."
+    ls, out = str(text or '').splitlines(), []
+    for i, l in enumerate(ls):
+        if (m := _HDR.match(l)) and m[1].lower() == 'from' and any(_HDR.match(x) for x in ls[i + 1:i + 4]): out.append(_who_of(m[2]))
+    out += [_who_of(m[0]) if _ADDR.search(m[0]) else ('', '') for m in _WROTE.finditer(str(text or ''))]
+    return list(dict.fromkeys(out))
+
+def _chain(body: str, own) -> str:
+    "The quoted or forwarded block under the sender's own words (triage.split_own, or below the mailbox's uniqueBody)."
+    from .triage import below, split_own
+    own = str(own or '').strip()
+    return (below(body, own) if own and len(own) < len(body.strip()) else split_own(body, floor=1)[1]).strip()
+
+def _by_name(store, name: str) -> str:
+    """A name-only header (Outlook writes "From: Erin Blake" for a colleague its directory resolved): the one address that name has
+    written from here, or the owner's own; '' when there is none or more than one."""
+    n = ' '.join(str(name or '').split()).lower()
+    if not n: return ''
+    o = store.owner() or {}
+    if n == str(o.get('owner_name') or '').strip().lower(): return str(o.get('owner_email') or '').lower()
+    ns = (n, ' '.join(reversed([x.strip() for x in n.split(',', 1)]))) if ',' in n else (n,)
+    xs = {r['a'] for r in store._rows("SELECT DISTINCT lower(FromEmail) a FROM message WHERE lower(FromName) IN (%s) AND FromEmail LIKE '%%@%%'"
+                                      % ','.join('?' * len(ns)), ns)}
+    return xs.pop() if len(xs) == 1 else ''
+
+def outsider(store, msg: dict, memo: dict = None, deep: bool = False, mid=None) -> dict | None:
+    """The outside author whose words or attachment ride in this mail: {'name', 'addr', 'said'}, else None. `msg`: an ingest dict or
+    row_msg; `mid`: its stored id, for the attachments a row carries when its mail_meta did not count them."""
+    body, meta = str(msg.get('body') or msg.get('BodyText') or ''), _chat_meta(msg)
+    if not body.strip() and not meta.get('attached'): return None
+    chain = _chain(body, msg.get('own_text') or msg.get('OwnText')) if body.strip() else ''
+    mostly = len(chain) * 2 > len(body.strip())
+    n_att = meta['atts'] if isinstance(meta.get('atts'), int) else \
+        sum(not a.get('Inline') for a in store.list_attachments(mid)) if mid and chain else 0
+    if not (mostly or n_att or meta.get('attached')): return None
+    src = msg.get('source_name') or msg.get('SourceName')
+    sender = _person({'from_name': msg.get('from_name') or msg.get('FromName')}, str(msg.get('from_email') or msg.get('FromEmail') or ''))
+    def bad(name, addr):
+        addr = addr or _by_name(store, name)
+        return not (addr and _known(store, {'channel': 'email', 'from_email': addr, 'from_name': name, 'source_name': src}, deep=deep, memo=memo)[0])
+    def hit(name, addr, what):
+        who = _person({'from_name': name}, addr) if (name or addr) else 'someone Taskuary cannot name'
+        return {'name': name, 'addr': addr, 'said': _said(f'{sender} {what} {who}, who is not someone you work with here, {NOBODY}.', True)}
+    for a in meta.get('attached') or []:
+        if bad(*_who_of(str(a))): return hit(*_who_of(str(a)), 'attached a mail from')
+    ppl = quoted_authors(chain)
+    if mostly and not ppl: return hit('', '', 'forwarded or quoted a mail written by')
+    for name, addr in ppl if (mostly or n_att) else ():
+        if bad(name, addr): return hit(name, addr, 'forwarded or quoted words written by' if mostly else 'sent attachments under a mail from')
+    return None
+
+def row_msg(row: dict) -> dict:
+    "A stored message row as the dict known() reads."
+    return {'channel': row.get('Channel') or '', 'from_email': row.get('FromEmail'), 'from_name': row.get('FromName'),
+            'source_name': row.get('SourceName'), 'conversation_id': row.get('ConversationId'), 'direction': row.get('Direction'),
+            'status': row.get('Status'), 'MailMetaJson': row.get('MailMetaJson'), 'body': row.get('BodyText'), 'own_text': row.get('OwnText')}
+
+def whom(store, rows, through: int = 0) -> dict | None:
+    """Who the trust presses name: the first line since `through` whose sender is not trusted, or - its sender trusted - the outsider
+    it forwards or quotes (their address on the line, so vouch and trust_org act on THEM, never the colleague); else the opener."""
+    from .ingest import is_ours
+    memo, first = {}, next((m for m in rows if not is_ours(m)), None)
+    for m in rows:
+        if is_ours(m) or int(m.get('MessageId') or 0) <= through: continue
+        if m.get('Channel') != 'email': return first           # a chat, tracker or alert names its opener, as it always did
+        d = row_msg(m)
+        if not _known(store, d, m.get('MessageId'), memo=memo)[0]: return m
+        if d['channel'] == 'email' and (o := outsider(store, d, memo, mid=m.get('MessageId'))):
+            return {**m, 'FromEmail': o['addr'], 'FromName': o['name'], 'MailMetaJson': None}
+    return first
 
 
 def wrote_to(store, mailbox: str, addr: str) -> bool:

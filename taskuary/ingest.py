@@ -200,7 +200,9 @@ def _from_row(r: dict, store=None) -> dict:
     except (TypeError, ValueError): meta = {}
     return {**({'invite': True} if meta.get('invite') else {}),       # judged later, it is still an invite (V5)
             **({'cal': meta['cal']} if isinstance(meta.get('cal'), dict) else {}),     # ...and still the invite it was (calwrite)
-            **({'mail_meta': {'dm': True}} if meta.get('dm') else {}),            # ...and still a one-to-one chat (chat_route)
+            # ...and still a one-to-one chat (chat_route), with the marks senders.known reads: a tracker author's membership, a mail's
+            # attachments and attached mails, the From's verification - judged later, it is judged on the same facts
+            **({'mail_meta': m} if (m := {k: meta[k] for k in ('dm', 'author', 'member', 'atts', 'attached', 'auth') if k in meta}) else {}),
             'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),

@@ -28,11 +28,9 @@ def of_message(store, row: dict, memo: dict = None, seen: dict = None) -> tuple:
         return ('stranger', 'a public repository, by someone without write access') if outside_row(store, row) \
             else ('trusted', 'a member of the repository')
     # the whole person, so a chat sender is judged as one (senders._chat_known); their own line is never the owner's talk.
-    # MailMetaJson carries the mail's sender-verification verdict (mailauth), so a forged From is never trusted on read
-    ok, why = senders.known(store, {'channel': ch, 'from_email': row.get('FromEmail'), 'from_name': row.get('FromName'),
-                                    'source_name': row.get('SourceName'), 'conversation_id': row.get('ConversationId'),
-                                    'direction': row.get('Direction'), 'status': row.get('Status'),
-                                    'MailMetaJson': row.get('MailMetaJson')}, exclude_mid=row.get('MessageId'), memo=memo)
+    # MailMetaJson carries the mail's sender-verification verdict (mailauth), so a forged From is never trusted on read - and the
+    # body and attachments ride too: a colleague's forward of an outsider's words is the outsider's (senders.outsider, H1)
+    ok, why = senders.known(store, senders.row_msg(row), exclude_mid=row.get('MessageId'), memo=memo)
     return ('trusted' if ok else 'stranger'), why
 
 # concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor

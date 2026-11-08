@@ -2378,6 +2378,8 @@ def _chat_failed(e):
     c = failures.classify(e, act='assistant.message')
     return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
+# ...said only of a CODING task now: a chat task is reopened by the words typed into it (_refuse_closed_chat), and nothing said on one names
+# a Continue it does not have (general.carry_on, the owner 2026-11-07)
 CLOSED_CHAT = (f"This task is closed. Press {buttons.label('reopen')}, then {buttons.label('continue')}, "
                'to pick the conversation back up.')
 

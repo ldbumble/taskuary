@@ -89,7 +89,7 @@ def test_a_turn_that_ran_out_of_time_pauses_its_run_and_keeps_its_thread():
     ses, close = timed_out_turn(s, tid)
     last = s.last_worker_event(tid, skip=ws.NOTES)
     assert last['Kind'] == 'stopped' and last['Source'] == general.TIMED_OUT
-    assert last['Text'] == "The agent's run was cut off by a time limit while it was still working. What it made so far is kept - Continue picks it up from there."
+    assert last['Text'] == "The agent's run was cut off by a time limit while it was still working. What it made so far is kept - type to carry on from there."
     assert ses.cli_sid == 'th-kit'                       # Continue resumes the thread it was on
     close.assert_called_once_with(learn=False, report=False)
 

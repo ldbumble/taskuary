@@ -456,7 +456,10 @@ def task_now(store, tid: int) -> str:
                  f"{who} is WORKING right now (idle {idle}s) - nothing for the owner until it stops")
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"
     # ...and whether its last session can be picked up, so "no agent" comes with the road that is real (2026-10-18)
-    else: state = 'no agent on it right now' + (f" - its last session is saved ({buttons.label('continue')} reopens it)" if continuable(store, tid) else '')
+    # ...in the words of its kind: a chat task has no Continue, typing in it carries it on (general.carry_on, the owner 2026-11-07)
+    else:
+        from .general import carry_on
+        state = 'no agent on it right now' + (f" - its last session is saved ({carry_on(t)})" if continuable(store, tid) else '')
     rv = store.pending_review(tid)
     last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') in ('agent', 'assistant_agent')), None)
     lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}"]

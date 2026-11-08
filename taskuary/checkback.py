@@ -84,4 +84,4 @@ def fire(store, tid: int, what: str):
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'check-back on task {tid} not handed to its agent: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The check-back could not wake the agent: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+        store.add_comment(tid, 'router', 'agent', f"The check-back could not wake the agent: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")

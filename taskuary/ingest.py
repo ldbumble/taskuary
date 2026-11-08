@@ -2093,7 +2093,7 @@ def _carry_on(store, tid, msg: dict, mid, follow: dict | None, actor: str) -> bo
     # a conversation of quick answers carries on quick while the task still reads quick: one call at a fraction of a desk (quickwork._take)
     quick = not coding and quickwork.only_quick(store, tid) and _reads_quick(store, tid)
     if not quick and not has_room(store):
-        not_started(store, tid, f'{busy_words(store)} - Continue picks it up')
+        not_started(store, tid, f'{busy_words(store)} - {general.carry_on(store.get_task(tid))}')
         return False
     (CODING_OPENING if coding else general.OPENING).add(tid)
     store.add_comment(tid, 'router', 'agent', f'{_who_said(msg)} wrote again with new work - the '
@@ -2309,7 +2309,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         try: ses = general.start_session(store, tid, actor='router')
         except Exception as e: logger.warning(f'task {tid}: the idle agent was not started again for a new line - {e}')
     if not ses:
-        store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - Continue picks it up.")
+        store.add_comment(tid, 'router', 'agent', f"{_who_said(msg)}'s new message could not be passed in: the assistant's session ended - {general.CARRY_ON}.")
         return
     # A BURST IS ONE RE-THINK (the owner's stress run, 2026-11-05): five mails in a few seconds were five queued turns, the agent re-reading
     # one line at a time. A line that finds another already waiting for the session joins it; the one waiting goes in once the session is
@@ -2341,7 +2341,7 @@ def _pass_general(store, tid, msg: dict, turn: str = None):
         if getattr(ses, "alive", True) is False and _open_task(store, tid):
             general.OPENING.add(tid); _replan_general(store, tid, said); return
         logger.warning(f'passing a line to the assistant failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't take {_who_said(msg)}'s new message: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
 
 
 def _said_coding(store, tid, msg: dict) -> bool:
@@ -2388,7 +2388,7 @@ def _continue_general(store, tid, msg: dict = None, mid=None):
     except Exception as e:
         # said, not retried: the start queue's retry opens a conversation without a turn (_start_general prompts a fresh one only)
         logger.warning(f'assistant carry-on failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't carry on by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
 
 
@@ -2473,7 +2473,7 @@ def thread_moved(store, tid, msg: dict, mid, follow: dict | None, actor: str, ow
         _spawn(_replan_pass, store, tid, {**msg, 'message_id': mid}, turn)
         return True
     if not has_room(store):
-        not_started(store, tid, f'{busy_words(store)} - Continue picks it up')
+        not_started(store, tid, f'{busy_words(store)} - {general.carry_on(store.get_task(tid))}')
         return False
     general.OPENING.add(tid)
     store.add_comment(tid, 'router', 'agent', ('You answered' if own else f'{_who_said(msg)} wrote') +
@@ -2491,7 +2491,7 @@ def _replan_general(store, tid, turn: str):
     except general.Stopped: pass
     except Exception as e:
         logger.warning(f'assistant re-plan failed for task {tid}: {e}')
-        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't look again by itself: {' '.join(str(e).split())[:200]} - Continue picks it up.")
+        store.add_comment(tid, 'router', 'agent', f"The assistant couldn't look again by itself: {' '.join(str(e).split())[:200]} - {general.CARRY_ON}.")
     finally: general.OPENING.discard(tid)
 
 

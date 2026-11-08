@@ -934,9 +934,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             {/* ...and ONE DOOR: while the conversation is open the box is how it goes on (no Continue on the bar, 2026-09-29), but once its
                 run has ENDED the bar offers Continue - and a box beside it read as a second way in (the owner, 2026-10-26: "before I hit
                 continue it has a space to type into the agent? coding agents don't have that"). `noComposer` is that Continue (TaskPage). */}
-            {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
-              {/* ...where the chat is home the box below IS Continue: Reopen alone brings it back */}
-              This task is closed. Press {btn("reopen")}{chat ? "" : <>, then {btn("continue")},</>} to pick the conversation back up.</div> : noComposer ? null : <>
+            {/* ...but a CHAT task is typed into to go on, closed or not (server._refuse_closed_chat): no Continue is there, so none is named
+                (the owner, 2026-11-07) - the box stays, under "Type to reopen it". A coding source keeps Reopen, then Continue */}
+            {closedChat && road ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
+              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : noComposer ? null : <>
+            {closedChat && <div className="tq-aui-hint" role="status" data-tq-closed-type="" style={{ padding: "6px 4px 0" }}>This task is closed. Type to reopen it.</div>}
             {/* THE ONE BOX (AgentSummary.OneBox): paperclip, chips, words, mic, stop, Send - the same component as every other box, assistant-ui's
                 composer its root, input and Send. Its files inside it, the one attachment look in one line (the owner, 2026-11-05), and WHERE IT CAME
                 FROM a chip at its left (2026-11-06: "keep the prompt box thin... put the from you in the left side of the prompt box") - a press opens it */}

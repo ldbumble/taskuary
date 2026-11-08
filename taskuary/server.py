@@ -2445,12 +2445,18 @@ def assistant_message(task_id: int, body: AssistantMessageBody):
     from . import general
     _refuse_closed_chat(task_id)
     if (said := _demo_turn(task_id, body.text)) is not None: return {'reply': said, **_assistant_payload(task_id)}
+    # ...THE LINE HELD BEHIND A RUNNING TURN TAKES THE FIRST LINE'S ROAD (general.say_line, the owner 2026-11-07): kept the moment it is sent,
+    # and started again quietly where the session ended under it - it came back "reload the page and ask again", red in the box
     try:
         _refresh_for_turn(task_id)
-        session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
-        reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model, pick=body.pick)
+        session, reply = _say(task_id, body)
     except (ValueError, RuntimeError) as e: return _chat_failed(e)
     return {'reply': reply, **_assistant_payload(task_id, session)}
+
+def _say(task_id: int, body, **kw):
+    "A typed line on the one road (general.say_line), as the chat's doors send it."
+    from . import general
+    return general.say_line(store, task_id, body.text, body.attachments, body.connector_id, body.model, body.pick, ACTOR, **kw)
 
 @app.post('/api/tasks/{task_id}/assistant/browser')
 def assistant_browser(task_id: int):
@@ -2548,22 +2554,15 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
             if fresh.get('polled') and fresh.get('added'):
                 put({'type': 'tool_call', 'name': 'sync_messages',
                      'detail': {'new': fresh.get('added', 0)}})
-            session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
             # ...said started only with an AI to start on: with none the step read "Started the selected agent" over a turn that
             # never could run (2026-10-22 walk) - send_prompt keeps the owner's words and fails saying why
-            if session.pick: put({'type': 'start', 'session': session.info()})
-            try:
-                reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model,
-                                            pick=body.pick, trace=trace, cancel=cancel)
-            except RuntimeError as e:
-                # it ended between being handed over and being spoken to (the owner closed the
-                # pane, a wrap-up ran). A question is not lost over a race: start a fresh one
-                # and ask it there, once - with the line already kept for it (general.wait_line), never kept twice
-                if 'has ended' not in str(e) or cancel.is_set(): raise
-                general.drop_session(task_id)
-                session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
-                reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model,
-                                            pick=body.pick, trace=trace, cancel=cancel, waiting=getattr(e, 'waiting', None))
+            # ...and a session that ended between being handed over and being spoken to (the owner closed the pane, a wrap-up ran) is
+            # started again once, quietly - the one road every typed line takes (general.say_line)
+            def started(s):
+                nonlocal session
+                session = s
+                if s.pick: put({'type': 'start', 'session': s.info()})
+            session, reply = _say(task_id, body, trace=trace, cancel=cancel, started=started)
             put({'type': 'done', 'reply': reply, 'payload': _assistant_payload(task_id, session)})
         # Once headers are streaming, FastAPI cannot replace this with its normal JSON error
         # response. Always terminate the NDJSON stream explicitly instead of leaving the UI's
@@ -2879,7 +2878,7 @@ def deliver_waiting(actor: str = 'startup') -> list:
         if not general.provider_options(store): break
         first = general.waiting_lines(store, tid)[0]
         def go(tid=tid, wid=first['id']):
-            try: general.start_session(store, tid, actor=actor).send_prompt('', waiting=wid)
+            try: general.say_line(store, tid, '', actor=actor, waiting=wid)
             except Exception as e: logger.warning(f'task {tid}: the lines kept for its agent were not handed on after the restart - {e}')
         threading.Thread(target=go, daemon=True, name=f'waiting-{tid}').start(); out.append(tid)
     return out

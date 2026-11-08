@@ -68,9 +68,9 @@ def wait_line(store, tid: int, text: str, files=None) -> int:
 def waiting_lines(store, tid: int) -> list:
     "The owner's lines no turn has taken yet, oldest first: [{id, text, files, at}]."
     return [{'id': r['CommentId'], 'at': r['CreatedAt'], **_line_of(r['Body'])} for r in store.list_comments(tid) if r.get('ActorType') == WAITING_TYPE]
-# A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out): `waiting` is the line kept for it, which the caller's 'has ended' road hands
-# to a fresh session (server.assistant_stream) instead of keeping it twice. 'has ended' is what every caller reads it by
-ENDED = 'this assistant session has ended - reload the page and ask again'
+# A SESSION THAT ENDED UNDER A LINE (failed, closed, idled out) - never "reload the page" (the owner, 2026-11-07): say_line starts a fresh one,
+# which takes the kept line. 'has ended' is what every caller reads it by
+ENDED = 'this assistant session has ended - it starts again with the next line you send'
 class Ended(RuntimeError):
     def __init__(self, waiting=None): super().__init__(ENDED); self.waiting = waiting
 # THE OWNER'S WORDS AS THEY TYPED THEM (the owner, 2026-11-04): answered through the Assistant, the agent's chat showed the Assistant's rewording
@@ -1660,7 +1660,7 @@ class GeneralSession:
         not echoed, because putting words in the owner's mouth in their own transcript is a lie the
         rest of this product is built to avoid; the assistant's answer is recorded as normal.
         `brief`: the first ask of an agent that started by itself - kept as the conversation's turn, but filed by Taskuary (BRIEF_ACTOR).
-        `waiting`: the owner's line already kept for the agent (wait_line) - a session that ended under it hands it to the next."""
+        `waiting`: the owner's line already kept for the agent (wait_line) - a session that ended under it hands it to the next (say_line)."""
         text = str(text or '').strip()
         if not text and waiting is None: raise ValueError('empty message')
         if not self.alive: raise Ended(waiting)
@@ -1672,13 +1672,14 @@ class GeneralSession:
         mine = as_owner and not brief and not kept
         if mine and waiting is None: waiting = wait_line(self.store, self.task_id, text, attachments)
         if not self._take(WAIT_TURN, cancel):
-            # ...it gave up because the session ended under it - the caller's 'has ended' road starts a fresh one, which takes the kept
-            # line - or because it was cancelled, which takes the line back
+            # ...it gave up because the session ended under it - the caller's road starts a fresh one, which takes the kept line (say_line) -
+            # or because it was cancelled, which takes the line back
             if not self.alive: raise Ended(waiting)
             if mine: self.store.drop_comment(waiting)
             raise RuntimeError('the assistant was still answering the previous question when this one was cancelled - send it again.')
-        # ...it idled out while this waited for the lock (idle_out): the caller's 'has ended' road starts it again (server.assistant_stream)
-        if not self.alive: self._lock.release(); raise Ended(waiting)
+        # ...it idled out while this waited for the lock (idle_out), or the turn ahead failed and its session is closing: the caller's road
+        # starts it again
+        if not self.alive or getattr(self, 'ending', False): self._lock.release(); raise Ended(waiting)
         lines = [text]
         if mine:
             # ...every line kept for it, each with the files sent with it (the owner, 2026-11-06), filed as this turn's own at the time it was
@@ -2001,7 +2002,7 @@ class GeneralSession:
                     ws.record(self.store, self.task_id, self.sid, 'stopped', text=said, source=TIMED_OUT)
                 except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
                 logger.warning(f'assistant turn on task {self.task_id} ran out of time: {e}')
-                if not is_dock(self.store.get_task(self.task_id)): threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
+                if not is_dock(self.store.get_task(self.task_id)): self._end_soon(learn=False, report=False)
                 raise Stopped(str(e)) from e
             try:
                 from . import workerstate as ws
@@ -2013,19 +2014,25 @@ class GeneralSession:
             # saved conversation back up; a session left open over a dead process offered Stop and save on nothing (2026-10-21)
             from .clipool import MID_TURN
             if stopped: raise Stopped(str(e)) from e
-            if MID_TURN in str(e): threading.Timer(0.1, self.close, kwargs={'learn': False}).start()
+            if MID_TURN in str(e): self._end_soon(learn=False)
             # A FAILED TURN IS SAID AS A FAILURE (owner-approved, 2026-10-21): left open, the session read alive and not busy - "waiting
             # on you" on the card, the rail and the Board over an agent that never ran. It ends here, its conversation kept, so every
             # surface reads its last word (workerstate.ended: failed) and the step offers Try again. A turn the owner stopped is not a
             # failure, and the dock is the app's own chat, not a run.
             elif not cancel.is_set() and not is_dock(self.store.get_task(self.task_id)):
-                threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
+                self._end_soon(learn=False, report=False)
             raise
         finally:
             self.busy, self.last, self.spoke = False, time.time(), True
             self._cancel = None
             self._emit('\x1b[1;34myou>\x1b[0m ')
             self._lock.release()
+
+    def _end_soon(self, **kw):
+        """Close once this turn has let go of the session - a failed or cut-off turn's ending. Marked AT ONCE: a line waiting behind it would
+        take the floor in that tenth of a second and be cut off by the close; it goes to a fresh session instead (say_line)."""
+        self.ending = True
+        threading.Timer(0.1, self.close, kwargs=kw).start()
 
     def file_quick(self, ask: str, out, steps: list, as_owner: bool = True, brief: bool = False) -> str:
         """A quick answer (quickwork.ask) filed as this session's turn, by `_file` - so its draft, question and close reach the owner
@@ -2048,7 +2055,7 @@ class GeneralSession:
             try: ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='quick')
             except Exception as skipped: logger.debug(f'quick worker event skipped: {skipped}')
             # ...and it ends, as a failed general turn does: left open it read "waiting on you" and held its place in SESSIONS
-            if not is_dock(self.store.get_task(self.task_id)): threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
+            if not is_dock(self.store.get_task(self.task_id)): self._end_soon(learn=False, report=False)
             raise
         finally:
             self.busy, self.last, self.spoke = False, time.time(), True
@@ -2423,6 +2430,25 @@ def idle_sweep(now: float = None) -> list:
             if s.idle_out(now): out.append(s.task_id)
         except Exception as e: logger.debug(f'task {s.task_id}: idle check failed - {e}')
     return out
+
+
+def say_line(store, tid: int, text: str, attachments=None, connector_id=None, model=None, pick=None, actor='owner', trace=None, cancel=None,
+             waiting: int = None, started=None):
+    """THE ONE ROAD FOR A LINE THE OWNER SENDS TO A TASK'S AGENT (the owner, 2026-11-07): the first line and every one held behind a running
+    turn alike. Kept the moment it is sent (send_prompt), handed to the agent's session - started, or brought back, as needed - and, where
+    that session ends under it (a turn failed, it idled out, a wrap-up closed it), handed once to a fresh one, which takes the kept line: a
+    held line came back "reload the page and ask again" where the first line's road had started again quietly. -> (session, reply);
+    `started(session)` hears each session it is given to."""
+    for again in (False, True):
+        ses = start_session(store, tid, connector_id, model, actor, pick)
+        if started: started(ses)
+        try: return ses, ses.send_prompt(text, attachments, connector_id, model, pick=pick, trace=trace, cancel=cancel, waiting=waiting)
+        except RuntimeError as e:
+            if again or 'has ended' not in str(e) or (cancel is not None and cancel.is_set()): raise
+            waiting = getattr(e, 'waiting', None) or waiting
+            end = time.time() + 3                  # ...a session still closing (_end_soon) is let go first
+            while ses.alive and time.time() < end: time.sleep(0.05)
+            drop_session(tid)
 
 
 def session_for(tid: int):

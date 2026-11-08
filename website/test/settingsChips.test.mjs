@@ -29,3 +29,10 @@ test("settings channel chips are keyboard-operable buttons that say their state"
   assert.match(settings, /cursor: "pointer", fontFamily: "inherit", fontSize: 11\.5, fontWeight: on\.has\(ch\) \? 700 : 500/,
     "the chip keeps the type it had as a Box");
 });
+
+// #settings=audit WITH DEVELOPER MODE OFF (the product audit, 2026-11-08): the list with no pill lit and no word - it says why now
+test("a link to the Activity log off Developer mode lands on the list and says why", () => {
+  const src = readFileSync(new URL("../src/SettingsView.jsx", import.meta.url), "utf8");
+  assert.match(src, /const hidden = !about && browseState\.section === "audit" && !section \? "The Activity log shows only in Developer mode\." : "";/);
+  assert.match(src, /\{hidden && <Typography data-tq-settings-hidden=""/);
+});

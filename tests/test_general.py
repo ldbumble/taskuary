@@ -281,8 +281,9 @@ class SharedSessionTests(unittest.TestCase):
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'Done from terminal.'):
             session = general.start_session(store, tid)
             session.write('Do this from xterm\r')
-            limit = time.time() + 2
-            while len(general.history(store, tid)) < 2 and time.time() < limit: time.sleep(.02)
+            # the answer is filed before it is echoed to the screen: wait for both (CI's Windows box lost that race)
+            limit = time.time() + 10
+            while (len(general.history(store, tid)) < 2 or 'Done from terminal.' not in session.scrollback()) and time.time() < limit: time.sleep(.02)
         self.assertEqual([m['role'] for m in general.history(store, tid)], ['user', 'assistant'])
         self.assertIn('Done from terminal.', session.scrollback())
 

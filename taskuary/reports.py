@@ -1077,9 +1077,8 @@ def _apikey_card(typ):
 
 
 def _read_card(t):
-    """A vendor read's card (apireads.json): its key as `api_key` - and, for a card that signs in by OAuth, the store and the card it
-    renews its tokens through (apireads._token)."""
-    if apireads.table()[t]['auth'] != 'oauth': return _apikey_card(t)
+    """A vendor read's card (apireads.json): its key as `api_key`, with the store - a Google Analytics or Power BI read spends the app's own
+    sign-in beside its card's key - and the card a sign-in by OAuth renews its tokens through (apireads._token)."""
     return lambda store, connector_id=None: {**_card(store, t, 'api_key', connector_id), 'store': store, 'connector_id': connector_id}
 
 

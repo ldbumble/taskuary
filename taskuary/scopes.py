@@ -19,6 +19,7 @@ below are what each connection could already do before scopes existed, so switch
 version on changes nothing until the owner tightens it.
 """
 import re
+from .apireads import types as read_types
 
 SCOPES = ('read', 'write', 'admin')
 _RANK = {s: i for i, s in enumerate(SCOPES)}
@@ -76,7 +77,7 @@ ACTIONS = {
     # these at a read-only account and the ladder holds even if everything above it fails.
     'postgresql': 'read', 'mysql': 'read', 'clickhouse': 'read', 'snowflake': 'read', 'bigquery': 'read',
     'cockroachdb': 'read', 'oracle': 'read', 'duckdb': 'read', 'dynamodb': 'read', 'mongodb': 'read', 'redis': 'read', 'neo4j': 'read',
-    **{f'{t}_read': 'read' for t in __import__('taskuary.apireads', fromlist=['types']).types()},       # apireads.json: a GET, or a POST the row names as a read
+    **{f'{t}_read': 'read' for t in read_types()},       # apireads.json: a GET, or a POST the row names as a read
     # treg: the catalogue is free to read; CALLING spends money and can reach a publish or an
     # order, so it is a write: at a card's read scope every call is a proposal. Cards start at FULL below, so that
     # holds only where the owner narrowed the card.

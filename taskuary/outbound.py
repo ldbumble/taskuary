@@ -52,14 +52,14 @@ def _source_connector_id(store, channel, address):
     return src.get('ConnectorId') if src else None
 
 
-def _graph_token(store, kind='outlook', connector_id=None):
+def _graph_token(store, kind='outlook', connector_id=None, scope=''):
     from .channels import graph_creds, graph_token
     c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
         store.get_connector_by_type(kind, with_secret=True)
     if c and c.get('Type') != kind: c = None
     if not c or not c.get('Active'): raise Fixable(f'the {kind} connection is not set up', f'Set up {kind}', f'#connector={kind}')
     cfg, sec, _ = graph_creds(store, c)
-    return graph_token(cfg, sec)
+    return graph_token(cfg, sec, scope)
 
 
 def _mailbox(store, msg=None):

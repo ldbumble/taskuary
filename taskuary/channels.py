@@ -93,19 +93,20 @@ def _outlook_for(store, c):
     return cards[0] if len(cards) == 1 and _cfg(cards[0]).get('auth') != 'user' else None
 
 
-def graph_token(cfg: dict, secret: str = None) -> str:
+def graph_token(cfg: dict, secret: str = None, scope: str = '') -> str:
     """An access token for Graph. Two roads: the card's owner signed in with their own account
     (auth=user: the secret is a refresh token, msauth turns it into access tokens) or a tenant
-    app registration (client credentials, app-only). The callers cannot tell them apart."""
+    app registration (client credentials, app-only). The callers cannot tell them apart.
+    `scope`: another Microsoft API than Graph on the same sign-in (Power BI's, apireads.py)."""
     if (cfg or {}).get('auth') == 'user':
         from . import msauth
-        return msauth.access_token(cfg, secret)
+        return msauth.access_token({**cfg, '_scope': f'offline_access {scope}'} if scope else cfg, secret)
     tid = cfg.get('tenant_id') or os.getenv('AZURE_TENANT_ID')
     cid = cfg.get('client_id') or os.getenv('AZURE_CLIENT_ID')
     sec = secret or os.getenv('AZURE_CLIENT_SECRET')
     if not (tid and cid and sec):
         raise RuntimeError('need tenant_id + client_id + a secret (or AZURE_* env vars on the server)')
-    scope = 'https://graph.microsoft.com/.default'
+    scope = scope or 'https://graph.microsoft.com/.default'
     def mint():
         r = requests.post(f'https://login.microsoftonline.com/{tid}/oauth2/v2.0/token', timeout=20,
                           data={'client_id': cid, 'client_secret': sec, 'grant_type': 'client_credentials', 'scope': scope})

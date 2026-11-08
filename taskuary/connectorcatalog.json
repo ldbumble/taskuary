@@ -2759,6 +2759,27 @@
       "desc": "Ashby's own MCP server in your agent CLI — agents look up candidates, jobs and interview schedules (an admin turns it on in Ashby first). You sign in once with Sign in."
     },
     {
+      "type": "pipedrive",
+      "title": "Pipedrive",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Deals, people, organizations and activities as reports and an agent tool - GET /deals?status=open, /activities?done=0.",
+      "match": [
+        "pipedrive"
+      ]
+    },
+    {
+      "type": "copper",
+      "title": "Copper",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "People, companies, opportunities and tasks as reports and an agent tool - Copper reads its lists by search: POST /opportunities/search.",
+      "match": [
+        "copper crm",
+        "copper.com"
+      ]
+    },
+    {
       "type": "plaid",
       "title": "Plaid",
       "group": "Markets & finance",
@@ -3342,6 +3363,39 @@
       "desc": "Gorgias's own MCP server in your agent CLI — agents look up tickets, customers and orders. You sign in once with Sign in."
     },
     {
+      "type": "toggl",
+      "title": "Toggl Track",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Time entries, projects and who logged what as reports and an agent tool - GET /me/time_entries?start_date=..., /workspaces/<id>/projects.",
+      "match": [
+        "toggl",
+        "toggl track"
+      ]
+    },
+    {
+      "type": "harvest",
+      "title": "Harvest",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Time entries, projects, budgets and invoices as reports and an agent tool - GET /time_entries?from=..., /reports/project_budget.",
+      "match": [
+        "harvest",
+        "harvestapp",
+        "getharvest"
+      ]
+    },
+    {
+      "type": "clockify",
+      "title": "Clockify",
+      "group": "Project management",
+      "planned": false,
+      "desc": "Time entries, projects and workspaces as reports and an agent tool - GET /workspaces/<id>/user/<id>/time-entries.",
+      "match": [
+        "clockify"
+      ]
+    },
+    {
       "type": "shipstation",
       "title": "ShipStation",
       "group": "Everything else",
@@ -3647,6 +3701,38 @@
         "docs": "https://developers.tally.so/api-reference/mcp"
       },
       "desc": "Tally's own MCP server in your agent CLI — agents read and build forms and read submissions. You sign in once with Sign in."
+    },
+    {
+      "type": "ups",
+      "title": "UPS",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Where a UPS parcel is, by tracking number, as a report and an agent tool - GET /api/track/v1/details/<number>.",
+      "match": [
+        "ups tracking",
+        "ups.com"
+      ]
+    },
+    {
+      "type": "fedex",
+      "title": "FedEx",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Where a FedEx parcel is, by tracking number, as a report and an agent tool - FedEx looks numbers up by POST /track/v1/trackingnumbers.",
+      "match": [
+        "fedex"
+      ]
+    },
+    {
+      "type": "usps",
+      "title": "USPS",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Where a USPS package is, by tracking number, as a report and an agent tool - GET /tracking/v3/tracking/<number>.",
+      "match": [
+        "usps",
+        "postal service"
+      ]
     },
     {
       "type": "deepseek",

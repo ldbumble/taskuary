@@ -2027,7 +2027,8 @@ export const ToRow = ({ to, onSave, disabled }) => {
   );
 };
 
-export const CcRow = ({ cc, setCc, channel }) => {
+// ...ONE ROW FOR CC AND BCC (the owner, 2026-11-08: "share code as much as possible with to/cc/bcc"): `label` names it, BCC the same row
+export const CcRow = ({ cc, setCc, channel, label: name = "CC" }) => {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
@@ -2042,12 +2043,12 @@ export const CcRow = ({ cc, setCc, channel }) => {
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
-      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>CC</Typography>
+      <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>{name}</Typography>
       {(cc || []).map((a) => (
         <Box key={a} sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.8, py: 0.15,
           borderRadius: 99, bgcolor: "#eef1ec", border: "1px solid #d9e0d6" }}>
           <Typography sx={{ fontSize: 11.5, color: INK }}>{a}</Typography>
-          <Box component="button" type="button" aria-label={`Remove ${a} from CC`}
+          <Box component="button" type="button" aria-label={`Remove ${a} from ${name}`}
             onClick={() => setCc((cc || []).filter((x) => x !== a))}
             sx={{ cursor: "pointer", color: FAINT, fontSize: 12, lineHeight: 1, border: 0, bgcolor: "transparent", p: 0, fontFamily: "inherit", "&:hover": { color: "#6b2733" } }}>✕</Box>
         </Box>
@@ -2061,13 +2062,25 @@ export const CcRow = ({ cc, setCc, channel }) => {
         <Typography {...pressable(() => setOpen(true))}
           sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
                 "&:hover": { textDecoration: "underline" } }}>
-          {(cc || []).length ? "Add another" : "Add CC"}
+          {(cc || []).length ? "Add another" : `Add ${name}`}
         </Typography>
       )}
       {!!err && open && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
     </Box>
   );
 };
+
+// THE SUBJECT, ON THE EMAIL CARD (the owner, 2026-11-08: one email card, every field editable): the line its reader sees, changed in place -
+// held like CC and sent with Send. `subject`: what goes now; `onChange` takes the owner's words
+export const SubjectRow = ({ subject, onChange, disabled }) => (
+  <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, minWidth: 0 }}>
+    <Typography sx={{ color: "#6f8a6e", fontSize: 9.5, fontWeight: 600, letterSpacing: "1.5px", flexShrink: 0 }}>SUBJECT</Typography>
+    <Box component="input" data-tq-subject="" value={subject || ""} disabled={disabled} aria-label="Subject" placeholder="(no subject)"
+      onChange={(e) => onChange(e.target.value)}
+      sx={{ ...FOCUS_RING, flex: 1, minWidth: 0, border: 0, borderBottom: "1px dashed #d9e0d6", bgcolor: "transparent", font: "inherit",
+        fontSize: 13, fontWeight: 600, color: INK, py: 0.25, outline: 0, "&:focus": { borderBottomColor: "#6f8a6e" } }} />
+  </Box>
+);
 
 // THE REPLY DRAFT BOX, one for every surface that shows a draft (task Close out, the walk's reply card) - a long email
 // read through an 8-line slot with its own scrollbar (the owner, 2026-10-19). It grows with the text up to 60% of the

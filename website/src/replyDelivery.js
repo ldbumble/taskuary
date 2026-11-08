@@ -29,6 +29,15 @@ export const deliveryCc = (review) => {
   const raw = deliveryMeta(review).cc;
   return Array.isArray(raw) ? raw.filter(Boolean) : [];
 };
+// ...BCC the same way, and the SUBJECT the email card shows (the owner, 2026-11-08: one email card): the envelope's, else "Re:" the mail answered
+export const deliveryBcc = (review) => {
+  const raw = deliveryMeta(review).bcc;
+  return Array.isArray(raw) ? raw.filter(Boolean) : [];
+};
+export const deliverySubject = (review) => {
+  const own = String(deliveryMeta(review).subject || "").trim(), theirs = String(review?.Subject || "").trim();
+  return own || (theirs ? (/^re:/i.test(theirs) ? theirs : `Re: ${theirs}`) : "");
+};
 // A chat has members, not recipients: name the room so "TO Sarah" does not read as a DM when it
 // is a channel everyone can see.
 const ROOMS = ["whatsapp", "teams", "slack", "telegram", "discord", "imessage"];

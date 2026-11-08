@@ -196,13 +196,18 @@ def _delivery_busy(store, rid):
                            if current.get('DeliveryClaim') else 'This draft changed before approval; review it and approve again.')}
 
 
+def _more(env, *keys) -> dict:
+    "The envelope's optional fields that are set - a sender that never had them is never handed them."
+    return {k: env[k] for k in keys if env.get(k)}
+
+
 def _send_snapshot(store, snapshot):
     """Only the durable approved payload crosses the provider boundary."""
     from . import outbound
     env, body = snapshot['envelope'], snapshot['body']
     if env.get('kind') == 'reply':
         return outbound.reply_to_message(store, snapshot['message'], body, to=env.get('to') or None,
-                                         cc=env.get('cc'), attachments=env.get('attachments'))
+                                         cc=env.get('cc'), attachments=env.get('attachments'), **_more(env, 'bcc', 'subject'))
     if env.get('kind') == 'zoho_invoice':
         from . import scopes, zoho
         c = store.get_connector(int(env.get('connector_id') or 0), with_secret=True)
@@ -218,7 +223,7 @@ def _send_snapshot(store, snapshot):
     if env.get('format') == 'html' and str(env.get('channel') or 'email').lower() == 'email':
         from .sharing import email_html
         html = email_html(env.get('subject') or '', body)
-    return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'),
+    return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'), **_more(env, 'bcc'),
                              attachments=env.get('attachments'), mailbox=env.get('mailbox'), **({'html': html} if html else {}))
 
 
@@ -236,7 +241,7 @@ def _reconcile_snapshot(store, snapshot):
         return {'state': 'unknown', 'reason': f'the provider could not verify delivery ({str(e)[:160]})'}
 
 
-def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=None, send_fn=None, anyway=False):
+def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=None, send_fn=None, anyway=False, bcc=None, subject=None):
     """Claim, send or reconcile, persist the outcome, then settle the task.
 
     Review status stays pending until delivery is confirmed. The durable claim and
@@ -257,6 +262,9 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         files = env.get('attachments')
         env = {**(outbound.reply_envelope(store, msg) or {'kind': 'reply'}), **({'attachments': files} if files else {})}
     if cc is not None: env['cc'] = list(cc)
+    # ...and BCC and the subject as the card has them (the owner, 2026-11-08: one email card, every field editable, edits go out with Send)
+    if bcc is not None: env['bcc'] = list(bcc)
+    if subject is not None and ' '.join(str(subject).split()): env['subject'] = ' '.join(str(subject).split())[:200]
     # a NEW email on a task leaves from the mailbox the task's mail came in on - not the first Outlook card, which sent a
     # second mailbox's business out under the first one's address. Nothing came in by mail: send_out's own fallback, as before
     if outgoing and not env.get('kind') and str(env.get('channel') or '').lower() == 'email' and not env.get('mailbox'):
@@ -520,7 +528,7 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
            actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False, fields: dict = None,
-           blanks_ok: bool = False) -> dict:
+           blanks_ok: bool = False, bcc: list = None, subject: str = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
     call (the API hands FastAPI's background task runner in); None runs it inline.
 
@@ -676,7 +684,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if verb in ('approve', 'edit') and not blanks_ok and rv.get('DeliveryState') not in ('unknown', 'sending') and (gap := _blanked(final)): return gap
     deliver = _envelope(rv)
     if (final or (cal and verb in ('approve', 'edit'))) and (rv.get('MessageId') or deliver):
-        result = _deliver_review(store, rv, final, verb, actor, note, cc, anyway=anyway)
+        result = _deliver_review(store, rv, final, verb, actor, note, cc, anyway=anyway, bcc=bcc, subject=subject)
         if not result.get('ok') or result.get('send_error'): return result
         sent, send_err = result.get('sent'), None
         # A confirmed edit still teaches the owner's voice below.

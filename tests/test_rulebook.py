@@ -60,10 +60,10 @@ MATRIX = [
     ('Q3 accruals file', 'agent_done', 'close', True),           # "Your reply went at 10:02; nothing since."
     ('Helpdesk tickets by day', 'report_ok', 'next', False),
     ('Vendor portal maintenance', 'fyi', 'next', False),
-    ('Reconcile the August GL export', 'working', 'next', False),
+    ('Reconcile the August GL export', 'working', None, False),      # a chat agent's turn picks the light (advisor.agent_light)
     ('agent asking (coding)', 'agent_asking', None, False),       # a coding agent's ask lights nothing (the owner, 2026-11-02)
-    ('agent finished (general)', 'agent_done', 'close', True),
-    ('agent failed (general)', 'failed_cause', 'continue', True),
+    ('agent finished (general)', 'agent_done', None, False),     # its turn said nothing is left nowhere: nothing lit (advisor.agent_light)
+    ('agent failed (general)', 'failed_cause', 'continue', False),    # ...its failure's Try again, said by the run's own line
     ('agent stopped-saved (coding)', 'stopped', 'continue', False),
     ('Close the August books', 'done_list', 'close', True),
     ('Move payroll to Payworth', 'goal', 'next', False),

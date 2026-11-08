@@ -1022,12 +1022,7 @@ def _send_state(memo: dict, channel, has_message=True) -> tuple:
 
 def _review_connect(memo: dict, r: dict) -> dict | None:
     "A draft's channel not connected: the card's Connect instead of its Send (outbound.connect_fix), once per channel a request."
-    try: env = json.loads(r.get('Deliver') or '{}') or {}
-    except (TypeError, ValueError, AttributeError): env = {}
-    if r.get('Kind') == 'action' or env.get('kind') in outbound.OWN_ROAD: return None
-    ch = str(r.get('Channel') or env.get('channel') or '').lower()
-    if ('connect', ch) not in memo: memo[('connect', ch)] = outbound.connect_fix(store, ch)
-    return memo[('connect', ch)]
+    return None if r.get('Kind') == 'action' else outbound.review_connect(store, r, memo)
 
 
 def _review_send_state(memo: dict, r: dict) -> tuple:
@@ -4828,6 +4823,7 @@ def handoff(task_id: int, body: HandoffBody):
             sent = outbound.send_out(store, body.channel, body.to, subject, text)
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
+    from . import general
     from .general import HANDED_OFF
     store.add_comment(task_id, ACTOR, 'human', f'{HANDED_OFF}{body.to} by {body.channel}:\n{text}')
     # FORWARD ONLY (the owner, 2026-10-18): handing it on used to close the task too, and nobody then saw whether the person
@@ -4838,6 +4834,7 @@ def handoff(task_id: int, body: HandoffBody):
     from . import funnel
     funnel.invalidate()
     store.audit('task', task_id, 'handoff', ACTOR, detail={'to': body.to, 'channel': body.channel, 'closed': False})
+    general.follow_up(store, task_id, 'handoff', ACTOR)
     return {'sent': sent, 'text': text, 'status': st}
 
 @app.get('/api/runs/live')

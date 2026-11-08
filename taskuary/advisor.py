@@ -883,8 +883,27 @@ def summary_line(store, tid) -> str:
     if not isinstance(summ, dict): return ''
     todo = [str(c.get('text')) for c in _checklist(store.get_task(int(tid))) if c.get('on_you') and not c.get('done') and c.get('text')]
     if todo: return "THE AGENT'S LAST SUMMARY: on you - " + '; '.join(' '.join(x.split())[:160] for x in todo[:6])
-    if summ.get('nothing_left') and not _draft(store, {}, 'task', tid): return "THE AGENT'S LAST SUMMARY: nothing left to do here"
+    if summ.get('nothing_left') and not _draft(store, {}, 'task', tid): return NOTHING_LEFT
     return ''
+NOTHING_LEFT = "THE AGENT'S LAST SUMMARY: nothing left to do here"
+
+
+# THE AGENT PICKS THE LIT BUTTON (the owner, 2026-11-08): on a task an agent works, the Advisor lit Reply while the agent's own turn said
+# "press Mark done". There the light is read off what the agent's latest turn left - no model call: the Send of a card it set up that waits
+# (never one whose channel is not connected - its card says Connect instead), Mark done where its summary said nothing is left, else nothing
+# ...the chat's agent, whose turns say where the owner stands; a coding agent's terminal says no such thing, and the Advisor still reads it
+def chat_agent(store, tid) -> bool:
+    from . import general
+    return general.handles(store.get_task(int(tid))) and agent_ran(store, tid)
+def agent_light(store, tid: int, item: dict, verbs: list) -> str | None:
+    from . import outbound
+    if _at_work(store, 'task', tid): return None
+    # ...and a failed run's way past it (offered's lead: the place that fixes it, or Try again) - a fact on the row, no one's opinion
+    if verbs and verbs[0]['verb'] in ('fix', 'continue') and not pressable(store, item, verbs[0]['verb'], verbs): return verbs[0]['verb']
+    if (w := store.waiting_on_owner(tid)) and (w.get('FinalText') or w.get('DraftText')):
+        if outbound.review_connect(store, w): return None
+        return next((v for v in ('send_close', 'approve') if not pressable(store, item, v, verbs)), None)
+    return 'close' if summary_line(store, tid) == NOTHING_LEFT and not pressable(store, item, 'close', verbs) else None
 
 
 def sent_line(store, target_kind, target_id) -> str:
@@ -1176,6 +1195,8 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
     Returns the row id when judged inline (tests, `wait=True`), None when skipped or sent to the background."""
     try:
         if str(store.get_setting(ON_KEY, '1') or '1') != '1' or not target_id: return None
+        # ...and nothing read in the background on an agent's task: its own turn picks the light (agent_light)
+        if not wait and target_kind == 'task' and chat_agent(store, target_id): return None
         rev = revision(store, target_kind, target_id)
         # ...a stop is the finish check's moment too: its line is there by the time the owner looks (decide asks for it as well)
         if event == 'agent.stopped' and target_kind == 'task' and BACKGROUND: _spawn(lambda: _check_stopped(store, target_id), f'advise-stop-{target_id}')
@@ -1263,6 +1284,9 @@ def decide(store, key: str, preread: bool = True) -> dict:
     if not item: return {}
     verbs = offered(store, item) + [buttons.chip('next')]
     r = rulebook.facts(store, item, verbs)
+    if tgt[0] == 'task' and chat_agent(store, tgt[1]):
+        return _out(store, key, item, verbs, r, rev, {'key': key, 'state': r['state'], 'verb': agent_light(store, int(tgt[1]), item, verbs), 'line': '',
+                                                      'by': 'agent', 'evidence': [], 'kind': 'other'}, None)
     every = _at(store, tgt[0], tgt[1], rev)
     # the finish check's rows are about the task's agent work, whichever card of it is asked about; the judge's are the item's own
     chk = next((x for x in every if x.get('Event') == CHECK), None) if tgt[0] == 'task' and r['state'] in CHECKED else None

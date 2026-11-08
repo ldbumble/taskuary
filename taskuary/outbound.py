@@ -452,6 +452,23 @@ def connect_fix(store, kind) -> dict | None:
     return {'says': f"{name} isn't connected", 'label': f'Connect {name}', 'href': f'#connector={k}'}
 
 
+def review_connect(store, r: dict, memo: dict = None) -> dict | None:
+    """connect_fix for one waiting card: an agent's act by its connector's card (a post's `linkedin`), a draft by its channel - None for an
+    act on a road of its own (an invoice, a meeting) or a card whose channel is connected. `memo`: one answer per channel for a list."""
+    try: p = json.loads((r.get('FinalText') or r.get('DraftText') or '{}') if r.get('Kind') == 'action' else (r.get('Deliver') or '{}')) or {}
+    except (TypeError, ValueError): p = {}
+    p = p if isinstance(p, dict) else {}
+    if r.get('Kind') == 'action':
+        from . import connectorcatalog
+        act = connectorcatalog.action_for(p.get('type')) if p.get('action') == 'run_tool' else None
+        k = act['card'] if act else None
+    else: k = None if p.get('kind') in OWN_ROAD else str(r.get('Channel') or p.get('channel') or '').lower()
+    if not k: return None
+    memo = {} if memo is None else memo
+    if ('connect', k) not in memo: memo[('connect', k)] = connect_fix(store, k)
+    return memo[('connect', k)]
+
+
 def block_fix(store, channel) -> dict | None:
     """...and the button that lifts it, branch for branch with send_block: the reason named a place ("(Settings → Replies)",
     "its card"), the row gets the way there. None where nothing here lifts it - a Teams chat is answered in Teams."""

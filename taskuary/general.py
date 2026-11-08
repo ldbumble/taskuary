@@ -522,6 +522,24 @@ def owner_did(store, tid: int) -> list:
             for r in store._rows(f"SELECT * FROM review WHERE TaskId=? AND DecidedBy IN ({who}) AND DecidedAt>?", (tid, *OWNER_ACTORS, since))
             if r['Status'] in DECIDED]
     return [f'{clock_of(at)}: {what}' for at, what in sorted(out, key=lambda x: str(x[0]))]
+# A PRESS THE AGENT SAID IT WAITS ON WAKES IT, ONCE (the owner, 2026-11-08): a press is otherwise a line it hears with the owner's next one -
+# but a turn that asked for Send or a hand-off and said it would follow up (its summary's `after_press`) is started again by that press
+FOLLOW_UP = ('The owner just pressed what your last turn waited on (see what the owner did since your last answer). Carry on from there as '
+             'you said you would - check it landed first; never redo it.')
+_WOKEN: set = set()
+def follow_up(store, tid, press: str, actor: str = 'owner') -> bool:
+    "Start one turn on task `tid` when its agent's newest summary waits on `press` ('send', 'handoff'). True when one was started."
+    try:
+        last = next((c for c in reversed(store.list_comments(int(tid), internal=True)) if c.get('ActorType') in (SUMMARY_TYPE, ASSISTANT_TYPE)), None)
+        summ = json.loads(last['Body']) if last and last.get('ActorType') == SUMMARY_TYPE else None
+    except (TypeError, ValueError): summ = None
+    if not isinstance(summ, dict) or summ.get('after_press') != press or last['CommentId'] in _WOKEN: return False
+    _WOKEN.add(last['CommentId'])
+    def go():
+        try: start_session(store, int(tid), actor=actor).send_prompt(FOLLOW_UP, as_owner=False, echo=False)
+        except Exception as e: logger.warning(f'task {tid}: the follow-up after {press} did not start - {e}')
+    threading.Thread(target=go, daemon=True, name=f'follow-up-{tid}').start()
+    return True
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""

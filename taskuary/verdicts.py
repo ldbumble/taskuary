@@ -526,7 +526,16 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
                            envelope=envelope, send_fn=post)
 
 
-def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
+def decide(store, rv: dict, verb_in: str, *a, **kw) -> dict:
+    """_decide, and a yes that went wakes the task's agent where its last turn said it waits on that Send (general.follow_up)."""
+    out = _decide(store, rv, verb_in, *a, **kw)
+    if verb_in in ('approve', 'edit') and out.get('ok') and not out.get('send_error') and rv.get('TaskId'):
+        from . import general
+        general.follow_up(store, rv['TaskId'], 'send', a[2] if len(a) > 2 else kw.get('actor', 'owner'))
+    return out
+
+
+def _decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
            actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False, fields: dict = None,
            blanks_ok: bool = False, bcc: list = None, subject: str = None) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning

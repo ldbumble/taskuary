@@ -36,12 +36,13 @@ CASES = [
     ('Helpdesk tickets by day', {'next'}, set(), []),
     ('Vendor portal maintenance', {'next', 'not_ours'}, {'mine', 'regular_agent'}, []),
     ('importers#215', {'next', 'regular_agent', 'mine'}, {'not_ours'}, []),
-    # an agent at work on it: Next, and nothing said (the owner, 2026-10-13)
-    ('Reconcile the August GL export', {'next'}, {'not_ours', 'reply'}, []),
+    # an agent at work on it: nothing lit and nothing said (the owner, 2026-10-13; its own turn picks the light, 2026-11-08)
+    ('Reconcile the August GL export', {'next', None}, {'not_ours', 'reply'}, []),
     # an asking agent is answered in its own pane - no button lights for it (the owner, 2026-10-20: "we don't need that button")
     ('agent asking (general)', {None}, {'stop_agent', 'answer_agent'}, []),
     ('agent asking (coding)', {None}, {'stop_agent', 'answer_agent'}, []),
-    ('agent finished (general)', {'close'}, set(), []),
+    # ...a chat agent's task lights what its own turn left (advisor.agent_light, 2026-11-08): this one said nothing is left on nobody
+    ('agent finished (general)', {'close', None}, set(), []),
     ('agent finished (coding)', {'close', 'review_changes'}, set(), []),
     # a failed general run is tried again from its saved conversation, never made a task of (owner-approved, 2026-10-21)
     ('agent failed (general)', {'continue'}, {'new_task', 'stop_agent'}, ['WHAT FAILED', 'test database was not reachable']),
@@ -49,7 +50,7 @@ CASES = [
     ('agent stopped-saved (general)', {'next', 'defer', None}, set(), []),
     ('agent stopped-saved (coding)', {None}, {'continue'}, []),     # Continue only from the finish check
     ('agent working (coding)', {'next'}, set(), []),
-    ('agent working (general)', {'next'}, set(), []),
+    ('agent working (general)', {'next', None}, set(), []),
     ('Close the August books', {'close'}, set(), []),
     ('Renew the PhishGuard licence', {'next', 'defer'}, {'not_ours'}, []),
     # a goal on track is Next; a step past its day is Chase, named in the line (the design, states 17 and 18)

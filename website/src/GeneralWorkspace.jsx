@@ -887,14 +887,6 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {/* the answer is being written somewhere else - another tab, or this pane before it was
               reopened - and the poll is what tells us so */}
           <ThreadPrimitive.If running={false}>{serverBusy && atWork}</ThreadPrimitive.If>
-          {/* ...and the lines typed while it works come UNDER its "Working on this…": over it, they stood between the turn's name and its
-              clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
-          {/* ...the SERVER'S copy first (`waiting`, kept the moment each was sent - on every screen, through a reload or a restart), each at the
-              time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
-          {[...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)].map((l) =>
-            <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
-            <div className="tq-aui-role">you{l.at ? ` · ${when(l.at)}` : ""}</div><div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
-            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
           {/* WHAT THE SOURCE WAITS ON THE OWNER FOR, while it works too (`cards`): a coding agent's permission cards, its screen while it asks */}
           {!dock && cards}
           {/* Only once it has stopped typing. An offer to "run this again, daily" hanging under a
@@ -928,6 +920,18 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </Box>
           )}
           </ThreadPrimitive.If>
+          {/* ...LAST, under everything the turn has drawn - its files and cards too: a PDF the turn made stood under the line typed after it
+              (the product audit, 2026-11-08) */}
+          {/* ...and the lines typed while it works come UNDER its "Working on this…": over it, they stood between the turn's name and its
+              clock, an empty head with the owner's words below it (the scenario run, 2026-11-06) */}
+          {/* ...the SERVER'S copy first (`waiting`, kept the moment each was sent - on every screen, through a reload or a restart), each at the
+              time it was typed, then this screen's own not yet kept; all of them waiting for the agent until a turn takes them (2026-11-07) */}
+          {[...waitingShown(waiting, held, mineDrawn, messages).map((w) => ({ id: `waiting-${w.id}`, text: w.text, at: w.at })), ...notShown(held, mineDrawn)].map((l) =>
+            <div key={l.id} className="tq-aui-message tq-aui-user" data-tq-held="">
+            {/* ...under the owner's own head, as every line of theirs is - "you" in grey read as somebody else's (the product audit, 2026-11-08) */}
+            <div className="tq-aui-user-head"><PersonOutlineIcon aria-hidden sx={{ fontSize: 14, verticalAlign: "-2px", mr: 0.5 }} />You{l.at ? ` · ${when(l.at)}` : ""}</div>
+            <div className="tq-aui-user-bubble" dir="auto">{l.text}</div>
+            {l.err ? <div className="tq-aui-hint" role="alert">{l.err}</div> : <div className="tq-aui-hint" data-tq-waiting="">Waiting for the agent</div>}</div>)}
           {/* ...a chat no turn has summed up yet: its cards (TaskPage's chatCards), under the thread */}
           {/* ...a section of the chat like the rest (the owner, 2026-11-05: "still see line of next steps"): a bold head, no rule over it */}
           {/* ...and in a chat no answer carries it yet (a reply triage drafted, no agent run - the owner, 2026-11-06): the draft under the ask */}

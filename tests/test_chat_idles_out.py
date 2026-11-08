@@ -54,6 +54,15 @@ class IdleOut(unittest.TestCase):
 
     def later(self, secs=61): return self.ses.last + secs
 
+    def test_a_cli_that_died_while_idle_closes_the_session_at_the_next_sweep(self):
+        # the product audit, 2026-11-08: its CLI tree killed, the session read alive - "waiting on you" over an agent that did not exist
+        self.ses.cli_up = True
+        with mock.patch.object(clipool, 'is_live', return_value=True):
+            self.assertNotIn(self.tid, general.idle_sweep(self.ses.last + 1))       # alive and not idle long enough: it stays
+        with mock.patch.object(clipool, 'is_live', return_value=False):
+            self.assertIn(self.tid, general.idle_sweep(self.ses.last + 1))          # gone: closed quietly, as idle time would
+        self.assertFalse(self.ses.alive); self.assertTrue(general.idled(self.tid, self.s))
+
     def test_an_idle_session_closes_quietly_after_the_period(self):
         s, tid = self.s, self.tid
         before = (chat(s, tid), len(s.list_comments(tid)), len(s.worker_events(tid)), s.get_task(tid)['Status'],

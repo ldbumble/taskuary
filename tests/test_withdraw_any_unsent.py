@@ -63,3 +63,22 @@ def test_what_already_went_is_never_withdrawn():
     s.decide_review(rid, 'approved', 'Hi Ray', 'owner'); s._exec("UPDATE review SET DeliveryState='sent' WHERE ReviewId=?", (rid,))
     out = verdicts.withdraw(s, tid, 'changed my mind', 'agent', which=str(rid))
     assert out['ok'] is False and s.get_review(rid)['Status'] == 'approved'
+
+
+def test_an_agent_with_no_shell_takes_back_an_email_by_its_marker():
+    # agent-flow audit 2026-11-07: [[TASKUARY-WITHDRAW: ...]] reached only the reply draft - an API card's wrong email stood with its Send
+    from taskuary import general, selfclose, slots
+    s = MemoryStore(); tid = own_task(s, 'general')
+    paula = slots.draft(s, tid, 'Hi Paula - the table.', to='paula@northwind.example', subject='The tools table')['review_id']
+    gail = slots.draft(s, tid, 'Hi Gail - the table.', to='gail@northwind.example', subject='The tools table')['review_id']
+    brief = general.latest_block(s, tid)
+    assert f'rv{paula}: the email to paula@northwind.example' in brief and 'which=' in brief
+    text, found = selfclose.withdraw_markers(f'Done.\n[[TASKUARY-WITHDRAW which=rv{paula}: sent to Gail instead]]\n'
+                                             '[[TASKUARY-WITHDRAW which="gail@northwind.example": Gail is away]]\n[[TASKUARY-WITHDRAW: no reply]]')
+    assert text == 'Done.' and found == [(f'rv{paula}', 'sent to Gail instead'), ('gail@northwind.example', 'Gail is away'), ('', 'no reply')]
+    answer = f'Taken back.\n[[TASKUARY-WITHDRAW which=rv{paula}: the owner wants it to go to Gail only]]'
+    with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')): sess = general.GeneralSession(s, tid)
+    with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda system, user, **kw: answer), mock.patch('taskuary.hooks.judge_ended'):
+        reply = sess.send_prompt('only Gail, please')
+    assert 'TASKUARY-WITHDRAW' not in reply and s.get_review(paula)['Status'] == 'closed_unsent'
+    assert waiting(s, tid) == [('slot', gail)]

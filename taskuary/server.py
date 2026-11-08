@@ -1012,6 +1012,16 @@ def _send_state(memo: dict, channel, has_message=True) -> tuple:
     return memo[k]
 
 
+def _review_connect(memo: dict, r: dict) -> dict | None:
+    "A draft's channel not connected: the card's Connect instead of its Send (outbound.connect_fix), once per channel a request."
+    try: env = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError, AttributeError): env = {}
+    if r.get('Kind') == 'action' or env.get('kind') in outbound.OWN_ROAD: return None
+    ch = str(r.get('Channel') or env.get('channel') or '').lower()
+    if ('connect', ch) not in memo: memo[('connect', ch)] = outbound.connect_fix(store, ch)
+    return memo[('connect', ch)]
+
+
 def _review_send_state(memo: dict, r: dict) -> tuple:
     """(CanSend, SendBlock) for one draft. A message the owner STARTED - one of a task's own emails or chats (slots.py), or
     + New's Send something - answers nothing, so its channel and recipient are in its envelope, not on a message: read off
@@ -2090,6 +2100,7 @@ def task_detail(task_id: int):
     from .ingest import DRAFTING
     for r in d.get('reviews') or []:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
+        r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)     # what goes under it: the reply box shows it
         r['Drafting'] = r['ReviewId'] in DRAFTING                         # its draft is being written: the box waits, never "nothing yet"
     # the owner's own mail has nobody behind it to answer (wrapup.from_owner): the page's Reply doors read this, never a guess
@@ -2307,7 +2318,8 @@ def _assistant_payload(task_id: int, session=None):
         except ValueError: who = ''
         cards.append({**{k: r.get(k) for k in ('ReviewId', 'Status', 'CreatedAt', 'DecidedAt', 'Reason')}, 'post': p, 'after': at_turn(r.get('CreatedAt')),
                       'network': _proposals.POSTS.get(p['type']) or (_cat.by_type(act['card']) or {}).get('title') or act['card'],
-                      'as': who or (c or {}).get('Name') or ''})
+                      'as': who or (c or {}).get('Name') or '',
+                      'connect': outbound.connect_fix(store, act['card']) if r.get('Status') == 'pending' else None})
     return {'messages': messages,
             'cards': cards,
             # WHICH TURN EACH PENDING DRAFT IS (general.draft_turns, 2026-11-06): drawn under its own turn - a stale one (made before the newest
@@ -4871,6 +4883,7 @@ def reviews(status: str = None):
     memo, sigs = {}, {}
     for r in rows:
         r['CanSend'], r['SendBlock'] = _review_send_state(memo, r)
+        r['Connect'] = _review_connect(memo, r)
         r['Signature'] = signatures.for_review(store, r, memo=sigs)
         r['Drafting'] = r['ReviewId'] in DRAFTING
         moved, latest = context_moved(store, r)          # material change only (PW-240), never a polling timestamp

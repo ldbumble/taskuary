@@ -9,6 +9,7 @@ import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api.js";
+import { openAppLink } from "./appLinks.js";
 import { attUrl } from "./Attachments.jsx";
 import { FileDialog } from "./PublishedPages.jsx";
 import { actionFor, changed, choiceOf, fieldsOf, stateOf, textKey, valuesOf, wordsOf } from "./actionCard.js";
@@ -77,6 +78,10 @@ export default function ActionCard({ row, tid, live = true, onChanged }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.5, py: 1, flexWrap: "wrap" }}>
         {gone ? <Typography data-tq-act-done="" sx={{ fontSize: 13, color: "#47654a", fontWeight: 600 }}>✓ {done ? w.done : st.said}
           {go && <> · <a href={go} target="_blank" rel="noopener noreferrer" style={{ color: ACCENT }}>See it on {row?.network}<OpenInNewIcon sx={{ fontSize: 12, ml: 0.25, verticalAlign: "-1px" }} /></a></>}</Typography>
+          : st.live && row?.connect ? <>
+            {/* ...its network not connected (outbound.connect_fix, the owner 2026-11-08): said, and Connect opens that card - the post waits */}
+            <Button size="small" variant="contained" disableElevation data-tq-act-connect="" onClick={() => openAppLink(row.connect.href)}>{row.connect.label}</Button>
+            <Typography data-tq-not-connected="" sx={{ fontSize: 11.5, color: FAINT }}>{row.connect.says}</Typography></>
           : st.live ? <>
             <Button size="small" variant="contained" disableElevation data-tq-act-press="" disabled={!!busy || !text.trim() || !!over} onClick={() => decide("approve")}
               title={hint("approve", post ? "post" : "action")} startIcon={busy === "approve" ? <CircularProgress size={12} color="inherit" /> : null}>

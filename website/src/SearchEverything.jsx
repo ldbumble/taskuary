@@ -17,10 +17,10 @@ import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import api from "./api";
-import { OPEN_SEARCH, openAppLink } from "./appLinks.js";
+import { OPEN_SEARCH, focusPlace, openAppLink } from "./appLinks.js";
 import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
-import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
+import { aloneAs, arrange, asks, channelsFor, countWords, filters, kindOf, lineOf, marks, messageLink, meta, nothingMatches, nothingYet, personHits, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 import { useAgents } from "./ui.jsx";
 const DONE_TODAY = "done:today";      // search.DONE_TODAY
@@ -228,7 +228,8 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
     // a setting or a connection: the page that holds it, by its link - the road every in-app link takes, which brings it to view
     if (h.href) { searchPicked(); openAppLink(h.href); }
     // ...a closed task opens as it is, in its chat - typing to it reopens it (the owner, 2026-11-06)
-    else if (h.type === "task") onOpenTask?.(h.tid, h);
+    // ...and one found by a line of its agent chat, scrolled to that line (search.py _chat)
+    else if (h.type === "task") { onOpenTask?.(h.tid, h); if (lineOf(h)) focusPlace(null, () => document.querySelector(lineOf(h))); }
     else if (h.type === "source") onPickSource?.(h.pick);
     else if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h);
     if (find) focusOpened(find);

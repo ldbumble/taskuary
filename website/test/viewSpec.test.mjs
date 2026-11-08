@@ -2,7 +2,7 @@
 // the call's answer, and turns a bad one into null (ViewSpec.jsx shows it as JSON). Invented people and numbers.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MARK, buttonOf, normalise, specIn, verbOf, viewOf } from "../src/viewSpec.js";
+import { MARK, buttonOf, fmtAs, labels, normalise, placesOf, specIn, verbOf, viewOf } from "../src/viewSpec.js";
 import { turnParts } from "../src/chatStream.js";
 
 const SPEC = {
@@ -78,4 +78,49 @@ test("in the chat a view is its own part, between the words around it", () => {
   ]);
   assert.deepEqual(parts.map((p) => p.type), ["said", "view", "said"]);
   assert.equal(parts[1].spec.elements.c.props.kind, "bar");
+});
+
+// grid, badge and note; a title and a description on every block; a tile's trend and format, a column's format, a highlighted point
+const NEW = { root: "g", elements: {
+  g: { type: "grid", props: { cols: 2, title: "Plans", description: "For 40 people" }, children: ["k", "c", "t", "b", "n"] },
+  k: { type: "stats", props: { items: [{ label: "Top tier", value: 540, format: "currency", trend: { dir: "up", text: "+$340 vs Basic" } }] } },
+  c: { type: "chart", props: { kind: "bar", format: "currency", points: [{ label: "Payworth Basic", value: 200, highlight: true }, { label: "Payworth Pro", value: 540 }] } },
+  t: { type: "table", props: { title: "Costs", columns: ["Plan", { label: "Per month", format: "currency" }], rows: [{ Plan: "Payworth Basic", "Per month": 200 }, ["Payworth Pro", 540]] } },
+  b: { type: "badge", props: { text: "Cheapest", variant: "success" } },
+  n: { type: "note", props: { tone: "warning", title: "Before you switch", text: "Two reports are still open." } },
+} };
+
+test("the new blocks and props pass, and the server's answer to them passes again", () => {
+  const v = normalise(NEW);
+  assert.deepEqual(v.elements.g.props, { cols: 2, title: "Plans", description: "For 40 people" });
+  assert.deepEqual(v.elements.k.props.items[0].trend, { dir: "up", text: "+$340 vs Basic" });
+  assert.deepEqual(v.elements.c.props.points.map((p) => !!p.highlight), [true, false]);
+  assert.deepEqual(v.elements.t.props.rows, [["Payworth Basic", 200], ["Payworth Pro", 540]]);
+  assert.deepEqual(labels(v.elements.t.props.columns), ["Plan", "Per month"]);
+  assert.deepEqual(normalise(v), v);
+  assert.equal(normalise({ root: "a", elements: { a: { type: "grid", props: { cols: "3" } } } }).elements.a.props.cols, 3);
+});
+
+test("the new blocks outside the catalog are null", () => {
+  const bad = (type, props) => assert.equal(normalise({ root: "a", elements: { a: { type, props } } }), null, JSON.stringify(props));
+  bad("grid", { cols: 5 }); bad("grid", { cols: true });
+  bad("badge", { text: "x", variant: "danger" }); bad("badge", {});
+  bad("note", { tone: "error", text: "x" });
+  bad("text", { text: "x", title: "y".repeat(201) });
+  bad("stats", { items: [{ label: "a", value: 1, trend: { dir: "sideways" } }] });
+  bad("stats", { items: [{ label: "a", value: 1, format: "euro" }] });
+  bad("stats", { items: [{ label: "a", value: 1, colour: "red" }] });
+  bad("table", { columns: [{ label: "a", format: "money" }], rows: [[1]] });
+  bad("table", { columns: [{ name: "a" }], rows: [[1]] });
+});
+
+test("a number in its format: money with none or two decimals, counts grouped, a percent as written", () => {
+  assert.equal(fmtAs(540, "currency"), "$540");
+  assert.equal(fmtAs(13.5, "currency", placesOf([0, 5, 13.5], "currency")), "$13.50");
+  assert.equal(fmtAs(0, "currency", 2), "$0.00");
+  assert.equal(fmtAs(-40, "currency"), "-$40");
+  assert.equal(fmtAs(6480, "number"), "6,480");
+  assert.equal(fmtAs(12.5, "percent"), "12.5%");
+  assert.equal(fmtAs(null, "currency"), "");
+  assert.equal(fmtAs("n/a", "currency"), "n/a");
 });

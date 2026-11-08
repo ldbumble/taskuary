@@ -115,8 +115,9 @@ const TwinTable = ({ head, rows }) => (
 );
 
 // ── ranked bars ────────────────────────────────────────────────────────────────────────────────────────────
+// ...an agent's view (ViewSpec) asks for its own figures (`c.fmt`), each value at its bar's end (`c.inline`) and one bar picked out (`g.on`)
 export function Bars({ c, groups, onDrill, stale }) {
-  const [tipEl, show, hide] = useTip();
+  const [tipEl, show, hide] = useTip(), f = c.fmt || fmt, hi = groups.some((g) => g.on);
   const max = Math.max(1, ...groups.map((g) => g.value ?? 0));
   // "share": each bar also said as a part of the first - a funnel's stages read as what is left of what came in
   const first = groups[0]?.value || 0, pct = (g) => (c.share && first ? `${Math.round(((g.value ?? 0) / first) * 100)}%` : "");
@@ -125,16 +126,17 @@ export function Bars({ c, groups, onDrill, stale }) {
   return (
     <Card c={c} w={c.w || 2} stale={stale} table={table}>
       {!groups.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : (
-        <div className="tq-dash-bars">
+        <div className={`tq-dash-bars${c.inline ? " inline" : ""}${hi ? " hi" : ""}`}>
           {groups.map((g) => (
             <React.Fragment key={g.key}>
               <span className="lbl" title={label(g.key)}>{label(g.key)}</span>
-              <button type="button" className="tq-dash-press" aria-label={`${label(g.key)}: ${fmt(g.value)}`}
+              <button type="button" className={`tq-dash-press${g.on ? " pick" : ""}`} aria-label={`${label(g.key)}: ${f(g.value)}`}
                 onClick={() => onDrill({ title: `${c.title} · ${label(g.key)}`, rows: g.rows })}
                 onPointerMove={(e) => show(e, <TipRows k={label(g.key)} rows={[["", g.value]]} />)} onPointerLeave={hide} onBlur={hide}>
-                <div className="bar" style={{ width: `${((g.value ?? 0) / max) * 100}%`, ...(g.other ? { background: "var(--d-other)" } : {}) }} />
+                <div className="bar" style={{ "--f": (g.value ?? 0) / max, ...(c.inline ? {} : { width: `${((g.value ?? 0) / max) * 100}%` }), ...(g.other ? { background: "var(--d-other)" } : {}) }} />
+                {c.inline && <span className="val">{f(g.value)}</span>}
               </button>
-              <span className="val">{fmt(g.value)}{pct(g) && <span className="pct">{pct(g)}</span>}</span>
+              {!c.inline && <span className="val">{fmt(g.value)}{pct(g) && <span className="pct">{pct(g)}</span>}</span>}
             </React.Fragment>
           ))}
         </div>
@@ -182,7 +184,7 @@ export function Stacked({ c, st, slots, onDrill, stale }) {
 // ── a value over time: line or area, one series, a crosshair that finds the day ────────────────────────────
 function niceMax(v) { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
 export function Line({ c, points, onDrill, stale }) {
-  const [ref, w] = useWidth(), [hover, setHover] = useState(null);
+  const [ref, w] = useWidth(), [hover, setHover] = useState(null), f = c.fmt || fmt;
   const H = Number(c.h) || 170, L = 34, R = 34, T = 10, B = 22, iw = Math.max(10, w - L - R), ih = H - T - B;
   const vals = points.map((p) => p.value).filter((v) => v !== null), top = niceMax(Math.max(0, ...vals));
   const x = (i) => L + (points.length < 2 ? iw / 2 : (i / (points.length - 1)) * iw), y = (v) => T + ih - (v / top) * ih;
@@ -198,15 +200,16 @@ export function Line({ c, points, onDrill, stale }) {
       <div ref={ref} style={{ position: "relative" }}>
         {!points.length ? <div className="tq-dash-none">{DASH.no_rows}</div> : w > 0 && (
           <svg className="tq-dash-svg" width={w} height={H} role="img" aria-label={`${c.title}, ${points.length} days`}>
-            {[0, 0.5, 1].map((f) => <g key={f}><line className={f === 0 ? "axis" : "grid"} x1={L} x2={L + iw} y1={y(top * f)} y2={y(top * f)} />
-              <text x={L - 6} y={y(top * f) + 4} textAnchor="end">{fmt(top * f)}</text></g>)}
+            {[0, 0.5, 1].map((k) => <g key={k}><line className={k === 0 ? "axis" : "grid"} x1={L} x2={L + iw} y1={y(top * k)} y2={y(top * k)} />
+              <text x={L - 6} y={y(top * k) + 4} textAnchor="end">{f(top * k)}</text></g>)}
             {c.kind === "area" && segs.map((s, i) => <path key={`a${i}`} className="ar" d={`M${s[0][0]},${y(0)} ${s.map(([a, b]) => `L${a},${b}`).join(" ")} L${s[s.length - 1][0]},${y(0)} Z`} />)}
             {segs.map((s, i) => s.length > 1 ? <polyline key={i} className="ln" pathLength="1" points={s.map(([a, b]) => `${a},${b}`).join(" ")} />
               : <circle key={i} className="dot" cx={s[0][0]} cy={s[0][1]} r={4} />)}
             {[0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i).map((i) => (
               <text key={i} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === points.length - 1 ? "end" : "middle"}>{shortDay(points[i].key)}</text>))}
             {lastI >= 0 && <><circle className="dot" cx={x(lastI)} cy={y(points[lastI].value)} r={4} />
-              <text className="end" x={x(lastI) + 7} y={y(points[lastI].value) + 4}>{fmt(points[lastI].value)}</text></>}
+              <text className="end" x={x(lastI) + 7} y={y(points[lastI].value) + 4}>{f(points[lastI].value)}</text></>}
+            {points.map((p, i) => p.on && p.value !== null && <circle key={`p${i}`} className="dot pick" cx={x(i)} cy={y(p.value)} r={5} />)}
             {h && <><line className="xh" x1={x(hover)} x2={x(hover)} y1={T} y2={T + ih} />
               {h.value !== null && <circle className="dot" cx={x(hover)} cy={y(h.value)} r={4} />}</>}
             <rect x={L} y={T} width={iw} height={ih} fill="transparent" style={{ cursor: "pointer" }}

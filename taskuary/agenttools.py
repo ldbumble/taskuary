@@ -62,10 +62,22 @@ TOOLS = {
     # ...and a VIEW in its own chat (viewspec.py, after Vercel's json-render): changes nothing outside the chat, so its door is the task's own read
     'show': ('read', "Show the owner a small view in this chat when a table, chart or checklist would be clearer than text - plain text is "
              "fine otherwise, and this is never required. Your words then say what the view means - never the same table or list again in text. `elements` maps an id to {type, props, children?}; `root` is the id drawn first, "
-             "each element's children under it. Types: table {columns, rows}, stats {items: [{label, value, note?}]}, chart {kind: bar|line, "
-             "title?, points: [{label, value}]}, list {items}, checklist {items: [{text, done}]}, steps {items}, text {text: markdown}, button "
-             "{label, verb: a task-page button to light for the owner (close, defer, reply, continue...) | open: an app page link like #settings}. A "
-             "button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix.",
+             "each element's children under it. Every type takes title? and description?; each block draws as its own card. Types: grid {cols: 1-4} "
+             "(its children side by side, stacking on a phone), stats {items: [{label, value, format?, note?, trend?: {dir: up|down|neutral, text}}]}, "
+             "chart {kind: bar|line, format?, points: [{label, value, highlight?}]}, table {columns: [name | {label, format}], rows}, checklist "
+             "{items: [{text, done}]}, list {items}, steps {items}, text {text: markdown}, note {tone: info|success|warning, text}, badge {text, "
+             "variant?: default|secondary|outline|success|warning}, button {label, verb: a task-page button to light for the owner (close, defer, "
+             "reply, continue...) | open: an app page link like #settings}. format is currency|number|percent (12.5 -> 12.5%); give numbers as numbers. "
+             "A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix. Example: "
+             '{"title":"Expense tools for 40 people","root":"top","elements":{"top":{"type":"grid","props":{"cols":1},"children":["kpi","row","todo"]},'
+             '"kpi":{"type":"stats","props":{"items":[{"label":"Cheapest","value":0,"format":"currency","note":"Spendly Free"},'
+             '{"label":"Cheapest paid","value":200,"format":"currency","note":"Payworth Basic"},{"label":"Top tier","value":540,"format":"currency",'
+             '"trend":{"dir":"up","text":"+$340 vs Basic"}}]}},"row":{"type":"grid","props":{"cols":2},"children":["c","t"]},'
+             '"c":{"type":"chart","props":{"kind":"bar","title":"Per month","format":"currency","points":[{"label":"Spendly Free","value":0},'
+             '{"label":"Payworth Basic","value":200,"highlight":true},{"label":"Payworth Pro","value":540}]}},"t":{"type":"table","props":'
+             '{"title":"What each plan costs","columns":["Plan",{"label":"Per month","format":"currency"},{"label":"Per person","format":"currency"}],'
+             '"rows":[["Spendly Free",0,0],["Payworth Basic",200,5],["Payworth Pro",540,13.5]]}},"todo":{"type":"checklist","props":{"title":"Rollout",'
+             '"items":[{"text":"Pick the plan","done":true},{"text":"Invite the team","done":false}]}}}}',
              _S({'title': _STR, 'root': _STR, 'elements': {'type': 'object', 'additionalProperties': {'type': 'object'}}}, ('root', 'elements')),
              ('GET', '/api/tasks/1')),
     'tick': ('own', "Tick (done=true) or untick one of this task's to-dos by its id. Only what you actually finished.",

@@ -70,7 +70,19 @@ def _judge(store, tid: int, msgs, memo: dict, seen: dict) -> tuple:
         if o == 'stranger': break
         if m['MessageId'] <= through: continue
         if (r := of_message(store, m, memo, seen)) and worse(r[0], o) != o: o, why = r
+    if o != 'stranger' and (b := teammate_bound(store, tid)): o, why = 'stranger', b
     return o, why, t
+
+# A TEAMMATE CHAT RUNS SAFE (H3, the owner 2026-11-08): a line in a chat bound to this task's agent (agentchannels.py) goes straight in,
+# and the answer goes straight back out - so a teammate, their account, or text they pasted could have the agent fetch the owner's
+# mail or other tasks into the chat. The task reads as a stranger's while it is bound to a chat with teammates: the CLI's reviewer, the
+# floor, a key bound to the task. The owner's own lines there and raise_to do not lift it; the setting does (teammate_chat_power).
+def teammate_bound(store, tid) -> str:
+    "Why the task runs safe for a teammate chat bound to it, else ''."
+    if str(store.get_setting('teammate_chat_power') or 'safe') == 'full' or not tid: return ''
+    from . import agentchannels as ac
+    b = next((b for b in ac.rows(store) if b.get('TaskId') == int(tid) and any((m or {}).get('role') == ac.TEAMMATE for m in b.get('members') or [])), None)
+    return f"teammates talk to its agent on {ac.LABEL.get(b['Kind'], b['Kind'])}, so it runs in safe mode (Settings: Teammate chats)" if b else ''
 
 def _idea(store, ref: str, pre: str):
     "The idea a ref names ('idea:<n>' on its line, 'assistant:idea:<n>' on its task), else None."

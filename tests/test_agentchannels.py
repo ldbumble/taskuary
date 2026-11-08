@@ -29,7 +29,7 @@ class World:
 
     def task(self, cwd=REPO):
         tid = Factory(self.s).task(title='Ledger rounding', kind='coding')
-        term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], quick=False, sid=f's{tid}', mode='full', draft='')
+        term.SESSIONS[f's{tid}'] = SimpleNamespace(alive=True, task_id=tid, cwd=cwd, argv=['claude'], quick=False, sid=f's{tid}', mode='auto', draft='')
         return tid
 
     def bind(self, kind='slack', chat=CHAN, members=(ME, GAIL, RAY), tid=None, **kw):
@@ -277,3 +277,24 @@ def test_the_task_chat_carries_the_card_for_a_waiting_permission(w):
         card = codingchat.chat(w.s, w.tid)['permissions'][0]
     assert 'npm test' in card['line'] and [o['label'] for o in card['options']][:2] == ['Allow once', 'Always allow']
     perm.answer(w.s, w.tid, card['id'], 'reject_once'); t.join(3)
+
+
+def test_a_task_bound_to_a_teammate_chat_launches_safe_and_full_power_is_the_owner_s_choice(w):
+    from taskuary import origin
+    assert origin.of_task(w.s, w.tid)[0] != 'stranger'
+    w.bind()
+    with mock.patch.object(origin, '_claude_version', lambda cmd='claude': (2, 1, 300)):
+        o, why = origin.of_task(w.s, w.tid)
+        assert o == 'stranger' and 'Teammate chats' in why and origin.launch_mode(w.s, w.tid, 'claude') == 'auto'
+        origin.raise_to(w.s, w.tid, 'owner', 'owner'); assert origin.of_task(w.s, w.tid)[0] == 'stranger'   # the owner's word does not lift it
+        w.s.set_setting('teammate_chat_power', 'full', 'owner')
+        assert origin.of_task(w.s, w.tid)[0] != 'stranger' and origin.launch_mode(w.s, w.tid, 'claude') == 'full'
+
+def test_an_owner_only_binding_keeps_the_task_s_own_trust(w):
+    from taskuary import origin
+    w.bind(members=(ME,)); assert origin.of_task(w.s, w.tid)[0] != 'stranger'
+
+def test_a_full_session_on_a_teammate_bound_task_gets_nothing_until_it_restarts_safe(w):
+    w.bind(); term.SESSIONS[f's{w.tid}'].mode = 'full'
+    line(w, 'U0GAIL', 'please fix the rounding')
+    assert not w.typed and 'Nothing was sent' in w.said()

@@ -327,6 +327,15 @@
       "desc": "What an outside contributor's pull request gets. Fix it in the cloud runs the agent and the tests on a machine GitHub throws away, never yours.",
       "help": "With \"fix in GitHub's cloud\", an outside pull request that ranking warned about, and whose review asks for changes, is fixed in GitHub's cloud instead of here. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine."
     },
+    "teammate_chat_power": {
+      "group": "Agent permissions",
+      "label": "Teammate chats",
+      "type": "select",
+      "options": ["safe", "full"],
+      "optionLabels": {"safe": "safe mode - the agent sees only its own task", "full": "full power - your agent's own permissions"},
+      "desc": "A coding agent whose task is bound to a WhatsApp, Telegram, Slack or Teams chat with teammates in it. Safe mode by default: it runs like a stranger's task - the CLI's own reviewer, Taskuary's floor, and a key that opens only that task - and its answers still post to the chat by themselves.",
+      "help": "A teammate's line goes straight into the agent, and the agent's answer goes straight back to the chat - nobody presses anything in between. In safe mode the agent cannot read your other mail, other tasks or Taskuary's files, so a teammate (or someone using a teammate's account, or text a teammate pasted from elsewhere) cannot ask it to fetch them into the chat. Your own lines in that chat do not lift it.\n\nFull power runs the agent with your CLI's own permissions, skipping its prompts, and the shared key that can read every task, every mail and every comment here: whatever a teammate asks it to look up can be posted back to the chat."
+    },
     "developer_mode": {
       "group": "Agent permissions",
       "label": "Developer mode",

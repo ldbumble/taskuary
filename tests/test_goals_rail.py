@@ -47,13 +47,22 @@ class GoalRowTests(unittest.TestCase):
         s.tick_checklist_item(g, checklist_id('Inventory the fields'), True, 'owner'); settle()
         c = card(s, g)
         self.assertEqual(c['kind'], 'goal'); self.assertEqual(funnel.level_of(c), 'task')
-        self.assertTrue(c['why'].startswith('1 of 3'), c['why'])
+        self.assertTrue(c['why'].startswith('1 of 3'), c['why']); self.assertIsNone(c['slipped_at'])
 
     def test_a_goal_past_its_date_is_slipped_and_in_tasks(self):
         s, settle = settled(); g = goal(s, due=day(-4)); settle()
         c = card(s, g)
         self.assertEqual((c['kind'], c['news']), ('goal_slipped', True)); self.assertEqual(funnel.level_of(c), 'task')
-        self.assertIn('slipped 4d', c['why'])
+        self.assertIn('slipped 4d', c['why']); self.assertEqual(c['slipped_at'], day(-4))
+
+    def test_a_goal_slipped_by_a_late_step_says_the_steps_day_not_its_own(self):
+        # the product audit, 2026-11-08: Ray's step was due two days ago and the goal in 50 - its row read "slipped" and the goal's date ahead
+        s, settle = settled(); g = goal(s)
+        c = s.create_task({'Title': 'Schema sign-off', 'Kind': 'task', 'Status': 'waiting', 'Assignee': 'person:ray@northwind.example',
+                           'ParentId': g, 'DueAt': day(-2)}, 'owner')
+        s.link_step(g, checklist_id('Schema sign-off'), c, 'owner'); settle()
+        k = card(s, g)
+        self.assertEqual((k['kind'], k['due'], k['slipped_at']), ('goal_slipped', day(50), day(-2)))
 
     def test_a_goal_with_every_box_done_is_not_slipped(self):
         s, settle = settled(); g = goal(s, due=day(-4), steps=('Only step',))

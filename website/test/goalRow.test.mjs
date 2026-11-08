@@ -28,7 +28,8 @@ test("a goal's row says its mark, its title and its steps, and slipped in red", 
   assert.match(view, /goal \? <span className="goal">\{meta\.mark\}<\/span> : <SourceMark/, "the goal's mark where the source logo goes");
   assert.match(view, /<span className="tq-pile-steps">· \{i\.steps_done \|\| 0\} of \{i\.steps\} steps<\/span>/);
   assert.match(view, /!!i\.ref && isCur && !goal &&/, "no TQ number on a goal's row");
-  assert.match(view, /goal \? \(i\.kind === "goal_slipped" \? \[meta\.word, dueWord\(i\.due\)\]\.filter\(Boolean\)\.join\(" "\) : ""\)/, "slipped says the day it slipped past");
+  assert.match(view, /goal \? \(i\.kind === "goal_slipped" \? \[meta\.word, dueWord\(i\.slipped_at \|\| i\.due\)\]\.filter\(Boolean\)\.join\(" "\) : ""\)/,
+    "slipped says the day it slipped past - its late step's while its own date is ahead (slipped_at, 2026-11-08)");
   assert.match(view, /\{goal && i\.kind !== "goal_slipped" && !!dueWord\(i\.due\) && <span className="tq-pile-due" title=\{`due \$\{dueWord\(i\.due\)\}`\}>· due \{dueWord\(i\.due\)\}<\/span>/, "its due date in its words");
   assert.match(src("assistantView.css"), /\.tq-pile-due \{ flex: 0 0 auto;/, "...and the title gives way to it, as to its count and its word");
   assert.doesNotMatch(view, /\{goal \? dueWord\(i\.due\)/, "the age column is a goal's age, not its date");
@@ -52,7 +53,7 @@ test("a rail row carries its state in its icon and its label, and no status word
   const view = src("AssistantView.jsx"), logo = src("StatusMark.jsx"), css = src("statusMark.css");
   assert.match(view, /const shown = st && \(st\.spins \|\| meta\.word !== BAND_SAYS\[level\]\) \? st : null;/);
   // the only words left on a row's right: a meeting's time and a goal's "slipped" (with its day, 2026-10-28)
-  assert.match(view, /: goal \? \(i\.kind === "goal_slipped" \? \[meta\.word, dueWord\(i\.due\)\]\.filter\(Boolean\)\.join\(" "\) : ""\) : "";/);
+  assert.match(view, /: goal \? \(i\.kind === "goal_slipped" \? \[meta\.word, dueWord\(i\.slipped_at \|\| i\.due\)\]\.filter\(Boolean\)\.join\(" "\) : ""\) : "";/);
   assert.match(logo, /role=\{st \? "img" : undefined\} aria-label=\{st \? statusLabel\(st, agent\) : undefined\}/);
   assert.match(logo, /\{badge && <i className=\{`badge\$\{st\.anim \? ` \$\{st\.anim\}` : ""\}`\} aria-hidden="true">\{badge\}<\/i>\}/);
   assert.doesNotMatch(css, /badge\.turn|tq-badge-turn/, "no hourglass turns: waiting to start wears no badge");

@@ -785,8 +785,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
                     // a goal says only that it SLIPPED (red); on track or not started, its steps say enough (the owner, 2026-10-21)
-                    // ...and a slipped one says the day it slipped past in the same red word, "slipped Dec 11" - its due date (2026-10-28)
-                    : goal ? (i.kind === "goal_slipped" ? [meta.word, dueWord(i.due)].filter(Boolean).join(" ") : "") : "";
+                    // ...and a slipped one says the day it slipped past in the same red word, "slipped Dec 11" - its due date (2026-10-28), or its
+                    // late step's while the goal's own is still ahead (`slipped_at`, 2026-11-08: "slipped Dec 23" on Nov 8 read as nonsense)
+                    : goal ? (i.kind === "goal_slipped" ? [meta.word, dueWord(i.slipped_at || i.due)].filter(Boolean).join(" ") : "") : "";
                 return (
                   <div key={i.key} className={cls} data-tq-key={i.key} data-tq-urgent={urgentDot ? "" : undefined} data-tq-important={imp ? "" : undefined}
                     style={{ top: falls(i.key) ? -ROW_H : top }}>

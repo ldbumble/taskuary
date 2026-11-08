@@ -1200,6 +1200,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     const SHELF = { docs: ["g:documents", "g:how"], profiles: ["g:profiles"] };
     const mine = about ? ["you", "docs", "memory"] : ["config", "profiles", "policies", PHONE_PAGE, ...(devMode ? ["audit"] : []), "updates"];
     const section = mine.includes(browseState.section) ? browseState.section : null;
+    // ...and SAYS WHY (the product audit, 2026-11-08: #settings=audit with Developer mode off drew the list with no pill and no word)
+    const hidden = !about && browseState.section === "audit" && !section ? "The Activity log shows only in Developer mode." : "";
     const page = SHELF[section] ? "docs" : section === "you" ? "about" : section;
     const gone = section === "config" && browseState.open && !GROUPS.includes(browseState.open);
     const knobsIn = (g) => Object.values(schema.knobs || {}).filter((k) => k.group === g).length;
@@ -1255,7 +1257,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           sx={{ mt: 1.5, bgcolor: "#fff", borderRadius: 2 }} />
       ),
       // what the assistant changed here - the tab drew it over Configuration
-      tools: <>{section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
+      tools: <>{hidden && <Typography data-tq-settings-hidden="" variant="body2" sx={{ mt: 1.5, color: DIM }}>{hidden}</Typography>}
+        {section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
         // the shelf's profiles come from DocsView's own reads - mounted unseen, as the tab's rail had it
         : SHELF[section] && !open ? <>
           {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}

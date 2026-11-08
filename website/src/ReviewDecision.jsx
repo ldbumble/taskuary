@@ -390,7 +390,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const solid = toRow && lit !== no("approve") ? "outlined" : "contained";
   // ...Close out's Send and close IS the primary (the owner, 2026-11-03: "make it the primary button"): filled as it stands, and it steps
   // back only while another move on this card is lit - an advised Send or Redraft - so one button is ever filled
-  const closeVariant = lit.startsWith(`${r.ReviewId}:`) && lit !== no("send_close") ? "outlined" : "contained";
+  // ...and only for a move DRAWN beside it (the product audit, 2026-11-08): a lit Redraft this card does not draw left Send and close outlined
+  // on one reply card and filled on the next - closeVariant, below, once the drawn moves are known
   // THE LINE NEVER WRAPS (the owner, 2026-10-23): with two sends it holds one line, and when they do not fit Send folds into a ▾ - measured
   // against the width it needed, so it comes back out once there is room again. An advised Send stays in view (actionRow: the lit move)
   const [foldSend, setFoldSend] = useState(false), [sendAt, setSendAt] = useState(null), foldAt = useRef(0);
@@ -416,6 +417,8 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
   const redraftLabel = redrafting && r.DraftText ? "Redrafting…" : drafting ? "Drafting…" : redraftWord;
   // the Advisor lit Redraft and said why: the warning and its button go over the draft (warnTop), not a line beside the buttons under it
   const warnTop = !!why && canRedraft && !r.Stale && !delivery.frozen && lit === no("redraft");
+  const redraftDrawn = canRedraft && !r.Stale && !delivery.frozen && !warnTop;
+  const closeVariant = lit === no("approve") || (lit === no("redraft") && redraftDrawn) ? "outlined" : "contained";
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!words.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";

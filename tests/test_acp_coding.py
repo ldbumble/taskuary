@@ -208,8 +208,9 @@ def test_a_coding_session_idle_past_its_period_closes_quietly_and_the_next_input
     later = waitroom.later; monkeypatch.setattr(waitroom, 'later', lambda *a, **k: None)  # a turn's end ticks the clock; its sweep raced ours on slow CI
     t = open_(s, tid, repo, seed='look at the totals'); assert idle(t)
     assert acpcoding.idle_sweep() == [] and t.alive                                                    # not idle long enough
-    monkeypatch.setattr(clipool, 'IDLE_SECONDS', 0.1); time.sleep(0.2)
+    # ...the note first, then the short period: added after it, a sweep on slow CI closed the session in the gap (2026-11-08)
     s.add_waiting(tid, 'a held note', 'owner')
+    monkeypatch.setattr(clipool, 'IDLE_SECONDS', 0.1); time.sleep(0.2)
     assert t.idle_why() == 'notes wait for it' and acpcoding.idle_sweep() == []
     s.deliver_waiting([w['WId'] for w in s.waiting_notes(tid)], 'typed')
     said_before, sid = [c['Body'] for c in s.list_comments(tid)], t.sid

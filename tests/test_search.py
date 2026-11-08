@@ -37,7 +37,8 @@ class SearchTests(unittest.TestCase):
     def test_every_kind_wears_its_pill_and_a_thread_is_one_row(self):
         by = {}
         for x in self.hits('certificate'): by.setdefault(x['type'], []).append(x)
-        self.assertEqual(sorted(by), ['chat', 'email', 'issue', 'pr', 'source', 'task'])
+        # ...a connection card whose own words match may join them (the ADP card's TLS 'certificate', 2026-11-08) - it is not one of these kinds
+        self.assertEqual(sorted(k for k in by if k != 'connector'), ['chat', 'email', 'issue', 'pr', 'source', 'task'])
         self.assertEqual(len(by['email']), 1); self.assertEqual(by['email'][0]['more'], 1)
         self.assertEqual(by['pr'][0]['title'], '#12 renew the certificate in CI')
         self.assertEqual(by['chat'][0]['title'], 'can you check the certificate on the portal')    # no subject: its own words

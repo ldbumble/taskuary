@@ -577,3 +577,13 @@ def test_a_quick_turn_ends_in_the_same_three_parts_as_an_agent_turn():
     summ = [m for m in general.shown_history(s, tid) if m.get('summary')]
     assert summ and summ[-1]['summary']['about'].startswith('Erin Blake asks whether') and summ[-1]['summary']['did'] == ANSWER['report']
     assert 'on_you' not in summ[-1]['summary']                       # the owner's own steps stay as they were
+
+def test_an_answer_that_could_not_be_read_says_why_in_the_log():
+    # the product audit, 2026-11-08: "the quick answer could not be read" on the task, nothing in the log on why
+    from loguru import logger
+    s = home(); tid, _ = arrived(s); said = []
+    sink = logger.add(lambda m: said.append(str(m)), level='INFO')
+    try:
+        with mock.patch.object(llm, 'build_llm', return_value=Brain('Sorry, I cannot help with that.', web=False)): assert quickwork.ask(s, tid, ASK) is None
+    finally: logger.remove(sink)
+    assert any(f'task {tid}: the quick answer could not be read' in x and 'Sorry, I cannot' in x for x in said), said

@@ -30,6 +30,10 @@ def test_the_state_word_is_the_lanes_except_an_agents_proposed_action():
     assert fp.state_of({'lane': 'approve', 'kind': 'action'}) == 'wants a yes'
     assert fp.state_of({'lane': 'approve', 'kind': 'action', 'closeout': 'merges the pull request'}) == 'ready to send'
     assert fp.state_of({'lane': 'no-such-lane'}) == fp._LANE_WORDS['fyi']
+    # a finished run's row says the finish its line says, as the page's pill does (railStatus.js) - "on you" under "finished" (2026-11-08)
+    assert fp.state_of({'lane': 'yours', 'kind': 'todo', 'finished': True}) == 'agent finished'
+    assert fp.state_of({'lane': 'yours', 'kind': 'todo'}) == fp._LANE_WORDS['yours']
+
 
 
 def test_back_in_reads_forward_in_the_rails_words():

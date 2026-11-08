@@ -14,7 +14,12 @@ test("the header's status is exactly the rail row's mark and word, for every lan
   // a kind over its lane, and a refused send over both - as the rail says them
   assert.equal(railStatus({ lane: "yours", kind: "agentdone" }).word, "agent finished");
   assert.equal(railStatus({ lane: "approve", kind: "review", not_sent: true }).word, "didn't send");
+  // a finished run's row says the finish its line says, never "on you" under "the assistant finished" (the product audit, 2026-11-08)
+  const fin = { lane: "yours", kind: "todo", finished: true, why: "the assistant finished - read what it found" };
+  assert.equal(railStatus(fin).word, "agent finished"); assert.equal(taskStatus({ rail: fin }).word, "agent finished");
+  assert.equal(railStatus({ lane: "yours", kind: "todo" }).word, rowMeta({ lane: "yours" }).word, "an unfinished one keeps its lane's word");
 });
+
 
 test("an agent at work spins; only the hand waves", () => {
   const working = railStatus({ lane: "working", kind: "task" });

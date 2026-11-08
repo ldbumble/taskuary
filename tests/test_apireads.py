@@ -23,6 +23,8 @@ DOC = {'digitalocean': {'account': {'email': 'alex@northwind.example', 'status':
        'splunk': {'links': {}, 'origin': 'https://splunk.example.com:8089/services/server/info', 'entry': [{'name': 'server-info'}], 'paging': {}},
        'dynatrace': {'totalCount': 1, 'pageSize': 1, 'types': [{'type': 'HOST', 'displayName': 'Host'}]},
        'kubernetes': {'major': '1', 'minor': '34', 'gitVersion': 'v1.34.0'},
+       'mercury': {'accounts': [{'id': 'acc-1', 'name': 'Northwind Checking', 'availableBalance': 1200.5, 'kind': 'checking'}]},
+       'lattice': {'id': 'u-1', 'name': 'Alex Doyle', 'email': 'alex@northwind.example', 'object': 'user'},
        'google_drive': {'user': {'displayName': 'Alex Doyle', 'emailAddress': 'alex@northwind.example'}},
        'onedrive': {'id': 'd1', 'driveType': 'business', 'owner': {'user': {'displayName': 'Alex Doyle'}}},
        'office365_files': {'value': [{'id': 'f1', 'name': 'Q3 plan.xlsx'}]},

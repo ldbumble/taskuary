@@ -76,7 +76,10 @@ export const liveTerminal = (term) => !!term?.alive && term.mode !== "assistant"
 export const soloTodo = ({ kind, started = false } = {}) => kind === "task" && !started;
 // ...and it opens where triage put it - on what came in (the owner, 2026-11-05: "if the triage says it is just a todo ... it should open on
 // the came from section only") or, once an agent has a Result or a draft on it, where its stage is; every other kind opens on its chat
-export const homeSection = (kind, stage) => (kind === "task" ? sectionOf(stage) : "agent");
+// ...ONE RULE FOR EVERY KIND (the owner, 2026-11-08): a task with any agent or chat on it - a session, a turn, a draft - opens on its chat, Came
+// from folded to the thin arrow tab, so the message shows once, in the chat; one with nothing but what came in opens on Came from. `chat`: the
+// page's own reading (TaskPage anyChat); left out, a to-do's stage or any other kind's chat answers it
+export const homeSection = (kind, stage, chat = kind !== "task" || sectionOf(stage) === "agent") => (chat ? "agent" : "from");
 // ...a closed tab says MORE than its name (the owner, 2026-10-27: "maybe a little smaller and have more summary on each one"): three or four
 // short lines, each clamped so a tab never scrolls. Words quoted are somebody's own; each line only where there is something to say.
 // ...and read like a book's SPINE (the owner, 2026-10-27): its `lines` at the top under the name, its `foot` - the one status line - at the

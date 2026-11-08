@@ -122,7 +122,7 @@ test("the main view follows where the task is up to: the work with Came from on 
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
   // ...the right drawer and its lit tab went with the sections in a row (2026-10-27): the section the task is up to is its kind's and its
   // stage's (homeSection) - never the Advisor's (2026-11-06: its decision names no section)
-  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage\) \};/);
+  assert.match(page, /if \(mainHeld\.current\.key !== mainKey\) mainHeld\.current = \{ key: mainKey, main: mainNow, sec: solo \? "from" : writingUp \? "agent" : homeSection\(t\?\.Kind, taskStage, anyChat\) \};/);
   assert.match(page, /const taskStage = stageOf\(\{ focus: restFocus, drafted: replyHas, closed: /, "the stage reads the focus, never the advice");
   // ...the focus the task opens on - a section opened by hand changes neither the stage nor the main view (the overnight walk, 2026-10-27)
   const restLine = page.match(/const restFocus = focusOf\(\{[^;]*;/)?.[0];
@@ -339,4 +339,16 @@ test("no task kind or state lays a Close out section: Came from and the chat, a 
   // ...the task's own moves ride the chat's strip
   assert.match(src, /function useTaskMoves\(sec\) \{/);
   assert.match(src, /close = sec === "agent";/);
+});
+
+// ONE RULE FOR EVERY KIND (the owner, 2026-11-08): any agent, turn or draft on a task opens it on its chat with Came from the thin arrow tab -
+// a reply kept a spine that cut its message to three lines; only a task with nothing but what came in opens on Came from
+test("every kind with a chat opens on it, Came from folded thin; one with none opens on Came from", () => {
+  for (const kind of ["reply", "general", "coding", "task"]) {
+    assert.equal(homeSection(kind, "to_reply", true), "agent", kind);
+    assert.equal(homeSection(kind, "to_reply", false), "from", kind);
+  }
+  const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /const anyChat = !!term\?\.alive \|\| hasRecord \|\| \(reviews \|\| \[\]\)\.some\(\(r\) => r\?\.Status === "pending"\);/);
+  assert.match(page, /const closedW = \(k\) => \(k === "from" \|\| \(sessionView && k !== "agent"\) \? MINI_W : tabW\(bodyW\)\);/);
 });

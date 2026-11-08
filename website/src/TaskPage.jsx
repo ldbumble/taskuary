@@ -1775,7 +1775,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // waiting to in progress, the page re-read where it was up to with the step still listed, and jumped away from the agent
   // ...and a to-do whose box started its agent (`solo` no more) opens on the chat that agent now answers in
   const mainHeld = useRef({ key: null, main: null, sec: null }), mainKey = `${selected}|${detail?.task?.TaskId === selected}|${!!term?.alive}|${sessionView}|${stacked}|${twoUp}|${liveSession ? "live" : t?.Status}|${!!writingUp}|${solo}`;
-  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: solo ? "from" : writingUp ? "agent" : homeSection(t?.Kind, taskStage) };
+  // ...an agent, a turn or a draft on it: its chat leads, Came from the thin tab (homeSection's one rule, 2026-11-08)
+  const anyChat = !!term?.alive || hasRecord || (reviews || []).some((r) => r?.Status === "pending");
+  if (mainHeld.current.key !== mainKey) mainHeld.current = { key: mainKey, main: mainNow, sec: solo ? "from" : writingUp ? "agent" : homeSection(t?.Kind, taskStage, anyChat) };
   const main = mainHeld.current.main;
   // ...and a section the owner OPENED stays open under them: only another task, an agent starting or stopping, the task closing or
   // reopening or the width folds it - not the detail landing, the Advisor's late pick, the write-up ending, or the status catching up
@@ -1783,7 +1785,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const pickKey = `${selected}|${!!term?.alive}|${sessionView}|${stacked}|${twoUp}|${["done", "dropped"].includes(t?.Status)}|${solo}`;
   // ...and never a section the task no longer lays: its last one instead
   const picked = secPick.key === pickKey ? secPick.sec : mainHeld.current.sec;
-  const section = twoUp ? (slotKeys.includes(picked) ? picked : slotKeys.at(-1)) : null, hereSec = solo ? "from" : homeSection(t?.Kind, taskStage);
+  const section = twoUp ? (slotKeys.includes(picked) ? picked : slotKeys.at(-1)) : null, hereSec = solo ? "from" : homeSection(t?.Kind, taskStage, anyChat);
   // THE OWNER ANSWERED OUTSIDE TASKUARY (taskLayout.answeredOutside): their own line in Teams or the mail client is the newest on the task -
   // the chat's Draft reply is not the lit move there: Mark done is (the owner, 2026-10-29)
   const outside = answeredOutside({ messages: taskMessages, outside: sentOutside, pending: !!pendingReview });
@@ -1791,7 +1793,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const openSection = (s) => setSecPick({ key: pickKey, sec: s });
   // ...each section's slot: a closed one its tab's width (slim beside a live agent), the open one the rest - and its body laid at that
   // open width whether it is open or not, so the move never reflows it and a hidden terminal keeps its size
-  const closedW = (k) => (sessionView && k !== "agent" ? MINI_W : tabW(bodyW));
+  // ...and Came from closed is always the thin arrow tab, whatever the kind (the owner, 2026-11-08: a reply's spine cut its message to three lines)
+  const closedW = (k) => (k === "from" || (sessionView && k !== "agent") ? MINI_W : tabW(bodyW));
   // ...less its slot's own 1px rule on the left (the chat's), so the body lies inside it
   // ...never laid wider than its slot: a 320px floor ran a 900px desk's ~240px Came from under the Agent spine (useStackBelow)
   const openW = (k) => Math.max(OPEN_MIN, bodyW - slots.filter((s) => s.key !== k).reduce((n, s) => n + closedW(s.key), 0) - (k === "from" ? 0 : 1));

@@ -149,7 +149,10 @@ def ask(store, tid, ask: str, steps: list = None, cancel=None) -> 'QuickAnswer |
     system, user = prompt(store, tid, ask, lookups)
     with llm.watching(trace): got = llm.ask_json(brain, system, user, want=None if web else QUICK_WANT, max_tokens=QUICK_TOKENS, **({'web': True} if web else {}))
     if steps is not None: steps[:] = [x for x in steps if not answer_text(x, got.raw)]
-    return read(got.data)
+    out = read(got.data)
+    # ...an answer that could not be read says WHY in the log (the product audit, 2026-11-08: the owner saw "could not be read", the log nothing)
+    if out is None: logger.info(f'task {tid}: the quick answer could not be read - {len(str(got.raw or ""))} chars back, starting: {str(got.raw or "")[:300]!r}')
+    return out
 
 
 QUICK_TIMEOUT = 180
@@ -205,7 +208,9 @@ def _call(store, tid, ask_: str, steps: list) -> tuple:
             try: return ask(store, tid, ask_, steps, cancel), ''
             finally: timer.cancel()
         finally: _give(store)
-    except Exception as e: return None, f'the quick answer could not be made ({e})'
+    except Exception as e:
+        logger.info(f'task {tid}: the quick call failed - {e}')
+        return None, f'the quick answer could not be made ({e})'
 
 def _escalated(store, tid, q: str, out, failed: str) -> bool:
     "True, having handed the task to the deep path, when the call failed, could not be read or said it needs more."

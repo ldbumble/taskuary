@@ -10770,7 +10770,10 @@ def catch_up_on_startup():
         t.start()
         return t
     hours = _catchup_hours(days)
-    logger.info(f"startup: {'incremental poll (closed under an hour)' if hours == 0 else f'catching up on the {hours:.1f} hour(s) it was closed'}")
+    # ...a home no source has polled yet was never closed: it reads back as far as the setting lets it (a new home said "catching up on the
+    # 72.0 hour(s) it was closed", 2026-11-08)
+    first = not any(s.get('LastPolledAt') for s in store.list_sources())
+    logger.info(f"startup: {f'first read - reaching back {hours:.0f} hours' if first else 'incremental poll (closed under an hour)' if hours == 0 else f'catching up on the {hours:.1f} hour(s) it was closed'}")
     from . import welcome
     # the greeting waits for the mail: said mid catch-up it was "nothing new came in" on a Monday, spent and never corrected (B4)
     welcome.catch_up_began()

@@ -3146,7 +3146,8 @@ def _auto_draft(store, tid, rid):
     done = DRAFTING.setdefault(rid, threading.Event())
     try: responder.write_draft(store, tid, rid, actor='auto-draft')
     except Exception as e:
-        logger.warning(f'auto-draft failed for task {tid}: {e}')
+        # ...a writer that said what it NEEDS is an expected outcome, logged as one: it was the only WARNING in a whole clean run (2026-11-08)
+        (logger.info if isinstance(e, responder.NotDrafted) else logger.warning)(f'auto-draft {"handed on" if isinstance(e, responder.NotDrafted) else "failed"} for task {tid}: {e}')
         # a writer that said what it NEEDS did not fail: no draft, work for an agent (store.set_review_draft_needs)
         try: (store.set_review_draft_needs if isinstance(e, responder.NotDrafted) else store.set_review_draft_error)(rid, str(e))
         except Exception as e2: logger.warning(f'could not record the draft failure on review {rid}: {e2}')

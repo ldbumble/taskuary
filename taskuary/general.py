@@ -589,7 +589,10 @@ def draft_turns(store, tid: int) -> list:
         s = wrapup.left_by(store, rv['ReviewId']); at = str((s or rv).get('CreatedAt') or '')
         turn = s['CommentId'] if s else next((c['CommentId'] for c in outs if str(c.get('CreatedAt') or '') >= at), None)
         later = next((i for i in ins if i > at), None)
-        stale = bool(later) and any(str(c.get('CreatedAt') or '') > later and c['CommentId'] != turn for c in outs)
+        # ...STALE ONLY UNTIL THE AGENT HAS READ WHAT CAME AFTER IT (the owner, 2026-11-08: "it says draft is still applicable but i can't send
+        # it"): each turn hears the draft waiting and withdraws or rewrites one the newest message undoes (latest_block, WITHDRAW_LINE), so a
+        # draft still pending after a later turn is one the agent KEPT - current, with its Send. Until that turn it reads "before your last message"
+        stale = bool(later) and not any(str(c.get('CreatedAt') or '') > later and c['CommentId'] != turn for c in outs)
         out.append({'review': rv['ReviewId'], 'turn': f'comment-{turn}' if turn else None, 'at': at, 'stale': stale, 'before': later if stale else None})
     return out
 

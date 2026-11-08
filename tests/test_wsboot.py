@@ -176,6 +176,14 @@ def test_a_new_sources_hat_is_added_when_sure_and_asked_on_a_card_when_not():
     assert W.get(s, 'ledger-app')['status'] == 'active' and 'bug reports become coding tasks' in W.section(s, 'ledger-app')
 
 
+def test_taskuarys_own_reports_are_never_a_new_hat():
+    s = world()
+    f = Factory(s)
+    for i in range(6): f.message(channel='report', source_name='Taskuary at a glance', from_email='taskuary@northwind.example', subject=f'At a glance {i}', sent_at=ago(days=i))
+    assert not [c for c, _ in wsboot.new_sources(s) if c == 'report']
+    assert not any('taskuary at a glance' in t['sources'] for t in wsboot.gather(s))
+
+
 def test_no_on_a_card_takes_it_out_and_it_never_asks_again():
     s = world()
     wsboot.propose(s, namer(sure=False))

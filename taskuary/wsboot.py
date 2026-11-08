@@ -28,6 +28,9 @@ REFRESH_DAYS, QUIET_DAYS, RECENT_DAYS = 7, 60, 14
 SOURCE_MIN = 5             # a new source is judged once this many messages came in by it
 NEW_DAYS = 45              # ...and only a source whose first message the app holds is this recent (a new connector or project)
 STATE_KEY = 'workstreams_boot'
+# Taskuary's own channels: what the app wrote (the Assistant, the owner's own asks, its reports and dashboards) is never a hat - a
+# dashboard landing daily once came back as "Is Taskuary task tracking a separate workstream of yours?" (2026-11-07)
+OURS = "('assistant','own','report')"
 
 
 def _now(): return datetime.now()
@@ -53,7 +56,7 @@ def gather(store, days: int = DAYS, rows=None) -> list:
     """[{id, people:set, sources:set, repos:set, own:bool, lines:[the owner's own words], subjects}] - one per thread of the window."""
     rows = rows if rows is not None else store._rows(
         "SELECT MessageId, ConversationId, Channel, SourceName, Subject, FromName, FromEmail, RecipientsJson, Direction, Status, SenderClass, SentAt, "
-        "substr(BodyText, 1, 300) BodyText FROM message WHERE SentAt>=? AND IFNULL(Channel,'') NOT IN ('assistant','own') ORDER BY SentAt", (_ago(days),))
+        "substr(BodyText, 1, 300) BodyText FROM message WHERE SentAt>=? AND IFNULL(Channel,'') NOT IN " + OURS + " ORDER BY SentAt", (_ago(days),))
     me, auto = _mine(store), defaultdict(Counter)
     for m in rows:
         if m.get('FromEmail'): auto[m['FromEmail'].lower()][m.get('SenderClass') or 'person'] += 1
@@ -207,7 +210,7 @@ def propose(store, llm, days: int = DAYS, rows=None) -> list:
     if rows is None:
         rows = store._rows(
             "SELECT MessageId, ConversationId, Channel, SourceName, Subject, FromName, FromEmail, RecipientsJson, Direction, Status, SenderClass, SentAt, "
-            "substr(BodyText, 1, 300) BodyText FROM message WHERE SentAt>=? AND IFNULL(Channel,'') NOT IN ('assistant','own') ORDER BY SentAt", (_ago(days),))
+            "substr(BodyText, 1, 300) BodyText FROM message WHERE SentAt>=? AND IFNULL(Channel,'') NOT IN " + OURS + " ORDER BY SentAt", (_ago(days),))
         if sum(1 for r in rows if _own(r)) < 50: rows = rows + _mailbox_rows(store, days)
     gs = groups(gather(store, days, rows))
     got = name(llm, gs, store.owner().get('owner') or '')
@@ -291,7 +294,7 @@ def new_sources(store) -> list:
     # ...NEW: its first message is recent - a mailbox or chat that has always been here was read by the bootstrap, and the owner's main
     # mailbox, which serves every hat, must never become one hat's
     for r in store._rows("SELECT Channel, SourceName, COUNT(*) n, MIN(CreatedAt) first FROM message WHERE IFNULL(SourceName,'')<>'' AND "
-                         "IFNULL(Channel,'') NOT IN ('assistant','own') GROUP BY Channel, SourceName HAVING n>=? AND first>=?",
+                         "IFNULL(Channel,'') NOT IN " + OURS + " GROUP BY Channel, SourceName HAVING n>=? AND first>=?",
                          (SOURCE_MIN, _ago(NEW_DAYS))):
         k = f"{str(r['Channel']).lower()}:{str(r['SourceName']).lower()}"
         if k in seen: continue

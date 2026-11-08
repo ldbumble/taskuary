@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:site/demo/assets/GameScene-BznLQOzE.js
 import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fz as xc}from"./index-BbGnY9le.js";/**
+========
+import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fx as xc}from"./index-H7_ykb9w.js";/**
+>>>>>>>> 9ae3b1821 (Rebuild the app, the demo and the docs; the golden lists both batches' cards):site/demo/assets/GameScene-BqGQedt8.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

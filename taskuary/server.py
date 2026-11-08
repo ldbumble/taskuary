@@ -138,9 +138,6 @@ async def _lifespan(_app):
     if not instance.claim(_hooks.base_url()):
         at = instance.holder().get('url')
         raise RuntimeError(f"another Taskuary is already running on {config.home()}{f' at {at}' if at else ''} - open that one, or quit it first")
-    # ...so the browsers this folder's last run left open are its own to close - off the start, each close can take seconds
-    from . import browserview as _bv
-    threading.Thread(target=_bv.close_orphans, name='browser-orphans', daemon=True).start()
     is_demo = demo.enabled()
     if not is_demo:
         # Capture historical read results before startup catch-up, worker repair,
@@ -194,6 +191,9 @@ async def _lifespan(_app):
     hub_term.recover_after_restart(store)
     # ...and an agent the restart cut off while it asked the owner is back at its question (resume_asking) - off the window's path
     threading.Thread(target=resume_asking, daemon=True, name='resume-asking').start()
+    # ...and the browsers this folder's last run left open are its own to close (instance.claim made it the one live run) - off the
+    # window's path, each close can take seconds
+    threading.Thread(target=close_orphan_browsers, daemon=True, name='browser-orphans').start()
     # ...and a batch whose close waited on a turn the restart ended (batch.TAG) closes now, its report from the saved transcript
     from . import batch as _batch
     try: _batch.recover_later(store)
@@ -2836,6 +2836,12 @@ def _reopen(task_id: int, row: dict, model=None, instruction=None, actor=ACTOR, 
 # ONCE: a question carried over is marked (workerstate.RESUMED) and never brought back again; a resume that fails leaves the task
 # interrupted, its ended run offering Answer it as before. An agent that was WORKING stays interrupted - that one is the owner's call.
 RESTARTED = 'Taskuary restarted while the agent was waiting on you. Its conversation is back - still waiting on your answer.'
+
+def close_orphan_browsers():
+    "The agent browsers a killed run of this data folder left open, closed (browserview.close_orphans)."
+    from . import browserview
+    browserview.close_orphans()
+
 
 def resume_asking(actor: str = 'startup') -> list:
     "Every agent a restart cut off while it asked the owner, back at its question - [task ids resumed]."

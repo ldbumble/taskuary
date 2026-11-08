@@ -80,7 +80,7 @@ def test_legacy_owner_opt_out_is_migrated_before_bridge_or_catchup_can_observe_i
         assert store._one("SELECT UpdatedBy FROM setting WHERE Name='general_auto_enabled'")['UpdatedBy'] == 'upgrade'
         doubles['open_drains'].assert_called_once_with(store)
         doubles['schedule_due'].assert_called_once_with(store)
-        assert doubles['threads'].call_count == 9  # harmless mocked clocks (full, reports, chat, doorway, reason network) + the new walk start after migration + the share links' own port (sharing.sync_listener) + keep-awake while work runs (awake.start, 2026-10-25) + agents a restart cut off while asking (resume_asking, 2026-11-03)
+        assert doubles['threads'].call_count == 10  # harmless mocked clocks (full, reports, chat, doorway, reason network) + the new walk start after migration + the share links' own port (sharing.sync_listener) + keep-awake while work runs (awake.start, 2026-10-25) + agents a restart cut off while asking (resume_asking, 2026-11-03) + the browsers a killed run left open (close_orphan_browsers, 2026-11-08)
     finally:
         store.close()
 

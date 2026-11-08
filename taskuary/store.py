@@ -6328,7 +6328,7 @@ class SQLiteStore:
         who, text = self.owner(), self.get_doc(name) or ''
         if who['owner'] != 'the owner': return render_doc(text, who)
         text = re.sub(r'\s*\(\s*\{\{\s*owner_email\s*\}\}\s*\)', '', retoken_doc(text, *TEMPLATE_OWNER))
-        if name == 'soul': text = f'{text.rstrip()}\n\n{NO_NAME_YET}'
+        if name == 'soul' and text.strip(): text = f'{text.rstrip()}\n\n{NO_NAME_YET}'     # an empty SOUL.md stays empty: nothing to misread
         return render_doc(text, who)
     def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
     def doc_names(self) -> list: return [r['Name'] for r in self._rows('SELECT Name FROM doc ORDER BY Name')]

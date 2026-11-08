@@ -3735,6 +3735,77 @@
       ]
     },
     {
+      "type": "google_analytics",
+      "title": "Google Analytics 4",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Your GA4 property's users, sessions, pages and events as reports and an agent tool, with the Google Sheets card's sign-in - POST /properties/<id>:runReport.",
+      "match": [
+        "google analytics",
+        "ga4"
+      ]
+    },
+    {
+      "type": "search_console",
+      "title": "Google Search Console",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Your sites' search clicks, impressions, queries and positions as reports and an agent tool, with the Google Sheets card's sign-in - POST /sites/<site>/searchAnalytics/query.",
+      "match": [
+        "search console",
+        "google search console",
+        "gsc"
+      ]
+    },
+    {
+      "type": "google_ads",
+      "title": "Google Ads",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Campaigns, spend, clicks and conversions as reports and an agent tool, with the Google Sheets card's sign-in and your developer token - POST /customers/<id>/googleAds:search (GAQL).",
+      "match": [
+        "google ads",
+        "adwords"
+      ]
+    },
+    {
+      "type": "meta_ads",
+      "title": "Meta Ads",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Ad accounts, campaigns and their insights (spend, reach, results) as reports and an agent tool - GET /act_<id>/insights?level=campaign.",
+      "match": [
+        "meta ads",
+        "facebook ads",
+        "ads manager"
+      ]
+    },
+    {
+      "type": "segment",
+      "title": "Segment",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Sources, destinations, tracking plans and their delivery health as reports and an agent tool - GET /sources, /destinations.",
+      "match": [
+        "segment.com",
+        "segment"
+      ]
+    },
+    {
+      "type": "posthog",
+      "title": "PostHog",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "PostHog's own MCP server in your agent CLI — agents query insights, funnels, feature flags and errors (the US cloud). You sign in once with Sign in.",
+      "match": [
+        "posthog"
+      ],
+      "mcp": {
+        "url": "https://mcp.posthog.com/mcp",
+        "docs": "https://posthog.com/docs/model-context-protocol"
+      }
+    },
+    {
       "type": "deepseek",
       "title": "DeepSeek",
       "group": "AI — agents & models",
@@ -4158,6 +4229,78 @@
         "url": "https://mcp.neon.tech/mcp",
         "docs": "https://neon.com/docs/ai/neon-mcp-server"
       }
+    },
+    {
+      "type": "looker",
+      "title": "Looker",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Looks, dashboards and saved queries' results as reports and an agent tool - GET /looks/<id>/run/json, /dashboards/<id>.",
+      "match": [
+        "looker"
+      ]
+    },
+    {
+      "type": "tableau",
+      "title": "Tableau",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Workbooks, views and their data as reports and an agent tool - GET /sites/<site id>/workbooks, /sites/<site id>/views/<id>/data.",
+      "match": [
+        "tableau"
+      ]
+    },
+    {
+      "type": "powerbi",
+      "title": "Power BI",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Workspaces, reports, datasets and DAX query results as reports and an agent tool, with the Outlook card's Microsoft sign-in - POST /datasets/<id>/executeQueries.",
+      "match": [
+        "power bi",
+        "powerbi"
+      ]
+    },
+    {
+      "type": "metabase",
+      "title": "Metabase",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Saved questions, dashboards and their results as reports and an agent tool - POST /api/card/<id>/query/json runs a saved question.",
+      "match": [
+        "metabase"
+      ]
+    },
+    {
+      "type": "databricks",
+      "title": "Databricks",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Jobs, their runs, clusters and SQL warehouses as reports and an agent tool - GET /api/2.1/jobs/runs/list. No SQL is run from this card.",
+      "match": [
+        "databricks"
+      ]
+    },
+    {
+      "type": "dbt_cloud",
+      "title": "dbt Cloud",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Jobs, runs and their failures as reports and an agent tool - GET /accounts/<id>/runs/?order_by=-id.",
+      "match": [
+        "dbt cloud",
+        "dbt"
+      ]
+    },
+    {
+      "type": "fivetran",
+      "title": "Fivetran",
+      "group": "Databases",
+      "planned": false,
+      "desc": "Connections, their sync state and failures as reports and an agent tool - GET /groups, /connections/<id>.",
+      "match": [
+        "fivetran"
+      ]
     },
     {
       "type": "zulip",

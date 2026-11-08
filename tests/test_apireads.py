@@ -41,11 +41,25 @@ DOC = {'digitalocean': {'account': {'email': 'alex@northwind.example', 'status':
        'copper': {'id': 1, 'name': 'Northwind'},
        'toggl': {'id': 1, 'email': 'alex@northwind.example', 'fullname': 'Alex Doyle', 'default_workspace_id': 7},
        'harvest': {'id': 1, 'first_name': 'Alex', 'last_name': 'Doyle', 'email': 'alex@northwind.example', 'is_active': True},
-       'clockify': {'id': 'u1', 'email': 'alex@northwind.example', 'name': 'Alex Doyle', 'activeWorkspace': 'w1'}}
+       'clockify': {'id': 'u1', 'email': 'alex@northwind.example', 'name': 'Alex Doyle', 'activeWorkspace': 'w1'},
+       'google_analytics': {'name': 'properties/1/metadata', 'dimensions': [{'apiName': 'date'}], 'metrics': [{'apiName': 'activeUsers'}]},
+       'search_console': {'siteEntry': [{'siteUrl': 'https://northwind.example/', 'permissionLevel': 'siteOwner'}]},
+       'google_ads': {'resourceNames': ['customers/1234567890']},
+       'meta_ads': {'data': [{'name': 'Northwind', 'account_status': 1, 'currency': 'USD', 'id': 'act_1'}], 'paging': {}},
+       'segment': {'data': {'workspace': {'id': 'w1', 'slug': 'northwind', 'name': 'Northwind'}}},
+       'looker': {'id': '1', 'display_name': 'Alex Doyle', 'email': 'alex@northwind.example'},
+       'tableau': {'site': {'id': 'site-1', 'name': 'Northwind', 'contentUrl': 'northwind'}},
+       'powerbi': {'@odata.context': 'https://api.powerbi.com/v1.0/myorg/$metadata#groups', 'value': [{'id': 'g1', 'name': 'Finance'}]},
+       'metabase': {'id': 1, 'common_name': 'Alex Doyle', 'email': 'alex@northwind.example'},
+       'databricks': {'id': '1', 'userName': 'alex@northwind.example', 'displayName': 'Alex Doyle'},
+       'dbt_cloud': {'data': [{'id': 1, 'name': 'Northwind'}], 'status': {'code': 200, 'is_success': True}},
+       'fivetran': {'code': 'Success', 'data': {'account_id': 'a1', 'account_name': 'Northwind', 'user_id': 'u1'}}}
 # a vendor that swaps the card's credentials for a bearer first answers its sign-in like this (each vendor's documented shape)
 TOKENS = {'ups': {'token_type': 'Bearer', 'access_token': 'ups-tok', 'expires_in': '14399', 'status': 'approved'},
           'fedex': {'access_token': 'fx-tok', 'token_type': 'bearer', 'expires_in': 3599, 'scope': 'CXS'},
-          'usps': {'access_token': 'usps-tok', 'token_type': 'Bearer', 'expires_in': 28799}}
+          'usps': {'access_token': 'usps-tok', 'token_type': 'Bearer', 'expires_in': 28799},
+          'looker': {'access_token': 'lk-tok', 'token_type': 'Bearer', 'expires_in': 3600},
+          'tableau': {'credentials': {'token': 'tab-tok', 'site': {'id': 'site-1', 'contentUrl': 'f1'}, 'user': {'id': 'u1'}}}}
 KEYS = {}                                          # a key with a shape of its own; every other card's key is key-1
 
 
@@ -194,6 +208,31 @@ class TheNewerShapes(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'plain name'):
                 apireads._names('/a/{shop}', apireads.Fields('pipedrive', {'shop': bad}))
         self.assertEqual(apireads._names('/a/{shop}', apireads.Fields('pipedrive', {'shop': 'abc-1'})), '/a/abc-1')
+
+    def test_tableau_signs_in_with_a_personal_token_and_fills_its_site_id(self):
+        cfg = {'api_key': 'pat-secret', 'pat_name': 'taskuary', 'host': 'tableau.northwind.example', 'path': '/sites/{site_id}/workbooks'}
+        with mock.patch.object(apireads.requests, 'post', return_value=resp(TOKENS['tableau'])) as p,                 mock.patch.object(apireads.requests, 'get', return_value=resp({'workbooks': {'workbook': []}})) as g:
+            apireads.runner('tableau')(cfg)
+        self.assertEqual(p.call_args.args[0], 'https://tableau.northwind.example/api/3.22/auth/signin')
+        self.assertEqual(p.call_args.kwargs['json'], {'credentials': {'personalAccessTokenName': 'taskuary', 'personalAccessTokenSecret': 'pat-secret',
+                                                                      'site': {'contentUrl': ''}}})
+        self.assertEqual((g.call_args.args[0], g.call_args.kwargs['headers']['X-Tableau-Auth']),
+                         ('https://tableau.northwind.example/api/3.22/sites/site-1/workbooks', 'tab-tok'))
+
+    def test_the_app_sign_ins_carry_google_ads_developer_token_and_power_bi_scope(self):
+        s = MemoryStore()
+        with mock.patch('taskuary.sheets._token', return_value='g-tok'), mock.patch('taskuary.sheets.google_sheets_connection', return_value={}),                 mock.patch.object(apireads.requests, 'post', return_value=resp({'results': []})) as p:
+            apireads.runner('google_ads')({'api_key': 'dev-tok', 'store': s, 'path': '/customers/1234567890/googleAds:search',
+                                           'body': {'query': 'SELECT campaign.name, metrics.clicks FROM campaign'}})
+        self.assertEqual((p.call_args.args[0], p.call_args.kwargs['headers']['developer-token'], p.call_args.kwargs['headers']['Authorization']),
+                         ('https://googleads.googleapis.com/v22/customers/1234567890/googleAds:search', 'dev-tok', 'Bearer g-tok'))
+        with mock.patch('taskuary.outbound._graph_token', return_value='pbi-tok') as t,                 mock.patch.object(apireads.requests, 'get', return_value=resp(DOC['powerbi'])):
+            apireads.runner('powerbi')({'store': s})
+        self.assertEqual(t.call_args.kwargs['scope'], 'https://analysis.windows.net/powerbi/api/.default')
+        with mock.patch('taskuary.outbound._graph_token', side_effect=RuntimeError('the Microsoft sign-in has lapsed - AADSTS65001')),                 self.assertRaisesRegex(RuntimeError, 'Power BI Service permissions'):
+            apireads.runner('powerbi')({'store': s})
+        with mock.patch.object(apireads.requests, 'get', return_value=resp({'error': {'code': 403}}, 403)),                 mock.patch('taskuary.sheets._token', return_value='g-tok'), mock.patch('taskuary.sheets.google_sheets_connection', return_value={}),                 self.assertRaisesRegex(RuntimeError, 'webmasters.readonly'):
+            apireads.runner('search_console')({'store': s})
 
 
 if __name__ == '__main__':

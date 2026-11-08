@@ -159,3 +159,15 @@ test("each turn shows the file as it made it; the newest turn the file itself (t
   // ...and a file since deleted is still there under the turn that made it
   assert.deepEqual(forTurn([], versions, "comment-3"), [then]);
 });
+
+// RAW PATHS IN THE ANSWER (the product audit, 2026-11-08): the picture's whole path stood on a line of its own over its card, and a path in
+// backticks came out as ```name```. A file's own line is its card; a path in backticks is its name in them
+test("a line that is only one of the task's files goes, and a path in backticks keeps one pair", async () => {
+  const { outputRefs: refs } = await import("../src/taskOutputs.js");
+  const B = String.fromCharCode(92), at = (tid, f) => ["C:", "Users", "alex", "AppData", "home", "scratch", "outputs", `TQ-000${tid}`, f].join(B);
+  const one = refs(`Here it is:\n${at(2, "banner.png")}\n\n**Before you post**`, 2, [{ path: "banner.png" }]);
+  assert.deepEqual(one, { text: "Here it is:\n\n**Before you post**", files: ["banner.png"] });
+  const two = refs("The PDF is at `" + at(4, "comparison.pdf") + "`, open it.", 4, [{ path: "comparison.pdf" }]);
+  assert.equal(two.text, "The PDF is at `comparison.pdf`, open it.");
+  assert.equal(refs("- `comparison.pdf`", 4, [{ path: "comparison.pdf" }]).text, "- `comparison.pdf`", "a list of files stays a list");
+});

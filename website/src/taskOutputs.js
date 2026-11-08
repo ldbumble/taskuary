@@ -92,11 +92,13 @@ export function outputRefs(text, tid, listed) {
     return label.trim() || baseName(at.rel);
   });
   // ...and a path in bold or italics keeps its marks OUTSIDE it: "**C:\\...\\report.xlsx**" named a file "report.xlsx**" that was not there
-  out = out.replace(BARE, (all) => {
+  out = out.replace(BARE, (all, at0, whole) => {
     const lead = /^[*_]+/.exec(all)?.[0] || "", tail = /[.,;:!?*_]+$/.exec(all)?.[0] || "", path = all.slice(lead.length, all.length - tail.length);
     const at = parseOutput(path);
     if (!at) return all;
-    if (at.tid === Number(tid)) { add(at.rel); return `${lead}\`${baseName(at.rel)}\`${tail}`; }
+    // ...a path the agent put in backticks is its name in those backticks - wrapped again it read ```name``` (the product audit, 2026-11-08)
+    const coded = whole[at0 - 1] === "\x60";
+    if (at.tid === Number(tid)) { add(at.rel); return coded ? `${baseName(at.rel)}${tail}` : `${lead}\`${baseName(at.rel)}\`${tail}`; }
     return `${lead}\`${path}\`${tail}`;
   });
   // ...THE TASK'S FOLDER, named bare, is a code span too - the chat makes that one a link that opens it on this computer (the owner,
@@ -113,6 +115,10 @@ export function outputRefs(text, tid, listed) {
     }
     return bit;
   });
+  // ...and a line that is nothing but one of its files is that file's card, drawn under the answer - never its name again on a line of its
+  // own (the product audit, 2026-11-08: the picture's whole path stood alone over the post card)
+  const own = new Set(files.map(baseName));
+  out = out.replace(/^[ \t]*[*_]*\x60([^\x60\n]+)\x60[*_]*[ \t.]*$/gm, (line, n) => (own.has(n) ? "" : line));
   // a marker on a line of its own leaves no empty line behind
   return { text: out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n").trim(), files };
 }

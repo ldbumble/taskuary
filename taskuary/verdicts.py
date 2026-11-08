@@ -357,11 +357,11 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
                 return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': error, 'send_fix': fix, 'delivery': 'failed'}
         try:
             sent = send_fn(attempted) if send_fn is not None else _send_snapshot(store, attempted)
-        except outbound.UNKNOWN_ERRORS as e:
-            checked = _reconcile_snapshot(store, attempted)
-            if checked['state'] == 'sent': return confirmed(checked['sent'], True)
-            return unknown(f'the provider did not answer ({str(e)[:120]}); {checked.get("reason") or "no delivery receipt is available"}')
         except Exception as e:
+            if isinstance(e, outbound.UNKNOWN_ERRORS) and outbound.delivery_uncertain(e):
+                checked = _reconcile_snapshot(store, attempted)
+                if checked['state'] == 'sent': return confirmed(checked['sent'], True)
+                return unknown(f'the provider did not answer ({str(e)[:120]}); {checked.get("reason") or "no delivery receipt is available"}')
             if outbound.delivery_uncertain(e):
                 checked = _reconcile_snapshot(store, attempted)
                 if checked['state'] == 'sent': return confirmed(checked['sent'], True)
@@ -369,6 +369,9 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             # said in words, once (failures.classify): a mail server's raw answer is its bookkeeping, not the owner's sentence
             from . import failures
             error, fix = failures.classify(e, act='review.approve')['sentence'][:300], outbound.fix_of(e)
+            # ...a channel that refused because it is not connected is fixed on its own card: reconnect, then Send again (2026-11-08)
+            ch = str((msg or {}).get('Channel') or attempted['envelope'].get('channel') or '').lower()
+            if not fix and ch and outbound.refused_before_send(e): fix = {'label': f'Reconnect {ch.replace("_", " ").title()}', 'href': f'#connector={ch}'}
             # ONE sentence, said once: the reason, the comment and the card each said it again in their own words (2026-10-17)
             finished = store.finish_review_delivery(rid, token, 'failed', reason=f'Not sent: {error}.', fix=fix)
             if attempted['envelope'].get('kind') == 'zoho_invoice' and attempted['envelope'].get('item_id'):

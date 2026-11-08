@@ -45,11 +45,14 @@ class OwnerLineIsKept(unittest.TestCase):
     def said(self): return [(c['ActorType'], c['Body']) for c in general.chat_rows(self.s, self.tid)]
 
     def test_a_line_typed_mid_turn_is_kept_at_once_with_its_time_and_taken_with_the_next_turn(self):
+        # waits for the state, never a fixed sleep: CI's macOS box had not started the first turn 0.3s in, so nothing was held (2026-11-08)
+        def until(ok, secs=10):
+            end = time.time() + secs
+            while not ok() and time.time() < end: time.sleep(0.02)
         first = threading.Thread(target=lambda: general.say_line(self.s, self.tid, 'Compare three tools.')); first.start()
-        time.sleep(0.3)
+        until(lambda: getattr(general.session_for(self.tid), 'busy', False))
         held = [threading.Thread(target=lambda w=w: general.say_line(self.s, self.tid, w)) for w in ('Make it cheapest first.', 'And add Trainly.')]
-        for t in held: t.start(); time.sleep(0.1)
-        time.sleep(0.1)
+        for i, t in enumerate(held): t.start(); until(lambda n=i + 1: len(general.waiting_lines(self.s, self.tid)) >= n)
         kept = general.waiting_lines(self.s, self.tid)
         self.assertEqual([w['text'] for w in kept], ['Make it cheapest first.', 'And add Trainly.'])      # kept the moment they were sent...
         self.assertEqual([w['text'] for w in server._assistant_payload(self.tid)['waiting']], [w['text'] for w in kept])   # ...on every screen

@@ -789,8 +789,16 @@ UNKNOWN_ERRORS = (requests.exceptions.Timeout, requests.exceptions.ConnectionErr
                   smtplib.SMTPServerDisconnected, requests.exceptions.JSONDecodeError, UncertainDelivery)
 
 
+# A REFUSAL BEFORE ANYTHING WENT IS NOT "DELIVERY UNKNOWN" (the owner, 2026-11-08: a WhatsApp reply read "Delivery has not been confirmed -
+# Check delivery" when the bridge had answered 503 {"error": "not connected to WhatsApp"}): a channel that SAYS it is not connected, not
+# signed in or refused the connection sent nothing - the owner reconnects and sends again. A bare 5xx stays unknown: a provider may have
+# sent before it failed (test_review_delivery_safety)
+NOT_SENT = re.compile(r'\bnot (connected|logged in|linked|signed in|paired|authenticated)\b|connection refused|ECONNREFUSED|actively refused', re.I)
+def refused_before_send(error) -> bool: return isinstance(error, ConnectionRefusedError) or bool(NOT_SENT.search(str(error)))
+
 def delivery_uncertain(error):
-    """Transport loss, server errors and partial sends do not establish non-delivery."""
+    """Transport loss, server errors and partial sends do not establish non-delivery - a refusal before anything went does."""
+    if refused_before_send(error) and not isinstance(error, UncertainDelivery): return False
     if isinstance(error, UNKNOWN_ERRORS): return True
     response = getattr(error, 'response', None)
     code = getattr(response, 'status_code', None) if response is not None else getattr(error, 'status', None)

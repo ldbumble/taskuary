@@ -935,7 +935,7 @@ def paused_conversation(store, item: dict) -> dict:
                 return item | {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'asking': True, 'agent': 'assistant', 'mode': 'assistant',
                                'tail': [str(q.get('text') or '')[:300]], 'request_id': q.get('request_id'), 'request_kind': q.get('kind'),
                                'since': _ts(q.get('at')) or item.get('since'), 'why': request_line(None, q)}
-            if item.get('lane') in ('yours', 'queued') and not store.pending_review(tid) and taskstate.state(store, task) == 'agentdone':
+            if item.get('lane') in ('yours', 'queued') and not store.waiting_on_owner(tid) and taskstate.state(store, task) == 'agentdone':
                 return item | {k: v for k, v in chat_done(store, task).items() if k in ('key', 'kind', 'lane', 'who', 'why', 'chat_done')}
             return item
     except Exception:
@@ -1002,9 +1002,9 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         # a session with no state of its own is parked, never "asked you" from a "?" in what it wrote.
         asking = t.get('state') == 'asking'
         # ...A CHAT AGENT THAT ASKED NOTHING is done for now (the owner, 2026-11-07; after a Send too, 2026-11-06): its row said "Taskuary is
-        # waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A reply it drafted still waits on you
+        # waiting on you" - it is the task's wrap-up, "agent done", until something is typed again. A reply or an email it drafted still waits on you
         from . import general
-        if not asking and t.get('mode') == 'assistant' and general.handles(task) and not store.pending_review(tid):
+        if not asking and t.get('mode') == 'assistant' and general.handles(task) and not store.waiting_on_owner(tid):
             out.append(chat_done(store, task, t.get('started'))); continue
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
@@ -1152,7 +1152,8 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
         # in_progress means an agent has it: there is nothing to close yet, whether or not a session
         # is alive right now (the same rule build() uses to put such a task on the shelf)
         if t.get('Status') not in ('open', 'waiting') or tid in busy or t.get('SourceRef') == 'assistant:dock': continue
-        if t.get('ReviewStatus') == 'pending' or store.pending_review(tid): continue
+        if t.get('ReviewStatus') == 'pending' or store.waiting_on_owner(tid): continue
+
         from . import slots
         if slots.open_(store, tid): continue           # its emails still wait (slots.py): not a task to wrap up yet
         sent = store.sent_reply(task_id=tid)

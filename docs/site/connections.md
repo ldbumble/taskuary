@@ -277,6 +277,11 @@ in, the default port known and the missing driver named in the error you actuall
 including raw ODBC through pyodbc. All of them are reads — these cards ship no write verb at all,
 and the engine's own user is the ceiling, so point them at a read-only account.
 
+**MongoDB**, **Redis** and **Neo4j** read too, each in its own way: MongoDB finds, counts and
+aggregates, and refuses a pipeline that carries `$out` or `$merge`; Redis sends one command from a
+closed list of reads (`GET`, `HGETALL`, `SCAN`, ...), never `KEYS` or a write; Neo4j runs every query
+in a read transaction. Each driver is an extra: `pip install taskuary[mongodb]`, `[redis]` or `[neo4j]`.
+
 **Cloud and monitoring** — AWS (S3 buckets, CloudWatch log groups, arbitrary service calls),
 Azure (blob containers, Log Analytics, arbitrary ARM paths, and it can reuse the Outlook app
 registration), Microsoft Entra ID, Prometheus, Datadog, WinRM for PowerShell on a remote Windows
@@ -466,7 +471,9 @@ A card under **AI · voice** turns speech into text: a voice note that arrives (
 message) and the microphone beside each box. Groq (Whisper), OpenAI transcription, Google Gemini
 transcription, Deepgram and ElevenLabs Scribe take a key; **Any Whisper server** points at one you
 run; **Local Whisper** runs on this computer with no key, and the audio never leaves it
-(`pip install taskuary[voice]`). With no voice card a voice note still lands, filed with a line
+(`pip install taskuary[voice]`). **Amazon Transcribe** runs on your own AWS account: each clip goes
+to the S3 bucket named on the card, a job transcribes it, and the clip and its transcript are both
+deleted once read. With no voice card a voice note still lands, filed with a line
 saying it was not transcribed and why, its audio attached so one click transcribes it later.
 
 Open **Windows / browser voice** under **AI · voice** to choose and test built-in dictation.
@@ -507,6 +514,23 @@ take a key (and, when self-hosted, the address). Google Drive, OneDrive and Micr
 nothing: they read with the Google Sheets card's and the Outlook card's sign-ins. **Test** makes one
 cheap read. A report or an agent then asks any address under that vendor's API by its path, and only
 ever reads: nothing but a GET is sent, so a Tradier key on this card places no order.
+
+Some take more than a key, and the card asks for each piece:
+
+- **A token swapped first** — Docker Hub (a personal access token), Charles Schwab, Workday and
+  PointClickCare (a refresh token), Dynamics 365, SAP and ADP (a client id and secret). Dynamics 365
+  uses your company's own Microsoft app; ADP also needs its TLS client certificate and key files.
+- **A key signed into each call** — NetSuite's token-based auth (account, consumer key and secret,
+  token id and secret), Google Cloud's service-account key file (`pip install taskuary[gcp]`), and
+  Epic and Oracle Cerner's SMART backend services: a private key whose public half the organization
+  registered (`pip install taskuary[fhir]`). Their FHIR reads are only what the organization granted.
+- **Credentials in the body** — Plaid, on the access token of an Item already linked to your app.
+- **Your own gateway** — Interactive Brokers through the Client Portal gateway on this computer.
+
+A few vendors read by POST — UptimeRobot, Plaid, NetSuite's SuiteQL, Cloud Logging, and the fetches
+of Browserbase, Oxylabs and Bright Data. Each card lists those paths, and a body goes nowhere else.
+Each card says what your organization's admin has to give you; for an EMR or HR system that is
+usually an approved app and a read-only role, set up on their side.
 
 ## A system with no card
 

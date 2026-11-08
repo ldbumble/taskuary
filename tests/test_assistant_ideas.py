@@ -16,7 +16,7 @@ class CatalogueTests(unittest.TestCase):
         for c in cards:
             for f in ('type', 'title', 'group', 'match'): self.assertTrue(c.get(f), f"{c.get('type')} lacks {f}")
         self.assertEqual(connectorcatalog.by_type('adp')['group'], 'Corporate systems')
-        self.assertTrue(connectorcatalog.by_type('adp')['planned'])
+        self.assertFalse(connectorcatalog.by_type('adp')['planned'])          # a working card since 2026-11-08 (apireads.json)
         self.assertFalse(connectorcatalog.by_type('outlook')['planned'])
         self.assertEqual(connectorcatalog.by_type('mssql')['group'], 'Databases')      # the tab's own section, not "Everything else"
 
@@ -118,7 +118,7 @@ class ConnectTests(unittest.TestCase):
         ideas, _, _ = self._advise(s, cite)
         i = ideas['connect:adp']; a = json.loads(i['ActionJson'])
         self.assertTrue(i['Text'].startswith('3 threads this month were about ADP'), i['Text'])   # 999 does not exist: not counted
-        self.assertEqual(a['count'], 3); self.assertTrue(a['planned']); self.assertEqual(a['connector_type'], 'adp')
+        self.assertEqual(a['count'], 3); self.assertFalse(a['planned']); self.assertEqual(a['connector_type'], 'adp')
 
     def test_under_the_floor_is_dropped_unless_the_owners_own_setup_names_it(self):
         s = A.store()

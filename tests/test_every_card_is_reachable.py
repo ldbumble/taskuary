@@ -76,7 +76,7 @@ class EveryCardCanBeTested(unittest.TestCase):
         src = (ROOT / 'taskuary' / 'channels.py').read_text(encoding='utf-8')
         region = src[src.index('def test_connector'):src.index('no test for connector type')]
         out = set(re.findall(r"'([a-z0-9_]+)'", region))
-        for name in ('RESEARCH', 'PAGE_READERS', 'DB_ENGINES', 'CHAT_SERVERS', 'AI_TYPES', 'INBOXES'):
+        for name in ('RESEARCH', 'PAGE_READERS', 'DB_ENGINES', 'NOSQL', 'CHAT_SERVERS', 'AI_TYPES', 'INBOXES'):
             if name in region: out |= set(getattr(channels, name))
         if "c['Type'] in READS" in region: out |= set(channels.READS) | {'dynamodb'}
         if 'remotemcp.road(' in region:               # every vendor MCP server and video skill tests on its road (remotemcp.test)

@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:site/demo/assets/GameScene-B8uqh5Qk.js
 import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fr as xc}from"./index-C4dQW6OB.js";/**
+========
+import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fr as xc}from"./index-CULOD0CX.js";/**
+>>>>>>>> a483d1934 (Rebuild the app, the demo and the docs):site/demo/assets/GameScene-BdYL-Rze.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

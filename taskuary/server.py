@@ -7596,6 +7596,13 @@ def video_tool_add(cid: int):
     try: return vt.add(store, t, ACTOR)
     except RuntimeError as e: raise HTTPException(422, str(e))
 
+@app.post('/api/connectors/{cid}/tool/sign-in')
+def video_tool_sign_in(cid: int):
+    "The card's Sign in press - the owner's only (guard.DENIED): each agent CLI with the server signs in to it in the browser (videotools.sign_in)."
+    vt, t = _video_card(cid)
+    try: return vt.sign_in(store, t, ACTOR)
+    except RuntimeError as e: raise HTTPException(422, str(e))
+
 @app.post('/api/connectors/{cid}/test')
 def connector_test(cid: int, body: ConnectorTestBody | None = None):
     from .channels import test_connector

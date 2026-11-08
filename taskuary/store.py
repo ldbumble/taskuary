@@ -6668,7 +6668,7 @@ class SQLiteStore:
         # ...the files in one read, in the messages' order: a read per message was 1,500 on a long chat (the owner, 2026-11-01)
         for a in self._rows('SELECT a.* FROM attachment a JOIN message m ON m.MessageId=a.MessageId WHERE m.TaskId=? ORDER BY a.AttachmentId',
                             (task_id,)): atts.setdefault(a['MessageId'], []).append(a)
-        reviews = self._rows('SELECT rv.*, m.FromName, m.FromEmail, m.Channel, m.SourceName, m.ConversationId FROM review rv '
+        reviews = self._rows('SELECT rv.*, m.FromName, m.FromEmail, m.Channel, m.SourceName, m.ConversationId, m.Subject FROM review rv '
                              'LEFT JOIN message m ON m.MessageId=rv.MessageId WHERE rv.TaskId=? ORDER BY rv.ReviewId DESC', (task_id,))
         # ...and a reply to a promise's own mail answers whom it was made to, not its author: "sends this to Alex Doyle" was the owner
         if (p := self.promised_in(t)) and any(r.get('MessageId') == p['MessageId'] for r in reviews):

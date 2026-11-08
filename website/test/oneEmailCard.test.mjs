@@ -25,3 +25,8 @@ test("every email card draws the same rows, and the press carries BCC and a chan
   assert.match(rd, /bcc: bccNow, subject: subj != null && subj !== subjFiled \? subj : null/);
   assert.doesNotMatch(rd, /!isSlot \|\| ccNow\.length > 0/, "an agent's email has the same Add CC as a reply");
 });
+
+test("a reply's card reads its subject off the mail it answers, which the task's reviews now carry", () => {
+  const store = readFileSync(new URL("../../taskuary/store.py", import.meta.url), "utf8");
+  assert.match(store, /m\.ConversationId, m\.Subject FROM review rv /);
+});

@@ -121,7 +121,10 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // its arrow halves it - the top stays where it is, as the chat box's does - and makes it whole again. A phone's arrow still pins it full screen
   const [half, setHalf] = useState(false);
   useEffect(() => { setHalf(false); }, [card.key]);
-  const h = phone ? phoneH : half ? `max(300px, calc(${height} / 2))` : height;
+  // ...A PHONE'S VIEW FITS THE CHAT BODY it sits in (the product audit, 2026-11-08, at 390px): the screen's height was taller than the body under
+  // the top bar and the dock, so the row riding at its foot (sticky) stood over the middle of the view and hid its own message box. The body's
+  // height, as on a desk; Expand, pinned over the page, takes the screen's
+  const h = phone ? (pin ? phoneH : height) : half ? `max(300px, calc(${height} / 2))` : height;
   const held = useHeldHeight(box, card.key);
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);

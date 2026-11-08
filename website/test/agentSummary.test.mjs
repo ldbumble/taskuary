@@ -150,6 +150,8 @@ test("a turn with words of its own draws them once, and the summary keeps only i
   const ws = readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
   const sum = readFileSync(new URL("../src/AgentSummary.jsx", import.meta.url), "utf8");
   assert.match(ws, /components=\{\{ Text: AssistantText,/, "the words are always drawn");
+  const text = ws.slice(ws.indexOf("const AssistantText"), ws.indexOf("const CameIn"));
+  assert.doesNotMatch(text, /return null/, "words equal to the summary's did are still drawn - the summary prose is out, so hiding them emptied the turn");
   assert.match(ws, /answered=\{answered\} \/>/);
   const cardsOnly = sum.slice(sum.indexOf("if (answered)"), sum.indexOf("// ...a nothing-new turn"));
   assert.ok(cardsOnly.length > 0, "an answered turn returns before the prose");

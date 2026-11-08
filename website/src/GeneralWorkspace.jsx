@@ -199,11 +199,10 @@ const AssistantText = ({ text }) => {
     const d = e.target.closest?.("code[data-tq-folder-link]");
     if (d) { e.preventDefault(); api.post(`/api/task-outputs/${at.tid}/open`).catch(() => {}); return; }
     const c = e.target.closest?.("code[data-tq-file-link]"), f = c && fileNamed(c); if (f) { e.preventDefault(); setViewing(f); } };
-  // an answer that was only its summary block is filed as the summary's "did" (general._file): said once, under What I did
-  const did = useAuiState((s) => String(s.message.metadata?.custom?.summary?.did || "").trim());
+  // an answer that was only its summary block is filed as the summary's "did" (general._file): the words are the turn, so they are drawn
+  // here and the summary's prose stays out (AgentSummary `answered`) - hiding them here too left the turn empty (2026-11-08 render)
   const { text: said, files } = at ? outputRefs(text, at.tid, at.listed) : { text, files: [] }, { isShown } = shownOnce(files, shown);
   const chat = React.useContext(ChatCtx);
-  if (did && String(text || "").trim() === did && !files.length) return null;
   return <>
     {!!said && <div ref={box} onClick={open}><LinkPopups><Md text={said} /></LinkPopups></div>}
     {/* ...in a chat the turn draws the files it made itself, once, inline (TurnFiles) */}

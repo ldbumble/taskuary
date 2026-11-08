@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:taskuary/web/assets/GameScene-qQnofFL0.js
 import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fm as xc}from"./index-O1KZ3rqx.js";/**
+========
+import{r as Xe,j as be,B as Ke,X as $s,Y as Dh,a0 as _c,a2 as Zr,T as ci,V as jr,t as vc,fm as xc}from"./index-BEA5f5zN.js";/**
+>>>>>>>> d53bfe877 (A phone's task view fits its chat body; a reply's card shows its subject):taskuary/web/assets/GameScene-Du9kSyKb.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

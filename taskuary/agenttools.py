@@ -151,6 +151,29 @@ TOOLS = {
                       'sign': {'type': 'object', 'properties': {'field': _STR, 'near': _STR, 'page': _INT,
                                                                  'box': {'type': 'array', 'items': {'type': 'number'}}}},
                       'date': {'type': ['boolean', 'string']}}), ('POST', '/api/agent/sign-form')),
+    # THE CALENDAR AND THE SHARE, SET UP LIKE AN EMAIL (the owner, 2026-11-08: "fix it like email or all other actions"): each a card in
+    # the chat with its one press - Accept / Decline / Propose, Send invite, Share - and nothing goes before it (calwrite, sharing)
+    'answer_invite': ('propose', "Answer the meeting invite waiting on this task: `answer` is accept, decline or propose (a new time). Read "
+                      "the invite and the owner's calendar first (the calendar tool) and say in your words whether it fits and what it "
+                      "clashes with. For propose give `start` and `end` (YYYY-MM-DD HH:MM, a time you found free) - none given is the first "
+                      "free time near it. `note` is the line that goes with the answer (empty for none). It becomes a card with the "
+                      "owner's Accept / Decline / Propose button - nothing reaches the calendar until they press it. A new call replaces it.",
+                      _S({'answer': {'type': 'string', 'enum': ['accept', 'decline', 'propose']}, 'start': _STR, 'end': _STR, 'note': _STR},
+                         ('answer',)), ('POST', '/api/agent/answer-invite')),
+    'set_up_meeting': ('propose', "Set up a meeting for the owner: `with` is who (names or addresses - names are looked up in the owner's "
+                       "mail and directory; one nobody can place comes back to you, so ask the owner for it rather than guess), `title`, "
+                       "`minutes` (15, 30, 45 or 60). With no `start`/`end` it takes the first time free on the owner's calendar and on "
+                       "theirs where it can see it - `within` (this_week, next_week) narrows the days. A Teams or Google Meet link is "
+                       "added by the owner's calendar unless `online` is false. `note` is the invite's words. It becomes an invite card "
+                       "in this chat with the owner's Send invite - nothing is sent until they press it. Never write an .ics file instead.",
+                       _S({'with': {'type': 'array', 'items': _STR}, 'title': _STR, 'minutes': _INT, 'within': _STR, 'start': _STR, 'end': _STR,
+                           'note': _STR, 'online': {'type': 'boolean'}}, ('with', 'title')), ('POST', '/api/agent/meeting')),
+    'share': ('propose', "Share a dashboard or report you made with someone: `report` is its number (the N of #report=N), `to` the person, "
+              "`text` the message that goes with it - what it shows, the numbers that matter. `via`: chat (on this task's chat with them - "
+              "Teams, Slack...) or email; leave it out and it goes the way they wrote to the owner. The owner sees the dashboard in this "
+              "chat with a Share with <name> card - nothing is sent until they press it. Use it instead of telling the owner to share it.",
+              _S({'report': _INT, 'to': _STR, 'text': _STR, 'via': {'type': 'string', 'enum': ['chat', 'email']}}, ('report', 'to', 'text')),
+              ('POST', '/api/agent/share')),
     'propose': ('propose', "Ask the owner to approve one act Taskuary runs on their press: comment_issue {body} (a public GitHub "
                 "comment), close_issue, open_pr, land, run_tool {type, connector_id, ...} (a send, post or order on one of their "
                 "systems - a post: {type: linkedin_post, text, image: a picture in your task folder}, drawn for the owner as the post with "
@@ -281,6 +304,9 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
     if name == 'sign_form':
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
+    if name == 'answer_invite': return _j(doors['answer_invite'](tid, a))
+    if name == 'set_up_meeting': return _j(doors['meeting'](tid, a))
+    if name == 'share': return _j(doors['share'](tid, a))
     if name == 'propose':
         old = a.get('replaces')
         return _j(replaced(doors, tid, doors['propose'](tid, {k: v for k, v in a.items() if k != 'replaces'}), old, 'a new proposal takes its place'))

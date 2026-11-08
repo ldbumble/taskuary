@@ -1263,6 +1263,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                                   'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
                                                             + (f' · {unsendable}' if unsendable else '')})
                 _spawn(_auto_draft, store, tid, rid)        # always drafted (PW-043)
+            elif f['kind'] == 'reply' and (job := invite_agent(store, tid, msg, mid)): starts.append((_auto_general, store, tid, job, True))
             # Almost everything a keyboard can do goes to the agent - the owner's rule (2026-08-27,
             # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
             # stops, and a job left on a list does not. Coding and general both self-dispatch when the Settings allow
@@ -2178,6 +2179,23 @@ def agent_on_reply(store, tid, msg: dict, mid, verdict: dict | None, actor: str,
     if opening and kind != 'coding': general.OPENING.add(tid)
     _spawn(_auto_code if kind == 'coding' else _auto_general, store, tid)
     return True
+
+
+# AN INVITE IS ANSWERED BY THE AGENT, LIKE AN EMAIL (the owner, 2026-11-08: "fix it like email or all other actions"): where an agent may
+# start by itself it reads the invite and the calendar and sets the answer up as a card (calwrite.answer) - Accept, Decline, or Propose a
+# new time with its slot - for the owner's press. Where none may, the task stays the owner's as before, its row's three answers standing.
+INVITE_JOB = ("THIS TASK IS A MEETING INVITE: {line}. Read it and the owner's calendar (the calendar tool), say in a line whether it fits "
+              'and what it clashes with, then set the answer up with answer_invite - accept, decline, or propose a new time you found free. '
+              'Nothing reaches the calendar until the owner presses it.')
+
+
+def invite_agent(store, tid, msg: dict, mid) -> str:
+    "The agent's job on an invite it may start on by itself (auto_start_ok), the task made the agent's kind - else ''."
+    from . import calwrite
+    c = calwrite.of_task(store, tid)
+    if not c or not c.get('invite') or live_agent(store, tid) or not auto_start_ok(store, msg, mid, 'general')[0]: return ''
+    store.update_task(tid, {'Kind': 'general'}, 'triage')
+    return INVITE_JOB.format(line=c['line'])
 
 
 def hand_reply_to_agent(store, tid, rid, why: str) -> bool:

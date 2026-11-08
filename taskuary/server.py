@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import kinds as task_kinds
 from . import buttons, config, failures, words
@@ -1667,13 +1667,9 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import calwrite
         m = store.get_message(mid)
         if not m: raise HTTPException(404, 'that message is gone')
-        act, start, end = str(p.get('act') or ''), p.get('start'), p.get('end')
-        if act in ('propose', 'schedule') and not (start and end):
-            free = calwrite.slots_for(store, m, act)['slots']
-            if not free: raise HTTPException(422, 'there is no free time in those days - pick one on the row')
-            start, end = free[0]['start'], free[0]['end']
-        try: return calwrite.draft(store, mid, act, start, end, ACTOR)
+        try: return calwrite.draft(store, mid, str(p.get('act') or ''), p.get('start'), p.get('end'), ACTOR)      # no time named: the first free one
         except calwrite.NoAccess as e: raise outbound.Fixable(str(e), e.fix['label'], e.fix['href'])
+        except ValueError as e: raise HTTPException(422, str(e))
     if kind in ('task.chase', 'task.let_go', 'task.elsewhere'):
         # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with
         # a follow-up on it); the person is its `who_email`, the ledger's key. A chase is a draft for your yes, never a send.
@@ -5778,6 +5774,42 @@ def agent_propose(body: AgentProposeBody, request: Request):
     if not q: raise HTTPException(422, proposals.refusal_line(miss[0] if miss else ''))
     return {'ok': True, 'queued': True, 'review': q['reviewId'], 'says': "Waiting on the owner's press - nothing happens until they approve it."}
 
+# ...and the calendar and a share, SET UP like an email (calwrite.answer / meeting, sharing.agent_share): a card with the owner's press
+class AgentInviteBody(BaseModel): task_id: int; answer: str; start: str | None = None; end: str | None = None; note: str | None = None
+class AgentMeetingBody(BaseModel):
+    task_id: int; title: str = ''; minutes: int = 30; within: str = ''; start: str | None = None; end: str | None = None; note: str = ''
+    online: bool = True; people: list[str] = Field([], alias='with')
+    model_config = {'populate_by_name': True}
+class AgentShareBody(BaseModel): task_id: int; report: int | None = None; to: str = ''; text: str = ''; via: str = ''
+
+def _agent_set_up(request: Request, tid: int, fn):
+    """One of the agent's set-ups on its OWN task: ValueError is the agent's to fix, NoAccess the card's - said in words, never a 500."""
+    from . import calwrite
+    _own_task_only(request, tid)
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    try: return fn()
+    except calwrite.NoAccess as e: return {'ok': False, 'says': f"{e} Tell the owner: {e.fix['label']} ({e.fix['href']})."}
+    except ValueError as e: raise HTTPException(422, str(e))
+
+@app.post('/api/agent/answer-invite')
+def agent_answer_invite(body: AgentInviteBody, request: Request):
+    """The answer to the invite on the session's OWN task, drafted for the owner's press (calwrite.answer). Nothing reaches the calendar."""
+    from . import calwrite
+    return _agent_set_up(request, body.task_id, lambda: calwrite.answer(store, body.task_id, body.answer, body.start, body.end, body.note))
+
+@app.post('/api/agent/meeting')
+def agent_meeting(body: AgentMeetingBody, request: Request):
+    """A new meeting set up on the session's OWN task (calwrite.meeting): its invite card waits on the owner's Send invite."""
+    from . import calwrite
+    return _agent_set_up(request, body.task_id, lambda: calwrite.meeting(store, body.task_id, body.people, body.title, body.minutes, body.within,
+                                                                          body.start, body.end, body.note, body.online))
+
+@app.post('/api/agent/share')
+def agent_share(body: AgentShareBody, request: Request):
+    """A report or dashboard the agent made, set up to share on the session's OWN task (sharing.agent_share) - sent only on the owner's press."""
+    from . import sharing
+    return _agent_set_up(request, body.task_id, lambda: sharing.agent_share(store, body.task_id, body.report, body.to, body.text, body.via))
+
 class AgentSignBody(BaseModel):
     task_id: int; attachment: int | None = None; file: str = ''; name: str = ''; data: str = ''   # data: base64, from the CLI's own read
     fields: dict = {}; sign: dict = {}; date: bool | str = False; agent: str = 'agent'
@@ -5850,6 +5882,9 @@ async def mcp_rpc(request: Request, task: int = 0):
              'draft': lambda tid, text, to, subject, files=(), cc=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files), cc=list(cc)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
+             'answer_invite': lambda tid, a: agent_answer_invite(AgentInviteBody(**{**a, 'task_id': tid}), request),
+             'meeting': lambda tid, a: agent_meeting(AgentMeetingBody(**{**a, 'task_id': tid}), request),
+             'share': lambda tid, a: agent_share(AgentShareBody(**{**a, 'task_id': tid}), request),
              'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),
              'propose_land': lambda tid, how, why: agent_propose_land(AgentLandBody(task_id=tid, how=how, why=why), request),
              'use_repo': lambda tid, target, why: agent_use_repo(AgentUseRepoBody(task_id=tid, path_or_name=target, why=why), request)}

@@ -22,7 +22,7 @@ import random
 import re
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
@@ -759,6 +759,9 @@ def agenda() -> list:
             ev(d3, '11:00', '12:00', 'Site leads sync')]
 
 
+SET_UPS = {}                            # what the agent sets up at the end of the seed (seed_set_ups): the invite, the dashboard's share
+
+
 def seed_calendar(store, f) -> int:
     """An invite waiting on Dana's answer that clashes with her planning block, and a thread asking for half an hour - the
     two rows whose buttons answer the calendar. Returns how many it made."""
@@ -775,6 +778,7 @@ def seed_calendar(store, f) -> int:
                     body='A dry run of the AP cutover before Thursday - we walk the export end to end with the team.',
                     conversation_id='email:ap-dry-run', MailMetaJson=json.dumps({'invite': True, 'cal': c}))
     f.route(mid, tid, 'create', f"{ruth[0]} invited you - {at}" + (f' - {clash}' if clash else ''))
+    SET_UPS['invite'] = dict(task=tid, mid=mid, cal=c, clash=clash, at=at, who=ruth)          # ...answered by the agent (seed_set_ups)
     # the ask: half an hour on the audit list, the day after - triage's `meet` on the message (store.add_route)
     t2 = f.task(title='Half an hour on the audit list', status='open', kind='reply', source='email')
     m2 = f.message(task_id=t2, subject='Audit list - 30 minutes?', from_name=priya[0], from_email=priya[1], sent_at=f.ago(hours=2),
@@ -786,6 +790,44 @@ def seed_calendar(store, f) -> int:
 
 
 SPREAD_MIN = 25                          # minutes between the morning's arrivals (seed)
+
+
+def seed_set_ups(store, f):
+    """THE AGENT SETS IT UP LIKE AN EMAIL (the owner, 2026-11-08: "fix it like email or all other actions"): the invite that clashes, answered
+    with a new time - the card calwrite.draft makes, Propose this time waiting on the press - and the dashboard shared with Gail on her own
+    Teams chat, drawn over its Share with Gail (sharing.agent_share). Made LAST, so every id the recording had before stays as it was."""
+    from . import calwrite, general
+    from .ingest import INVITE_JOB
+    def say(tid, mins, actor, typ, body):
+        cid = store.add_comment(tid, actor, typ, body); store._exec('UPDATE comment SET CreatedAt=? WHERE CommentId=?', (_at(mins), cid)); return cid
+    if (iv := SET_UPS.pop('invite', None)):
+        t, mid, c, (who, email) = iv['task'], iv['mid'], iv['cal'], iv['who']
+        free = calwrite.free_slots(store, 60, date.fromisoformat(c['start'][:10]), None, avoid=(c['start'], c['end']), events=agenda())[0]
+        at = calwrite.when(free['start'], free['end'])
+        env = {'kind': 'calendar', 'channel': 'calendar', 'act': 'propose', 'provider': 'outlook', 'connector_id': 0, 'mailbox': 'demo',
+               'subject': c['subject'], 'to': [email], 'clash': '', 'event_id': c['event_id'], 'ical_uid': c['ical_uid'], 'start': c['start'],
+               'end': c['end'], 'new_start': free['start'], 'new_end': free['end'], 'when': at, 'was': iv['at']}
+        rv = f.review(t, mid, kind='outbound', draft=f"I'm in quarter-end planning that morning - would {at} work instead?", Deliver=json.dumps(env),
+                      reason=f"Propose {at} for {c['subject']} - press {calwrite.send_word()} and the calendar is told")
+        store.update_task(t, {'Kind': 'general', 'Status': 'in_progress', 'Assignee': 'agent:general'}, 'triage')
+        # ...the invite came in, the agent was handed it, and its turn said why this time
+        store._exec('UPDATE message SET CreatedAt=? WHERE MessageId=?', (_at(56), mid)); store._exec('UPDATE route SET CreatedAt=? WHERE MessageId=?', (_at(56), mid))
+        say(t, 55, general.BRIEF_ACTOR, general.USER_TYPE, INVITE_JOB.format(line=f"{who} invited you to {c['subject']}, {iv['at']}"))
+        summ = {'about': f"{who} invited you to the {c['subject']}, {iv['at']}.",
+                'did': f"Checked your calendar: it {iv['clash']}. The first free hour after it is **{at}**, so I set up a new time with a short note - "
+                       'or accept or decline it instead.', 'drafted': [{'review': rv}]}
+        cid = say(t, 54, 'assistant', general.ASSISTANT_TYPE, summ['did']); say(t, 53.99, 'assistant', general.SUMMARY_TYPE, json.dumps(summ))
+        store.snap_draft(rv, cid)
+    if (sh := SET_UPS.pop('share', None)):
+        t = sh['task']; gail = store.list_messages(t)[0]
+        rv = f.review(t, gail['MessageId'], kind='draft_reply', reason='the dashboard Gail asked for, to share with her',
+                      Deliver=json.dumps({'share': {'report': sh['report'], 'title': sh['title'], 'to': 'Gail Moreno'}}),
+                      draft=f"Hi Gail - vendor spend is a dashboard now, refreshed every Monday at 7:00. The last 7 days came to ${sh['last']:,.0f}; "
+                            f"Alvarez Supply is the biggest vendor at {sh['alvarez']:.0%} of all spend. Top vendors and categories are on it too.")
+        store._exec('UPDATE review SET CreatedAt=? WHERE ReviewId=?', (_at(285.7), rv))
+        turn = next(x for x in reversed(store.list_comments(t, internal=True)) if x.get('ActorType') == general.SUMMARY_TYPE)
+        store._exec('UPDATE comment SET Body=? WHERE CommentId=?', (json.dumps({**json.loads(turn['Body']), 'drafted': [{'review': rv}]}), turn['CommentId']))
+        store.snap_draft(rv, next(x for x in reversed(store.list_comments(t, internal=True)) if x.get('ActorType') == general.ASSISTANT_TYPE)['CommentId'])
 
 
 def seed(store) -> int:
@@ -1010,6 +1052,7 @@ def seed(store) -> int:
     seed_dashboard(store)
     made += seed_agent_day(store, f)
     made += seed_tour(store, f)
+    seed_set_ups(store, f)
     seed_ai_usage(store)          # ...and the morning's asks, for their "AI used" folds
     logger.info(f'demo: seeded {made} items of invented work')
     return made
@@ -1185,12 +1228,12 @@ def seed_agent_day(store, f) -> int:
     try: reports.run_one(store, store.get_source(sid), None, 'schedule')
     except Exception as e: logger.warning(f'demo: the vendor spend dashboard did not run - {e}')
     alvarez = sum(d for _, v, _, d in rows if v == 'Alvarez Supply') / sum(d for *_, d in rows)
+    SET_UPS['share'] = dict(task=t, report=sid, title=spec['title'], last=last, alvarez=alvarez)  # ...shared with Gail (seed_set_ups)
     said(t, 285.6, 'turn', None,
          {'about': 'Gail would rather see vendor spend weekly, on a dashboard, than in the monthly PDF.',
           'did': f'Built **[Vendor spend, weekly](#report={sid})** on six months of AP payments, beside your reports. It refreshes Mondays at 7:00. '
-                 f'The last 7 days came to **${last:,.0f}**; Alvarez Supply is the biggest vendor, **{alvarez:.0%}** of all spend.',
-          'on_you': ['Share the dashboard with Gail, or say if she would rather get it by mail each Monday']})
-    store.set_on_you(t, ['Share the dashboard with Gail, or say if she would rather get it by mail each Monday'], 'assistant')
+                 f'The last 7 days came to **${last:,.0f}**; Alvarez Supply is the biggest vendor, **{alvarez:.0%}** of all spend. '
+                 'She asked on Teams, so it is set up to share with her there.'})
 
     # 4. A RESEARCH ANSWER with its sources, and the decision it leaves with the owner
     t = tids['research']

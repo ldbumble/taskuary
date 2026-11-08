@@ -454,15 +454,24 @@ def _title(msg: dict) -> str:
     return s[:200] or 'Meeting'
 
 
-def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: str = 'owner') -> dict:
+def first_free(store, msg: dict, act: str) -> tuple:
+    """(start, end): the first free time Propose a new time or Find a time would offer - for an answer set up with no time named."""
+    free = slots_for(store, msg, act)['slots']
+    if not free: raise ValueError('there is no free time in those days - pick one on the row')
+    return free[0]['start'], free[0]['end']
+
+
+def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: str = 'owner', note: str = None) -> dict:
     """The answer, drafted into the approval queue: a review on the message (and its task) whose envelope is the calendar
-    act. {reviewId, taskId, say}. Raises ValueError for what the item cannot carry, NoAccess for a card that may not write."""
+    act. {reviewId, taskId, say}. A new time with none named is the first free one (first_free); `note` replaces the line the
+    box starts with. Raises ValueError for what the item cannot carry, NoAccess for a card that may not write."""
     if act not in ACTS: raise ValueError(f'not a calendar answer: {act}')
     msg = store.get_message(int(mid))
     if not msg: raise ValueError('that message is gone')
     c = invite_of(msg)
     if act != 'schedule' and not c: raise ValueError('that message is not a meeting invite')
     if act == 'schedule' and not meet_of(msg): raise ValueError('that message does not ask for a time to meet')
+    if act in ('propose', 'schedule') and not (start and end): start, end = first_free(store, msg, act)
     if act in ('propose', 'schedule'):
         try: a, b = _dt(start), _dt(end)
         except (TypeError, ValueError): raise ValueError('pick a time first')
@@ -484,8 +493,8 @@ def draft(store, mid: int, act: str, start: str = None, end: str = None, actor: 
             'propose': f"Propose {when(start, end)} for {subject}", 'schedule': f'Invite {", ".join(who) or "them"} to {subject} - {line}'}[act]
     old = next((r for r in store.reviews_for_message(int(mid)) if r.get('Status') == 'pending' and env_of(r).get('kind') == 'calendar'), None)
     if old: store.decide_review(old['ReviewId'], 'rejected', old.get('DraftText'), actor, 'replaced by another calendar answer')
-    rid = store.add_review({'TaskId': msg.get('TaskId'), 'MessageId': int(mid), 'Kind': 'outbound', 'Status': 'pending',
-                            'DraftText': NOTE[act].format(when=when(start, end) if start else ''), 'Deliver': json.dumps(env),
+    text = NOTE[act].format(when=when(start, end) if start else '') if note is None else str(note).strip()[:4000]
+    rid = store.add_review({'TaskId': msg.get('TaskId'), 'MessageId': int(mid), 'Kind': 'outbound', 'Status': 'pending', 'DraftText': text, 'Deliver': json.dumps(env),
                             'Reason': f"{head}{' · ' + clash if clash else ''} - press {send_word()} and the calendar is told"})
     store.audit('review', rid, 'calendar_drafted', actor, detail={'act': act, 'provider': acct['provider']})
     return {'reviewId': rid, 'taskId': msg.get('TaskId'), 'say': head + (f' ({clash})' if clash else '') + f'. It waits for your {send_word()}.'}
@@ -627,11 +636,8 @@ def name_of(store, addr: str) -> str:
 def _and(xs: list) -> str: return ' and '.join(xs) if len(xs) < 3 else f"{', '.join(xs[:-1])} and {xs[-1]}"
 
 
-def draft_new(store, people, subject: str, start: str, end: str, note: str = '', actor: str = 'owner') -> dict:
-    """New → Meeting's pick: a task "Meeting with <who> about <subject>" whose Close out holds the invite, drafted as a review whose
-    envelope is the calendar's 'schedule' act - the same one a thread's Find a time drafts. {taskId, ref, reviewId, title, say}.
-    Raises ValueError for what is missing, NoAccess for a card that may not write - and then nothing is made."""
-    from .store import task_ref
+def _checked(store, people, subject: str, start: str, end: str) -> tuple:
+    """(addresses, subject, account) for a new meeting, or ValueError for what is missing, NoAccess for a card that may not write."""
     to, subject = _addrs(people), ' '.join(str(subject or '').split())[:200]
     if not to: raise ValueError('add who the meeting is with')
     if not subject: raise ValueError('say what the meeting is about')
@@ -639,18 +645,72 @@ def draft_new(store, people, subject: str, start: str, end: str, note: str = '',
     except (TypeError, ValueError): raise ValueError('pick a time first')
     if b <= a: raise ValueError('that time ends before it starts')
     acct = account(store); require_write(store, acct)
-    title = f"Meeting with {_and([name_of(store, x) for x in to])} about {subject}"[:300]
+    return to, subject, acct
+
+
+# the call link a new meeting carries, by the calendar that makes it (deliver): Graph's online meeting, Google's conference
+LINK = {'outlook': 'Teams', 'google': 'Google Meet'}
+
+
+def _invite(store, tid: int, to: list, subject: str, start: str, end: str, note: str, actor: str, acct: dict, online: bool = False) -> dict:
+    """The invite as a review on task `tid` - the 'schedule' act every new meeting drafts, waiting on the owner's Send. {reviewId, head, clash}."""
     line, clash = when(start, end), clash_line(store, start, end)
-    tid = store.create_task({'Title': title, 'Summary': f"{subject} - {line}, with {', '.join(to)}.", 'Kind': 'task', 'Status': 'open',
-                             'Priority': 'normal', 'Source': 'meeting'}, actor)
     env = {'kind': 'calendar', 'channel': 'calendar', 'act': 'schedule', 'provider': acct['provider'], 'connector_id': acct['connector'],
-           'mailbox': acct['mailbox'], 'subject': subject, 'to': to, 'clash': clash, 'start': start, 'end': end, 'when': line}
+           'mailbox': acct['mailbox'], 'subject': subject, 'to': to, 'clash': clash, 'start': start, 'end': end, 'when': line,
+           **({'link': LINK.get(acct['provider'], 'Teams')} if online else {})}
     head = f'Invite {", ".join(to)} to {subject} - {line}'
     rid = store.add_review({'TaskId': tid, 'Kind': 'outbound', 'Status': 'pending', 'DraftText': str(note or '').strip()[:4000],
                             'Deliver': json.dumps(env), 'Reason': f"{head}{' · ' + clash if clash else ''} - press {send_word()} and the calendar is told"})
-    store.audit('review', rid, 'calendar_drafted', actor, detail={'act': 'schedule', 'provider': acct['provider'], 'new': True})
-    return {'taskId': tid, 'ref': task_ref(tid), 'reviewId': rid, 'title': title,
-            'say': f"{task_ref(tid)} - {head}" + (f' ({clash})' if clash else '') + f'. The invite waits in its chat for your {send_word()}.'}
+    store.audit('review', rid, 'calendar_drafted', actor, detail={'act': 'schedule', 'provider': acct['provider'], 'task': tid})
+    return {'reviewId': rid, 'head': head, 'clash': clash}
+
+
+def draft_new(store, people, subject: str, start: str, end: str, note: str = '', actor: str = 'owner') -> dict:
+    """New → Meeting's pick: a task "Meeting with <who> about <subject>" whose Close out holds the invite, drafted as a review whose
+    envelope is the calendar's 'schedule' act - the same one a thread's Find a time drafts. {taskId, ref, reviewId, title, say}.
+    Raises ValueError for what is missing, NoAccess for a card that may not write - and then nothing is made."""
+    from .store import task_ref
+    to, subject, acct = _checked(store, people, subject, start, end)
+    title = f"Meeting with {_and([name_of(store, x) for x in to])} about {subject}"[:300]
+    tid = store.create_task({'Title': title, 'Summary': f"{subject} - {when(start, end)}, with {', '.join(to)}.", 'Kind': 'task', 'Status': 'open',
+                             'Priority': 'normal', 'Source': 'meeting'}, actor)
+    got = _invite(store, tid, to, subject, start, end, note, actor, acct)
+    return {'taskId': tid, 'ref': task_ref(tid), 'reviewId': got['reviewId'], 'title': title,
+            'say': f"{task_ref(tid)} - {got['head']}" + (f" ({got['clash']})" if got['clash'] else '') + f'. The invite waits in its chat for your {send_word()}.'}
+
+
+# ── the agent sets it up (the owner, 2026-11-08: "fix it like email or all other actions") ──────────────────────────────────
+# An invite that came in: the agent reads it and the calendar, then SETS UP the answer - the draft the row's Accept / Decline / Propose a
+# new time makes. A meeting asked for: the people found in the owner's mail, a free time read off the calendars, a Teams or Meet link,
+# the invite drafted on the agent's own task. Either way a card in the chat, and nothing reaches a calendar before the owner's press.
+def _told(say: str) -> str: return f"Set up for the owner's press: {say.split('. It waits')[0]}. Nothing reaches the calendar until they press it."
+
+
+def answer(store, tid: int, act: str, start: str = None, end: str = None, note: str = None, actor: str = 'agent') -> dict:
+    """The agent's answer to the invite waiting on task `tid`. {ok, review, when, clash, says}."""
+    if act not in ('accept', 'decline', 'propose'): raise ValueError('answer is accept, decline or propose')
+    c = of_task(store, tid)
+    if not c or not c.get('invite'): raise ValueError('no invite on this task waits on an answer - it was answered already, or there is none')
+    out = draft(store, c['mid'], act, start, end, actor, note)
+    env = env_of(store.get_review(out['reviewId']))
+    return {'ok': True, 'review': out['reviewId'], 'when': env.get('when'), 'clash': env.get('clash') or '', 'says': _told(out['say'])}
+
+
+def meeting(store, tid: int, who, subject: str, minutes: int = 30, within: str = '', start: str = None, end: str = None, note: str = '',
+            online: bool = True, actor: str = 'agent') -> dict:
+    """The agent's "set up a meeting" on task `tid`: who by name or address (people_of - a name nobody can place is said back, never
+    guessed), the first free time on the owner's calendar and theirs (suggest) unless one is named. {ok, review, to, when, link, says}."""
+    to, miss = people_of(store, who)
+    if miss: raise ValueError(f"no address for {_and(miss)} in the owner's mail or directory - give the address, or ask the owner for it")
+    if not (start and end):
+        free = suggest(store, to, minutes, within)['slots']
+        if not free: raise ValueError('no free time in those days - name other days (within) or a start and end')
+        start, end = free[0]['start'], free[0]['end']
+    to, subject, acct = _checked(store, to, subject, start, end)
+    got = _invite(store, int(tid), to, subject, start, end, note, actor, acct, online)
+    env = env_of(store.get_review(got['reviewId']))
+    return {'ok': True, 'review': got['reviewId'], 'to': to, 'when': env['when'], 'link': env.get('link') or '',
+            'says': _told(got['head'] + (f" ({got['clash']})" if got['clash'] else ''))}
 
 
 def env_of(r) -> dict:
@@ -692,8 +752,10 @@ def deliver(store, env: dict, note: str) -> dict:
         base = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
         if act == 'schedule':
             body = {'summary': env.get('subject'), 'description': note, 'start': _g_time(env['start'], tz), 'end': _g_time(env['end'], tz),
-                    'attendees': [{'email': a} for a in to]}
-            r = requests.post(base, params={'sendUpdates': 'all'}, headers=h, timeout=30, data=json.dumps(body)); _ok(r, 'create the meeting')
+                    'attendees': [{'email': a} for a in to],
+                    **({'conferenceData': {'createRequest': {'requestId': f"tq-{int(time.time())}", 'conferenceSolutionKey': {'type': 'hangoutsMeet'}}}} if env.get('link') else {})}
+            r = requests.post(base, params={'sendUpdates': 'all', **({'conferenceDataVersion': 1} if env.get('link') else {})}, headers=h, timeout=30,
+                              data=json.dumps(body)); _ok(r, 'create the meeting')
             return {'channel': 'calendar', 'to': to, 'act': act, 'id': (r.json() or {}).get('id')}
         r = requests.get(base, params={'iCalUID': env.get('ical_uid')}, headers=h, timeout=20); _ok(r, 'find the meeting')
         ev = next(iter((r.json() or {}).get('items') or []), None)
@@ -712,7 +774,8 @@ def deliver(store, env: dict, note: str) -> dict:
     box = env.get('mailbox')
     if act == 'schedule':
         body = {'subject': env.get('subject'), 'body': {'contentType': 'text', 'content': note}, 'start': _ms_time(env['start'], tz),
-                'end': _ms_time(env['end'], tz), 'attendees': [{'emailAddress': {'address': a}, 'type': 'required'} for a in to]}
+                'end': _ms_time(env['end'], tz), 'attendees': [{'emailAddress': {'address': a}, 'type': 'required'} for a in to],
+                **({'isOnlineMeeting': True, 'onlineMeetingProvider': 'teamsForBusiness'} if env.get('link') else {})}
         r = requests.post(f'{GRAPH}/users/{box}/events', headers=h, timeout=30, data=json.dumps(body)); _ok(r, 'create the meeting')
         return {'channel': 'calendar', 'to': to, 'act': act, 'id': (r.json() or {}).get('id')}
     if not env.get('event_id'): raise RuntimeError('the invite carries no meeting to answer')

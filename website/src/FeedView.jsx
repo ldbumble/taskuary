@@ -57,6 +57,9 @@ const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack
   zendesk: "Zendesk tickets", freshdesk: "Freshdesk tickets", intercom: "Intercom conversations", servicenow: "ServiceNow records",
   shortcut: "Shortcut stories", wrike: "Wrike tasks", smartsheet: "Smartsheet rows", airtable: "Airtable rows",
   github_projects: "GitHub Projects items", bitbucket: "Bitbucket PRs & issues", ms_planner: "Planner tasks",
+  zulip: "Zulip messages", signal: "Signal messages", twilio: "Texts", discourse: "Discourse notifications", reddit: "Reddit inbox",
+  youtube: "YouTube comments", calendly: "Calendly bookings", shipstation: "ShipStation orders", shopify: "Shopify orders",
+  square: "Square disputes", paypal: "PayPal disputes",
   aws: "AWS buckets & log groups", azure: "Azure containers & workspaces" };
 
 

@@ -11,6 +11,9 @@ workspace - a Zendesk agent, an Intercom teammate, a member of the Bitbucket wor
 an outside collaborator is a stranger's words; a source that cannot say (Airtable) carries no author, and its items wait for
 the owner's Trust everyone from ... press. Membership lookups are cached per process, like devtools.gitlab_member.
 
+The same road carries the people who write from OUTSIDE (Zulip, Signal, Twilio texts, Discourse, Reddit, YouTube) and the business
+systems where something waits on you (Calendly bookings, ShipStation and Shopify orders, Square and PayPal disputes) - see below.
+
 Read-only: nothing is posted back to any of these (trackers.py writes Jira, Monday and Linear only).
 """
 import json, re
@@ -25,8 +28,9 @@ from .timewords import plural
 
 NAMES = {'zendesk': 'Zendesk', 'freshdesk': 'Freshdesk', 'intercom': 'Intercom', 'servicenow': 'ServiceNow',
          'shortcut': 'Shortcut', 'wrike': 'Wrike', 'smartsheet': 'Smartsheet', 'airtable': 'Airtable',
-         'github_projects': 'GitHub Projects', 'bitbucket': 'Bitbucket', 'ms_planner': 'Microsoft Planner'}
-HELPDESKS = ('zendesk', 'freshdesk', 'intercom', 'servicenow')
+         'github_projects': 'GitHub Projects', 'bitbucket': 'Bitbucket', 'ms_planner': 'Microsoft Planner',
+         'zulip': 'Zulip', 'signal': 'Signal', 'twilio': 'Twilio', 'discourse': 'Discourse', 'reddit': 'Reddit', 'youtube': 'YouTube',
+         'calendly': 'Calendly', 'shipstation': 'ShipStation', 'shopify': 'Shopify', 'square': 'Square', 'paypal': 'PayPal'}
 _MEMO = {}       # (type, scope, who) -> membership, read once per process
 
 
@@ -84,8 +88,11 @@ def _member(key, ask):
     return _MEMO[key]
 
 
-def item(id, subject, head, body='', who=None, email=None, uid=None, member=None, at=None, link=None, place=None) -> dict:
-    return dict(id=id, subject=subject, head=head, body=body, who=who, email=email, uid=uid, member=member, at=at, link=link, place=place)
+def item(id, subject, head, body='', who=None, email=None, uid=None, member=None, at=None, link=None, place=None, conv=None, drained=False) -> dict:
+    """One piece of work as every source hands it over. `conv`: the conversation it continues (a chat's room, a texter) when that is not
+    the item itself; `drained`: the source handed it over once and keeps no copy (signal-cli's queue), so no time floor may drop it."""
+    return dict(id=id, subject=subject, head=head, body=body, who=who, email=email, uid=uid, member=member, at=at, link=link, place=place,
+                conv=conv, drained=drained)
 
 
 # ── Zendesk ──────────────────────────────────────────────────────────────────────────────
@@ -537,6 +544,344 @@ def items_ms_planner(store, c, since) -> list:
     return out
 
 
+# ═══ PEOPLE WHO WRITE TO YOU FROM OUTSIDE: chat, community, social, texts ════════════════════════════════════════════════════
+# The same road - but here almost every author is an outsider by nature (a forum member, a Redditor, a commenter, a texter), so
+# a member is only who the platform itself says belongs: a Zulip organisation's non-guest, a Discourse forum's staff. Everyone
+# else is a stranger, vouched for one by one (senders.vouch keys on their id here).
+
+# ── Zulip ────────────────────────────────────────────────────────────────────────────────
+def _zu_base(c): return _site(c, 'site', '{}.zulipchat.com', 'no Zulip site set - e.g. https://yourco.zulipchat.com')
+def _zu(c, path, **params):
+    return _req(c, 'get', f'{_zu_base(c)}/api/v1{path}', 'check the bot or account email and its API key (Personal settings → Account & privacy → API key)',
+                params=params, auth=(_cfg(c).get('email') or '', c.get('Secret') or ''))
+
+
+def test_zulip(store, c) -> str:
+    _need(c, 'API key', 'Zulip: Personal settings → Account & privacy → Manage your API key')
+    me = _zu(c, '/users/me')
+    _keep(store, c, me_id=me['user_id'])
+    _seed_source(store, c, _host(_zu_base(c)))
+    return f"authenticated as {me.get('full_name')} - messages that mention you and direct messages flow in on the next sync"
+
+
+def items_zulip(store, c, since) -> list:
+    base, me, seen, out = _zu_base(c), int(_me(c)), set(), []
+    for why, narrow in (('mentions you', 'mentioned'), ('a direct message', 'dm')):
+        for m in _zu(c, '/messages', anchor='newest', num_before=CAP, num_after=0, apply_markdown='false',
+                     narrow=json.dumps([{'operator': 'is', 'operand': narrow}])).get('messages') or []:
+            if m['id'] in seen or m.get('sender_id') == me: continue
+            seen.add(m['id'])
+            # Zulip's own role: owner 100 ... member 400, guest 600 - a guest or a bot is not of the organisation
+            role = lambda u=m['sender_id']: (lambda x: x.get('role', 600) <= 400 and not x.get('is_bot'))(_zu(c, f'/users/{u}').get('user') or {})
+            dm = m.get('type') == 'private'
+            where = f"dm/{m['sender_id']}" if dm else f"channel/{m.get('stream_id')}/topic/{quote(str(m.get('subject') or ''))}"
+            out.append(item(m['id'], None if dm else f"#{m.get('display_recipient')} > {m.get('subject')}",
+                            f"Zulip message - {why}", m.get('content'), m.get('sender_full_name'), m.get('sender_email'), m['sender_id'],
+                            _member(('zulip', base, m['sender_id']), role), m.get('timestamp'),
+                            f"{base}/#narrow/{where}/near/{m['id']}",
+                            _host(base), conv=f"dm:{m['sender_id']}" if dm else f"{m.get('stream_id')}:{m.get('subject')}"))
+    return out
+
+
+# ── Signal (signal-cli-rest-api running beside Taskuary) ──────────────────────────────────
+def _sg_base(c) -> str: return str(_cfg(c).get('url') or 'http://127.0.0.1:8080').strip().rstrip('/')
+def _sg_number(c) -> str:
+    n = re.sub(r'[^\d+]', '', str(_cfg(c).get('number') or ''))
+    if not n: raise RuntimeError("no number set - the Signal number signal-cli is registered or linked as, e.g. +15551234567")
+    return n
+
+
+def test_signal(store, c) -> str:
+    about, n = _req(c, 'get', f'{_sg_base(c)}/v1/about', 'the signal-cli REST API refused us'), _sg_number(c)
+    if n not in (_req(c, 'get', f'{_sg_base(c)}/v1/accounts', 'the signal-cli REST API refused us') or []):
+        raise RuntimeError(f'signal-cli answers, but {n} is not registered or linked on it - link it first (its /v1/qrcodelink)')
+    _seed_source(store, c, n)
+    return f"signal-cli {about.get('version') or ''} answers for {n} - your messages flow in on the next sync"
+
+
+def items_signal(store, c, since) -> list:
+    # receive EMPTIES signal-cli's queue: what it hands over is this poll's to file, so nothing here may drop a message
+    out = []
+    for e in _req(c, 'get', f'{_sg_base(c)}/v1/receive/{quote(_sg_number(c))}', 'the signal-cli REST API refused us') or []:
+        v = e.get('envelope') or {}
+        d = v.get('dataMessage') or {}
+        if not str(d.get('message') or '').strip(): continue        # receipts, typing, reactions
+        who, g = v.get('sourceUuid') or v.get('sourceNumber') or v.get('source'), (d.get('groupInfo') or {}).get('groupId')
+        out.append(item(f"{who}:{v.get('timestamp')}", None, f"Signal message{' in a group' if g else ''}", d['message'],
+                        v.get('sourceName') or v.get('sourceNumber'), None, who, None, v.get('timestamp'), None, 'Signal',
+                        conv=f"g:{g}" if g else f"dm:{who}", drained=True))
+    return out
+
+
+# ── Twilio (texts to your number) ────────────────────────────────────────────────────────
+def _tw(c, path, **params):
+    sid = str(_cfg(c).get('account_sid') or '').strip()
+    if not re.fullmatch(r'AC[0-9a-fA-F]{32}', sid): raise RuntimeError('no Account SID set - it starts AC, on the Twilio console home')
+    return _req(c, 'get', f'https://api.twilio.com/2010-04-01/Accounts/{sid}{path}', 'check the Account SID and the auth token', params=params,
+                auth=(sid, c.get('Secret') or ''))
+
+
+def test_twilio(store, c) -> str:
+    _need(c, 'auth token', 'the Twilio console home shows the Account SID and the auth token')
+    a, n = _tw(c, '.json'), str(_cfg(c).get('number') or '').strip()
+    if not n: raise RuntimeError('no number set - the Twilio number texts arrive on, e.g. +15551234567')
+    _seed_source(store, c, n)
+    return f"authenticated to {a.get('friendly_name')} - texts to {n} flow in on the next sync"
+
+
+def items_twilio(store, c, since) -> list:
+    from email.utils import parsedate_to_datetime
+    n = str(_cfg(c).get('number') or '').strip()
+    ms = _tw(c, '/Messages.json', To=n, PageSize=CAP, **{'DateSent>': f'{since - timedelta(days=1):%Y-%m-%d}'}).get('messages') or []
+    return [item(m['sid'], None, 'Text message to your Twilio number', m.get('body'), m.get('from'), None, m.get('from'), None,
+                 parsedate_to_datetime(m['date_sent']).isoformat() if m.get('date_sent') else None,
+                 f"https://console.twilio.com/us1/monitor/logs/sms/{m['sid']}", n, conv=f"from:{m.get('from')}")
+            for m in ms if m.get('direction') == 'inbound']
+
+
+# ── Discourse (mentions, replies, messages to you) ───────────────────────────────────────
+DC_KINDS = {1: 'mentioned you', 2: 'replied to you', 3: 'quoted you', 6: 'sent you a message', 15: 'mentioned your group'}
+def _dc_base(c): return _site(c, 'base_url', '{}', 'no forum URL set - e.g. https://forum.yourco.example')
+def _dc(c, path, **params):
+    return _req(c, 'get', f'{_dc_base(c)}{path}', 'check the API key and the user name it acts for (Admin → API → Keys)', params=params,
+                headers={'Api-Key': c.get('Secret') or '', 'Api-Username': _cfg(c).get('username') or '', 'Accept': 'application/json'})
+
+
+def test_discourse(store, c) -> str:
+    _need(c, 'API key', 'Discourse: Admin → API → New API key (a single user: you)')
+    u = _dc(c, f"/u/{quote(str(_cfg(c).get('username') or ''))}.json").get('user') or {}
+    _seed_source(store, c, _host(_dc_base(c)))
+    return f"authenticated as {u.get('username')} - mentions, replies and messages to you flow in on the next sync"
+
+
+def _dc_staff(c, who):
+    """Staff - or a member of the group the card names - is of the forum; anyone else can sign up, so is a stranger."""
+    def ask():
+        u = _dc(c, f'/u/{quote(who)}.json').get('user') or {}
+        g = str(_cfg(c).get('member_group') or '').strip().lower()
+        return bool(u.get('admin') or u.get('moderator') or (g and g in {str(x.get('name') or '').lower() for x in u.get('groups') or []}))
+    return _member(('discourse', _dc_base(c), who), ask)
+
+
+def items_discourse(store, c, since) -> list:
+    base, out = _dc_base(c), []
+    for n in _dc(c, '/notifications.json', username=_cfg(c).get('username') or '').get('notifications') or []:
+        if n.get('notification_type') not in DC_KINDS or _when(n.get('created_at')) < _new(since): continue
+        d = n.get('data') or {}
+        who = d.get('original_username') or d.get('display_username')
+        p = _dc(c, f"/posts/by_number/{n['topic_id']}/{n.get('post_number') or 1}.json") if n.get('topic_id') else {}
+        out.append(item(n['id'], d.get('topic_title') or n.get('fancy_title') or 'Discourse', f"Discourse - {who} {DC_KINDS[n['notification_type']]}",
+                        p.get('raw') or _text(p.get('cooked')), p.get('name') or who, None, who and f'u:{who}',
+                        _dc_staff(c, who) if who else None, n.get('created_at'),
+                        f"{base}/t/{n.get('slug') or '-'}/{n['topic_id']}/{n.get('post_number') or 1}", _host(base), conv=f"t{n.get('topic_id')}"))
+    return out
+
+
+# ── Reddit (your inbox: replies, mentions, messages) ─────────────────────────────────────
+RD_UA = 'taskuary:inbox:1.0 (by your own script app)'
+def _rd_token(c) -> str:
+    cfg = _cfg(c)
+    if not (cfg.get('client_id') and cfg.get('client_secret') and cfg.get('username')):
+        raise RuntimeError('need the script app\'s client id and secret (reddit.com/prefs/apps) and your user name')
+    from . import net
+    def mint():
+        r = requests.request('post', 'https://www.reddit.com/api/v1/access_token', timeout=30, auth=(cfg['client_id'], cfg['client_secret']),
+                             data={'grant_type': 'password', 'username': cfg['username'], 'password': c.get('Secret') or ''}, headers={'User-Agent': RD_UA})
+        j = r.json() if r.status_code == 200 else {}
+        if not j.get('access_token'): raise RuntimeError('Reddit refused the sign-in - check the app id, its secret, your user name and password '
+                                                         '(an account with two-factor sign-in cannot use a script app)')
+        return j['access_token'], j.get('expires_in')
+    return net.token(('reddit', cfg['client_id'], cfg['username']), mint)
+
+
+def _rd(c, path, **params):
+    return _req(c, 'get', f'https://oauth.reddit.com{path}', 'the sign-in was refused - Test the card again', params=params,
+                headers={'Authorization': f'Bearer {_rd_token(c)}', 'User-Agent': RD_UA})
+
+
+def test_reddit(store, c) -> str:
+    _need(c, 'password', 'your Reddit password (the script app signs in as you)')
+    me = _rd(c, '/api/v1/me')
+    _seed_source(store, c, f"u/{me.get('name')}")
+    return f"authenticated as u/{me.get('name')} - replies, mentions and messages in your inbox flow in on the next sync"
+
+
+def items_reddit(store, c, since) -> list:
+    out = []
+    for k in (_rd(c, '/message/inbox', limit=CAP, raw_json=1).get('data') or {}).get('children') or []:
+        m = k.get('data') or {}
+        kind = 'a reply to you' if m.get('was_comment') else 'a message'
+        out.append(item(m.get('name') or m['id'], m.get('link_title') or m.get('subject'), f"Reddit - {kind}{' in r/' + m['subreddit'] if m.get('subreddit') else ''}",
+                        m.get('body'), f"u/{m.get('author')}", None, m.get('author') and f"u:{m['author']}", False,   # a Redditor is always an outsider
+                        m.get('created_utc'), f"https://www.reddit.com{m['context']}" if m.get('context') else 'https://www.reddit.com/message/inbox',
+                        f"u/{_cfg(c).get('username')}"))
+    return out
+
+
+# ── YouTube (comments on your channel's videos) ──────────────────────────────────────────
+def _yt(c, path, **params):
+    return _req(c, 'get', f'https://www.googleapis.com/youtube/v3{path}', 'check the API key (Google Cloud console, YouTube Data API v3 enabled)',
+                params={**params, 'key': c.get('Secret') or ''})
+def _yt_channel(c) -> str:
+    ch = str(_cfg(c).get('channel_id') or '').strip()
+    if not re.fullmatch(r'UC[\w-]{22}', ch): raise RuntimeError('no channel id set - it starts UC (YouTube Studio → Settings → Channel → Advanced)')
+    return ch
+
+
+def test_youtube(store, c) -> str:
+    _need(c, 'API key', 'Google Cloud console → APIs & Services → enable YouTube Data API v3 → Credentials → API key')
+    ch = (_yt(c, '/channels', part='snippet', id=_yt_channel(c)).get('items') or [None])[0]
+    if not ch: raise RuntimeError('YouTube knows no channel with that id')
+    _seed_source(store, c, ch['snippet']['title'])
+    return f"found {ch['snippet']['title']} - new comments on its videos flow in on the next sync"
+
+
+def items_youtube(store, c, since) -> list:
+    me, out = _yt_channel(c), []
+    for t in _yt(c, '/commentThreads', part='snippet', allThreadsRelatedToChannelId=me, order='time', maxResults=CAP, textFormat='plainText').get('items') or []:
+        s = (t['snippet'].get('topLevelComment') or {}).get('snippet') or {}
+        who = (s.get('authorChannelId') or {}).get('value')
+        if who == me: continue                                                  # the channel's own words are not work
+        out.append(item(t['id'], f"Comment on your video {t['snippet'].get('videoId')}", 'YouTube comment on your channel', s.get('textOriginal'),
+                        s.get('authorDisplayName'), None, who and f'ch:{who}', False, s.get('updatedAt') or s.get('publishedAt'),
+                        f"https://www.youtube.com/watch?v={t['snippet'].get('videoId')}&lc={t['id']}", 'YouTube', conv=t['id']))
+    return out
+
+
+# ═══ THE BUSINESS SYSTEMS: something waits on you ═══════════════════════════════════════════════════════════════════════════
+# A booking, an order to ship, a dispute to answer. Nobody inside wrote these - a customer did, or the system did - so no item
+# here carries a member: each waits for the owner's press until they trust the source (Trust everyone from ...).
+
+# ── Calendly (new bookings) ──────────────────────────────────────────────────────────────
+CY = 'https://api.calendly.com'
+def _cy(c, url, **params):
+    return _req(c, 'get', url if url.startswith('http') else f'{CY}{url}', 'check the personal access token (Integrations → API & webhooks)',
+                params=params, headers={'Authorization': f"Bearer {c.get('Secret') or ''}"})
+
+
+def test_calendly(store, c) -> str:
+    _need(c, 'personal access token', 'Calendly: Integrations & apps → API & webhooks → Generate new token')
+    me = _cy(c, '/users/me')['resource']
+    _keep(store, c, me_id=me['uri'])
+    _seed_source(store, c, me.get('name') or 'Calendly')
+    return f"authenticated as {me.get('name')} - new bookings flow in on the next sync"
+
+
+def items_calendly(store, c, since) -> list:
+    out = []
+    for e in _cy(c, '/scheduled_events', user=_me(c), status='active', min_start_time=_utc(datetime.now()), sort='start_time:asc', count=CAP).get('collection') or []:
+        if _when(e.get('created_at')) < _new(since): continue                  # a booking is news once: when it is made
+        inv = (_cy(c, f"{e['uri']}/invitees").get('collection') or [{}])[0]
+        qa = '\n'.join(f"{q.get('question')}: {q.get('answer')}" for q in inv.get('questions_and_answers') or [])
+        out.append(item(e['uri'].rsplit('/', 1)[-1], f"{e.get('name')} with {inv.get('name') or 'someone'}",
+                        f"Calendly booking - {_when(e.get('start_time'))[:16]} to {_when(e.get('end_time'))[11:16]}",
+                        '\n'.join(x for x in (qa, (e.get('location') or {}).get('join_url')) if x), inv.get('name'), inv.get('email'), None, None,
+                        e.get('created_at'), 'https://calendly.com/app/scheduled_events/user/me', 'Calendly'))
+    return out
+
+
+# ── ShipStation (orders waiting to ship) ─────────────────────────────────────────────────
+def _st(c, path, **params):
+    return _req(c, 'get', f'https://ssapi.shipstation.com{path}', 'check the API key and secret (Settings → Account → API Settings)', params=params,
+                auth=(_cfg(c).get('api_key') or '', c.get('Secret') or ''))
+
+
+def test_shipstation(store, c) -> str:
+    _need(c, 'API secret', 'ShipStation: Settings → Account → API Settings shows the key and the secret')
+    n = len(_st(c, '/stores') or [])
+    _seed_source(store, c, 'ShipStation')
+    return f"authenticated - {plural(n, 'store')} - orders awaiting shipment flow in on the next sync"
+
+
+def items_shipstation(store, c, since) -> list:
+    # ShipStation keeps its own clock (US Pacific, no offset): the query reaches a day back and ingest keeps only what changed
+    j = _st(c, '/orders', orderStatus='awaiting_shipment', modifyDateStart=f'{since - timedelta(days=1):%Y-%m-%d %H:%M:%S}',
+            sortBy='ModifyDate', sortDir='DESC', pageSize=CAP)
+    by = lambda o: f" · ship by {str(o['shipByDate'])[:10]}" if o.get('shipByDate') else ''
+    return [item(o['orderId'], f"Order {o.get('orderNumber')} to ship", f"ShipStation order - awaiting shipment{by(o)}",
+                 '\n'.join([*(f"{i.get('quantity')} × {i.get('name')}" for i in o.get('items') or []),
+                            *(f'{k}: {o[k]}' for k in ('customerNotes', 'internalNotes', 'orderTotal') if o.get(k))]),
+                 (o.get('billTo') or {}).get('name'), o.get('customerEmail'), None, None, None,
+                 f"https://ship.shipstation.com/orders/awaiting-shipment/order/{o['orderId']}", 'ShipStation') for o in j.get('orders') or []]
+
+
+# ── Shopify (open orders not yet fulfilled) ──────────────────────────────────────────────
+def _sh_base(c): return _site(c, 'shop', '{}.myshopify.com', 'no shop set - yourstore.myshopify.com')
+def _sh(c, path, **params):
+    return _req(c, 'get', f'{_sh_base(c)}/admin/api/2024-10{path}', 'check the Admin API access token (a custom app with read_orders)',
+                params=params, headers={'X-Shopify-Access-Token': c.get('Secret') or ''})
+
+
+def test_shopify(store, c) -> str:
+    _need(c, 'Admin API access token', 'Shopify admin → Settings → Apps and sales channels → Develop apps → your app → API credentials')
+    sh = _sh(c, '/shop.json')['shop']
+    _seed_source(store, c, sh.get('name') or _host(_sh_base(c)))
+    return f"connected to {sh.get('name')} - open orders waiting to be fulfilled flow in on the next sync"
+
+
+def items_shopify(store, c, since) -> list:
+    base = _sh_base(c)
+    return [item(o['id'], f"Order {o.get('name')} to fulfil", f"Shopify order - {o.get('financial_status')} · unfulfilled · {o.get('total_price')} {o.get('currency')}",
+                 '\n'.join([*(f"{i.get('quantity')} × {i.get('title')}" for i in o.get('line_items') or []), *([f"Note: {o['note']}"] if o.get('note') else [])]),
+                 ' '.join(x for x in ((o.get('customer') or {}).get('first_name'), (o.get('customer') or {}).get('last_name')) if x) or None,
+                 o.get('email'), None, None, o.get('updated_at'), f"{base}/admin/orders/{o['id']}", _host(base))
+            for o in _sh(c, '/orders.json', status='open', fulfillment_status='unfulfilled', updated_at_min=_utc(since), limit=CAP).get('orders') or []]
+
+
+# ── Square (disputes waiting on your evidence) ───────────────────────────────────────────
+def _sq(c, path, **params):
+    return _req(c, 'get', f'https://connect.squareup.com/v2{path}', 'check the access token (Developer Console → your app → Credentials, Production)',
+                params=params, headers={'Authorization': f"Bearer {c.get('Secret') or ''}", 'Square-Version': '2024-10-17'})
+def _money(m, cents=True):
+    m = m or {}
+    v = m.get('amount') if cents else m.get('value')
+    return f"{(v or 0) / 100 if cents else v} {m.get('currency') or m.get('currency_code') or ''}".strip()
+
+
+def test_square(store, c) -> str:
+    _need(c, 'access token', 'Square Developer Console → your app → Credentials → Production access token')
+    m = _sq(c, '/merchants/me').get('merchant') or {}
+    _seed_source(store, c, m.get('business_name') or 'Square')
+    return f"connected to {m.get('business_name')} - disputes waiting on your evidence flow in on the next sync"
+
+
+def items_square(store, c, since) -> list:
+    return [item(d['id'], f"Dispute: {_money(d.get('amount_money'))} - {str(d.get('reason') or '').replace('_', ' ').lower()}",
+                 f"Square dispute - evidence required{' by ' + str(d['due_at'])[:10] if d.get('due_at') else ''}",
+                 f"Card: {d.get('card_brand')}\nPayment: {(d.get('disputed_payment') or {}).get('payment_id')}", 'Square', None, None, None,
+                 d.get('updated_at'), 'https://app.squareup.com/dashboard/disputes', 'Square')
+            for d in _sq(c, '/disputes', states='EVIDENCE_REQUIRED').get('disputes') or []]
+
+
+# ── PayPal (disputes that need your action) ──────────────────────────────────────────────
+def _pp_base(c) -> str: return 'https://api-m.sandbox.paypal.com' if _cfg(c).get('sandbox') in (True, 'true', '1', 'yes') else 'https://api-m.paypal.com'
+def _pp(c, path, **params):
+    from . import net
+    cid = str(_cfg(c).get('client_id') or '').strip()
+    if not cid: raise RuntimeError('no client id set - developer.paypal.com → Apps & Credentials → your app')
+    def mint():
+        r = requests.request('post', f'{_pp_base(c)}/v1/oauth2/token', timeout=30, auth=(cid, c.get('Secret') or ''), data={'grant_type': 'client_credentials'})
+        if r.status_code != 200: raise RuntimeError(f'PayPal refused the app (said {r.status_code}) - check the client id and secret')
+        j = r.json(); return j['access_token'], j.get('expires_in')
+    tok = net.token(('paypal', _pp_base(c), cid), mint)
+    return _req(c, 'get', f'{_pp_base(c)}{path}', 'the app needs the disputes permission (Apps & Credentials → your app → Features)', params=params,
+                headers={'Authorization': f'Bearer {tok}'})
+
+
+def test_paypal(store, c) -> str:
+    _need(c, 'client secret', 'developer.paypal.com → Apps & Credentials → your app → Secret')
+    _pp(c, '/v1/customer/disputes', page_size=1)
+    _seed_source(store, c, 'PayPal')
+    return 'connected - disputes that need your action flow in on the next sync'
+
+
+def items_paypal(store, c, since) -> list:
+    return [item(d['dispute_id'], f"Dispute: {_money(d.get('dispute_amount'), False)} - {str(d.get('reason') or '').replace('_', ' ').lower()}",
+                 f"PayPal dispute - {str(d.get('dispute_life_cycle_stage') or '').lower()} · needs your action", f"Status: {d.get('status')}", 'PayPal',
+                 None, None, None, d.get('update_time'), f"https://www.paypal.com/resolutioncenter/{d['dispute_id']}", 'PayPal')
+            for d in _pp(c, '/v1/customer/disputes', dispute_state='REQUIRED_ACTION', page_size=CAP).get('items') or []]
+
+
 TYPES = tuple(NAMES)
 TESTS = {t: globals()[f'test_{t}'] for t in TYPES}
 ITEMS = {t: globals()[f'items_{t}'] for t in TYPES}
@@ -550,9 +895,9 @@ def poll(store, c, since, llm=None, file_only=False) -> int:
     try: xs = ITEMS[t](store, c, since)
     except requests.RequestException as e: raise RuntimeError(f'{NAMES[t]} poll failed: {e}') from e
     for x in xs:
-        if x['at'] and _when(x['at']) < _new(since): continue
+        if x['at'] and not x['drained'] and _when(x['at']) < _new(since): continue
         n += ingest_tracker(store, file_only=file_only, llm=llm, msg={
-            'external_id': f"{t}:{x['id']}", 'channel': t, 'conversation_id': f"{t}:{x['id']}",
+            'external_id': f"{t}:{x['id']}", 'channel': t, 'conversation_id': f"{t}:{x['conv'] or x['id']}",
             'subject': str(x['subject'] or NAMES[t])[:300], 'body': f"[{x['head']}]\n{str(x['body'] or '(no description)')[:20000]}",
             'from_name': x['who'] or NAMES[t], 'from_email': x['email'], 'sent_at': _when(x['at']) if x['at'] else datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'source_link': x['link'], 'source_name': x['place'] or NAMES[t], **author_meta(t, x['uid'], x['member'])})

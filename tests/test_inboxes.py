@@ -278,6 +278,156 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual((cfg['_scope'], cfg['_for'], sec, borrowed), (msauth.PLANNER, 'ms_planner', 'rt', True))
 
 
+class ZulipTests(unittest.TestCase):
+    def test_mentions_and_dms_with_the_organizations_roles(self):
+        s = MemoryStore(); c = conn(s, 'zulip', {'site': 'northwind.zulipchat.com', 'email': 'alex@northwind.example'})
+        msg = lambda i, who, kind='stream': {'id': i, 'sender_id': who, 'sender_full_name': f'U{who}', 'sender_email': f'u{who}@northwind.example',
+                                             'content': f'@**Alex Doyle** can you look {i}', 'timestamp': 1787300000, 'type': kind,
+                                             'display_recipient': 'ops', 'subject': 'deploy', 'stream_id': 5}
+        with wired({'/users/me': {'user_id': 1, 'full_name': 'Alex Doyle'},
+                    '/messages': {'messages': [msg(10, 2), msg(11, 3, 'private'), msg(12, 1)]},
+                    '/users/2': {'user': {'role': 400}}, '/users/3': {'user': {'role': 600}}}):
+            inboxes.test(s, c)
+            self.assertEqual(inboxes.poll(s, again(s, c), SINCE), 2)          # its own line is not work; the second narrow repeats them
+        got = {r['FromName']: r for r in rows(s, 'zulip')}
+        self.assertEqual(got['U2']['ConversationId'], 'zulip:5:deploy'); self.assertIn('/channel/5/topic/deploy/near/10', got['U2']['SourceLink'])
+        self.assertTrue(trusted(s, got['U2'])); self.assertFalse(trusted(s, got['U3']))     # a guest
+
+
+class SignalTests(unittest.TestCase):
+    def test_a_drained_queue_files_every_message_however_old(self):
+        s = MemoryStore(); c = conn(s, 'signal', {'number': '+1 555 0100'})
+        env = lambda ts, text, g=None: {'envelope': {'source': '+15550111', 'sourceNumber': '+15550111', 'sourceUuid': 'uuid-1', 'sourceName': 'Ray Colton',
+                                                     'timestamp': ts, 'dataMessage': {'timestamp': ts, 'message': text, **({'groupInfo': {'groupId': g}} if g else {})}}}
+        with wired({'/v1/about': {'version': '0.92'}, '/v1/accounts': ['+15550100'],
+                    '/v1/receive/%2B15550100': [env(1000000000000, 'old but never seen'), env(1787300000000, None), env(1787300001000, 'in the group', 'G1')]}):
+            self.assertIn('+15550100', inboxes.test(s, c))
+            self.assertEqual(inboxes.poll(s, c, SINCE), 2)
+        got = [r for r in rows(s, 'signal')]
+        self.assertEqual({r['ConversationId'] for r in got}, {'signal:dm:uuid-1', 'signal:g:G1'})
+        self.assertFalse(trusted(s, got[0]))
+
+    def test_an_unlinked_number_is_said(self):
+        s = MemoryStore(); c = conn(s, 'signal', {'number': '+15550100'})
+        with wired({'/v1/about': {}, '/v1/accounts': []}), self.assertRaisesRegex(RuntimeError, 'not registered or linked'): inboxes.test(s, c)
+
+
+class TwilioTests(unittest.TestCase):
+    def test_inbound_texts_thread_by_sender(self):
+        sid = 'AC' + 'a' * 32
+        s = MemoryStore(); c = conn(s, 'twilio', {'account_sid': sid, 'number': '+15550100'})
+        m = lambda i, d='inbound': {'sid': f'SM{i}', 'from': '+15550199', 'to': '+15550100', 'body': f'text {i}', 'direction': d,
+                                    'date_sent': 'Thu, 20 Aug 2026 10:00:00 +0000'}
+        with wired({f'/Accounts/{sid}.json': {'friendly_name': 'Northwind'}, '/Messages.json': {'messages': [m(1), m(2), m(3, 'outbound-api')]}}) as h:
+            inboxes.test(s, c)
+            self.assertEqual(inboxes.poll(s, c, SINCE), 2)
+        self.assertEqual(h.calls[-1][2]['params']['To'], '+15550100')
+        self.assertEqual({r['ConversationId'] for r in rows(s, 'twilio')}, {'twilio:from:+15550199'})
+
+
+class DiscourseTests(unittest.TestCase):
+    def test_notifications_to_me_and_only_staff_are_colleagues(self):
+        s = MemoryStore(); c = conn(s, 'discourse', {'base_url': 'https://forum.northwind.example', 'username': 'alex'})
+        n = lambda i, kind, who: {'id': i, 'notification_type': kind, 'created_at': '2026-08-20T10:00:00.000Z', 'topic_id': 70 + i, 'post_number': 2,
+                                  'slug': 'pump-noise', 'fancy_title': 'Pump noise', 'data': {'original_username': who, 'topic_title': 'Pump noise'}}
+        with wired({'/u/alex.json': {'user': {'username': 'alex'}}, '/notifications.json': {'notifications': [n(1, 1, 'erin'), n(2, 2, 'visitor'), n(3, 5, 'x')]},
+                    '/posts/by_number/71/2.json': {'raw': 'what do you think @alex', 'name': 'Erin Blake'},
+                    '/posts/by_number/72/2.json': {'raw': 'reply', 'name': 'A Visitor'},
+                    '/u/erin.json': {'user': {'moderator': True}}, '/u/visitor.json': {'user': {'groups': [{'name': 'trust_level_1'}]}}}):
+            inboxes.test(s, c)
+            self.assertEqual(inboxes.poll(s, c, SINCE), 2)                     # a like (type 5) is not work
+        got = {r['FromName']: r for r in rows(s, 'discourse')}
+        self.assertEqual(got['Erin Blake']['SourceLink'], 'https://forum.northwind.example/t/pump-noise/71/2')
+        self.assertTrue(trusted(s, got['Erin Blake'])); self.assertFalse(trusted(s, got['A Visitor']))
+
+
+class RedditTests(unittest.TestCase):
+    def test_the_inbox_through_a_script_app_is_always_strangers(self):
+        s = MemoryStore(); c = conn(s, 'reddit', {'client_id': 'cid', 'client_secret': 'cs', 'username': 'alexd'})
+        kid = lambda i: {'kind': 't1', 'data': {'id': f'c{i}', 'name': f't1_c{i}', 'author': 'someone', 'body': 'is this still for sale?', 'was_comment': True,
+                                                'subreddit': 'woodworking', 'link_title': 'My bench', 'created_utc': 1787300000.0, 'context': f'/r/woodworking/comments/x/y/c{i}/?context=3'}}
+        with mock.patch('taskuary.net.token', side_effect=lambda key, mint: mint()[0]), \
+                wired({'reddit.com/api/v1/access_token': {'access_token': 'T', 'expires_in': 3600},
+                       '/api/v1/me': {'name': 'alexd'}, '/message/inbox': {'data': {'children': [kid(1)]}}}):
+            self.assertIn('u/alexd', inboxes.test(s, c))
+            self.assertEqual(inboxes.poll(s, c, SINCE), 1)
+        r = rows(s, 'reddit')[0]
+        self.assertEqual(r['SourceLink'], 'https://www.reddit.com/r/woodworking/comments/x/y/c1/?context=3'); self.assertFalse(trusted(s, r))
+        from taskuary import guard
+        self.assertIn('client_secret', guard.WRITE_ONLY_CONFIG['reddit'])
+
+
+class YouTubeTests(unittest.TestCase):
+    def test_comments_on_my_videos_without_my_own(self):
+        me = 'UC' + 'x' * 22
+        s = MemoryStore(); c = conn(s, 'youtube', {'channel_id': me})
+        th = lambda i, who: {'id': f'Ug{i}', 'snippet': {'videoId': 'vid1', 'topLevelComment': {'snippet': {
+            'authorDisplayName': f'@viewer{i}', 'authorChannelId': {'value': who}, 'textOriginal': 'great video, what lens?',
+            'publishedAt': '2026-08-20T10:00:00Z', 'updatedAt': '2026-08-20T10:00:00Z'}}}}
+        with wired({'/channels': {'items': [{'snippet': {'title': 'Northwind Builds'}}]}, '/commentThreads': {'items': [th(1, 'UCother'), th(2, me)]}}) as h:
+            self.assertIn('Northwind Builds', inboxes.test(s, c))
+            self.assertEqual(inboxes.poll(s, c, SINCE), 1)
+        self.assertEqual(h.calls[-1][2]['params']['allThreadsRelatedToChannelId'], me)
+        r = rows(s, 'youtube')[0]
+        self.assertEqual(r['SourceLink'], 'https://www.youtube.com/watch?v=vid1&lc=Ug1'); self.assertFalse(trusted(s, r))
+
+
+class CommerceTests(unittest.TestCase):
+    """Bookings, orders and disputes: nobody inside wrote them, so they wait until the source is trusted."""
+    def test_calendly_new_bookings(self):
+        s = MemoryStore(); c = conn(s, 'calendly')
+        ev = lambda i, made: {'uri': f'https://api.calendly.com/scheduled_events/E{i}', 'name': 'Intro call', 'created_at': made,
+                              'start_time': '2026-09-02T15:00:00Z', 'end_time': '2026-09-02T15:30:00Z', 'location': {'join_url': 'https://zoom.example/j/1'}}
+        with wired({'/users/me': {'resource': {'uri': 'https://api.calendly.com/users/ME', 'name': 'Alex Doyle'}},
+                    '/scheduled_events/E1/invitees': {'collection': [{'name': 'Paula Vance', 'email': 'paula@vendor.example',
+                                                                     'questions_and_answers': [{'question': 'Topic?', 'answer': 'pricing'}]}]},
+                    '/scheduled_events': {'collection': [ev(1, '2026-08-20T10:00:00Z'), ev(2, '2026-07-01T10:00:00Z')]}}):
+            inboxes.test(s, c)
+            self.assertEqual(inboxes.poll(s, again(s, c), SINCE), 1)
+        r = rows(s, 'calendly')[0]
+        self.assertEqual(r['Subject'], 'Intro call with Paula Vance'); self.assertIn('Topic?: pricing', r['BodyText']); self.assertFalse(trusted(s, r))
+
+    def test_shipstation_orders_awaiting_shipment(self):
+        s = MemoryStore(); c = conn(s, 'shipstation', {'api_key': 'k'})
+        o = {'orderId': 99, 'orderNumber': 'NW-1001', 'shipByDate': '2026-08-22T00:00:00.0000000', 'customerEmail': 'buyer@vendor.example',
+             'billTo': {'name': 'Pat Buyer'}, 'items': [{'name': 'Oak shelf', 'quantity': 2}], 'customerNotes': 'gift wrap', 'orderTotal': 120.0}
+        with wired({'/stores': [{'storeId': 1}], '/orders': {'orders': [o]}}):
+            self.assertIn('1 store', inboxes.test(s, c))
+            self.assertEqual(inboxes.poll(s, c, SINCE), 1)
+        r = rows(s, 'shipstation')[0]
+        self.assertIn('2 × Oak shelf', r['BodyText']); self.assertIn('ship by 2026-08-22', r['BodyText'])
+
+    def test_shopify_unfulfilled_orders(self):
+        s = MemoryStore(); c = conn(s, 'shopify', {'shop': 'northwind'})
+        o = {'id': 450, 'name': '#1001', 'email': 'buyer@vendor.example', 'updated_at': '2026-08-20T10:00:00-04:00', 'financial_status': 'paid',
+             'total_price': '40.00', 'currency': 'USD', 'customer': {'first_name': 'Pat', 'last_name': 'Buyer'},
+             'line_items': [{'title': 'Mug', 'quantity': 1}], 'note': 'ship Monday'}
+        with wired({'/admin/api/2024-10/shop.json': {'shop': {'name': 'Northwind Goods'}}, '/admin/api/2024-10/orders.json': {'orders': [o]}}) as h:
+            inboxes.test(s, c)
+            self.assertEqual(inboxes.poll(s, c, SINCE), 1)
+        self.assertEqual(h.calls[-1][2]['params']['fulfillment_status'], 'unfulfilled')
+        r = rows(s, 'shopify')[0]
+        self.assertEqual((r['FromName'], r['SourceLink']), ('Pat Buyer', 'https://northwind.myshopify.com/admin/orders/450'))
+
+    def test_square_and_paypal_disputes(self):
+        s = MemoryStore(); sq, pp = conn(s, 'square'), conn(s, 'paypal', {'client_id': 'cid'})
+        with wired({'/merchants/me': {'merchant': {'business_name': 'Northwind'}},
+                    '/v2/disputes': {'disputes': [{'id': 'D1', 'amount_money': {'amount': 2500, 'currency': 'USD'}, 'reason': 'NOT_AS_DESCRIBED',
+                                                   'state': 'EVIDENCE_REQUIRED', 'due_at': '2026-08-30T00:00:00Z', 'card_brand': 'VISA',
+                                                   'updated_at': '2026-08-20T10:00:00Z'}]}}):
+            inboxes.test(s, sq); self.assertEqual(inboxes.poll(s, sq, SINCE), 1)
+        self.assertEqual(rows(s, 'square')[0]['Subject'], 'Dispute: 25.0 USD - not as described')
+        with mock.patch('taskuary.net.token', side_effect=lambda key, mint: mint()[0]), \
+                wired({'/v1/oauth2/token': {'access_token': 'T', 'expires_in': 3600},
+                       '/v1/customer/disputes': {'items': [{'dispute_id': 'PP-D-1', 'reason': 'MERCHANDISE_OR_SERVICE_NOT_RECEIVED', 'status': 'WAITING_FOR_SELLER_RESPONSE',
+                                                            'dispute_amount': {'value': '19.99', 'currency_code': 'USD'}, 'dispute_life_cycle_stage': 'INQUIRY',
+                                                            'update_time': '2026-08-20T10:00:00.000Z'}]}}) as h:
+            inboxes.test(s, pp); self.assertEqual(inboxes.poll(s, pp, SINCE), 1)
+        self.assertIn('api-m.paypal.com', h.calls[0][1])
+        r = rows(s, 'paypal')[0]
+        self.assertEqual(r['SourceLink'], 'https://www.paypal.com/resolutioncenter/PP-D-1'); self.assertFalse(trusted(s, r))
+
+
 class MailPresetTests(unittest.TestCase):
     """Fastmail, Yahoo, Proton Mail Bridge and Exchange are IMAP cards with their servers filled in - no protocol of their own."""
     def presets(self):

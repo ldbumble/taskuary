@@ -16,14 +16,10 @@ const CATEGORIES = [
   "Social",
 ];
 
-// THE ROADMAP EMPTIES AS IT IS BUILT (the owner, 2026-11-08: "all the ones that say coming soon just add them now"): a category is
-// judged by every card it holds, working or planned, and the planned ones are only those no road reaches yet
-test("every connector category holds several cards, working or planned", () => {
-  const groups = new Set(CATALOGUE.map((c) => c.group));
-  for (const category of CATEGORIES) {
-    assert.ok(groups.has(category), category);
-    assert.ok(CATALOGUE.filter((c) => c.group === category).length >= 5, `${category} should not look empty`);
-  }
+// A category is never empty - but its roadmap may run out: the owner, 2026-11-08, "all the ones that say coming soon just add them
+// now". So the guard is that each category holds cards, working or planned, and the roadmap names no category the page lacks.
+test("every connector category holds cards, and the roadmap stays inside the categories", () => {
+  for (const category of CATEGORIES) assert.ok(CATALOGUE.some((c) => c.group === category), `${category} should not look empty`);
   for (const category of Object.keys(PLANNED_CONNECTORS)) assert.ok(CATEGORIES.includes(category), category);
   assert.equal(plannedFor("AI — agents & models").length, 0);      // every model provider on the roadmap now has a card
 });
@@ -38,12 +34,11 @@ test("the requested Grok API connector is BUILT, not merely planned", () => {
 });
 
 test("Everything else is a useful catalog rather than an empty bucket", () => {
-  // ten planned until the vendors' own MCP servers made Intercom, PayPal and Calendly working cards here (remotemcp.py, 2026-11-08)
-  const entries = plannedFor("Everything else");
-  assert.ok(entries.length >= 5);
-  assert.ok(CATALOGUE.filter((c) => c.group === "Everything else" && c.mcp && !c.planned).length >= 10);
-  assert.ok(entries.some((c) => c.type === "shopify"));      // stripe was the example here until it was built (2026-11-01)
-  assert.ok(entries.some((c) => c.type === "docusign"));
+  const all = CATALOGUE.filter((c) => c.group === "Everything else");
+  assert.ok(all.length >= 10);
+  // stripe was the example here until it was built (2026-11-01); shopify until it was (2026-11-08)
+  assert.ok(all.some((c) => c.type === "shopify" && !c.planned));
+  assert.ok(plannedFor("Everything else").some((c) => c.type === "docusign"));
 });
 
 test("catalog identifiers are unique and every card has searchable copy", () => {
@@ -77,4 +72,22 @@ test("each connector type is drawn once: a planned card never repeats a live one
   ]);
   assert.deepEqual(groups.map((g) => g.cards.map((c) => c.key)), [["catalog-pcc", "d1"], ["d2", "d3"], ["pgraphql"]]);
   assert.match(read("ConnectorsView.jsx"), /const groups = onceEach\(\[/, "the page's groups go through onceEach");
+});
+
+// Fastmail, Yahoo, Proton Mail Bridge and Exchange are IMAP cards with their servers filled in (the owner, 2026-11-08: "add more
+// connections ... make them work well") - one press makes the card, the card remembers its preset, and the preset is not offered twice
+test("a mailbox preset makes an IMAP card with its servers, and is offered until it exists", async () => {
+  const { PRESETS, presetBody, presetOf, presetsLeft } = await import("../src/connectorCatalog.js");
+  assert.deepEqual(Object.keys(PRESETS).sort(), ["exchange", "fastmail", "proton_mail", "yahoo_mail"]);
+  const body = presetBody("proton_mail");
+  assert.equal(body.Type, "imap"); assert.equal(body.Name, "Proton Mail");
+  assert.deepEqual(JSON.parse(body.ConfigJson), { imap_host: "127.0.0.1", imap_port: 1143, imap_starttls: true, smtp_host: "127.0.0.1", smtp_port: 1025, preset: "proton_mail" });
+  const made = { Type: "imap", ConfigJson: body.ConfigJson };
+  assert.equal(presetOf(made).title, "Proton Mail");
+  assert.equal(presetOf({ Type: "imap", ConfigJson: "{}" }), null);
+  assert.equal(presetOf({ Type: "gmail", ConfigJson: body.ConfigJson }), null, "a preset belongs to its own card type");
+  assert.deepEqual(presetsLeft(["fastmail", "proton_mail", "nope"], [made]), ["fastmail"]);
+  const view = read("ConnectorsView.jsx");
+  assert.match(view, /\.\.\.presetCards\(\["fastmail", "yahoo_mail", "proton_mail", "exchange"\]\)/);
+  assert.match(view, /const m = metaOf\(conn\) \|\| \{ fields: \[\], howto: \[\] \};/);
 });

@@ -1824,8 +1824,8 @@
       "type": "signal",
       "title": "Signal",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Signal conversations through a local bridge",
+      "planned": false,
+      "desc": "Your Signal messages land on your work rail through triage, read by signal-cli's REST API running beside Taskuary.",
       "match": [
         "signal"
       ]
@@ -2909,8 +2909,8 @@
       "type": "shopify",
       "title": "Shopify",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Orders, products and customers",
+      "planned": false,
+      "desc": "Open Shopify orders NOT YET FULFILLED land on your work rail through triage.",
       "match": [
         "shopify"
       ]
@@ -2919,8 +2919,8 @@
       "type": "square",
       "title": "Square",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Payments, orders and locations",
+      "planned": false,
+      "desc": "Square disputes WAITING ON YOUR EVIDENCE land on your work rail through triage.",
       "match": [
         "square"
       ]
@@ -2930,9 +2930,19 @@
       "title": "PayPal",
       "group": "Everything else",
       "planned": false,
-      "desc": "PayPal's own MCP server in your agent CLI — agents look up transactions, invoices and disputes. You sign in once with Sign in.",
+      "desc": "PayPal disputes that NEED YOUR ACTION land on your work rail through triage.",
       "match": [
         "paypal"
+      ]
+    },
+    {
+      "type": "paypal_mcp",
+      "title": "PayPal MCP",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "PayPal's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
+      "match": [
+        "paypal mcp"
       ],
       "mcp": {
         "url": "https://mcp.paypal.com/http",
@@ -2943,8 +2953,8 @@
       "type": "twilio",
       "title": "Twilio",
       "group": "Everything else",
-      "planned": true,
-      "desc": "SMS, calls and delivery events",
+      "planned": false,
+      "desc": "Texts to your Twilio number land on your work rail through triage.",
       "match": [
         "twilio"
       ]
@@ -2974,9 +2984,19 @@
       "title": "Calendly",
       "group": "Everything else",
       "planned": false,
-      "desc": "Calendly's own MCP server in your agent CLI — agents see scheduled events and invitees and share booking links. You sign in once with Sign in.",
+      "desc": "New Calendly bookings land on your work rail with who booked and their answers.",
       "match": [
         "calendly"
+      ]
+    },
+    {
+      "type": "calendly_mcp",
+      "title": "Calendly MCP",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Calendly's own MCP server in your agent CLI — agents look up and update what is there. You sign in once with Sign in.",
+      "match": [
+        "calendly mcp"
       ],
       "mcp": {
         "url": "https://mcp.calendly.com",
@@ -3031,8 +3051,8 @@
       "type": "shipstation",
       "title": "ShipStation",
       "group": "Everything else",
-      "planned": true,
-      "desc": "Orders, shipments and delivery status",
+      "planned": false,
+      "desc": "ShipStation orders AWAITING SHIPMENT land on your work rail through triage.",
       "match": [
         "shipstation"
       ]
@@ -3397,8 +3417,8 @@
       "type": "reddit",
       "title": "Reddit",
       "group": "Social",
-      "planned": true,
-      "desc": "Watch subreddits and your own inbox; post and reply with a script app.",
+      "planned": false,
+      "desc": "Replies, mentions and messages in your Reddit inbox land on your work rail through triage.",
       "match": [
         "reddit",
         "subreddit"
@@ -3408,8 +3428,8 @@
       "type": "youtube",
       "title": "YouTube",
       "group": "Social",
-      "planned": true,
-      "desc": "Channel statistics and new comments on your videos, as a report.",
+      "planned": false,
+      "desc": "New comments on your YouTube channel's videos land on your work rail through triage.",
       "match": [
         "youtube",
         "yt"
@@ -3419,8 +3439,8 @@
       "type": "discourse",
       "title": "Discourse",
       "group": "Social",
-      "planned": true,
-      "desc": "Forum topics and replies from any Discourse instance.",
+      "planned": false,
+      "desc": "Discourse mentions, replies and messages TO YOU land on your work rail through triage.",
       "match": [
         "discourse",
         "forum"
@@ -3623,8 +3643,8 @@
       "type": "zulip",
       "title": "Zulip",
       "group": "Messaging",
-      "planned": true,
-      "desc": "Threaded team chat you can host yourself - topics inside streams, which is a shape triage would read well.",
+      "planned": false,
+      "desc": "Zulip messages that MENTION YOU and your direct messages land on your work rail through triage.",
       "match": [
         "zulip"
       ]

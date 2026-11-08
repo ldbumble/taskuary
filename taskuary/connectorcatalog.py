@@ -21,8 +21,8 @@ def source_types() -> tuple:
     Setup's main source is any one of them - mail, chat or a task system (the owner, 2026-10-21: "normally it's email ... any
     messaging/email/task system (e.g. monday.com) as an option") - so the list is the catalogue's, never a name list here."""
     gs = _raw()['sources']['groups']
-    # ...and a vendor's MCP server (remotemcp.py) brings nothing in: it is a tool the agents reach out with, never a source
-    return tuple(c['type'] for c in cards() if c.get('group') in gs and not c.get('planned') and not c.get('mcp'))
+    # ...a vendor's MCP server (remotemcp.py) is a tool, never a source; a mailbox preset (Fastmail, Proton Mail) is an IMAP card with its servers filled in, never a connector type of its own
+    return tuple(c['type'] for c in cards() if c.get('group') in gs and not c.get('planned') and not c.get('preset') and not c.get('mcp'))
 
 
 def own_groups() -> tuple:

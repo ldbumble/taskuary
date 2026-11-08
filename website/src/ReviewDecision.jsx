@@ -568,11 +568,13 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
       )}
       {!proposal && !isCal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
         promised={filesPromised(r)} short={filesShort(filedDelivery, deliveryFiles(filedDelivery))} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={off || delivery.frozen} />}
-      {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || "").toLowerCase() === "email" && (
+      {/* an agent's email (slots.draft) has no message, so no r.Channel: its envelope says email - the CC it was given showed nowhere
+          (the product audit, 2026-11-08). One with none gets no Add CC here: that is the owner's call to make (ASK OWNER, F27) */}
+      {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || meta.channel || "").toLowerCase() === "email" && (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
           CC: {ccNow.length ? ccNow.join(", ") : "none"}
         </Typography>
-      ) : !proposal && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel} />}
+      ) : !proposal && (!isSlot || ccNow.length > 0) && <CcRow cc={ccNow} setCc={setCc} channel={r.Channel || meta.channel} />}
       {/* why there is no Send (outbound.send_block, PW-044) is the Copy button's hover under the draft, not a line over it (2026-10-22) */}
       {/* THE WARNING SITS OVER THE DRAFT IT IS ABOUT, ITS REDRAFT IN IT (the owner, 2026-10-28: "redraft warning on top of the reply should
           have the redraft button on it, not below the message box") */}

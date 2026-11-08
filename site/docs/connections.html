@@ -47,7 +47,7 @@
 <div class="entry on">
       <a class="page" href="./connections" aria-current="page">Connections</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Connections's sections"></button>
-      <div class="secs"><a class="sec" href="#what-a-connection-is" data-sec="what-a-connection-is">What a connection is</a><a class="sec" href="#the-five-roles" data-sec="the-five-roles">The five roles</a><a class="sec" href="#mail" data-sec="mail">Mail</a><a class="sec" href="#chat" data-sec="chat">Chat</a><a class="sec" href="#repositories-and-trackers" data-sec="repositories-and-trackers">Repositories and trackers</a><a class="sec" href="#data-and-report-sources" data-sec="data-and-report-sources">Data and report sources</a><a class="sec" href="#coding-clis-and-ai-providers" data-sec="coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="#voice-notes-and-dictation" data-sec="voice-notes-and-dictation">Voice notes and dictation</a><a class="sec" href="#a-vendors-own-mcp-server" data-sec="a-vendors-own-mcp-server">A vendor's own MCP server</a><a class="sec" href="#a-vendors-api-read-with-a-key" data-sec="a-vendors-api-read-with-a-key">A vendor's API, read with a key</a><a class="sec" href="#a-system-with-no-card" data-sec="a-system-with-no-card">A system with no card</a><a class="sec" href="#adding-another-of-the-same-kind" data-sec="adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="#pushing-something-in-yourself" data-sec="pushing-something-in-yourself">Pushing something in yourself</a></div>
+      <div class="secs"><a class="sec" href="#what-a-connection-is" data-sec="what-a-connection-is">What a connection is</a><a class="sec" href="#the-five-roles" data-sec="the-five-roles">The five roles</a><a class="sec" href="#mail" data-sec="mail">Mail</a><a class="sec" href="#chat" data-sec="chat">Chat</a><a class="sec" href="#repositories-and-trackers" data-sec="repositories-and-trackers">Repositories and trackers</a><a class="sec" href="#data-and-report-sources" data-sec="data-and-report-sources">Data and report sources</a><a class="sec" href="#coding-clis-and-ai-providers" data-sec="coding-clis-and-ai-providers">Coding CLIs and AI providers</a><a class="sec" href="#voice-notes-and-dictation" data-sec="voice-notes-and-dictation">Voice notes and dictation</a><a class="sec" href="#a-vendors-own-mcp-server" data-sec="a-vendors-own-mcp-server">A vendor's own MCP server</a><a class="sec" href="#a-vendors-api-read-with-a-key" data-sec="a-vendors-api-read-with-a-key">A vendor's API, read with a key</a><a class="sec" href="#cards-that-sign-in-with-your-own-app" data-sec="cards-that-sign-in-with-your-own-app">Cards that sign in with your own app</a><a class="sec" href="#mail-and-messages-a-vendor-pushes" data-sec="mail-and-messages-a-vendor-pushes">Mail and messages a vendor pushes</a><a class="sec" href="#a-system-with-no-card" data-sec="a-system-with-no-card">A system with no card</a><a class="sec" href="#adding-another-of-the-same-kind" data-sec="adding-another-of-the-same-kind">Adding another of the same kind</a><a class="sec" href="#pushing-something-in-yourself" data-sec="pushing-something-in-yourself">Pushing something in yourself</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./tasks-and-agents">Tasks and agents</a>
@@ -509,6 +509,10 @@ in, the default port known and the missing driver named in the error you actuall
 <strong>Any database (connection string)</strong> card is still there for anything else with a SQLAlchemy URL,
 including raw ODBC through pyodbc. All of them are reads — these cards ship no write verb at all,
 and the engine&#39;s own user is the ceiling, so point them at a read-only account.</p>
+<p><strong>MongoDB</strong>, <strong>Redis</strong> and <strong>Neo4j</strong> read too, each in its own way: MongoDB finds, counts and
+aggregates, and refuses a pipeline that carries <code>$out</code> or <code>$merge</code>; Redis sends one command from a
+closed list of reads (<code>GET</code>, <code>HGETALL</code>, <code>SCAN</code>, ...), never <code>KEYS</code> or a write; Neo4j runs every query
+in a read transaction. Each driver is an extra: <code>pip install taskuary[mongodb]</code>, <code>[redis]</code> or <code>[neo4j]</code>.</p>
 <p><strong>Cloud and monitoring</strong> — AWS (S3 buckets, CloudWatch log groups, arbitrary service calls),
 Azure (blob containers, Log Analytics, arbitrary ARM paths, and it can reuse the Outlook app
 registration), Microsoft Entra ID, Prometheus, Datadog, WinRM for PowerShell on a remote Windows
@@ -674,7 +678,9 @@ agent runs on and as your triage brain is normal and cheap, and it is the light 
 message) and the microphone beside each box. Groq (Whisper), OpenAI transcription, Google Gemini
 transcription, Deepgram and ElevenLabs Scribe take a key; <strong>Any Whisper server</strong> points at one you
 run; <strong>Local Whisper</strong> runs on this computer with no key, and the audio never leaves it
-(<code>pip install taskuary[voice]</code>). With no voice card a voice note still lands, filed with a line
+(<code>pip install taskuary[voice]</code>). <strong>Amazon Transcribe</strong> runs on your own AWS account: each clip goes
+to the S3 bucket named on the card, a job transcribes it, and the clip and its transcript are both
+deleted once read. With no voice card a voice note still lands, filed with a line
 saying it was not transcribed and why, its audio attached so one click transcribes it later.</p>
 <p>Open <strong>Windows / browser voice</strong> under <strong>AI · voice</strong> to choose and test built-in dictation.
 <strong>Windows speech recognition</strong> uses the microphone on the computer running Taskuary;
@@ -708,6 +714,49 @@ take a key (and, when self-hosted, the address). Google Drive, OneDrive and Micr
 nothing: they read with the Google Sheets card&#39;s and the Outlook card&#39;s sign-ins. <strong>Test</strong> makes one
 cheap read. A report or an agent then asks any address under that vendor&#39;s API by its path, and only
 ever reads: nothing but a GET is sent, so a Tradier key on this card places no order.</p>
+<p>Some take more than a key, and the card asks for each piece:</p>
+<ul>
+<li><strong>A token swapped first</strong> — Docker Hub (a personal access token), Charles Schwab, Workday and
+PointClickCare (a refresh token), Dynamics 365, SAP and ADP (a client id and secret). Dynamics 365
+uses your company&#39;s own Microsoft app; ADP also needs its TLS client certificate and key files.</li>
+<li><strong>A key signed into each call</strong> — NetSuite&#39;s token-based auth (account, consumer key and secret,
+token id and secret), Google Cloud&#39;s service-account key file (<code>pip install taskuary[gcp]</code>), and
+Epic and Oracle Cerner&#39;s SMART backend services: a private key whose public half the organization
+registered (<code>pip install taskuary[fhir]</code>). Their FHIR reads are only what the organization granted.</li>
+<li><strong>Credentials in the body</strong> — Plaid, on the access token of an Item already linked to your app.</li>
+<li><strong>Your own gateway</strong> — Interactive Brokers through the Client Portal gateway on this computer.</li>
+</ul>
+<p>A few vendors read by POST — UptimeRobot, Plaid, NetSuite&#39;s SuiteQL, Cloud Logging, and the fetches
+of Browserbase, Oxylabs and Bright Data. Each card lists those paths, and a body goes nowhere else.
+Each card says what your organization&#39;s admin has to give you; for an EMR or HR system that is
+usually an approved app and a read-only role, set up on their side.</p>
+<h2 id="cards-that-sign-in-with-your-own-app">Cards that sign in with your own app<a class="anchor" href="#cards-that-sign-in-with-your-own-app" aria-label="Link to this section">#</a></h2>
+<p>Basecamp to-dos, Box, DocuSign, HubSpot, Salesforce, Threads, Webex, Zoom and Zoom Team Chat sign in
+by OAuth, through an app <strong>you</strong> register at the vendor — Taskuary has no shared app anywhere. The
+card names the vendor&#39;s developer console and shows the redirect URL to add there, which points back
+at Taskuary on this computer (<code>http://127.0.0.1:&lt;port&gt;/api/oauth/callback</code>), so no public address
+is needed. Paste the app&#39;s Client ID and Client Secret (each saves itself) and press <strong>Sign in</strong>: the
+consent screen opens in a new tab, and the tokens come back here, sealed like every secret, and renew
+themselves. Only you can press Sign in — an agent is refused it.</p>
+<p>Threads accepts only an https redirect. Give your own tunnel&#39;s address under <strong>redirect address</strong> on
+the card and the redirect URL follows it.</p>
+<p>What comes in: Webex and Zoom Team Chat direct messages and the messages that @mention you; replies to
+your Threads posts and posts that mention you (always as a stranger&#39;s words); HubSpot tickets and tasks,
+and Salesforce cases and tasks, assigned to you; DocuSign envelopes waiting on your signature; Basecamp
+to-dos assigned to you, and Pings and @mentions. People the vendor itself calls your colleagues are
+known; a customer, a client or an outside contact is a stranger. Agents and reports read with the same
+sign-in — Box files, Zoom meetings and recordings, HubSpot and Salesforce records, an envelope&#39;s status —
+and only ever read.</p>
+<h2 id="mail-and-messages-a-vendor-pushes">Mail and messages a vendor pushes<a class="anchor" href="#mail-and-messages-a-vendor-pushes" aria-label="Link to this section">#</a></h2>
+<p><strong>Mailgun</strong> keeps the mail a route stores, and Taskuary polls it: give the private API key and the
+receiving domain, and no public address is needed. <strong>LINE</strong> (its Messaging API only pushes) and
+<strong>SendGrid Inbound Parse</strong> post each message to Taskuary, so they need a public https address that
+reaches this computer — a tunnel of your own, such as cloudflared or ngrok, pointed at Taskuary&#39;s
+port. The card shows the path to put after that address. Each push proves itself before anything is
+kept: LINE&#39;s signature with your channel secret, SendGrid&#39;s secret path (and its signature, when you
+add the security policy&#39;s key). Only those paths answer under the tunnel&#39;s name — never the app.</p>
+<p><strong>Substack</strong> has no API. Replies and comments reach you as Substack&#39;s own emails, through your mail
+card; give the card your publication&#39;s address and agents and reports read your posts from its feed.</p>
 <h2 id="a-system-with-no-card">A system with no card<a class="anchor" href="#a-system-with-no-card" aria-label="Link to this section">#</a></h2>
 <p>Search the catalogue first. When nothing matches, <strong>Request</strong> under the empty grid drafts a feature
 request for that card, and the Assistant offers the same when you ask it to connect something the

@@ -110,6 +110,10 @@ class TakingTurnsTests(unittest.TestCase):
         sess.pick, sess.provider = 'cli:claude', 'coding'
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=mock.Mock(side_effect=RuntimeError('boom'))):
             with self.assertRaises(RuntimeError): sess.send_prompt('one')
+        self.assertTrue(sess._lock.acquire(blocking=False)); sess._lock.release()       # the floor is free...
+        # ...and the session that failed is closing (_end_soon): the next line goes to a fresh one, as every door sends it (say_line)
+        with self.assertRaises(general.Ended): sess.send_prompt('two')
+        sess = general.GeneralSession(self.s, self.tid); sess.pick, sess.provider = 'cli:claude', 'coding'
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda *a, **k: 'fine'):
             self.assertEqual(sess.send_prompt('two'), 'fine')
 

@@ -55,6 +55,13 @@ def world(tmp_path, monkeypatch):
     return w
 
 
+def _again(s, tid, text='Try again.'):
+    """Try again, as its door sends it: the failed turn's session is closing (GeneralSession._end_soon), so the line goes to a fresh one."""
+    _run.sess.close(learn=False, report=False); general.drop_session(tid)
+    _run.sess = general.GeneralSession(s, tid)
+    return _run.sess.send_prompt(text, echo=False)
+
+
 def _run(s, cfg, tid):
     """Start the task's general agent and send one turn, as Start does; what it said, or the error it failed with."""
     with mock.patch.object(config, 'load', lambda: cfg):
@@ -200,7 +207,7 @@ def test_a_launch_that_finds_a_saved_claude_signed_out_moves_to_codex_for_the_ne
     tid = _researcher(s)
     first = _run(s, cfg, tid)
     assert "claude isn't signed in" in first
-    with mock.patch.object(config, 'load', lambda: cfg): again = _run.sess.send_prompt('Try again.', echo=False)
+    with mock.patch.object(config, 'load', lambda: cfg): again = _again(s, tid)
     assert not again.startswith('error') and [r['cmd'] for r in world['ran']] == ['claude', 'codex']
     assert not s.get_setting('default_brain') and not s.get_setting('assistant_ai')
 
@@ -214,7 +221,7 @@ def test_a_claude_the_person_picked_stays_and_says_it_is_not_signed_in(world):
     said = _run(s, cfg, tid)
     assert "claude isn't signed in" in said and 'Set it up' in said, said
     with mock.patch.object(config, 'load', lambda: cfg), pytest.raises(RuntimeError, match="claude isn't signed in"):
-        _run.sess.send_prompt('Try again.', echo=False)
+        _again(s, tid)
     assert [r['cmd'] for r in world['ran']] == ['claude', 'claude']          # never quietly another AI
     assert s.get_setting('assistant_ai') == 'cli:claude'
 

@@ -2,8 +2,9 @@
 
 The audit's stress run: a first turn ran fourteen minutes, and the five lines typed in its first seconds lived only in the server's memory and
 the page's own state - a page opened mid-turn showed none of them, a restart would have lost them, and when they finally drew they were stamped
-with the time the next turn took them. Now each is kept at once with its typed time, shown on every screen as waiting for the agent, and taken
-together when the turn ends.
+with the time the next turn took them. And a line held behind a turn that failed came back "reload the page and ask again", red in the box,
+where the first line's road started again quietly. One road now: kept at once with its typed time, shown on every screen as waiting for the
+agent, taken together when the turn ends, and started again on a fresh session where the old one ended under it.
 """
 import json, threading, time, unittest
 from unittest import mock
@@ -44,9 +45,9 @@ class OwnerLineIsKept(unittest.TestCase):
     def said(self): return [(c['ActorType'], c['Body']) for c in general.chat_rows(self.s, self.tid)]
 
     def test_a_line_typed_mid_turn_is_kept_at_once_with_its_time_and_taken_with_the_next_turn(self):
-        first = threading.Thread(target=lambda: general.start_session(self.s, self.tid).send_prompt('Compare three tools.')); first.start()
+        first = threading.Thread(target=lambda: general.say_line(self.s, self.tid, 'Compare three tools.')); first.start()
         time.sleep(0.3)
-        held = [threading.Thread(target=lambda w=w: general.start_session(self.s, self.tid).send_prompt(w)) for w in ('Make it cheapest first.', 'And add Ramp.')]
+        held = [threading.Thread(target=lambda w=w: general.say_line(self.s, self.tid, w)) for w in ('Make it cheapest first.', 'And add Ramp.')]
         for t in held: t.start(); time.sleep(0.1)
         time.sleep(0.1)
         kept = general.waiting_lines(self.s, self.tid)
@@ -70,6 +71,19 @@ class OwnerLineIsKept(unittest.TestCase):
         while (general.waiting_lines(self.s, self.tid) or general.ASSISTANT_TYPE not in dict(self.said())) and time.time() < end: time.sleep(0.05)
         self.assertEqual(self.said()[-2:], [(general.USER_TYPE, 'And copy Erin Blake.'), (general.ASSISTANT_TYPE, 'Answer 1.')])
         self.assertEqual(general.waiting_lines(self.s, self.tid), [])
+
+    def test_a_held_line_behind_a_turn_that_failed_starts_the_agent_again_quietly(self):
+        "Bug 10: the held road had no restart - the line came back 'reload the page and ask again'."
+        self.brain.fail = {1}
+        c = TestClient(server.app)
+        first = threading.Thread(target=lambda: c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Compare three tools.'})); first.start()
+        time.sleep(0.3)
+        r = c.post(f'/api/tasks/{self.tid}/assistant/messages', json={'text': 'Cheapest first, please.'})
+        first.join(15)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()['reply'], 'Answer 2.')                                  # answered on a fresh session...
+        self.assertEqual([b for t, b in self.said() if t == general.USER_TYPE].count('Cheapest first, please.'), 1)    # ...the line said once
+        self.assertNotIn('reload the page', general.ENDED)
 
     def test_a_cancelled_line_is_taken_back(self):
         ses = general.start_session(self.s, self.tid)

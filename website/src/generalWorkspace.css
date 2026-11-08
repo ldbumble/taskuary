@@ -141,6 +141,13 @@
   .tq-aui-dock-expanded .tq-aui-viewport { padding: 14px 10px 8px; }
 }
 
+/* ON A PHONE what the box goes with ("From Priya Shah", its files) is a line of its own over the words (the owner, 2026-11-08): beside them it
+   squeezed "Message the agent…" into a column a word wide */
+@media (max-width: 599.95px) {
+  .tq-aui-composer:has(> .tq-aui-attachments) { flex-wrap: wrap; row-gap: 2px; }
+  .tq-aui-composer > .tq-aui-attachments { order: -1; flex: 1 0 100%; max-width: 100%; padding-left: 4px; }
+}
+
 /* on a phone the recurring-report offer stacks: side by side the text squeezed into a one-word column */
 @media (max-width: 600px) {
   }

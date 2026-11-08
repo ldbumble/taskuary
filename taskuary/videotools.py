@@ -3,8 +3,8 @@
 Three roads, each one table and one code path, so a new product is a row:
 
   MCPS    a vendor's remote MCP server, registered in the agent CLIs the owner has (Claude Code: `claude mcp add --transport http
-          --scope user`; Codex: `codex mcp add --url`). Sign-in is the vendor's OAuth, which the CLI does itself - Taskuary never holds
-          the token, so it cannot list the server's tools either, and the send filter (sendfilter.py) would leave it out whole. The
+          --scope user`; Codex: `codex mcp add --url`). Sign-in is the vendor's OAuth, which the CLI does itself (the card's Sign in
+          runs its `mcp login`) - Taskuary never holds the token, so it cannot list the server's tools either, and the send filter (sendfilter.py) would leave it out whole. The
           owner's Add press is their word on it: the server is marked kept there (sendfilter.correct '*'), which the card says.
   SKILLS  a Claude Code skill on disk (~/.claude/skills/<dir>, read by skillimport.py): Browser Use's video-use - cloned, its Python
           set up with uv (or a venv + pip), and the ElevenLabs card's key written into its own .env, which is where it reads it.
@@ -30,6 +30,9 @@ SKILLS = {'video_use': {'title': 'video-use', 'dir': 'video-use', 'repo': 'https
 TYPES = tuple(dict.fromkeys([*MCPS, *SKILLS]))
 CLIS = {'claude': 'Claude Code', 'codex': 'Codex'}
 SIGN_IN = {'claude': 'in a Claude Code terminal type /mcp and pick {n}', 'codex': 'run `codex mcp login {n}` once'}
+# SIGN IN, ONE PRESS (the owner, 2026-11-08): both CLIs sign in to a server themselves - `<cli> mcp login <name>` opens the vendor's page in the
+# browser and waits for its answer - so the card's press starts that, hidden, and the card reads the CLI's own record of it (signed_in)
+LOGINS, LOGIN_WAIT = {}, 600          # (cli, name) -> (the login running, when it began)
 
 
 def _which(c):
@@ -43,6 +46,27 @@ def add_argv(cli: str, exe: str, name: str, url: str) -> list:
 def registered(name: str) -> dict:
     from . import sendfilter
     return {'claude': name in sendfilter.claude_servers(), 'codex': name in sendfilter.codex_servers()}
+def signed_in(cli: str, name: str):
+    """True / False by the CLI's own record, None where it cannot be read here. Claude Code keeps its MCP sign-ins in .credentials.json
+    (`mcpOAuth`, each with its serverName - the macOS keychain instead, unread); Codex says it in `codex mcp list --json` (`auth_status`)."""
+    try:
+        if cli == 'claude':
+            from .climodels import claude_home
+            f = claude_home() / '.credentials.json'
+            if not f.exists(): return None
+            return any(isinstance(v, dict) and v.get('serverName') == name and v.get('accessToken')
+                       for v in (json.loads(f.read_text(encoding='utf-8')).get('mcpOAuth') or {}).values())
+        from . import spawn
+        r = spawn.run([_which('codex'), 'mcp', 'list', '--json'], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+        row = next((x for x in json.loads(r.stdout or '[]') if x.get('name') == name), None)
+        return bool(row) and str(row.get('auth_status') or '').lower() in ('o_auth', 'oauth', 'bearer_token')
+    except Exception as e:
+        logger.info(f'videotools: whether {cli} is signed in to {name} was not read: {e}'); return None
+def signing_in(cli: str, name: str) -> bool:
+    p, t0 = LOGINS.get((cli, name), (None, 0))
+    if p is None or p.poll() is not None: return False
+    if time.time() - t0 < LOGIN_WAIT: return True
+    p.kill(); return False                                       # the browser page was left: the next press starts it again
 def skill_here(t: str) -> bool:
     s, root = SKILLS[t], skills_root()
     if s.get('pack'): return root.is_dir() and any(p.name.startswith(s['dir']) and (p / 'SKILL.md').exists() for p in root.iterdir())
@@ -65,8 +89,9 @@ def state(store, t: str) -> dict:
     if demo.enabled(): return {**out, 'demo': True}          # the demo world shows nobody's machine
     if url:
         on = registered(t)
-        out['clis'] = {c: {'here': bool(_which(c)), 'added': on[c]} for c in CLIS}
-        out['sign_in'] = [SIGN_IN[c].format(n=t) for c, v in out['clis'].items() if v['added']]
+        out['clis'] = {c: {'here': bool(_which(c)), 'added': on[c], 'signed_in': signed_in(c, t) if on[c] else False,
+                           'signing_in': signing_in(c, t)} for c in CLIS}
+        out['sign_in'] = [SIGN_IN[c].format(n=t) for c, v in out['clis'].items() if v['added'] and not v['signed_in']]
         if not any(v['here'] for v in out['clis'].values()): out['missing'].append('Claude Code or Codex on this computer')
     if s := SKILLS.get(t):
         out['skill'] = {'name': s['title'], 'here': skill_here(t), 'repo': s.get('repo') or f"https://github.com/{s['pack']}"}
@@ -126,6 +151,25 @@ def add(store, t: str, actor: str = 'owner', runner=None) -> dict:
         store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, actor)
     store.audit('connector', 0, 'video_tool_added', actor, detail={'type': t, 'said': said})
     return {**st, 'said': said}
+
+
+def sign_in(store, t: str, actor: str = 'owner', start=None) -> dict:
+    """The card's Sign in press - the owner's only (guard.DENIED): each CLI here that has the server and is not signed in to it runs its own
+    `mcp login`, which opens the vendor's sign-in in the browser. Returns state() with `said`; the card asks again until it says signed in."""
+    from . import demo, spawn
+    if demo.enabled(): raise RuntimeError('This is the demo - nothing signs in here.')
+    if t not in MCPS: raise RuntimeError(f'{t} has no sign-in of its own')
+    start, said = start or (lambda argv: spawn.popen(argv, stdin=spawn.subprocess.DEVNULL, stdout=spawn.subprocess.DEVNULL,
+                                                      stderr=spawn.subprocess.DEVNULL)), []
+    clis = state(store, t)['clis']
+    for c, v in clis.items():
+        if not v['added'] or v['signed_in'] or v['signing_in']: continue
+        try: LOGINS[(c, t)] = (start([_which(c), 'mcp', 'login', t]), time.time()); said.append(f'{CLIS[c]}: sign-in opened in your browser')
+        except OSError as e: said.append(f'{CLIS[c]}: sign-in did not start ({e})')
+    if not said: said.append('Add it first - there is nothing to sign in to yet' if not any(v['added'] for v in clis.values()) else
+                             'The sign-in is open in your browser' if any(v['signing_in'] for v in clis.values()) else 'Already signed in')
+    store.audit('connector', 0, 'video_tool_sign_in', actor, detail={'type': t, 'said': said})
+    return {**state(store, t), 'said': said}
 
 
 def test(store, t: str) -> str:

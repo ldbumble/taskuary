@@ -24,6 +24,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { takeLists } from "./connectorLists.js";
+import { SIGN_LABEL, signState } from "./videoSignIn.js";
 import { removeWords, usedBy } from "./connectorUses.js";
 import { nothingMatches } from "./searchHits.js";
 import { connectName, connectionWish, openBugReport } from "./bugReportOpen.js";
@@ -2867,13 +2868,16 @@ function VideoToolDetail({ conn, reload, onBack, onCreated }) {
   const [said, setSaid] = useState(null);         // what the last Add press said, one line per step
   const look = () => api.get(`/api/connectors/${conn.ConnectorId}/tool`).then(({ data }) => setSt(data || {})).catch(() => setSt({}));
   useEffect(() => { look(); }, [conn.ConnectorId]);
-  const add = async () => {
+  const press = (path, failed) => async () => {
     setBusy(true);
-    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/tool`); setSt(data); setSaid(data.said || []); }
-    catch (e) { setSaid([e?.response?.data?.detail || "Add did not run"]); }
+    try { const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/tool${path}`); setSt(data); setSaid(data.said || []); }
+    catch (e) { setSaid([e?.response?.data?.detail || failed]); }
     setBusy(false); reload();
   };
-  const clis = Object.entries(st?.clis || {}), skill = st?.skill;
+  const add = press("", "Add did not run"), signIn = press("/sign-in", "Sign in did not start");
+  const clis = Object.entries(st?.clis || {}), skill = st?.skill, sign = signState(st);
+  // ...while the vendor's page is open in the browser, the card asks the CLI again until it says signed in (videotools.signed_in)
+  useEffect(() => { if (sign !== "signing") return undefined; const h = setInterval(look, 3000); return () => clearInterval(h); }, [sign, conn.ConnectorId]);
   const name = { claude: "Claude Code", codex: "Codex" };
   return (
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
@@ -2882,14 +2886,19 @@ function VideoToolDetail({ conn, reload, onBack, onCreated }) {
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 720 }}>{CATALOGUE.find((c) => c.type === conn.Type)?.desc}</Typography>
       {st?.url && <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>MCP server <code>{st.url}</code></Typography>}
       {clis.map(([c, v]) => (
-        <Typography key={c} variant="body2" sx={{ color: INK }}>{name[c]}: {!v.here ? "not on this computer" : v.added ? "added" : "not added yet"}</Typography>))}
+        <Typography key={c} variant="body2" sx={{ color: INK }}>{name[c]}: {!v.here ? "not on this computer" : !v.added ? "not added yet"
+          : v.signed_in ? "added · signed in" : v.signing_in ? "added · signing in…" : "added"}</Typography>))}
       {skill && <Typography variant="body2" sx={{ color: INK }}>Skill <a href={skill.repo} target="_blank" rel="noreferrer">{skill.name}</a>: {skill.here ? "installed" : "not installed"}</Typography>}
       {(st?.missing || []).map((m) => <Typography key={m} variant="body2" sx={{ color: DIM }}>Still needs {m}.</Typography>)}
       {!!st?.sign_in?.length && <Typography variant="body2" sx={{ color: DIM, mt: 1, maxWidth: 720 }}>
-        Sign-in is the vendor's, in the agent: {st.sign_in.join("; or ")}. Taskuary never sees that sign-in, so it cannot list this server's tools - adding it here is your word that your agents may use all of them.</Typography>}
+        Sign-in is the vendor's, in the agent: press Sign in, or {st.sign_in.join("; or ")}. Taskuary never sees that sign-in, so it cannot list this server's tools - adding it here is your word that your agents may use all of them.</Typography>}
       <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.5 }}>
         <Button variant="outlined" disabled={busy || !st || st.ready} onClick={add} startIcon={busy ? <CircularProgress size={12} /> : null}>
           {st?.ready ? "Added" : skill && !st?.url ? "Install" : "Add"}</Button>
+        {/* SIGN IN, ONE PRESS (the owner, 2026-11-08): the agent CLI's own `mcp login` opens the vendor's sign-in in the browser */}
+        {sign && (st?.demo ? <Typography variant="body2" sx={{ color: DIM }}>This is the demo - nothing signs in here.</Typography>
+          : <Button variant="outlined" data-tq-video-sign-in={sign} disabled={busy || sign !== "out"} onClick={signIn}
+            startIcon={sign === "signing" ? <CircularProgress size={12} /> : null}>{SIGN_LABEL[sign]}</Button>)}
       </Box>
       {(said || []).map((l) => <Typography key={l} variant="caption" sx={{ color: DIM, display: "block", mt: .5 }}>{l}</Typography>)}
       <CardPlaybooks type={conn.Type} />

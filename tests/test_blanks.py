@@ -60,6 +60,14 @@ class DoorTests(unittest.TestCase):
         with _sent(seen): out = verdicts.decide(s2, s2.get_review(rid2), 'approve', 'Moved to [DATE].')
         self.assertEqual((out['send_error'], len(seen)), ('Fill in [DATE] first', 1))
 
+    def test_send_anyway_goes_past_the_blank_the_owner_was_asked_about(self):
+        # the owner, 2026-11-08: Send stays lit; its press asks "This still has [ROOM]. Send anyway?" and Send anyway goes (blanks.js blankAsk)
+        s, seen = MemoryStore(), []
+        _tid, rid = _reply(s, 'The review is in [ROOM]. I will confirm by ___.')
+        with _sent(seen): out = verdicts.decide(s, s.get_review(rid), 'approve', blanks_ok=True)
+        self.assertTrue(out['ok'], out)
+        self.assertEqual(seen, ['The review is in [ROOM]. I will confirm by ___.'])
+
     def test_a_mail_tag_is_not_a_blank(self):
         s, seen = MemoryStore(), []
         _tid, rid = _reply(s, 'Re: [External] Payworth renewal - signed and attached [1].')

@@ -53,8 +53,8 @@ class AutoStartTests(unittest.TestCase):
         out, spawned = ingested(s, mail(), 'general')
         self.assertEqual(spawned, ['_auto_general'])
         # the record leads with whose it is, and says the start was set going - not that it started (a thread may yet fail)
-        self.assertTrue(last_reason(s).startswith('triage: work for the assistant - '), last_reason(s))
-        self.assertIn('the assistant was set to start by itself', last_reason(s))
+        self.assertTrue(last_reason(s).startswith('triage: work for the agent - '), last_reason(s))
+        self.assertIn('the agent was set to start by itself', last_reason(s))
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
 
     def test_coding_still_opens_its_cli(self):

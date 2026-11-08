@@ -56,8 +56,8 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))      # a real task, on the Board
         self.assertEqual(spawned, ['_auto_general'])
         reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertTrue(reason.startswith('triage: work for the assistant'), reason)
-        self.assertIn('the assistant was set to start by itself', reason)
+        self.assertTrue(reason.startswith('triage: work for the agent'), reason)
+        self.assertIn('the agent was set to start by itself', reason)
         self.assertNotIn('coding agent', reason)                             # it was not
 
     def test_a_plain_task_is_nobodys_but_yours(self):

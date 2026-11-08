@@ -98,7 +98,7 @@ class RouteHeadTests(unittest.TestCase):
     def test_the_head_says_whose_it_is(self):
         from taskuary.categories import route_head
         self.assertEqual(route_head('task', 'coding', 'northwind/ledger'), 'work for the coding agent in northwind/ledger')
-        self.assertEqual(route_head('task', 'general', 'northwind/ledger'), 'work for the assistant')       # a repo is coding's alone
+        self.assertEqual(route_head('task', 'general', 'northwind/ledger'), 'work for the agent')       # a repo is coding's alone
         self.assertEqual(route_head('task', 'task'), 'yours to do')
         self.assertEqual((route_head('reply_only', 'reply'), route_head('fyi')), ('needs a reply', 'nothing to do'))
 

@@ -25,7 +25,7 @@ test("two columns at rest, the whole width while an agent works - coding or gene
   assert.match(src, /aria-expanded=\{fromSide\} aria-controls="tq-from-side" onClick=\{\(\) => setFromSide\(\(v\) => !v\)\}/);
   assert.match(src, /const fromDrawer = main === "work" && !twoUp;/);
   assert.match(src, /\{\(!fromDrawer \|\| fromSide\) && slot\("from",/);
-  assert.match(src, /\.\.\.\(fromDrawer \? \{ \.\.\.card, px: 1\.5, py: 1\.25, \.\.\.FROM_SIDE \} : PHONE_FROM\(fromOpen\)\)/);
+  assert.match(src, /\.\.\.\(fromDrawer \? \{ \.\.\.card, px: 1\.5, py: 1\.25, \.\.\.FROM_SIDE \} : PHONE_FROM\(fromOpen \|\| solo\)\)/);
   assert.match(src, /const FROM_SIDE = \{ position: "absolute", top: 0, left: 0, bottom: 0,/);
   assert.match(src, /const \[fromSide, setFromSide\] = useState\(false\);/);
   assert.match(src, /if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); shut\(\)\?\.focus\(\); \}/);
@@ -68,7 +68,7 @@ test("the layout: two columns whenever no agent is live - a Result and a failure
   assert.ok(at(/const resultShown = /) < at(/const focus = focusOf\(/) && at(/const failedRun = /) < at(/const focus = focusOf\(/));
   // the "From" title and its X head only the sidebar (2026-10-22: the columns have no title over From)
   assert.match(src, /\{fromDrawer && <Box sx=\{\{ display: "flex", alignItems: "center" \}\}>\s+<Typography sx=\{\{ \.\.\.label, flex: 1 \}\}>From<\/Typography>\s+<IconButton size="small" aria-label="Close From" data-tq-from-close=""/);
-  assert.match(src, /onClickCapture=\{stacked \? phoneFromTap : undefined\}/);
+  assert.match(src, /onClickCapture=\{stacked && !solo \? phoneFromTap : undefined\}/);
   // ...and no third section: what Close out held is the chat's cards (2026-11-06)
   assert.doesNotMatch(src, /slot\("close"|data-tq-closeout|closeOutRef/);
   // ...its record behind the Result's heading while the Result rests on its summary (2026-10-27: "click Result to see more")

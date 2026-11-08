@@ -247,22 +247,19 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
     </React.Fragment>
   ));
 }
-// THE TWO COLUMNS (taskLayout.js): stacked in a narrow view, side by side once the view is wide enough for both - measured on the
-// view itself (the steps box is an inline-size container), so the canvas beside the rail and the Tasks tab's pane each decide
-// by their own width, not the window's
-// ...one surface: no box round From, a hairline between the columns (the owner, 2026-10-22: "still so messy")
-// ...and HEIGHT FOLLOWS THE WORK (the task-view cleanup, owner-approved 2026-10-25: "messy and not clear what's next", a message ask
-// made the card too big): side by side from 760px, From clamp(300px, 36%, 520px) so prose keeps a measure at 1920; the card is as tall
-// as its content up to the canvas, each column its own one scroller, and a thread never scrolls inside a column. From may run to
-// max(1.5x the work, 420px) before it scrolls on its own (--tq-work-h, the work column measured), so Show all on a burst does not
-// stretch a short reply's card to the canvas
-const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", rowGap: 2, alignItems: "stretch",
-  "@container (min-width: 760px)": { gridTemplateColumns: "minmax(0, clamp(300px, 36%, 520px)) minmax(0, 1fr)", gridTemplateRows: "minmax(0, 1fr)",
-    flex: "0 1 auto", minHeight: 0,
-    "& > [data-tq-from], & > [data-tq-work]": { minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain", overflowAnchor: "none" },
-    "& > [data-tq-from]": { pr: 2.5, maxHeight: "max(420px, calc(var(--tq-work-h, 280px) * 1.5))" },
-    "& > [data-tq-from] [data-tq-chat-thread], & > [data-tq-from] [data-tq-thread-box]": { maxHeight: "none", overflowY: "visible" },
-    "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
+// THE STACKED PAGE (taskLayout.js): a narrow view's From over its work, measured on the view itself (the steps box is an inline-size
+// container), so the canvas beside the rail and the Tasks tab's pane each decide by their own width, not the window's
+// ...AND IT IS THE VIEW'S HEIGHT, its box at the foot (the owner, F4 2026-11-08): on a phone a reply task's box sat under a 528px chat
+// floor, to scroll for, and a to-do's half-way up under From's three-line clamp. The page never scrolls as a whole: From takes what it
+// needs and scrolls on its own past that (a phone's folded From stays clipped to its three lines), the work - the chat - the rest, its
+// box on the view's foot, never under 280px; a to-do's From is the whole page, its box sticky at its foot
+const PHONE_MQ = "(max-width: 599.95px)";
+const COLUMNS = { display: "flex", flexDirection: "column", rowGap: 2, flex: "1 1 0", minHeight: 0, minWidth: 0,
+  "& > [data-tq-from]": { flex: "0 1 auto", minHeight: 0, overflowY: "auto", scrollbarWidth: "thin", overscrollBehaviorY: "contain" },
+  "& > [data-tq-from]:has(> [data-tq-solo-box])": { flex: "1 1 0" },
+  "& > [data-tq-work]": { flex: "1 0 auto", minHeight: 0 }, "& > [data-tq-work]:empty": { display: "none" },   // a to-do's: nothing in it to grow
+  "& [data-tq-agent-room=chat]": { minHeight: 280 },
+  [`@media ${PHONE_MQ}`]: { "& > [data-tq-from]:not([data-tq-from-open]):not(:has(> [data-tq-solo-box]))": { overflowY: "hidden" } } };
 // THE SHADE AND THE FOCUS (the owner, 2026-10-25: "shading for what to focus on"): the card's body a warm shade, the one section to act on
 // white with a hairline - no heavy shadow, just white against the shade
 export const SHADE = "#f5f2ed", FOCUS_EDGE = "#e4ded4";
@@ -366,7 +363,6 @@ const DRAWER_TAB = (open, right = false, lit = false) => ({ appearance: "none", 
   ...(lit && !open ? { "@keyframes tqTabPeek": { "0%, 100%": { transform: "none" }, "50%": { transform: `translateX(${right ? -5 : 5}px)` } },
     animation: "tqTabPeek .6s ease-in-out .5s 2", "@media (prefers-reduced-motion: reduce)": { animation: "none" } } : {}) });
 // a phone's From: three lines, faded at the foot, until a tap opens it
-const PHONE_MQ = "(max-width: 599.95px)";
 const PHONE_FROM = (open) => (open ? {} : { [`@media ${PHONE_MQ}`]: { maxHeight: 132, overflow: "hidden", cursor: "pointer",
   maskImage: "linear-gradient(#000 70%, transparent)", WebkitMaskImage: "linear-gradient(#000 70%, transparent)" } });
 // the repo is a filter like the others, but it opens a picker rather than a menu of values
@@ -3056,8 +3052,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={fromDrawer ? "" : undefined}
                     id={fromDrawer ? "tq-from-side" : undefined} role={fromDrawer ? "complementary" : twoUp ? "region" : undefined}
                     aria-label={fromDrawer || twoUp ? "Came from" : undefined} aria-hidden={twoUp && !isOpen("from") ? true : undefined}
-                    onClickCapture={stacked ? phoneFromTap : undefined} sx={twoUp ? { ...SECTION(isOpen("from"), openW("from")), gap: 1.75 }
-                      : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen)) }}>
+                    onClickCapture={stacked && !solo ? phoneFromTap : undefined} sx={twoUp ? { ...SECTION(isOpen("from"), openW("from")), gap: 1.75 }
+                      : { minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75, ...(fromDrawer ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE } : PHONE_FROM(fromOpen || solo)) }}>
                     {twoUp && <SectionHead sec={SECTIONS[0]} sub="what came in, and what triage made of it" here={hereSec === "from"}
  />}
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no

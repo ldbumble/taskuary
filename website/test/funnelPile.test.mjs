@@ -265,7 +265,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // ...and a band you can open is shut the same way: the heading is the control (2026-09-16)
   assert.match(view, /const folds = CAPPED\.includes\(level\) && rows\.length > FLOOR/);
   assert.match(css, /\.tq-pile-head \{[^}]*position: sticky/);
-  assert.match(view, /One more and you're clear/);    // ...the count is the encouragement, at the bottom, from fifteen
+  assert.match(view, /`\$\{left\} to go, then you're clear\.`/);
+  assert.doesNotMatch(view, /away from clear\./, "one phrase whatever the count (2026-11-08)");    // ...the count is the encouragement, at the bottom, from fifteen
   const feed = read("FeedView.jsx");
   // the rail is the ranked pipe and nothing else - the Timeline's historical rows are gone (2026-10-15)
   assert.match(feed, /\{setupRail \? null : top\}/);

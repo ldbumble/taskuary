@@ -99,7 +99,7 @@ export const CliConnectionsPage = ({ onBack }) => {
       <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Configure each CLI once. Its command and arguments are shared by every profile that chooses it.</Typography>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_CONNECTION })}>Add CLI connection</Button>
     </Box>
-    <Button size="small" onClick={() => { openAppLink("profiles"); }} sx={{ mb: 2 }}>Manage profiles in Docs</Button>
+    <Button size="small" onClick={() => { openAppLink("profiles"); }} sx={{ mb: 2 }}>Manage profiles in Settings</Button>
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     <UndoLine kinds={["cli"]} onRestored={load} />
     {!clis && !err && <CircularProgress size={22} />}

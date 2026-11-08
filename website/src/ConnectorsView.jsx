@@ -927,7 +927,7 @@ const DATA_META = {
     connect: { label: "Sign in with LinkedIn", status: (cid) => `/api/connectors/${cid}/linkedin/status`,
       start: (cid) => `/api/connectors/${cid}/linkedin/authorize`,
       text: "Opens LinkedIn's consent screen in a new tab. The token returns directly to Taskuary." },
-    desc: "Publish to your own LinkedIn feed. A draft an agent writes never posts itself: the card ships at authority READ, so every post is a proposal you approve on the task.",
+    desc: "Publish to your own LinkedIn feed. A post an agent writes never goes by itself: it waits on the task for your Post.",
     howto: ["Create an app at developer.linkedin.com/apps. It must be associated with a LinkedIn Page you are an admin of — that is LinkedIn's rule, not ours, and there is no way around it.",
       "On the app's Products tab add BOTH: 'Share on LinkedIn' (which lets it post) and 'Sign In with LinkedIn using OpenID Connect' (which lets it read who you are). Both are self-serve and granted immediately. With only the first, the sign-in is refused with “Scope openid is not authorized for your application”.",
       "Do NOT request Community Management. That one needs a registered legal entity and a narrated screencast, and a rejection is terminal for the app — you would have to make a new one.",
@@ -947,7 +947,7 @@ const DATA_META = {
     howto: ["Sign in at treg.to (GitHub or an emailed code) and create a token. New verified accounts get $1.00 of credit; there is no subscription and no seat.",
       "Paste the token under Credentials. Leave the url blank unless you self-host.",
       "Test lists treg's own tool surface — about ten meta-tools. The 3,600 endpoints are not tools; they are the catalogue those tools search.",
-      "Searching is free and changes nothing, so an agent may do it unattended. CALLING spends real money and can reach endpoints that publish or order, so the card ships at authority READ and every call becomes a proposal you approve on the task.",
+      "Searching is free and changes nothing, so an agent may do it unattended. CALLING spends real money and can reach endpoints that publish or order, so every call an agent makes waits on the task for your approval.",
       "max cost is the only ceiling there is — treg applies none of its own to a direct call. 0.25 is generous for ordinary work (their median endpoint is $0.002) and still refuses the video-generation tail.",
       "Your own credential always wins: if you connect a provider you already pay for, treg uses it and never meters it."],
     agent: ["Search FIRST: run_tool with type treg_search and a `q` that says the JOB, not the vendor (‘find a company's employee count’, not ‘Crunchbase’). The answer gives each endpoint's id, its price and how reliably it has been working.",
@@ -1026,7 +1026,7 @@ const DATA_META = {
       "Connect an agent at robinhood.com/agentic-trading and paste the token it issues under Credentials. Leave the url blank unless Robinhood gives you a different one.",
       "Test lists the tools YOUR account exposes. Robinhood publishes no manifest, so this is how you learn the names — the names it prints are what you put in a report's \"tool\".",
       "Reads: 'robinhood_read' with a tool and its args. It refuses any tool Robinhood has not marked read-only, so it cannot be talked into placing an order.",
-      "The card ships at authority READ, so 'robinhood_order' never runs for an agent — it PROPOSES the trade and you approve it on the task. Raising the card to write removes that click. Robinhood's own warning is worth repeating: AI agents can make errors, misinterpret instructions, and act on incomplete or outdated information."],
+      "An agent never places an order itself - it proposes the trade and you approve it on the task. Robinhood's own warning is worth repeating: AI agents can make errors, misinterpret instructions, and act on incomplete or outdated information."],
     agent: ["Run robinhood_tools FIRST - the tool names are not documented anywhere and differ by account; never guess one.",
       "Reads are yours: run_tool with type robinhood_read, a \"tool\" from that manifest and its \"args\". A tool the server has not marked read-only is refused, by design - do not try to route around it.",
       "You may NOT place a trade. Propose it and say what the analysis was: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"robinhood_order\", \"tool\": \"<from the manifest>\", \"args\": {...}}. The owner approves it on the task and it executes then, not before.",
@@ -3293,7 +3293,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        {meta.desc} The connection only — build the scheduled reports under Reports.
+        {meta.desc}
       </Typography>
       <UnderTabs tabs={["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={meta.howto} />}

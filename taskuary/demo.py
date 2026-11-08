@@ -468,7 +468,7 @@ SEEDS = [
     ('email', 2, 'Invoice 88213 - past due', 'This invoice is 46 days past due. Please advise.',
      'reply', 'a vendor chasing payment: an answer, not a project'),
     ('email', 0, 'FW: Quarterly newsletter', 'Sharing for visibility. No action needed.', 'fyi',
-     'cc-for-visibility, nothing asked'),
+     'copied to keep you in the loop - nothing asked of you'),
     ('teams', 1, '', 'thanks!! that fixed it', 'fyi', 'a thank-you closes a thread, it does not open one'),
 ]
 
@@ -631,7 +631,7 @@ HISTORY = [
     (5, 11, 'teams', 2, '', 'the Riverside export ran clean last night', 'fyi',
      'a green run is not work'),
     (5, 9, 'email', 1, 'FW: Regional operations newsletter',
-     'Sharing for visibility.', 'fyi', 'cc-for-visibility, nothing asked'),
+     'Sharing for visibility.', 'fyi', 'copied to keep you in the loop - nothing asked of you'),
 ]
 
 # WHAT TRIAGE MADE OF AN FYI (the verdict's `thread`, kept on its own route - store.message_thread): what an FYI's middle opens with,

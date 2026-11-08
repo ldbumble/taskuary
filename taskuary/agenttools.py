@@ -117,18 +117,24 @@ TOOLS = {
                       "mail. `answers`: the number of the mail it replies to, when that is an earlier one than the newest (THE MAIL ON THIS "
                       "TASK in your brief). Who hears it is yours to decide: `only: true` sends it to that mail's sender alone (something "
                       "sensitive), `cc` lists who else is copied instead of the thread's own, and `why_to` says in one line why it goes to "
-                      "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent.",
+                      "whom it goes. It becomes a pending reply with a Send button for the owner - nothing is sent. `replaces`: as on "
+                      "propose_email.",
                       _S({'text': _STR, 'to': _STR, 'answers': _INT, 'only': {'type': 'boolean'}, 'cc': {'type': 'array', 'items': _STR},
-                          'why_to': _STR, 'attach': _ATTACH}, ('text',)), ('POST', '/api/agent/reply')),
+                          'why_to': _STR, 'attach': _ATTACH, 'replaces': _STR}, ('text',)), ('POST', '/api/agent/reply')),
     'reply_not_needed': ('own', "The reply waiting on this task is no longer needed - someone else answered, the owner already did. `why` "
                          "says it in one line. The draft stays, marked, with the owner's Send still on it - nothing is sent, deleted or "
                          "closed; a new reply clears the mark.", _S({'why': _STR}, ('why',)), ('POST', '/api/agent/not-needed')),
-    'withdraw_draft': ('own', "The reply draft waiting on this task no longer answers the newest message - take it off the table. `why` says "
-                       "in one line what changed. It is kept under Not sent with the owner's Bring it back - nothing is sent or deleted. To "
-                       "correct it instead, just propose the new reply: it takes the old one's place.", _S({'why': _STR}, ('why',)),
-                       ('POST', '/api/agent/withdraw-draft')),
+    'withdraw_draft': ('own', "Take back something you set up on this task that has not gone out: the reply draft, an email, a post or another "
+                       "proposal - when the goal changed or it no longer answers the newest message. `which`: its review id (each propose tool "
+                       "returns one) or who it was to; leave it out for the reply draft. `why` says in one line what changed. A draft is kept "
+                       "under Not sent with the owner's Bring it back; nothing is sent or deleted, and what already went is never touched. To "
+                       "correct a reply, just propose the new one: it takes the old one's place. Setting up a new email IN PLACE of an old one "
+                       "(the owner changed who it goes to), give the new one `replaces` instead - one call, one Send left.",
+                       _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'propose_email': ('propose', "Draft one more email this task needs (to someone, with a subject). It waits with a Send button for "
-                      "the owner - nothing is sent.", _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH}, ('text',)),
+                      "the owner - nothing is sent. `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
+                      "takes the place of - it is withdrawn in the same call.",
+                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH, 'replaces': _STR}, ('text',)),
                       ('POST', '/api/agent/draft')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
     # want me to send it out'"): signed with the picture the owner saved, which the agent never sees (handsign)
@@ -150,7 +156,7 @@ TOOLS = {
                 "Create issue button), write_playbook {slug, text}, settings {changes}. On a Jira, Monday or Linear item: run_tool with type "
                 "jira_comment {body}, jira_move {status}, jira_assign {assignee}, jira_close {body?} (monday_ and linear_ the same); `item` "
                 "is the one this task came from unless you name another. Always give `why`. It puts an Approve button in front of "
-                "the owner - nothing happens until they press it.",
+                "the owner - nothing happens until they press it. `replaces`: as on propose_email.",
                 {'type': 'object', 'properties': {'action': _STR, 'why': _STR}, 'required': ['action', 'why'],
                  'additionalProperties': True}, ('POST', '/api/agent/propose')),
 }
@@ -160,8 +166,9 @@ ANNOTATIONS = {'read': {'readOnlyHint': True, 'openWorldHint': False}, 'own': {'
 NOT_PROPOSABLE = ('merge_pr', 'close_item', 'repair_workflow', 'push_direct')     # the owner's close-out, a workflow's own repair, a push past review
 
 
-# ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: the reply tools are not offered at all
-REPLY_TOOLS = ('propose_reply', 'reply_not_needed', 'withdraw_draft')
+# ...and on the owner's own ask (wrapup.no_correspondent) there is nobody to reply to: the reply tools are not offered at all. withdraw_draft
+# is not one of them - an own ask's emails and posts are the agent's to take back too (a "send it to Gail instead" left Paula's armed)
+REPLY_TOOLS = ('propose_reply', 'reply_not_needed')
 def listing(skip=()) -> list:
     "tools/list: every tool with what it does and whether it only reads - but those in `skip`."
     return [{'name': n, 'description': d, 'inputSchema': s, 'annotations': ANNOTATIONS[c]} for n, (c, d, s, _) in TOOLS.items() if n not in skip]
@@ -260,17 +267,30 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         from . import repochoice
         return _out(repochoice.says_found(repochoice.find(store, str(a.get('query') or '')), repochoice.folders(store)))
     if name == 'reply_not_needed': return _j(doors['not_needed'](tid, str(a.get('why') or '')))
-    if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or '')))
+    if name == 'withdraw_draft': return _j(doors['withdraw'](tid, str(a.get('why') or ''), str(a.get('which') or '')))
     if name == 'propose_reply':
         who = {k: a[k] for k in ('answers', 'only', 'cc', 'why_to') if a.get(k) not in (None, '')}
-        return _j(doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who))
-    if name == 'propose_email': return _j(doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''),
-                                                         attached(tid, a.get('attach'))))
+        out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who)
+        return _j(replaced(doors, tid, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
+    if name == 'propose_email':
+        out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')))
+        return _j(replaced(doors, tid, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
         return out['says'] if out.get('says') else _j(out)
-    if name == 'propose': return _j(doors['propose'](tid, a))
+    if name == 'propose':
+        old = a.get('replaces')
+        return _j(replaced(doors, tid, doors['propose'](tid, {k: v for k, v in a.items() if k != 'replaces'}), old, 'a new proposal takes its place'))
     raise ValueError(f'no tool {name!r} - tools/list names them; use one of those')
+
+
+def replaced(doors, tid: int, out, old, why: str):
+    "The new draft's answer, with the one it `replaces` withdrawn once the new one stands - so the owner has one Send, never two."
+    o = json.loads(out.body) if hasattr(out, 'body') else out
+    if not old or not (isinstance(o, dict) and o.get('ok')): return o
+    w = doors['withdraw'](tid, why, str(old))
+    w = json.loads(w.body) if hasattr(w, 'body') else w
+    return {**o, 'replaced': w.get('review_id')} if w.get('ok') else {**o, 'not_replaced': w.get('why')}
 
 
 def attached(tid: int, names) -> list:

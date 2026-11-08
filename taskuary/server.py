@@ -5531,7 +5531,7 @@ def agent_not_needed(body: AgentNotNeededBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return verdicts.not_needed(store, body.task_id, body.why, body.agent)
 
-class AgentWithdrawBody(BaseModel): task_id: int; why: str; agent: str = 'agent'
+class AgentWithdrawBody(BaseModel): task_id: int; why: str; which: str = ''; agent: str = 'agent'
 
 @app.post('/api/agent/withdraw-draft')
 def agent_withdraw_draft(body: AgentWithdrawBody, request: Request):
@@ -5540,7 +5540,7 @@ def agent_withdraw_draft(body: AgentWithdrawBody, request: Request):
     from . import verdicts
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return verdicts.withdraw(store, body.task_id, body.why, body.agent)
+    return verdicts.withdraw(store, body.task_id, body.why, body.agent, body.which)
 
 class AgentCheckBackBody(BaseModel): task_id: int; when: str; what: str; agent: str = 'agent'
 
@@ -5805,7 +5805,7 @@ async def mcp_rpc(request: Request, task: int = 0):
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
-             'withdraw': lambda tid, why: agent_withdraw_draft(AgentWithdrawBody(task_id=tid, why=why), request),
+             'withdraw': lambda tid, why, which='': agent_withdraw_draft(AgentWithdrawBody(task_id=tid, why=why, which=which), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),

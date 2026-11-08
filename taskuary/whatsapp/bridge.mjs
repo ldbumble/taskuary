@@ -45,6 +45,23 @@ let sock = null, connected = false, me = "", meJid = "", qr = "", pairingCode = 
 const BOOT = crypto.randomUUID();
 const messages = [];                       // { seq, id, jid, chat, name, text, ts, fromMe }
 const taskuarySent = new Set();             // ids sent through localhost /send, never user prompts
+// THE MESSAGE A REPLY ANSWERS, as Baileys quotes it (sendMessage's `quoted`): the last MAX_KEPT by id, so a reply from Taskuary reads on the
+// phone as an answer to that very line (the owner, 2026-11-08: two answers in one chat, neither said which message it was for)
+const originals = new Map();
+const remember = (m) => { if (!m?.key?.id || !m.message) return;
+  originals.delete(m.key.id); originals.set(m.key.id, { key: m.key, message: m.message });
+  while (originals.size > MAX_KEPT) originals.delete(originals.keys().next().value); };
+// ...and one that rotated out (or came before a restart) is quoted from the words Taskuary kept of it - a direct chat's line, whose author
+// is the chat; a group's needs its author, so it goes unquoted, as does one with no words. Never a reason to fail the send
+const quoting = (jid, q) => {
+  const id = typeof q === "string" ? q : q?.id;
+  if (!id) return undefined;
+  const kept = originals.get(id) || messages.find((m) => m.id === id && m.key);
+  if (kept?.message) return kept;
+  if (kept?.key) return { key: kept.key, message: { conversation: String(kept.text || q?.text || "") } };
+  const said = String(q?.text || "").slice(0, 1000);
+  return said && !String(jid).endsWith("@g.us") ? { key: { remoteJid: jid, id, fromMe: false }, message: { conversation: said } } : undefined;
+};
 const lids = createLidMap();                 // phone <-> LID, so a person picked by number is heard when WhatsApp writes by LID
 const chatGate = createChatGate(undefined, lids);
 const chatRoster = createChatRoster({ canon: chatGate.canonical, alt: lids.alt });   // JIDs/names/recency only; never message bodies
@@ -297,6 +314,7 @@ async function connect() {
       // the gate opens for the owner's own address (key shares); what that lets through about an unpicked chat stops here
       if (!chatGate.admits(k.remoteJid)) { chatGate.shouldIgnore(k.remoteJid); continue; }
       chatRoster.observeMessage(m);
+      remember(m);
       // A VOTE on the Assistant's poll is the owner picking one of its choices: it goes on as that choice's
       // own words, the same as typing them. A vote on anything else (another poll, an older one) is nothing.
       const inner = content(m.message);
@@ -437,7 +455,7 @@ http.createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/send") {
       const chunks = []; for await (const c of req) chunks.push(c);
-      const { jid, text: t, poll } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      const { jid, text: t, poll, quote } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
       if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
       if (!jid || !t) return json(res, 400, { error: "jid and text are required" });
       const keep = (id) => {
@@ -448,7 +466,8 @@ http.createServer(async (req, res) => {
         if (echo) echo.taskuary = true;
         if (taskuarySent.size > MAX_KEPT * 2) taskuarySent.delete(taskuarySent.values().next().value);
       };
-      const sent = await sock.sendMessage(jid, { text: t });
+      const q = quoting(jid, quote);
+      const sent = await sock.sendMessage(jid, { text: t }, ...(q ? [{ quoted: q }] : []));
       const id = sent?.key?.id || "";
       if (id) keep(id);
       // ...and the choices as a POLL under it, tappable. The secret is ours so the vote can be opened.
@@ -472,14 +491,15 @@ http.createServer(async (req, res) => {
       const chunks = []; let size = 0;
       for await (const c of req) { size += c.length; if (size <= DOC_BODY_MAX) chunks.push(c); }
       if (size > DOC_BODY_MAX) return json(res, 413, { error: `the file is over ${DOC_MAX / 2 ** 20} MB` });
-      const { jid, data, mimetype, fileName, caption } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      const { jid, data, mimetype, fileName, caption, quote } = JSON.parse(Buffer.concat(chunks).toString() || "{}");
       if (!connected) return json(res, 503, { error: "not connected to WhatsApp" });
       if (!jid || !data || !fileName) return json(res, 400, { error: "jid, data and fileName are required" });
       const doc = Buffer.from(String(data), "base64");
       if (!doc.length) return json(res, 400, { error: "the file is empty" });
       if (doc.length > DOC_MAX) return json(res, 413, { error: `the file is over ${DOC_MAX / 2 ** 20} MB` });
+      const q = quoting(jid, quote);
       const sent = await sock.sendMessage(jid, { document: doc, mimetype: String(mimetype || "application/octet-stream"),
-        fileName: String(fileName).slice(0, 255), ...(caption ? { caption: String(caption).slice(0, 1000) } : {}) });
+        fileName: String(fileName).slice(0, 255), ...(caption ? { caption: String(caption).slice(0, 1000) } : {}) }, ...(q ? [{ quoted: q }] : []));
       const id = sent?.key?.id || "";
       if (id) { taskuarySent.add(id); const echo = messages.find((m) => m.id === id); if (echo) echo.taskuary = true; }
       return json(res, 200, { ok: true, id, bytes: doc.length });

@@ -914,6 +914,13 @@ def re_subject(s) -> str:
     return s if s.lower().startswith('re:') else f'Re: {s}'.strip()
 
 
+def wa_quote(msg: dict) -> dict | None:
+    "The WhatsApp message a reply answers, as the bridge quotes it: {id, text} off its 'whatsapp:<jid>:<id>' - None for one with no id."
+    ext = str(msg.get('ExternalId') or '')
+    if not ext.startswith('whatsapp:') or ext.count(':') < 2: return None
+    return {'id': ext.rsplit(':', 1)[-1], 'text': ' '.join(str(msg.get('OwnText') or msg.get('BodyText') or '').split())[:300]}
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None, attachments: list = None, bcc: list = None,
                      subject: str = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
@@ -973,7 +980,11 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         # as punctuation and folds a long bubble behind "Read more". Spell it for the channel and
         # send it whole; the first piece is the reply, so its receipt is the one that answers.
         said = [p for p in chatformat.split(chatformat.render(body, ch)) if p.strip()] or [body]
-        return _send_parts(lambda p: send(store, chat, p, connector_id) if connector_id else send(store, chat, p), said)
+        # ...and on WhatsApp as a REPLY to the very line it answers (the owner, 2026-11-08: two answers in one chat, neither said which
+        # message it was for): the first piece quotes it, so each reply quotes its own
+        q = wa_quote(msg) if ch == 'whatsapp' else None
+        kw = {'connector_id': connector_id} if connector_id else {}
+        return _send_parts(lambda p: send(store, chat, p, **kw, **({'quote': q} if q and p is said[0] else {})), said)
     if ch == 'slack':
         from . import chatformat
         chat = str(msg.get('ConversationId') or '').split(':', 1)[-1]   # 'slack:<channel id>'

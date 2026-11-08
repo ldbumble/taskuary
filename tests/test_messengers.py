@@ -342,6 +342,35 @@ class WhatsAppTests(unittest.TestCase):
         self.assertEqual(out['chat'], '155@s.whatsapp.net')
         self.assertEqual(seen['body'], {'jid': '155@s.whatsapp.net', 'text': 'Fixed.'})
 
+    def test_each_reply_quotes_the_message_it_answers(self):
+        """The owner, 2026-11-08: two answers in one chat read on the phone as two loose lines. Each approved draft goes as a WhatsApp
+        reply to the line it answers (AnswersMid), its first piece quoting it - two drafts in one chat, each its own."""
+        from taskuary import verdicts
+        s, _ = self._store()
+        tid = s.create_task({'Title': 'Export and invoice', 'Kind': 'reply', 'Status': 'open', 'Source': 'whatsapp'}, 'router')
+        mids = [s.add_message({'TaskId': tid, 'ExternalId': f'whatsapp:155@s.whatsapp.net:{i}', 'Channel': 'whatsapp',
+                               'ConversationId': 'whatsapp:155@s.whatsapp.net', 'FromName': 'Marcus Reed', 'FromEmail': 'whatsapp:155',
+                               'SentAt': f'2026-11-08 10:0{n}:00', 'BodyText': t, 'Status': 'routed'})
+                for n, (i, t) in enumerate([('3EB0A1', 'the export is late'), ('3EB0B2', 'and the invoice too')])]
+        rids = [s.add_review({'TaskId': tid, 'MessageId': mids[1], 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': t})
+                for t in ('Invoice is out.', 'Export runs tonight.')]
+        s.set_review_answers(rids[0], mids[1]); s.set_review_answers(rids[1], mids[0])
+        bodies = []
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None, **k: bodies.append(body) or {'ok': True}):
+            for rid in rids: self.assertTrue(verdicts.decide(s, s.get_review(rid), 'approve')['ok'])
+        self.assertEqual([(b['text'], b['quote']) for b in bodies], [('Invoice is out.', {'id': '3EB0B2', 'text': 'and the invoice too'}),
+                                                                     ('Export runs tonight.', {'id': '3EB0A1', 'text': 'the export is late'})])
+
+    def test_a_long_reply_quotes_once_and_a_row_without_an_id_quotes_nothing(self):
+        s, _ = self._store()
+        bodies = []
+        msg = {'Channel': 'whatsapp', 'ConversationId': 'whatsapp:155@s.whatsapp.net', 'ExternalId': 'whatsapp:155@s.whatsapp.net:3EB0C3', 'BodyText': 'ok?'}
+        with mock.patch.object(messengers, '_wa', lambda c_, p, body=None, **k: bodies.append(body) or {'ok': True}):
+            outbound.reply_to_message(s, msg, '\n\n'.join(f'Paragraph {i}. ' + 'word ' * 120 for i in range(12)))
+            outbound.reply_to_message(s, {**msg, 'ExternalId': None}, 'Fixed.')
+        self.assertGreater(len(bodies), 2)
+        self.assertEqual([b.get('quote', {}).get('id') for b in bodies], ['3EB0C3'] + [None] * (len(bodies) - 1))
+
 
 class OwnerTests(unittest.TestCase):
     def test_the_name_lives_in_one_setting_and_reaches_every_tokened_doc(self):

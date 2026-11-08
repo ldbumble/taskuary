@@ -416,6 +416,8 @@ async def token_gate(request: Request, call_next):
     # the demo is the real app with every door to the outside world shut, and it is shut HERE:
     # over the method and the path, before a handler exists to be trusted (demo.py)
     if demo.enabled():
+        # ...and a read of the host or of a real system is answered from the demo's own invented machine (demo.ANSWERS)
+        if (said := demo.answer(request.method, request.url.path)) is not None: return JSONResponse(said)
         why = demo.refuse(request.method, request.url.path)
         if why:
             # ...and the refused press is an act on its item, so the Advisor reads it again as refused (demo.refused)
@@ -7389,7 +7391,7 @@ def connectors(request: Request):
         rows = [guard.without_config_secrets(c) for c in rows]
     rows = [guard.masked_config(c) for c in rows]
     from .connectorcatalog import connected_count
-    return {'data': rows, 'connected': connected_count(store, cfg.get('cli_connections'))}
+    return {'data': rows, 'connected': connected_count(store, demo.cli_connections() if demo.enabled() else cfg.get('cli_connections'))}
 
 @app.get('/api/scopes')
 def scope_catalog():
@@ -7812,8 +7814,6 @@ def wa_status(cid: int):
     from . import wabridge
     c = store.get_connector(cid, with_secret=True)
     if not c or c['Type'] != 'whatsapp': raise HTTPException(404, 'not a WhatsApp connector')
-    from . import demo
-    if demo.enabled(): return {'connected': False, 'bridge': False, 'node': False, 'manager': {}, 'detail': 'the demo has no bridge - nothing real is reachable from here'}
     # node: the one thing the card cannot install for the owner - step 1 of the pairing box turns on it
     try: return {**_status(c), 'bridge': True, 'node': True, 'manager': wabridge.state()}
     except RuntimeError as e: return {'connected': False, 'bridge': False, 'node': bool(wabridge.node()), 'detail': str(e), 'manager': wabridge.state()}   # bridge down is a state, not a 500

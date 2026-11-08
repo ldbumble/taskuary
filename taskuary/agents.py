@@ -510,6 +510,8 @@ def runs_here(profile: dict) -> bool:
     read as claude, so a role row synced before any brain was chosen "ran here" on a machine where only Codex was set up."""
     cmd = (profile or {}).get('cmd')
     if not cmd: return False
+    from . import demo
+    if demo.enabled(): return demo.here(cmd)                  # the demo's invented machine, never the visitor's PATH
     try: return bool(_resolve_cmd(cmd))
     except (FileNotFoundError, OSError): return False
 

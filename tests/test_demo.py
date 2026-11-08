@@ -565,3 +565,36 @@ class DemoChatTurnTests(unittest.TestCase):
             s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I found three places near the office.')
             self.assertEqual(server._demo_turn(tid, 'the second one'), demo.CHAT_TURN)
         self.assertNotIn('above', demo.NEW_CHAT_TURN)
+
+
+class TheDemoWorldIsConnectedTests(unittest.TestCase):
+    """F31 + F47 (2026-11-08): Connections said "0 connected" while the demo's tasks posted to LinkedIn and read Teams, and the AI tool
+    cards read the VISITOR'S machine through GET routes the deny list lets by. The world is connected now, and its machine invented."""
+    HOST_READS = ('/api/cli/detect', '/api/cli/connections', '/api/deps', '/api/update', '/api/connectors/3/wa/status',
+                  '/api/connectors/3/wa/chats', '/api/connectors/3/linkedin/status', '/api/connectors/3/mail/folders')
+
+    def test_every_host_read_is_answered_from_the_demo_and_never_looks(self):
+        import shutil, subprocess
+        boom = mock.Mock(side_effect=AssertionError('the demo looked at the host'))
+        with on(), mock.patch.object(shutil, 'which', boom), mock.patch.object(subprocess, 'run', boom), mock.patch.object(subprocess, 'Popen', boom):
+            for path in self.HOST_READS: self.assertIsNotNone(demo.answer('GET', path), path)
+            from taskuary import agents, clis
+            self.assertTrue(agents.runs_here({'cmd': 'claude'})); self.assertFalse(agents.runs_here({'cmd': 'gemini'}))
+            self.assertEqual({r['name'] for r in clis.detect() if r['installed']}, set(demo.CLIS_HERE))
+            self.assertEqual({t['name'] for t in clis.tools() if t['installed']}, set(demo.TOOLS_HERE))
+        self.assertEqual(demo.answer('GET', '/api/tasks'), None, 'the demo world itself is read as it is')
+
+    def test_outside_the_demo_nothing_is_answered_for_it(self):
+        os.environ.pop(demo.FLAG, None)
+        for path in self.HOST_READS: self.assertIsNone(demo.answer('GET', path), path)
+
+    def test_the_tool_cards_buttons_say_it_is_the_demo(self):
+        with on():
+            for path in ('/api/cli/install', '/api/cli/update', '/api/cli/setup', '/api/cli/connections/claude', '/api/deps/install', '/api/update'):
+                self.assertTrue(demo.refuse('POST', path).startswith('This is the demo - nothing happens'), path)
+
+    def test_its_tasks_channels_are_connected(self):
+        from taskuary import connectorcatalog, outbound
+        s = MemoryStore(); demo.seed(s)
+        self.assertEqual(connectorcatalog.connected_count(s, demo.cli_connections()), len(demo.CONNECTIONS) + len(demo.CLIS_ON))
+        for kind in ('email', 'linkedin', 'teams', 'whatsapp', 'github'): self.assertIsNone(outbound.connect_fix(s, kind), kind)

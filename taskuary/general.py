@@ -471,6 +471,9 @@ def newest_message(store, tid: int) -> dict | None:
 
 def _quote(x, n) -> str: return '"' + _cut(' '.join(str(x or '').split()), n) + '"'
 
+# THE OWNER'S HAND-OFF (Hand it to a person, server.handoff) is a 'human' comment headed this - the agent's next turn hears it with what went
+# (the owner, 2026-11-08: it was never told, so it could draft the answer to someone the task had already been handed to)
+HANDED_OFF = 'Handed off to '
 def latest_block(store, tid: int, resumed: bool = False) -> str:
     """LATEST_LINE with its facts: the newest message, the draft waiting and when it was made, what already went - '' on a chat with none.
     `resumed`: a CLI that has the conversation already reads the newest message as its turn, so only a draft or a reply that went is news."""
@@ -482,7 +485,8 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     answered = not resumed and any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid))
     from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
     others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
-    if not (rv or sent or answered or others): return ''
+    handed = [c for c in store.list_comments(tid) if c.get('ActorType') == 'human' and str(c.get('Body') or '').startswith(HANDED_OFF)]
+    if not (rv or sent or answered or others or handed): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
     if rv:
@@ -496,6 +500,8 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
+    if handed: out.append('THE OWNER HANDED THIS TO A PERSON - it is theirs now; never send them what they were already sent:\n' + '\n'.join(
+        f"- {clock(c['CreatedAt'])}: {c['Body'].partition(chr(10))[0].rstrip(':')} - {_quote(c['Body'].partition(chr(10))[2], 400)}" for c in handed))
     return '\n\n'.join(out)
 
 def turn_facts(store, tid: int, task: dict = None, resumed: bool = False) -> str:

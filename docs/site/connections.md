@@ -494,6 +494,20 @@ cannot list the server's tools: adding the card is your word that your agents ma
 Where a card for the same vendor already brings work in (Notion, Linear, Jira, Monday.com, Todoist,
 Stripe, Sentry, Datadog), that card is unchanged and the MCP card sits beside it.
 
+A few servers sign in with a personal token instead — GitHub MCP, PagerDuty MCP, Smartsheet and Wrike.
+Paste the token on the card and press **Add**: it goes into Claude Code's own configuration as the
+header the vendor names. Codex reads such a token only from an environment variable, so these cards
+add to Claude Code alone.
+
+## A vendor's API, read with a key
+
+DigitalOcean, Terraform Cloud, Better Stack, CircleCI, Buildkite, Coda, Intrinio, Benzinga, Tradier,
+Diffbot, and the self-hosted Jenkins, SonarQube, Elasticsearch, Splunk, Dynatrace and Kubernetes each
+take a key (and, when self-hosted, the address). Google Drive, OneDrive and Microsoft 365 files take
+nothing: they read with the Google Sheets card's and the Outlook card's sign-ins. **Test** makes one
+cheap read. A report or an agent then asks any address under that vendor's API by its path, and only
+ever reads: nothing but a GET is sent, so a Tradier key on this card places no order.
+
 ## A system with no card
 
 Search the catalogue first. When nothing matches, **Request** under the empty grid drafts a feature

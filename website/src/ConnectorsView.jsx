@@ -3202,7 +3202,8 @@ function AgentToolDetail({ conn, reload, onBack, onCreated }) {
   const [tok, setTok] = useState("");
   const saveTok = async () => {
     if (!tok.trim()) return;
-    try { await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, Secret: tok.trim() }); setTok(""); setSaid(["Token saved - press Add"]); }
+    const secret = { ConnectorId: conn.ConnectorId, Secret: tok.trim() };       // a secret saves when its box is left, like every card's
+    try { await api.post("/api/connectors", secret); setTok(""); setSaid(["Token saved - press Add"]); }
     catch (e) { setSaid([e?.response?.data?.detail || "The token was not saved"]); }
     look(); reload();
   };

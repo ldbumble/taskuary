@@ -33,7 +33,7 @@ class Stopped(RuntimeError):
     "A turn the owner stopped - the start that ran it is done, not failed (ingest._start_general)."
 # A TURN THAT RAN OUT OF TIME (2026-11-04): a CLI's 1500 s limit killed an agent mid-build, and it read "You stopped it" with Try again.
 # An agent's turn has no limit now (llm.make_cli_llm); a turn that still has one - the dock's look-up - ends `stopped` from this source,
-# its files and thread kept, says so in its own words, and Continue picks it up
+# its files and thread kept, says so in its own words, and typing carries it on
 TIMED_OUT = 'timeout'
 def _timed_out(e):
     "The clipool.TimedOut behind a failed turn, however a brain wrapped it - else None."
@@ -43,7 +43,13 @@ def _timed_out(e):
 def timed_out_line(e=None, agent='the agent') -> str:
     "No limit is named: an agent's run has none, and this is only said of a run cut on an old profile's limit or a one-shot cap."
     return (f"{agent[:1].upper() + agent[1:]}'s run was cut off by a time limit while it was still working. What it made so far is kept - "
-            f"{L('continue')} picks it up from there.")
+            f"{CARRY_ON} from there.")
+# ON A CHAT TASK TYPING IS THE WAY ON (the owner, 2026-11-07; the chat rulings of 2026-11-05): it has no Continue button, so nothing said
+# on one names it. A coding task keeps its Continue
+CARRY_ON = 'type to carry on'
+def carry_on(task) -> str:
+    "How the owner picks the work back up, in words: typing on a chat task, Continue on a coding one."
+    return CARRY_ON if handles(task) else f"{L('continue')} picks it up"
 def is_brief(c) -> bool: return c.get('ActorType') == USER_TYPE and c.get('Actor') == BRIEF_ACTOR
 # THE OWNER'S WORDS AS THEY TYPED THEM (the owner, 2026-11-04): answered through the Assistant, the agent's chat showed the Assistant's rewording
 # ("Option B: book the 3-year renewal at 6,000.") under YOU for "Go with option B, three years." Their words go under YOU exactly; what the

@@ -41,7 +41,8 @@ class TimedOut(RuntimeError):
 
 
 RESTART_FAILED = 'the AI tool stopped, and stopped again when it was restarted'
-MID_TURN = 'the agent stopped in the middle of its turn - nothing was sent again, as it may have done part of the work; Continue picks it up'
+# ...a chat agent's CLI (this pool's only kind): typing carries it on, as no Continue button is there (general.CARRY_ON)
+MID_TURN = 'the agent stopped in the middle of its turn - nothing was sent again, as it may have done part of the work; type to carry on'
 
 
 class Live:

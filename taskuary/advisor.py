@@ -732,8 +732,11 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         from . import continuity
         at = continuity.last_agent_turn(store, int(target_id))
         mail = continuity.mail_since(store, int(target_id), at) if at else []
+        # ...how the owner hands them on, in its kind's words: a chat task is typed into, it has no Continue (general.handles, 2026-11-07)
+        from .general import handles
+        hand = 'typing in its chat' if handles(store.get_task(int(target_id))) else buttons.label('continue')
         if mail:
-            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; {buttons.label('continue')} hands "
+            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; {hand} hands "
                          "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
                                                              f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
         t = store.get_task(int(target_id)) or {}
@@ -744,7 +747,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         if waiton.waiting(t): lines.append(f"THE AGENT IS WAITING ON {waiton.name_of(t['WaitingOn'])}'S ANSWER - they have not written since; nothing here moves it")
         elif mail and waiton.woke_by(t, mail[-1]):
             lines.append(f"THE AGENT WAS WAITING ON {mail[-1].get('FromName') or mail[-1].get('FromEmail')}'S ANSWER, AND IT IS THE NEWEST LINE ABOVE - "
-                         f"{buttons.label('continue')} hands it to the agent's saved conversation")
+                         f"{hand} hands it to the agent's saved conversation")
         todo = [c.get('text') + (f" (note: {c['note']})" if c.get('note') else '') for c in _checklist(t) if not c.get('done') and c.get('text')]
         if todo: lines.append('STILL TO DO ON THE TASK: ' + ' | '.join(' '.join(str(x).split())[:160] for x in todo[:6]))
         # ...and a list with nothing left on it, said: with no line at all the model could not tell it from a task with no list

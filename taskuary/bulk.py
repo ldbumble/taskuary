@@ -12,6 +12,7 @@ The set comes from the owner's words in this turn: the mail pipe.read quotes is 
 import re
 from loguru import logger
 from . import lanes, operations, words
+from .buttons import label as L
 from .store import task_ref
 
 AGENT_LANES = ('blocked', 'working', 'queued')
@@ -158,19 +159,25 @@ def tids(refs) -> list:
 
 def stop(store, ts: list, actor: str = 'owner') -> dict:
     "Each by the page's Stop and save. {done: [rows], stuck: [rows]} - audited with every task."
+    from .general import handles as is_chat
     done, stuck = [], []
     for t in ts:
-        (done if _run(store, 'agent.stop', t, {'wrap': True}, actor) else stuck).append({'tid': t, 'title': (store.get_task(t) or {}).get('Title') or ''})
+        task = store.get_task(t) or {}
+        (done if _run(store, 'agent.stop', t, {'wrap': True}, actor) else stuck).append({'tid': t, 'title': task.get('Title') or '', 'chat': is_chat(task)})
     store.audit('pipe', 0, 'bulk_stop', actor, detail={'tasks': [i['tid'] for i in done], 'stuck': [i['tid'] for i in stuck]})
     return {'done': done, 'stuck': stuck}
 
 
-STOP_AFTER = 'Each was written up and saved on its task, which stays open - Continue picks it up where it left off.'
+STOP_AFTER = 'Each was written up and saved on its task, which stays open - {how} where it left off.'
 def stop_receipt(out: dict, idle: list = ()) -> str:
     "Every agent it stopped, as its task's link, then any that would not stop, then the refs with none running."
     n, stuck = len(out['done']), out['stuck']
     parts = [f"Stopped and saved: {n} {'agent' if n == 1 else 'agents'}." if n else 'Nothing was stopped.']
-    if n: parts += [listing(out['done']), STOP_AFTER]
+    # ...in the words of each kind: a chat task carries on by typing, a coding one by Continue (general.carry_on, the owner 2026-11-07)
+    chats = {bool(r.get('chat')) for r in out['done']}
+    how = ('typing in its chat carries it on' if chats == {True} else f"{L('continue')} picks it up" if chats == {False}
+           else f"typing in its chat carries it on (a coding agent: {L('continue')})")
+    if n: parts += [listing(out['done']), STOP_AFTER.format(how=how)]
     if stuck: parts += [f'{len(stuck)} would not stop just then:', listing(stuck)]
     if idle: parts.append('No agent running on: ' + ', '.join(task_ref(t) for t in idle[:12]) + (' …' if len(idle) > 12 else '') + '.')
     return '\n'.join(parts)

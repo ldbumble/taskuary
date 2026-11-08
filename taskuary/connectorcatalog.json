@@ -2838,20 +2838,6 @@
       ]
     },
     {
-      "type": "bing_search",
-      "title": "Bing Web Search",
-      "group": "Agentic web",
-      "planned": true,
-      "desc": "Microsoft web and news search",
-      "match": [
-        "bing web search",
-        "bing",
-        "web",
-        "search",
-        "bing search"
-      ]
-    },
-    {
       "type": "apify",
       "title": "Apify",
       "group": "Agentic web",

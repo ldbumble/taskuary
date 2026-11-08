@@ -258,12 +258,12 @@ def items_servicenow(store, c, since) -> list:
 # ── Shortcut ─────────────────────────────────────────────────────────────────────────────
 SC = 'https://api.app.shortcut.com/api/v3'
 def _sc(c, path, **params):
-    return _req(c, 'get', f'{SC}{path}', 'check the API token (Settings → Your account → API Tokens)', params=params,
+    return _req(c, 'get', f'{SC}{path}', 'check the API token (Settings, then Your account → API Tokens)', params=params,
                 headers={'Shortcut-Token': c.get('Secret') or '', 'Content-Type': 'application/json'})
 
 
 def test_shortcut(store, c) -> str:
-    _need(c, 'API token', 'Shortcut: Settings → Your account → API Tokens → Generate token')
+    _need(c, 'API token', 'Shortcut: Settings, then Your account → API Tokens → Generate token')
     m = _sc(c, '/member')
     p, ws = m.get('profile') or {}, (m.get('workspace2') or {}).get('url_slug') or 'Shortcut'
     _keep(store, c, me_id=m['id'], mention=p.get('mention_name') or '', workspace=ws)
@@ -417,7 +417,7 @@ def _gql(c, query, **variables):
 
 
 def test_github_projects(store, c) -> str:
-    _need(c, 'token', 'GitHub → Settings → Developer settings → a token with read:project (and repo for private repos)')
+    _need(c, 'token', 'GitHub → Settings, then Developer settings → a token with read:project (and repo for private repos)')
     v = _gql(c, '{ viewer { login projectsV2(first: 20) { totalCount } } }')['viewer']
     _keep(store, c, me_id=v['login'])
     _seed_source(store, c, v['login'])
@@ -724,7 +724,7 @@ def _yt(c, path, **params):
                 params={**params, 'key': c.get('Secret') or ''})
 def _yt_channel(c) -> str:
     ch = str(_cfg(c).get('channel_id') or '').strip()
-    if not re.fullmatch(r'UC[\w-]{22}', ch): raise RuntimeError('no channel id set - it starts UC (YouTube Studio → Settings → Channel → Advanced)')
+    if not re.fullmatch(r'UC[\w-]{22}', ch): raise RuntimeError('no channel id set - it starts UC (YouTube Studio → Settings, then Channel → Advanced)')
     return ch
 
 
@@ -782,12 +782,12 @@ def items_calendly(store, c, since) -> list:
 
 # ── ShipStation (orders waiting to ship) ─────────────────────────────────────────────────
 def _st(c, path, **params):
-    return _req(c, 'get', f'https://ssapi.shipstation.com{path}', 'check the API key and secret (Settings → Account → API Settings)', params=params,
+    return _req(c, 'get', f'https://ssapi.shipstation.com{path}', 'check the API key and secret (Settings, then Account → API Settings)', params=params,
                 auth=(_cfg(c).get('api_key') or '', c.get('Secret') or ''))
 
 
 def test_shipstation(store, c) -> str:
-    _need(c, 'API secret', 'ShipStation: Settings → Account → API Settings shows the key and the secret')
+    _need(c, 'API secret', 'ShipStation: Settings, then Account → API Settings shows the key and the secret')
     n = len(_st(c, '/stores') or [])
     _seed_source(store, c, 'ShipStation')
     return f"authenticated - {plural(n, 'store')} - orders awaiting shipment flow in on the next sync"
@@ -813,7 +813,7 @@ def _sh(c, path, **params):
 
 
 def test_shopify(store, c) -> str:
-    _need(c, 'Admin API access token', 'Shopify admin → Settings → Apps and sales channels → Develop apps → your app → API credentials')
+    _need(c, 'Admin API access token', 'Shopify admin → Settings, then Apps and sales channels → Develop apps → your app → API credentials')
     sh = _sh(c, '/shop.json')['shop']
     _seed_source(store, c, sh.get('name') or _host(_sh_base(c)))
     return f"connected to {sh.get('name')} - open orders waiting to be fulfilled flow in on the next sync"

@@ -1231,6 +1231,11 @@ def _shows(store, it: dict, b: str) -> bool:
     # Copy is a draft's that cannot be sent from here (ReviewDecision, the owner 2026-10-22) - it stood on every task's list of buttons
     if b == 'copy': return bool(it.get('rid')) and cannot(it, 'approve', store)
     if b == 'pick_repo': return str((store.get_task(int(it['tid'])) or {}).get('Kind') or '').lower() == 'coding'
+    # NO REPLY OR HAND OFF ON THE BAR (the owner, 2026-11-08): the agent does them from the chat ("reply saying...", "hand this to Erin"), its
+    # card's Send sends - only with no AI connected do they stand, folded, so the owner is never stuck
+    if b in ('reply', 'forward'):
+        from . import capabilities
+        return not capabilities.has_ai(store)
     return b != 'fix'                  # a failure's own way out, with its own words - never a button to light from the chat
 
 

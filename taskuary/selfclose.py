@@ -343,6 +343,7 @@ REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who
 # each turn closes on a block the page draws as three parts - what the task wants, what the agent did, what is on the owner (the parser
 # is Task 3.5's). Not `SUMMARY:`, which the brief already uses as the task-summary label.
 SUMMARY_OPEN, SUMMARY_CLOSE = '[[TASKUARY-SUMMARY]]', '[[/TASKUARY-SUMMARY]]'
+AFTER_PRESS = ('send', 'handoff')
 SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"about": "<two or three plain sentences on the situation: which '
                 f'conversation this is on and what it is about, who asked, for whom and why they want it - read from the whole thread, naming only people '
                 f'the thread itself shows in that role>", "did": "<the RESULT ITSELF first - the file path, the link, the figure or the name '
@@ -350,7 +351,9 @@ SUMMARY_LINE = (f'ENDING EVERY TURN: close each reply with {SUMMARY_OPEN}{{"abou
                 f'you researched, found or did; a part unmet or unchecked is named here>", "on_you": ["<each step left for the owner, one short line '
                 f'each>"], "nothing_left": <true only when the goal is met and you checked it, and nothing is left for them but to close>, '
                 f'"answer_is_result": <true when your words above the block ARE what the owner asked for - the answer, the list, the link - so they '
-                f'show beside it; false when this block says it all>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. You are talking TO the owner in their own chat: say "you" and "your", never their name or '
+                f'show beside it; false when this block says it all>, "after_press": <only when you said you will carry on once the owner presses '
+                f'one button you set up: "send" (a draft, post or act of yours) or "handoff" (handing it to a person) - that press wakes you once; '
+                f'else leave it out>}}{SUMMARY_CLOSE} - valid JSON, plain words, no secret in it. You are talking TO the owner in their own chat: say "you" and "your", never their name or '
                 f'"they" ("You asked...", "This is ready for your Mark done") - above the block and in it. A drafted reply is '
                 f'already its own card with Send under Next steps, and so is a post or any act you proposed; a question you ask is shown on its own: none '
                 f'is ever an on_you step - on_you is only what is truly the owner\'s, with why. When you '
@@ -391,6 +394,8 @@ def summary_marker(text: str, letters=()) -> tuple:
     out = {'about': flat(j.get('about'), 600), 'did': flat(j.get('did'), 600), 'nothing_left': j.get('nothing_left') is True}
     # ...and the agent's own say on whether its prose is the deliverable (GeneralWorkspace: agentSummary.answerShown) - kept only when it said
     if isinstance(j.get('answer_is_result'), bool): out['answer_is_result'] = j['answer_is_result']
+    # ...and the one press it waits on to carry on (general.follow_up): that press starts its next turn
+    if j.get('after_press') in AFTER_PRESS: out['after_press'] = j['after_press']
     if isinstance(j.get('on_you'), list): out['on_you'] = list(dict.fromkeys(x for x in (flat(o, 200) for o in j['on_you'] if isinstance(o, str)) if x))[:6]
     if cs := [{'kind': c['kind'], 'review': c['review'] if isinstance(c.get('review'), int) else None, 'said': ' '.join(c['said'].split())[:1000]}
               for c in j.get('corrections') or [] if isinstance(c, dict) and c.get('kind') in ('redraft', 'ask') and isinstance(c.get('said'), str) and c['said'].strip()]:

@@ -190,20 +190,21 @@ class NoDefaultVerbTests(_Rail):
         return t
 
     def test_an_ask_waits_silently_for_the_model_and_lights_only_with_a_fact(self):
+        # ...Remind me, not Reply: with an AI connected the row has no Reply (the agent writes it from the chat, the owner 2026-11-08)
         s = MemoryStore(); t = self._asked(s)
         with mock.patch.object(capabilities, 'has_ai', return_value=True), mock.patch.object(advisor, 'notice') as n:
             d = advisor.decide(s, f'task:{t}', preread=False)
         self.assertEqual((d['verb'], d['line']), (None, ''), 'while it reads: nothing lit, never the rule first')
         self.assertEqual(n.call_args.kwargs.get('tier'), 2, 'and it is asked')
-        advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'reply', 'line': '', 'evidence': []}))
+        advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=brain_saying({'verb': 'defer', 'line': '', 'evidence': []}))
         with mock.patch.object(capabilities, 'has_ai', return_value=True), mock.patch.object(advisor, 'notice'):
-            self.assertEqual(advisor.decide(s, f'task:{t}', preread=False)['verb'], 'reply', "the model's light stands, line or not")
+            self.assertEqual(advisor.decide(s, f'task:{t}', preread=False)['verb'], 'defer', "the model's light stands, line or not")
         s._exec('DELETE FROM advice WHERE TargetId=?', (t,))
         advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True,
-                       llm=brain_saying({'verb': 'reply', 'line': 'Erin asked twice since Monday.', 'evidence': [], 'kind': 'late'}))
+                       llm=brain_saying({'verb': 'defer', 'line': 'Erin asked twice since Monday.', 'evidence': [], 'kind': 'late'}))
         with mock.patch.object(capabilities, 'has_ai', return_value=True), mock.patch.object(advisor, 'notice'):
             d = advisor.decide(s, f'task:{t}', preread=False)
-        self.assertEqual((d['verb'], d['line'], d['by']), ('reply', 'Erin asked twice since Monday.', 'model'))
+        self.assertEqual((d['verb'], d['line'], d['by']), ('defer', 'Erin asked twice since Monday.', 'model'))
 
     def test_hand_to_an_agent_is_the_models_call_with_no_capacity_gate(self):
         """The capacity wall was a code gate on one verb in one state; the measure behind it (marked done 4 of 4) is now in the prompt."""

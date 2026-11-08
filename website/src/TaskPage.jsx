@@ -769,6 +769,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   onChanged, autostart, onAutostarted, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "", rail = null, note = null, saidDay = null, saidHand = null, litMove = "" }) {
   const caps = useCapabilities(), canCode = caps.coding;     // no coding tool connected: coding is not offered (capabilities.js)
+  const manual = caps.ai === false;                          // no AI: the owner replies and hands off from the bar's ▾ themselves
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
   const [detail, setDetail] = useState(() => heldTask(selected));
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
@@ -2490,8 +2491,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     : [
       ...calVerbs,
       // ...an invite is answered by the calendar, not by an email back (calwrite.py)
-      ...(replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
-        spine: openingReply ? "Drafting…" : !pendingReview && !sentReview ? btn("reply", "none") : undefined,
+      // NO REPLY OR HAND OFF ON THE BAR (the owner, 2026-11-08): the agent does them from the chat ("reply saying...", "hand this to Erin") and
+      // its card's Send sends - only with no AI connected they stand, folded in the ▾, so the owner is never stuck (concierge._shows, the same)
+      ...(manual && replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "more", label: openingReply ? "Drafting…" : replyPrimary,
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
       // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
       // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
@@ -2540,8 +2542,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => remindHere(steady(a || e?.currentTarget)),
         title: hintOfRow("remind") },
       { id: "watch", group: "more", label: labelOfRow("watch", watching ? "on" : null), run: watchIt, title: hintOfRow("watch", watching ? "on" : null) },
-      // ...a reply that went needs at most Reply on its row: Hand it to a person waits in the ▾ (the owner, 2026-10-28)
-      { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand"), tucked: !!sentReview },
+      ...(manual ? [{ id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand"), tucked: true }] : []),
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       // ...never on a chat task (the owner, 2026-11-05: "we can remove those 2 buttons like continue agent or start new agent. Just type and it

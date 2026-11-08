@@ -2310,7 +2310,10 @@ def _assistant_payload(task_id: int, session=None):
             'earlier': [],
             # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
             # ...each under the answer of the turn that made it (`after`, as a published page), so the turn shows what it made
-            'outputs': [{**o, 'after': at_turn(o.get('at'))} for o in outputs.listing(task_id)],
+            # ...by the turn that wrote it where that turn kept it (outputs.made_by), else by when it was made
+            'outputs': [{**o, 'after': by.get(o['path']) or at_turn(o.get('at'))} for by in [outputs.made_by(task_id)] for o in outputs.listing(task_id)],
+            # ...and each EARLIER turn's own version of a file a later turn changed (outputs.turn_versions): drawn under that turn instead
+            'turnOutputs': outputs.turn_versions(task_id),
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
             # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
             'providers': general.brain_options(store, keep=general.default_pick(store, task)),
@@ -3765,14 +3768,14 @@ def open_task_outputs(tid: int, request: Request):
 
 
 @app.api_route('/api/task-outputs/{tid}/{rel:path}', methods=['GET', 'HEAD'])
-def task_output(tid: int, rel: str, download: bool = False, preview: bool = False, sheet: str = ''):
+def task_output(tid: int, rel: str, download: bool = False, preview: bool = False, sheet: str = '', turn: int = 0):
     """One file from THIS task's outputs folder - a name inside it, never a path out of it (outputs.resolve). `preview` gives a
     workbook's sheet as rows (outputs.sheet) or a document's paragraphs and tables (outputs.document); otherwise the bytes: a
     picture drawn as itself, text and anything that could run as plain text, the rest as a download under its own name (_NOSCRIPT,
-    as the attachment and artifact routes do)."""
+    as the attachment and artifact routes do). `turn`: that turn's own copy of the file, as it left it (outputs.keep_turn)."""
     from . import outputs
     if not store.get_task(tid): raise HTTPException(404, 'task not found')
-    path = outputs.resolve(tid, rel)
+    path = outputs.resolve(tid, rel, outputs.turn_folder(tid, turn) if turn > 0 else None)
     if not path: raise HTTPException(404, f'{Path(str(rel).replace(chr(92), "/")).name or "That file"} {GONE} - it is no longer in '
                                           f'{task_ref(tid)}\'s folder ({outputs.folder(tid)})')
     if preview:

@@ -461,7 +461,9 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
     rv = store.pending_review(tid, 'draft_reply', live_only=False) or store.pending_review(tid, 'draft', live_only=False)
     rv = rv if rv and str(rv.get('DraftText') or '').strip() else None
     answered = not resumed and any(c.get('ActorType') == ASSISTANT_TYPE for c in store.list_comments(tid))
-    if not (rv or sent or answered): return ''
+    from . import verdicts                    # ...and the rest it set up and has not sent: named, so a marker can take one back by its id
+    others = [x for x in verdicts.unsent(store, tid) if not rv or x['rid'] != rv['ReviewId']]
+    if not (rv or sent or answered or others): return ''
     out = [selfclose.LATEST_LINE]
     if new: out.append(f"THE NEWEST MESSAGE - from {new['who']}, at {clock(new['at'])}: {_quote(new['words'], 600)}")
     if rv:
@@ -470,6 +472,9 @@ def latest_block(store, tid: int, resumed: bool = False) -> str:
         to, before = m.get('FromName') or m.get('FromEmail') or '', bool(new) and at < new['at']
         out.append(f"THE DRAFT WAITING NOW (rv{rv['ReviewId']}{', to ' + to if to else ''}, drafted at {clock(at)}"
                    f"{' - BEFORE the newest message' if before else ''}): {_quote(rv['DraftText'], 1500)}\n{selfclose.WITHDRAW_LINE}")
+    if others: out.append('ALSO SET UP AND NOT SENT - take back any the newest message undoes:\n' + '\n'.join(
+        f"- rv{x['rid']}: {x['what']}" for x in others)
+        + ('' if rv else f'\n{selfclose.WITHDRAW_LINE}'))
     if sent: out.append('ALREADY SENT ON THIS TASK - never draft these again:\n' + '\n'.join(
         f"- {clock(x['at'])}, to {x['to']}: {_quote(x['text'], 400)}" for x in sent))
     return '\n\n'.join(out)
@@ -2121,11 +2126,11 @@ class GeneralSession:
         reply, named = selfclose.attach_markers(reply)
         who = selfclose.reply_who(reply)        # ...who hears it, as the marker says (2026-11-06)
         # ...and a draft it takes back (selfclose.LATEST_LINE): first, so a corrected reply in the same answer is the one left standing
-        reply, wd = selfclose.withdraw_marker(reply)
-        if wd is not None:
+        reply, wds = selfclose.withdraw_markers(reply)
+        for which, wd in wds:
             from . import verdicts
-            got = verdicts.withdraw(self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant')
-            if not got.get('ok'): logger.info(f"task {self.task_id}: the draft was not withdrawn - {got.get('why')}")
+            got = verdicts.withdraw(self.store, self.task_id, wd or 'the newest message changed what is owed', 'assistant', which)
+            if not got.get('ok'): logger.info(f"task {self.task_id}: {which or 'the draft'} was not withdrawn - {got.get('why')}")
         reply, drafted = selfclose.reply_marker(reply)
         reply, showing = selfclose.show_markers(reply)
         _show_files(self.store, self.task_id, showing, paths)

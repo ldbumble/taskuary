@@ -481,13 +481,17 @@ LATEST_LINE = ('LATEST MESSAGE WINS: your answer is to the newest message, read 
                'reply: it takes the place of the old one) or withdraw it (say why in one line); never leave an earlier draft standing as if it '
                'answered this. Never draft again what already went out below; write only what is new since.')
 WITHDRAW_MARK = '[[TASKUARY-WITHDRAW: <why, one line>]]'
+# ...and any unsent thing it set up, as withdraw_draft takes it (verdicts.withdraw): an agent with no shell took back only the reply draft,
+# so an email to the wrong person stood beside the right one with its Send (agent-flow audit, 2026-11-07)
 WITHDRAW_LINE = (f'To withdraw the pending draft, put {WITHDRAW_MARK} on its own line - or, with a shell, run `taskuary --withdraw-draft "<why>"` '
-                 '(the withdraw_draft tool). It is kept under Not sent for the owner; nothing is sent or deleted.')
-_WITHDRAW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?WITHDRAW\s*:?\s*(.*?)\s*\]\][ \t]*\n?', re.I | re.M)
-def withdraw_marker(text: str) -> tuple:
-    "(text with the withdraw line taken out, its why) - why None when it wrote none, '' when it gave no reason."
-    m = _WITHDRAW_RE.search(text or '')
-    return (text, None) if not m else (_WITHDRAW_RE.sub('', text).strip(), ' '.join(m.group(1).split()))
+                 '(the withdraw_draft tool). An email, a post or another proposal you set up: [[TASKUARY-WITHDRAW which=<its review id or who it '
+                 'was to>: <why>]], one line each. It is kept under Not sent for the owner; nothing is sent or deleted.')
+_WITHDRAW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?WITHDRAW\b\s*(?:which\s*=\s*(?:"([^"]*)"|([^\s:\]]+)))?\s*:?\s*(.*?)\s*\]\][ \t]*\n?',
+                          re.I | re.M)
+def withdraw_markers(text: str) -> tuple:
+    "(text with every withdraw line taken out, [(which, why)]) - which '' for the reply draft, why '' when it gave no reason."
+    found = [(' '.join((a or b or '').split()), ' '.join(w.split())) for a, b, w in _WITHDRAW_RE.findall(text or '')]
+    return (text, []) if not found else (_WITHDRAW_RE.sub('', text).strip(), found)
 
 
 _SHOW_RE = re.compile(r'^[ \t]*\[\[\s*TASKUARY[-_ ]?SHOW\s*:?\s*(.+?)\s*\]\][ \t]*\n?', re.I | re.M)

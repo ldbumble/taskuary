@@ -1244,7 +1244,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "\n\nHOVERING GUIDE\nThis conversation is the owner's always-available Taskuary guide. "
             "Use the fresh workspace snapshot to walk them through what arrived, what needs a decision, "
             "what agents produced, and what to do next. Prioritize; do not merely recite every row. "
-            "When you mention a task, link it as [TQ-0001](#task=1), using its real id. The buttons above "
+            "The buttons above "
             "the chat start focused walkthroughs and open Task, Report, and Connection creation surfaces; "
             "the smaller links open what they name. You may explain or perform actions only through "
             "tools you actually have; approval and sending remain the owner's actions.\n\n"
@@ -1265,6 +1265,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "a safe action, then present the next unresolved item. Do not dump a list upfront. Say clearly "
             "when the walkthrough is complete."
         )
+    # ...and how a page is brought up: one shared line, the dock's and every task agent's (words.LINK_LINE) - never a stranger's session
+    if not outsider: system += f'\n\n{words.LINK_LINE}'
     sources = []
     from . import origin
     stranger = origin.of_task(store, tid)[0] == 'stranger'   # the reviewer reads this as the owner's words: theirs go in a file

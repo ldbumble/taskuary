@@ -67,7 +67,7 @@ TOOLS = {
              "chart {kind: bar|line, format?, points: [{label, value, highlight?}]}, table {columns: [name | {label, format}], rows}, checklist "
              "{items: [{text, done}]}, list {items}, steps {items}, text {text: markdown}, note {tone: info|success|warning, text}, badge {text, "
              "variant?: default|secondary|outline|success|warning}, button {label, verb: a task-page button to light for the owner (close, defer, "
-             "reply, continue...) | open: an app page link like #settings}. format is currency|number|percent (12.5 -> 12.5%); give numbers as numbers. "
+             "reply, continue...) | open: an app link as BRINGING THINGS UP writes them - #task=12, #connector=quickbooks, #settings=updates, #report=new}. format is currency|number|percent (12.5 -> 12.5%); give numbers as numbers. "
              "A button only lights or opens - it never sends, pays or closes. A bad spec comes back saying what to fix. Example: "
              '{"title":"Expense tools for 40 people","root":"top","elements":{"top":{"type":"grid","props":{"cols":1},"children":["kpi","row","todo"]},'
              '"kpi":{"type":"stats","props":{"items":[{"label":"Cheapest","value":0,"format":"currency","note":"Spendly Free"},'

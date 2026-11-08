@@ -597,11 +597,21 @@ def draft_turns(store, tid: int) -> list:
     return out
 
 
+def mail_row(store, x: dict, n: int = 3000) -> dict:
+    """One message that came in (a JOINED row), as the chat draws it - the general chat and the coding one alike (codingchat.mails): who,
+    channel, when, their own words, and `mid` with how many `files` rode on it, which the bubble draws under the words (the owner,
+    2026-11-08: a screenshot and a voice note came in, and the chat showed only the words)."""
+    from .triage import own_words
+    return {'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
+            'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'), 'mid': x['MessageId'],
+            'files': len(store.list_attachments(x['MessageId']) or []),
+            'words': (str(x.get('OwnText') or '').strip() or own_words(str(x.get('BodyText') or '')).strip())[:n] or x.get('Subject') or ''}
+
+
 def shown_history(store, tid: int) -> list:
     """history, as the pane draws it: each carried-on brief with the mail that woke it (`mail`: who, channel, at, their own words), and
     each answer with the `summary` filed after it."""
     from . import ownwork
-    from .triage import own_words
     # ...EVERY RUN, in order: a chat task is one conversation (the owner, 2026-11-05: "the chat not showing prior runs as there is only one run per
     # task") - an earlier run is not folded away as "the earlier agent's conversation"; the next turn still continues the current run (history)
     rows = chat_rows(store, tid); msgs = _as_messages(rows)
@@ -613,10 +623,7 @@ def shown_history(store, tid: int) -> list:
     # `at`: when it was sent, in this server's zone like every stamp here (store.norm_stamp) - the page reads it through the zone setting.
     # `words`: the text Taskuary kept of it
     # (OwnText - no "sent from outside" banner, no quoted history), else its own words read from the body
-    def shown(got): return [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
-                             'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'),
-                             'words': (str(x.get('OwnText') or '').strip() or own_words(str(x.get('BodyText') or '')).strip())[:3000] or x.get('Subject') or ''}
-                            for x in got[-5:]]
+    def shown(got): return [mail_row(store, x) for x in got[-5:]]
     placed = set()
     for i, (m, c) in enumerate(zip(msgs, rows)):
         if not m.get('brief'): continue

@@ -2712,6 +2712,10 @@ def say_to_task(store, task_id: int, msg: dict, actor: str = 'router', new: bool
     ch = msg.get("Channel") or msg.get("channel") or "mail"
     line = (f"{who} wrote again (by {ch}) with more work on this task - their words, not the owner's: {body}" if new
             else f'{who} answered (by {ch}): {body}')[:4000]
+    # ...with the FILES that came with it, by their paths on this machine (the owner, 2026-11-08: a screenshot sent to a live session reached
+    # it as its caption alone, "This seems to be not working") - the seed names a task's first files the same way (seed_text FILES)
+    files = [a for a in (store.list_attachments(mid) if mid else []) or [] if a.get('Path')]
+    if files: line += ' [FILES that came with it, already on this machine - open them: ' + '; '.join(f"{a['Name']} ({a['Path']})" for a in files[:8]) + ']'
     # NOT INTO A TURN STILL RUNNING (TQ-1251, the owner, 2026-11-02: "the relay is not sending messages to him"). Typed while the agent
     # worked, the line left the box - so it read as delivered - and never reached the agent: Claude's queue let it go while a tool call
     # waited on the owner's yes. Mid-turn it waits in the waiting room instead, which types it in once the agent stops (waitroom.tick).

@@ -42,6 +42,7 @@ import { assignedAgent } from "./agentIdentity.js";
 import { LinkPopups, Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
+import { Attachments } from "./Attachments.jsx";
 import { placeShown } from "./shownPages.js";
 import { forTurn, outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
@@ -216,8 +217,14 @@ const AssistantText = ({ text }) => {
 const CameIn = ({ mail }) => mail.map((x, i) => (
   <div key={i} className="tq-aui-mail" data-tq-chat-mail="">
     <div className="tq-aui-role">{x.who}</div>
-    <div className="tq-aui-mail-bubble">{x.words}</div>
+    <div className="tq-aui-mail-bubble">{mailWords(x)}<CameWith x={x} /></div>
   </div>));
+// ...AND WHAT CAME WITH IT (the owner, 2026-11-08: a screenshot and a voice note came in on WhatsApp, and the chat showed only the words): the
+// message's own files under its words, by the panel's one Attachments - a picture drawn small (a click opens it whole), a voice note a player
+// over its transcript (the words), any other file a chip that opens. Every channel's bubble alike (general.mail_row `mid`, `files`)
+const CameWith = ({ x }) => x.files > 0 && x.mid ? <div className="tq-aui-arrived-files" data-tq-chat-files={x.files}><Attachments messageId={x.mid} dense /></div> : null;
+// ...a picture with no words came in as "(no text - see the attachment)": with the picture drawn under it, the words say nothing
+const mailWords = (x) => x.files > 0 && /^\(no text - see the attachments?\)$/.test(String(x.words || "").trim()) ? "" : x.words;
 // WHERE THE CHAT IS THE TASK'S HOME (taskLayout.chatHome) it is one stream, oldest to newest (the owner, 2026-11-04: "it should be one chat as
 // a agent thinking"): triage's reading opens it, Taskuary's instructions are not drawn, and the mail that woke a turn is a timestamped line
 // over the turn it woke - "↓ 2:14 PM · Ray Colton wrote again: …" - its words whole on hover. A brief with no mail (the first) says nothing
@@ -248,7 +255,8 @@ const Arrived = ({ mail }) => mail.filter((x) => !x.own).map((x, i, all) => {
   return <div key={i} className={`tq-aui-arrived${more ? " tq-aui-arrived-more" : ""}`} data-tq-chat-arrived="">
     {!again && <span className="tq-aui-arrived-head">{more ? stamp : <><ChannelMark channel={x.channel} />
       {[`${CHANNEL_WORD[String(x.channel || "").toLowerCase()] || "Message"} from ${x.who || "someone"}`, stamp].filter(Boolean).join(" · ")}</>}</span>}
-    <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{x.words}</span>
+    {!!mailWords(x) && <span className="tq-aui-arrived-words" dir="auto" title={x.words}>{mailWords(x)}</span>}
+    <CameWith x={x} />
   </div>;
 });
 // what a check-back come due asked to verify, from Taskuary's own line (checkback.TURN) - '' for any other brief

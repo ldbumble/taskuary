@@ -170,6 +170,7 @@
 .tq-aui-chat .tq-aui-arrived-head { color: #6b6559; font-weight: 600; font-size: 11.5px; }
 /* ...the next of a burst from the same sender sits close under the first, its time alone over it (GeneralWorkspace Arrived) */
 .tq-aui-chat .tq-aui-arrived-more { margin-top: -8px; }
+.tq-aui-arrived-files > div { margin-top: 2px; }
 .tq-aui-chat .tq-aui-arrived-more .tq-aui-arrived-head { font-weight: 500; color: #8b877e; }
 /* ...and the summary keeps its breath under the agent's own words when they are shown over it (AgentSummary's first head has no top margin) */
 .tq-aui-chat .tq-aui-agent-body > div:not(.tq-aui-summary):not(.tq-aui-live-steps) + .tq-aui-summary[data-tq-summary=open] { margin-top: 12px; }

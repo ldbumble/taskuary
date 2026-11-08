@@ -725,3 +725,19 @@ def test_a_task_from_before_the_chat_draws_its_stored_report_as_one_answer():
     ms = general.shown_history(s, tid)
     assert ms[-1]['role'] == 'assistant' and 'Ordered the badge' in ms[-1]['content'][0]['text']
     assert ms[0].get('brief') and ms[0]['mail'][0]['who'] == 'Erin Blake', 'the mail that started it is drawn over the answer'
+
+
+def test_a_message_in_the_chat_carries_its_files_both_chats_alike():
+    """The owner, 2026-11-08: a WhatsApp screenshot and a voice note came in, and the chat's bubble showed only the words. Each message the
+    chat draws names its message and how many files rode on it, so the bubble draws them - the general chat and the coding chat by one road."""
+    from taskuary import codingchat, general
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Login page broken', 'Kind': 'task', 'Status': 'open'}, 'owner')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'whatsapp', 'FromName': 'Erin Blake', 'BodyText': 'This seems to be not working',
+                         'ExternalId': 'whatsapp:155@s.whatsapp.net:3EB0', 'SentAt': '2026-11-08 16:49:30', 'Status': 'routed'})
+    s.add_attachment({'MessageId': mid, 'ExternalId': 'x:1', 'Name': 'shot.jpg', 'ContentType': 'image/jpeg', 'Size': 9, 'Inline': 1, 'Path': '/a/shot.jpg'})
+    [x] = general.shown_history(s, tid)[0]['mail']
+    assert (x['mid'], x['files'], x['words']) == (mid, 1, 'This seems to be not working')
+    [y] = codingchat.mails(s, tid)
+    assert {k: y[k] for k in x} == x and y['joined']

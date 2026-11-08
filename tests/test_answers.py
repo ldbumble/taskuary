@@ -146,6 +146,18 @@ class SayToTaskTests(unittest.TestCase):
         self.assertIn('Taskuary queued 1 note', said); self.assertNotIn('the owner queued', said)
         self.assertIn("their words, not the owner's: use the Gmail signature", said)
 
+    def test_a_screenshot_reaches_the_live_session_by_its_path(self):
+        """The owner, 2026-11-08: a screenshot sent into a live session's thread reached the agent as its caption alone."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
+        mid = s.add_message({'TaskId': tid, 'ExternalId': 'whatsapp:155@s.whatsapp.net:3EB0', 'Channel': 'whatsapp', 'FromName': 'Erin Blake',
+                             'BodyText': 'This seems to be not working', 'Status': 'routed'})
+        s.add_attachment({'MessageId': mid, 'ExternalId': 'x:1', 'Name': 'shot.jpg', 'ContentType': 'image/jpeg', 'Size': 9, 'Path': '/att/1/0-shot.jpg'})
+        with mock.patch.dict(terminal.SESSIONS, {'sid1': FakeSession(tid, parked=False)}, clear=True),                 mock.patch.object(terminal, 'stranger_now', return_value=''):
+            self.assertTrue(terminal.say_to_task(s, tid, s.get_message(mid), new=True))
+        [note] = s.waiting_notes(tid)
+        self.assertIn('This seems to be not working', note['Note']); self.assertIn('shot.jpg (/att/1/0-shot.jpg)', note['Note'])
+
     def test_no_session_is_false(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 't', 'Kind': 'coding', 'Status': 'open'}, 't')

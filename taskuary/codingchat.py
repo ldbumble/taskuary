@@ -53,12 +53,8 @@ def acp_updates(tid: int, sid: str) -> list:
 
 def mails(store, tid: int) -> list:
     "What came in on the task, each in its sender's words - the shape the general chat draws (general.shown_history `mail`)."
-    from .general import JOINED
-    from .triage import own_words
-    return [{'who': 'You' if x.get('Own') else x.get('FromName') or x.get('FromEmail') or '', 'own': bool(x.get('Own')),
-             'channel': x.get('Channel') or '', 'at': x.get('SentAt') or x.get('CreatedAt'), 'joined': x.get('JoinedAt') or x.get('CreatedAt'),
-             'words': (str(x.get('OwnText') or '').strip() or own_words(str(x.get('BodyText') or '')).strip())[:MAIL_N] or x.get('Subject') or ''}
-            for x in store._rows(JOINED, (int(tid),))]
+    from .general import JOINED, mail_row
+    return [{**mail_row(store, x, MAIL_N), 'joined': x.get('JoinedAt') or x.get('CreatedAt')} for x in store._rows(JOINED, (int(tid),))]
 
 
 def _live(tid: int):

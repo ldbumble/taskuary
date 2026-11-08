@@ -439,6 +439,11 @@ def card_for(store, item, compact, live_state, now, states=None, noise=None):
             said = said[:160]
             card.update(lane='saved' if funnel.session_saved(store, tid) else 'stopped',
                         why=f"{agent_word(task.get('Kind'))} {'failed' if end == 'failed' else 'stopped'}" + (f': {said}' if said else ''))
+        elif end == 'finished' and (waits := store.waiting_on_owner(tid)):
+            # ...but a run that finished with a post, an email or another act waiting for the owner's press is that press, not "finished - read
+            # what it found" (the owner's render check, 2026-11-08: a LinkedIn post waiting for Post read "agent done") - store.waiting_on_owner
+            from .general import handles
+            card.update(lane='approve', why=' '.join(str(waits.get('Reason') or 'a step waits for your yes').split())[:160], **({'chat': True} if handles(task) else {}))
         elif end == 'finished':
             last = store.last_worker_event(tid, kinds=('finished',)) or {}
             said = ' '.join(str(last.get('Text') or '').split())[:160]

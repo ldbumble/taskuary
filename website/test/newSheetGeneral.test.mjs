@@ -13,8 +13,14 @@ test("the second door is a general agent, not the assistant's thread", () => {
   assert.match(ns, /title="A general agent"/);
 });
 
-test("it asks the hand-off's three questions and dispatches them as general work", () => {
-  assert.match(ns, /generalBrains=\{generalBrains\} brainsRead=\{agentsRead\} pick=\{pick\}/);
+// THE AGENT CHAT'S OWN BOX (the owner, 2026-11-08): a general agent's job is typed into the shared PromptBox - no AI picker, no model picker, no
+// Connect an AI; Settings decides the AI, and with none connected the box says so with the way to connect one
+test("a general agent's job is typed into the chat's own box, with no pickers, and dispatched as general work", () => {
+  assert.doesNotMatch(ns, /generalBrains=\{generalBrains\} brainsRead=\{agentsRead\} pick=\{pick\}/);
+  assert.match(ns, /<PromptBox text=\{words\} setText=\{setWords\} pics=\{pics\} busy=\{busy\} onSend=\{submit\}/);
+  assert.match(ns, /const agentBox = kind === "agent" && how === "general"/);
+  assert.match(ns, /!agentBox && <Button size="small" variant="contained"/, "the box's own Send, no second one in the footer");
+  assert.match(ns, /\(await capabilities\(\)\)\.ai === false/, "no AI is the one capability's answer - the demo's agents work");
   assert.ok(ns.includes('/dispatch`, { ...(general\n            ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }'));
 });
 

@@ -40,7 +40,8 @@ import { openAppLink } from "./appLinks.js";
 import { NEW_PB, askPlaybook } from "./playbookOpen.js";
 import { DASH, place } from "./words.js";
 import { label as btn } from "./buttons.js";
-import { useCapabilities } from "./capabilities.js";
+import { capabilities, useCapabilities } from "./capabilities.js";
+import { PromptBox } from "./AgentSummary.jsx";
 import { FOCUS_RING, pressable } from "./pressable.js";
 
 const KINDS = [
@@ -269,6 +270,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // A CONNECTOR NAMED IN AN AGENT'S JOB is offered its card on the row, beside Start (connectorCatalog.connectorNamed): "connect taskuary
   // to linkedin" was only ever an agent job, with no way to Connections (a tester, 2026-10-20). The words still go to an agent if pressed.
   const [words, setWords] = useState(initialText);
+  // ...a general agent's job is typed into the agent chat's own box (PromptBox) - its words are read at the press from here
+  const agentBox = kind === "agent" && how === "general", wordsRef = useRef(words), agentBoxRef = useRef(agentBox);
+  wordsRef.current = words; agentBoxRef.current = agentBox;
   const named = kind === "agent" ? connectorNamed(words) : null;
   // each sheet registers as ITSELF: the Feed's closed dialog and the chat's open card both said "new-send", one cleared what the
   // other put, and every put re-drew both - the Send something tab died in that loop (React #185, the UI audit 2026-10-21)
@@ -286,7 +290,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
   const submit = useCallback(async () => {
     setBusy(true); setErr(""); setErrAi(false); setOk("");
-    const about = String(aboutRef.current?.value || "").trim();
+    const about = String((agentBoxRef.current ? wordsRef.current : aboutRef.current?.value) || "").trim();
     try {
       if (kind === "send") {
         const { data } = await api.post("/api/outbox", {
@@ -303,9 +307,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         const general = how === "general";
         // NOTHING TO RUN IT ON, SAID HERE AND THE SHEET STAYS OPEN (owner-approved, 2026-10-21): the task was made, its agent failed a
         // second later, and it sat on the rail under "waiting on you". Read fresh - the list loaded with the sheet may be from before
-        if (general && !((await api.get("/api/agents")).data?.general_brains || []).length) {
-          setErr(NO_AI_LINE); setErrAi(true); setBusy(false); return;
-        }
+        // ...read off the one capability (capabilities.has_ai): the demo's agents work with no AI connected, and its box said "No AI connected"
+        if (general && (await capabilities()).ai === false) { setErr(NO_AI_LINE); setBusy(false); return; }
         // a session opens where the picker says (auto = the repository the words name, else the server guesses as ever);
         // the choice is the task's `repo:` tag, the override that always wins
         const pickd = general ? null : repoPick.current?.(about) || null;
@@ -340,7 +343,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         filed.current = null;
         if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf({ ...out, ref: "" }).text}.`);      // the line leads with the ref: said once, not twice
-        aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
+        aboutRef.current?.clear(); setWords(""); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "playbook") {
         // the one road to a playbook is the shelf's New playbook: this press is its Set up with AI, made there once with these words
         askPlaybook(about, true); onClose?.(); openAppLink(`report=${NEW_PB}`);
@@ -477,17 +480,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                   hint="a researcher, analyst or writer on its own. It looks things up, drafts and reports back." />
               </Box>
             </Box>}
-            {how === "general" && (
-              <Box>
-                <Label>Agent</Label>
-                {/* the task page's hand-off, the same three questions: which profile, which brain, which model */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
-                  <AgentPicker agents={agents} models={models} kinds={kinds} agent={role} model={model}
-                    generalBrains={generalBrains} brainsRead={agentsRead} pick={pick} onPick={setPick}
-                    onAgent={(a) => { setRole(a); setModel(""); }} onModel={setModel} size={30} />
-                </Box>
-              </Box>
-            )}
+            {/* A GENERAL AGENT'S JOB IS TYPED INTO THE AGENT CHAT'S OWN BOX (the owner, 2026-11-08): no AI picker, no model picker, no Connect an AI -
+                Settings decides the AI. Its box is below, where the words go (AgentBox) */}
             {how === "terminal" && (
               <Box>
                 <Label>Agent</Label>
@@ -525,7 +519,16 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             onPicked={(d) => { setOk(`${d.ref} — the invite is drafted in its chat, waiting for your ${btn("approve")}. Nothing went out.`); onDone?.(); onOpenTask?.(d.taskId); }} />
         )}
 
-        {!REPEATS.includes(kind) && kind !== "meeting" && <Box>
+        {agentBox ? <Box data-tq-new-agent-box="">
+          <Label>{aboutLabel}</Label>
+          {/* ...THE CHAT'S OWN BOX (AgentSummary.PromptBox): paperclip, words, mic, Send - typing and Send make the task, start its agent and open
+              its chat. With no AI connected it says so, with the way to connect one */}
+          <PromptBox text={words} setText={setWords} pics={pics} busy={busy} onSend={submit} label={aboutLabel} title={verb} autoFocus
+            placeholder="why did Site 3's census move four points in July?" sendOff={noAi} />
+          {noAi && <Typography data-tq-new-no-ai="" variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }}>
+            No AI is connected, so an agent can't run this yet - <Box component="a" href={place("ai").href}
+              onClick={(e) => { e.preventDefault(); onClose?.(); openAppLink(place("ai").href); }} sx={{ color: "inherit", fontWeight: 600 }}>connect one</Box>.</Typography>}
+        </Box> : !REPEATS.includes(kind) && kind !== "meeting" && <Box>
           <Label>{aboutLabel}</Label>
           <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setWords} label={aboutLabel} />
           {kind === "send" && (
@@ -601,7 +604,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
       <ButtonBar>
         {/* ...a playbook's Set up with AI opens the build in the chat: a door, out of the Assistant's view (the owner, 2026-11-02) */}
-        {!REPEATS.includes(kind) && kind !== "meeting" && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
+        {!REPEATS.includes(kind) && kind !== "meeting" && !agentBox && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
           {...(kind === "playbook" ? { "data-tq-view-skip": "" } : {})}
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}>{busy ? "Working…" : verb}</Button>}
         <Button size="small" onClick={close}>Cancel</Button>

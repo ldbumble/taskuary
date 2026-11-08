@@ -77,6 +77,10 @@ def named(tid: int, raw: str):
         except (OSError, ValueError): return None
     return resolve(tid, raw)
 
+def rel(tid: int, p: Path) -> str:
+    "`p`'s name in the folder. Both sides resolved: a home given by its 8.3 short form (C:/Users/ABCDEF~1) resolves to the long one."
+    return Path(p).resolve().relative_to(folder(tid).resolve()).as_posix()
+
 def row(tid: int, p: Path, rel: str) -> dict:
     "One file as the page draws it - the same shape as a shown page (server._artifact_row), so one list draws both."
     from urllib.parse import quote

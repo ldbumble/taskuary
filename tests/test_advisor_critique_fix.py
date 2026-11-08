@@ -5,6 +5,14 @@ the decision's kind and whether an agent ran - never the line's words. Invented 
 from taskuary import advisor, funnel
 from taskuary.testing import Factory
 from tests.test_advisor_memory_reason import w, ask, judged       # noqa: F401 - w is the fixture
+import pytest
+
+@pytest.fixture(autouse=True)
+def _mailbox_connected(monkeypatch):
+    """These drafts go by email in a world with no mailbox card: as if one were connected, so the Send is what is judged (a card that says
+    Connect email lights nothing - advisor.unconnected, tests/test_agent_lights.py)."""
+    from taskuary import advisor as _adv
+    monkeypatch.setattr(_adv, 'unconnected', lambda store, item: False)
 
 V = lambda *vs: [{'verb': v, 'label': v} for v in vs]
 GAP = 'The draft leaves her start-date question unanswered.'

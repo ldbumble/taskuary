@@ -7,6 +7,14 @@ from unittest import mock
 from taskuary import advisor, buttons, demo, funnel
 from taskuary.store import MemoryStore
 from tests.test_advisor import _Rail
+import pytest
+
+@pytest.fixture(autouse=True)
+def _mailbox_connected(monkeypatch):
+    """These drafts go by email in a world with no mailbox card: as if one were connected, so the Send is what is judged (a card that says
+    Connect email lights nothing - advisor.unconnected, tests/test_agent_lights.py)."""
+    from taskuary import advisor as _adv
+    monkeypatch.setattr(_adv, 'unconnected', lambda store, item: False)
 
 
 class RefusedTests(_Rail):

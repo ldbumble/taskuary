@@ -71,3 +71,12 @@ def test_the_press_it_waits_on_starts_one_turn_and_no_other_does():
         verdicts.decide(s, {'ReviewId': 1, 'TaskId': tid2}, 'approve', 'text')
         verdicts.decide(s, {'ReviewId': 1, 'TaskId': tid2}, 'reject')
     assert [c.args[1:3] for c in f.call_args_list] == [(tid2, 'send')]
+
+
+def test_an_agents_email_draft_with_no_mailbox_lights_nothing():
+    """A bare review row has no Channel: the mail it answers says it is email, and no mailbox is connected - the card says Connect email."""
+    s = MemoryStore(); tid = agent_task(s, {'about': 'Erin asked', 'did': 'Drafted the answer'})
+    mid = s.add_message({'ExternalId': 'e2', 'Channel': 'email', 'Subject': 'Overtime', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
+                         'BodyText': 'September overtime?', 'Status': 'routed', 'TaskId': tid})
+    s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, 2,140 hours.'})
+    with mock.patch.object(advisor, 'pressable', return_value=''): assert lit(s, tid)['verb'] is None

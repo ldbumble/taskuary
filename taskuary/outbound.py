@@ -462,7 +462,10 @@ def review_connect(store, r: dict, memo: dict = None) -> dict | None:
         from . import connectorcatalog
         act = connectorcatalog.action_for(p.get('type')) if p.get('action') == 'run_tool' else None
         k = act['card'] if act else None
-    else: k = None if p.get('kind') in OWN_ROAD else str(r.get('Channel') or p.get('channel') or '').lower()
+    # ...a bare review row (rv.*) carries no Channel: the mail it answers says it
+    else:
+        m = store.get_message(r['MessageId']) if r.get('MessageId') and not (r.get('Channel') or p.get('channel')) else None
+        k = None if p.get('kind') in OWN_ROAD else str(r.get('Channel') or p.get('channel') or (m or {}).get('Channel') or '').lower()
     if not k: return None
     memo = {} if memo is None else memo
     if ('connect', k) not in memo: memo[('connect', k)] = connect_fix(store, k)

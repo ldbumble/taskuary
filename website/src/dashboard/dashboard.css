@@ -1,36 +1,43 @@
 /* THE DASHBOARD'S ONE PALETTE (docs/notes/dashboards.md). Six categorical slots in a fixed order, validated with the dataviz
    skill's checker against this surface: light worst adjacent CVD dE 9.2, normal 17.2; dark 9.1 / 15.4 - slot 4 is under 3:1 on
    the light paper, so every chart keeps its legend and its table view. Marks wear the slots; text never does. Chrome is the
-   Beacon paper and ink. Dark is chosen step by step, not flipped - it waits on [data-theme="dark"], which the app does not set yet. */
+   Beacon paper and ink. Dark is chosen step by step, not flipped - it waits on [data-theme="dark"], which the app does not set yet.
+   THE CARDS ARE WHITE ON A CLEAN LIGHT PAGE (the owner, 2026-11-07: "I liked the white cards better"): plain white, a hairline edge and
+   a soft shadow, so each card stands off the page; the page itself is a quiet neutral, not the warm ground of a task. */
 .tq-dash {
-  --d-surface: #fffdfb; --d-plane: #f6f4f1; --d-ink: #262521; --d-ink2: #4d4a43; --d-muted: #6e685f;
-  --d-grid: #ece7df; --d-axis: #d3ccc0; --d-border: #e1dcd5; --d-wash: rgba(85, 105, 122, .07); --d-focus: #55697a;
+  --d-surface: #ffffff; --d-plane: #f6f4f1; --d-chip: #efede9; --d-ink: #262521; --d-ink2: #4d4a43; --d-muted: #6e685f;
+  --d-grid: #eeeae4; --d-axis: #d3ccc0; --d-border: #e4e0d9; --d-wash: rgba(85, 105, 122, .07); --d-focus: #55697a;
   --d-s1: #3f77b3; --d-s2: #c8743a; --d-s3: #2f9e7a; --d-s4: #c19a2e; --d-s5: #b06c9e; --d-s6: #6a8f3c; --d-other: #b3ab9e;
   --d-track: #dfe7f0; --d-up: #2f6b34; --d-down: #8a3646;
   container-type: inline-size; display: flex; flex-direction: column; gap: 12px; min-height: 0; color: var(--d-ink);
   font-size: 13px;
 }
 :root[data-theme="dark"] .tq-dash {
-  --d-surface: #1c1b19; --d-plane: #121110; --d-ink: #f0eee9; --d-ink2: #c9c5bb; --d-muted: #8f897e;
+  --d-surface: #1c1b19; --d-plane: #121110; --d-chip: #262522; --d-ink: #f0eee9; --d-ink2: #c9c5bb; --d-muted: #8f897e;
   --d-grid: #2b2a27; --d-axis: #3a3935; --d-border: rgba(255, 255, 255, .1); --d-wash: rgba(255, 255, 255, .06); --d-focus: #8fb0d6;
   --d-s1: #4f8acb; --d-s2: #cf7e44; --d-s3: #36a882; --d-s4: #b08a22; --d-s5: #c07aae; --d-s6: #78a046; --d-other: #5d5a54;
   --d-track: #24364a; --d-up: #5fb865; --d-down: #e0838f;
 }
 
-/* one row of filters, above everything it scopes (never inside a card) */
-.tq-dash-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.tq-dash-seg { display: inline-flex; border: 1px solid var(--d-border); border-radius: 8px; overflow: hidden; background: var(--d-surface); }
-.tq-dash-seg button { all: unset; cursor: pointer; padding: 5px 11px; font-size: 12px; color: var(--d-ink2); }
-.tq-dash-seg button + button { border-left: 1px solid var(--d-border); }
-.tq-dash-seg button:hover { background: var(--d-wash); }
-.tq-dash-seg button[aria-pressed="true"] { background: var(--d-ink); color: var(--d-surface); font-weight: 600; }
+/* one row of filters, above everything it scopes (never inside a card): the range a segmented control - a quiet track, the chosen
+   one a raised white chip - and the segment one field of the same height, its name and its value inside one edge */
+.tq-dash-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.tq-dash-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--d-chip); }
+.tq-dash-seg button { all: unset; cursor: pointer; height: 26px; line-height: 26px; padding: 0 12px; border-radius: 7px; font-size: 12.5px;
+  font-weight: 500; color: var(--d-ink2); transition: background-color .15s, color .15s; }
+.tq-dash-seg button:hover { color: var(--d-ink); }
+.tq-dash-seg button[aria-pressed="true"] { background: var(--d-surface); color: var(--d-ink); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(38, 37, 33, .12), 0 0 0 .5px rgba(38, 37, 33, .06); }
 .tq-dash-seg button:focus-visible, .tq-dash-press:focus-visible { outline: 2px solid var(--d-focus); outline-offset: 1px; }
-.tq-dash-select { font: inherit; font-size: 12px; padding: 5px 8px; border: 1px solid var(--d-border); border-radius: 8px;
-  background: var(--d-surface); color: var(--d-ink); max-width: 220px; }
-.tq-dash-bar label { font-size: 12px; color: var(--d-muted); display: inline-flex; align-items: center; gap: 6px; }
+.tq-dash-bar label { display: inline-flex; align-items: center; height: 32px; box-sizing: border-box; padding-left: 12px; border: 1px solid var(--d-border);
+  border-radius: 9px; background: var(--d-surface); font-size: 12.5px; color: var(--d-muted); text-transform: capitalize; }
+.tq-dash-bar label:focus-within { border-color: var(--d-focus); }
+.tq-dash-select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 12.5px; font-weight: 600; text-transform: none; height: 100%;
+  border: 0; outline: 0; cursor: pointer; padding: 0 30px 0 8px; color: var(--d-ink); max-width: 220px; border-radius: 0 9px 9px 0;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e685f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 11px center; }
 
 /* the grid: four columns, two on a tablet, one on a phone (the container, not the window: the canvas is narrower than the screen) */
-.tq-dash-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-content: start; }
+.tq-dash-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-content: start; }
 .tq-dash-grid > .w1 { grid-column: span 1; } .tq-dash-grid > .w2 { grid-column: span 2; }
 .tq-dash-grid > .w3 { grid-column: span 3; } .tq-dash-grid > .w4 { grid-column: span 4; }
 /* the setup page: each tile under its own sentence, and the add box closing the grid (DashboardEditor.jsx) */
@@ -46,17 +53,17 @@
   /* a phone: the numbers two abreast, every chart and list the whole width */
   .tq-dash-grid { gap: 8px; }
   .tq-dash-card { padding: 10px 11px; }
-  .tq-dash-value { font-size: 26px; }
+  .tq-dash-value { font-size: 24px; }
   /* ...and the range's words stay on one line each: "7 days" broke in two at a phone's width */
-  .tq-dash-seg button { padding: 5px 8px; white-space: nowrap; }
+  .tq-dash-seg button { padding: 0 9px; white-space: nowrap; }
 }
 
-.tq-dash-card { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 12px; padding: 14px 16px;
-  min-width: 0; display: flex; flex-direction: column; gap: 10px; position: relative; transition: opacity .2s, border-color .15s;
-  box-shadow: 0 1px 2px rgba(38, 37, 33, .04); }
+.tq-dash-card { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 12px; padding: 16px 18px;
+  min-width: 0; display: flex; flex-direction: column; gap: 12px; position: relative; transition: opacity .2s, border-color .15s, box-shadow .15s;
+  box-shadow: 0 1px 2px rgba(38, 37, 33, .05), 0 6px 16px -10px rgba(38, 37, 33, .12); }
 .tq-dash-card.stale { opacity: .55; }
 .tq-dash-h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.tq-dash-h h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--d-ink2); flex: 1; min-width: 0;
+.tq-dash-h h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--d-ink2); flex: 1; min-width: 0; letter-spacing: .005em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-dash-flip { all: unset; cursor: pointer; font-size: 11px; color: var(--d-muted); padding: 2px 4px; border-radius: 4px; }
 .tq-dash-flip:hover { color: var(--d-ink); background: var(--d-wash); }
@@ -65,13 +72,14 @@
 
 /* the stat tile: label, value, delta vs the period before, a sparkline in the de-emphasis ink with today in the accent */
 .tq-dash-stat { cursor: pointer; }
-.tq-dash-stat:hover { border-color: var(--d-axis); }
-.tq-dash-value { font-size: 34px; font-weight: 650; line-height: 1; letter-spacing: -.02em; color: var(--d-ink); margin-top: 2px; }
-.tq-dash-value .u { font-size: 15px; font-weight: 500; letter-spacing: 0; color: var(--d-muted); margin-left: 4px; }
+.tq-dash-stat { gap: 8px; }
+.tq-dash-stat:hover { border-color: var(--d-axis); box-shadow: 0 1px 2px rgba(38, 37, 33, .06), 0 8px 20px -10px rgba(38, 37, 33, .18); }
+.tq-dash-value { font-size: 28px; font-weight: 640; line-height: 1.05; letter-spacing: -.02em; color: var(--d-ink); font-variant-numeric: tabular-nums; }
+.tq-dash-value .u { font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--d-muted); margin-left: 4px; }
 .tq-dash-delta { font-size: 12px; color: var(--d-muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .tq-dash-delta b { font-weight: 600; color: var(--d-ink2); font-variant-numeric: tabular-nums; }
 .tq-dash-delta .up { color: var(--d-up); } .tq-dash-delta .down { color: var(--d-down); }
-.tq-dash-spark { display: block; width: 100%; height: 34px; margin-top: auto; }
+.tq-dash-spark { display: block; width: 100%; height: 30px; margin-top: auto; }
 
 /* progress toward a target: the track is a lighter step of the fill's own hue */
 .tq-dash-track { height: 8px; border-radius: 4px; background: var(--d-track); overflow: hidden; margin-top: auto; flex: none; }
@@ -149,15 +157,17 @@
 
 /* on the canvas the dashboard takes the chat body's height (a size container, assistantView.css) less its card's own heading and
    buttons, and scrolls inside itself - the card never runs off under the dock */
-.tq-dash-canvas { margin-top: 8px; overflow: auto; padding: 10px; border-radius: 10px; background: #f3f0eb;
+.tq-dash-canvas { margin-top: 8px; overflow: auto; padding: 12px; border-radius: 10px; background: #f7f7f5;
   flex: 1 1 auto; min-height: 280px; }
 /* ...and the CARD is the pane: the chat body's whole height, as a task view with a live agent takes it (CanvasItem.CANVAS_ITEM_HEIGHT,
    the same 100cqh against the same size container), its heading and buttons at the ends and the dashboard taking what is between */
 .tq-card:has(> .tq-dash-canvas) { display: flex; flex-direction: column; box-sizing: border-box;
   height: max(460px, calc(100cqh + 14px - var(--tq-dash-gap, 2px))); margin-top: 0; margin-bottom: 0; }
 :root[data-theme="dark"] .tq-dash-canvas { background: #121110; }
-/* ...and in a task's three sections (ItemSections) the section is the warm ground and scrolls itself: the dashboard sits straight on it */
+/* ...and in a task's three sections (ItemSections) the section scrolls itself and the dashboard sits straight on it - on the clean light
+   page, not the task's warm ground (the owner, 2026-11-07); a brief (ReportBrief) sits on the same page */
 .tq-item-sec .tq-dash-canvas { margin: 0; padding: 0; background: transparent; border-radius: 0; overflow: visible; min-height: 0; flex: none; }
+.tq-item-sec:has(> [data-tq-dash-body]), .tq-item-sec:has([data-tq-report-brief]) { background: #f7f7f5; }
 
 @media (prefers-reduced-motion: reduce) { .tq-dash-card { transition: none; } }
 

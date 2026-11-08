@@ -31,6 +31,8 @@ import { Md, looksMd } from "./md.jsx";
 import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
 import ReportRows from "./ReportRows.jsx";
+import ReportBrief from "./ReportBrief.jsx";
+import { briefOf } from "./reportBrief.js";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
@@ -493,6 +495,9 @@ function FullText({ mid, revision, report = null }) {
   // ...a report's table sits in a panel its own width (the owner, 2026-10-28): full width, a two-column table left it 3/4 empty
   const rows = !morning && jsonRows(text);
   if (report && rows) return <ReportRows rows={rows} name={report.name} mid={none ? null : mid} />;
+  // ...and a brief of the End of day checkup's shape - roll-ups, groups of bullets - is laid out as one, not a wall of markdown (ReportBrief)
+  const brief = report && !morning && !rows && briefOf(text);
+  if (brief) return <ReportBrief brief={brief} mid={none ? null : mid} />;
   // ...and a message with no words of its own (a picture-only mail) is said by its pictures and files, never "(empty)" (Attachments `bare`)
   const bare = !none && !morning && !text.trim() ? { remote: remotePicture(raw) } : null;
   return (

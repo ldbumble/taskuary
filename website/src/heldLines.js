@@ -34,3 +34,12 @@ export function stillHeld(held, messages, at = "after") {
 // the agent asked takes the answer's road - appended to the thread, which draws it as the turn's own - and held, it stood at the foot as well
 // until the server filed it. A held line is drawn only while the thread on screen does not draw it; `drawn`: its owner's lines at the hold
 export const notShown = (held, thread) => stillHeld(held, thread, "drawn");
+
+// THE LINES THE SERVER KEPT FOR THE AGENT (general.waiting_lines, the owner 2026-11-07): saved the moment they were sent, so every screen draws
+// them - another tab's, the phone's, this page reloaded - with the time each was typed, until a turn takes them. Not where this screen draws the
+// same words already: a line it held itself, or its thread's own copy of a line it streamed
+export function waitingShown(waiting, held, thread, messages) {
+  const kept = (messages || []).filter((m) => m?.role === "user").length;
+  const own = new Set([...(held || []).map((l) => same(l.text)), ...(thread || []).filter((m) => m?.role === "user").slice(kept).map((m) => same(words(m)))]);
+  return (waiting || []).filter((w) => !own.has(same(w.text)));
+}

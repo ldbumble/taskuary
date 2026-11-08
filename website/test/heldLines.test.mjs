@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { heldLine, stillHeld } from "../src/heldLines.js";
+import { heldLine, stillHeld, waitingShown } from "../src/heldLines.js";
 
 const said = (text) => ({ role: "user", content: [{ type: "text", text }] });
 
@@ -34,4 +34,16 @@ test("a held line the server spelled back with other spacing or quotes is not dr
   // ...and one the server kept in other words still goes once the owner's line has arrived
   assert.deepEqual(stillHeld(held, [msg("first"), msg("It is over four dollars")]), []);
   assert.deepEqual(stillHeld(held, [msg("first")]), held, "not there yet: still held");
+});
+
+test("the lines the server kept for the agent show on every screen, once (the owner, 2026-11-07)", () => {
+  const waiting = [{ id: 7, text: "make it 2,500", at: "2026-11-07 20:33:04" }, { id: 8, text: "and copy Erin", at: "2026-11-07 20:33:09" }];
+  const server = [said("compare three tools")];
+  // a page opened mid-turn (or another screen) has none of its own: both, as the server kept them
+  assert.deepEqual(waitingShown(waiting, [], server, server).map((w) => w.id), [7, 8]);
+  // ...the screen that typed one draws its own held copy instead, never both
+  assert.deepEqual(waitingShown(waiting, [{ id: "h", text: "make it  2,500" }], server, server).map((w) => w.id), [8]);
+  // ...and a line its own thread streamed is its thread's; the server's conversation counts nothing extra
+  assert.deepEqual(waitingShown(waiting, [], [...server, said("and copy Erin")], server).map((w) => w.id), [7]);
+  assert.deepEqual(waitingShown(undefined, [], server, server), []);
 });

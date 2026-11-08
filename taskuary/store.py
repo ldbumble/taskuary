@@ -5135,6 +5135,20 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
             return cur.lastrowid
     def list_comments(self, task_id): return self._rows('SELECT * FROM comment WHERE TaskId=? ORDER BY CommentId', (task_id,))
+    def drop_comment(self, comment_id): self._exec('DELETE FROM comment WHERE CommentId=?', (comment_id,))
+    def take_lines(self, task_id, kind, as_kind, words=str) -> list:
+        """THE OWNER'S LINES KEPT FOR A TURN, taken by it (general.send_prompt): each `kind` row moved to the END of the conversation as an
+        `as_kind` row - its words read out of the kept body by `words`, the time it was typed kept - so the conversation reads in the order the
+        agent read it. In one step under the lock: two turns never take one line. [the rows as they waited], oldest first."""
+        with self.lock:
+            got = [dict(r) for r in self.cx.execute('SELECT * FROM comment WHERE TaskId=? AND ActorType=? ORDER BY CommentId', (task_id, kind))]
+            for r in got:
+                self.cx.execute('DELETE FROM comment WHERE CommentId=?', (r['CommentId'],))
+                self.cx.execute('INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)',
+                                (task_id, r['Actor'], as_kind, words(r['Body']), r['CreatedAt']))
+            if got: self.cx.commit(); self._writes += 1
+        if got: self._poke('task-changed', task_id=task_id)
+        return got
     def snap_draft(self, review_id, comment_id) -> bool:
         """Keep review `review_id` as it stands, under the turn `comment_id` that left it - only when its words changed since the last turn
         kept it: a turn that left the draft untouched did not write it, so it is not drawn there again. True when one was kept."""

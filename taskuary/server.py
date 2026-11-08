@@ -2305,6 +2305,9 @@ def _assistant_payload(task_id: int, session=None):
             # WHICH TURN EACH PENDING DRAFT IS (general.draft_turns, 2026-11-06): drawn under its own turn - a stale one (made before the newest
             # message, left untouched by the turn that answered it) with its time, never as the newest turn's Next steps
             'drafts': general.draft_turns(store, task_id),
+            # THE OWNER'S LINES NO TURN HAS TAKEN YET (general.wait_line, the owner 2026-11-07): kept as they were sent, drawn on every screen as
+            # waiting for the agent, each at the time it was typed
+            'waiting': general.waiting_lines(store, task_id),
             'demo': demo.enabled(),          # the demo's turns are written in advance: no AI to connect, so no banner asking for one
             # the conversations of the agents run before this one: drawn IN the chat now (shown_history: every run), never a fold of their own
             'earlier': [],
@@ -2555,12 +2558,12 @@ async def assistant_stream(task_id: int, body: AssistantMessageBody):
             except RuntimeError as e:
                 # it ended between being handed over and being spoken to (the owner closed the
                 # pane, a wrap-up ran). A question is not lost over a race: start a fresh one
-                # and ask it there, once.
+                # and ask it there, once - with the line already kept for it (general.wait_line), never kept twice
                 if 'has ended' not in str(e) or cancel.is_set(): raise
                 general.drop_session(task_id)
                 session = general.start_session(store, task_id, body.connector_id, body.model, ACTOR, body.pick)
                 reply = session.send_prompt(body.text, body.attachments, body.connector_id, body.model,
-                                            pick=body.pick, trace=trace, cancel=cancel)
+                                            pick=body.pick, trace=trace, cancel=cancel, waiting=getattr(e, 'waiting', None))
             put({'type': 'done', 'reply': reply, 'payload': _assistant_payload(task_id, session)})
         # Once headers are streaming, FastAPI cannot replace this with its normal JSON error
         # response. Always terminate the NDJSON stream explicitly instead of leaving the UI's
@@ -2860,6 +2863,25 @@ def resume_asking(actor: str = 'startup') -> list:
             logger.warning(f'task {tid}: the agent waiting on the owner was not brought back after the restart - {e}')
             store.tag_task(tid, hub_term.INTERRUPTED, True, actor)        # a start that got as far as clearing it: still interrupted
             store.audit('task', tid, 'resume-asking', actor, 'system', detail={'fromSid': last['Sid'], 'failed': str(e)[:300]})
+    deliver_waiting(actor)
+    return out
+
+
+def deliver_waiting(actor: str = 'startup') -> list:
+    """THE OWNER'S LINES A RESTART CUT OFF GO TO THE AGENT (the owner, 2026-11-07: "it must not be lost on a server restart"): typed while
+    its turn ran, they were kept (general.wait_line) and nothing in this process waits to hand them on. Each open chat task with lines
+    waiting gets its agent back with them, taken together as one turn - [task ids]. A task closed since keeps them, drawn as waiting."""
+    from . import general
+    out = []
+    for tid in sorted({int(r['TaskId']) for r in store._rows('SELECT DISTINCT TaskId FROM comment WHERE ActorType=?', (general.WAITING_TYPE,))}):
+        t = store.get_task(tid) or {}
+        if t.get('Status') not in ('open', 'waiting', 'in_progress') or not general.handles(t) or general.is_dock(t) or general.session_for(tid): continue
+        if not general.provider_options(store): break
+        first = general.waiting_lines(store, tid)[0]
+        def go(tid=tid, wid=first['id']):
+            try: general.start_session(store, tid, actor=actor).send_prompt('', waiting=wid)
+            except Exception as e: logger.warning(f'task {tid}: the lines kept for its agent were not handed on after the restart - {e}')
+        threading.Thread(target=go, daemon=True, name=f'waiting-{tid}').start(); out.append(tid)
     return out
 
 

@@ -1346,3 +1346,14 @@ class AFailingConnectionIsTheBellsTests(unittest.TestCase):
         self.assertIn(f"connector:{c['ConnectorId']}", {p['key'] for p in problems.collect(s)})
         self.assertFalse([i for i in funnel.pile(s, force=True)['items'] if i['key'].startswith('conn:')])
         self.assertFalse(hasattr(funnel, 'broken_connections'))
+
+
+def test_a_closed_task_looked_up_by_any_road_says_it_is_closed():
+    # the owner, 2026-11-08: a done task opened from Search was drawn under Tasks - the page draws none for a `closed` card (pulledRow)
+    from taskuary import funnel
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); tid = s.create_task({'Title': 'Payworth renewal', 'Kind': 'task', 'Status': 'open'}, 'owner')
+    s.update_task(tid, {'Status': 'done'}, 'owner')
+    assert funnel.item_for_key(s, f'task:{tid}')['closed'] is True
+    assert (funnel.next_item(s, f'task:{tid}', include_surfaced=True) or {'closed': True})['closed'] is True
+    assert funnel.shut(s, {'tid': s.create_task({'Title': 'Open one', 'Kind': 'task', 'Status': 'open'}, 'owner')}).get('closed') is None

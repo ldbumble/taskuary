@@ -2,7 +2,8 @@
 // it kept its own copy, and Google Vertex AI and Meta reached the shelf only (2026-10-15).
 // The nine after typesafe speak the OpenAI surface (llm.OPENAI_COMPATIBLE); groq, cerebras, gemini and mistral need no payment method.
 export const AI_SHELF = ["hipaa_ai", "anthropic", "openai", "chatgpt", "azure_openai", "vertex_ai", "openrouter", "meta", "ollama", "typesafe",
-  "groq", "cerebras", "gemini", "deepseek", "mistral", "together", "xai", "cohere", "perplexity"];
+  "groq", "cerebras", "gemini", "deepseek", "mistral", "together", "xai", "cohere", "perplexity",
+  "fireworks_ai", "nvidia_nim", "sambanova", "deepinfra", "novita", "hyperbolic", "bedrock"];
 // Setup's: the shelf less the two that cannot sort mail - a decision model, and a ChatGPT sign-in that needs its own window
 export const SETUP_AI = AI_SHELF.filter((t) => !["chatgpt", "typesafe"].includes(t));
 // The organisation's AI card (HIPAA AI) cannot connect without its gateway's address unless this build ships one (the server's
@@ -20,4 +21,11 @@ export const AI_WHY = {
   mistral: "European models, key from console.mistral.ai", together: "open models, key from api.together.xyz",
   xai: "Grok, key from console.x.ai", cohere: "Cohere's models, key from dashboard.cohere.com",
   perplexity: "answers with web search, key from perplexity.ai",
+  fireworks_ai: "open models, key from app.fireworks.ai",
+  nvidia_nim: "NVIDIA-hosted models, key from build.nvidia.com",
+  sambanova: "fast open models, key from cloud.sambanova.ai",
+  deepinfra: "low-cost open models, key from deepinfra.com",
+  novita: "open models, key from novita.ai",
+  hyperbolic: "open models, key from app.hyperbolic.ai",
+  bedrock: "models in your AWS account, a Bedrock API key",
 };

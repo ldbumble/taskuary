@@ -4,8 +4,9 @@ They are a TABLE, not nine branches: a base url, a default model and a bearer ke
 integration. This pins the thing a table can get wrong - a url that does not exist, a provider
 that never reached AI_TYPES and so appears in no brain picker, or a branch that quietly drops
 the key. Every url here was verified against the live host by an unauthenticated POST: 400/401
-means the endpoint is real, 404 means the path is wrong (Fireworks failed exactly that way and
-is deliberately absent).
+means the endpoint is real, 404 means the path is wrong (Fireworks failed exactly that way, at /v1).
+The seven added on 2026-11-08 (Fireworks at /inference/v1, NVIDIA NIM, SambaNova, DeepInfra, Novita, Hyperbolic, Bedrock) were read off
+each vendor's own OpenAI-compatibility page instead; AddedFromTheVendorsDocs pins what those pages say.
 """
 import unittest
 from unittest import mock
@@ -43,6 +44,27 @@ class TableIsTheIntegration(unittest.TestCase):
     def test_an_unknown_type_still_refuses(self):
         with self.assertRaises(RuntimeError):
             make_llm('not_a_provider', {}, 'k')
+
+
+class AddedFromTheVendorsDocs(unittest.TestCase):
+    "Each answers a chat completion shaped as its docs show, at the url its docs give, with the key as a bearer."
+    URLS = {'fireworks_ai': 'https://api.fireworks.ai/inference/v1/chat/completions', 'nvidia_nim': 'https://integrate.api.nvidia.com/v1/chat/completions',
+            'sambanova': 'https://api.sambanova.ai/v1/chat/completions', 'deepinfra': 'https://api.deepinfra.com/v1/openai/chat/completions',
+            'novita': 'https://api.novita.ai/openai/chat/completions', 'hyperbolic': 'https://api.hyperbolic.ai/inference/v1/chat/completions',
+            'bedrock': 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/chat/completions'}
+
+    def test_each_one_round_trips(self):
+        for t, url in self.URLS.items():
+            seen = {}
+            def post(u, headers=None, json=None, timeout=None, **kw):
+                seen.update(url=u, auth=(headers or {}).get('Authorization'), model=(json or {}).get('model'))
+                r = mock.Mock(); r.status_code = 200
+                r.json.return_value = {'id': 'chatcmpl-1', 'object': 'chat.completion', 'model': seen['model'],
+                                       'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'ok'}, 'finish_reason': 'stop'}],
+                                       'usage': {'prompt_tokens': 3, 'completion_tokens': 1, 'total_tokens': 4}}
+                return r
+            with mock.patch('taskuary.llm.requests.post', side_effect=post): self.assertEqual(make_llm(t, {}, 'sk-doc')('s', 'u'), 'ok', t)
+            self.assertEqual((seen['url'], seen['auth'], seen['model']), (url, 'Bearer sk-doc', OPENAI_COMPATIBLE[t][1]), t)
 
 
 if __name__ == '__main__':

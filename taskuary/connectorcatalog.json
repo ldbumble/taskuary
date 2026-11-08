@@ -1538,8 +1538,8 @@
       "type": "fireworks_ai",
       "title": "Fireworks AI",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Serverless inference for open models",
+      "planned": false,
+      "desc": "Open models on fast serverless inference - one key, any model in its library.",
       "match": [
         "fireworks ai",
         "fireworks"
@@ -1560,8 +1560,8 @@
       "type": "bedrock",
       "title": "AWS Bedrock",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Claude, Llama and other models through AWS",
+      "planned": false,
+      "desc": "Models in your own AWS account through Bedrock's chat completions - with a Bedrock API key.",
       "match": [
         "aws bedrock",
         "aws",
@@ -3323,8 +3323,8 @@
       "type": "nvidia_nim",
       "title": "NVIDIA NIM",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Open models on NVIDIA-hosted endpoints, OpenAI-compatible",
+      "planned": false,
+      "desc": "Open models served by NVIDIA's NIM microservices, with free credits to start.",
       "match": [
         "nvidia nim",
         "nvidia"
@@ -3334,8 +3334,8 @@
       "type": "sambanova",
       "title": "SambaNova",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Open-weights models on SambaNova hardware, OpenAI-compatible",
+      "planned": false,
+      "desc": "Llama and other open models on SambaNova's own chips - fast, with a free tier.",
       "match": [
         "sambanova"
       ]
@@ -3344,8 +3344,8 @@
       "type": "deepinfra",
       "title": "DeepInfra",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Open models at per-token prices, OpenAI-compatible",
+      "planned": false,
+      "desc": "Open models at low per-token prices, pay as you go.",
       "match": [
         "deepinfra"
       ]
@@ -3354,8 +3354,8 @@
       "type": "novita",
       "title": "Novita AI",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Open models on Novita, OpenAI-compatible",
+      "planned": false,
+      "desc": "Open models on pay-as-you-go GPUs, one key for the whole library.",
       "match": [
         "novita"
       ]
@@ -3364,8 +3364,8 @@
       "type": "hyperbolic",
       "title": "Hyperbolic",
       "group": "AI — agents & models",
-      "planned": true,
-      "desc": "Open-weights inference, OpenAI-compatible",
+      "planned": false,
+      "desc": "Open models on low-cost GPU inference.",
       "match": [
         "hyperbolic"
       ]

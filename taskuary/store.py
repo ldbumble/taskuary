@@ -1496,6 +1496,7 @@ class SQLiteStore:
                          ('cohere', 'Cohere'),
                          ('deepseek', 'DeepSeek'),
                          ('perplexity', 'Perplexity'),
+                         ('fireworks_ai', 'Fireworks AI'), ('nvidia_nim', 'NVIDIA NIM'), ('sambanova', 'SambaNova'), ('deepinfra', 'DeepInfra'), ('novita', 'Novita AI'), ('hyperbolic', 'Hyperbolic'), ('bedrock', 'AWS Bedrock'),
                          ('hipaa_ai', 'HIPAA AI'),
                          ('azure_openai', 'Azure OpenAI'), ('vertex_ai', 'Google Vertex AI'), ('openrouter', 'OpenRouter'),
                          ('ollama', 'Local models (Ollama)'), ('meta', 'Meta Model API (Muse Spark)'),

@@ -40,6 +40,16 @@ OPENAI_COMPATIBLE = {
     'cohere':     ('https://api.cohere.ai/compatibility/v1', 'command-r-plus'),
     'deepseek':   ('https://api.deepseek.com/v1', 'deepseek-chat'),
     'perplexity': ('https://api.perplexity.ai', 'sonar'),
+    # (the owner, 2026-11-08: "all the ones that say coming soon just add them now") - each base and model read off the vendor's own
+    # OpenAI-compatibility page that day, not probed: Fireworks' is /inference/v1 (the /v1 once probed was a 404), Bedrock's
+    # is us-east-1's - another region is its base_url - and takes a Bedrock API key as the bearer
+    'fireworks_ai': ('https://api.fireworks.ai/inference/v1', 'accounts/fireworks/models/glm-5p3-flash'),
+    'nvidia_nim': ('https://integrate.api.nvidia.com/v1', 'meta/llama-3.3-70b-instruct'),
+    'sambanova':  ('https://api.sambanova.ai/v1', 'Meta-Llama-3.3-70B-Instruct'),
+    'deepinfra':  ('https://api.deepinfra.com/v1/openai', 'meta-llama/Llama-3.3-70B-Instruct-Turbo'),
+    'novita':     ('https://api.novita.ai/openai', 'meta-llama/llama-3.3-70b-instruct'),
+    'hyperbolic': ('https://api.hyperbolic.ai/inference/v1', 'glm-5.3-flash'),
+    'bedrock':    ('https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1', 'openai.gpt-oss-120b-1:0'),
     # HIPAA AI: an organisation's own AI (Vertex behind its gateway), switched on with an ACCESS CODE - the person's own gateway
     # key, so usage is metered per person and one code is revoked alone (the owner, 2026-10-16). The app ships no key; the address
     # is the gateway's, filled in here once it is deployed (HIPAA_AI_URL), and `hipaa-ai` is the alias the gateway maps to its model.

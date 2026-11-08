@@ -33,7 +33,7 @@ export const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && 
 export const TYPE_LABELS = {
   ...READ_LABELS,
   zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary", taskuary_data: "Taskuary - its own rows",
-  mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", graphql: "GraphQL", rss: "RSS / Atom",
+  obsidian_read: "Obsidian notes", mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", graphql: "GraphQL", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
   entra_users: "Entra ID — people", entra_groups: "Entra ID — group members",

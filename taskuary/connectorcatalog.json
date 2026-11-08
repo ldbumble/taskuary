@@ -2820,6 +2820,28 @@
       ]
     },
     {
+      "type": "gong",
+      "title": "Gong",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Calls, their transcripts and activity stats as reports and an agent tool - GET /calls?fromDateTime=..., POST /calls/transcript.",
+      "match": [
+        "gong",
+        "gong.io"
+      ]
+    },
+    {
+      "type": "veeva",
+      "title": "Veeva Vault",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Documents, objects and VQL query results as reports and an agent tool - GET /query?q=SELECT id, name__v FROM documents.",
+      "match": [
+        "veeva",
+        "veeva vault"
+      ]
+    },
+    {
       "type": "plaid",
       "title": "Plaid",
       "group": "Markets & finance",
@@ -3198,6 +3220,17 @@
         "365",
         "files",
         "office365 files"
+      ]
+    },
+    {
+      "type": "obsidian",
+      "title": "Obsidian",
+      "group": "Files & sheets",
+      "planned": false,
+      "desc": "Your Obsidian vault read where it lies on this computer - the latest notes, the ones a word is in, or one note - as a report or an agent tool.",
+      "match": [
+        "obsidian",
+        "obsidian vault"
       ]
     },
     {
@@ -3909,6 +3942,51 @@
       ]
     },
     {
+      "type": "mailchimp",
+      "title": "Mailchimp",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Audiences, campaigns and their reports (opens, clicks, unsubscribes) as reports and an agent tool - GET /reports?count=10.",
+      "match": [
+        "mailchimp"
+      ]
+    },
+    {
+      "type": "kit",
+      "title": "Kit (ConvertKit)",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Subscribers, broadcasts, sequences and their stats as reports and an agent tool - GET /broadcasts, /subscribers?status=active.",
+      "match": [
+        "convertkit",
+        "kit.com"
+      ]
+    },
+    {
+      "type": "canva",
+      "title": "Canva",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Canva's own MCP server in your agent CLI — agents search, make and export your designs. You sign in once with Sign in.",
+      "match": [
+        "canva"
+      ],
+      "mcp": {
+        "url": "https://mcp.canva.com/mcp",
+        "docs": "https://www.canva.dev/docs/connect/canva-mcp-server-setup"
+      }
+    },
+    {
+      "type": "vimeo",
+      "title": "Vimeo",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Your videos, their plays, folders and comments as reports and an agent tool - GET /me/videos?sort=date.",
+      "match": [
+        "vimeo"
+      ]
+    },
+    {
       "type": "deepseek",
       "title": "DeepSeek",
       "group": "AI — agents & models",
@@ -4148,6 +4226,73 @@
       "desc": "Your publication's posts, read from its public feed, for the agents and reports. Substack has no API: replies and comments reach you as Substack's own emails, through your mail card.",
       "match": [
         "substack"
+      ]
+    },
+    {
+      "type": "instagram",
+      "title": "Instagram",
+      "group": "Social",
+      "planned": false,
+      "desc": "Comments on your recent Instagram posts land on your work rail through triage; posts and their insights as reports and an agent tool - GET /<id>/media.",
+      "match": [
+        "instagram",
+        "insta"
+      ]
+    },
+    {
+      "type": "facebook_pages",
+      "title": "Facebook Pages",
+      "group": "Social",
+      "planned": false,
+      "desc": "Comments on your Page's posts and messages to your Page land on your work rail through triage; posts and insights as reports and an agent tool - GET /<page>/feed.",
+      "match": [
+        "facebook page",
+        "facebook",
+        "messenger"
+      ]
+    },
+    {
+      "type": "tiktok",
+      "title": "TikTok",
+      "group": "Social",
+      "planned": false,
+      "desc": "Your TikTok profile and videos with their views, likes and comments counts as reports and an agent tool - POST /video/list/?fields=id,title,view_count.",
+      "match": [
+        "tiktok"
+      ]
+    },
+    {
+      "type": "x",
+      "title": "X (Twitter)",
+      "group": "Social",
+      "planned": false,
+      "desc": "Posts that mention you land on your work rail through triage; posts and users as reports and an agent tool - GET /users/<id>/mentions. Direct messages need a sign-in as you, which comes later.",
+      "match": [
+        "twitter",
+        "x.com",
+        "tweet"
+      ]
+    },
+    {
+      "type": "wordpress",
+      "title": "WordPress",
+      "group": "Social",
+      "planned": false,
+      "desc": "Comments awaiting your moderation land on your work rail through triage; posts, pages and comments as reports and an agent tool - GET /posts?status=publish.",
+      "match": [
+        "wordpress",
+        "wp-admin"
+      ]
+    },
+    {
+      "type": "ghost",
+      "title": "Ghost",
+      "group": "Social",
+      "planned": false,
+      "desc": "Posts, pages, members and newsletters as reports and an agent tool - GET /posts/?filter=status:draft, /members/?filter=status:paid.",
+      "match": [
+        "ghost.io",
+        "ghost blog"
       ]
     },
     {

@@ -12,7 +12,9 @@ an outside collaborator is a stranger's words; a source that cannot say (Airtabl
 the owner's Trust everyone from ... press. Membership lookups are cached per process, like devtools.gitlab_member.
 
 The same road carries the people who write from OUTSIDE (Zulip, Signal, Twilio texts, Discourse, Reddit, YouTube) and the business
-systems where something waits on you (Calendly bookings, ShipStation and Shopify orders, Square and PayPal disputes) - see below.
+systems where something waits on you (Calendly bookings, ShipStation and Shopify orders, Square and PayPal disputes) - see below -
+and the cards that are also keyed reads (apireads.json): WooCommerce and BigCommerce orders, comments on your Instagram posts and
+Facebook Page, messages to your Page, posts on X that mention you, WordPress comments awaiting moderation.
 
 And the ones that sign in by OAuth (oauth.py - their Secret is the tokens Sign in left, spent through oauth.access): Webex and Zoom Team
 Chat (direct messages, @mentions), Threads (replies, mentions - always strangers), HubSpot and Salesforce (tickets, cases and tasks
@@ -38,7 +40,8 @@ NAMES = {'zendesk': 'Zendesk', 'freshdesk': 'Freshdesk', 'intercom': 'Intercom',
          'calendly': 'Calendly', 'shipstation': 'ShipStation', 'shopify': 'Shopify', 'square': 'Square', 'paypal': 'PayPal',
          'webex': 'Webex', 'zoom_chat': 'Zoom Team Chat', 'threads': 'Threads', 'hubspot': 'HubSpot', 'salesforce': 'Salesforce',
          'docusign': 'DocuSign', 'basecamp_todos': 'Basecamp to-dos', 'mailgun': 'Mailgun', 'line': 'LINE', 'sendgrid': 'SendGrid Inbound Parse',
-         'woocommerce': 'WooCommerce', 'bigcommerce': 'BigCommerce'}
+         'woocommerce': 'WooCommerce', 'bigcommerce': 'BigCommerce',
+         'instagram': 'Instagram', 'facebook_pages': 'Facebook Pages', 'x': 'X', 'wordpress': 'WordPress'}
 _MEMO = {}       # (type, scope, who) -> membership, read once per process
 
 
@@ -1308,6 +1311,98 @@ def items_bigcommerce(store, c, since) -> list:
                  _person(o.get('billing_address')), (o.get('billing_address') or {}).get('email'), None, None, when(o.get('date_modified')),
                  f"https://store-{hsh}.mybigcommerce.com/manage/orders/{o['id']}", 'BigCommerce')
             for o in (js if isinstance(js, list) else [])]                          # no orders: an empty 204, not a list
+
+
+# ── Instagram (comments on your recent posts) ────────────────────────────────────────────
+def test_instagram(store, c) -> str:
+    _need(c, 'access token', 'Meta Business settings: Users, then System users, then Generate new token (instagram_basic, instagram_manage_comments)')
+    me = _kapi(c, f"/{_cfg(c).get('ig_user_id')}", fields='username')
+    _keep(store, c, username=me.get('username'))
+    _seed_source(store, c, f"@{me.get('username')}")
+    return f"connected to @{me.get('username')} - comments on your recent posts flow in on the next sync"
+
+
+def items_instagram(store, c, since) -> list:
+    me, out = _cfg(c).get('username'), []
+    for m in (_kapi(c, f"/{_cfg(c).get('ig_user_id')}/media", limit=10,
+                   fields='id,caption,permalink,timestamp,comments.limit(25){id,text,username,timestamp,from}').get('data') or []):
+        for k in (m.get('comments') or {}).get('data') or []:
+            who = k.get('username') or (k.get('from') or {}).get('username')
+            if me and who == me: continue                                       # your own replies are not work
+            out.append(item(k['id'], f"@{who} commented on your post", f"Instagram comment on: {str(m.get('caption') or 'your post')[:80]}",
+                            k.get('text'), f'@{who}', None, who and f'ig:{who}', False,            # a commenter is always an outsider
+                            k.get('timestamp'), m.get('permalink'), f'@{me}' if me else 'Instagram'))
+    return out
+
+
+# ── Facebook Pages (comments on your Page's posts, messages to your Page) ────────────────
+def test_facebook_pages(store, c) -> str:
+    _need(c, 'Page access token', 'Meta Business settings: Users, then System users, then Generate new token for the Page')
+    pg = _kapi(c, f"/{_cfg(c).get('page_id')}", fields='name')
+    _seed_source(store, c, pg.get('name') or 'Facebook Page')
+    return f"connected to {pg.get('name')} - comments on its posts and messages to it flow in on the next sync"
+
+
+def items_facebook_pages(store, c, since) -> list:
+    pid, out = str(_cfg(c).get('page_id')), []
+    who = lambda f: ((f or {}).get('name'), (f or {}).get('id') and f"fb:{f['id']}")
+    for p in _kapi(c, f'/{pid}/feed', limit=10, fields='id,message,permalink_url,comments.limit(25){id,message,from,created_time,permalink_url}').get('data') or []:
+        for k in (p.get('comments') or {}).get('data') or []:
+            if (k.get('from') or {}).get('id') == pid: continue                 # the Page answering is not work
+            n, uid = who(k.get('from'))
+            out.append(item(k['id'], f"{n or 'Someone'} commented on your Page's post", f"Facebook comment on: {str(p.get('message') or 'a post')[:80]}",
+                            k.get('message'), n, None, uid, False, k.get('created_time'), k.get('permalink_url') or p.get('permalink_url'), 'Facebook Page'))
+    for v in _kapi(c, f'/{pid}/conversations', limit=CAP, fields='id,updated_time,link,messages.limit(1){id,message,from,created_time}').get('data') or []:
+        m = ((v.get('messages') or {}).get('data') or [None])[0]
+        if not m or (m.get('from') or {}).get('id') == pid: continue           # the last word is the Page's: nothing waits
+        n, uid = who(m.get('from'))
+        out.append(item(m['id'], f"Message from {n or 'someone'} to your Page", 'Facebook Page message', m.get('message'), n, None, uid, False,
+                        m.get('created_time'), f"https://www.facebook.com{v['link']}" if str(v.get('link') or '').startswith('/') else 'https://business.facebook.com/latest/inbox',
+                        'Facebook Page', conv=v['id']))
+    return out
+
+
+# ── X (posts that mention you) ───────────────────────────────────────────────────────────
+def test_x(store, c) -> str:
+    _need(c, 'bearer token', 'developer.x.com: Projects and Apps, then your app, then Keys and tokens')
+    u = _kapi(c, '/users/by/username/{username}').get('data') or {}
+    if not u.get('id'): raise RuntimeError('X knows no account with that handle')
+    _keep(store, c, me_id=u['id'])
+    _seed_source(store, c, f"@{u.get('username')}")
+    return f"found @{u.get('username')} - posts that mention you flow in on the next sync (reading mentions needs a paid API plan)"
+
+
+def items_x(store, c, since) -> list:
+    j = _kapi(c, f'/users/{_me(c)}/mentions', start_time=_utc(since), max_results=max(5, CAP), expansions='author_id',
+             **{'tweet.fields': 'created_at,author_id,conversation_id', 'user.fields': 'username,name'})
+    users = {u['id']: u for u in (j.get('includes') or {}).get('users') or []}
+    out = []
+    for t in j.get('data') or []:
+        u = users.get(t.get('author_id')) or {}
+        h = u.get('username') or t.get('author_id')
+        out.append(item(t['id'], f"@{h} mentioned you", 'X post mentioning you', t.get('text'), f"{u.get('name') or h} (@{h})", None,
+                        t.get('author_id') and f"x:{t['author_id']}", False, t.get('created_at'), f"https://x.com/{h}/status/{t['id']}",
+                        f"@{_cfg(c).get('username')}", conv=t.get('conversation_id')))
+    return out
+
+
+# ── WordPress (comments awaiting your moderation) ────────────────────────────────────────
+def test_wordpress(store, c) -> str:
+    _need(c, 'application password', 'WordPress admin: Users, then Profile, then Application Passwords')
+    me = _kapi(c, '/users/me', context='edit')
+    if 'moderate_comments' not in (me.get('capabilities') or {}):
+        raise RuntimeError(f"signed in as {me.get('name')}, who may not moderate comments - use an editor's or an administrator's account")
+    _seed_source(store, c, _host(_api_base(c).split('/wp-json')[0]))
+    return f"signed in as {me.get('name')} - comments awaiting moderation flow in on the next sync"
+
+
+def items_wordpress(store, c, since) -> list:
+    site = _api_base(c).split('/wp-json')[0]
+    return [item(k['id'], f"Comment awaiting moderation from {k.get('author_name') or 'someone'}", f"WordPress comment on post {k.get('post')} - held for moderation",
+                 _text((k.get('content') or {}).get('rendered')), k.get('author_name'), k.get('author_email'),
+                 f"wp:{k.get('author') or k.get('author_email') or k['id']}", False,      # anyone can comment, an account or not: an outsider
+                 f"{k['date_gmt']}Z" if k.get('date_gmt') else k.get('date'), f"{site}/wp-admin/comment.php?action=editcomment&c={k['id']}", _host(site))
+            for k in _kapi(c, '/comments', status='hold', context='edit', per_page=CAP, orderby='date', after=_utc(since)) or []]
 
 
 TESTS = {t: globals()[f'test_{t}'] for t in NAMES}

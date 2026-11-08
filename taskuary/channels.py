@@ -507,6 +507,9 @@ def test_connector(store, cid: int, draft: dict | None = None) -> dict:
         elif c['Type'] in READS:
             from . import apireads
             detail = apireads.test(store, c)                       # its one cheap GET (apireads.json `probe`)
+        elif c['Type'] == 'obsidian':
+            from . import obsidian
+            detail = obsidian.test(store, c)                        # the vault folder is there and holds notes
         elif c['Type'] == 'dynamodb':
             from . import aws
             from .reports import _card

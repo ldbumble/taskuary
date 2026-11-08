@@ -462,11 +462,11 @@ class MailPresetTests(unittest.TestCase):
 
 class OneRoadTests(unittest.TestCase):
     def test_every_source_is_wired_everywhere_a_tracker_is(self):
-        from taskuary import channels, outbound, search, store
+        from taskuary import apireads, channels, outbound, search, store
         for t in inboxes.TYPES:
             self.assertIn(t, channels.PER_CONNECTOR); self.assertEqual(channels.CH2SRC[t], t)
             self.assertIn(t, senders.TRACKERS); self.assertIn(t, outbound.NEVER); self.assertIn(t, search.TICKET)
-            self.assertIn('trigger', store.DEFAULT_ROLES[t].split(','))        # ...and a report and agent read too, where its API is one (apireads.json)
+            self.assertEqual(store.DEFAULT_ROLES[t], 'trigger,report,tool' if t in apireads.types() else 'trigger')    # a keyed read too: test_read_sources
         self.assertEqual({c['Type'] for c in MemoryStore().list_connectors()} & set(inboxes.TYPES), set(inboxes.TYPES))
 
     def test_a_poll_goes_through_the_card_test_and_poll_dispatch(self):

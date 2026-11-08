@@ -983,7 +983,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # five more (2026-09-08): finnhub/polygon/tiingo/fmp key like twelvedata; alpaca
                  # needs two credentials (key_id, secret_key) and ships market DATA only, no orders
                  'finnhub': 'report,tool', 'polygon': 'report,tool', 'tiingo': 'report,tool',
-                 'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool', 'dynamodb': 'report,tool',
+                 'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool', 'dynamodb': 'report,tool', 'obsidian': 'report,tool',
                  **{t: 'report,tool' for t in _read_types()},      # apireads.json: reads, as reports and agent tools
                  'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
@@ -1525,7 +1525,7 @@ class SQLiteStore:
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),
                          ('cockroachdb', 'CockroachDB'), ('oracle', 'Oracle Database'), ('duckdb', 'DuckDB'), ('dynamodb', 'Amazon DynamoDB'),
-                         ('mongodb', 'MongoDB'), ('redis', 'Redis'), ('neo4j', 'Neo4j'),
+                         ('mongodb', 'MongoDB'), ('redis', 'Redis'), ('neo4j', 'Neo4j'), ('obsidian', 'Obsidian'),
                          # a vendor's REST API read with a key (apireads.json)
                          *((t, r['title']) for t, r in apireads.table().items()),
                          ('snowflake', 'Snowflake'),

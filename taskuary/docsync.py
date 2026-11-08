@@ -75,7 +75,7 @@ def sync_connections(store, actor='system'):
                      '|yahoo_quotes|yahoo_history|edgar_filings|edgar_facts|coingecko_prices|alchemy_prices|alchemy_wallet|fx_rates|'
                      'td_quotes|td_indicator|av_quotes|fred_series|markets_screen|'
                      'finnhub_quotes|finnhub_news|finnhub_earnings|finnhub_insiders|'
-                     'polygon_bars|polygon_snapshot|tiingo_history|tiingo_news|marketstack_eod|eodhd_eod|dynamodb|mongodb|redis|neo4j|' + '|'.join(f'{t}_read' for t in apireads.types()) + '|'
+                     'polygon_bars|polygon_snapshot|tiingo_history|tiingo_news|marketstack_eod|eodhd_eod|dynamodb|mongodb|redis|neo4j|obsidian_read|' + '|'.join(f'{t}_read' for t in apireads.types()) + '|'
                      'fmp_fundamentals|fmp_ratios|alpaca_quotes|alpaca_bars", ...} — '
                      'saved credentials are filled in for you; if several cards have that type, pass '
                      '"connector_id": <the id named above>; the raw output comes back. '

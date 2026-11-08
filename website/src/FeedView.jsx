@@ -63,6 +63,7 @@ const CHANNEL_LABELS = { email: "Mailboxes", teams: "Teams chats", slack: "Slack
   front: "Front conversations", helpscout: "Help Scout conversations", gorgias: "Gorgias tickets", ringcentral: "RingCentral calls & texts",
   aircall: "Aircall calls", dialpad: "Dialpad calls", typeform: "Typeform responses", jotform: "Jotform submissions",
   surveymonkey: "SurveyMonkey responses", tally: "Tally submissions", google_forms: "Google Forms responses", lever: "Lever candidates",
+  instagram: "Instagram comments", facebook_pages: "Facebook Page comments & messages", x: "X mentions", wordpress: "WordPress comments",
   aws: "AWS buckets & log groups", azure: "Azure containers & workspaces" };
 
 

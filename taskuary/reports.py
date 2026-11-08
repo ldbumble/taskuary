@@ -775,6 +775,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             # a vendor's REST API read with a key, one row each in apireads.json; and DynamoDB's reads on its own card's keys
             **{f'{t}_read': _lazy('apireads', 'runner')(t) for t in apireads.types()},
             'dynamodb': _lazy('aws', 'run_dynamodb'),
+            'obsidian_read': _lazy('obsidian', 'run'),        # an Obsidian vault: a folder of notes on this computer, read where it lies
             # treg over its hosted MCP: search the catalogue (free), then call one endpoint.
             # The call is a write whatever the endpoint does - it spends money, and the same
             # door reaches endpoints that publish and order.
@@ -918,7 +919,7 @@ def executor_for(type_name):
 # Which connector CARD owns each executor type: the s3/cloudwatch types run on the aws
 # card's keys, the blob/logs types on the azure card's app - roles and creds resolve there.
 CARD_OF = {'postgresql': 'postgresql', 'mysql': 'mysql', 'clickhouse': 'clickhouse', 'snowflake': 'snowflake', 'bigquery': 'bigquery',
-           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 'dynamodb': 'dynamodb', 'mongodb': 'mongodb', 'redis': 'redis', 'neo4j': 'neo4j',
+           'cockroachdb': 'cockroachdb', 'oracle': 'oracle', 'duckdb': 'duckdb', 'dynamodb': 'dynamodb', 'mongodb': 'mongodb', 'redis': 'redis', 'neo4j': 'neo4j', 'obsidian_read': 'obsidian',
            **{f'{t}_read': t for t in apireads.types()}, 
            'treg_tools': 'treg', 'treg_search': 'treg', 'treg_call': 'treg',
            'linkedin_me': 'linkedin', 'linkedin_post': 'linkedin', 'github_issue': 'github',
@@ -1184,6 +1185,7 @@ CONNECTION_OF = {'mssql': mssql_connection, 'winrm': winrm_connection, 'database
                     ('postgresql', 'mysql', 'clickhouse', 'snowflake', 'bigquery', 'cockroachdb', 'oracle', 'duckdb', 'mongodb', 'redis', 'neo4j')},
                  'aws': aws_connection, 's3_object': aws_connection, 'cloudwatch_logs': aws_connection,
                  'dynamodb': lambda store, connector_id=None: _card(store, 'dynamodb', 'secret_access_key', connector_id),
+                 'obsidian_read': lambda store, connector_id=None: _card(store, 'obsidian', 'api_key', connector_id),     # its vault folder
                  **{f'{t}_read': _read_card(t) for t in apireads.types()
                     if t not in apireads.BORROWED},
                  'azure': azure_connection, 'azure_blob': azure_connection, 'azure_logs': azure_connection,

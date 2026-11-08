@@ -63,7 +63,18 @@ DOC = {'digitalocean': {'account': {'email': 'alex@northwind.example', 'status':
        'recurly': {'object': 'list', 'has_more': False, 'data': [{'id': 'site1', 'object': 'site', 'subdomain': 'northwind'}]},
        'zuora': {'products': [{'id': 'p1', 'name': 'Northwind Plan'}], 'success': True},
        'toast': {'guid': 'f1', 'general': {'name': 'Northwind Cafe', 'timeZone': 'America/New_York'}},
-       'clover': {'elements': [{'id': 'o1', 'state': 'open', 'total': 1250}], 'href': 'https://api.clover.com/v3/merchants/f1/orders'}}
+       'clover': {'elements': [{'id': 'o1', 'state': 'open', 'total': 1250}], 'href': 'https://api.clover.com/v3/merchants/f1/orders'},
+       'instagram': {'username': 'northwind', 'media_count': 12, 'id': 'f1'},
+       'facebook_pages': {'name': 'Northwind', 'followers_count': 120, 'id': 'f1'},
+       'tiktok': {'data': {'user': {'open_id': 'o1', 'display_name': 'Northwind', 'follower_count': 10}}, 'error': {'code': 'ok', 'message': ''}},
+       'x': {'data': {'id': '2244994945', 'name': 'Northwind', 'username': 'f1'}},
+       'wordpress': {'id': 1, 'name': 'Alex Doyle', 'capabilities': {'moderate_comments': True}},
+       'ghost': {'site': {'title': 'Northwind Notes', 'url': 'https://northwind.example/', 'version': '5.0'}},
+       'mailchimp': {'health_status': "Everything's Chimpy!"},
+       'kit': {'user': {'email': 'alex@northwind.example'}, 'account': {'name': 'Northwind', 'plan_type': 'creator'}},
+       'vimeo': {'uri': '/users/1', 'name': 'Northwind', 'link': 'https://vimeo.com/northwind'},
+       'gong': {'requestId': 'r1', 'records': {'totalRecords': 1}, 'users': [{'id': '1', 'emailAddress': 'alex@northwind.example'}]},
+       'veeva': {'responseStatus': 'SUCCESS', 'users': [{'user': {'id': 1, 'user_name__v': 'api@northwind.example'}}]}}
 # a vendor that swaps the card's credentials for a bearer first answers its sign-in like this (each vendor's documented shape)
 TOKENS = {'ups': {'token_type': 'Bearer', 'access_token': 'ups-tok', 'expires_in': '14399', 'status': 'approved'},
           'fedex': {'access_token': 'fx-tok', 'token_type': 'bearer', 'expires_in': 3599, 'scope': 'CXS'},
@@ -71,8 +82,9 @@ TOKENS = {'ups': {'token_type': 'Bearer', 'access_token': 'ups-tok', 'expires_in
           'looker': {'access_token': 'lk-tok', 'token_type': 'Bearer', 'expires_in': 3600},
           'zuora': {'access_token': 'zu-tok', 'token_type': 'bearer', 'expires_in': 3599, 'scope': 'entity.1 platform.write', 'jti': 'j1'},
           'toast': {'token': {'tokenType': 'Bearer', 'accessToken': 'toast-tok', 'expiresIn': 86400}, 'status': 'SUCCESS'},
+          'veeva': {'responseStatus': 'SUCCESS', 'sessionId': 'veeva-sess', 'userId': 1, 'vaultId': 2},
           'tableau': {'credentials': {'token': 'tab-tok', 'site': {'id': 'site-1', 'contentUrl': 'f1'}, 'user': {'id': 'u1'}}}}
-KEYS = {}                                          # a key with a shape of its own; every other card's key is key-1
+KEYS = {'ghost': '6489a1b2:0a1b2c3d4e5f'}         # a key with a shape of its own; every other card's key is key-1
 
 
 def resp(j, code=200):
@@ -246,6 +258,31 @@ class TheNewerShapes(unittest.TestCase):
             apireads.runner('powerbi')({'store': s})
         with mock.patch.object(apireads.requests, 'get', return_value=resp({'error': {'code': 403}}, 403)),                 mock.patch('taskuary.sheets._token', return_value='g-tok'), mock.patch('taskuary.sheets.google_sheets_connection', return_value={}),                 self.assertRaisesRegex(RuntimeError, 'webmasters.readonly'):
             apireads.runner('search_console')({'store': s})
+
+    def test_ghost_signs_each_read_with_a_five_minute_admin_jwt(self):
+        import base64, hashlib, hmac
+        with mock.patch.object(apireads.requests, 'get', return_value=resp(DOC['ghost'])) as g:
+            apireads.runner('ghost')({'api_key': '6489a1b2:0a1b2c3d4e5f', 'host': 'northwind.ghost.io'})
+        self.assertEqual(g.call_args.args[0], 'https://northwind.ghost.io/ghost/api/admin/site/')
+        head, body, sig = g.call_args.kwargs['headers']['Authorization'].removeprefix('Ghost ').split('.')
+        dec = lambda x: json.loads(base64.urlsafe_b64decode(x + '=' * (-len(x) % 4)))
+        self.assertEqual((dec(head)['kid'], dec(body)['aud'], dec(body)['exp'] - dec(body)['iat']), ('6489a1b2', '/admin/', 300))
+        want = base64.urlsafe_b64encode(hmac.new(bytes.fromhex('0a1b2c3d4e5f'), f'{head}.{body}'.encode(), hashlib.sha256).digest()).rstrip(b'=').decode()
+        self.assertEqual(sig, want)
+        with self.assertRaisesRegex(RuntimeError, 'id>:<secret'): apireads.runner('ghost')({'api_key': 'nocolon', 'host': 'n.ghost.io'})
+
+    def test_mailchimp_reads_its_data_centre_off_the_key_and_veeva_its_session(self):
+        with mock.patch.object(apireads.requests, 'get', return_value=resp(DOC['mailchimp'])) as g:
+            apireads.runner('mailchimp')({'api_key': 'abc123-us6'})
+        self.assertEqual(g.call_args.args[0], 'https://us6.api.mailchimp.com/3.0/ping')
+        with mock.patch.object(apireads.requests, 'post', return_value=resp(TOKENS['veeva'])) as p,                 mock.patch.object(apireads.requests, 'get', return_value=resp(DOC['veeva'])) as g:
+            apireads.runner('veeva')({'api_key': 'pw', 'user': 'api@northwind.example', 'host': 'northwind.veevavault.com'})
+        self.assertEqual((p.call_args.args[0], p.call_args.kwargs['data']), ('https://northwind.veevavault.com/api/v24.1/auth', {'username': 'api@northwind.example', 'password': 'pw'}))
+        self.assertEqual(g.call_args.kwargs['headers']['Authorization'], 'veeva-sess')
+        from taskuary import net
+        net._TOKENS.clear()
+        with mock.patch.object(apireads.requests, 'post', return_value=resp({'responseStatus': 'FAILURE', 'errors': [{'type': 'USERNAME_OR_PASSWORD_INCORRECT'}]})),                 self.assertRaisesRegex(RuntimeError, 'no token'):
+            apireads.runner('veeva')({'api_key': 'bad', 'user': 'u', 'host': 'northwind.veevavault.com'})
 
 
 if __name__ == '__main__':

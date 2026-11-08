@@ -9,7 +9,7 @@ waits for the owner's Approve. A stranger's task never gets one.
 import json, unittest
 from unittest import mock
 
-from taskuary import browserview, general, ingest, terminal, triage
+from taskuary import browserview, general, ingest, origin, terminal, triage
 from taskuary.store import MemoryStore
 from tests.test_general import connect_cli
 
@@ -57,6 +57,8 @@ class EveryDoorGetsTheBrowser(unittest.TestCase):
     def setUp(self):
         self.s = owner_store()
         self.tid = arrive(self.s, verdict(needs_browser=True))['task_id']
+        # the invite's words are Events', not the owner's (H1): the owner's forward is theirs until the owner trusts them
+        origin.raise_to(self.s, self.tid, 'trusted', 'owner')
         self.assertFalse(browserview.wanted(self.s.get_task(self.tid)), 'nothing is tagged until an agent starts')
 
     def test_the_general_door_tags_it_once_and_opens_the_browser(self):

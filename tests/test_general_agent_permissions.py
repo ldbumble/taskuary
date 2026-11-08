@@ -105,10 +105,15 @@ class SqlReadIsReadTests(unittest.TestCase):
             out = TestClient(server.app).post('/api/tools/run', json={'type': 'mssql', 'connector_id': cid, **body}).json()
         return out, cx
 
-    def test_at_read_a_batch_that_writes_is_rolled_back(self):
+    def test_at_read_a_batch_that_writes_is_refused(self):
+        # M3: rollback cannot take back a sent mail or DDL, so a read-level card runs ONE SELECT and never sends the batch
         out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n'}, scope='read')
-        self.assertTrue(out['ok'], out); self.assertGreaterEqual(cx.rolled, 1)
+        self.assertFalse(out['ok'], out); self.assertIn('one statement', json.dumps(out))
         self.assertEqual(cx.committed, 0, 'a read-level connection committed a write')
+
+    def test_at_read_a_select_runs_and_is_rolled_back(self):
+        out, cx = self.run_tool(MemoryStore(), {'query': 'SELECT 1 AS n'}, scope='read')
+        self.assertTrue(out['ok'], out); self.assertGreaterEqual(cx.rolled, 1); self.assertEqual(cx.committed, 0)
 
     def test_the_caller_cannot_ask_for_a_commit(self):
         out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n', '_write': True, 'write': True}, scope='read')
@@ -129,7 +134,7 @@ class SqlReadIsReadTests(unittest.TestCase):
         def connect(cs, *a, **k): seen.append(next(h for h in ('admin.', 'readonly.') if h in cs)); return cx
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.mssql._connect', connect):
             out = TestClient(server.app).post('/api/tools/run', json={'type': 'mssql', 'connector_id': ro,
-                                                                      'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n'}).json()
+                                                                      'query': 'SELECT 1 AS n'}).json()
         self.assertTrue(out['ok'], out)
         self.assertEqual(seen, ['readonly.'])
         self.assertEqual(cx.committed, 0)

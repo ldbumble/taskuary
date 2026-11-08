@@ -63,6 +63,9 @@ test("a stopped general agent: Continue and a line typed after it show at once, 
   // ...ONE PROMPT BOX (the owner, 2026-11-06): a chat task opens on its chat with the one box under it - no Send to agent form, no button of its
   // own; what is typed there starts the agent
   assert.equal(await page.$("[data-tq-run-form]"), null, "no separate Send to agent form on a chat task");
+  // ...and A TASK NOTHING HAS WORKED YET OPENS ON CAME FROM (homeSection's one rule, the owner 2026-11-08): its chat is the Agent tab beside it
+  await page.waitForSelector("[data-tq-task-page] [data-tq-section-tab]", { timeout: 30000 });
+  await page.$eval("[data-tq-task-page] [data-tq-section-tab='agent']", (tab) => tab.click()).catch(() => {});   // already open: no tab
   const first = await page.waitForSelector("[data-tq-task-page] [data-tq-agent-room] .tq-aui-input", { visible: true, timeout: 30000 });
   await first.type("compare them on price."); await page.keyboard.press("Enter");
   await inTask(page, /Payworth is cheapest/);

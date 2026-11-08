@@ -101,7 +101,7 @@ def test_a_joining_general_verdict_on_a_reply_task_starts_the_assistant():
     t = s.get_task(tid)
     assert t['Kind'] == 'general' and s.task_has_tag(tid, ingest.REPLY_TAG)
     assert spawned == ['_auto_general']                                              # the agent - and no tool-less redraft beside it
-    assert any('needs the assistant before it can be answered' in x and 'drafts the reply for your Send' in x for x in lines(s, tid))
+    assert any('needs the agent before it can be answered' in x and 'drafts the reply for your Send' in x for x in lines(s, tid))
     assert 'REPLY OWED to Erin Blake' in ingest.reply_job(s, tid)
 
 

@@ -1913,8 +1913,15 @@ def next_item(store, key: str = None, include_surfaced: bool = False, items: lis
         if item is None and getattr(store, 'processing_reads_active', lambda: False)():
             item = next((i for i in build(store, keep_surfaced=True, full_history=True, keys=[key])['items']
                          if i['key'] == key or key in i.get('aliases', [])), None)
-        return _present_one(store, item) or batch_item(store, key)
+        return shut(store, _present_one(store, item)) or batch_item(store, key)
     return None
+
+
+def shut(store, it):
+    """A CLOSED TASK SAYS SO: brought up by its ref it carried no `closed`, so its row offered Mark done, Close with a note and Remove
+    beside Reopen task, and a typed close ran task.complete on it a second time (2026-10-26). Only Reopen task reopens it. ...And opened, it is
+    only shown - the page draws no row for it under Tasks (funnelPile.pulledRow, the owner 2026-11-08) - whichever road found it."""
+    return it if not it or not it.get('tid') or (store.get_task(int(it['tid'])) or {}).get('Status') not in ('done', 'dropped') else it | {'closed': True}
 
 
 def batch_item(store, key: str) -> dict | None:
@@ -1949,9 +1956,6 @@ def item_for_key(store, key: str) -> dict | None:
     Recent list pulls into the chat by hand. The pile's own producers run on that one row with the
     quiet filter off; the concierge can then talk about it like anything else."""
     t = re.match(r'^task:(\d+)$', key or '')
-    # A CLOSED TASK SAYS SO: brought up by its ref it carried no `closed`, so its row offered Mark done, Close with a note and Remove
-    # beside Reopen task, and a typed close ran task.complete on it a second time (2026-10-26). Only Reopen task reopens it.
-    shut = lambda it: it if not it or not it.get('tid') or (store.get_task(int(it['tid'])) or {}).get('Status') not in ('done', 'dropped')         else it | {'closed': True}
     if t:
         tid = int(t.group(1))
         task = store.get_task(tid)
@@ -1962,8 +1966,8 @@ def item_for_key(store, key: str) -> dict | None:
         row = next(iter(store.feed(limit=1, days=FEED_DAYS, task_id=tid) or store.feed(limit=1, days=3650, task_id=tid)), None)
         if row:
             got = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
-            if got: return shut(_present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'}))
-        return shut(_present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
+            if got: return shut(store, _present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'}))
+        return shut(store, _present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
                                                summary=agent_found(store, tid), why=f"{STATUS_SAYS.get(task.get('Status'), 'Open')} - you asked about it")))
     m = re.match(r'^(msg|report):(\d+)$', key or '')
     if not m: return None
@@ -1975,7 +1979,7 @@ def item_for_key(store, key: str) -> dict | None:
     items = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
     it = next((i for i in items if i.get('mid') == mid), None)
     if it and it['kind'] == 'fyi': it = it | {'lane': 'fyi', 'why': row.get('RouteReason') or it['why']}
-    return shut(_present_one(store, it))
+    return shut(store, _present_one(store, it))
 
 
 def message_item(store, key: str) -> dict | None:

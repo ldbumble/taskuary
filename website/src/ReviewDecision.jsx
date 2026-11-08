@@ -633,7 +633,12 @@ function Decision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = nul
         {/* a channel that cannot carry the reply must SAY so: github with replies
             off gets 'No response required' as THE action, not a send that bounces */}
         <>
-        {delivery.frozen ? (<>
+        {/* ...its channel not connected: Connect is the one move drawn under the draft, as on a post (the owner's render check, 2026-11-08: the
+            card said "No mailbox is connected" over a lit Send and close) */}
+        {connect && r.Status === "pending" ? (
+          <Button size="small" variant="contained" disableElevation data-tq-connect="" disabled={off} onClick={() => openAppLink(connect.href)}
+            title={`${connect.says} - opens its connection`}>{connect.label}</Button>
+        ) : delivery.frozen ? (<>
           <Button size="small" variant={solid} disableElevation disabled={off || !delivery.canCheck}
             onClick={() => decide("approve")} title={delivery.line}>
             {busy ? "Checking delivery…" : delivery.label}

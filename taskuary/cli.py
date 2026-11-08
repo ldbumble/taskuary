@@ -356,7 +356,7 @@ def main():
     ap.add_argument('--answers', type=int, metavar='N', help='with --reply: the message number (#N) of the mail it replies to - the one that holds '
                                                          'the ask, or an earlier mail when that is the right next step')
     ap.add_argument('--only', action='store_true', help="with --reply: to that mail's sender alone, nobody copied (something sensitive)")
-    ap.add_argument('--cc', action='append', default=None, metavar='ADDRESS', help='with --reply: who else is copied, instead of the thread (repeat for more)')
+    ap.add_argument('--cc', action='append', default=None, metavar='ADDRESS', help='who else is copied (repeat for more): with --reply, instead of the thread; with --draft, on that email')
     ap.add_argument('--why-to', default='', metavar='LINE', help='with --reply: one line on why it goes to whom it goes, when it is not the plain reply all')
     ap.add_argument('--subject', default='', help='the subject line')
     # ...and a BATCH's items (batch.py): one finding per item, as the agent finishes each
@@ -438,7 +438,7 @@ def main():
             except OSError as e: print(f'not saved: cannot read {a}: {e.strerror or e}'); return
         who = os.environ.get('TASKUARY_AGENT') or 'agent'
         got = (_post('/api/agent/draft', {'task_id': int(tid), 'text': text, 'to': args.to, 'subject': args.subject, 'slot': args.slot,
-                                          'agent': who, 'files': files}, stranger) if drafting
+                                          'agent': who, 'files': files, 'cc': args.cc or []}, stranger) if drafting
                else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up,
                                                 'to': args.to, 'answers': args.answers, 'only': args.only, 'cc': args.cc, 'why_to': args.why_to}, stranger))
         if not got: return

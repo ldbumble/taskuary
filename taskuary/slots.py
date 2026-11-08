@@ -64,7 +64,7 @@ def add(store, tid: int, outputs, actor: str, sender: dict = None) -> list:
     to pick from; none leaves the name and its '?'."""
     from . import people
     # every email the task has owed - sent and dropped ones too: an email already sent is not owed again because a later
-    # message words it differently
+    # message words it differently (one taken back unsent is owed again: draft reopens it, _reopen)
     have = {str(i['out'].get('to')).casefold() for i in all_(store, tid)}
     new = []
     for i in clean(outputs):
@@ -129,16 +129,22 @@ def seen(store, tid: int):
 
 
 def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str = '', agent: str = 'agent',
-          channel: str = 'email', name: str = '') -> dict:
+          channel: str = 'email', name: str = '', cc=()) -> dict:
     """The agent that did the work writes one output itself - the slot named by id, else the open one to the same person,
-    else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it."""
+    else a slot it adds (said on the task: the owner sees the list grow). Nothing is sent: the owner approves it. `cc`: who
+    else is copied - kept on the envelope, so the card shows what the agent said it did (it said "Gail on cc" and dropped her)."""
     text = str(text or '').strip()
     if not text: return {'ok': False, 'why': 'no email text'}
+    cc = [a for a in (split(x)[1] for x in ([cc] if isinstance(cc, str) else cc or [])) if a]
+    if cc and channel != 'email': return {'ok': False, 'why': f'{channel} has no cc - only an email can copy somebody in'}
+    if bad := [a for a in cc if '@' not in a]: return {'ok': False, 'why': f"cc takes email addresses - {', '.join(bad)} is not one"}
+    cc = [a.lower() for a in cc]
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return {'ok': False, 'why': 'that task is closed'}
     to = split(to)[1] if channel == 'email' else ' '.join(str(to or '').split())
     want = ' '.join(str(to or '').split()).casefold()
     hit = next((i for i in all_(store, tid) if slot and i['id'] == slot), None) or \
-          next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None)
+          next((i for i in open_(store, tid) if want and str(i['out'].get('to')).casefold() == want), None) or \
+          (want and _reopen(store, tid, want, agent))
     added = False
     if hit and hit.get('done'): return {'ok': False, 'why': f"the email to {hit['out'].get('to')} was already sent or dropped"}
     if hit and want and '@' in want and str(hit['out'].get('to')).casefold() != want:
@@ -155,7 +161,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
     subj = subject_of(store, tid, hit, subject) if kind == 'email' else ''
-    deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': [], 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
+    deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': cc, 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
     if rv and rv.get('Status') == 'pending':
         rid = rv['ReviewId']
@@ -169,6 +175,18 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         text = agent_signed(store, store.get_review(rid), text) or text
     store.update_review_draft(rid, text, None, by=f'agent:{agent}')
     return {'ok': True, 'review_id': rid, 'slot': hit['id'], 'added': added}
+
+
+def _reopen(store, tid: int, want: str, agent: str):
+    """The slot to this person whose email was taken back unsent (withdrawn or dropped), owed again: the corrected email goes
+    in its place - add() refused it, so after a withdraw the owner was told to send the fix by hand (the product audit, 2026-11-08).
+    Never one whose email went: what was sent is not owed again."""
+    for i in reversed(all_(store, tid)):
+        rv = store.get_review(i['rid']) if i.get('done') and i.get('rid') else None
+        if rv and str(i['out'].get('to')).casefold() == want and rv.get('Status') in ('closed_unsent', 'rejected') and rv.get('DeliveryState') != 'sent':
+            mark(store, tid, i['id'], done=False, actor=f'agent:{agent}')
+            return {**i, 'done': False}
+    return None
 
 
 def subject_of(store, tid: int, hit: dict, subject: str = '') -> str:

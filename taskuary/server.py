@@ -5482,7 +5482,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up, to=body.to,
                               answers=body.answers, only=body.only, cc=body.cc, why_to=body.why_to)
 
-class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
+class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; cc: list[str] = []
 
 @app.post('/api/agent/draft')
 def agent_draft(body: AgentDraftBody, request: Request):
@@ -5492,7 +5492,7 @@ def agent_draft(body: AgentDraftBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     from . import wrapup
     files = _agent_files(body.files)
-    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
+    out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent, cc=body.cc)
     return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
 class AgentWaitBody(BaseModel): task_id: int; who: str; agent: str = 'agent'
@@ -5542,7 +5542,7 @@ def agent_not_needed(body: AgentNotNeededBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return verdicts.not_needed(store, body.task_id, body.why, body.agent)
 
-class AgentWithdrawBody(BaseModel): task_id: int; why: str; which: str = ''; agent: str = 'agent'
+class AgentWithdrawBody(BaseModel): task_id: int; why: str; which: str = ''; agent: str = 'agent'; keep: int = 0
 
 @app.post('/api/agent/withdraw-draft')
 def agent_withdraw_draft(body: AgentWithdrawBody, request: Request):
@@ -5551,7 +5551,7 @@ def agent_withdraw_draft(body: AgentWithdrawBody, request: Request):
     from . import verdicts
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return verdicts.withdraw(store, body.task_id, body.why, body.agent, body.which)
+    return verdicts.withdraw(store, body.task_id, body.why, body.agent, body.which, keep=body.keep)
 
 class AgentCheckBackBody(BaseModel): task_id: int; when: str; what: str; agent: str = 'agent'
 
@@ -5816,11 +5816,11 @@ async def mcp_rpc(request: Request, task: int = 0):
     doors = {'tool_run': lambda b: tool_run(b, request),
              'tick': lambda tid, item, done: agent_tick(AgentTickBody(task_id=tid, item=item, done=done), request),
              'not_needed': lambda tid, why: agent_not_needed(AgentNotNeededBody(task_id=tid, why=why), request),
-             'withdraw': lambda tid, why, which='': agent_withdraw_draft(AgentWithdrawBody(task_id=tid, why=why, which=which), request),
+             'withdraw': lambda tid, why, which='', keep=0: agent_withdraw_draft(AgentWithdrawBody(task_id=tid, why=why, which=which, keep=keep), request),
              'check_back': lambda tid, when, what: agent_check_back(AgentCheckBackBody(task_id=tid, when=when, what=what), request),
              'ask_stronger': lambda tid, q, c: agent_ask_stronger(AgentAskStrongerBody(task_id=tid, question=q, context=c), request),
              'reply': lambda tid, text, to='', files=(), **who: agent_reply(AgentReplyBody(task_id=tid, text=text, to=to, files=list(files), **who), request),
-             'draft': lambda tid, text, to, subject, files=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files)), request),
+             'draft': lambda tid, text, to, subject, files=(), cc=(): agent_draft(AgentDraftBody(task_id=tid, text=text, to=to, subject=subject, files=list(files), cc=list(cc)), request),
              'sign': lambda tid, a: agent_sign_form(AgentSignBody(**{**{k: v for k, v in a.items() if k in AgentSignBody.model_fields}, 'task_id': tid}), request),
              'propose': lambda tid, a: agent_propose(AgentProposeBody(**{**a, 'task_id': tid}), request),
              'note_peers': lambda tid, to, text: agent_note_peers(AgentNoteBody(task_id=tid, to=to, text=text), request),

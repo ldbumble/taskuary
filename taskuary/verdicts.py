@@ -394,14 +394,15 @@ def not_needed(store, tid: int, why: str, by: str) -> dict:
 # ...AND ONE THAT NO LONGER ANSWERS IS WITHDRAWN (the owner, 2026-11-06: corrected, the agent left its earlier draft standing under the newest
 # turn as if it answered the correction): the agent takes it off the table itself, with why. Closed unsent like a superseded draft - its words
 # kept under Close out's "Not sent", Bring it back still sends it - never deleted
-def withdraw(store, tid: int, why: str, by: str, which='') -> dict:
+def withdraw(store, tid: int, why: str, by: str, which='', keep: int = 0) -> dict:
     """Withdraw one unsent draft on the task, for `why`: `which` is its review id or who it was to; none means the reply draft (or the one
-    unsent thing, when there is only one). {'ok': False, 'why': ...} when there is none, several match, or no reason was given."""
+    unsent thing, when there is only one). {'ok': False, 'why': ...} when there is none, several match, or no reason was given.
+    `keep`: a review never taken back - the new draft that `replaces` this one, which may be the same person's own slot."""
     from . import slots
     from .wrapup import WITHDRAWN
     why, which = ' '.join(str(why or '').split()), ' '.join(str(which or '').split()).casefold().removeprefix('rv')
     if not why: return {'ok': False, 'why': 'say in one line why the draft no longer answers - what the newest message changed'}
-    left = unsent(store, tid)
+    left = [r for r in unsent(store, tid) if r['rid'] != keep]
     if not left: return {'ok': False, 'why': 'nothing unsent is waiting on this task, so there is nothing to withdraw'}
     if which.isdigit(): hit = [r for r in left if r['rid'] == int(which)]
     elif which: hit = [r for r in left if which in r['to'].casefold() or which in r['what'].casefold()]

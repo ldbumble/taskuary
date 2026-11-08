@@ -133,9 +133,10 @@ TOOLS = {
                        _S({'why': _STR, 'which': _STR}, ('why',)), ('POST', '/api/agent/withdraw-draft')),
     'propose_email': ('propose', "Draft one more email this task needs, to someone. `subject` is the line its reader sees - write it for "
                       "them, never this task's title (that is the owner's own label); writing back to someone who mailed on this task, "
-                      "keep their mail's subject with \"Re: \". It waits with a Send button for the owner - nothing is sent. `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
+                      "keep their mail's subject with \"Re: \". It waits with a Send button for the owner - nothing is sent. `cc`: who else is copied (addresses). `replaces`: the review id (or recipient) of an unsent email, reply or post this one "
                       "takes the place of - it is withdrawn in the same call.",
-                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'attach': _ATTACH, 'replaces': _STR}, ('to', 'subject', 'text')),
+                      _S({'to': _STR, 'subject': _STR, 'text': _STR, 'cc': {'type': 'array', 'items': _STR}, 'attach': _ATTACH, 'replaces': _STR},
+                         ('to', 'subject', 'text')),
                       ('POST', '/api/agent/draft')),
     # THE FORM A MAIL BRINGS (the owner, 2026-11-04: a permission slip to sign for their kid - "the agent should sign it and say 'do you
     # want me to send it out'"): signed with the picture the owner saved, which the agent never sees (handsign)
@@ -274,7 +275,8 @@ def call(store, tid: int, name: str, args: dict, doors: dict) -> str:
         out = doors['reply'](tid, str(a.get('text') or ''), str(a.get('to') or ''), attached(tid, a.get('attach')), **who)
         return _j(replaced(doors, tid, out, a.get('replaces'), f"the reply to {a.get('to') or 'the newest mail'} takes its place"))
     if name == 'propose_email':
-        out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')))
+        out = doors['draft'](tid, str(a.get('text') or ''), str(a.get('to') or ''), str(a.get('subject') or ''), attached(tid, a.get('attach')),
+                            a.get('cc') or ())
         return _j(replaced(doors, tid, out, a.get('replaces'), f"the email to {a.get('to') or 'someone else'} takes its place"))
     if name == 'sign_form':
         out = doors['sign'](tid, a)
@@ -289,7 +291,9 @@ def replaced(doors, tid: int, out, old, why: str):
     "The new draft's answer, with the one it `replaces` withdrawn once the new one stands - so the owner has one Send, never two."
     o = json.loads(out.body) if hasattr(out, 'body') else out
     if not old or not (isinstance(o, dict) and o.get('ok')): return o
-    w = doors['withdraw'](tid, why, str(old))
+    # ...an email to the same person was rewritten in its own review: withdrawing `old` then took back the new one with it
+    if str(old).casefold().removeprefix('rv') == str(o.get('review_id')): return {**o, 'replaced': o['review_id']}
+    w = doors['withdraw'](tid, why, str(old), keep=o.get('review_id') or 0)
     w = json.loads(w.body) if hasattr(w, 'body') else w
     return {**o, 'replaced': w.get('review_id')} if w.get('ok') else {**o, 'not_replaced': w.get('why')}
 

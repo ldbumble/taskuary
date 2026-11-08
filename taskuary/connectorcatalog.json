@@ -2780,6 +2780,46 @@
       ]
     },
     {
+      "type": "paddle",
+      "title": "Paddle",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Subscriptions, transactions, customers and adjustments as reports and an agent tool - GET /subscriptions?status=past_due.",
+      "match": [
+        "paddle"
+      ]
+    },
+    {
+      "type": "chargebee",
+      "title": "Chargebee",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Subscriptions, invoices, dunning and customers as reports and an agent tool - GET /invoices?status[is]=payment_due.",
+      "match": [
+        "chargebee"
+      ]
+    },
+    {
+      "type": "recurly",
+      "title": "Recurly",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Subscriptions, invoices, past-due accounts and transactions as reports and an agent tool - GET /invoices?state=past_due.",
+      "match": [
+        "recurly"
+      ]
+    },
+    {
+      "type": "zuora",
+      "title": "Zuora",
+      "group": "Corporate systems",
+      "planned": false,
+      "desc": "Accounts, subscriptions, invoices and ZOQL query results as reports and an agent tool - POST /v1/action/query.",
+      "match": [
+        "zuora"
+      ]
+    },
+    {
       "type": "plaid",
       "title": "Plaid",
       "group": "Markets & finance",
@@ -3804,6 +3844,69 @@
         "url": "https://mcp.posthog.com/mcp",
         "docs": "https://posthog.com/docs/model-context-protocol"
       }
+    },
+    {
+      "type": "ebay",
+      "title": "eBay",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Your eBay orders, what is left to ship and payouts as reports and an agent tool - GET /sell/fulfillment/v1/order?filter=orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}.",
+      "match": [
+        "ebay"
+      ]
+    },
+    {
+      "type": "etsy",
+      "title": "Etsy",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Your shop's receipts, listings and reviews as reports and an agent tool - GET /shops/<id>/receipts?was_shipped=false.",
+      "match": [
+        "etsy"
+      ]
+    },
+    {
+      "type": "woocommerce",
+      "title": "WooCommerce",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Orders still to ship land on your work rail through triage; orders, products and customers as reports and an agent tool - GET /orders?status=processing.",
+      "match": [
+        "woocommerce",
+        "woo commerce"
+      ]
+    },
+    {
+      "type": "bigcommerce",
+      "title": "BigCommerce",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Orders awaiting fulfillment land on your work rail through triage; orders, products and customers as reports and an agent tool - GET /v2/orders?status_id=11.",
+      "match": [
+        "bigcommerce"
+      ]
+    },
+    {
+      "type": "toast",
+      "title": "Toast",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "A restaurant's orders, menus, labor and cash entries as reports and an agent tool - GET /orders/v2/ordersBulk?businessDate=20261108.",
+      "match": [
+        "toast pos",
+        "toasttab"
+      ]
+    },
+    {
+      "type": "clover",
+      "title": "Clover",
+      "group": "Everything else",
+      "planned": false,
+      "desc": "Orders, payments, refunds and items as reports and an agent tool - GET /orders?filter=state=open, /payments.",
+      "match": [
+        "clover pos",
+        "clover"
+      ]
     },
     {
       "type": "deepseek",

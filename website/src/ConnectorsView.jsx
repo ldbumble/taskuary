@@ -534,6 +534,23 @@ const META = {
       "Enter the shop and paste the token (write-only).",
       "Every sync brings in open orders still to fulfil that changed since the last poll, with their items and note.",
       "Nothing is changed in Shopify; Taskuary only reads."] },
+  // ...a source that is also a keyed read (apireads.json): the same card's key serves the poll, the reports and the agents
+  woocommerce: { group: "Everything else", channel: "woocommerce", srcLabel: "Shop", srcPh: "added by Test",
+    fields: [["shop address (https://shop.yourco.example)", "host"], ["consumer key (ck_...)", "consumer_key"]],
+    secretLabel: "consumer secret (cs_...)",
+    desc: "WooCommerce orders PAID AND WAITING TO SHIP come in and are sorted like everything else that comes in; reports and agents read orders, products and customers.",
+    howto: ["WordPress admin: WooCommerce, then Settings, then Advanced, then REST API - Add key with Read permission.",
+      "Enter the shop address and the consumer key, paste the consumer secret (write-only). Test reads one order.",
+      "Every sync brings in processing orders that changed since the last poll, with their items and the customer's note. A customer is a stranger until you trust the shop.",
+      "A woocommerce_read report or agent asks any read under /wp-json/wc/v3 (GET /products?stock_status=outofstock). Nothing is changed in the shop."] },
+  bigcommerce: { group: "Everything else", channel: "bigcommerce", srcLabel: "Store", srcPh: "added by Test",
+    fields: [["store hash (the code after /stores/ in the API path)", "store_hash"]],
+    secretLabel: "API account access token",
+    desc: "BigCommerce orders AWAITING FULFILLMENT come in and are sorted like everything else that comes in; reports and agents read orders, products and customers.",
+    howto: ["BigCommerce control panel: Settings, then Store-level API accounts - Create API account with Orders and Products read-only. It shows the API path (with the store hash) and the access token.",
+      "Enter the store hash, paste the access token (write-only). Test reads the store.",
+      "Every sync brings in orders awaiting fulfillment that changed since the last poll. A customer is a stranger until you trust the store.",
+      "A bigcommerce_read report or agent asks any read under the store's API (GET /v3/catalog/products). Nothing is changed in the store."] },
   square: { group: "Everything else", channel: "square", srcLabel: "Business", srcPh: "added by Test",
     fields: [],
     secretLabel: "access token",
@@ -2208,7 +2225,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     // ...the sources where work waits on you elsewhere (waiting.py), each in its catalogue group
     ...channelCards(waitingIn(category)),
     // ...and a vendor's REST API read with a key (apireads.json), in its own catalogue group
-    ...dataCards(READ_TYPES.filter((t) => CATALOGUE.find((c) => c.type === t)?.group === category)),
+    ...dataCards(READ_TYPES.filter((t) => !META[t] && CATALOGUE.find((c) => c.type === t)?.group === category)),    // a source too: drawn as its channel card
     ...CATALOGUE.filter((c) => c.mcp && c.group === category).flatMap((c) =>
       specialCards(c.type, c.title, "", `${c.type} ${c.title} ${c.desc} ${(c.match || []).join(" ")} mcp agent tools`, toolDesc)),
     ...plannedFor(category).map((c) => ({
@@ -2330,7 +2347,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "Agentic web", cards: [...dataCards(["exa", "tavily", "brave_search", "serpapi", "serper", "reader", "firecrawl", "scrapingbee", "apify"]), ...catalogCards("Agentic web")] },
     { title: "Files & sheets", cards: [...dataCards(["knowledge", "handbook", "sharepoint", "google_sheets", "smb_file", "sftp"]),
       ...catalogCards("Files & sheets")] },
-    { title: "Everything else", cards: [...channelCards(["calendly", "shopify", "shipstation", "square", "paypal", "twilio"]), ...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
+    { title: "Everything else", cards: [...channelCards(["calendly", "shopify", "woocommerce", "bigcommerce", "shipstation", "square", "paypal", "twilio"]), ...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
  ]);
   const hits = matchCards(groups, q);
   // WORDS TYPED PUT THE OPEN CARD DOWN (the owner, 2026-10-21: "link" typed over the open LinkedIn card, and the page went on

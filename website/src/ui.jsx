@@ -97,7 +97,7 @@ export const CHANNEL_COLORS = { teams: "#6264A7", email: "#41525f", github: "#2b
   zendesk: "#03363d", freshdesk: "#25c16f", intercom: "#1f8ded", servicenow: "#62d84e", shortcut: "#58b1e4", wrike: "#08cf65",
   smartsheet: "#0073ec", airtable: "#fcb400", github_projects: "#2b2a26", bitbucket: "#0052cc", ms_planner: "#31752f",
   zulip: "#6492fe", signal: "#3a76f0", twilio: "#f22f46", discourse: "#231f20", reddit: "#ff4500", youtube: "#ff0000",
-  calendly: "#006bff", shipstation: "#84c225", shopify: "#5e8e3e", square: "#3e4348", paypal: "#003087",
+  calendly: "#006bff", shipstation: "#84c225", shopify: "#5e8e3e", square: "#3e4348", paypal: "#003087", woocommerce: "#7f54b3", bigcommerce: "#121118",
   aws: "#ff9900", azure: "#0078d4", database: "#6b6459", smb_file: "#6b6459", own: "#8a7a5c" };
 // ...and the ONE colour that stands for a source, for the dot on the work rail. A channel with its
 // own brand mark is not in the table above (the mark colours itself), so its logo's colour is named
@@ -115,7 +115,7 @@ const CHANNEL_ICONS = { teams: GroupsIcon, github: GitHubIcon, report: Assessmen
   shortcut: ChecklistIcon, wrike: ChecklistIcon, smartsheet: ViewKanbanIcon, airtable: ViewKanbanIcon, github_projects: ViewKanbanIcon,
   bitbucket: MergeTypeIcon, ms_planner: ChecklistIcon,
   zulip: TagIcon, signal: SendIcon, twilio: SendIcon, discourse: TagIcon, reddit: TagIcon, youtube: TagIcon,
-  calendly: GroupsIcon, shipstation: StorageIcon, shopify: StorageIcon, square: ErrorOutlineIcon, paypal: ErrorOutlineIcon,
+  calendly: GroupsIcon, shipstation: StorageIcon, shopify: StorageIcon, square: ErrorOutlineIcon, paypal: ErrorOutlineIcon, woocommerce: StorageIcon, bigcommerce: StorageIcon,
   front: SupportAgentIcon, helpscout: SupportAgentIcon, gorgias: SupportAgentIcon, ringcentral: SendIcon, aircall: SendIcon, dialpad: SendIcon,
   typeform: ArticleIcon, jotform: ArticleIcon, surveymonkey: ArticleIcon, tally: ArticleIcon, google_forms: ArticleIcon, lever: GroupsIcon,
   aws: CloudQueueIcon, azure: CloudQueueIcon, database: StorageIcon, smb_file: StorageIcon,

@@ -3,7 +3,7 @@ its one cheap GET - each fed the answer its vendor's docs show - and nothing but
 import json, re, unittest
 from unittest import mock
 
-from taskuary import apireads, channels, connectorcatalog, reports, scopes
+from taskuary import apireads, channels, connectorcatalog, inboxes, reports, scopes
 from taskuary.store import MemoryStore
 
 # the probe's answer, shaped as each vendor documents it (not live captures)
@@ -53,12 +53,24 @@ DOC = {'digitalocean': {'account': {'email': 'alex@northwind.example', 'status':
        'metabase': {'id': 1, 'common_name': 'Alex Doyle', 'email': 'alex@northwind.example'},
        'databricks': {'id': '1', 'userName': 'alex@northwind.example', 'displayName': 'Alex Doyle'},
        'dbt_cloud': {'data': [{'id': 1, 'name': 'Northwind'}], 'status': {'code': 200, 'is_success': True}},
-       'fivetran': {'code': 'Success', 'data': {'account_id': 'a1', 'account_name': 'Northwind', 'user_id': 'u1'}}}
+       'fivetran': {'code': 'Success', 'data': {'account_id': 'a1', 'account_name': 'Northwind', 'user_id': 'u1'}},
+       'ebay': {'href': 'https://api.ebay.com/sell/fulfillment/v1/order?limit=1&offset=0', 'total': 1, 'orders': [{'orderId': '01-1', 'orderFulfillmentStatus': 'NOT_STARTED'}]},
+       'etsy': {'application_id': 1234},
+       'woocommerce': [{'id': 727, 'status': 'processing', 'total': '29.35'}],
+       'bigcommerce': {'id': 'abc123', 'domain': 'northwind.example', 'name': 'Northwind Goods'},
+       'paddle': {'data': [{'event_type_id': 1, 'name': 'transaction.completed'}], 'meta': {'request_id': 'r1'}},
+       'chargebee': {'list': [{'subscription': {'id': 's1', 'status': 'active'}}], 'next_offset': None},
+       'recurly': {'object': 'list', 'has_more': False, 'data': [{'id': 'site1', 'object': 'site', 'subdomain': 'northwind'}]},
+       'zuora': {'products': [{'id': 'p1', 'name': 'Northwind Plan'}], 'success': True},
+       'toast': {'guid': 'f1', 'general': {'name': 'Northwind Cafe', 'timeZone': 'America/New_York'}},
+       'clover': {'elements': [{'id': 'o1', 'state': 'open', 'total': 1250}], 'href': 'https://api.clover.com/v3/merchants/f1/orders'}}
 # a vendor that swaps the card's credentials for a bearer first answers its sign-in like this (each vendor's documented shape)
 TOKENS = {'ups': {'token_type': 'Bearer', 'access_token': 'ups-tok', 'expires_in': '14399', 'status': 'approved'},
           'fedex': {'access_token': 'fx-tok', 'token_type': 'bearer', 'expires_in': 3599, 'scope': 'CXS'},
           'usps': {'access_token': 'usps-tok', 'token_type': 'Bearer', 'expires_in': 28799},
           'looker': {'access_token': 'lk-tok', 'token_type': 'Bearer', 'expires_in': 3600},
+          'zuora': {'access_token': 'zu-tok', 'token_type': 'bearer', 'expires_in': 3599, 'scope': 'entity.1 platform.write', 'jti': 'j1'},
+          'toast': {'token': {'tokenType': 'Bearer', 'accessToken': 'toast-tok', 'expiresIn': 86400}, 'status': 'SUCCESS'},
           'tableau': {'credentials': {'token': 'tab-tok', 'site': {'id': 'site-1', 'contentUrl': 'f1'}, 'user': {'id': 'u1'}}}}
 KEYS = {}                                          # a key with a shape of its own; every other card's key is key-1
 
@@ -104,6 +116,7 @@ class EveryRowIsAWorkingCard(unittest.TestCase):
                     mock.patch('taskuary.outbound._graph_token', return_value='ms-tok'):
                 out = channels.test_connector(s, cid)
             self.assertTrue(out['ok'], (t, out))
+            if t in inboxes.TYPES: continue                                  # a source too: its Test is the source's (test_read_sources)
             if r.get('token'):
                 self.assertEqual(p.call_count, 1, t); self.assertFalse(p.call_args.kwargs['allow_redirects'], t)
                 if r['token']['url'].startswith('https://'): self.assertEqual(p.call_args.args[0], r['token']['url'], t)

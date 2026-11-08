@@ -1018,7 +1018,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  'sentry': 'trigger', 'pagerduty': 'trigger',
                  # helpdesks and the newer trackers (inboxes.py): what is assigned to you is work
                  **dict.fromkeys(INBOXES, 'trigger'),
-                 # ...and the ones that are both (HubSpot, Salesforce, DocuSign, Webex...): work comes in, and agents read the same API
+                 # ...and the ones that are both (HubSpot, Salesforce, DocuSign, Webex, WooCommerce, BigCommerce...): work comes in, and agents read the same API
                  **{t: 'trigger,report,tool' for t in INBOXES if t in _read_types()},
                  # speech to text: no role - the funnel and the prompt box ask the first active one
                  'gemini_stt': '', 'groq_stt': '', 'openai_stt': '', 'deepgram': '', 'elevenlabs_stt': '', 'stt_server': '', 'local_whisper': '',

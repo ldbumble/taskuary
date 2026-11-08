@@ -37,7 +37,8 @@ NAMES = {'zendesk': 'Zendesk', 'freshdesk': 'Freshdesk', 'intercom': 'Intercom',
          'zulip': 'Zulip', 'signal': 'Signal', 'twilio': 'Twilio', 'discourse': 'Discourse', 'reddit': 'Reddit', 'youtube': 'YouTube',
          'calendly': 'Calendly', 'shipstation': 'ShipStation', 'shopify': 'Shopify', 'square': 'Square', 'paypal': 'PayPal',
          'webex': 'Webex', 'zoom_chat': 'Zoom Team Chat', 'threads': 'Threads', 'hubspot': 'HubSpot', 'salesforce': 'Salesforce',
-         'docusign': 'DocuSign', 'basecamp_todos': 'Basecamp to-dos', 'mailgun': 'Mailgun', 'line': 'LINE', 'sendgrid': 'SendGrid Inbound Parse'}
+         'docusign': 'DocuSign', 'basecamp_todos': 'Basecamp to-dos', 'mailgun': 'Mailgun', 'line': 'LINE', 'sendgrid': 'SendGrid Inbound Parse',
+         'woocommerce': 'WooCommerce', 'bigcommerce': 'BigCommerce'}
 _MEMO = {}       # (type, scope, who) -> membership, read once per process
 
 
@@ -1254,6 +1255,59 @@ def items_sendgrid(store, c, since) -> list:
         out.append(item(m.get('message_id') or f"{mail}:{m.get('at')}", m.get('subject') or '(no subject)', f"Mail to {m.get('to')} (SendGrid Inbound Parse)",
                         m.get('text') or _text(m.get('html')), name, mail, mail, None, int(m['at']) if m.get('at') else None, None, 'SendGrid', drained=True))
     return out
+
+
+# ═══ CARDS THAT ARE ALSO KEYED READS (apireads.json) ═════════════════════════════════════════════════════════════════════════
+# The same card is a report and agent read (`<type>_read`) and a source: one key, one request road (apireads.get - no redirect, nothing
+# but reads), so the poll and a report can never disagree on where the card's key goes.
+def _kapi(c, path, **params):
+    from . import apireads
+    return apireads.get(c['Type'], _cfg(c), c.get('Secret') or '', path, params or None)
+def _api_base(c) -> str:
+    from . import apireads
+    return apireads.base_of(c['Type'], _cfg(c), c.get('Secret') or '')
+def _lines(xs, qty='quantity', name='name') -> list: return [f"{x.get(qty)} × {x.get(name)}" for x in xs or []]
+def _person(a) -> str | None: return ' '.join(x for x in ((a or {}).get('first_name'), (a or {}).get('last_name')) if x) or None
+
+
+# ── WooCommerce (orders paid and waiting to ship) ────────────────────────────────────────
+def test_woocommerce(store, c) -> str:
+    _need(c, 'consumer secret', 'WooCommerce: Settings, then Advanced, then REST API - add a Read key')
+    _kapi(c, '/orders', per_page=1)
+    _seed_source(store, c, _host(_cfg(c).get('host') or 'WooCommerce'))
+    return 'connected - orders paid and waiting to ship (processing) flow in on the next sync'
+
+
+def items_woocommerce(store, c, since) -> list:
+    site = str(_cfg(c).get('host') or '').rstrip('/')
+    site = site if site.startswith('http') else f'https://{site}'
+    return [item(o['id'], f"Order #{o.get('number') or o['id']} to ship", f"WooCommerce order - processing · {o.get('total')} {o.get('currency')}",
+                 '\n'.join([*_lines(o.get('line_items')), *([f"Customer note: {o['customer_note']}"] if o.get('customer_note') else [])]),
+                 _person(o.get('billing')), (o.get('billing') or {}).get('email'), None, None,    # a customer wrote nothing: no author
+                 f"{o['date_modified_gmt']}Z" if o.get('date_modified_gmt') else o.get('date_modified'),
+                 f"{site}/wp-admin/post.php?post={o['id']}&action=edit", _host(site))
+            for o in _kapi(c, '/orders', status='processing', modified_after=_utc(since), per_page=CAP, orderby='modified') or []]
+
+
+# ── BigCommerce (orders awaiting fulfillment) ────────────────────────────────────────────
+def test_bigcommerce(store, c) -> str:
+    _need(c, 'API account access token', 'BigCommerce: Settings, then Store-level API accounts - Orders read-only')
+    st = _kapi(c, '/v2/store')
+    _seed_source(store, c, st.get('name') or 'BigCommerce')
+    return f"connected to {st.get('name')} - orders awaiting fulfillment flow in on the next sync"
+
+
+def items_bigcommerce(store, c, since) -> list:
+    from email.utils import parsedate_to_datetime
+    when = lambda v: parsedate_to_datetime(v).isoformat() if v else None              # v2 orders keep RFC 2822 dates
+    js = _kapi(c, '/v2/orders', status_id=11, min_date_modified=_utc(since), sort='date_modified:desc', limit=CAP)
+    hsh = _cfg(c).get('store_hash')
+    return [item(o['id'], f"Order {o['id']} to fulfil", f"BigCommerce order - {o.get('status')} · {o.get('total_inc_tax')} {o.get('currency_code')}",
+                 '\n'.join(x for x in (f"{o.get('items_total')} items", o.get('customer_message') and f"Customer message: {o['customer_message']}",
+                                        o.get('staff_notes') and f"Staff notes: {o['staff_notes']}") if x),
+                 _person(o.get('billing_address')), (o.get('billing_address') or {}).get('email'), None, None, when(o.get('date_modified')),
+                 f"https://store-{hsh}.mybigcommerce.com/manage/orders/{o['id']}", 'BigCommerce')
+            for o in (js if isinstance(js, list) else [])]                          # no orders: an empty 204, not a list
 
 
 TESTS = {t: globals()[f'test_{t}'] for t in NAMES}

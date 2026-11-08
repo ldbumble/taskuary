@@ -8,7 +8,7 @@ file the agent wrote was on disk and unreachable from the page.
 
 Now the folder is named: <home>/scratch/outputs/TQ-nnnn/ for task nnnn - the very one the agent picked - it is said in the brief
 (brief), and GET /api/task-outputs/<tid>/<file> serves a file in THAT task's folder and nothing else (resolve)."""
-import mimetypes, re
+import json, mimetypes, re, shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -47,14 +47,15 @@ def _base_ok(base: Path) -> bool:
 
 _DRIVE = re.compile(r'^[A-Za-z]:|^[\\/]{2}')
 
-def resolve(tid: int, rel: str):
-    """The file `rel` names inside task `tid`'s outputs folder, or None. A name only: never absolute, never a drive or a share, no
-    `..` or empty step, no `:` (an NTFS stream), no link anywhere on the way - and after resolving, still under the folder."""
+def resolve(tid: int, rel: str, base: Path = None):
+    """The file `rel` names inside task `tid`'s outputs folder (or `base`, a turn's kept copies - turn_folder), or None. A name only: never
+    absolute, never a drive or a share, no `..` or empty step, no `:` (an NTFS stream), no link anywhere on the way - and after resolving,
+    still under the folder."""
     rel = str(rel or '')
     if not rel or '\x00' in rel or _DRIVE.match(rel) or rel[0] in '/\\': return None
     parts = rel.replace('\\', '/').split('/')
     if any(p in ('', '.', '..') or ':' in p for p in parts): return None
-    base = folder(tid)
+    base = base or folder(tid)
     try:
         if not _base_ok(base): return None
         p, cur = base.joinpath(*parts), base
@@ -85,6 +86,66 @@ def row(tid: int, p: Path, rel: str) -> dict:
     return {'id': f'output:{rel}', 'name': p.name, 'path': rel, 'kind': 'output', 'content_type': content_type(p.name),
             'size': st.st_size, 'at': datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'), 'preview': sheet, 'url': f'/api/task-outputs/{int(tid)}/{quote(rel)}',
             **({'note': 'No preview on this install - Download opens it in your spreadsheet app.'} if PREVIEW.get(ext) == 'sheet' and not sheet else {})}
+
+
+# EACH TURN KEEPS THE FILE AS IT MADE IT (the owner, 2026-11-07: "same file with revisions"): an agent improves one file in place (ONE_FILE),
+# so a turn that named it drew the NEWEST version - turn 1's words about three tools over the four-tool table a later turn wrote. The turn that
+# writes a file keeps its version: a copy when it is small, else only its name and stamp, read as "changed later" once a newer turn writes it.
+# The newest turn and the file itself are the latest; the copies live beside the outputs folder, never in it (listing, deliverables)
+TURN_COPY_MAX = 5_000_000
+def turns_folder(tid: int) -> Path: return config.home() / 'scratch' / 'output-turns' / task_ref(tid)
+def turn_folder(tid: int, turn: int) -> Path: return turns_folder(tid) / str(int(turn))
+
+
+def keep_turn(tid: int, turn: int, since: float) -> list:
+    "The files turn `turn` (its answer's CommentId) wrote - changed at or after `since`, its start - kept as it left them: [{path, size, mtime, kept}]."
+    got = []
+    for r in listing(tid):
+        p = resolve(tid, r['path'])
+        if not p or (st := p.stat()).st_mtime < since: continue
+        kept = st.st_size <= TURN_COPY_MAX
+        if kept:
+            (dest := turn_folder(tid, turn).joinpath(*r['path'].split('/'))).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, dest)
+        got.append({'path': r['path'], 'size': st.st_size, 'mtime': st.st_mtime, 'kept': kept})
+    if got:
+        turns_folder(tid).mkdir(parents=True, exist_ok=True)
+        (turns_folder(tid) / f'{int(turn)}.json').write_text(json.dumps(got), encoding='utf-8')
+    return got
+
+
+def turns_made(tid: int) -> list:
+    "[(turn, [what keep_turn kept])], oldest turn first - [] for a task none kept."
+    base, out = turns_folder(tid), []
+    try: turns = sorted(int(f.stem) for f in base.glob('*.json') if f.stem.isdigit()) if base.is_dir() else []
+    except OSError: return []
+    for turn in turns:
+        try: out.append((turn, json.loads((base / f'{turn}.json').read_text(encoding='utf-8'))))
+        except (OSError, ValueError): continue
+    return out
+
+
+def made_by(tid: int) -> dict:
+    "Each file's newest turn that wrote it: {path: 'comment-<id>'} - the turn the file as it is now belongs to."
+    return {k['path']: f'comment-{turn}' for turn, made in turns_made(tid) for k in made}
+
+
+def turn_versions(tid: int) -> list:
+    """Each turn's own version of a file a LATER turn changed, as `row` draws it, `turn` its answer ('comment-<id>'): its copy (`url` with
+    ?turn=), else - too big to copy - the file as it is now, marked `later`. A file no turn changed since is its turn's version: no row."""
+    from urllib.parse import quote
+    made_ = turns_made(tid)
+    if not made_: return []
+    now, out = {r['path']: r for r in listing(tid)}, []
+    for turn, made in made_:
+        for k in made:
+            cur, p = now.get(k['path']), resolve(tid, k['path'])
+            if cur and p and (p.stat().st_mtime, p.stat().st_size) == (k['mtime'], k['size']): continue
+            mine = {'id': f"output:{k['path']}@{turn}", 'turn': f'comment-{turn}', 'after': f'comment-{turn}'}
+            if k.get('kept') and (c := resolve(tid, k['path'], turn_folder(tid, turn))):
+                out.append({**row(tid, c, k['path']), **mine, 'url': f"/api/task-outputs/{int(tid)}/{quote(k['path'])}?turn={turn}"})
+            elif cur: out.append({**cur, **mine, 'later': True, 'note': 'Changed later - this opens its newest version.'})
+    return out
 
 
 def listing(tid: int) -> list:

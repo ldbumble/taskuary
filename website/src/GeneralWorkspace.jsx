@@ -42,7 +42,7 @@ import { LinkPopups, Md } from "./md.jsx";
 import { draftState } from "./sendState.js";
 import PublishedPages, { FileDialog } from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
-import { outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
+import { forTurn, outputRefs, outputRow, shownOnce, turnFiles, uncited } from "./taskOutputs.js";
 import TurnFiles from "./TurnFiles.jsx";
 import ActionCard from "./ActionCard.jsx";
 import CopyCorner from "./CopyCorner.jsx";
@@ -177,11 +177,13 @@ const AgentNameCtx = React.createContext("Taskuary");
 // outputs folder comes out of the words and sits under them with Preview and Download. A Codex answer printed the raw marker, and
 // asked to send the workbook it wrote a link to an /outputs/ address the server never had - a 404 (outputs.py).
 const OutputsCtx = React.createContext(null);
+// ...each turn's own: the version of a file IT made, where a later turn changed it (taskOutputs.forTurn, the owner 2026-11-07)
+const useTurnOutputs = (id) => { const at = React.useContext(OutputsCtx); return at && { ...at, listed: forTurn(at.listed, at.versions, id) }; };
 // ...and a file NAMED in the words - `Report.csv` - opens over the chat at a press (FileDialog): the names are marked once drawn
 const nameOf = (s) => String(s || "").trim().replace(/^.*[\\/]/, "");
 export const isOutputsFolder = (s, tid) => new RegExp(`outputs[\\\\/]TQ-0*${Number(tid)}[\\\\/]?$`, "i").test(String(s || "").trim());
 const AssistantText = ({ text }) => {
-  const at = React.useContext(OutputsCtx), shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)];
+  const mid = useAuiState((s) => s.message.id), at = useTurnOutputs(mid), shown = React.useContext(ShownCtx)[mid];
   const box = React.useRef(null), [viewing, setViewing] = useState(null);
   const listed = at?.listed || [];
   const fileNamed = (el) => { const n = nameOf(el?.textContent); return n ? listed.find((f) => f.name === n || nameOf(f.path) === n) : null; };
@@ -396,7 +398,7 @@ const RanFor = () => {
     · {when(t)}{ran ? ` · ${ran}` : ""}</span>;
 };
 const AssistantMessage = () => {
-  const shown = React.useContext(ShownCtx)[useAuiState((s) => s.message.id)], at = React.useContext(OutputsCtx), work = React.useContext(WorkCtx);
+  const id = useAuiState((s) => s.message.id), shown = React.useContext(ShownCtx)[id], at = useTurnOutputs(id), work = React.useContext(WorkCtx);
   const words = useAuiState((s) => textOf(s.message)), custom = useAuiState((s) => s.message.metadata?.custom), chat = React.useContext(ChatCtx);
   // the turn is the chat's last entry AND has answered: it carries its card - a turn still at work never takes the one before it's draft (the owner,
   // 2026-11-05: "email draft is being shown below the new prompt ... it's connected to the prior agent taskuary thing")
@@ -405,7 +407,6 @@ const AssistantMessage = () => {
   const lastAnswered = useAuiState((s) => [...s.thread.messages].reverse().find((m) => m.role === "assistant" && !live(m) && m.metadata?.custom?.summary)?.id === s.message.id);
   // WHAT THIS TURN MADE AND SET UP, IN IT (the owner, 2026-11-05): in a chat, the files it made inline, and an act it proposed drawn as its
   // connector declares it (a post as the post, ActionCard) under its Next steps - live on the newest turn, read-only (gone, or not) before
-  const id = useAuiState((s) => s.message.id);
   const posts = work && chat ? (work.cards || []).filter((p) => p.after === id) : [];
   const made = at && chat ? turnFiles({ listed: at.listed, id, words, did: custom?.summary?.did, tid: at.tid,
     skip: (work?.cards || []).map((p) => p.post?.image).filter(Boolean) }) : [];
@@ -1269,7 +1270,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, compact = false,
     <LevelCtx.Provider value={level}><ChatCtx.Provider value={chat && !dock}><AgentNameCtx.Provider value={dock ? name : AGENT_TURN}><ShownCtx.Provider value={placed.by}>
     <WorkCtx.Provider value={dock ? null : { reviews: withTurns(reviews, data?.drafts), checklist: steps, acts: [...(data?.browserActs || []), ...(data?.playbookDrafts || [])], next,
       cards: data?.cards || [], refresh }}>
-    <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
+    <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs, versions: data?.turnOutputs }}>
       {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
       <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)

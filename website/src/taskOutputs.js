@@ -162,6 +162,16 @@ export const deliverables = (rows) => {
   return { made, working };
 };
 
+// EACH TURN SHOWS THE FILE AS IT MADE IT (the owner, 2026-11-07: "same file with revisions"): turn 1 named the table a later turn rewrote in
+// place, and drew the newest one under words about the old. `versions` (outputs.turn_versions) are earlier turns' own copies, `turn` the
+// answer each belongs to: that turn reads its own, every other turn - the newest among them - the file as it is now
+export const forTurn = (listed, versions, id) => {
+  const mine = new Map((versions || []).filter((v) => v.turn === id).map((v) => [v.path, v]));
+  if (!mine.size) return listed || [];
+  const out = (listed || []).map((r) => mine.get(r.path) || r);
+  return [...out, ...[...mine.values()].filter((v) => !out.includes(v))];
+};
+
 // WHAT A TURN MADE, IN THE TURN (the owner, 2026-11-05: "the post and images are as artifacts separate not inline???"): the files placed on this
 // answer by when they were made (the server's `after`, as a shown page's) and the ones its words or its summary name - each thing once, the
 // newest of a family, never the agent's working files - less `skip` (a post's own picture, drawn on the post)

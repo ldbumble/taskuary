@@ -3,7 +3,7 @@
 // else stays plain text.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deliverables, family, isWorking, outputOf, outputRefs, outputRow, outputUrl, plainCitations, shownOnce, uncited } from "../src/taskOutputs.js";
+import { deliverables, family, forTurn, isWorking, outputOf, outputRefs, outputRow, outputUrl, plainCitations, shownOnce, turnFiles, uncited } from "../src/taskOutputs.js";
 
 test("a bare path to a name with spaces is that whole file, not a file called by its first word (stress test 2026-11-02)", () => {
   const listed = [{ path: "Open tasks 2026-11-02.xlsx", name: "Open tasks 2026-11-02.xlsx", kind: "output" }];
@@ -144,4 +144,18 @@ test("the task's folder and its files named bare become code spans the chat open
   assert.equal(outputRefs(coded, 1348, []).text, coded);
   // another task's folder is not this task's link
   assert.ok(!outputRefs(`see ${win("C:", "x", "scratch", "outputs", "TQ-1349", "")} now`, 1348, []).text.includes(Q));
+});
+
+test("each turn shows the file as it made it; the newest turn the file itself (the owner, 2026-11-07: same file with revisions)", () => {
+  const now = { id: "output:tools.md", path: "tools.md", name: "tools.md", kind: "output", url: "/api/task-outputs/8/tools.md", after: "comment-9" };
+  const then = { ...now, id: "output:tools.md@3", url: "/api/task-outputs/8/tools.md?turn=3", turn: "comment-3", after: "comment-3" };
+  const listed = [now], versions = [then];
+  assert.deepEqual(forTurn(listed, versions, "comment-3"), [then]);              // turn 1 reads the copy it left
+  assert.deepEqual(forTurn(listed, versions, "comment-9"), [now]);               // ...the newest turn the file as it is now
+  assert.equal(forTurn(listed, undefined, "comment-3"), listed);
+  const words = "Here is the comparison: `tools.md`";
+  assert.deepEqual(turnFiles({ listed: forTurn(listed, versions, "comment-3"), id: "comment-3", words, tid: 8 }).map((f) => f.url), [then.url]);
+  assert.deepEqual(turnFiles({ listed: forTurn(listed, versions, "comment-9"), id: "comment-9", words, tid: 8 }).map((f) => f.url), [now.url]);
+  // ...and a file since deleted is still there under the turn that made it
+  assert.deepEqual(forTurn([], versions, "comment-3"), [then]);
 });

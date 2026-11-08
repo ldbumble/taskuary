@@ -2153,6 +2153,10 @@ class GeneralSession:
             from . import hooks
             hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=self.wake)
         rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
+        # ...and the files this turn wrote, as it left them: a later turn rewrites them in place (outputs.keep_turn, the owner 2026-11-07)
+        from . import outputs
+        try: outputs.keep_turn(self.task_id, rid, t0)
+        except Exception as e: logger.debug(f'task {self.task_id}: the files of this turn were not kept with it - {e}')
         if summ:
             take_corrections(self.store, self.task_id, summ.pop('corrections', None))     # learned quietly, never drawn
             take_lesson_and_check(self.store, self.task_id, summ.pop('lesson', None), summ.pop('check_back', None))

@@ -262,6 +262,21 @@ offer, is refused and nothing is changed. A scheduled report never runs them.
 Monday's board can have several status and People columns. The first of each is used unless the
 card's settings name one (`status_column`, `people_column`).
 
+## Shared inboxes, phones, forms and candidates
+
+| System | What comes in |
+|---|---|
+| **Front, Help Scout, Gorgias** | Open conversations and tickets assigned to you |
+| **RingCentral, Aircall, Dialpad** | Missed calls and voicemails to you (with the vendor's transcript where it has one); RingCentral texts too |
+| **Typeform, Jotform, SurveyMonkey, Tally, Google Forms** | New responses on the forms you pick - Test lists your forms and their ids |
+| **Lever** | Candidates you own, when they change |
+
+Each card's Test finds you in that system, so only what points at you comes in. A customer, a caller,
+a form respondent or a candidate is a stranger's words: nothing starts on them by itself until you
+trust the source. A Front or Help Scout message written by one of your own teammates is a colleague's.
+Google Forms needs no key of its own - it reads with the Google Sheets card's sign-in, minted with the
+forms scopes. Nothing is answered, approved or changed in any of them.
+
 ## Data and report sources
 
 The full list is long and grows; these are the ones worth knowing about by shape.
@@ -494,7 +509,8 @@ transcription card. On a Mac, click in the box and press the Dictation key (or F
 ## A vendor's own MCP server
 
 Many cards — Notion MCP, Linear MCP, Atlassian, Airtable, Dropbox, Figma, Stripe MCP, Sentry MCP,
-Cloudflare, Vercel, Supabase, Zapier and about thirty more — are the vendor's own hosted MCP server,
+Cloudflare, Vercel, Supabase, Zapier, and for money and people Xero, BILL, Expensify, Ramp, Brex,
+Mercury, Avalara, Deel, Greenhouse and Ashby, and about thirty more — are the vendor's own hosted MCP server,
 added to your agent CLI. **Add** registers it in Claude Code and Codex on this computer; **Sign in**
 opens the vendor's own sign-in page in your browser, once. Taskuary never holds that sign-in, so it
 cannot list the server's tools: adding the card is your word that your agents may use all of them.
@@ -509,7 +525,7 @@ add to Claude Code alone.
 ## A vendor's API, read with a key
 
 DigitalOcean, Terraform Cloud, Better Stack, CircleCI, Buildkite, Coda, Intrinio, Benzinga, Tradier,
-Diffbot, and the self-hosted Jenkins, SonarQube, Elasticsearch, Splunk, Dynatrace and Kubernetes each
+Diffbot, Mercury, Lattice, and the self-hosted Jenkins, SonarQube, Elasticsearch, Splunk, Dynatrace and Kubernetes each
 take a key (and, when self-hosted, the address). Google Drive, OneDrive and Microsoft 365 files take
 nothing: they read with the Google Sheets card's and the Outlook card's sign-ins. **Test** makes one
 cheap read. A report or an agent then asks any address under that vendor's API by its path, and only

@@ -2439,9 +2439,11 @@ def _demo_turn(task_id: int, text: str):
     advance. None off the demo, and for the Assistant's own chat, which the demo answers from its recordings."""
     from . import general
     if not demo.enabled() or general.is_dock(store.get_task(task_id)) or not str(text or '').strip(): return None
+    said = demo.chat_turn(any(c.get('ActorType') == general.ASSISTANT_TYPE and c.get('Body') not in (demo.CHAT_TURN, demo.NEW_CHAT_TURN)
+                              for c in store.list_comments(task_id)))
     store.add_comment(task_id, 'owner', general.USER_TYPE, str(text).strip())
-    store.add_comment(task_id, 'assistant', general.ASSISTANT_TYPE, demo.CHAT_TURN)
-    return demo.CHAT_TURN
+    store.add_comment(task_id, 'assistant', general.ASSISTANT_TYPE, said)
+    return said
 
 
 @app.post('/api/tasks/{task_id}/assistant/messages')

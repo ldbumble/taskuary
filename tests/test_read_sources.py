@@ -27,7 +27,9 @@ def conn(s, typ, cfg, key='tok'):
 class OneCardTwoRoles(unittest.TestCase):
     def test_each_source_is_a_read_too_and_tests_as_a_source(self):
         both = set(inboxes.TYPES) & set(apireads.types())
-        self.assertEqual(both, {'woocommerce', 'bigcommerce', 'instagram', 'facebook_pages', 'x', 'wordpress'})
+        self.assertEqual(both, {'woocommerce', 'bigcommerce', 'instagram', 'facebook_pages', 'x', 'wordpress',
+                                # ...and the ones that sign in by OAuth or push (tests/test_oauth_sources.py)
+                                'webex', 'zoom_chat', 'threads', 'hubspot', 'salesforce', 'docusign', 'basecamp_todos', 'mailgun', 'line', 'sendgrid'})
         for t in both:
             self.assertEqual(store_mod.DEFAULT_ROLES[t], 'trigger,report,tool', t)
             self.assertEqual(reports.card_of(f'{t}_read'), t)

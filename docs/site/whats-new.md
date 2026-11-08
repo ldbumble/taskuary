@@ -2,6 +2,13 @@
 
 What each release changed, newest first. Ask the Assistant "what changed in the last update?" and it reads this page.
 
+## 0.3.11.17 - 2026-11-08
+
+- A phone's task page is the view's height, its message box at the foot on every kind
+- The demo is a connected world on an invented machine
+- On a phone the chat box's From chip sits on a line of its own over the words
+- Invites, new meetings and a dashboard's share are set up like an email: a card and one press
+
 ## 0.3.11.16 - 2026-11-08
 
 - The agent's own turn picks the lit button; the bar drops Reply and Hand it to a person

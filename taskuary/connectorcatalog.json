@@ -1909,8 +1909,8 @@
       "type": "docker_hub",
       "title": "Docker Hub",
       "group": "Developer",
-      "planned": true,
-      "desc": "Images, tags and build activity",
+      "planned": false,
+      "desc": "Repositories, tags and pull counts as reports and an agent tool - the token is swapped for a short-lived one, then GET /v2/namespaces/<you>/repositories.",
       "match": [
         "docker hub",
         "docker",
@@ -2314,8 +2314,8 @@
       "type": "gcp",
       "title": "Google Cloud",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Projects, resources and audit activity",
+      "planned": false,
+      "desc": "Projects, Cloud Run services, Cloud Functions and logs as reports and an agent tool - the path names the service: /run/v2/projects/<p>/locations/-/services, POST /logging/v2/entries:list.",
       "match": [
         "google cloud",
         "google",
@@ -2389,8 +2389,8 @@
       "type": "heroku",
       "title": "Heroku",
       "group": "Cloud & infrastructure",
-      "planned": true,
-      "desc": "Apps, releases and dynos",
+      "planned": false,
+      "desc": "Apps, dynos, releases and add-ons as reports and an agent tool - GET /apps, /apps/<app>/dynos, /apps/<app>/releases.",
       "match": [
         "heroku"
       ]
@@ -2411,8 +2411,8 @@
       "type": "netsuite",
       "title": "NetSuite",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "ERP records, saved searches and reports",
+      "planned": false,
+      "desc": "Records and SuiteQL queries as reports and an agent tool - POST /services/rest/query/v1/suiteql {q: \"SELECT ...\"}, GET /services/rest/record/v1/vendor. Token-based auth from your NetSuite admin.",
       "match": [
         "netsuite"
       ]
@@ -2421,8 +2421,8 @@
       "type": "sap",
       "title": "SAP",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "ERP data and business workflows",
+      "planned": false,
+      "desc": "S/4HANA OData reads as reports and an agent tool - business partners, purchase orders, journal entries: GET /sap/opu/odata/sap/<service>/<entity>?$format=json. Your SAP admin gives the communication user.",
       "match": [
         "sap"
       ]
@@ -2461,8 +2461,8 @@
       "type": "dynamics365",
       "title": "Dynamics 365",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "CRM and finance records",
+      "planned": false,
+      "desc": "Dataverse tables - accounts, contacts, opportunities, cases - as reports and an agent tool: GET /api/data/v9.2/accounts?$top=10. Your own company app; Taskuary ships none.",
       "match": [
         "dynamics 365",
         "dynamics",
@@ -2474,8 +2474,8 @@
       "type": "bamboohr",
       "title": "BambooHR",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "People, time off and employee data",
+      "planned": false,
+      "desc": "The employee directory, time off and reports as reports and an agent tool - GET /employees/directory, /time_off/whos_out. Your BambooHR admin gives API access.",
       "match": [
         "bamboohr"
       ]
@@ -2484,8 +2484,8 @@
       "type": "workday",
       "title": "Workday",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "HR, finance and workforce data",
+      "planned": false,
+      "desc": "Workers, organizations and custom reports (RaaS) as reports and an agent tool - GET /ccx/api/v1/<tenant>/workers, /ccx/service/customreport2/<tenant>/<owner>/<report>?format=json.",
       "match": [
         "workday"
       ]
@@ -2494,8 +2494,8 @@
       "type": "adp",
       "title": "ADP",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "Payroll, workforce and employee data",
+      "planned": false,
+      "desc": "Workers, pay statements and time cards as reports and an agent tool - GET /hr/v2/workers. ADP needs its TLS client certificate on every call: your ADP admin gives the client id, secret and certificate.",
       "match": [
         "adp"
       ]
@@ -2504,8 +2504,8 @@
       "type": "epic",
       "title": "Epic (EMR)",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "Clinical records and operational reports",
+      "planned": false,
+      "desc": "FHIR R4 reads - Patient, Encounter and what the organization grants - with SMART backend services: a JWT signed with your key, no sign-in screen. Reads only, scoped by the org.",
       "match": [
         "epic (emr)",
         "epic",
@@ -2516,8 +2516,8 @@
       "type": "cerner",
       "title": "Oracle Cerner (EMR)",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "Clinical and scheduling data",
+      "planned": false,
+      "desc": "FHIR R4 reads - Patient, Encounter and what the organization grants - with SMART backend services: a JWT signed with your key, no sign-in screen. Reads only, scoped by the org.",
       "match": [
         "oracle cerner (emr)",
         "oracle",
@@ -2529,8 +2529,8 @@
       "type": "pointclickcare",
       "title": "PointClickCare (EMR)",
       "group": "Corporate systems",
-      "planned": true,
-      "desc": "Senior-care clinical and operational data",
+      "planned": false,
+      "desc": "Facilities, residents and their census as reports and an agent tool, through PointClickCare's partner API - your partner app, approved by PointClickCare and signed in to once by the organization. Reads only.",
       "match": [
         "pointclickcare (emr)",
         "pointclickcare",
@@ -2599,8 +2599,8 @@
       "type": "plaid",
       "title": "Plaid",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Bank account and transaction data through a linked-account aggregator",
+      "planned": false,
+      "desc": "Balances, transactions, holdings and liabilities of an account already linked to your Plaid app - you paste the Item's access token; no Link screen here. Reads only.",
       "match": [
         "plaid"
       ]
@@ -2609,8 +2609,8 @@
       "type": "ibkr",
       "title": "Interactive Brokers",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Positions, orders and account data",
+      "planned": false,
+      "desc": "Accounts, positions, balances and quotes through your own Client Portal gateway - GET /portfolio/accounts, /portfolio/<id>/positions/0. Reads only: no order is ever placed from this card.",
       "match": [
         "interactive brokers",
         "interactive",
@@ -2622,8 +2622,8 @@
       "type": "schwab",
       "title": "Charles Schwab",
       "group": "Markets & finance",
-      "planned": true,
-      "desc": "Brokerage accounts and market data",
+      "planned": false,
+      "desc": "Accounts, positions, orders placed elsewhere and quotes - GET /trader/v1/accounts?fields=positions, /marketdata/v1/quotes?symbols=AAPL. Reads only: no order is ever placed from this card.",
       "match": [
         "charles schwab",
         "charles",
@@ -2775,8 +2775,8 @@
       "type": "uptimerobot",
       "title": "UptimeRobot",
       "group": "Observability",
-      "planned": true,
-      "desc": "Monitor status and outage alerts",
+      "planned": false,
+      "desc": "Monitors, their uptime and alert contacts as reports and an agent tool - UptimeRobot's reads are POSTs (getMonitors), and only those are sent.",
       "match": [
         "uptimerobot"
       ]
@@ -2819,8 +2819,8 @@
       "type": "browserbase",
       "title": "Browserbase",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Managed browsers for web agents",
+      "planned": false,
+      "desc": "Cloud browsers for agents: list projects and sessions, and start a session (POST /sessions) whose connect URL an agent drives. Nothing else is sent.",
       "match": [
         "browserbase"
       ]
@@ -2875,8 +2875,8 @@
       "type": "oxylabs",
       "title": "Oxylabs",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Web scraping and proxy-backed collection",
+      "planned": false,
+      "desc": "Web pages and search results fetched through Oxylabs' scraper - POST /v1/queries starts a fetch, GET /v1/queries/<id>/results reads it; /v2/stats is the usage.",
       "match": [
         "oxylabs"
       ]
@@ -3724,8 +3724,8 @@
       "type": "brightdata",
       "title": "Bright Data",
       "group": "Agentic web",
-      "planned": true,
-      "desc": "Proxy and scraping infrastructure at the scale where a page actively refuses ordinary fetches.",
+      "planned": false,
+      "desc": "A page or a search result fetched through your Web Unlocker or SERP zone - POST /request with {zone, url, format}; GET /zone/get_active_zones lists the zones.",
       "match": [
         "bright data",
         "brightdata",

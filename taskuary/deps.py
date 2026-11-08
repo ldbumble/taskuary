@@ -46,6 +46,8 @@ OPTIONAL = {
     'pymongo': 'pymongo>=4',                 # the MongoDB card (nosql.py)
     'redis': 'redis>=5',                     # the Redis card
     'neo4j': 'neo4j>=5',                     # the Neo4j card
+    'google.auth': 'google-auth>=2',         # the Google Cloud card's service-account key (apireads.py)
+    'jwt': 'PyJWT[crypto]>=2',               # Epic and Cerner: the SMART backend-services JWT (apireads.py)
 }
 
 # What Taskuary.exe ships with, read by taskuary.spec at build time so the list lives in ONE

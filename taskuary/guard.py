@@ -502,7 +502,9 @@ WRITE_ONLY_CONFIG = {'linkedin': ('client_secret', 'refresh_token'), 'reddit': (
                      # the Google cards' OAuth client secret and the Gmail card's calendar refresh token came back readable in plain
                      # boxes on reopen, beside an App Password that was masked (the UI audit, 2026-10-21)
                      'gmail': ('google_client_secret', 'google_refresh_token'),
-                     'google_sheets': ('google_client_secret',), 'google_chat': ('google_client_secret',)}
+                     'google_sheets': ('google_client_secret',), 'google_chat': ('google_client_secret',),
+                     # a keyed read with a second secret beside its key (apireads.json `write_only`): Schwab's app secret, NetSuite's consumer secret, Plaid's access token
+                     **__import__('taskuary.apireads', fromlist=['write_only']).write_only()}
 
 
 def masked_config(row: dict) -> dict:

@@ -41,7 +41,8 @@ def card(s, t, key='key-1', **cfg):
 
 class EveryRowIsAWorkingCard(unittest.TestCase):
     def test_the_table_and_the_catalogue_agree(self):
-        self.assertEqual(set(DOC), set(apireads.types()))
+        from tests.test_apireads_signed import DOC as SIGNED       # the rows whose key is swapped, signed or rides in a body
+        self.assertEqual(set(DOC) | set(SIGNED), set(apireads.types()))
         for t, r in apireads.table().items():
             c = connectorcatalog.by_type(t)
             self.assertTrue(c and c['planned'] is False, t)
@@ -51,7 +52,7 @@ class EveryRowIsAWorkingCard(unittest.TestCase):
 
     def test_each_cards_test_makes_its_probe_with_the_key_where_the_vendor_wants_it(self):
         s = MemoryStore()
-        for t, r in apireads.table().items():
+        for t, r in ((t, apireads.table()[t]) for t in DOC):
             cid = card(s, t, host='https://ci.northwind.example', user='alex')
             with mock.patch.object(apireads.requests, 'get', return_value=resp(DOC[t])) as g, \
                     mock.patch('taskuary.sheets._token', return_value='g-tok'), mock.patch('taskuary.sheets.google_sheets_connection', return_value={}), \
@@ -82,9 +83,9 @@ class OnlyReads(unittest.TestCase):
         for bad in ('https://evil.example/x', '//evil.example', 'v2/droplets', '/../x', '/x@evil.example', '/a\\b'):
             with self.subTest(bad=bad), self.assertRaises(ValueError): apireads._path(bad)
 
-    def test_no_verb_but_get_exists_and_a_missing_key_or_address_says_so(self):
+    def test_no_verb_but_get_and_a_listed_post_exists_and_a_missing_key_or_address_says_so(self):
         src = open(apireads.__file__, encoding='utf-8').read()
-        self.assertNotRegex(src, r'requests\.(post|put|patch|delete)\(')
+        self.assertNotRegex(src, r'requests\.(put|patch|delete|request)\(')          # a POST only to a row's `post` paths: test_apireads_signed
         with self.assertRaisesRegex(RuntimeError, 'no Tradier key'): apireads.runner('tradier')({})
         with self.assertRaisesRegex(RuntimeError, 'Jenkins needs its address'): apireads.runner('jenkins')({'api_key': 'k'})
         self.assertEqual(apireads.base_of('sonarqube', {}), 'https://sonarcloud.io')

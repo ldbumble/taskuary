@@ -17,8 +17,7 @@ PLANNED = [
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
-           'netsuite', 'sap', 'workday', 'adp',            # quickbooks is BUILT (quickbooks.py)
-           'epic', 'cerner', 'pointclickcare',   # smb_file is BUILT now (files.py), and so is sftp
+           # NetSuite, SAP, Workday, ADP, Epic, Cerner and PointClickCare are BUILT now (apireads.json, 2026-11-08), as are smb_file and sftp
            'stooq']    # its CSV endpoint serves a JS proof-of-work challenge now (2026-09-08) - not reachable from REST
 
 MAX_ROWS, BODY_CHARS, AI_CHARS = 200, 20000, 12000     # per report; override with cfg['max_rows']

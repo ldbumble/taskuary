@@ -983,7 +983,7 @@ DEFAULT_ROLES = {'outlook': 'trigger,tool', 'teams': 'trigger,tool', 'slack': 't
                  # needs two credentials (key_id, secret_key) and ships market DATA only, no orders
                  'finnhub': 'report,tool', 'polygon': 'report,tool', 'tiingo': 'report,tool',
                  'fmp': 'report,tool', 'alpaca': 'report,tool', 'marketstack': 'report,tool', 'eodhd': 'report,tool', 'dynamodb': 'report,tool',
-                 **{t: 'report,tool' for t in ('digitalocean', 'terraform_cloud', 'better_stack', 'circleci', 'buildkite', 'coda', 'intrinio', 'benzinga', 'tradier', 'diffbot', 'jenkins', 'sonarqube', 'elastic', 'splunk', 'dynatrace', 'kubernetes', 'google_drive', 'onedrive', 'office365_files')},      # apireads.json: reads, as reports and agent tools
+                 **{t: 'report,tool' for t in __import__('taskuary.apireads', fromlist=['types']).types()},      # apireads.json: reads, as reports and agent tools
                  'screen': 'report,tool',       # the strategy screen: conditions in config, matches out (markets.py)
                  # research reads the public web - a report source, and a tool an agent may use
                  'exa': 'report,tool', 'tavily': 'report,tool',

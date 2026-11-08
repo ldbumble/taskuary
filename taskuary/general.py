@@ -1454,6 +1454,19 @@ def _images(paths) -> list:
     return out
 
 
+def page_needs_owner(store, tid: int) -> str:
+    """Why task `tid`'s browser must be up NOW, '' when it need not: the owner has a part on its page - a sign-in asked, a step handed
+    over, a held act. Read off the task, not a session, so a restart sees what the last run left open. Only then does a fresh session
+    bring Chrome back on its last page; else the agent's own first `open` launches it (the owner, 2026-11-05: the browser stays hidden
+    unless the work needs it) - a restart after "forget the portal" relaunched it on a dead page (agent-flow audit, 2026-11-07)."""
+    from . import browserview, proposals, signin, workerstate as ws
+    if any(str(e.get('RequestId') or '').startswith((browserview.TURN_PREFIX, signin.PREFIX)) for e in ws.open_requests(ws.events(store, tid))):
+        return 'the owner has a part on its page'
+    if any(proposals._action(r) in proposals.HELD_ACTS for r in store._rows(
+            "SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))): return 'an act waits for the owner'
+    return ''
+
+
 class GeneralSession:
     """A connector-backed conversation with the live-session contract used by the terminal."""
     mode = 'assistant'
@@ -1789,13 +1802,16 @@ class GeneralSession:
                 # for one. A chat that did not is a research session: it reads, it does not run.
                 # ...and never on an empty tab (the owner, 2026-11-04: "no browser should open if we don't have a URL"): up already, or on
                 # the page it was last on - else OFFERED, and the agent's first `agent-browser open <url>` launches it (browserview.on_demand)
-                last = browserview.last_page(self.task_id) if self.browser_wanted else ''
+                # ...and on that page only while the owner has a part on it (page_needs_owner): else it is offered, its address said
+                was = browserview.last_page(self.task_id) if self.browser_wanted else ''
+                last = was if was and page_needs_owner(self.store, self.task_id) else ''
                 if self.browser_wanted and (browserview.state(self.sid, fresh=True).get('open') or (last and browserview.start(self.sid, last))):
                     browser_tools = True
                     system = f'{system}\n\n{browserview.brief(held=self.holds_browser())}'
                 elif self.browser_wanted and not last and browserview.installed():
                     browser_tools, browser_offer = True, True
-                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=False)}'
+                    system = f'{system}\n\n{browserview.brief(held=self.holds_browser(), open_now=False)}' + \
+                             (f' It was last on {was} - open it again only if the work still needs it.' if was else '')
                 elif self.browser_wanted:
                     # a browser that did not open is SAID - in the turn and to the agent - not left for it to guess at (2026-10-25)
                     why = browserview.FAILED_WHY if browserview.installed() else 'agent-browser is not installed on this computer'
@@ -2271,12 +2287,7 @@ class GeneralSession:
         if self.store.waiting_notes(self.task_id): return 'notes wait for it'
         if ws.held_for(self.task_id): return 'a question is held for the owner'
         # ...nor while the owner has a part on its page (a sign-in, a step handed over, a held act): the browser stays up until the agent answers
-        from . import browserview, proposals, signin
-        req = ws.asking_of(self.store, self) or {}
-        if str(req.get('request_id') or '').startswith((browserview.TURN_PREFIX, signin.PREFIX)): return 'the owner has a part on its page'
-        if any(proposals._action(r) in proposals.HELD_ACTS for r in self.store._rows(
-                "SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (self.task_id,))): return 'an act waits for the owner'
-        return ''
+        return page_needs_owner(self.store, self.task_id)
 
     def idle_out(self, now: float = None) -> bool:
         """Close QUIETLY after idle_for() with nothing going on (the owner, 2026-11-05: "instead of keeping it open forever it should just shut
@@ -2558,7 +2569,7 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     # browser was last on - after a restart the agent's ask ("sign in on the page beside us") still points somewhere real. Else the agent's
     # first navigate launches it (browserview.on_demand)
     from . import browserview
-    last = browserview.last_page(tid) if session.browser_wanted else ''
+    last = browserview.last_page(tid) if session.browser_wanted and page_needs_owner(store, tid) else ''
     if last and not quick and not signed_out and not session.pick.startswith('connector:'):   # an API card can't drive it
         threading.Thread(target=browserview.start, args=(session.sid, last), daemon=True).start()
     return session

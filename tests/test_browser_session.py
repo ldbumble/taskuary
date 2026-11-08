@@ -37,7 +37,10 @@ class AskingForOneTests(unittest.TestCase):
             # ...offered until there is a page to open it on: its first navigate launches it (browserview.on_demand, 2026-11-04)
             self.assertIn('NO BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
             with mock.patch.object(bv, 'last_page', return_value='https://portal.example/login'):
-                self.assertIn('A BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
+                # ...and on it only while the owner has a part on that page (general.page_needs_owner, agent-flow audit 2026-11-07)
+                self.assertIn('NO BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
+                with mock.patch('taskuary.general.page_needs_owner', return_value='the owner has a part on its page'):
+                    self.assertIn('A BROWSER IS OPEN', terminal.seed_text(s, asked, repo=None, cwd=''))
             self.assertNotIn('BROWSER IS OPEN', terminal.seed_text(s, plain, repo=None, cwd=''))
 
     def test_nothing_is_promised_when_the_tool_is_not_installed(self):

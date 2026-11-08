@@ -55,8 +55,22 @@ class NothingLaunchesWithoutAnAddress(unittest.TestCase):
         self.assertNotIn('A BROWSER IS OPEN', text)
         self.assertIn('agent-browser open <url>', text)
 
+    def _restart(self):
+        from taskuary import agents
+        with mock.patch.object(bv, 'last_page', return_value='https://portal.example/login'),              mock.patch.object(general.threading, 'Thread') as th, mock.patch.dict(terminal.SESSIONS, {}, clear=True),              mock.patch.object(general, '_selected', return_value=('cli:claude', 'Claude Code', '')),              mock.patch.object(agents, 'runs_here', lambda p: True):
+            ses = general.start_session(self.s, self.tid, pick='cli:claude')
+        return ses, [c.kwargs['args'] for c in th.call_args_list if c.kwargs.get('target') is bv.start]
+
+    def test_a_page_it_was_last_on_stays_down_when_nothing_on_it_waits_for_the_owner(self):
+        # agent-flow audit 2026-11-07: "forget the portal", a restart, and Chrome came back on the dead page
+        self.assertEqual(self._restart()[1], [])
+        self.assertEqual(general.page_needs_owner(self.s, self.tid), '')
+
     def test_a_page_it_was_last_on_is_an_address(self):
         # a restart mid sign-in: the agent's ask still points at a real page, so that page opens with the session
+        from taskuary import signin
+        ws.record(self.s, self.tid, 'run-before', 'input_needed', request_id=f'{signin.PREFIX}portal.example', text='Sign in to the portal')
+        self.assertTrue(general.page_needs_owner(self.s, self.tid))
         with mock.patch.object(bv, 'last_page', return_value='https://portal.example/login'), \
              mock.patch.object(general.threading, 'Thread') as th, mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(general, '_selected', return_value=('cli:claude', 'Claude Code', '')):

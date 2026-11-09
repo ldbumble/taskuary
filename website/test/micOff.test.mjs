@@ -62,3 +62,21 @@ test("voice typing with its setting off asks to turn it on, and a yes turns it o
   assert.match(mic, /data-tq-speech-on="" onClick=\{turnOn\}/);
   assert.match(mic, /if \(viaBuiltin\) return;/, "nothing records a clip for the computer's own any more");
 });
+
+// A MIC THAT HEARD NOTHING SAYS WHY (the owner, 2026-11-09: "you start it and end it and no words show up???"): every road that ends with
+// no words - an empty transcript from the voice AI, a Windows voice typing session that heard nothing or whose stop failed - flashes a reason.
+test("a failed or empty transcription shows a reason, never silence", () => {
+  assert.match(ui, /export const heardNothing = \(who\) => `\$\{who\} heard no words - /);
+  assert.match(mic, /if \(data\.text\) live\.current\.onText\?\.\(data\.text\); else flash\(heardNothing\(/, "an empty transcript names who heard nothing");
+  assert.doesNotMatch(mic, /flash\("nothing audible"\)/);
+  assert.match(mic, /catch \(e\) \{ flash\(e\?\.response\?\.data\?\.detail \|\| "transcription failed"\); \}/, "a failed one says the server's reason");
+  assert.match(mic, /heard \|\|= said\.length > 0/);
+  assert.match(mic, /if \(error \|\| !heard\) flash\(error \|\| heardNothing\("Windows voice typing"\)\)/, "a voice typing session that heard nothing says so");
+  assert.doesNotMatch(mic, /catch \{ end\(""\); \}/, "a failed stop is not a silent end");
+});
+
+test("a refused microphone in the Taskuary window points at Windows' setting, not an address bar it does not have", () => {
+  assert.match(mic, /catch \(e\) \{ flash\(micRefused\(e\?\.name\)\); \}/);
+  const fn = ui.slice(ui.indexOf("export const micRefused"), ui.indexOf("// One mic. Press to record"));
+  assert.match(fn, /inWindow \? "Windows kept the microphone from this window - turn on \\"Let desktop apps access your microphone\\"/);
+});

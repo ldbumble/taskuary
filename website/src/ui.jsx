@@ -502,6 +502,15 @@ export const useVoiceReady = () => {
   return v && { ...v, choice: voiceChoice(), recheck: () => setN((x) => x + 1) };
 };
 
+// A MIC THAT HEARD NOTHING SAYS WHY (the owner, 2026-11-09: "you start it and end it and no words show up???") - the stop of an empty
+// recording or session named nothing, or "nothing audible" for a moment. Each says what heard nothing and what to check.
+export const heardNothing = (who) => `${who} heard no words - check the microphone is the right one and not muted in the computer's sound settings, then press the mic and talk`;
+// a refused microphone: the Taskuary window has no address bar to allow it in, so it points at Windows' own setting there
+export const micRefused = (name, inWindow = typeof window !== "undefined" && !!window.pywebview) => name === "NotAllowedError"
+  ? (inWindow ? "Windows kept the microphone from this window - turn on \"Let desktop apps access your microphone\" in Windows' microphone privacy settings" : dictationError("not-allowed"))
+  : inWindow ? "No microphone Windows will lend this window - plug one in or pick it in Windows' Sound settings"
+  : "No microphone this browser can use - plug one in or allow it in the address bar";
+
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
 export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) => {
@@ -585,24 +594,25 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
         try {
           const blob = clip;
           const { data } = await api.post("/api/voice/transcribe", blob, { headers: { "Content-Type": blob.type || "audio/webm" } });
-          if (data.text) onText?.(data.text); else flash("nothing audible");
+          // the latest handler (the box may have re-rendered while it transcribed), and an empty answer says why, never a bare "nothing"
+          if (data.text) live.current.onText?.(data.text); else flash(heardNothing(voice?.label || "The voice AI"));
         } catch (e) { flash(e?.response?.data?.detail || "transcription failed"); }
         setBusy(false);
       };
       mr.start(); setRec(mr);
-    } catch (e) { flash(e?.name === "NotAllowedError" ? dictationError("not-allowed") : "No microphone this browser can use - plug one in or allow it in the address bar"); }
+    } catch (e) { flash(micRefused(e?.name)); }
   };
   // WINDOWS VOICE TYPING (voice.py LIVE; the owner, 2026-11-02: "use desktop if the machine has it"): the server listens on this
   // computer's microphone from the press to the next one. Each phrase lands as it settles - one by one into the chat box (onInterim),
   // all at the stop elsewhere, as the browser's dictation does - and the stop waits for a phrase still being said
   const listen = async () => {
     setBusy(true);
-    let id, seen = 0, all = "", timer = null, over = false;
-    const take = (said = []) => { seen += said.length; for (const t of said) { if (live.current.onInterim) live.current.onText?.(t); else all = all ? `${all} ${t}` : t; } };
+    let id, seen = 0, all = "", timer = null, over = false, heard = false;
+    const take = (said = []) => { seen += said.length; heard ||= said.length > 0; for (const t of said) { if (live.current.onInterim) live.current.onText?.(t); else all = all ? `${all} ${t}` : t; } };
     const end = (error) => {
       if (over) return; over = true; clearInterval(timer); setRec(null); setBusy(false); if (ctl) ctl.current = null;
       if (all) live.current.onText?.(all);
-      if (error) flash(error);
+      if (error || !heard) flash(error || heardNothing("Windows voice typing"));
     };
     try { id = (await api.post("/api/voice/listen")).data.id; }
     catch (e) { setBusy(false); flash(e?.response?.data?.detail || "Windows voice typing would not start"); return; }
@@ -614,7 +624,7 @@ export const MicButton = ({ onText, onInterim, onActive, ctl, size = 18, sx }) =
       stop: async () => {
         clearInterval(timer); setBusy(true);
         try { const { data } = await api.post(`/api/voice/listen/${id}/stop`, null, { params: { since: seen } }); take(data.said); end(data.error); }
-        catch { end(""); }
+        catch (e) { end(e?.response?.data?.detail || "Windows voice typing stopped before it said what it heard - press the mic again"); }
       },
       cancel: () => { if (!over) { over = true; clearInterval(timer); api.post(`/api/voice/listen/${id}/stop`).catch(() => {}); } },
     };

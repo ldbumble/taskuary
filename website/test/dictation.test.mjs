@@ -95,6 +95,15 @@ test("the owner's stop ends it with no line, and the last words still land", () 
   assert.equal(made.length, 1, "a stop is not restarted");
 });
 
+// "you start it and end it and no words show up" (the owner, 2026-11-09): a stop with nothing heard says so, never a silent mic
+test("a stop with no word heard ends with a reason, not silence", () => {
+  const { got, d } = run();
+  d.stop();
+  assert.equal(got.finals.length, 0);
+  assert.deepEqual(got.ends, [dictationError("no-speech")]);
+  assert.match(got.ends[0], /No words heard/);
+});
+
 test("a send cancels: nothing more lands", () => {
   const { sr, got, d } = run();
   const s = sr();

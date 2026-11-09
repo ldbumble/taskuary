@@ -395,6 +395,36 @@ def save_download(url: str, folder: Path = None) -> dict:
     return {'name': p.name, 'folder': str(folder), 'path': str(p)}
 
 
+def mic_allowed(kind, uri) -> bool:
+    "Is this WebView2 permission ask the microphone, for the app's own page on this computer?"
+    from urllib.parse import urlsplit
+    host = (urlsplit(str(uri or '')).hostname or '').lower()
+    return str(kind).split('.')[-1] == 'Microphone' and (host == 'localhost' or host == '::1' or host.startswith('127.'))
+
+def allow_microphone() -> bool:
+    """THE WINDOW'S OWN PAGE MAY HEAR THE MICROPHONE (the owner, 2026-11-09: "press the mic ... no words show up"). pywebview leaves
+    WebView2's permission asks to WebView2's own pop-up, and its window is private, so the pop-up came back at every launch - a pop-up a
+    web page asks for, inside an app the owner already runs. A miss (Block, or a click away) left the mic saying "allow it in the address
+    bar", in a window that has none. The app's own page on this computer is given the microphone; any other page and any other permission
+    still goes to WebView2's pop-up. Windows only."""
+    if sys.platform != 'win32': return False
+    try:
+        from webview.platforms import edgechromium as ec
+        ready = ec.EdgeChrome.on_webview_ready
+        if getattr(ready, '_tq_mic', False): return True
+        def on_ready(self, sender, args):
+            ready(self, sender, args)
+            try:
+                from Microsoft.Web.WebView2.Core import CoreWebView2PermissionState as St
+                def asked(s, a):
+                    if mic_allowed(a.PermissionKind, a.Uri): a.State = St.Allow
+                sender.CoreWebView2.PermissionRequested += asked
+            except Exception as e: logger.debug(f'microphone: the web view keeps its own ask - {e}')
+        on_ready._tq_mic = True; ec.EdgeChrome.on_webview_ready = on_ready
+        return True
+    except Exception as e: logger.debug(f'microphone: not reached on this pywebview - {e}'); return False
+
+
 def downloads_to_folder() -> bool:
     """A download the window starts by itself (a plain link) goes straight into Downloads too, under a free name - not the Save As
     box pywebview opens for every one. Windows only; elsewhere the toolkit's own handling stays."""
@@ -649,7 +679,7 @@ def main():
     except Exception as e: logger.debug(f'downloads: this pywebview cannot take them from the page - {e}')
     if running:
         print(f'Taskuary is already running at {running} - opening that one.')
-        dotnet(); downloads_to_folder()
+        dotnet(); downloads_to_folder(); allow_microphone()
         webview.start(follow_server, (running, window))
         return 0
 
@@ -666,6 +696,7 @@ def main():
     dotnet()                              # imported here, on the main thread; the icon comes up in opened(), once the window has
     allow_text_menus()                    # a right-click on a misspelt word offers the fix again
     downloads_to_folder()                 # ...and a download the window starts itself lands in Downloads, no Save As box
+    allow_microphone()                    # ...and the mic on its own page is heard without WebView2's pop-up
     try: window.events.closing += closing_handler(window, lambda: _server_store() if 'server' in held else None, shell=shell)
     except Exception as e: logger.debug(f'closing: no goodbye on this pywebview - {e}')
 

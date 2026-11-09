@@ -231,6 +231,27 @@ class BuiltinVoiceTests(unittest.TestCase):
         with mock.patch.object(voice, 'builtin', return_value=None), self.assertRaises(RuntimeError): voice.listen_start()
         with mock.patch.object(voice, 'builtin', return_value={**voice.LIVE, 'ask': voice.SPEECH_ASK}), self.assertRaises(RuntimeError): voice.listen_start()
 
+    def test_a_session_that_heard_nothing_says_why(self):
+        """"you start it and end it and no words show up" (the owner, 2026-11-09): Windows answered each listen 'Unknown' with no text
+        (Online speech recognition off or blocked) and the stop came back empty with no error - a silent mic. Now it names why."""
+        from taskuary import spawn
+        import io as _io
+        class Child:
+            def __init__(self, out): self.stdout, self.stderr, self.returncode = _io.BytesIO(out), _io.BytesIO(b''), 0
+            def wait(self, timeout=None): return 0
+            def kill(self): pass
+        for out, want in ((b'.\r\n?Unknown\r\n?Unknown\r\n', 'speech service did not answer'), (b'.\r\n?TimeoutExceeded\r\n', 'heard no speech'),
+                          (b'.\r\n', 'heard no speech')):
+            with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(spawn, 'popen', lambda argv, **kw: Child(out)):
+                sid = voice.listen_start(); voice._LISTEN['cur']['reader'].join(2)
+                got = voice.listen_stop(sid)
+                self.assertEqual(got['said'], []); self.assertIn(want, got['error'])
+        said = lambda argv, **kw: Child(b'.\r\n?Unknown\r\n+call Erin back\r\n')
+        with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(spawn, 'popen', said):
+            sid = voice.listen_start(); voice._LISTEN['cur']['reader'].join(2)
+            self.assertEqual(voice.listen_stop(sid), {'said': ['call Erin back'], 'ready': True, 'done': True, 'error': ''}, 'words heard: no complaint')
+        self.assertIn("Write('?' + $s)".replace('Write', 'WriteLine'), voice._WINRT, 'the child names each empty answer')
+
     def test_voice_typing_serves_only_a_page_on_this_computer(self):
         here, there = TestClient(server.app, client=('127.0.0.1', 5000)), TestClient(server.app, client=('192.168.1.20', 5000))
         with mock.patch.object(voice, 'builtin', return_value=voice.LIVE), mock.patch.object(server, 'store', MemoryStore()):

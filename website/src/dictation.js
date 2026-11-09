@@ -19,7 +19,7 @@ export const dictationError = (code) => ({
   "network": "Browser voice needs an internet connection - it could not reach the browser's speech service",
   "audio-capture": "No microphone found - plug one in or pick it in your sound settings",
   "language-not-supported": "The browser's voice does not hear this language - set up a voice AI instead",
-  "no-speech": "No speech heard - press the mic and talk",
+  "no-speech": "No words heard - check the microphone is on and not muted, then press the mic and talk",
   "aborted": "Something else took the microphone - press the mic to go on",
 }[code] ?? (code ? `Browser voice stopped (${code})` : null));
 
@@ -68,7 +68,8 @@ export function dictate({ SR, lang = "en-US", phrases = null, onFinal, onInterim
       if (!on) return;
       on = false; const s = r;
       s.onerror = null;
-      s.onend = () => { s.onresult = s.onend = null; onInterim?.(""); onEnd?.(null); };
+      // ...and a stop with no word heard says so (2026-11-09: "you start it and end it and no words show up") - never a silent mic
+      s.onend = () => { s.onresult = s.onend = null; onInterim?.(""); onEnd?.(heard ? null : dictationError("no-speech")); };
       try { s.stop(); } catch { s.onend(); }
     },
     // a send: the words in flight would land in a box just emptied, so they are dropped

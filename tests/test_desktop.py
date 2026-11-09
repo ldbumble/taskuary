@@ -156,3 +156,28 @@ def test_a_right_click_on_a_typo_reaches_the_web_views_own_menu_again():
         assert desktop.allow_text_menus() == 'mac'
     menu = mock.Mock(); Host().willOpenMenu_withEvent_(menu, None); menu.removeAllItems.assert_not_called()
     with mock.patch.object(desktop.sys, 'platform', 'linux'): assert desktop.allow_text_menus() == ''
+
+
+def test_the_windows_own_page_hears_the_microphone_without_webview2s_pop_up():
+    """"press the mic ... no words show up" (2026-11-09): pywebview left the ask to WebView2's pop-up, back at every private launch. The
+    app's own page on this computer gets the microphone; another page, or another permission, still gets the pop-up."""
+    import types
+    from unittest import mock
+    assert desktop.mic_allowed('Microphone', 'http://127.0.0.1:50066/') and desktop.mic_allowed('CoreWebView2PermissionKind.Microphone', 'http://localhost:8000/x')
+    assert not desktop.mic_allowed('Camera', 'http://127.0.0.1:1/') and not desktop.mic_allowed('Microphone', 'https://vendor.example/')
+    class EdgeChrome:
+        def on_webview_ready(self, sender, args): pass
+    ec = types.SimpleNamespace(EdgeChrome=EdgeChrome)
+    core = types.SimpleNamespace(CoreWebView2PermissionState=types.SimpleNamespace(Allow='allow'))
+    with mock.patch.object(desktop.sys, 'platform', 'win32'), mock.patch.dict('sys.modules', {'webview.platforms.edgechromium': ec,
+            'webview.platforms': types.SimpleNamespace(edgechromium=ec), 'Microsoft.Web.WebView2.Core': core}):
+        assert desktop.allow_microphone() and desktop.allow_microphone()
+        handlers = []
+        class Ev:
+            def __iadd__(self, f): handlers.append(f); return self
+        EdgeChrome().on_webview_ready(types.SimpleNamespace(CoreWebView2=types.SimpleNamespace(PermissionRequested=Ev())), None)
+    assert len(handlers) == 1, 'wrapped once, however often it is called'
+    ours, theirs = (types.SimpleNamespace(PermissionKind='Microphone', Uri=u, State='default') for u in ('http://127.0.0.1:9/', 'https://vendor.example/'))
+    handlers[0](None, ours); handlers[0](None, theirs)
+    assert (ours.State, theirs.State) == ('allow', 'default')
+    with mock.patch.object(desktop.sys, 'platform', 'linux'): assert desktop.allow_microphone() is False

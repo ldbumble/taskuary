@@ -355,6 +355,7 @@ while (-not (Test-Path $env:TQ_STOP)) {
   $x = $t.Result; $s = "$($x.Status)"
   if ($x.Text) { [Console]::Out.WriteLine('+' + $x.Text); [Console]::Out.Flush() }
   elseif ($s -in @('MicrophoneUnavailable', 'NetworkFailure', 'TopicLanguageNotSupported', 'GrammarCompilationFailure')) { throw $s }
+  else { [Console]::Out.WriteLine('?' + $s); [Console]::Out.Flush() }
 }
 } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 2 }'''
 
@@ -381,8 +382,21 @@ def _read(s):
         t = line.decode('utf-8', 'replace').rstrip('\r\n')
         if t == '.': s['ready'] = True
         elif t.startswith('+') and t[1:].strip(): s['said'].append(t[1:].strip())
+        elif t.startswith('?'): s['last'] = t[1:].strip()
     if p.wait(): s['error'] = _why(p.stderr.read().decode('utf-8', 'replace').strip() or str(p.returncode))
     s['done'] = True
+
+# A SESSION THAT HEARD NOTHING SAYS SO (the owner, 2026-11-09: "you start it and end it and no words show up???"). Windows answers every
+# listen, and with Online speech recognition off or blocked it answers 'Unknown' with no text - the loop took that as a pause, so the
+# stop came back empty and the mic said nothing at all. Now a session that ends with no words names why, by the last answer Windows gave.
+_HEARD_NOTHING = {'Unknown': "Windows voice typing heard no words - Windows' speech service did not answer. Check that Online speech "
+                             "recognition is on in Windows' speech privacy settings (your organisation may block it), or set up a voice AI",
+                  'TimeoutExceeded': "Windows voice typing heard no speech - check the microphone Windows is using (Sound settings) "
+                                     "and that it is not muted, then press the mic and talk"}
+
+def heard_nothing(last: str = '') -> str:
+    "The line a session that ended with no words shows, by Windows' last answer (`last`: a SpeechRecognitionResultStatus name, or '')."
+    return _HEARD_NOTHING.get(last) or (f"Windows voice typing heard no words (Windows answered: {last})" if last else _HEARD_NOTHING['TimeoutExceeded'])
 
 def listen_start() -> str:
     """Start the one live session (an earlier one stops first) and return its id."""
@@ -395,7 +409,7 @@ def listen_start() -> str:
         sid = uuid.uuid4().hex[:12]
         stop = os.path.join(tempfile.gettempdir(), f'taskuary-listen-{sid}.stop')
         p = spawn.popen(_ps(_WINRT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={**os.environ, 'TQ_STOP': stop})
-        s = _LISTEN['cur'] = {'id': sid, 'proc': p, 'stop': stop, 'said': [], 'error': '', 'ready': False, 'done': False}
+        s = _LISTEN['cur'] = {'id': sid, 'proc': p, 'stop': stop, 'said': [], 'error': '', 'last': '', 'ready': False, 'done': False}
         s['reader'] = threading.Thread(target=_read, args=(s,), daemon=True, name='voice-listen'); s['reader'].start()
     return sid
 
@@ -422,6 +436,7 @@ def listen_stop(sid: str, since: int = 0):
         s = _LISTEN.get('cur')
         if not s or s['id'] != sid: return None
         _stop(_LISTEN.pop('cur'))
+    if not s['said'] and not s['error']: s['error'] = heard_nothing(s.get('last', ''))
     return {**_view(s, since), 'done': True}
 
 
